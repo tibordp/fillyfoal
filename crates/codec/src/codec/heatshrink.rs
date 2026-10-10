@@ -147,6 +147,11 @@ impl Decode for Heatshrink {
         }
         out_len.saturating_sub(window)
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // The window is in `out`.
+        Some(0)
+    }
 }
 
 #[cfg(test)]
@@ -168,6 +173,24 @@ mod tests {
         ] {
             let mut d = Streaming(Heatshrink::new(w, l));
             assert_eq!(decode_all(&mut d, data, 1 << 20).unwrap(), words, "{w}/{l}");
+        }
+    }
+
+    #[test]
+    fn checkpoints_resume_mid_stream() {
+        for (w, data) in [
+            (11, &include_bytes!("testdata/words.hs11-4")[..]),
+            (8, &include_bytes!("testdata/words.hs8-4")[..]),
+        ] {
+            let (checked, largest) = crate::codec::pipeline::verify_checkpoints(
+                || Box::new(Streaming(Heatshrink::new(w, 4))),
+                data,
+                500,
+                3,
+            )
+            .unwrap();
+            assert!(checked > 5, "{w}: {checked}");
+            assert_eq!(largest, std::mem::size_of::<Heatshrink>());
         }
     }
 

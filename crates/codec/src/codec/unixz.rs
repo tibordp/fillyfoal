@@ -17,6 +17,7 @@ fn bad(what: &str) -> Diagnostic {
 }
 
 /// The LZW state once the header has been read.
+#[derive(Clone)]
 struct Lzw {
     max_bits: u32,
     block_mode: bool,
@@ -198,6 +199,7 @@ impl Lzw {
 /// A `.Z` stream, decoded as far as the input reaches. Output is never
 /// read back (the string table holds the strings), so all of it can be
 /// released, and input up to the current code.
+#[derive(Clone)]
 pub struct UnixCompress {
     lzw: Option<Lzw>,
     /// Header bytes still at the front of the input (3, until released).
@@ -307,5 +309,58 @@ impl Decoder for UnixCompress {
 
     fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
         None
+    }
+
+    /// The string table (allocated whole for the maximum code width, so a
+    /// CLEAR code does not make it smaller: 3 bytes per code, 192 KiB at 16
+    /// bits) and the string being expanded; no window.
+    fn checkpoint(&self) -> Option<Box<dyn Decoder>> {
+        Some(Box::new(self.clone()))
+    }
+
+    fn state_size(&self) -> usize {
+        let table = self.lzw.as_ref().map_or(0, |lzw| {
+            lzw.prefix
+                .capacity()
+                .saturating_mul(2)
+                .saturating_add(lzw.suffix.capacity())
+                .saturating_add(lzw.stack.capacity())
+        });
+        std::mem::size_of::<Self>().saturating_add(table)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::codec::pipeline::verify_checkpoints;
+
+    /// `/usr/bin/compress` output (`tests/data/compress`): 16-bit codes,
+    /// 12-bit codes (`-b12`), incompressible data, and a megabyte of words
+    /// whose table fills up and is cleared.
+    #[test]
+    fn checkpoints_resume_mid_stream() {
+        for (name, step, every, bits) in [
+            ("text.Z", 1024, 3, 16),
+            ("text12.Z", 1024, 3, 12),
+            ("rnd.Z", 1024, 3, 16),
+            ("words.Z", 1 << 16, 7, 16),
+        ] {
+            let input = std::fs::read(format!(
+                "{}/../../tests/data/compress/{name}",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .unwrap();
+            let (checked, largest) =
+                verify_checkpoints(|| Box::new(UnixCompress::default()), &input, step, every)
+                    .unwrap();
+            assert!(checked > 3, "{name}: {checked}");
+            let table = 3usize << bits;
+            assert!(
+                (table..table + 8192).contains(&largest),
+                "{name}: {largest}"
+            );
+        }
     }
 }

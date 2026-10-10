@@ -241,6 +241,11 @@ impl Decode for Lzfu {
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // The 4 KiB dictionary is inline.
+        Some(0)
+    }
 }
 
 /// Decodes a whole compressed RTF stream (for tests).
@@ -308,6 +313,67 @@ mod tests {
         input.extend_from_slice(&body);
         let out = decode(&input, 1 << 20).unwrap();
         assert_eq!(out, b"{\\rtf1\\ansicpg1252");
+    }
+
+    /// Literals and references (to text 100 and 1000 bytes back), then the
+    /// end marker.
+    #[test]
+    #[allow(
+        clippy::indexing_slicing,
+        clippy::arithmetic_side_effects,
+        clippy::cast_possible_truncation
+    )]
+    fn checkpoints_resume_mid_stream() {
+        let words = include_bytes!("testdata/words.txt");
+        let (mut body, mut write, mut raw) = (Vec::new(), PROLOGUE.len(), 0usize);
+        let mut control = 0;
+        let mut items = 0;
+        let mut item = |body: &mut Vec<u8>, reference: Option<u16>, literal: u8| {
+            if items % 8 == 0 {
+                control = body.len();
+                body.push(0);
+            }
+            match reference {
+                Some(r) => {
+                    body[control] |= 1 << (items % 8);
+                    body.extend_from_slice(&r.to_be_bytes());
+                }
+                None => body.push(literal),
+            }
+            items += 1;
+        };
+        for (i, &literal) in words.iter().enumerate().take(20_000) {
+            if i > 1000 && i % 3 == 0 {
+                let back = if i % 2 == 0 { 100 } else { 1000 };
+                let len = 2 + i % 16;
+                let at = (write + 4096 - back) % 4096;
+                item(&mut body, Some((at << 4 | (len - 2)) as u16), 0);
+                write = (write + len) % 4096;
+                raw += len;
+            } else {
+                item(&mut body, None, literal);
+                write = (write + 1) % 4096;
+                raw += 1;
+            }
+        }
+        item(&mut body, Some((write << 4) as u16), 0);
+        let mut input = Vec::new();
+        input.extend_from_slice(&u32::try_from(body.len() + 12).unwrap().to_le_bytes());
+        input.extend_from_slice(&u32::try_from(raw).unwrap().to_le_bytes());
+        input.extend_from_slice(&LZFU.to_le_bytes());
+        input.extend_from_slice(&0u32.to_le_bytes());
+        input.extend_from_slice(&body);
+        assert_eq!(decode(&input, 1 << 24).unwrap().len(), raw);
+        let (checked, largest) = crate::codec::pipeline::verify_checkpoints(
+            || Box::new(crate::codec::pipeline::Streaming(Lzfu::default())),
+            &input,
+            1000,
+            3,
+        )
+        .unwrap();
+        assert!(checked > 10, "{checked}");
+        // The dictionary is inline.
+        assert_eq!(largest, std::mem::size_of::<Lzfu>());
     }
 
     #[test]

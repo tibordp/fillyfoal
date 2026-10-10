@@ -216,4 +216,64 @@ impl Decode for Decoder {
     fn release_output(&mut self, n: usize) {
         self.released_out = self.released_out.saturating_add(n);
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // Steps end between chunks, so a checkpoint is free: no window, and
+        // the chunk table is shared (an `Arc`), not copied.
+        Some(0)
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
+mod tests {
+    use super::*;
+    use crate::codec::pipeline::{Streaming, verify_checkpoints};
+
+    /// A resource of the LZX chunk from `tests/data/cab` (the test
+    /// encoder's, checked with 7-Zip) and stored chunks, as
+    /// `tests/on_demand.rs` builds it.
+    #[test]
+    fn checkpoints_between_chunks_are_free() {
+        let lzx = std::fs::read(format!(
+            "{}/../../tests/data/cab/wim-chunk.lzx",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap();
+        let stored: Vec<u8> = (0..32768u32 * 2 + 1000)
+            .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
+            .collect();
+        let chunks: Vec<&[u8]> = vec![
+            &lzx,
+            &stored[..32768],
+            &lzx,
+            &lzx,
+            &stored[32768..65536],
+            &lzx,
+            &lzx,
+            &stored[65536..],
+        ];
+        let (mut table, mut body) = (Vec::new(), Vec::new());
+        for (i, data) in chunks.iter().enumerate() {
+            if i > 0 {
+                table.extend_from_slice(&(body.len() as u32).to_le_bytes());
+            }
+            body.extend_from_slice(data);
+        }
+        let input = [table, body].concat();
+        let resource = Resource {
+            kind: Kind::Lzx,
+            chunk: 32768,
+            original: 32768 * 7 + 1000,
+        };
+        let (checked, largest) =
+            verify_checkpoints(|| Box::new(Streaming(Decoder::new(resource))), &input, 1, 1)
+                .unwrap();
+        assert_eq!(checked, 7);
+        assert_eq!(largest, std::mem::size_of::<Decoder>());
+    }
 }

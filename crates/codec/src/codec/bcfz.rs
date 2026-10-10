@@ -159,6 +159,11 @@ impl Decode for Bcfz {
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len.saturating_sub(WINDOW)
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // The window is in `out`.
+        Some(0)
+    }
 }
 
 #[cfg(test)]
@@ -213,6 +218,29 @@ mod tests {
             self.lsb(offset, n);
             self.lsb(len, n);
         }
+    }
+
+    #[test]
+    fn checkpoints_resume_mid_stream() {
+        let words = include_bytes!("testdata/words.txt");
+        let mut w = Writer::default();
+        w.literals(&words[..5000]);
+        let mut size = 5000u64;
+        for i in 0..1000u32 {
+            let (offset, len) = (1000 + i * 37 % 4000, 20 + i % 300);
+            w.copy(offset, len, 13);
+            w.literals(&words[i as usize..i as usize + 7]);
+            size += u64::from(offset.min(len)) + 7;
+        }
+        let (checked, largest) = crate::codec::pipeline::verify_checkpoints(
+            || Box::new(Streaming(Bcfz::new(size))),
+            &w.bytes,
+            2000,
+            3,
+        )
+        .unwrap();
+        assert!(checked > 10, "{checked}");
+        assert_eq!(largest, std::mem::size_of::<Bcfz>());
     }
 
     #[test]

@@ -225,10 +225,19 @@ impl Decode for Lznt1 {
         // Steps end between chunks, and chunks do not refer to each other.
         out_len
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // No window either: checkpoints are free.
+        Some(0)
+    }
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
 mod tests {
     use super::*;
     use crate::codec::pipeline::{Streaming, decode_all};
@@ -239,15 +248,43 @@ mod tests {
 
     /// [MS-XCA] section 3.3: a 142-byte string (with its NUL) in one
     /// 59-byte compressed chunk.
+    const SPEC: [u8; 59] = [
+        0x38, 0xb0, 0x88, 0x46, 0x23, 0x20, 0x00, 0x20, 0x47, 0x20, 0x41, 0x00, 0x10, 0xa2, 0x47,
+        0x01, 0xa0, 0x45, 0x20, 0x44, 0x00, 0x08, 0x45, 0x01, 0x50, 0x79, 0x00, 0xc0, 0x45, 0x20,
+        0x05, 0x24, 0x13, 0x88, 0x05, 0xb4, 0x02, 0x4a, 0x44, 0xef, 0x03, 0x58, 0x02, 0x8c, 0x09,
+        0x16, 0x01, 0x48, 0x45, 0x00, 0xbe, 0x00, 0x9e, 0x00, 0x04, 0x01, 0x18, 0x90, 0x00,
+    ];
+
+    /// Chunks of the spec example (each padded to 4 KiB by the next) and
+    /// stored chunks, as a compression unit and as plain data.
+    #[test]
+    fn checkpoints_between_chunks_are_free() {
+        let mut input = Vec::new();
+        for i in 0..12u8 {
+            if i % 4 == 3 {
+                // A stored chunk of 4 KiB.
+                input.extend_from_slice(&(0x3000u16 | 0xfff).to_le_bytes());
+                input.extend((0..4096u32).map(|j| (j * 7 + u32::from(i)) as u8));
+            } else {
+                input.extend_from_slice(&SPEC);
+            }
+        }
+        for size in [None, Some(64 * 1024)] {
+            let (checked, largest) = crate::codec::pipeline::verify_checkpoints(
+                || Box::new(Streaming(Lznt1::new(size))),
+                &input,
+                1000,
+                1,
+            )
+            .unwrap();
+            assert!(checked >= 8, "{checked}");
+            assert_eq!(largest, std::mem::size_of::<Lznt1>());
+        }
+    }
+
     #[test]
     fn spec_example() {
-        let compressed = [
-            0x38, 0xb0, 0x88, 0x46, 0x23, 0x20, 0x00, 0x20, 0x47, 0x20, 0x41, 0x00, 0x10, 0xa2,
-            0x47, 0x01, 0xa0, 0x45, 0x20, 0x44, 0x00, 0x08, 0x45, 0x01, 0x50, 0x79, 0x00, 0xc0,
-            0x45, 0x20, 0x05, 0x24, 0x13, 0x88, 0x05, 0xb4, 0x02, 0x4a, 0x44, 0xef, 0x03, 0x58,
-            0x02, 0x8c, 0x09, 0x16, 0x01, 0x48, 0x45, 0x00, 0xbe, 0x00, 0x9e, 0x00, 0x04, 0x01,
-            0x18, 0x90, 0x00,
-        ];
+        let compressed = SPEC;
         let mut expected = b"F# F# G A A G F# E D D E F# F# E E F# F# G A A G F# E D D E F# E D D E E F# D E F# G F# D E \
 F# G F# E D E A F# F# G A A G F# E D D E F# E D D"
             .to_vec();

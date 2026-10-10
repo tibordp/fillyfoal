@@ -279,6 +279,11 @@ impl Decode for Lz77 {
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len.saturating_sub(WINDOW)
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // The window is in `out`.
+        Some(0)
+    }
 }
 
 #[cfg(test)]
@@ -533,6 +538,26 @@ pub(crate) mod tests {
         // Long runs (0x20 and 0x10 long lengths).
         let zeros = vec![0u8; 3000];
         assert_eq!(run(&compress(&zeros), 3000).unwrap(), zeros);
+    }
+
+    #[test]
+    fn checkpoints_resume_mid_stream() {
+        let mut data = include_bytes!("testdata/words.txt").to_vec();
+        data.extend((0..20_000u32).map(|i| (i % 13) as u8));
+        // Far repeats (beyond 0x3fff).
+        let copy = data[100..9000].to_vec();
+        data.extend_from_slice(&copy);
+        let packed = compress(&data);
+        let size = data.len() as u64;
+        let (checked, largest) = crate::codec::pipeline::verify_checkpoints(
+            || Box::new(Streaming(Lz77::new(size))),
+            &packed,
+            2000,
+            3,
+        )
+        .unwrap();
+        assert!(checked > 10, "{checked}");
+        assert_eq!(largest, std::mem::size_of::<Lz77>());
     }
 
     #[test]

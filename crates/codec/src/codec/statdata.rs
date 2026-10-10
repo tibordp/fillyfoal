@@ -129,6 +129,10 @@ impl Decode for SpssBytecode {
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 /// A 12-bit length (`low` nibble, then a byte) plus `base`.
@@ -290,6 +294,10 @@ impl Decode for SasRle {
     fn releasable_output(&self, outlen: usize) -> usize {
         outlen
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 /// The farthest an RDC back-reference reaches (a 12-bit offset plus 3).
@@ -420,6 +428,11 @@ impl Decode for SasRdc {
 
     fn releasable_output(&self, outlen: usize) -> usize {
         outlen.saturating_sub(RDC_WINDOW)
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        // The window is in `out`.
+        Some(0)
     }
 }
 
@@ -552,5 +565,40 @@ mod tests {
         assert!(run(SasRdc::default(), &hex(rdc), 100).is_err());
         assert!(run(SasRle::default(), &[0x00], 1 << 16).is_err());
         assert!(run(SasRdc::default(), &[0x80, 0x00, 0x30], 1 << 16).is_err());
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn checkpoints_resume_mid_stream() {
+        use crate::codec::pipeline::{Decoder, Streaming, verify_checkpoints};
+        let packed =
+            include_bytes!("../../../../tests/fixtures/external/spss-sav/survey-bytecode.sav");
+        type Make = Box<dyn Fn() -> Box<dyn Decoder>>;
+        let cases: [(Make, Vec<u8>, usize); 3] = [
+            (
+                Box::new(|| Box::new(Streaming(SpssBytecode::new(100f64.to_bits(), false)))),
+                sav_data(packed).to_vec(),
+                64,
+            ),
+            (
+                Box::new(|| Box::new(Streaming(SasRle::default()))),
+                hex(
+                    "af4142434445464748414243444546474841424344454647484142434445464748414243444546474841424344454647486017705400050102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445400c78",
+                ),
+                8,
+            ),
+            (
+                Box::new(|| Box::new(Streaming(SasRdc::default()))),
+                hex(
+                    "00e741424344454647488500fd00fd0047480f200f200120fc000f000f000f000f000f0008000102030405060708090a00000b0c0d0e0f101112131415161718191a00001b1c1d1e1f202122232425262728292a00002b2c2d2e2f303132333435363738393a03803b3c3d3e3f40520d0f780978",
+                ),
+                8,
+            ),
+        ];
+        for (make, input, step) in cases {
+            let (checked, largest) = verify_checkpoints(make, &input, step, 1).unwrap();
+            assert!(checked > 1, "{checked}");
+            assert!(largest < 64, "{largest}");
+        }
     }
 }

@@ -261,4 +261,133 @@ impl Decoder for FolderDecoder {
         // Quantum and LZX their own history.
         out_len
     }
+
+    /// Between blocks (LZX: between frames), with the history the method
+    /// keeps: nothing when stored, MSZIP's 32 KiB dictionary (it carries
+    /// over from block to block), LZX's window (up to 2 MiB) and the
+    /// block data it has yet to decode. Quantum folders are not
+    /// checkpointed: its window is inside its state, which this module
+    /// cannot see to count.
+    fn checkpoint(&self) -> Option<Box<dyn Decoder>> {
+        let method = match self.method.as_ref().ok()? {
+            Method::Stored => Method::Stored,
+            Method::Mszip => Method::Mszip,
+            Method::Quantum(_) => return None,
+            Method::Lzx {
+                core,
+                stream,
+                frames,
+            } => Method::Lzx {
+                core: core.checkpoint(),
+                stream: stream.clone(),
+                frames: frames.clone(),
+            },
+        };
+        Some(Box::new(FolderDecoder {
+            folder: self.folder,
+            method: Ok(method),
+            at: self.at,
+            dict: self.dict.clone(),
+        }))
+    }
+
+    fn state_size(&self) -> usize {
+        let method = match &self.method {
+            Ok(Method::Lzx {
+                core,
+                stream,
+                frames,
+            }) => core
+                .heap_size()
+                .saturating_add(stream.len())
+                .saturating_add(frames.len().saturating_mul(std::mem::size_of::<usize>())),
+            _ => 0,
+        };
+        std::mem::size_of::<Self>()
+            .saturating_add(self.dict.len())
+            .saturating_add(method)
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
+mod tests {
+    use super::*;
+    use crate::codec::pipeline::verify_checkpoints;
+
+    /// A cabinet's folders: compression type and the span of their data
+    /// blocks.
+    fn folders(cab: &[u8]) -> Vec<(u16, std::ops::Range<usize>)> {
+        let u16le = |o: usize| u16::from_le_bytes([cab[o], cab[o + 1]]);
+        let u32le = |o: usize| u32::from_le_bytes(cab[o..o + 4].try_into().unwrap()) as usize;
+        (0..usize::from(u16le(26)))
+            .map(|i| {
+                let at = 36 + 8 * i;
+                let start = u32le(at);
+                let mut end = start;
+                for _ in 0..u16le(at + 4) {
+                    end += 8 + usize::from(u16le(end + 4));
+                }
+                (u16le(at + 6), start..end)
+            })
+            .collect()
+    }
+
+    /// The cabinets of `tests/data/cab` (MSZIP from zlib; LZX and Quantum
+    /// from the test encoder there, checked with 7-Zip): checkpoints after
+    /// every block, each the size of its method's history.
+    #[test]
+    fn checkpoints_resume_between_blocks() {
+        for (name, window) in [
+            ("mszip.cab", MSZIP_DICT),
+            ("lzx16.cab", 1 << 16),
+            ("lzx21.cab", 1 << 21),
+            ("quantum.cab", 0),
+        ] {
+            let cab = std::fs::read(format!(
+                "{}/../../tests/data/cab/{name}",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .unwrap();
+            for (kind, range) in folders(&cab) {
+                let folder = Folder {
+                    kind,
+                    data_reserve: 0,
+                };
+                let input = &cab[range];
+                let (checked, largest) =
+                    verify_checkpoints(|| Box::new(FolderDecoder::new(folder)), input, 1, 1)
+                        .unwrap();
+                let out_len = crate::codec::pipeline::decode_all(
+                    &mut FolderDecoder::new(folder),
+                    input,
+                    1 << 26,
+                )
+                .unwrap()
+                .len();
+                match folder.method() {
+                    2 => assert_eq!(checked, 0, "{name}"),
+                    _ => assert!(
+                        checked >= (out_len / 32768).saturating_sub(1),
+                        "{name}: {checked}"
+                    ),
+                }
+                if window == MSZIP_DICT {
+                    assert_eq!(largest, std::mem::size_of::<FolderDecoder>() + window);
+                } else if window > 0 {
+                    // The window (or all output so far, if less), the
+                    // tables and up to two blocks of data.
+                    let history = window.min(out_len.saturating_sub(32768));
+                    assert!(
+                        (history..history + 72 * 1024).contains(&largest),
+                        "{name}: {largest}"
+                    );
+                }
+            }
+        }
+    }
 }

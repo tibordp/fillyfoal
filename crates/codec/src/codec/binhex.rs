@@ -140,6 +140,10 @@ impl Decode for BinHex {
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 #[cfg(test)]
@@ -179,5 +183,34 @@ mod tests {
             assert_eq!(out, b"aaaaa\x90b");
         }
         assert!(decode_all(Codec::BinHex.decoder().unwrap().as_mut(), &text, 3).is_err());
+    }
+
+    #[test]
+    fn checkpoints_resume_mid_stream() {
+        // Text with runs and escaped 0x90 bytes, in lines of 64 characters.
+        let words = &include_bytes!("testdata/words.txt")[..30_000];
+        let mut raw = Vec::new();
+        for (i, chunk) in words.chunks(100).enumerate() {
+            raw.extend_from_slice(chunk);
+            raw.extend_from_slice(if i % 2 == 0 {
+                &[b'x', 0x90, 200]
+            } else {
+                &[0x90, 0]
+            });
+        }
+        let mut text = Vec::new();
+        for line in encode(&raw).chunks(64) {
+            text.extend_from_slice(line);
+            text.push(b'\n');
+        }
+        let (checked, largest) = crate::codec::pipeline::verify_checkpoints(
+            || Codec::BinHex.decoder().unwrap(),
+            &text,
+            1000,
+            3,
+        )
+        .unwrap();
+        assert!(checked > 10, "{checked}");
+        assert!(largest < 256, "{largest}");
     }
 }

@@ -241,6 +241,10 @@ impl Decode for MeatPack {
         // Output is never read back: the formatting state is kept here.
         out_len
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 #[cfg(test)]
@@ -264,6 +268,20 @@ mod tests {
         0x1B, 0x3A, 0x51, 0xC4, 0xFF, 0xFF, 249,
     ];
     const LINE: &[u8] = b"G1 X113.214 Y91.45 E1.3154\n";
+
+    #[test]
+    fn checkpoints_resume_mid_stream() {
+        let input = [WITH_SPACES, NO_SPACES, b"M107\n"].concat().repeat(100);
+        let (checked, largest) = crate::codec::pipeline::verify_checkpoints(
+            || Box::new(Streaming(MeatPack::default())),
+            &input,
+            100,
+            3,
+        )
+        .unwrap();
+        assert!(checked > 10, "{checked}");
+        assert_eq!(largest, std::mem::size_of::<MeatPack>());
+    }
 
     #[test]
     fn readme_example() {

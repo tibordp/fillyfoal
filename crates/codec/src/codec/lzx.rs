@@ -363,6 +363,36 @@ impl Lzx {
         self.st.offset
     }
 
+    /// Heap bytes a [`Lzx::checkpoint`] of this decoder holds: its last
+    /// window of history and its tables.
+    pub fn heap_size(&self) -> usize {
+        let st = &self.st;
+        let codes = [&st.main, &st.length, &st.aligned]
+            .iter()
+            .map(|h| h.symbols.capacity().saturating_mul(2))
+            .fold(0, usize::saturating_add);
+        self.hist
+            .len()
+            .min(self.window())
+            .saturating_add(st.main_len.capacity())
+            .saturating_add(st.length_len.capacity())
+            .saturating_add(codes)
+    }
+
+    /// A copy to resume from later (between frames), keeping only the last
+    /// window of history: matches reach no further back. The history is
+    /// kept across CHM resets too, since nothing stops a match there from
+    /// reaching back past the reset.
+    pub fn checkpoint(&self) -> Lzx {
+        let from = self.hist.len().saturating_sub(self.window());
+        Lzx {
+            params: self.params,
+            main_symbols: self.main_symbols,
+            st: self.st.clone(),
+            hist: self.hist.get(from..).unwrap_or_default().to_vec(),
+        }
+    }
+
     /// Saves the state before a frame (see [`Lzx::restore`]).
     pub fn snapshot(&mut self) -> Snapshot {
         let window = self.window();
@@ -796,5 +826,113 @@ impl Decoder for LzxStream {
         // Matches read the decoder's own history (untranslated), never
         // `out`, and E8 positions count from its running offset.
         out_len
+    }
+
+    /// The core between frames, with its last window of history (which it
+    /// keeps itself, `out` being E8-translated): up to 2 MiB.
+    fn checkpoint(&self) -> Option<Box<dyn Decoder>> {
+        let core = self.core.as_ref().ok()?;
+        Some(Box::new(LzxStream {
+            core: Ok(core.checkpoint()),
+            params: self.params,
+        }))
+    }
+
+    fn state_size(&self) -> usize {
+        std::mem::size_of::<Self>().saturating_add(self.core.as_ref().map_or(0, Lzx::heap_size))
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
+mod tests {
+    use super::*;
+    use crate::codec::pipeline::verify_checkpoints;
+
+    fn read(name: &str) -> Vec<u8> {
+        std::fs::read(format!(
+            "{}/../../tests/data/cab/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    }
+
+    /// The LZX section of `tests/data/cab/lzx.chm` (written by the test
+    /// encoder there, checked with 7-Zip): its content stream, window bits,
+    /// reset interval in frames and decoded length.
+    fn chm_section(chm: &[u8]) -> (Vec<u8>, u8, u32, u64) {
+        let u32le = |d: &[u8], o: usize| u32::from_le_bytes(d[o..o + 4].try_into().unwrap());
+        let u64le = |d: &[u8], o: usize| u64::from_le_bytes(d[o..o + 8].try_into().unwrap());
+        let content_at = u64le(chm, 0x58) as usize;
+        let dir = u64le(chm, 0x48) as usize + 0x54;
+        let pmgl = &chm[dir..dir + 0x1000];
+        let end = 0x1000 - u32le(pmgl, 4) as usize;
+        let encint = |at: &mut usize| {
+            let mut v = 0u64;
+            loop {
+                let b = pmgl[*at];
+                *at += 1;
+                v = v << 7 | u64::from(b & 0x7f);
+                if b & 0x80 == 0 {
+                    return v;
+                }
+            }
+        };
+        let (mut at, mut sec0) = (20, std::collections::HashMap::new());
+        while at < end {
+            let len = encint(&mut at) as usize;
+            let name = String::from_utf8(pmgl[at..at + len].to_vec()).unwrap();
+            at += len;
+            let (section, offset, length) = (encint(&mut at), encint(&mut at), encint(&mut at));
+            if section == 0 {
+                let from = content_at + offset as usize;
+                sec0.insert(name, &chm[from..from + length as usize]);
+            }
+        }
+        let base = "::DataSpace/Storage/MSCompressed/";
+        let control = sec0[&format!("{base}ControlData")];
+        let reset = sec0[&format!(
+            "{base}Transform/{{7FC28940-9D31-11D0-9B27-00A0C91E9C7C}}/InstanceData/ResetTable"
+        )];
+        (
+            sec0[&format!("{base}Content")].to_vec(),
+            (u32le(control, 16) * 32768).trailing_zeros() as u8,
+            u32le(control, 12),
+            u64le(reset, 16),
+        )
+    }
+
+    #[test]
+    fn checkpoints_resume_between_frames() {
+        // A CHM section: 64 KiB window, resets every two frames, E8
+        // translation; more output than the window.
+        let (content, window_bits, reset_interval, len) = chm_section(&read("lzx.chm"));
+        assert_eq!((window_bits, reset_interval), (16, 2));
+        let params = Params {
+            window_bits,
+            reset_interval,
+            variant: Variant::Cab,
+            len: Some(len),
+        };
+        assert!(len > 1 << 16, "{len}");
+        let (checked, largest) =
+            verify_checkpoints(|| Box::new(LzxStream::new(params)), &content, 4096, 1).unwrap();
+        // After every frame but the last.
+        assert_eq!(checked, (len as usize).div_ceil(FRAME) - 1);
+        // The window, the tables, the decoder itself.
+        assert!((1 << 16..(1 << 16) + 4096).contains(&largest), "{largest}");
+        // A WIM chunk: one frame, so no checkpoint inside it.
+        let chunk = read("wim-chunk.lzx");
+        verify_checkpoints(
+            || Box::new(LzxStream::new(Params::wim_chunk(32768))),
+            &chunk,
+            4096,
+            1,
+        )
+        .unwrap();
     }
 }

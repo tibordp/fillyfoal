@@ -930,6 +930,37 @@ impl Simple {
         Ok(false)
     }
 
+    /// Heap bytes a copy holds: the trees and codes (shared ones counted
+    /// too: a copy may outlive the decoder), and method 5's own window.
+    fn held_bytes(&self) -> usize {
+        let word = std::mem::size_of::<usize>();
+        let canonical = |c: &Canonical| {
+            c.symbols
+                .capacity()
+                .saturating_mul(2)
+                .saturating_add(c.counts.capacity().saturating_mul(4))
+        };
+        match &self.kind {
+            Kind::Stored { .. } | Kind::Rle90 { .. } => 0,
+            Kind::Huffman { nodes, .. } => nodes.as_ref().map_or(0, |n| {
+                n.len().saturating_mul(std::mem::size_of::<HuffNode>())
+            }),
+            Kind::Lzah(st) => std::mem::size_of::<Lzah>()
+                .saturating_add(st.tree.freq.capacity().saturating_mul(4))
+                .saturating_add(st.tree.prnt.capacity().saturating_mul(word))
+                .saturating_add(st.tree.son.capacity().saturating_mul(word))
+                .saturating_add(st.window.capacity()),
+            Kind::Sit13(st) => {
+                std::mem::size_of::<Sit13>().saturating_add(st.codes.as_ref().map_or(0, |c| {
+                    std::mem::size_of::<Codes>()
+                        .saturating_add(canonical(&c.first))
+                        .saturating_add(c.second.as_ref().map_or(0, canonical))
+                        .saturating_add(canonical(&c.offsets))
+                }))
+            }
+        }
+    }
+
     /// Bits read so far.
     fn bit_pos(&self) -> usize {
         match &self.kind {
@@ -1605,6 +1636,47 @@ impl pipeline::Decoder for Decoder {
             _ => out_len,
         }
     }
+
+    /// The methods but Arsenic (whose models and BWT block, up to 16 MiB,
+    /// are not counted here): their tables and, for method 13, the 64 KiB
+    /// window in `out`; method 2 is `compress` with its string table.
+    fn checkpoint(&self) -> Option<Box<dyn pipeline::Decoder>> {
+        let method = match &self.method {
+            Method::Simple(s) => Method::Simple(s.clone()),
+            Method::Lzw {
+                lzw,
+                scratch,
+                written,
+            } => Method::Lzw {
+                lzw: lzw.clone(),
+                scratch: scratch.clone(),
+                written: *written,
+            },
+            Method::Arsenic(_) | Method::Unsupported => return None,
+        };
+        Some(Box::new(Decoder {
+            params: self.params,
+            method,
+            crc16: self.crc16,
+            warning: self.warning.clone(),
+            consumed: self.consumed,
+            done: self.done,
+        }))
+    }
+
+    fn state_size(&self) -> usize {
+        let method = match &self.method {
+            Method::Simple(s) => s.0.held_bytes(),
+            Method::Lzw { lzw, scratch, .. } => pipeline::Decoder::state_size(lzw)
+                .saturating_sub(std::mem::size_of::<UnixCompress>())
+                .saturating_add(scratch.len()),
+            Method::Arsenic(_) | Method::Unsupported => 0,
+        };
+        let warning = self.warning.as_ref().map_or(0, |w| w.message.capacity());
+        std::mem::size_of::<Self>()
+            .saturating_add(method)
+            .saturating_add(warning)
+    }
 }
 
 #[cfg(test)]
@@ -1671,6 +1743,51 @@ mod tests {
         methods.sort_unstable();
         methods.dedup();
         assert_eq!(methods, [0, 1, 2, 3, 5, 13, 15]);
+    }
+
+    /// Every fork of `methods.sit` but Arsenic's (not checkpointed).
+    #[test]
+    fn checkpoints_resume_mid_fork() {
+        let archive = include_bytes!("../../../../tests/fixtures/synthetic/stuffit/methods.sit");
+        let mut at = 22usize;
+        let mut methods = Vec::new();
+        while at + 112 <= archive.len() {
+            let h = &archive[at..at + 112];
+            at += 112;
+            if h[0] >= 32 {
+                continue;
+            }
+            let len = |o| u32_be(h, o).unwrap() as u64;
+            for (method, size, packed, crc) in [
+                (h[0], len(84), len(92), u16_be(h, 100).unwrap()),
+                (h[1], len(88), len(96), u16_be(h, 102).unwrap()),
+            ] {
+                let input = &archive[at..at + packed as usize];
+                at += packed as usize;
+                if packed == 0 {
+                    continue;
+                }
+                let params = Params {
+                    method,
+                    size,
+                    crc: Some(crc),
+                };
+                let (checked, largest) =
+                    pipeline::verify_checkpoints(|| Box::new(Decoder::new(params)), input, 200, 1)
+                        .unwrap();
+                if method == 15 {
+                    assert_eq!(checked, 0);
+                } else {
+                    // (Stored forks are copied 64 KiB at a time.)
+                    assert!(checked > 0 || size < 1000 || method == 0, "method {method}");
+                    assert!(largest < 256 * 1024, "method {method}: {largest}");
+                    methods.push(method);
+                }
+            }
+        }
+        methods.sort_unstable();
+        methods.dedup();
+        assert_eq!(methods, [0, 1, 2, 3, 5, 13]);
     }
 
     #[test]

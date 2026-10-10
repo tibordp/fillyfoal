@@ -500,6 +500,12 @@ impl Decode for Bzz {
         // Blocks are independent of earlier output.
         out_len
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // Steps end between blocks, which are independent: no window,
+        // and the context models are inline.
+        Some(0)
+    }
 }
 
 /// Decodes a whole BZZ stream (for callers holding all of it).
@@ -516,6 +522,20 @@ mod tests {
 
     // Vectors written by `tests/data/djvu/bzz.py` (see the module docs):
     // `encode(words[:4096])`, the same with 1000-byte blocks, and `encode(b"")`.
+    #[test]
+    fn checkpoints_between_blocks_are_free() {
+        let (checked, largest) = crate::codec::pipeline::verify_checkpoints(
+            || Box::new(Streaming(Bzz::default())),
+            include_bytes!("testdata/words-blocks.bzz"),
+            1,
+            1,
+        )
+        .unwrap();
+        // Four blocks of 1000 bytes and one of 96.
+        assert!(checked >= 3, "{checked}");
+        assert_eq!(largest, std::mem::size_of::<Bzz>());
+    }
+
     #[test]
     fn decodes_reference_vectors() {
         let words = &include_bytes!("testdata/words.txt")[..4096];

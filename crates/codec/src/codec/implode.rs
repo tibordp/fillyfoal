@@ -55,6 +55,11 @@ struct Code {
 }
 
 impl Code {
+    /// Heap bytes a copy holds.
+    fn heap_size(&self) -> usize {
+        self.symbol.capacity().saturating_mul(2)
+    }
+
     /// Builds the code for `lengths` (0 = unused). Over-subscribed lengths
     /// are an error; incomplete codes are allowed (missing codes fail when
     /// met).
@@ -351,6 +356,21 @@ impl Decode for Explode {
             out_len.saturating_sub(self.window())
         }
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // The window is in `out`; the trees are shared, but counted (a
+        // checkpoint may outlive the decoder).
+        Some(self.trees.as_ref().map_or(0, |t| {
+            let codes = [t.literals.as_ref(), Some(&t.lengths), Some(&t.distances)];
+            std::mem::size_of::<Trees>().saturating_add(
+                codes
+                    .into_iter()
+                    .flatten()
+                    .map(Code::heap_size)
+                    .fold(0, usize::saturating_add),
+            )
+        }))
+    }
 }
 
 /// Packed bit lengths of the DCL codes, in the format of
@@ -524,6 +544,20 @@ impl Decode for DclExplode {
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len.saturating_sub(DCL_WINDOW)
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // The window is in `out`; the codes are shared, but counted (a
+        // checkpoint may outlive the decoder).
+        Some(self.setup.as_ref().map_or(0, |s| {
+            let codes = [&s.literals, &s.lengths, &s.distances];
+            std::mem::size_of::<DclSetup>().saturating_add(
+                codes
+                    .into_iter()
+                    .map(Code::heap_size)
+                    .fold(0, usize::saturating_add),
+            )
+        }))
+    }
 }
 
 /// Decodes a DCL implode stream; returns the output and the bytes used.
@@ -545,5 +579,45 @@ mod tests {
         let (out, used) = blast(&data, 100).unwrap();
         assert_eq!(out, b"AIAIAIAIAIAIA");
         assert_eq!(used, data.len());
+    }
+
+    /// The test files of `tests/data/implode` (checked with 7-Zip) and
+    /// `tests/data/dcl` (StormLib's pklib).
+    #[test]
+    fn checkpoints_resume_mid_stream() {
+        use crate::codec::Codec;
+        let implode = |large_window, literal_tree| {
+            Codec::Implode(Implode {
+                large_window,
+                literal_tree,
+                size: None,
+            })
+        };
+        for (codec, path) in [
+            (implode(true, true), "implode/text_8k_lit.imploded"),
+            (implode(false, false), "implode/text_4k.imploded"),
+            (implode(true, false), "implode/mixed_8k.imploded"),
+            (implode(false, true), "implode/mixed_4k_lit.imploded"),
+            (implode(false, true), "implode/runs_4k_lit.imploded"),
+            (Codec::DclImplode, "dcl/text_ascii4k.pk"),
+            (Codec::DclImplode, "dcl/text_binary2k.pk"),
+            (Codec::DclImplode, "dcl/mixed_binary1k.pk"),
+        ] {
+            let input = std::fs::read(format!(
+                "{}/../../tests/data/{path}",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .unwrap();
+            let (checked, largest) = crate::codec::pipeline::verify_checkpoints(
+                || codec.decoder().unwrap(),
+                &input,
+                500,
+                1,
+            )
+            .unwrap();
+            assert!(checked > 3, "{path}: {checked}");
+            // The decoder and its trees.
+            assert!(largest < 4096, "{path}: {largest}");
+        }
     }
 }

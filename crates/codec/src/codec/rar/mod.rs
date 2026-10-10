@@ -174,6 +174,15 @@ impl Window {
             .unwrap_or_default()
     }
 
+    /// A copy of the history from `keep_from` on.
+    fn copy_from(&self, keep_from: u64) -> Window {
+        let from = to_usize(keep_from.saturating_sub(self.base)).min(self.data.len());
+        Window {
+            base: self.base.saturating_add(to_u64(from)),
+            data: self.data.get(from..).unwrap_or_default().to_vec(),
+        }
+    }
+
     /// Drops history before `keep_from` once that frees enough.
     fn trim(&mut self, keep_from: u64) {
         let n = keep_from.saturating_sub(self.base);
@@ -246,6 +255,13 @@ impl Stream {
         self.params.dict.max(4 << 20)
     }
 
+    /// Where the history still needed starts: back-references reach
+    /// [`Stream::keep`] back, and pending filters' blocks (output held back
+    /// until they are complete) start at or after `written`.
+    fn keep_from(&self) -> u64 {
+        self.written.min(self.win.pos().saturating_sub(self.keep()))
+    }
+
     /// Outputs what is decoded up to the first pending filter whose block
     /// is incomplete. At the end of a member (`end`), incomplete filters
     /// are dropped and their data output unfiltered.
@@ -287,8 +303,7 @@ impl Stream {
             self.written = end_at;
         }
         self.emit_raw(out, pos, limit)?;
-        let keep_from = self.written.min(self.win.pos().saturating_sub(self.keep()));
-        self.win.trim(keep_from);
+        self.win.trim(self.keep_from());
         Ok(())
     }
 
@@ -473,6 +488,45 @@ impl Decoder for Stream {
     fn releasable_output(&self, out_len: usize) -> usize {
         // Matches read the decoder's own window, never `out`.
         out_len
+    }
+
+    /// Between batches, with the history from [`Stream::keep_from`] (the
+    /// dictionary, at least 4 MiB, and any block held back for a filter),
+    /// which the decoder keeps itself; its tables, and the PPMd model (up
+    /// to its memory size, 256 MiB at most) and filter programs of RAR 3.
+    /// So a RAR checkpoint costs 4 MiB at least, and is taken rarely. The
+    /// decoder itself trims its history in steps of 1 MiB or more, so it
+    /// may hold more than the copy.
+    fn checkpoint(&self) -> Option<Box<dyn Decoder>> {
+        Some(Box::new(Stream {
+            params: self.params.clone(),
+            in_base: self.in_base,
+            member: self.member,
+            member_in: self.member_in,
+            bitpos: self.bitpos,
+            started: self.started,
+            win: self.win.copy_from(self.keep_from()),
+            member_start: self.member_start,
+            emitted: self.emitted,
+            written: self.written,
+            pending: self.pending.clone(),
+            v5: self.v5.clone(),
+            v3: self.v3.clone(),
+            done: self.done,
+        }))
+    }
+
+    fn state_size(&self) -> usize {
+        let history = self.win.pos().saturating_sub(self.keep_from());
+        std::mem::size_of::<Self>()
+            .saturating_add(to_usize(history))
+            .saturating_add(
+                self.pending
+                    .len()
+                    .saturating_mul(std::mem::size_of::<Pending>()),
+            )
+            .saturating_add(self.v5.heap_size())
+            .saturating_add(self.v3.heap_size())
     }
 }
 
