@@ -127,6 +127,270 @@ fn fixtures_are_robust() {
     });
 }
 
+/// Tiny chunks, tiny budgets, short pages and little derived memory change
+/// how often expansions suspend, restart and re-decode, never what they
+/// produce. Slow; run on demand: `cargo test --test formats -- --ignored`.
+#[test]
+#[ignore]
+fn fixtures_are_invariant_under_host_pressure() {
+    let paths = fixtures();
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let failures = std::sync::Mutex::new(Vec::new());
+    let compared = std::sync::atomic::AtomicUsize::new(0);
+    let polls = std::sync::atomic::AtomicUsize::new(0);
+    std::thread::scope(|scope| {
+        for _ in 0..threads {
+            scope.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(path) = paths.get(i) else { break };
+                    let data = load(path);
+                    if data.len() > common::LARGE_FIXTURE {
+                        continue;
+                    }
+                    let name = display_name(path);
+                    let expected = common::explore_as(&name, &data, chosen_format(path));
+                    let mut host = common::Host::open(
+                        &name,
+                        data,
+                        fillyfoal::Limits {
+                            chunk_size: std::env::var("PRESSURE_CHUNK")
+                                .ok()
+                                .and_then(|v| v.parse().ok())
+                                .unwrap_or(512),
+                            max_derived: std::env::var("PRESSURE_DERIVED")
+                                .ok()
+                                .and_then(|v| v.parse().ok())
+                                .unwrap_or(64 << 20),
+                            ..fillyfoal::Limits::default()
+                        },
+                        chosen_format(path),
+                    );
+                    host.budget = std::env::var("PRESSURE_BUDGET")
+                        .ok()
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(37);
+                    host.max_polls = 50_000_000;
+                    host.explore(
+                        host.root,
+                        24,
+                        std::env::var("PRESSURE_PAGE")
+                            .ok()
+                            .and_then(|v| v.parse().ok())
+                            .unwrap_or(7),
+                    );
+                    let got = host.render();
+                    compared.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    polls.fetch_add(host.polls as usize, std::sync::atomic::Ordering::Relaxed);
+                    if got != expected {
+                        let diff: Vec<String> = expected
+                            .lines()
+                            .zip(got.lines())
+                            .filter(|(a, b)| a != b)
+                            .take(3)
+                            .map(|(a, b)| format!("- {a}\n+ {b}"))
+                            .collect();
+                        failures.lock().unwrap().push(format!(
+                            "{}:\n{}",
+                            snapshot_name(path),
+                            diff.join("\n")
+                        ));
+                    }
+                }
+            });
+        }
+    });
+    let failures = failures.into_inner().unwrap();
+    eprintln!(
+        "compared {} fixtures, {} polls",
+        compared.into_inner(),
+        polls.into_inner()
+    );
+    assert!(
+        failures.is_empty(),
+        "{} fixtures differ:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}
+
+/// Random host behaviour (expanding, seeking windows back and forth,
+/// collapsing, trimming, polling single nodes) must keep every child at
+/// its index and leave a session that explores to the same tree. Slow; run
+/// on demand: `cargo test --test formats -- --ignored`.
+#[test]
+#[ignore]
+fn fixtures_survive_random_host_behaviour() {
+    let paths: Vec<_> = fixtures()
+        .into_iter()
+        .step_by(
+            std::env::var("FUZZ_STEP")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(7),
+        )
+        .collect();
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let failures = std::sync::Mutex::new(Vec::new());
+    std::thread::scope(|scope| {
+        for _ in 0..threads {
+            scope.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(path) = paths.get(i) else { break };
+                    let data = load(path);
+                    if data.len() > common::LARGE_FIXTURE {
+                        continue;
+                    }
+                    let name = display_name(path);
+                    let expected = common::explore_as(&name, &data, chosen_format(path));
+                    let mut host = common::Host::open(
+                        &name,
+                        data,
+                        fillyfoal::Limits {
+                            chunk_size: 64,
+                            ..fillyfoal::Limits::default()
+                        },
+                        chosen_format(path),
+                    );
+                    host.budget = 200;
+                    let mut rng = common::Rng(0x9e37_79b9_7f4a_7c15 ^ i as u64);
+                    if let Err(e) = random_walk(
+                        &mut host,
+                        &mut rng,
+                        std::env::var("FUZZ_STEPS")
+                            .ok()
+                            .and_then(|v| v.parse().ok())
+                            .unwrap_or(300),
+                    ) {
+                        failures
+                            .lock()
+                            .unwrap()
+                            .push(format!("{}: {e}", snapshot_name(path)));
+                        continue;
+                    }
+                    // Back to a clean slate: everything must come out the same.
+                    host.session.collapse(host.root);
+                    host.explore(host.root, 24, 1000);
+                    // Derived sources are numbered in the order they were
+                    // made, which depends on the walk; compare them by order
+                    // of appearance.
+                    let got = renumber_sources(&host.render());
+                    let expected = renumber_sources(&expected);
+                    if got != expected {
+                        if let Ok(dir) = std::env::var("FUZZ_DUMP") {
+                            std::fs::write(format!("{dir}/expected.txt"), &expected).unwrap();
+                            std::fs::write(format!("{dir}/got.txt"), &got).unwrap();
+                        }
+                        let diff: Vec<String> = expected
+                            .lines()
+                            .zip(got.lines())
+                            .filter(|(a, b)| a != b)
+                            .take(2)
+                            .map(|(a, b)| format!("- {a}\n+ {b}"))
+                            .collect();
+                        failures.lock().unwrap().push(format!(
+                            "{}: differs after random walk ({} vs {} lines)\n{}",
+                            snapshot_name(path),
+                            expected.lines().count(),
+                            got.lines().count(),
+                            diff.join("\n")
+                        ));
+                    }
+                }
+            });
+        }
+    });
+    let failures = failures.into_inner().unwrap();
+    assert!(
+        failures.is_empty(),
+        "{} fixtures failed:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}
+
+/// Renumbers `#N:` source references in order of first appearance.
+fn renumber_sources(render: &str) -> String {
+    let mut map = std::collections::HashMap::new();
+    let mut out = String::with_capacity(render.len());
+    let mut rest = render;
+    while let Some(at) = rest.find('#') {
+        out.push_str(&rest[..at]);
+        let tail = &rest[at + 1..];
+        let digits = tail.bytes().take_while(u8::is_ascii_digit).count();
+        if digits > 0 && tail[digits..].starts_with(":0x") {
+            let next = map.len() + 1;
+            let n = *map.entry(&tail[..digits]).or_insert(next);
+            out.push_str(&format!("#{n}"));
+            rest = &tail[digits..];
+        } else {
+            out.push('#');
+            rest = tail;
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+fn random_walk(host: &mut common::Host, rng: &mut common::Rng, steps: usize) -> Result<(), String> {
+    use fillyfoal::{ChildState, Progress};
+    let mut known = vec![host.root];
+    for _ in 0..steps {
+        known.retain(|&id| host.session.node(id).is_some());
+        if known.is_empty() {
+            known.push(host.root);
+        }
+        let id = known[(rng.next() as usize) % known.len()];
+        match rng.next() % 8 {
+            0 | 1 => host.session.expand_more(id, 1 + rng.next() % 50),
+            2 => {
+                let start = rng.next() % 200;
+                host.session.seek(id, start, 1 + rng.next() % 50);
+            }
+            3 => host.session.collapse(id),
+            4 => host.session.trim(rng.next() as usize % 200, &[]),
+            5 => {
+                for _ in 0..(rng.next() % 20) {
+                    match host.session.poll_node(id, 1 + rng.next() % 500) {
+                        Progress::NeedBytes(requests) => host.supply(requests),
+                        Progress::Idle => break,
+                        _ => {}
+                    }
+                }
+            }
+            _ => host.run(),
+        }
+        // Every materialised child sits at its index.
+        let Some(children) = host.session.children(id) else {
+            continue;
+        };
+        let first = children.first;
+        let ids = children.ids.to_vec();
+        for (k, child) in ids.iter().enumerate() {
+            let Some((_, path)) = host.session.address(*child) else {
+                return Err("live child without an address".into());
+            };
+            if path.last() != Some(&(first + k as u64)) {
+                return Err(format!(
+                    "child {k} of the window at {first} has index {:?}",
+                    path.last()
+                ));
+            }
+            if rng.next().is_multiple_of(4) {
+                known.push(*child);
+            }
+        }
+        if matches!(children.state, ChildState::Running(_)) && rng.next().is_multiple_of(3) {
+            host.run();
+        }
+    }
+    host.run();
+    Ok(())
+}
+
 /// The directory a fixture lives in names the format it must be identified
 /// as. This catches probes that are too greedy (or too strict) as formats
 /// accumulate. Fixtures of formats that are never identified by content

@@ -383,8 +383,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     } else if !cur.at_end() || members > 0 {
         cx.diag(Diagnostic::warning("no end-of-archive marker"));
     }
-    if !cur.at_end() {
-        let rest = input.span.tail(cur.pos());
+    // What follows the archive, in the stream's real length (a stream that
+    // records no size has only an upper bound until it has been decoded).
+    let file = cx.known(input.span).await;
+    if cur.pos() < file.len {
+        let rest = file.tail(cur.pos());
         let nonzero = cx
             .read_avail(rest.sub(0, BLOCK))
             .await?

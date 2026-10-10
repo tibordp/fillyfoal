@@ -295,3 +295,40 @@ fn the_work_limit_bounds_work_between_pages_not_a_whole_listing() {
     assert!(children.error.is_none(), "{:?}", children.error);
     assert_eq!(children.ids.len(), 5000);
 }
+
+#[test]
+fn exploring_twice_gives_the_same_tree() {
+    let data = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/external/gzip/large-member.tar.gz"
+    ))
+    .unwrap();
+    let explore = |host: &mut Session, root: NodeId| {
+        fn walk(session: &mut Session, data: &[u8], id: NodeId, depth: usize) {
+            if depth == 0 {
+                return;
+            }
+            session.expand(id, 1000);
+            run(session, data, 1_000_000, 10_000);
+            let ids = session.children(id).unwrap().ids.to_vec();
+            for c in ids {
+                walk(session, data, c, depth - 1);
+            }
+        }
+        walk(host, &data, root, 24);
+        fillyfoal::render::tree(host, root)
+    };
+    let mut session = Session::new(Limits {
+        chunk_size: 64,
+        ..Limits::default()
+    });
+    let source = session.add_source(data.len() as u64);
+    let root = session.add_root(fillyfoal::formats::root(
+        "large-member.tar.gz",
+        Span::new(source, 0, data.len() as u64),
+    ));
+    let first = explore(&mut session, root);
+    session.collapse(root);
+    let second = explore(&mut session, root);
+    assert_eq!(first, second);
+}

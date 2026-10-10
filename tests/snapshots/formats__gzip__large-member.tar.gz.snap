@@ -81,4 +81,3 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Lines — 1 line  [#1:0x200800+0x6]
             Line 1: "world"  [#1:0x200800+0x5]
       End of archive — 2 zero blocks  [#1:0x200a00+0x400]
-      Padding — 226.2 KiB  [#1:0x200e00+0x388a0]

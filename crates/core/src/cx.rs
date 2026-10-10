@@ -896,6 +896,28 @@ impl Cx {
             .is_none_or(|s| s.len_known)
     }
 
+    /// `span` clamped to the real length of its source. For a lazily
+    /// decoded stream whose length is not known yet (see
+    /// [`Cx::decode_lazy_unsized`]) this decodes the rest of it first, so
+    /// use it where a walker reaches what follows its records (trailing
+    /// data, padding), never to look ahead. A decoding error stops there
+    /// and is attached to the node being expanded.
+    pub async fn known(&self, span: Span) -> Span {
+        if !self.len_known(span.source)
+            && span.len > 0
+            && let Err(e) = self
+                .read_avail(span.sub(span.len.saturating_sub(1), 1))
+                .await
+        {
+            self.diag(e);
+        }
+        let len = self
+            .source_len(span.source)
+            .saturating_sub(span.offset)
+            .min(span.len);
+        Span::new(span.source, span.offset, len)
+    }
+
     /// Whether `source` is decoded on demand (reading its end decodes it all).
     pub fn is_lazy(&self, source: SourceId) -> bool {
         lock(&self.shared)

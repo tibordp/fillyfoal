@@ -288,7 +288,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if !ended {
         cx.diag(Diagnostic::warning("no TRAILER!!! entry"));
     }
-    if !cur.at_end() {
+    // What follows the archive, in the stream's real length (a stream that
+    // records no size has only an upper bound until it has been decoded).
+    let file = cx.known(file).await;
+    if cur.pos() < file.len {
         let rest = file.tail(cur.pos());
         let data = cx.read_avail(rest.sub(0, 4096)).await?;
         let node = Node::new(if data.iter().all(|&b| b == 0) {

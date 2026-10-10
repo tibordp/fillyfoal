@@ -352,15 +352,20 @@ impl Host {
                 }
                 Progress::NeedBytes(requests) => {
                     assert!(!requests.is_empty());
-                    for r in requests {
-                        let start = r.offset as usize;
-                        let end = (start + r.len as usize).min(self.data.len());
-                        let bytes = self.data.get(start..end).unwrap_or_default();
-                        self.bytes_supplied += bytes.len() as u64;
-                        self.session.supply(r.source, r.offset, bytes);
-                    }
+                    self.supply(requests);
                 }
             }
+        }
+    }
+
+    /// Answers byte requests from memory.
+    pub fn supply(&mut self, requests: Vec<fillyfoal::ByteRequest>) {
+        for r in requests {
+            let start = r.offset as usize;
+            let end = (start + r.len as usize).min(self.data.len());
+            let bytes = self.data.get(start..end).unwrap_or_default();
+            self.bytes_supplied += bytes.len() as u64;
+            self.session.supply(r.source, r.offset, bytes);
         }
     }
 
