@@ -9,7 +9,7 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cache::ByteCache;
 use crate::cx::{Cx, Key, Output, Pending, Shared, Stop, lock};
 use crate::error::Diagnostic;
-use crate::formats;
+use crate::formats::{self, Catalog, Registry};
 use crate::node::{Count, Expansion, Node};
 use crate::secret::{Secret, SecretRequest};
 use crate::span::{Origin, SourceId, Span};
@@ -147,7 +147,11 @@ pub enum Progress {
     NeedSecret(Vec<SecretRequest>),
 }
 
-pub struct Session {
+/// A dissection session over the formats of catalog `C` (the `fillyfoal`
+/// crate's `Session` alias uses all of them).
+pub struct Session<C> {
+    registry: &'static Registry,
+    catalog: std::marker::PhantomData<fn() -> C>,
     shared: Arc<Mutex<Shared>>,
     slots: Vec<Slot>,
     free: Vec<u32>,
@@ -222,7 +226,7 @@ impl Entry {
     }
 }
 
-impl Session {
+impl<C: Catalog> Session<C> {
     pub fn new(limits: Limits) -> Self {
         let mut limits = limits;
         limits.chunk_size = limits.chunk_size.max(1);
@@ -249,6 +253,8 @@ impl Session {
             tick: 0,
         };
         Session {
+            registry: C::REGISTRY,
+            catalog: std::marker::PhantomData,
             shared: Arc::new(Mutex::new(shared)),
             slots: Vec::new(),
             free: Vec::new(),
@@ -665,6 +671,7 @@ impl Session {
     /// index `start` up to `target`, resuming from the nearest mark.
     fn start(&mut self, id: NodeId, start: u64, target: u64) {
         let shared = self.shared.clone();
+        let registry = self.registry;
         let forced = if self.overrides.is_empty() {
             None
         } else {
@@ -693,6 +700,7 @@ impl Session {
         let cx = Cx {
             shared,
             out: out.clone(),
+            registry,
         };
         entry.run = Some(Run {
             future: expander.start(cx),

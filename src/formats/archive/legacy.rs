@@ -7,7 +7,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::{Head, Input, Probe, embedded, embedded_as};
+use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value};
@@ -347,10 +347,11 @@ async fn packit_entry(
         cx.emit(embedded("Data fork", input.nested(data)));
     }
     if rsrc.len > 0 {
-        cx.emit(embedded_as(
+        // The resource fork format lives in a crate that depends on this one.
+        cx.emit(crate::formats::embedded_named(
             "Resource fork",
             input.nested(rsrc),
-            &crate::formats::system::platform::MAC_RESOURCE,
+            "mac-rsrc",
         ));
     }
     cx.emit(Node::new("CRC").span(Span::new(rsrc.source, rsrc.end(), 2)));

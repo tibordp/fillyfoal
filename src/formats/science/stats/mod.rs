@@ -156,38 +156,7 @@ pub fn row_node(name: String, span: Span, items: Vec<Item>) -> Node {
         .lazy(emit_nodes, Arc::new(nodes))
 }
 
-/// `(year, month, day)` of a day count since 1970-01-01 (Howard Hinnant's
-/// `civil_from_days`).
-pub fn civil(days: i64) -> (i64, i64, i64) {
-    let z = days
-        .clamp(-1_000_000_000, 1_000_000_000)
-        .saturating_add(719_468);
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = doe
-        .saturating_sub(doe / 1460)
-        .saturating_add(doe / 36_524)
-        .saturating_sub(doe / 146_096)
-        / 365;
-    let doy = doe.saturating_sub(
-        yoe.saturating_mul(365)
-            .saturating_add(yoe / 4)
-            .saturating_sub(yoe / 100),
-    );
-    let mp = doy.saturating_mul(5).saturating_add(2) / 153;
-    let day = doy
-        .saturating_sub(mp.saturating_mul(153).saturating_add(2) / 5)
-        .saturating_add(1);
-    let month = if mp < 10 {
-        mp.saturating_add(3)
-    } else {
-        mp.saturating_sub(9)
-    };
-    let year = yoe
-        .saturating_add(era.saturating_mul(400))
-        .saturating_add(i64::from(month <= 2));
-    (year, month, day)
-}
+pub use crate::formats::util::civil::civil;
 
 /// `1980-01-15`, or `1980-01-15 10:30:00` with the time.
 pub fn date_string(unix_seconds: i64, time: bool) -> String {

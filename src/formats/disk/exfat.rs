@@ -723,7 +723,7 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
             }
             0xa0 => {
                 cx.push(Node::new("Volume GUID").span(span).value(Value::Guid(
-                    crate::formats::disk::guid_le(e.get(6..22).unwrap_or_default()),
+                    crate::formats::util::datakit::guid_le(e.get(6..22).unwrap_or_default()),
                 )))
                 .await
             }

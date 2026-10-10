@@ -182,9 +182,58 @@ pub static STREAMING: &[&Format] = &[
     &text::plain::FORMAT,
 ];
 
-/// Whether `format` is in [`STREAMING`].
-pub fn streams(format: &Format) -> bool {
-    STREAMING.iter().any(|f| std::ptr::eq(*f, format))
+/// The formats a session knows: all of them in probing order, and those
+/// that stream (see [`STREAMING`]).
+pub struct Registry {
+    pub formats: &'static [&'static Format],
+    pub streaming: &'static [&'static Format],
+}
+
+impl Registry {
+    pub fn by_name(&self, name: &str) -> Option<&'static Format> {
+        self.formats.iter().copied().find(|f| f.name == name)
+    }
+
+    /// The formats that list `extension` (without the dot, any case), in
+    /// probe order: candidates for a file whose content was not recognised,
+    /// or for an "inspect as" menu. Identification itself never uses
+    /// extensions.
+    pub fn by_extension(&self, extension: &str) -> Vec<&'static Format> {
+        let ext = extension.trim_start_matches('.');
+        self.formats
+            .iter()
+            .copied()
+            .filter(|f| f.extensions.iter().any(|e| e.eq_ignore_ascii_case(ext)))
+            .collect()
+    }
+
+    /// Picks the first format whose probe matches.
+    pub fn identify(&self, head: &Head<'_>) -> Option<&'static Format> {
+        self.formats.iter().copied().find(|f| f.probe.matches(head))
+    }
+
+    /// Whether `format` dissects unsized streams from the front.
+    pub fn streams(&self, format: &Format) -> bool {
+        self.streaming.iter().any(|f| std::ptr::eq(*f, format))
+    }
+}
+
+/// Names the registry a [`crate::session::Session`] uses.
+pub trait Catalog: 'static {
+    const REGISTRY: &'static Registry;
+}
+
+/// Every format.
+pub static REGISTRY: Registry = Registry {
+    formats: FORMATS,
+    streaming: STREAMING,
+};
+
+/// The catalog of every format.
+pub struct All;
+
+impl Catalog for All {
+    const REGISTRY: &'static Registry = &REGISTRY;
 }
 
 /// All formats, in probing order: specific before generic.
@@ -1791,24 +1840,17 @@ pub static FORMATS: &[&Format] = &[
 ];
 
 pub fn by_name(name: &str) -> Option<&'static Format> {
-    FORMATS.iter().copied().find(|f| f.name == name)
+    REGISTRY.by_name(name)
 }
 
-/// The formats that list `extension` (without the dot, any case), in probe
-/// order: candidates for a file whose content was not recognised, or for
-/// an "inspect as" menu. Identification itself never uses extensions.
+/// See [`Registry::by_extension`].
 pub fn by_extension(extension: &str) -> Vec<&'static Format> {
-    let ext = extension.trim_start_matches('.');
-    FORMATS
-        .iter()
-        .copied()
-        .filter(|f| f.extensions.iter().any(|e| e.eq_ignore_ascii_case(ext)))
-        .collect()
+    REGISTRY.by_extension(extension)
 }
 
 /// Picks the first format whose probe matches.
 pub fn identify(head: &Head<'_>) -> Option<&'static Format> {
-    FORMATS.iter().copied().find(|f| f.probe.matches(head))
+    REGISTRY.identify(head)
 }
 
 /// A top-level node that identifies and dissects `span` when expanded.
@@ -1829,7 +1871,21 @@ pub fn embedded_as(
 ) -> Node {
     Node::new(name)
         .span(input.span)
-        .lazy(dissect_as, (input, format.name))
+        .lazy(dissect_as, (input, format))
+}
+
+/// A node for embedded content of the format registered as `format`, for
+/// a dissector that cannot name the format's static (it lives in a crate
+/// that depends on the dissector's). Content of a format this session does
+/// not register is identified as usual.
+pub fn embedded_named(
+    name: impl Into<Cow<'static, str>>,
+    input: Input,
+    format: &'static str,
+) -> Node {
+    Node::new(name)
+        .span(input.span)
+        .lazy(dissect_named, (input, format))
 }
 
 fn check_nesting(cx: &Cx, input: &Input) -> Result<()> {
@@ -1889,7 +1945,7 @@ async fn settle(
                 len: input.span.len,
                 len_known: cx.len_known(input.span.source),
             };
-            (identify(&probe), data.is_empty())
+            (cx.registry().identify(&probe), data.is_empty())
         }
     };
     if claim.is_some() {
@@ -1923,7 +1979,7 @@ pub async fn dissect_unsized(cx: Cx, input: Input) -> Result<()> {
         None if cx.len_known(span.source) => None,
         None => {
             let (data, tail) = head(&cx, span).await?;
-            identify(&Head {
+            cx.registry().identify(&Head {
                 data: &data,
                 tail: &tail,
                 len: span.len,
@@ -1931,7 +1987,7 @@ pub async fn dissect_unsized(cx: Cx, input: Input) -> Result<()> {
             })
         }
     };
-    if format.is_some_and(|f| !streams(f)) && !cx.len_known(span.source) {
+    if format.is_some_and(|f| !cx.registry().streams(f)) && !cx.len_known(span.source) {
         // Decoding up to the provisional end finds the real one.
         let last = span.sub(span.len.saturating_sub(1), 1);
         if let Err(e) = cx.read_avail(last).await {
@@ -2074,13 +2130,19 @@ pub async fn expand_content(
     dissect_or_data(cx, inner).await
 }
 
-async fn dissect_as(cx: Cx, (input, name): (Input, &'static str)) -> Result<()> {
-    let given =
-        by_name(name).ok_or_else(|| Diagnostic::internal(format!("unknown format {name}")))?;
+async fn dissect_as(cx: Cx, (input, given): (Input, &'static Format)) -> Result<()> {
     match settle(&cx, &input, Some(given)).await? {
         (Some(format), _) => (format.dissect)(cx, input).await,
         (None, _) => Err(Diagnostic::internal(format!(
-            "format {name} was not settled"
+            "format {} was not settled",
+            given.name
         ))),
+    }
+}
+
+async fn dissect_named(cx: Cx, (input, name): (Input, &'static str)) -> Result<()> {
+    match cx.registry().by_name(name) {
+        Some(format) => dissect_as(cx, (input, format)).await,
+        None => dissect(cx, input).await,
     }
 }

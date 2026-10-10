@@ -871,7 +871,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
 
     let owned = probe_head(&cx, file).await?;
-    let label = match crate::formats::identify(&Head::from(&owned)) {
+    let label = match cx.registry().identify(&Head::from(&owned)) {
         Some(f) if f.name != "zip" => format!("{} ({} entries)", f.title, dir.entries),
         _ => format!("ZIP archive, {} entries", dir.entries),
     };

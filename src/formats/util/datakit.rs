@@ -316,6 +316,21 @@ pub fn le_uint(bytes: &[u8]) -> u64 {
     })
 }
 
+/// A GUID in Microsoft mixed-endian layout from raw bytes (zero-padded).
+pub fn guid_le(b: &[u8]) -> crate::value::Guid {
+    let get = |i: usize| b.get(i).copied().unwrap_or(0);
+    let mut data4 = [0u8; 8];
+    for (i, d) in data4.iter_mut().enumerate() {
+        *d = get(i.saturating_add(8));
+    }
+    crate::value::Guid {
+        data1: u32::from_le_bytes([get(0), get(1), get(2), get(3)]),
+        data2: u16::from_le_bytes([get(4), get(5)]),
+        data3: u16::from_le_bytes([get(6), get(7)]),
+        data4,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

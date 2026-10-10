@@ -310,21 +310,7 @@ pub fn time(tag: u64, content: &[u8]) -> Option<i64> {
         .checked_add(second)
 }
 
-/// Days since 1970-01-01 of a proleptic Gregorian date (Howard Hinnant's
-/// algorithm).
-#[allow(clippy::arithmetic_side_effects)] // inputs are range-checked first
-pub fn days_from_civil(year: i64, month: i64, day: i64) -> Option<i64> {
-    if !(1..=9999).contains(&year) || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
-        return None;
-    }
-    let y = if month <= 2 { year - 1 } else { year };
-    let era = y.div_euclid(400);
-    let yoe = y - era * 400;
-    let mp = (month + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + day - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    Some(era * 146_097 + doe - 719_468)
-}
+pub use crate::formats::util::civil::days_from_civil;
 
 /// `YYYY-MM-DD` of a Unix timestamp, for summaries.
 #[allow(clippy::arithmetic_side_effects)] // i128 cannot overflow for i64 input

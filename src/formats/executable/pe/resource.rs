@@ -16,7 +16,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::image::{bmp, dims};
 use crate::formats::util::lines::flags as flag_value;
-use crate::formats::{Input, embedded, embedded_as};
+use crate::formats::{Input, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{FlagTable, Value, flag};
@@ -149,12 +149,12 @@ async fn node(
                     .lazy(menu_ex, span)
             }
         }
-        Some(RT_RCDATA) if cx.read_avail(span.sub(0, 4)).await? == b"TPF0" => embedded_as(
-            "Delphi form",
-            input.nested(span),
-            &crate::formats::system::delphi::DFM,
-        )
-        .summary(format!("TPF0 stream, {:#x} bytes", span.len)),
+        Some(RT_RCDATA) if cx.read_avail(span.sub(0, 4)).await? == b"TPF0" =>
+        // The form format lives in a crate that depends on this one.
+        {
+            crate::formats::embedded_named("Delphi form", input.nested(span), "delphi-dfm")
+                .summary(format!("TPF0 stream, {:#x} bytes", span.len))
+        }
         _ => embedded("Content", input.nested(span)).summary(format!("{:#x} bytes", span.len)),
     })
 }

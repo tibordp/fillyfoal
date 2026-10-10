@@ -366,7 +366,7 @@ fn logtime(b: &[u8]) -> Option<(Value, String)> {
     if month == 0 || month > 12 || day == 0 || day > 31 {
         return None;
     }
-    let unix = crate::formats::disk::civil_to_unix(
+    let unix = crate::formats::util::civil::civil_to_unix(
         1900i64.saturating_add(year.into()),
         month.into(),
         day.into(),

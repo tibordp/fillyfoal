@@ -18,7 +18,7 @@ use crate::bytes::to_u64;
 use crate::cache::ByteCache;
 use crate::codec::Codec;
 use crate::error::{Diagnostic, Result};
-use crate::formats::Format;
+use crate::formats::{Format, Registry};
 use crate::node::{Count, Node};
 use crate::secret::{MAX_ATTEMPTS, Secret, SecretRequest};
 use crate::session::{Interpretation, Limits};
@@ -645,6 +645,7 @@ impl Block {
 pub struct Cx {
     pub(crate) shared: Arc<Mutex<Shared>>,
     pub(crate) out: Arc<Mutex<Output>>,
+    pub(crate) registry: &'static Registry,
 }
 
 impl Cx {
@@ -672,6 +673,11 @@ impl Cx {
     /// Records what the node's own detection step settled on.
     pub(crate) fn interpreted(&self, interpretation: Interpretation) {
         lock(&self.out).interpretation = Some(interpretation);
+    }
+
+    /// The formats this session identifies.
+    pub fn registry(&self) -> &'static Registry {
+        self.registry
     }
 
     pub fn limits(&self) -> Limits {

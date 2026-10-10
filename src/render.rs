@@ -110,13 +110,18 @@ pub fn line(node: &Node) -> String {
 }
 
 /// Renders the materialised part of the tree under `root`.
-pub fn tree(session: &Session, root: NodeId) -> String {
+pub fn tree<C: crate::formats::Catalog>(session: &Session<C>, root: NodeId) -> String {
     let mut out = String::new();
     render(session, root, 0, &mut out);
     out
 }
 
-fn render(session: &Session, id: NodeId, depth: usize, out: &mut String) {
+fn render<C: crate::formats::Catalog>(
+    session: &Session<C>,
+    id: NodeId,
+    depth: usize,
+    out: &mut String,
+) {
     let Some(node) = session.node(id) else {
         return;
     };

@@ -527,7 +527,7 @@ async fn timestamp(r: &mut ByteReader<'_>, body: u64, end: u64) -> Result<(Strin
             frac = format!(" (fraction {})", vt::decimal_string(cneg, &digits, exp));
         }
     }
-    let days = crate::formats::asn1::der::days_from_civil(
+    let days = crate::formats::util::civil::days_from_civil(
         i64::try_from(year).unwrap_or(0),
         i64::try_from(month.max(1)).unwrap_or(1),
         i64::try_from(day.max(1)).unwrap_or(1),

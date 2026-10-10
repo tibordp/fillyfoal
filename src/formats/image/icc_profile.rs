@@ -394,7 +394,7 @@ fn header(f: &mut Fields<'_>, ctx: &HeaderCtx) -> Result<Header> {
         node = node.value(Value::Text("not set".to_owned()));
     } else {
         node = node.value(Value::Timestamp {
-            unix_seconds: crate::formats::disk::civil_to_unix(
+            unix_seconds: crate::formats::util::civil::civil_to_unix(
                 year.into(),
                 month.into(),
                 day.into(),

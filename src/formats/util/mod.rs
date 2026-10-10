@@ -9,7 +9,8 @@
 //! encodings (`wire`: protobuf, FlatBuffers, Thrift, Cap'n Proto).
 
 pub mod arcutil;
-pub(crate) mod binutil;
+pub mod binutil;
+pub mod civil;
 pub mod datakit;
 pub mod json;
 pub mod lcid;

@@ -49,7 +49,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::disk::guid_le;
+use crate::formats::util::datakit::guid_le;
 use crate::formats::util::datakit::{hex, text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};

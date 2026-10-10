@@ -7,7 +7,7 @@ use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::text::scan::head_lines;
-use crate::formats::{Head, Input, Probe, embedded, embedded_as};
+use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::value::{Radix, Value};
 
@@ -83,10 +83,11 @@ async fn appimage(cx: Cx, input: Input) -> Result<()> {
             .span(file.sub(8, 3))
             .value(uint(kind.into(), 8)),
     );
-    cx.emit(embedded_as(
+    // ELF lives in a crate that depends on this one.
+    cx.emit(crate::formats::embedded_named(
         "Runtime (ELF)",
         input.nested(file.sub(0, end)),
-        &crate::formats::executable::elf::FORMAT,
+        "elf",
     ));
     cx.emit(embedded(
         if kind == 1 {

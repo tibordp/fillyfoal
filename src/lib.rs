@@ -38,7 +38,9 @@ pub use node::{Count, Node};
 pub use secret::{Secret, SecretKind, SecretRequest};
 pub use session::{
     Address, ByteRequest, ChildState, Children, Interpretation, Limits, NodeId, Progress,
-    ReadProgress, Session, Wait,
+    ReadProgress, Wait,
 };
+/// A session over every registered format.
+pub type Session = session::Session<formats::All>;
 pub use span::{Origin, SourceId, Span};
 pub use value::{Guid, Radix, Value};

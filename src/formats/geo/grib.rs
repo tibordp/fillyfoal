@@ -414,7 +414,7 @@ fn date(y: u64, mo: u64, d: u64, h: u64, mi: u64) -> String {
 fn timestamp(y: u64, mo: u64, d: u64, h: u64, mi: u64, s: u64) -> Value {
     let c = |v: u64| u32::try_from(v).unwrap_or(0);
     Value::Timestamp {
-        unix_seconds: crate::formats::disk::civil_to_unix(
+        unix_seconds: crate::formats::util::civil::civil_to_unix(
             i64::try_from(y).unwrap_or(0),
             c(mo),
             c(d),

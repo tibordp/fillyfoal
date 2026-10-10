@@ -47,7 +47,7 @@ impl<R: Read + Seek> Driver<R> {
     }
 
     /// Polls until the session is idle, reading whatever it asks for.
-    pub fn run(&mut self, session: &mut Session) -> io::Result<()> {
+    pub fn run<C: crate::formats::Catalog>(&mut self, session: &mut Session<C>) -> io::Result<()> {
         loop {
             match session.poll(self.budget) {
                 Progress::Idle => return Ok(()),

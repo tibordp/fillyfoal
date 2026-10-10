@@ -8,7 +8,7 @@ use crate::bytes::{to_u64, to_usize, u32_le, u64_le};
 use crate::cx::{Block, Cx, lock};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
-use crate::formats::disk::guid_le;
+use crate::formats::util::datakit::guid_le;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{Guid, Value, lookup};

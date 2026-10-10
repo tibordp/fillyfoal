@@ -490,7 +490,7 @@ async fn layout(
             }
             let first = crate::bytes::u64_le(e, 32).unwrap_or(0);
             let last = crate::bytes::u64_le(e, 40).unwrap_or(0);
-            let kind = crate::formats::disk::guid_le(e.get(..16).unwrap_or_default());
+            let kind = crate::formats::util::datakit::guid_le(e.get(..16).unwrap_or_default());
             areas.push((
                 first,
                 last.saturating_add(1),

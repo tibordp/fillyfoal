@@ -338,21 +338,7 @@ async fn list_fragments(cx: Cx, pieces: Arc<Vec<Span>>) -> Result<()> {
     Ok(())
 }
 
-/// Seconds since the Unix epoch for a proleptic Gregorian date and time.
-#[allow(clippy::arithmetic_side_effects)] // i128 cannot overflow for these inputs
-pub fn civil_to_unix(year: i64, month: u32, day: u32, hour: u32, min: u32, sec: u32) -> i64 {
-    // Howard Hinnant's days_from_civil.
-    let y = i128::from(year) - i128::from(month <= 2);
-    let era = y.div_euclid(400);
-    let yoe = y - era * 400;
-    let m = i128::from(month.clamp(1, 12));
-    let mp = if m > 2 { m - 3 } else { m + 9 };
-    let doy = (153 * mp + 2) / 5 + i128::from(day.clamp(1, 31)) - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    let days = era * 146_097 + doe - 719_468;
-    let secs = days * 86_400 + i128::from(hour) * 3600 + i128::from(min) * 60 + i128::from(sec);
-    i64::try_from(secs).unwrap_or(i64::MAX)
-}
+pub use crate::formats::util::civil::civil_to_unix;
 
 /// MS-DOS date (high 16 bits) and time (low 16 bits), as used by FAT and
 /// exFAT, to Unix seconds.
@@ -448,20 +434,7 @@ pub fn unix_mode(mode: u32) -> String {
     out
 }
 
-/// A GUID in Microsoft mixed-endian layout from raw bytes (zero-padded).
-pub fn guid_le(b: &[u8]) -> crate::value::Guid {
-    let get = |i: usize| b.get(i).copied().unwrap_or(0);
-    let mut data4 = [0u8; 8];
-    for (i, d) in data4.iter_mut().enumerate() {
-        *d = get(i.saturating_add(8));
-    }
-    crate::value::Guid {
-        data1: u32::from_le_bytes([get(0), get(1), get(2), get(3)]),
-        data2: u16::from_le_bytes([get(4), get(5)]),
-        data3: u16::from_le_bytes([get(6), get(7)]),
-        data4,
-    }
-}
+pub use crate::formats::util::datakit::guid_le;
 
 /// Rounds `v` up to a multiple of `a`, saturating instead of overflowing.
 pub fn align(v: u64, a: u64) -> u64 {

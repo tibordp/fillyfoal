@@ -50,7 +50,7 @@ use crate::declare_format;
 use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::disk::guid_le;
+use crate::formats::util::datakit::guid_le;
 use crate::formats::{Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
