@@ -466,6 +466,11 @@ impl Decode for Lz4Block {
     fn release_output(&mut self, n: usize) {
         self.base = self.base.saturating_sub(n);
     }
+
+    /// No heap: the window is the caller's output.
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 /// A stretch `[from, end)` of the input (a block, a chunk) that a
@@ -808,6 +813,13 @@ impl Decode for Lz4Frame {
             d.release_output(n);
         }
     }
+
+    /// No heap (the content checksum is not computed): linked blocks keep
+    /// their 64 KiB window in the caller's output; between frames, and
+    /// between independent blocks, there is no window at all.
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 /// Raw Snappy: a varint length, then literals and copies.
@@ -992,6 +1004,13 @@ impl Decode for Snappy {
         self.base = self.base.saturating_sub(before);
         self.released = self.released.saturating_add(n.saturating_sub(before));
     }
+
+    /// No heap. Copies may reach back to the start of the stream, so a
+    /// raw stream's window is all its output (checkpoints of one are
+    /// correspondingly rare); a framed chunk's is at most 64 KiB.
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 /// What a Snappy framing chunk's body is decoded as.
@@ -1159,12 +1178,77 @@ impl Decode for SnappyFramed {
             d.release_output(n);
         }
     }
+
+    /// No heap (CRCs are not checked); chunks are independent, so between
+    /// chunks there is no window.
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::arithmetic_side_effects)]
 mod tests {
     use super::*;
+    use crate::codec::pipeline::{Decoder, Streaming, verify_checkpoints};
+
+    /// Checks `make`'s checkpoints over `input` (see `testdata/words8.py`)
+    /// at every step of `step` bytes; returns how many were checked and
+    /// the largest state.
+    fn checkpoints(make: impl Fn() -> Box<dyn Decoder>, input: &[u8], step: usize) -> usize {
+        let (checked, largest) = verify_checkpoints(make, input, step, 1).unwrap();
+        // The decoders own nothing on the heap.
+        assert!(largest <= 256, "{largest}");
+        checked
+    }
+
+    #[test]
+    fn lz4_checkpoints_resume_in_linked_and_independent_blocks() {
+        // A frame of linked 64 KiB blocks with a content checksum, then a
+        // frame of independent blocks with block checksums.
+        let frames = include_bytes!("testdata/words8.lz4");
+        for step in [1000, 4096, 70_000] {
+            let checked = checkpoints(|| Box::new(Streaming(Lz4Frame::default())), frames, step);
+            assert!(checked >= 368_192 / step / 2, "{checked}");
+        }
+        // One 200 KB raw block: a 64 KiB window throughout.
+        let block = include_bytes!("testdata/words8.lz4-block");
+        let checked = checkpoints(|| Box::new(Streaming(Lz4Block::new())), block, 4096);
+        assert!(checked > 40, "{checked}");
+    }
+
+    #[test]
+    fn lz4_windows() {
+        let frames = include_bytes!("testdata/words8.lz4");
+        let mut d = Lz4Frame::default();
+        let mut out = Vec::new();
+        let (mut linked, mut free) = (false, false);
+        while d.step(frames, true, &mut out, 4096, 1 << 30).unwrap() == Step::More {
+            let keep = out.len() - d.releasable_output(out.len());
+            assert!(keep <= LZ4_WINDOW, "{keep}");
+            linked |= keep == LZ4_WINDOW;
+            // In the second frame, nothing of the first is kept.
+            free |= out.len() > 330_000 && keep <= out.len() - 320_000;
+        }
+        assert!(linked && free);
+        assert_eq!(out.len(), 368_192);
+    }
+
+    #[test]
+    fn snappy_checkpoints_resume_inside_and_between_chunks() {
+        let framed = include_bytes!("testdata/words8.sz");
+        for step in [1000, 4096, 70_000] {
+            let checked = checkpoints(
+                || Box::new(Streaming(SnappyFramed::default())),
+                framed,
+                step,
+            );
+            assert!(checked >= 102_048 / step / 2, "{checked}");
+        }
+        let raw = include_bytes!("testdata/words8.snappy");
+        let checked = checkpoints(|| Box::new(Streaming(Snappy::default())), raw, 4096);
+        assert!(checked > 10, "{checked}");
+    }
 
     #[test]
     fn lz4_block_with_overlapping_match() {

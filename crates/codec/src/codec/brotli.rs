@@ -186,6 +186,15 @@ impl Decode for Stream {
         self.released = self.released.saturating_add(n.saturating_sub(start));
         self.start = Some(start.saturating_sub(n));
     }
+
+    /// No heap: meta-block state (prefix codes, context maps, block
+    /// switches) lives only while a meta-block is decoded, and steps end
+    /// between meta-blocks; what carries over (the distance ring, the
+    /// stream position) is inline. The window, up to 16 MiB, is the
+    /// caller's output, so checkpoints of a large-window stream are rare.
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 /// Whether `data` is exactly one complete Brotli stream with some content
@@ -1161,9 +1170,30 @@ fn decode(input: &[u8], limit: usize) -> Result<(Vec<u8>, usize)> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::arithmetic_side_effects)]
 mod tests {
     use super::*;
+    use crate::codec::pipeline::{Streaming, verify_checkpoints};
+
+    #[test]
+    fn checkpoints_resume_between_meta_blocks() {
+        // 320 KB at quality 9 with a 64 KiB window (`testdata/words8.py`).
+        let data = include_bytes!("testdata/words8.br");
+        let (checked, largest) =
+            verify_checkpoints(|| Box::new(Streaming(Stream::default())), data, 1, 1).unwrap();
+        assert!(checked >= 2, "{checked}");
+        assert!(largest <= 256, "{largest}");
+        let mut d = Stream::default();
+        let mut out = Vec::new();
+        let mut released = false;
+        while d.step(data, true, &mut out, 1, 1 << 30).unwrap() == Step::More {
+            let keep = out.len() - d.releasable_output(out.len());
+            assert!(keep <= (1 << 16) - 16);
+            released |= keep < out.len();
+        }
+        assert!(released);
+        assert_eq!(out.len(), 320_000);
+    }
 
     #[test]
     fn dictionary_layout() {
