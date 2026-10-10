@@ -1,5 +1,6 @@
-//! Excel parsed formulas ([MS-XLS] 2.5.198): BIFF8 `rgce` token arrays,
-//! decoded token by token and rendered back to formula text.
+//! Excel parsed formulas ([MS-XLS] 2.5.198): BIFF8 `rgce` token arrays
+//! (and the BIFF2–5 forms), decoded token by token and rendered back to
+//! formula text.
 
 use crate::bytes::{u16_le, u32_le, u64_le};
 use crate::value::{EnumTable, lookup};
@@ -13,6 +14,8 @@ pub struct Names {
     pub xti: Vec<String>,
     /// Defined names, in NAME record order (ptgName indices are 1-based).
     pub defined: Vec<String>,
+    /// Sheet names in BOUNDSHEET order (BIFF5 3-D references index them).
+    pub tabs: Vec<String>,
 }
 
 pub const ERRORS: EnumTable = &[
@@ -428,14 +431,16 @@ pub fn tokens(rgce: &[u8], names: &Names) -> (Vec<Token>, Option<String>) {
     tokens_for(rgce, names, 8)
 }
 
-/// Splits `rgce` of BIFF version `version` (2, 3, 4 or 8) into tokens.
+/// Splits `rgce` of BIFF version `version` (2, 3, 4, 5 or 8) into tokens.
 /// Rendering needs every token decoded, so decoding stops at the first
 /// unknown one. Before BIFF8 ([MS-XLS] covers BIFF8 only; the earlier forms
 /// follow the OpenOffice.org "Excel File Format" documentation and
 /// LibreOffice's importer): references hold an 8-bit column with the
 /// relative flags in the row, strings are byte strings, names carry unused
 /// bytes, function indices are 8-bit before BIFF4 and tAttr data is 8-bit
-/// in BIFF2.
+/// in BIFF2. BIFF5 3-D references hold a signed EXTERNSHEET index (negative
+/// for this workbook), 8 unused bytes and the first and last sheet indices
+/// before the reference.
 pub fn tokens_for(rgce: &[u8], names: &Names, version: u8) -> (Vec<Token>, Option<String>) {
     let early = version < 8;
     let v2 = version == 2;
@@ -752,6 +757,38 @@ pub fn tokens_for(rgce: &[u8], names: &Names, version: u8) -> (Vec<Token>, Optio
                 stack.push("#REF!".to_owned());
                 Some(if early { 7 } else { 9 })
             }
+            0x39 if version == 5 => {
+                // EXTERNSHEET index, 8 unused bytes, the 1-based name
+                // index, 12 unused bytes.
+                let x = u16_at(0).unwrap_or(0).cast_signed();
+                let i = u16_at(10).unwrap_or(0);
+                detail = format!("external name {i} (EXTERNSHEET {x})");
+                stack.push(format!("[name {i}]"));
+                Some(25)
+            }
+            0x3a..=0x3d if version == 5 => {
+                let x = u16_at(0).unwrap_or(0).cast_signed();
+                let (first, last) = (u16_at(10).unwrap_or(0), u16_at(12).unwrap_or(0));
+                let sheet = sheet5(names, x, first, last);
+                let area = matches!(base, 0x3b | 0x3d);
+                let at = p.saturating_add(14);
+                let rel = |o: usize| u16_le(rgce, at.saturating_add(o)).unwrap_or(0);
+                let col = |o: usize| byte(at.saturating_add(o));
+                detail = match base {
+                    0x3a => {
+                        let (r, c) = early_ref(rel(0), col(2));
+                        format!("{sheet}!{}", cell(r, c))
+                    }
+                    0x3b => {
+                        let (r1, c1) = early_ref(rel(0), col(4));
+                        let (r2, c2) = early_ref(rel(2), col(5));
+                        format!("{sheet}!{}:{}", cell(r1, c1), cell(r2, c2))
+                    }
+                    _ => format!("{sheet}!#REF!"),
+                };
+                stack.push(detail.clone());
+                Some(if area { 21 } else { 18 })
+            }
             0x39..=0x3d if early => None,
             0x39 => {
                 let i = u32_le(rgce, p.saturating_add(2)).unwrap_or(0);
@@ -825,7 +862,40 @@ fn sheet(names: &Names, xti: u16) -> String {
         .get(usize::from(xti))
         .cloned()
         .unwrap_or_else(|| format!("XTI{xti}"));
-    if name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+    quote_sheet(name)
+}
+
+/// The sheet (or sheet range) of a BIFF5 3-D reference: sheets of this
+/// workbook (a negative EXTERNSHEET index) by index, 0xFFFF for a deleted
+/// one; another workbook's by its EXTERNSHEET entry.
+fn sheet5(names: &Names, ixals: i16, first: u16, last: u16) -> String {
+    let tab = |i: u16| {
+        if i == 0xffff {
+            "#REF".to_owned()
+        } else {
+            names
+                .tabs
+                .get(usize::from(i))
+                .cloned()
+                .unwrap_or_else(|| format!("sheet {i}"))
+        }
+    };
+    if ixals >= 0 {
+        return quote_sheet(format!("[EXTERNSHEET {ixals}]sheet {first}"));
+    }
+    if first == last {
+        quote_sheet(tab(first))
+    } else {
+        quote_sheet(format!("{}:{}", tab(first), tab(last)))
+    }
+}
+
+fn quote_sheet(name: String) -> String {
+    // A sheet range's colon needs no quotes (sheet names cannot hold one).
+    if name
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == ':')
+    {
         name
     } else {
         format!("'{}'", name.replace('\'', "''"))
