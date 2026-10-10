@@ -1435,6 +1435,72 @@ impl pipeline::Decoder for Decoder {
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len
     }
+
+    /// Between steps, with the dictionary as it is (the last 4 to 8 MiB of
+    /// output: it is trimmed to 4 MiB once it reaches 8, and a copy trimmed
+    /// further could fail where the decoder would not), the trees (shared
+    /// ones counted too: a copy may outlive the decoder) and the SOUND and
+    /// PIC models.
+    fn checkpoint(&self) -> Option<Box<dyn pipeline::Decoder>> {
+        Some(Box::new(Decoder {
+            params: self.params.clone(),
+            st: self.st.clone(),
+            dict: self.dict.clone(),
+        }))
+    }
+
+    fn state_size(&self) -> usize {
+        std::mem::size_of::<Self>()
+            .saturating_add(self.dict.data.len())
+            .saturating_add(self.st.held_bytes())
+    }
+}
+
+impl State {
+    /// Heap bytes a copy holds.
+    fn held_bytes(&self) -> usize {
+        let tree = |t: &Option<Tree>| {
+            t.as_ref().map_or(0, |t| {
+                t.codes
+                    .len()
+                    .saturating_mul(2)
+                    .saturating_add(t.widths.len())
+            })
+        };
+        let cur = self.cur.as_ref().map_or(0, |c| {
+            tree(&c.lz.main)
+                .saturating_add(tree(&c.lz.lens))
+                .saturating_add(c.exe_leftover.capacity())
+        });
+        let sound = self
+            .sound
+            .trees
+            .trees
+            .iter()
+            .map(tree)
+            .fold(0, usize::saturating_add)
+            .saturating_add(
+                self.sound
+                    .trees
+                    .trees
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<Option<Tree>>()),
+            )
+            .saturating_add(
+                self.sound
+                    .channels
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<Channel>()),
+            );
+        let pic = self
+            .pic
+            .plane0
+            .capacity()
+            .saturating_add(self.pic.planes1.capacity())
+            .saturating_mul(std::mem::size_of::<ErrContext>())
+            .saturating_add(self.pic.prev.len().saturating_mul(4));
+        cur.saturating_add(sound).saturating_add(pic)
+    }
 }
 
 /// Undoes the EXE filter on `chunk` (which starts at output position `at`):
@@ -1630,6 +1696,51 @@ mod tests {
             include_bytes!("../../../../tests/fixtures/synthetic/ace/solid.ace"),
             3,
         );
+    }
+
+    /// Every fixture's streams (a solid archive's as one), with LZ77, the
+    /// blocked modes (DELTA, EXE, SOUND, PIC) and solid members.
+    #[test]
+    fn checkpoints_resume_mid_stream() {
+        for archive in [
+            &include_bytes!("../../../../tests/fixtures/synthetic/ace/lz77.ace")[..],
+            include_bytes!("../../../../tests/fixtures/synthetic/ace/blocked.ace"),
+            include_bytes!("../../../../tests/fixtures/synthetic/ace/solid.ace"),
+        ] {
+            let (solid, files) = members(archive);
+            let streams: Vec<(Vec<Member>, Vec<u8>)> = if solid {
+                vec![(
+                    files.iter().map(|(m, _)| *m).collect(),
+                    files
+                        .iter()
+                        .flat_map(|(_, r)| archive[r.clone()].to_vec())
+                        .collect(),
+                )]
+            } else {
+                files
+                    .iter()
+                    .map(|(m, r)| (vec![*m], archive[r.clone()].to_vec()))
+                    .collect()
+            };
+            let mut checked_all = 0;
+            for (members, input) in streams {
+                let params = Params {
+                    members: members.into(),
+                };
+                let (checked, largest) = pipeline::verify_checkpoints(
+                    || Box::new(Decoder::new(params.clone())),
+                    &input,
+                    16,
+                    1,
+                )
+                .unwrap();
+                checked_all += checked;
+                // The dictionary (all output so far, here) and the models.
+                assert!(largest < 64 * 1024, "{largest}");
+            }
+            // (A step runs on to the next mode switch: few steps here.)
+            assert!(checked_all > 0, "{checked_all}");
+        }
     }
 
     #[test]

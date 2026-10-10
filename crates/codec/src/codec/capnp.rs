@@ -101,6 +101,24 @@ impl Decode for Packed {
     fn consumed(&self) -> usize {
         self.pos
     }
+
+    fn releasable_input(&self) -> usize {
+        // Steps end between units.
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        // Output is never read back.
+        out_len
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 #[cfg(test)]
@@ -134,5 +152,22 @@ mod tests {
         assert_eq!(out.len(), 16);
         assert_eq!(out.get(9), Some(&9));
         assert!(unpack(&[0x03, 0x01]).is_err());
+    }
+
+    #[test]
+    fn checkpoints_resume_mid_stream() {
+        let mut unit = vec![
+            0x51, 0x08, 0x03, 0x02, 0x00, 0x02, 0xff, 1, 2, 3, 4, 5, 6, 7, 8, 1,
+        ];
+        unit.extend_from_slice(&[0, 9, 0, 9, 0, 9, 0, 9]);
+        let input = unit.repeat(200);
+        let checked = crate::codec::pipeline::verify_checkpoints(
+            || Box::new(crate::codec::pipeline::Streaming(Packed::default())),
+            &input,
+            100,
+            3,
+        )
+        .map(|(checked, _)| checked);
+        assert!(checked.as_ref().is_ok_and(|&n| n > 10), "{checked:?}");
     }
 }

@@ -120,6 +120,11 @@ impl Decode for Yaz0 {
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len.saturating_sub(WINDOW)
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // The window is in `out`.
+        Some(0)
+    }
 }
 
 #[cfg(test)]
@@ -127,6 +132,54 @@ impl Decode for Yaz0 {
 mod tests {
     use crate::codec::Codec;
     use crate::codec::pipeline::decode_all;
+
+    /// A Yaz0 body for `data`, from greedy matches (for this test only).
+    #[allow(clippy::arithmetic_side_effects, clippy::indexing_slicing)]
+    fn encode(data: &[u8]) -> Vec<u8> {
+        use crate::codec::xpress::tests::{Token, parse};
+        let mut out = Vec::new();
+        let mut group = 0;
+        for (i, token) in parse(data, super::WINDOW, 0x111, usize::MAX)
+            .into_iter()
+            .enumerate()
+        {
+            if i % 8 == 0 {
+                group = out.len();
+                out.push(0);
+            }
+            match token {
+                Token::Literal(b) => {
+                    out[group] |= 0x80 >> (i % 8);
+                    out.push(b);
+                }
+                Token::Match { offset, len } => {
+                    let r = offset - 1;
+                    if len <= 17 {
+                        out.extend_from_slice(&[((len - 2) << 4 | r >> 8) as u8, r as u8]);
+                    } else {
+                        out.extend_from_slice(&[(r >> 8) as u8, r as u8, (len - 0x12) as u8]);
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn checkpoints_resume_mid_stream() {
+        let words = include_bytes!("testdata/words.txt");
+        let data = [&words[..], &[7u8; 3000], &words[..20_000]].concat();
+        let body = encode(&data);
+        let codec = Codec::Yaz0 {
+            size: data.len() as u64,
+        };
+        assert!(decode_all(codec.decoder().unwrap().as_mut(), &body, 1 << 24).unwrap() == data);
+        let (checked, largest) =
+            crate::codec::pipeline::verify_checkpoints(|| codec.decoder().unwrap(), &body, 2000, 3)
+                .unwrap();
+        assert!(checked > 10, "{checked}");
+        assert!(largest < 256, "{largest}");
+    }
 
     #[test]
     fn literals_and_copies() {

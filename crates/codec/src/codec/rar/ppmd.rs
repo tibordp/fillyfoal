@@ -36,12 +36,21 @@ const PAGE: usize = 1 << PAGE_BITS;
 pub type Trace = Vec<(u32, u32, u32)>;
 
 /// The heap, allocated in pages on first write.
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Mem {
     pages: Vec<Option<Box<[u8]>>>,
 }
 
 impl Mem {
+    /// Heap bytes a clone copies: the page table and the pages written.
+    fn heap_size(&self) -> usize {
+        let written = self.pages.iter().filter(|p| p.is_some()).count();
+        self.pages
+            .capacity()
+            .saturating_mul(std::mem::size_of::<Option<Box<[u8]>>>())
+            .saturating_add(written.saturating_mul(PAGE))
+    }
+
     fn reset(&mut self, size: u32) {
         let n = (size >> PAGE_BITS).saturating_add(1) as usize;
         self.pages.clear();
@@ -128,6 +137,7 @@ enum SeeRef {
 }
 
 /// A PPMd model and its range decoder.
+#[derive(Clone)]
 pub struct Ppm {
     mem: Mem,
     size: u32,
@@ -181,6 +191,16 @@ impl Default for Ppm {
 }
 
 impl Ppm {
+    /// Heap bytes a clone copies: the model's memory pages in use (up to
+    /// its memory size), and a trace if one is kept.
+    pub fn heap_size(&self) -> usize {
+        let trace = self.trace.as_ref().map_or(0, |t| {
+            t.capacity()
+                .saturating_mul(std::mem::size_of::<(u32, u32, u32)>())
+        });
+        self.mem.heap_size().saturating_add(trace)
+    }
+
     pub fn new() -> Self {
         let mut indx2units = [0u8; N_INDEXES];
         let mut units2indx = [0u8; 128];

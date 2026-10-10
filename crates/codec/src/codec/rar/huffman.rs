@@ -38,6 +38,18 @@ pub struct Code {
 }
 
 impl Code {
+    /// Heap bytes a clone copies.
+    pub fn heap_size(&self) -> usize {
+        self.sorted
+            .capacity()
+            .saturating_mul(std::mem::size_of::<u16>())
+            .saturating_add(
+                self.quick
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<(u8, u16)>()),
+            )
+    }
+
     /// Builds the code for `lengths` (one per symbol, 0 = unused).
     pub fn new(lengths: &[u8]) -> Result<Code> {
         let mut c = Code::default();

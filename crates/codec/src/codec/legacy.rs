@@ -157,6 +157,11 @@ impl Decode for Lzf {
     fn release_output(&mut self, n: usize) {
         self.base = self.base.saturating_sub(n);
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // The window is in `out`.
+        Some(0)
+    }
 }
 
 /// One `ZV` block header: `(header length, data length, uncompressed
@@ -280,6 +285,11 @@ impl Decode for LzfFramed {
         // Blocks are independent and decoded whole.
         out_len
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // Blocks are independent: no window.
+        Some(0)
+    }
 }
 
 /// Decodes one ADC chunk (all of `input`) onto `out`.
@@ -400,5 +410,39 @@ impl Decode for Adc {
 
     fn release_output(&mut self, n: usize) {
         self.base = self.base.saturating_sub(n);
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        // The window is in `out`.
+        Some(0)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use crate::codec::Codec;
+    use crate::codec::pipeline::verify_checkpoints;
+
+    /// The test files of `tests/data/lzf` and `tests/data/adc`.
+    #[test]
+    fn checkpoints_resume_mid_stream() {
+        for (codec, path) in [
+            (Codec::Lzf, "lzf/text.lzf"),
+            (Codec::LzfFramed, "lzf/mixed.zv"),
+            (Codec::Adc, "adc/text.adc"),
+            (Codec::Adc, "adc/gpt.adc"),
+        ] {
+            let input = std::fs::read(format!(
+                "{}/../../tests/data/{path}",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .unwrap();
+            let (checked, largest) =
+                verify_checkpoints(|| codec.decoder().unwrap(), &input, 1000, 1).unwrap();
+            // (ZV blocks are decoded whole: 64 KiB per step.)
+            assert!(checked > 1, "{path}: {checked}");
+            assert!(largest < 256, "{path}: {largest}");
+        }
     }
 }

@@ -178,3 +178,173 @@ fn empty_group() {
     });
     assert_eq!(decode_all(&mut d, &[], 100).unwrap(), b"");
 }
+
+/// A RAR 5 variable-length integer at `*at`.
+fn vint(data: &[u8], at: &mut usize) -> u64 {
+    let mut v = 0u64;
+    for shift in (0..).step_by(7) {
+        let b = data[*at];
+        *at += 1;
+        v |= u64::from(b & 0x7f) << shift;
+        if b & 0x80 == 0 {
+            break;
+        }
+    }
+    v
+}
+
+/// The compressed streams in one of the test encoder's archives (the
+/// header layouts `tests/data/rar/rarenc.py` writes): each file's packed
+/// data on its own, a solid group's concatenated, stored files skipped.
+fn streams(archive: &[u8]) -> Vec<(Params, Vec<u8>)> {
+    let u16le = |o: usize| usize::from(u16::from_le_bytes([archive[o], archive[o + 1]]));
+    let u32le = |o: usize| u32::from_le_bytes(archive[o..o + 4].try_into().unwrap()) as usize;
+    // (algorithm, dictionary, solid, packed data, unpacked size) per file.
+    let mut files = Vec::new();
+    if archive.starts_with(b"Rar!\x1a\x07\x00") {
+        let mut pos = 7;
+        while pos + 7 <= archive.len() {
+            let (kind, flags, size) = (archive[pos + 2], u16le(pos + 3), u16le(pos + 5));
+            let mut next = pos + size;
+            if kind == 0x74 {
+                let (packed, unpacked, method) =
+                    (u32le(pos + 7), u32le(pos + 11), archive[pos + 25]);
+                if method != 0x30 {
+                    files.push((
+                        Algorithm::V29,
+                        (64u64 << 10) << (flags >> 5 & 7),
+                        flags & 0x10 != 0,
+                        archive[next..next + packed].to_vec(),
+                        unpacked as u64,
+                    ));
+                }
+                next += packed;
+            }
+            pos = next;
+        }
+    } else {
+        assert!(archive.starts_with(b"Rar!\x1a\x07\x01\x00"));
+        let mut pos = 8;
+        while pos + 4 < archive.len() {
+            let mut at = pos + 4;
+            let size = vint(archive, &mut at) as usize;
+            let end = at + size;
+            let kind = vint(archive, &mut at);
+            let flags = vint(archive, &mut at);
+            if flags & 1 != 0 {
+                vint(archive, &mut at);
+            }
+            let data = if flags & 2 != 0 {
+                vint(archive, &mut at) as usize
+            } else {
+                0
+            };
+            if kind == 2 {
+                let file_flags = vint(archive, &mut at);
+                let unpacked = vint(archive, &mut at);
+                vint(archive, &mut at);
+                at += 4 * usize::from(file_flags & 2 != 0) + 4 * usize::from(file_flags & 4 != 0);
+                let info = vint(archive, &mut at);
+                if info >> 7 & 7 != 0 {
+                    files.push((
+                        Algorithm::V50,
+                        (128u64 << 10) << (info >> 10 & 31),
+                        info & 0x40 != 0,
+                        archive[end..end + data].to_vec(),
+                        unpacked,
+                    ));
+                }
+            }
+            pos = end + data;
+        }
+    }
+    let mut groups: Vec<(Params, Vec<u8>)> = Vec::new();
+    for (algorithm, dict, solid, packed, unpacked) in files {
+        let member = Member {
+            packed: packed.len() as u64,
+            unpacked,
+            algorithm,
+        };
+        match groups.last_mut() {
+            Some((params, data)) if solid => {
+                params.members = [&params.members[..], &[member]].concat().into();
+                data.extend_from_slice(&packed);
+            }
+            _ => groups.push((
+                Params {
+                    dict,
+                    members: vec![member].into(),
+                },
+                packed,
+            )),
+        }
+    }
+    groups
+}
+
+/// The fixtures (`tests/data/rar/make.py`): RAR 5 and RAR 2.9 LZ with
+/// filters, solid groups and PPMd. Their output is smaller than the
+/// history kept, so checkpoints hold all of it.
+#[test]
+fn checkpoints_resume_mid_stream() {
+    for name in [
+        "v5-normal.rar",
+        "v5-solid.rar",
+        "v4-normal.rar",
+        "v4-solid.rar",
+        "v4-ppmd.rar",
+    ] {
+        let archive = std::fs::read(format!(
+            "{}/../../tests/fixtures/synthetic/rar/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap();
+        let groups = streams(&archive);
+        assert!(!groups.is_empty(), "{name}");
+        for (params, input) in groups {
+            let total: u64 = params.members.iter().map(|m| m.unpacked).sum();
+            let (checked, largest) = crate::codec::pipeline::verify_checkpoints(
+                || Box::new(Stream::new(params.clone())),
+                &input,
+                256,
+                1,
+            )
+            .unwrap();
+            assert!(checked > 0, "{name}");
+            assert!(
+                largest >= total as usize / 4 && largest < total as usize + (1 << 20),
+                "{name}: {largest} for {total}"
+            );
+        }
+    }
+}
+
+/// 5,200,000 bytes of RAR 5 (`tests/data/rar/big.py`): checkpoints past
+/// 4 MiB keep the last 4 MiB of history. (A step decodes a batch of 32K
+/// symbols, and the first 5 MB are long matches, so the checkpoints are
+/// in the text at the end.)
+#[test]
+fn checkpoints_keep_four_mib() {
+    let input = include_bytes!("../testdata/rar5-text-5m.bin");
+    let params = Params {
+        dict: 4 << 20,
+        members: vec![Member {
+            packed: input.len() as u64,
+            unpacked: 5_200_000,
+            algorithm: Algorithm::V50,
+        }]
+        .into(),
+    };
+    let (checked, largest) = crate::codec::pipeline::verify_checkpoints(
+        || Box::new(Stream::new(params.clone())),
+        input,
+        4096,
+        1,
+    )
+    .unwrap();
+    assert!(checked >= 2, "{checked}");
+    assert!(
+        (4 << 20..(4 << 20) + (1 << 16)).contains(&largest),
+        "{largest}"
+    );
+}

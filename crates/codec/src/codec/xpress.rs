@@ -589,7 +589,7 @@ impl Decode for XpressHuffman {
     clippy::indexing_slicing,
     clippy::arithmetic_side_effects
 )]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::codec::pipeline::{Streaming, decode_all};
 
@@ -675,15 +675,15 @@ mod tests {
         assert!(huffman(300, &broken, 1 << 20).is_err());
     }
 
-    enum Token {
+    pub(crate) enum Token {
         Literal(u8),
         Match { offset: usize, len: usize },
     }
 
     /// Greedy matches (offsets up to `window`, lengths up to `max_len`, none
     /// crossing a multiple of `split` bytes of output) for the test
-    /// encoders below.
-    fn parse(data: &[u8], window: usize, max_len: usize, split: usize) -> Vec<Token> {
+    /// encoders below (and other LZ77 codecs' tests).
+    pub(crate) fn parse(data: &[u8], window: usize, max_len: usize, split: usize) -> Vec<Token> {
         let mut last = std::collections::HashMap::new();
         let (mut tokens, mut i) = (Vec::new(), 0);
         while i < data.len() {

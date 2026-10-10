@@ -22,6 +22,7 @@ const LOW: usize = 16;
 const REP: usize = 44;
 const TABLES: usize = MAIN + DIST + LOW + REP;
 
+#[derive(Clone)]
 struct Codes {
     main: Code,
     dist: Code,
@@ -38,7 +39,7 @@ struct Block {
     last: bool,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct State {
     codes: Option<Codes>,
     block: Option<Block>,
@@ -47,6 +48,18 @@ pub struct State {
     last_len: u64,
     /// Where the last filter declared in this member ends.
     filter_end: Option<u64>,
+}
+
+impl State {
+    /// Heap bytes a clone copies (the prefix codes).
+    pub fn heap_size(&self) -> usize {
+        self.codes.as_ref().map_or(0, |c| {
+            [&c.main, &c.dist, &c.low, &c.rep]
+                .iter()
+                .map(|code| code.heap_size())
+                .fold(0, usize::saturating_add)
+        })
+    }
 }
 
 /// A length from its slot: slots 0–7 are lengths 2–9, then four slots per

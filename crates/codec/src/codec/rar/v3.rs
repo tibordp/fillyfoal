@@ -51,6 +51,7 @@ const DIST_BASE: [u32; DIST] = [
 ];
 
 /// A RarVM program seen in the stream.
+#[derive(Clone)]
 struct Program {
     /// The block length of its last use (the default for the next).
     last_len: u32,
@@ -58,6 +59,7 @@ struct Program {
     len: usize,
 }
 
+#[derive(Clone)]
 struct Codes {
     main: Code,
     dist: Code,
@@ -67,6 +69,7 @@ struct Codes {
 
 /// What carries over between blocks (and between the files of a solid
 /// group).
+#[derive(Clone)]
 pub struct State {
     /// Code lengths, kept for the next table's delta coding.
     lengths: [u8; TABLES],
@@ -102,6 +105,27 @@ impl Default for State {
             programs: Vec::new(),
             last_program: 0,
         }
+    }
+}
+
+impl State {
+    /// Heap bytes a clone copies: the prefix codes, the PPMd model (its
+    /// pages in use, up to the model's memory size) and the programs.
+    pub fn heap_size(&self) -> usize {
+        let codes = self.codes.as_ref().map_or(0, |c| {
+            [&c.main, &c.dist, &c.low, &c.len]
+                .iter()
+                .map(|code| code.heap_size())
+                .fold(0, usize::saturating_add)
+        });
+        let ppmd = self.ppmd.as_ref().map_or(0, |p| {
+            std::mem::size_of::<Ppm>().saturating_add(p.heap_size())
+        });
+        codes.saturating_add(ppmd).saturating_add(
+            self.programs
+                .capacity()
+                .saturating_mul(std::mem::size_of::<Program>()),
+        )
     }
 }
 

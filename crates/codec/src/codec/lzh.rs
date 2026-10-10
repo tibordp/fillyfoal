@@ -1097,4 +1097,86 @@ impl Decode for Lzh {
             None => out_len,
         }
     }
+
+    /// The tables, and the history of the methods that keep their own (the
+    /// LZS/LZ5 ring, 2-4 KiB; MSZIP's 32 KiB dictionary); the CRC runs as
+    /// output is produced.
+    fn heap_size(&self) -> Option<usize> {
+        let code = |c: &Code| match c {
+            Code::Single(_) => 0,
+            Code::Huffman { symbols, .. } => symbols.capacity().saturating_mul(2),
+        };
+        let word = std::mem::size_of::<usize>();
+        Some(match &self.state {
+            State::Static { c, p, .. } => code(c).saturating_add(code(p)),
+            State::Lh1 { tree, p } => std::mem::size_of::<Adaptive>()
+                .saturating_add(tree.freq.capacity().saturating_mul(4))
+                .saturating_add(tree.prnt.capacity().saturating_mul(word))
+                .saturating_add(tree.son.capacity().saturating_mul(word))
+                .saturating_add(code(p)),
+            State::Fastest => 0,
+            State::Ring { ring, .. } => ring.capacity(),
+            State::Lzw { table, .. } => table
+                .capacity()
+                .saturating_mul(std::mem::size_of::<(u16, u8)>()),
+            State::Mszip { dict } => dict.capacity(),
+        })
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
+mod tests {
+    use super::*;
+
+    /// The members of `methods.lzh` (level-0 headers, written by
+    /// `tests/data/lzh/make.py`), each checked with its CRC-16.
+    #[test]
+    fn checkpoints_resume_mid_stream() {
+        let archive = include_bytes!("../../../../tests/fixtures/synthetic/lha/methods.lzh");
+        let u32le = |o: usize| u32::from_le_bytes(archive[o..o + 4].try_into().unwrap());
+        let mut pos = 0;
+        let mut checked_all = 0;
+        while archive[pos] != 0 {
+            let size = usize::from(archive[pos]);
+            let body = pos + 2;
+            let method = match &archive[body..body + 5] {
+                b"-lh1-" => Some(Method::Lh1),
+                b"-lh4-" => Some(Method::Lh { dict_bits: 12 }),
+                b"-lh5-" => Some(Method::Lh { dict_bits: 13 }),
+                b"-lh6-" => Some(Method::Lh { dict_bits: 15 }),
+                b"-lh7-" => Some(Method::Lh { dict_bits: 16 }),
+                b"-lzs-" => Some(Method::Lzs),
+                b"-lz5-" => Some(Method::Lz5),
+                _ => None,
+            };
+            let (packed, original) = (u32le(body + 5) as usize, u32le(body + 9));
+            let crc = u16::from_le_bytes([archive[body + size - 2], archive[body + size - 1]]);
+            let data = &archive[body + size..body + size + packed];
+            pos = body + size + packed;
+            let Some(method) = method else { continue };
+            let params = Params {
+                method,
+                size: Some(u64::from(original)),
+                check: Check::Crc16(crc),
+            };
+            let make = || -> Box<dyn crate::codec::pipeline::Decoder> {
+                Box::new(crate::codec::pipeline::Streaming(Lzh::new(params)))
+            };
+            let mut d = make();
+            let out = crate::codec::pipeline::decode_all(d.as_mut(), data, 1 << 20).unwrap();
+            assert_eq!(out.len() as u32, original);
+            assert!(d.warning(&out).is_none());
+            let (checked, largest) =
+                crate::codec::pipeline::verify_checkpoints(make, data, 500, 1).unwrap();
+            assert!(checked > 0, "{method:?}");
+            assert!(largest < 16 * 1024, "{method:?}: {largest}");
+            checked_all += checked;
+        }
+        assert!(checked_all > 30, "{checked_all}");
+    }
 }
