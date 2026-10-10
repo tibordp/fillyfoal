@@ -172,7 +172,15 @@ async fn members(cx: &Cx, lex: &mut Lexer<'_>, dict: bool, input: Input) -> Resu
             let key = text_of(lex, &child).await?;
             match next_child(lex).await? {
                 Some(value) => {
-                    cx.push(value_node(lex, &value, key, input).await?).await;
+                    let node = value_node(lex, &value, key, input).await?;
+                    // The entry covers its <key> too (a <data> node keeps
+                    // the span of the base64 text it decodes).
+                    let node = if value.name == b"data" {
+                        node
+                    } else {
+                        node.span(lex.scan.span(child.open.start, value.ext.end))
+                    };
+                    cx.push(node).await;
                 }
                 None => {
                     let span = lex.scan.span(child.open.start, child.ext.end);
@@ -227,9 +235,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .find(|a| a.name.bytes() == b"version")
             .and_then(|a| a.value.map(|v| v.text()))
     };
+    let mut plist_node = Node::new("<plist>").span(lex.span(&plist));
     if let Some(v) = &version {
-        cx.emit(Node::new("Version").value(Value::Text(v.clone())));
+        plist_node = plist_node.value(Value::Text(v.clone())).summary("version");
     }
+    cx.emit(plist_node);
     let Some(top) = next_child(&mut lex).await? else {
         return Ok(());
     };
@@ -244,9 +254,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             };
             cx.annotate(format!("Property list (XML), {kind} with {count}"));
             let span = lex.scan.span(top.open.start, top.ext.end);
+            cx.emit(Node::new(format!("<{kind}>")).span(lex.span(&top.open)));
             let mut inner = Lexer::new(&cx, span, Mode::Xml);
             inner.next().await?;
-            members(&cx, &mut inner, dict, input).await
+            members(&cx, &mut inner, dict, input).await?;
+            if top.ext.closure == xml::Closure::Explicit {
+                let close = inner_end(&lex, &top);
+                cx.emit(Node::new(format!("</{kind}>")).span(close));
+            }
+            close_plist(&cx, &mut lex).await
         }
         _ => {
             let node = value_node(&mut lex, &top, "Value".to_owned(), input).await?;
@@ -254,7 +270,29 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 cx.annotate(format!("Property list (XML), {kind}: {}", preview(t, 60)));
             }
             cx.emit(node);
-            Ok(())
+            close_plist(&cx, &mut lex).await
+        }
+    }
+}
+
+/// The span of an element's end tag.
+fn inner_end(lex: &Lexer<'_>, c: &Child) -> Span {
+    let end_tag = 3u64.saturating_add(crate::bytes::to_u64(c.name.len()));
+    lex.scan
+        .span(c.ext.end.saturating_sub(end_tag).max(c.open.end), c.ext.end)
+}
+
+/// The `</plist>` end tag after the top-level value.
+async fn close_plist(cx: &Cx, lex: &mut Lexer<'_>) -> Result<()> {
+    loop {
+        let t = lex.next().await?;
+        match t.kind {
+            Kind::End => {
+                cx.emit(Node::new("</plist>").span(lex.span(&t)));
+                return Ok(());
+            }
+            Kind::Eof | Kind::Start => return Ok(()),
+            _ => {}
         }
     }
 }

@@ -78,8 +78,11 @@ expression: "common::explore(&display_name(&path), &data)"
           Extra field length: 0  [0xa5+0x2]
       ▾ Content — Property list (XML), array with 1 element  [0xc0+0x44]
           XML declaration: "<?xml version=\"1.0\"?>"  [#2:0x0+0x15]
-          Version: "1.0"
+          <plist>: "1.0" — version  [#2:0x15+0x15]
+          <array>  [#2:0x2a+0x7]
           [0]: "Pages-756"  [#2:0x31+0x1a]
+          </array>  [#2:0x4b+0x8]
+          </plist>  [#2:0x53+0x8]
     ▾ QuickLook/Thumbnail.jpg — stored, 4 → 4 bytes  [0x1bb+0x45]
       ▾ Central Directory Header  [0x1bb+0x2e]
           Signature: 50 4b 01 02  |PK..|  [0x1bb+0x4]

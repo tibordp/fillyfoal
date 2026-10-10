@@ -38,5 +38,8 @@ expression: "common::explore(&display_name(&path), &data)"
       length: 0x7a  [0xd0+0x4]
     ▾ Entitlements — Property list (XML), dict with 1 key  [0xd4+0x72]
         XML declaration: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"  [0xd4+0x26]
-        Version: "1.0"
-        get-task-allow: true  [0x12f+0x7]
+        <plist>: "1.0" — version  [0xfb+0x15]
+        <dict>  [0x110+0x6]
+        get-task-allow: true  [0x116+0x20]
+        </dict>  [0x136+0x7]
+        </plist>  [0x13d+0x8]
