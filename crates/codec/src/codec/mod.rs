@@ -950,4 +950,20 @@ mod tests {
         // Truncation is an error, not a panic.
         assert!(inflate::inflate(&dynamic[..dynamic.len() / 2], 1 << 20).is_err());
     }
+
+    #[test]
+    fn deflate_and_zlib_checkpoints_resume_exactly() {
+        let dynamic = include_bytes!("testdata/words.deflate");
+        let (checked, largest) =
+            pipeline::verify_checkpoints(|| Codec::Deflate.decoder().unwrap(), dynamic, 512, 3)
+                .unwrap();
+        assert!(checked > 5, "{checked}");
+        assert!(largest < 4096, "{largest}");
+        let mut zlib = vec![0x78, 0x9c];
+        zlib.extend_from_slice(dynamic);
+        zlib.extend_from_slice(&adler32(include_bytes!("testdata/words.txt")).to_be_bytes());
+        let (checked, _) =
+            pipeline::verify_checkpoints(|| Codec::Zlib.decoder().unwrap(), &zlib, 512, 3).unwrap();
+        assert!(checked > 5, "{checked}");
+    }
 }

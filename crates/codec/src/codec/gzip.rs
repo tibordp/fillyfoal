@@ -235,6 +235,25 @@ mod tests {
     use super::*;
     use crate::codec::pipeline::{Decoder, Status, Streaming};
 
+    #[test]
+    fn checkpoints_resume_inside_and_between_members() {
+        let data: Vec<u8> = (0..300_000u32)
+            .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
+            .collect();
+        let mut stream = member(&data, Some("one"));
+        stream.extend(member(&data[..1000], None));
+        stream.extend(member(&data, None));
+        let body = &stream[header_len(&stream).unwrap()..];
+        let (checked, _) = crate::codec::pipeline::verify_checkpoints(
+            || Box::new(Streaming(Gzip::default())),
+            body,
+            4096,
+            7,
+        )
+        .unwrap();
+        assert!(checked > 10, "{checked}");
+    }
+
     /// A member with stored DEFLATE blocks.
     fn member(data: &[u8], name: Option<&str>) -> Vec<u8> {
         let mut out = vec![

@@ -433,6 +433,71 @@ impl Chain {
     }
 }
 
+/// Checks a codec's checkpoints, for its tests: decodes `input` with
+/// `make()` in steps of `step` bytes, and at every `every`-th step takes a
+/// checkpoint the way a lazily decoded source does (released down to its
+/// window and unread input), resumes it, and checks that it produces the
+/// rest of the output exactly. Returns how many checkpoints were checked
+/// and their largest [`Decoder::state_size`], or what went wrong.
+#[doc(hidden)]
+pub fn verify_checkpoints(
+    make: impl Fn() -> Box<dyn Decoder>,
+    input: &[u8],
+    step: usize,
+    every: usize,
+) -> std::result::Result<(usize, usize), String> {
+    const LIMIT: usize = 1 << 30;
+    let expected = decode_all(make().as_mut(), input, LIMIT).map_err(|e| e.message)?;
+    let mut decoder = make();
+    let mut out = Vec::new();
+    let mut checked = 0usize;
+    let mut largest = 0usize;
+    for n in 0usize.. {
+        let status = decoder
+            .decode(input, true, &mut out, step, LIMIT)
+            .map_err(|e| e.message)?;
+        if status != Status::More {
+            break;
+        }
+        if !n.is_multiple_of(every.max(1)) {
+            continue;
+        }
+        let Some(mut resumed) = decoder.checkpoint() else {
+            continue;
+        };
+        largest = largest.max(resumed.state_size());
+        let unread = resumed.releasable_input().min(input.len());
+        resumed.release_input(unread);
+        let window_from = resumed.releasable_output(out.len()).min(out.len());
+        resumed.release_output(window_from);
+        let mut rest = out.get(window_from..).unwrap_or_default().to_vec();
+        let tail = input.get(unread..).unwrap_or_default();
+        loop {
+            match resumed
+                .decode(tail, true, &mut rest, usize::MAX, LIMIT)
+                .map_err(|e| format!("resumed at output {}: {}", out.len(), e.message))?
+            {
+                Status::Done => break,
+                Status::More => {}
+                Status::NeedInput => {
+                    return Err(format!(
+                        "resumed at output {}: stream ended early",
+                        out.len()
+                    ));
+                }
+            }
+        }
+        if expected.get(window_from..) != Some(rest.as_slice()) {
+            return Err(format!(
+                "resumed at output {} (window from {window_from}, input from {unread}): output differs",
+                out.len()
+            ));
+        }
+        checked = checked.saturating_add(1);
+    }
+    Ok((checked, largest))
+}
+
 /// Decodes a whole in-memory buffer (for tests and small inputs).
 pub fn decode_all(decoder: &mut dyn Decoder, input: &[u8], limit: usize) -> Result<Vec<u8>> {
     let mut out = Vec::new();
