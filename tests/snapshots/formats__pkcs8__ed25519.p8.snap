@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ed25519.p8 — Private key (PKCS#8), Ed25519  [0x0+0x30]
+  ▾ PrivateKeyInfo — SEQUENCE  [0x0+0x30]
+      version: 0 — INTEGER  [0x2+0x3]
+    ▾ privateKeyAlgorithm — SEQUENCE, Ed25519  [0x5+0x7]
+        algorithm: "1.3.101.112" — OBJECT IDENTIFIER, Ed25519  [0x7+0x5]
+    ▾ privateKey — OCTET STRING, 34 bytes, encapsulates DER  [0xc+0x24]
+        CurvePrivateKey: 71 92 75 1a da b9 b2 84 27 5a 6b 23 42 5a d3 a0 …  |q.u.....'Zk#BZ..| — OCTET STRING, 32 bytes  [0xe+0x22]

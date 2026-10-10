@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ rsa1024.der — Public key, RSA 1024-bit, e=65537  [0x0+0xa2]
+  ▾ SubjectPublicKeyInfo — SEQUENCE, RSA 1024-bit, e=65537  [0x0+0xa2]
+    ▾ algorithm — SEQUENCE, rsaEncryption  [0x3+0xf]
+        algorithm: "1.2.840.113549.1.1.1" — OBJECT IDENTIFIER, rsaEncryption  [0x5+0xb]
+        parameters — NULL  [0x10+0x2]
+    ▾ subjectPublicKey — BIT STRING, 1120 bits, encapsulates DER  [0x12+0x90]
+      ▾ RSAPublicKey — SEQUENCE, 1024-bit, e=65537  [0x16+0x8c]
+          modulus: c0 e7 a1 3c 98 ce 39 f8 25 1f 46 84 ab fc 55 39 …  |...<..9.%.F...U9| — INTEGER, 1024-bit  [0x19+0x84]
+          publicExponent: 65537 — INTEGER  [0x9d+0x5]

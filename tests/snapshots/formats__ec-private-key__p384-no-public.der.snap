@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ p384-no-public.der — EC private key, secp384r1, 384-bit  [0x0+0x40]
+  ▾ ECPrivateKey — SEQUENCE  [0x0+0x40]
+      version: 1 — INTEGER  [0x2+0x3]
+      privateKey: 8f 9a 09 e6 60 4a cf 35 d9 33 a2 61 e9 45 9a cf …  |....`J.5.3.a.E..| — OCTET STRING, 48 bytes  [0x5+0x32]
+    ▾ parameters — [0], secp384r1  [0x37+0x9]
+        namedCurve: "1.3.132.0.34" — OBJECT IDENTIFIER, secp384r1  [0x39+0x7]

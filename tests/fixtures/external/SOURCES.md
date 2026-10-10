@@ -304,10 +304,40 @@ and reproduce every file byte for byte.
 | `x509/leaf.cer` | OpenSSL 3 (openssl CLI) | ECDSA P-256 leaf signed by the test CA in pem/chain.pem; signature verifies |
 | `crl/ca.crl` | OpenSSL 3 (openssl CLI) | CRL signed by the test CA |
 | `csr/leaf.csr` | OpenSSL 3 (openssl CLI) | self-signature verifies (`openssl req -verify`) |
-| `der/leaf-pub.der` | OpenSSL 3 (openssl CLI, inferred) | SubjectPublicKeyInfo of the leaf key |
+| `spki/leaf-pub.der` | OpenSSL 3 (openssl CLI, inferred) | SubjectPublicKeyInfo of the leaf key (was `der/leaf-pub.der`) |
 | `pkcs7/signed.p7s` | OpenSSL 3 (openssl CLI) | CMS signature verifies (`openssl cms -verify`) |
 | `pkcs12/` | OpenSSL 3 (`openssl pkcs12 -export`) | all four: OpenSSL 3 defaults (SHA-256 MAC, 2048 iterations, PBES2/AES-256-CBC) or `-legacy` (RC2/3DES, SHA-1 MAC); password `fillyfoal` (empty for empty-password.p12) |
 | `pkcs8-encrypted/` | OpenSSL 3 (`openssl pkcs8 -topk8`) | both: `-v1 PBE-SHA1-3DES` and the PBES2/AES-256 default; password `fillyfoal` |
+| `x509/ca-rsa.cer` | OpenSSL 3.6.3 (openssl CLI) | `sh tests/data/x509/make.sh` (fresh keys each run: same structure, new bytes): RSA-2048 root CA with name constraints (DNS, email, IPv4/IPv6 ranges, directory name), certificate policies (CPS URI, user notice), policy constraints, inhibitAnyPolicy, Microsoft CA version; checked against `openssl x509 -text` |
+| `x509/leaf-p256.cer` | OpenSSL 3.6.3 (openssl CLI) | the same script: P-256 leaf signed by `x509/ca-rsa.cer` with a SAN of every name type, key usage, EKU, AKI with issuer and serial, issuer alternative name, CRL distribution point with reasons and CRL issuer, AIA, TLS feature, Microsoft template name and template, Netscape cert type and comment, and a fabricated RFC 6962 SCT list (two SCTs with filler signatures, handed to openssl as the extension's DER); checked against `openssl x509 -text` |
+| `x509/p384.cer` | OpenSSL 3.6.3 (openssl CLI) | the same script: self-signed P-384, ECDSA with SHA-384 |
+| `x509/ed25519.cer` | OpenSSL 3.6.3 (openssl CLI) | the same script: self-signed Ed25519 |
+| `x509/x25519.cer` | OpenSSL 3.6.3 (openssl CLI) | the same script: X25519 key certified by the CA (`-force_pubkey`) |
+| `x509/rsa-pss.cer` | OpenSSL 3.6.3 (openssl CLI) | the same script: RSA-PSS key and signature (SHA-384, MGF1 SHA-384, salt 48) |
+| `crl/revoked.crl` | OpenSSL 3.6.3 (`openssl ca -gencrl`) | the same script: three revocations (keyCompromise, `-crl_compromise` invalidity date, `-crl_hold` hold instruction), issuing distribution point with reasons, AKI, CRL number; checked against `openssl crl -text` |
+| `ocsp-request/` | OpenSSL 3.6.3 (`openssl ocsp`) | the same script: a request for three certificates signed by the leaf key with a nonce, and a plain one |
+| `ocsp-response/` | OpenSSL 3.6.3 (`openssl ocsp -index`) | the same script: responses over the CA database (revoked with reason, unknown, good; responder by name with certificates, and `-resp_key_id -resp_no_certs`); checked against `openssl ocsp -resp_text` |
+| `tsq/` | OpenSSL 3.6.3 (`openssl ts -query`) | the same script: SHA-256 imprint, nonce, certificate requested |
+| `tsr/` | OpenSSL 3.6.3 (`openssl ts -reply`) | the same script: TSA with accuracy, ordering, TSA name and ESS signingCertificateV2; checked against `openssl ts -reply -text` |
+| `pkcs7/bundle.p7b` | OpenSSL 3.6.3 (`openssl crl2pkcs7`) | the same script: certificates-only SignedData (CA and leaf) |
+| `pkcs7/bundle-crl.p7c` | OpenSSL 3.6.3 (`openssl crl2pkcs7`) | the same script: SignedData with the CA certificate and the CRL |
+| `pkcs7/enveloped.p7m` | OpenSSL 3.6.3 (`openssl cms -encrypt`) | the same script: EnvelopedData with a key-transport (RSA) and a key-agreement (ECDH) recipient |
+| `pkcs7/auth-enveloped.p7m` | OpenSSL 3.6.3 (`openssl cms -encrypt -aes-256-gcm`) | the same script: AuthEnvelopedData, ECDH recipient |
+| `pkcs7/password.p7m` | OpenSSL 3.6.3 (`openssl cms -encrypt -pwri_password`) | the same script: password recipient (PBKDF2, PWRI-KEK) |
+| `pkcs7/kek.p7m` | OpenSSL 3.6.3 (`openssl cms -encrypt -secretkey`) | the same script: KEK recipient (AES-128 key wrap) |
+| `pkcs7/encrypted-data.p7m` | OpenSSL 3.6.3 (`openssl cms -EncryptedData_encrypt`) | the same script: EncryptedData |
+| `pkcs7/digested.p7m` | OpenSSL 3.6.3 (`openssl cms -digest_create`) | the same script: DigestedData (SHA-256) |
+| `rsa-private-key/` | OpenSSL 3.6.3 (`openssl rsa -traditional -outform DER`) | the same script: PKCS#1 RSA-1024 private key |
+| `rsa-public-key/` | OpenSSL 3.6.3 (`openssl rsa -RSAPublicKey_out`) | the same script: PKCS#1 RSAPublicKey of that key |
+| `ec-private-key/` | OpenSSL 3.6.3 (`openssl ec -outform DER`) | the same script: SEC 1 P-256 key with its public key, P-384 key `-no_public` |
+| `pkcs8/` | OpenSSL 3.6.3 (`openssl pkey -outform DER`) | the same script: unencrypted PKCS#8 of RSA, P-256, Ed25519 and X25519 keys |
+| `spki/rsa1024.der` | OpenSSL 3.6.3 (`openssl pkey -pubout`) | the same script: SubjectPublicKeyInfo of the RSA key |
+| `spki/p384.der` | OpenSSL 3.6.3 (`openssl pkey -pubout`) | the same script: SubjectPublicKeyInfo of the P-384 key |
+| `spki/ed25519.der` | OpenSSL 3.6.3 (`openssl pkey -pubout`) | the same script: SubjectPublicKeyInfo of the Ed25519 key |
+| `dh-params/` | OpenSSL 3.6.3 (`openssl dhparam -outform DER`) | the same script: ffdhe2048 as PKCS#3 DHParameter |
+| `dsa-params/` | OpenSSL 3.6.3 (`openssl dsaparam`) | the same script: DSA-1024 parameters |
+| `dsa-private-key/` | OpenSSL 3.6.3 (`openssl dsa -outform DER`) | the same script: DSA private key (OpenSSL's traditional encoding) |
+| `der/generic.der` | OpenSSL 3.6.3 (`openssl asn1parse -genconf`) | the same script: one SEQUENCE of assorted universal types (BOOLEAN, INTEGERs, NULL, OID, strings, times, BIT/OCTET STRING, ENUMERATED, SET, implicit and explicit tags) |
 | `pem/chain.pem` | OpenSSL 3 (openssl CLI) | leaf + CA chain; `openssl verify` accepts it |
 
 ## FFmpeg: images
@@ -588,6 +618,8 @@ and reproduce every file byte for byte.
 | --- | --- | --- |
 | `openssh-key/` | ssh-keygen (OpenSSH_10.2p1, macOS) | `sh tests/data/openssh-key/make.sh` (keys are random: same structure, new bytes); passphrase `fillyfoal`, `-a 4`, `-Z aes256-ctr` / `aes256-cbc` / `aes256-gcm@openssh.com` / `chacha20-poly1305@openssh.com`; edit: the PEM armor removed (`base64 -d` of the body) to get the binary format; every encrypted key decrypts with matching check values (and AEAD tag) |
 | `openssh-keys/ssh-keygen.pub` | ssh-keygen (OpenSSH_10.2p1, macOS) | the same script: `.pub` files of the keys above and an ed25519 user certificate (`ssh-keygen -s ca -I fillyfoal-user -n alice,bob`), concatenated |
+| `openssh-keys/certificates.pub` | ssh-keygen (OpenSSH_10.2p1, macOS) | `sh tests/data/openssh-cert/make.sh` (random keys): an Ed25519 host certificate signed by an RSA CA (`rsa-sha2-512`, serial 42, two principals, validity window) and an ECDSA P-384 user certificate signed by an Ed25519 CA (`force-command`, `source-address`, `permit-pty` only, valid forever); checked against `ssh-keygen -L` |
+| `openssh-krl/revoked.krl` | ssh-keygen (OpenSSH_10.2p1, macOS) | the same script: `ssh-keygen -k -z 3` over serials, a serial range and key IDs under the Ed25519 CA, an explicit key, a key by SHA-256 and a SHA-256 fingerprint; checked against `ssh-keygen -Q -l` |
 | `pem/openssh-rsa.key` | ssh-keygen (OpenSSH_10.2p1, macOS) | the same script: `ssh-keygen -t rsa -b 1024 -N ''`, unedited |
 | `keychain/items.keychain` | macOS `security` (Security.framework, macOS 26) | `sh tests/data/keychain/make.sh` (random salts and keys: same structure, new bytes): `security create-keychain -p fillyfoal`, a generic and an internet password, an OpenSSL self-signed certificate and its EC private key imported; unedited |
 

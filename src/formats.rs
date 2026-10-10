@@ -678,11 +678,37 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "security")]
     &asn1::CSR,
     #[cfg(feature = "security")]
+    &asn1::PROVISIONING_PROFILE,
+    #[cfg(feature = "security")]
     &asn1::PKCS7,
     #[cfg(feature = "security")]
     &asn1::PKCS12,
     #[cfg(feature = "security")]
     &asn1::PKCS8_ENCRYPTED,
+    #[cfg(feature = "security")]
+    &asn1::OCSP_REQUEST,
+    #[cfg(feature = "security")]
+    &asn1::OCSP_RESPONSE,
+    #[cfg(feature = "security")]
+    &asn1::TS_QUERY,
+    #[cfg(feature = "security")]
+    &asn1::TS_REPLY,
+    #[cfg(feature = "security")]
+    &asn1::PKCS8,
+    #[cfg(feature = "security")]
+    &asn1::RSA_PRIVATE_KEY,
+    #[cfg(feature = "security")]
+    &asn1::RSA_PUBLIC_KEY,
+    #[cfg(feature = "security")]
+    &asn1::EC_PRIVATE_KEY,
+    #[cfg(feature = "security")]
+    &asn1::DSA_PRIVATE_KEY,
+    #[cfg(feature = "security")]
+    &asn1::SPKI,
+    #[cfg(feature = "security")]
+    &asn1::DH_PARAMS,
+    #[cfg(feature = "security")]
+    &asn1::DSA_PARAMS,
     #[cfg(feature = "security")]
     &asn1::DER,
     #[cfg(feature = "security")]
@@ -1850,6 +1876,8 @@ pub static FORMATS: &[&Format] = &[
     &security::credentials::KDB,
     #[cfg(feature = "security")]
     &security::openssh::OPENSSH_KEY,
+    #[cfg(feature = "security")]
+    &security::krl::KRL,
     #[cfg(feature = "security")]
     &security::credentials::KEYBOX,
     #[cfg(feature = "security")]

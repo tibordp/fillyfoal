@@ -11,6 +11,7 @@ pub mod keepass;
 pub mod kerberos;
 pub mod keychain;
 pub mod keyrings;
+pub mod krl;
 pub mod openssh;
 pub mod pem;
 pub mod pgp;

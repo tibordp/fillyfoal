@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ dsa1024.der — DSA private key, 1024-bit p, 224-bit q  [0x0+0x1cf]
+  ▾ DSAPrivateKey — SEQUENCE  [0x0+0x1cf]
+      version: 0 — INTEGER  [0x4+0x3]
+      p: b9 1c 0c de 27 3e 9a a9 a4 23 d7 de 71 d3 52 03 …  |....'>...#..q.R.| — INTEGER, 1024-bit  [0x7+0x84]
+      q: 9b a3 0c fe b5 96 d6 d0 e5 0c 98 43 db 73 ed 2e …  |...........C.s..| — INTEGER, 224-bit  [0x8b+0x1f]
+      g: 03 48 af 55 80 af 69 72 b5 81 d3 69 3d db 8c 06 …  |.H.U..ir...i=...| — INTEGER, 1018-bit  [0xaa+0x83]
+      y: 87 c2 97 0d 3c 21 e5 a9 5d 7f 30 2b 06 24 b2 01 …  |....<!..].0+.$..| — INTEGER, 1024-bit  [0x12d+0x84]
+      x: 27 a2 ca 03 f9 70 4e 7f 04 03 5a 5d e4 45 98 57 …  |'....pN...Z].E.W| — INTEGER, 222-bit  [0x1b1+0x1e]

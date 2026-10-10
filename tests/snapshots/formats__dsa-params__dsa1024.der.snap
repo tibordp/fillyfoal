@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ dsa1024.der — DSA parameters, 1024-bit p, 224-bit q  [0x0+0x12a]
+  ▾ Dss-Parms — SEQUENCE  [0x0+0x12a]
+      p: a2 38 4d 61 18 af dc 55 1e 6f c3 2a 76 75 ac 6b …  |.8Ma...U.o.*vu.k| — INTEGER, 1024-bit  [0x4+0x84]
+      q: e1 31 68 3c bb a8 4c ea 30 09 fc 65 81 0f d1 3c …  |.1h<..L.0..e...<| — INTEGER, 224-bit  [0x88+0x1f]
+      g: 44 61 1c 2a cf 9d 21 15 0b 83 e4 93 9f 3b 11 90 …  |Da.*..!......;..| — INTEGER, 1023-bit  [0xa7+0x83]

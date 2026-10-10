@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ffdhe2048.der — DH parameters, 2048-bit prime, generator 2  [0x0+0x10c]
+  ▾ DHParameter — SEQUENCE  [0x0+0x10c]
+      prime: ff ff ff ff ff ff ff ff ad f8 54 58 a2 bb 4a 9a …  |..........TX..J.| — INTEGER, 2048-bit  [0x4+0x105]
+      base: 2 — INTEGER  [0x109+0x3]

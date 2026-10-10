@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ed25519.der — Public key, Ed25519  [0x0+0x2c]
+  ▾ SubjectPublicKeyInfo — SEQUENCE, Ed25519  [0x0+0x2c]
+    ▾ algorithm — SEQUENCE, Ed25519  [0x2+0x7]
+        algorithm: "1.3.101.112" — OBJECT IDENTIFIER, Ed25519  [0x4+0x5]
+      subjectPublicKey: f2 7c 22 65 76 44 2c b4 58 39 99 07 b7 85 28 98 …  |.|"evD,.X9....(.| — BIT STRING, 32-byte key  [0x9+0x23]

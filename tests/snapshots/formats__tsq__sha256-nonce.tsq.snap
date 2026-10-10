@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sha256-nonce.tsq — Time-stamp request, sha256, nonce, certificate requested  [0x0+0x45]
+  ▾ TimeStampReq — SEQUENCE  [0x0+0x45]
+      version: 1 — INTEGER  [0x2+0x3]
+    ▾ messageImprint — SEQUENCE  [0x5+0x33]
+      ▾ hashAlgorithm — SEQUENCE, sha256  [0x7+0xf]
+          algorithm: "2.16.840.1.101.3.4.2.1" — OBJECT IDENTIFIER, sha256  [0x9+0xb]
+          parameters — NULL  [0x14+0x2]
+        hashedMessage: "75:09:96:22:5C:DD:76:3B:59:B8:58:D9:73:EC:82:9D:71:CF:45:0E:6B:41:78:C6:AF:FA:D0:E6:EE:39:15:86" — OCTET STRING, 32 bytes  [0x16+0x22]
+      nonce: 3276120855036251570 — INTEGER  [0x38+0xa]
+      certReq: true — BOOLEAN  [0x42+0x3]

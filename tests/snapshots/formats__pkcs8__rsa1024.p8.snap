@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ rsa1024.p8 — Private key (PKCS#8), rsaEncryption, 1024-bit  [0x0+0x27b]
+  ▾ PrivateKeyInfo — SEQUENCE  [0x0+0x27b]
+      version: 0 — INTEGER  [0x4+0x3]
+    ▾ privateKeyAlgorithm — SEQUENCE, rsaEncryption  [0x7+0xf]
+        algorithm: "1.2.840.113549.1.1.1" — OBJECT IDENTIFIER, rsaEncryption  [0x9+0xb]
+        parameters — NULL  [0x14+0x2]
+    ▾ privateKey — OCTET STRING, 609 bytes, encapsulates DER  [0x16+0x265]
+      ▾ RSAPrivateKey — SEQUENCE  [0x1a+0x261]
+          version: 0 — INTEGER  [0x1e+0x3]
+          modulus: c0 e7 a1 3c 98 ce 39 f8 25 1f 46 84 ab fc 55 39 …  |...<..9.%.F...U9| — INTEGER, 1024-bit  [0x21+0x84]
+          publicExponent: 65537 — INTEGER  [0xa5+0x5]
+          privateExponent: 7e 44 a0 03 dc 39 d1 34 1e 88 74 4e 4f 8d 61 f3 …  |~D...9.4..tNO.a.| — INTEGER, 1023-bit  [0xaa+0x83]
+          prime1: e8 c6 88 5e b1 64 28 88 c3 d2 46 61 94 38 cf 01 …  |...^.d(...Fa.8..| — INTEGER, 512-bit  [0x12d+0x43]
+          prime2: d4 26 bb e1 5c 18 d4 60 4f 31 99 39 89 12 5d a6 …  |.&..\..`O1.9..].| — INTEGER, 512-bit  [0x170+0x43]
+          exponent1: d5 0a a7 52 eb 4d fc df 37 41 e3 52 79 83 08 ca …  |...R.M..7A.Ry...| — INTEGER, 512-bit  [0x1b3+0x43]
+          exponent2: 8c 29 33 03 86 b7 18 c8 b0 49 92 73 c2 ad 91 95 …  |.)3......I.s....| — INTEGER, 512-bit  [0x1f6+0x43]
+          coefficient: 6e eb 29 62 f4 c9 31 80 f4 d5 19 89 cb 78 7f 81 …  |n.)b..1......x..| — INTEGER, 511-bit  [0x239+0x42]
