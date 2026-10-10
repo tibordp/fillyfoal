@@ -127,7 +127,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - run: npm ci
+      - run: npm ci --prefer-offline --no-audit --no-fund
       # A debug build is enough to typecheck and bundle against; the
       # release one (fat LTO) is the Pages workflow's.
       - run: wasm-pack build wasm --target web --dev --no-opt --out-dir ../src/wasm-pkg --no-pack
