@@ -2,14 +2,14 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ qemu-extl2-zstd.qcow2 — QCOW2 version 3 image, 256 KiB virtual, 16 KiB clusters, zstd, extended L2 entries  [0x0+0x18013]
+▾ qemu-extl2-zstd.qcow2 — QCOW2 version 3 image, 256.0 KiB virtual, 16.0 KiB clusters, zstd, extended L2 entries  [0x0+0x18013]
   ▾ Header  [0x0+0x48]
       Magic: 51 46 49 fb  |QFI.|  [0x0+0x4]
       Version: 3  [0x4+0x4]
       Backing file name offset: 0x0  [0x8+0x8]
       Backing file name length: 0  [0x10+0x4]
-      Cluster bits: 14 — 16 KiB  [0x14+0x4]
-      Virtual disk size: 262144 — 256 KiB  [0x18+0x8]
+      Cluster bits: 14 — 16.0 KiB  [0x14+0x4]
+      Virtual disk size: 262144 — 256.0 KiB  [0x18+0x8]
       Encryption: none (0x0)  [0x20+0x4]
       L1 entries: 1  [0x24+0x4]
       L1 table offset: 0xc000  [0x28+0x8]
@@ -65,7 +65,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Type: end of extensions (0x0)  [0x1f8+0x4]
         Length: 0  [0x1fc+0x4]
     Unused — rest of the header cluster  [0x200+0x3e00]
-  ▾ L1 table — 1 entry, each covering 16 MiB of the guest  [0xc000+0x8]
+  ▾ L1 table — 1 entry, each covering 16.0 MiB of the guest  [0xc000+0x8]
     ▾ L1[0]: 0x8000000000010000 [COPIED] — guest 0x0–0xffffff: L2 table at 0x10000, copied  [0xc000+0x8] → 0x10000+0x4000
       ▾ L2[0] — guest 0x0: host 0x14000, copied; subclusters allocated 0–1, 6–7, zero 16–17  [0x10000+0x10] → 0x14000+0x4000
           Descriptor: 0x8000000000014000 [COPIED]  [0x10000+0x8]
@@ -77,7 +77,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Descriptor: 0x4000000000018000 [COMPRESSED]  [0x10040+0x8]
           Compressed data offset: 0x18000  [0x10040+0x8]
         ▾ Compressed cluster — 19 bytes  [0x18000+0x13]
-            Decompressed — 16 KiB  [#1:0x0+0x4000]
+            Decompressed — 16.0 KiB  [#1:0x0+0x4000]
           Subcluster zero bitmap: 0x0 — none  [0x10048+0x4]
           Subcluster allocation bitmap: 0x0 — none  [0x1004c+0x4]
         L2[5–7]: unallocated (0x0) — guest 0x14000–0x1ffff: unallocated  [0x10050+0x30]
@@ -92,12 +92,12 @@ expression: "common::explore(&display_name(&path), &data)"
         Clusters 0x7–0x1fff: 0 — free (beyond the end of the file)  [0x800e+0x3ff2]
       Refcount table[1–2047]: unallocated (0x0) — clusters 0x2000–0xffffff: no refcount block (all free)  [0x4008+0x3ff8]
   ▾ Host cluster map — what each cluster of the file holds  [0x0+0x18013]
-      Header — 16 KiB  [0x0+0x4000]
-      Refcount table — 16 KiB  [0x4000+0x4000]
-      Refcount block — 16 KiB  [0x8000+0x4000]
-      L1 table — 16 KiB  [0xc000+0x4000]
-      L2 table — 16 KiB  [0x10000+0x4000]
-      Data — guest 0x0–0x3fff, 16 KiB  [0x14000+0x4000]
+      Header — 16.0 KiB  [0x0+0x4000]
+      Refcount table — 16.0 KiB  [0x4000+0x4000]
+      Refcount block — 16.0 KiB  [0x8000+0x4000]
+      L1 table — 16.0 KiB  [0xc000+0x4000]
+      L2 table — 16.0 KiB  [0x10000+0x4000]
+      Data — guest 0x0–0x3fff, 16.0 KiB  [0x14000+0x4000]
       Compressed data — 19 bytes  [0x18000+0x13]
-  ▾ Virtual disk — 256 KiB
+  ▾ Virtual disk — 256.0 KiB
       Data  [#2:0x0+0x40000]

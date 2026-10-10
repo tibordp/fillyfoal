@@ -7,28 +7,17 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value};
+use crate::value::EnumTable;
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
 
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
 /// Header-only dissector body: emits a signature and the rest as one node.
-async fn signature_and_body(
+pub(crate) async fn signature_and_body(
     cx: &Cx,
     file: Span,
     magic_len: u64,
@@ -69,7 +58,7 @@ async fn ha(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Entries")
             .span(file.sub(2, 2))
-            .value(uint(count.into(), 16)),
+            .value(uint(count, 16)),
     );
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(4);

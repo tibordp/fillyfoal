@@ -14,8 +14,14 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, uint};
-use crate::formats::{Codec, Format, Head, Input, Probe, content, embedded};
+use crate::formats::text::decode::{Decoded, base64};
+use crate::formats::text::scan::Owned;
+use crate::formats::text::xml::{Kind, Lexer, Mode, token_text};
+use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, uint};
+use crate::formats::{Codec, Format, Head, Input, Probe, content, embedded, embedded_named};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
@@ -68,7 +74,7 @@ record! {
         flags: u32 "Flags" .flags(FLAGS),
         running: u64 "Running data fork offset" .hex(),
         data_offset: u64 "Data fork offset" .hex(),
-        data_length: u64 "Data fork length" .with(|&l, n| n.summary(human_size(l))),
+        data_length: u64 "Data fork length" .with(|&l, n| n.summary(fmt::size(l))),
         rsrc_offset: u64 "Resource fork offset" .hex(),
         rsrc_length: u64 "Resource fork length",
         segment: u32 "Segment number",
@@ -78,13 +84,13 @@ record! {
         data_checksum_bits: u32 "Data checksum size (bits)",
         data_checksum: bytes[128] "Data checksum",
         xml_offset: u64 "XML offset" .hex(),
-        xml_length: u64 "XML length" .with(|&l, n| n.summary(human_size(l))),
+        xml_length: u64 "XML length" .with(|&l, n| n.summary(fmt::size(l))),
         reserved: bytes[120] "Reserved",
         checksum_type: u32 "Master checksum type" .enumeration(CHECKSUM),
         checksum_bits: u32 "Master checksum size (bits)",
         checksum: bytes[128] "Master checksum",
         variant: u32 "Image variant" .enumeration(VARIANT),
-        sectors: u64 "Sector count" .with(|&s, n| n.summary(human_size(s.saturating_mul(512)))),
+        sectors: u64 "Sector count" .with(|&s, n| n.summary(fmt::size(s.saturating_mul(512)))),
         reserved2: bytes[12] "Reserved",
     }
 }
@@ -114,10 +120,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Data fork")
             .span(data)
-            .summary(human_size(data.len)),
+            .summary(fmt::size(data.len)),
     );
     if koly.rsrc_length > 0 {
-        cx.emit(Node::new("Resource fork").span(file.sub(koly.rsrc_offset, koly.rsrc_length)));
+        let rsrc = file.sub(koly.rsrc_offset, koly.rsrc_length);
+        cx.emit(embedded_named(
+            "Resource fork",
+            input.nested(rsrc),
+            "mac-rsrc",
+        ));
     }
     let xml = file.sub(koly.xml_offset, koly.xml_length);
     if koly.xml_length > 0 {
@@ -126,120 +137,125 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .span(xml)
                 .lazy(partitions, (input, xml, data)),
         );
-        cx.emit(embedded("Property list", input.nested(xml)).summary(human_size(xml.len)));
+        cx.emit(embedded("Property list", input.nested(xml)).summary(fmt::size(xml.len)));
     }
     cx.emit(Koly::node("Trailer (koly)", trailer, BE));
     cx.annotate(format!(
         "Apple disk image (UDIF), {} ({} sectors)",
-        human_size(koly.sectors.saturating_mul(512)),
+        fmt::size(koly.sectors.saturating_mul(512)),
         koly.sectors
     ));
     Ok(())
 }
 
-/// Standard base64, ignoring whitespace. Returns `None` on other bytes.
-fn base64(data: &[u8]) -> Option<Vec<u8>> {
-    let mut out = Vec::with_capacity((data.len() / 4).saturating_mul(3));
-    let mut acc = 0u32;
-    let mut bits = 0u32;
-    for &c in data {
-        let v = match c {
-            b'A'..=b'Z' => c.wrapping_sub(b'A'),
-            b'a'..=b'z' => c.wrapping_sub(b'a').wrapping_add(26),
-            b'0'..=b'9' => c.wrapping_sub(b'0').wrapping_add(52),
-            b'+' => 62,
-            b'/' => 63,
-            b'=' => break,
-            b' ' | b'\t' | b'\r' | b'\n' => continue,
-            _ => return None,
-        };
-        acc = (acc << 6 | u32::from(v)) & 0x00ff_ffff;
-        bits = bits.saturating_add(6);
-        if bits >= 8 {
-            bits = bits.saturating_sub(8);
-            out.push(u8::try_from((acc >> bits) & 0xff).unwrap_or(0));
-        }
-    }
-    Some(out)
-}
-
-fn find(hay: &[u8], needle: &[u8], from: usize) -> Option<usize> {
-    let rest = hay.get(from..)?;
-    rest.windows(needle.len())
-        .position(|w| w == needle)
-        .and_then(|p| p.checked_add(from))
-}
-
-/// The text of the `<tag>` element following `<key>key</key>` within
-/// `range` of `xml`, with its offsets.
-fn keyed(xml: &[u8], range: (usize, usize), key: &[u8], tag: &[u8]) -> Option<(usize, usize)> {
-    // Searching only up to the end of the range keeps a walk over many
-    // dicts linear (a missing key would otherwise scan to the end of the XML).
-    let xml = xml.get(..range.1)?;
-    let mut k = b"<key>".to_vec();
-    k.extend_from_slice(key);
-    k.extend_from_slice(b"</key>");
-    let at = find(xml, &k, range.0).filter(|&a| a < range.1)?;
-    let mut open = b"<".to_vec();
-    open.extend_from_slice(tag);
-    open.push(b'>');
-    let mut close = b"</".to_vec();
-    close.extend_from_slice(tag);
-    close.push(b'>');
-    let start = find(xml, &open, at)?.checked_add(open.len())?;
-    let end = find(xml, &close, start)?;
-    (end <= range.1).then_some((start, end))
-}
-
-/// One `blkx` entry: its name and the span of its base64 data.
+/// One `blkx` entry: its name and its base64 `<data>` text.
 struct Blkx {
     name: String,
-    data: (usize, usize),
+    data: Owned,
 }
 
-async fn blkx_entries(cx: &Cx, xml: &[u8]) -> Vec<Blkx> {
+/// Where the walk over the property list is.
+#[derive(Default)]
+struct Walk {
+    depth: usize,
+    /// Inside a `<key>`: its text comes next.
+    in_key: bool,
+    key: Vec<u8>,
+    /// The depth of the `blkx` array.
+    array: Option<usize>,
+    /// The depth of the current entry's dict.
+    entry: Option<usize>,
+    /// Inside the entry's `<string>` or `<data>` value for this key.
+    value: Option<Vec<u8>>,
+    name: Option<String>,
+    cf_name: Option<String>,
+    data: Option<Owned>,
+}
+
+/// The `blkx` entries of the resource-fork dict
+/// (`resource-fork` → `blkx` → array of dicts with `Name`/`CFName` and
+/// `Data`), with the spans of their base64 payloads.
+async fn blkx_entries(cx: &Cx, xml: Span) -> Result<Vec<Blkx>> {
+    let mut lex = Lexer::new(cx, xml, Mode::Xml);
+    let mut w = Walk::default();
     let mut out = Vec::new();
-    let Some(key) = find(xml, b"<key>blkx</key>", 0) else {
-        return out;
-    };
-    let Some(array_end) = find(xml, b"</array>", key) else {
-        return out;
-    };
-    let mut at = key;
-    while let Some(start) = find(xml, b"<dict>", at).filter(|&s| s < array_end) {
-        cx.checkpoint().await;
-        let Some(end) = find(xml, b"</dict>", start) else {
-            break;
-        };
-        let range = (start, end);
-        let name = keyed(xml, range, b"Name", b"string")
-            .or_else(|| keyed(xml, range, b"CFName", b"string"))
-            .and_then(|(s, e)| xml.get(s..e))
-            .map(|b| String::from_utf8_lossy(b).into_owned())
-            .unwrap_or_default();
-        if let Some(data) = keyed(xml, range, b"Data", b"data") {
-            out.push(Blkx { name, data });
+    loop {
+        let t = lex.next().await?;
+        match t.kind {
+            Kind::Eof => break,
+            Kind::Start => {
+                let name = lex.name(&t).await?;
+                // A key names the value element that follows it.
+                let key = std::mem::take(&mut w.key);
+                if t.empty {
+                    continue;
+                }
+                w.depth = w.depth.saturating_add(1);
+                match name.as_slice() {
+                    b"key" => w.in_key = true,
+                    b"array" if w.array.is_none() && key == b"blkx" => w.array = Some(w.depth),
+                    b"dict" if w.array.is_some_and(|a| a.saturating_add(1) == w.depth) => {
+                        cx.checkpoint().await;
+                        w.entry = Some(w.depth);
+                        (w.name, w.cf_name, w.data) = (None, None, None);
+                    }
+                    b"string" | b"data"
+                        if w.entry.is_some_and(|e| e.saturating_add(1) == w.depth) =>
+                    {
+                        w.value = Some(key);
+                    }
+                    _ => {}
+                }
+            }
+            Kind::Text | Kind::Cdata if w.in_key => {
+                w.key = token_text(&mut lex, &t).await?.trim().as_bytes().to_vec();
+            }
+            Kind::Text => match w.value.as_deref() {
+                Some(b"Name") => w.name = Some(token_text(&mut lex, &t).await?),
+                Some(b"CFName") => w.cf_name = Some(token_text(&mut lex, &t).await?),
+                Some(b"Data") => {
+                    let len = to_usize(t.end.saturating_sub(t.start));
+                    w.data = Some(lex.owned(&t, len).await?);
+                }
+                _ => {}
+            },
+            Kind::End => {
+                let name = lex.name(&t).await?;
+                match name.as_slice() {
+                    b"key" => w.in_key = false,
+                    b"string" | b"data" => w.value = None,
+                    b"dict" if w.entry == Some(w.depth) => {
+                        w.entry = None;
+                        if let Some(data) = w.data.take() {
+                            let name = w.name.take().or(w.cf_name.take()).unwrap_or_default();
+                            out.push(Blkx { name, data });
+                        }
+                    }
+                    b"array" if w.array == Some(w.depth) => break,
+                    _ => {}
+                }
+                w.depth = w.depth.saturating_sub(1);
+            }
+            _ => {}
         }
-        at = end;
     }
-    out
+    Ok(out)
 }
 
 async fn partitions(cx: Cx, (input, xml_span, data_fork): (Input, Span, Span)) -> Result<()> {
-    let xml = cx.read(xml_span).await?;
-    let entries = blkx_entries(&cx, &xml).await;
+    let entries = blkx_entries(&cx, xml_span).await?;
     cx.set_count(Count::Exact(to_u64(entries.len())));
     for (i, e) in entries.into_iter().enumerate() {
-        let b64_span = xml_span.sub(to_u64(e.data.0), to_u64(e.data.1.saturating_sub(e.data.0)));
-        let decoded = xml.get(e.data.0..e.data.1).and_then(base64);
+        let b64_span = e.data.span;
+        let decoded = base64(&e.data.bytes);
         let name = if e.name.is_empty() {
             format!("Partition {i}")
         } else {
-            e.name.clone()
+            e.name
         };
         let mut node = Node::new(name).span(b64_span);
         match decoded {
-            Some(bytes) if bytes.starts_with(b"mish") => {
+            Decoded { bytes, error: None } if bytes.starts_with(b"mish") => {
                 let sectors = u64_be(&bytes, 16).unwrap_or(0);
                 let chunks = u32_be(&bytes, 200).unwrap_or(0);
                 let origin = Origin {
@@ -250,8 +266,8 @@ async fn partitions(cx: Cx, (input, xml_span, data_fork): (Input, Span, Span)) -
                 node = node
                     .summary(format!(
                         "{}, {}",
-                        human_size(sectors.saturating_mul(512)),
-                        count(chunks.into(), "chunk", "chunks")
+                        fmt::size(sectors.saturating_mul(512)),
+                        count(chunks, "chunk", "chunks")
                     ))
                     .lazy(partition, (input, mish.span, data_fork));
             }
@@ -292,25 +308,22 @@ async fn partition(cx: Cx, (input, mish, data_fork): (Input, Span, Span)) -> Res
                 bits: 32,
                 name: crate::value::lookup(CHUNK_TYPE, kind.into()),
             }),
-            Node::new("Comment").span(span.sub(4, 4)).value(hex(u32_be(
-                &raw,
-                at.saturating_add(4),
-            )
-            .unwrap_or(0)
-            .into())),
+            Node::new("Comment")
+                .span(span.sub(4, 4))
+                .value(hex(u32_be(&raw, at.saturating_add(4)).unwrap_or(0), 64)),
             Node::new("First sector")
                 .span(span.sub(8, 8))
-                .value(uint(first)),
+                .value(uint(first, 64)),
             Node::new("Sector count")
                 .span(span.sub(16, 8))
-                .value(uint(sectors)),
+                .value(uint(sectors, 64)),
             Node::new("Compressed offset")
                 .span(span.sub(24, 8))
-                .value(hex(offset))
+                .value(hex(offset, 64))
                 .target(data),
             Node::new("Compressed length")
                 .span(span.sub(32, 8))
-                .value(uint(length)),
+                .value(uint(length, 64)),
         ];
         match kind {
             0x8000_0005 => fields.push(content("Data", input, data, Codec::Zlib, Some(size))),
@@ -325,10 +338,10 @@ async fn partition(cx: Cx, (input, mish, data_fork): (Input, Span, Span)) -> Res
         }
         let mut summary = format!(
             "{kind_name}, sectors {first}..+{sectors} ({})",
-            human_size(size)
+            fmt::size(size)
         );
         if length > 0 {
-            summary = format!("{summary} from {}", human_size(length));
+            summary = format!("{summary} from {}", fmt::size(length));
         }
         cx.push(
             Node::new(format!("Chunk {i}"))

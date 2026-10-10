@@ -11,14 +11,14 @@
 
 use std::sync::Arc;
 
-use crate::bytes::{to_u64, u32_le, u64_le};
+use crate::bytes::{align_up, to_u64, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::disk::qcow::{Regions, decoded_leaf};
 use crate::formats::disk::{PieceList, size};
-use crate::formats::util::datakit::{enumv, uint};
+use crate::formats::util::val::{enumv, uint};
 use crate::formats::{Codec, Format, Input, Probe, dissect_or_data};
 use crate::node::Node;
 use crate::record;
@@ -204,7 +204,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     .span(descriptor.sub(0, used))
                     .summary(format!(
                         "{create_type}, {}",
-                        crate::formats::util::arcutil::count(
+                        crate::formats::util::fmt::count(
                             to_u64(extent_lines(&text)),
                             "extent",
                             "extents"
@@ -251,7 +251,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Redundant grain directory")
                 .span(rgd)
-                .summary(crate::formats::util::arcutil::count(
+                .summary(crate::formats::util::fmt::count(
                     tables,
                     "grain table",
                     "grain tables",
@@ -264,7 +264,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .span(gd)
             .summary(format!(
                 "{} of {gtes} entries, each covering {}",
-                crate::formats::util::arcutil::count(tables, "grain table", "grain tables"),
+                crate::formats::util::fmt::count(tables, "grain table", "grain tables"),
                 size(per_table)
             ))
             .lazy(grain_directory, (sparse.clone(), false)),
@@ -496,7 +496,7 @@ impl Marker {
     /// Bytes from the marker to the next one.
     fn len(&self) -> u64 {
         match self {
-            Marker::Grain { size, .. } => 12u64.saturating_add(*size).next_multiple_of(SECTOR),
+            Marker::Grain { size, .. } => align_up(12u64.saturating_add(*size), SECTOR),
             Marker::Meta { sectors, .. } => sectors.saturating_add(1).saturating_mul(SECTOR),
         }
     }
@@ -856,7 +856,7 @@ async fn descriptor_file(cx: Cx, input: Input) -> Result<()> {
     let used = to_u64(text.len());
     cx.annotate(format!(
         "VMDK descriptor ({kind}), {}",
-        crate::formats::util::arcutil::count(to_u64(extent_lines(&text)), "extent", "extents")
+        crate::formats::util::fmt::count(to_u64(extent_lines(&text)), "extent", "extents")
     ));
     if used < input.span.len {
         cx.emit(

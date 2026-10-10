@@ -48,13 +48,16 @@ use crate::cx::{Block, Cx};
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::{count, emit_nodes, hex, text, uint};
+use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Head, Input, Probe, dissect_or_data, expand_content};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 
-use super::{filetime, size};
+use super::filetime;
+use crate::formats::util::fmt::size;
 
 const LE: Endian = Endian::Little;
 /// The first header's size.
@@ -762,7 +765,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("CRC-32")
                 .span(file.sub(l.end, 4))
-                .value(hex(u32_le(&crc, 0).unwrap_or(0).into()))
+                .value(hex(u32_le(&crc, 0).unwrap_or(0), 64))
                 .desc("Of the setup program and the data before it (not checked)"),
         );
     }
@@ -962,7 +965,7 @@ async fn pages(cx: Cx, (_input, l): (Input, Layout)) -> Result<()> {
         let kind = w(1);
         let name = lookup(PAGE_KINDS, kind.into()).unwrap_or("Page");
         let mut fields = vec![
-            Node::new("Dialog ID").value(uint(w(0).into())),
+            Node::new("Dialog ID").value(uint(w(0), 64)),
             Node::new("Kind").value(Value::Enum {
                 raw: kind.into(),
                 bits: 32,
@@ -980,7 +983,7 @@ async fn pages(cx: Cx, (_input, l): (Input, Layout)) -> Result<()> {
                 bits: 32,
             }));
         }
-        fields.push(Node::new("Flags").value(hex(w(5).into())));
+        fields.push(Node::new("Flags").value(hex(w(5), 64)));
         for (k, label) in [
             (6, "Caption"),
             (7, "Back"),
@@ -1040,9 +1043,7 @@ async fn sections(cx: Cx, (_input, l): (Input, Layout)) -> Result<()> {
                 .span(f(0))
                 .value(text(name.clone()))
                 .summary(string_ref(name_ptr)),
-            Node::new("Install types")
-                .span(f(1))
-                .value(hex(w(1).into())),
+            Node::new("Install types").span(f(1)).value(hex(w(1), 64)),
             Node::new("Flags")
                 .span(f(2))
                 .value(crate::formats::util::lines::flags(
@@ -1053,11 +1054,9 @@ async fn sections(cx: Cx, (_input, l): (Input, Layout)) -> Result<()> {
             Node::new("Code")
                 .span(f(3))
                 .summary(format!("entry #{code}"))
-                .value(uint(code.into())),
-            Node::new("Code size")
-                .span(f(4))
-                .value(uint(code_size.into())),
-            Node::new("Size (KiB)").span(f(5)).value(uint(kb.into())),
+                .value(uint(code, 64)),
+            Node::new("Code size").span(f(4)).value(uint(code_size, 64)),
+            Node::new("Size (KiB)").span(f(5)).value(uint(kb, 64)),
             Node::new("Name buffer").span(span.tail(24)),
         ];
         let label = if name.is_empty() {
@@ -1152,7 +1151,7 @@ async fn entries(cx: Cx, (_input, l): (Input, Layout)) -> Result<()> {
             let node = Node::new(format!("Parameter {k}")).span(at);
             fields.push(match kinds.get(k) {
                 Some('s') => node.value(text(s.string(v))).summary(string_ref(v)),
-                Some(&kind @ ('v' | 'j')) => node.value(hex(v.into())).summary(param(&s, kind, v)),
+                Some(&kind @ ('v' | 'j')) => node.value(hex(v, 64)).summary(param(&s, kind, v)),
                 _ => node.value(Value::Int {
                     value: i64::from(v as i32),
                     bits: 32,
@@ -1222,14 +1221,14 @@ async fn language_tables(cx: Cx, (_input, l): (Input, Layout)) -> Result<()> {
         let mut fields = vec![
             Node::new("Language ID")
                 .span(span.sub(0, 2))
-                .value(hex(id.into()))
+                .value(hex(id, 64))
                 .summary(crate::formats::util::lcid::describe(id.into())),
             Node::new("Dialog offset")
                 .span(span.sub(2, 4))
-                .value(hex(s.word(at.saturating_add(2)).into())),
+                .value(hex(s.word(at.saturating_add(2)), 64)),
             Node::new("Right to left")
                 .span(span.sub(6, 4))
-                .value(uint(s.word(at.saturating_add(6)).into())),
+                .value(uint(s.word(at.saturating_add(6)), 64)),
         ];
         let mut list = Vec::new();
         for k in 0..strings.min(4096) {
@@ -1321,7 +1320,9 @@ async fn files(cx: Cx, (input, l): (Input, Layout)) -> Result<()> {
             .span
             .sub(start.saturating_add(f.index.saturating_mul(ENTRY)), ENTRY);
         let mut children = vec![
-            Node::new("Entry").value(uint(f.index)).target(entry_span),
+            Node::new("Entry")
+                .value(uint(f.index, 64))
+                .target(entry_span),
             Node::new("Overwrite").value(Value::Enum {
                 raw: overwrite.into(),
                 bits: 32,
@@ -1334,7 +1335,7 @@ async fn files(cx: Cx, (input, l): (Input, Layout)) -> Result<()> {
         ));
         children.push(
             Node::new("Data block offset")
-                .value(hex(offset.into()))
+                .value(hex(offset, 64))
                 .target(s.region.sub(offset.into(), 4)),
         );
         let (node, _) = block_node(&cx, input, &l, &s, offset.into(), "Content".to_owned()).await;

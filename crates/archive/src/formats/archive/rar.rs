@@ -24,9 +24,11 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::arcutil::{
-    ByteReader, count, emit_nodes, hex, human_size, text, unsupported,
-};
+use crate::formats::util::arcutil::{ByteReader, emit_nodes, unsupported};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::capitalize;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, text};
 use crate::formats::{Codec, Format, Input, Probe, dissect_or_data};
 use crate::node::Node;
 use crate::span::{Origin, Span};
@@ -198,11 +200,6 @@ fn part4(header: &[u8], block: Span, flags: u16, packed: u64, unpacked: u64) -> 
     })
 }
 
-/// The NUL-separated ASCII part of a (possibly Unicode-encoded) name.
-fn name4(bytes: &[u8]) -> String {
-    crate::text::until_nul(bytes)
-}
-
 async fn next_block4(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Block4> {
     let start = cur.pos();
     let base = cur.peek(7).await?;
@@ -238,7 +235,8 @@ async fn next_block4(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Block4> {
         let bytes = header
             .get(name_at..name_at.saturating_add(len))
             .unwrap_or_default();
-        name = Some(name4(bytes));
+        // The ASCII part before the NUL of a (possibly Unicode-encoded) name.
+        name = Some(crate::text::until_nul(bytes));
         if kind == 0x74 {
             let block = cur.span(u64::from(size).saturating_add(add));
             part = part4(&header, block, flags, add, unpacked);
@@ -285,11 +283,11 @@ async fn dissect4(cx: &Cx, input: Input) -> Result<()> {
                 let s = if b.flags & 0xe0 == 0xe0 {
                     "directory".to_owned()
                 } else {
-                    human_size(b.unpacked)
+                    fmt::size(b.unpacked)
                 };
                 (n.clone(), s)
             }
-            (0x7a, Some(n)) => (format!("Subblock {n}"), human_size(b.span.len)),
+            (0x7a, Some(n)) => (format!("Subblock {n}"), fmt::size(b.span.len)),
             (0x73, _) => {
                 solid = b.flags & 0x0008 != 0;
                 encrypted = b.flags & 0x0080 != 0;
@@ -321,17 +319,9 @@ async fn dissect4(cx: &Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "RAR archive (v4), {solid}{}, {} uncompressed",
         count(files, "file", "files"),
-        human_size(total)
+        fmt::size(total)
     ));
     Ok(())
-}
-
-fn capitalize(s: &str) -> String {
-    let mut c = s.chars();
-    match c.next() {
-        Some(first) => first.to_uppercase().chain(c).collect(),
-        None => String::new(),
-    }
 }
 
 async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
@@ -344,7 +334,7 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let stored_crc = r.u16("Header CRC", LE).ok_or_else(bad)?;
     let computed = (crc32(header.get(2..).unwrap_or_default()) & 0xffff) as u16;
     r.with(|n| {
-        let n = n.value(hex(stored_crc.into()));
+        let n = n.value(hex(stored_crc, 64));
         if computed == stored_crc {
             n.summary("valid")
         } else {
@@ -377,7 +367,7 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
                 unknown,
             })
         }
-        None => n.value(hex(flags.into())),
+        None => n.value(hex(flags, 64)),
     });
     r.u16("Header size", LE).ok_or_else(bad)?;
     let mut data = None;
@@ -388,9 +378,9 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         }
         0x74 | 0x7a => {
             let pack = r.u32("Packed size", LE).ok_or_else(bad)?;
-            r.with(|n| n.summary(human_size(pack.into())));
+            r.with(|n| n.summary(fmt::size(pack.into())));
             let unp = r.u32("Unpacked size", LE).ok_or_else(bad)?;
-            r.with(|n| n.summary(human_size(unp.into())));
+            r.with(|n| n.summary(fmt::size(unp.into())));
             let os = r.u8("Host OS").ok_or_else(bad)?;
             r.with(|n| {
                 n.value(Value::Enum {
@@ -400,12 +390,12 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
                 })
             });
             let crc = r.u32("File CRC", LE).ok_or_else(bad)?;
-            r.with(|n| n.value(hex(crc.into())));
+            r.with(|n| n.value(hex(crc, 64)));
             let time = r.u32("Modification time (DOS)", LE).ok_or_else(bad)?;
             r.with(|n| {
                 let date = u16::try_from(time >> 16).unwrap_or(0);
                 let t = u16::try_from(time & 0xffff).unwrap_or(0);
-                n.value(hex(time.into()))
+                n.value(hex(time, 64))
                     .summary(crate::text::dos_datetime(date, t))
             });
             let ver = r.u8("Version needed").ok_or_else(bad)?;
@@ -420,7 +410,7 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             });
             let name_len = r.u16("Name size", LE).ok_or_else(bad)?;
             let attr = r.u32("Attributes", LE).ok_or_else(bad)?;
-            r.with(|n| n.value(hex(attr.into())));
+            r.with(|n| n.value(hex(attr, 64)));
             let mut packed = u64::from(pack);
             let mut unpacked = u64::from(unp);
             if flags & 0x100 != 0 {
@@ -435,7 +425,7 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
                 None
             };
             let raw = r.bytes("Name", name_len.into()).ok_or_else(bad)?;
-            let name = name4(raw);
+            let name = crate::text::until_nul(raw);
             r.with(|n| n.value(text(name.clone())));
             if flags & 0x400 != 0 {
                 r.bytes("Salt", 8);
@@ -641,9 +631,9 @@ fn file_fields(r: &mut ByteReader<'_>) -> Option<FileFields> {
         })
     });
     let unpacked = r.vint("Unpacked size")?;
-    r.with(|n| n.summary(human_size(unpacked)));
+    r.with(|n| n.summary(fmt::size(unpacked)));
     let attr = r.vint("Attributes")?;
-    r.with(|n| n.value(hex(attr)));
+    r.with(|n| n.value(hex(attr, 64)));
     if flags & 0x02 != 0 {
         let t = r.u32("Modification time", LE)?;
         r.with(|n| {
@@ -655,17 +645,17 @@ fn file_fields(r: &mut ByteReader<'_>) -> Option<FileFields> {
     let mut crc = None;
     if flags & 0x04 != 0 {
         let c = r.u32("Data CRC32", LE)?;
-        r.with(|n| n.value(hex(c.into())));
+        r.with(|n| n.value(hex(c, 64)));
         crc = Some(c);
     }
     let info = r.vint("Compression information")?;
     r.with(|n| {
-        n.value(hex(info)).summary(format!(
+        n.value(hex(info, 64)).summary(format!(
             "version {}, method {}{}, dictionary {}",
             info & 0x3f,
             (info >> 7) & 7,
             if info & 0x40 != 0 { ", solid" } else { "" },
-            human_size(dict5(info))
+            fmt::size(dict5(info))
         ))
     });
     let os = r.vint("Host OS")?;
@@ -722,7 +712,7 @@ fn common5(r: &mut ByteReader<'_>) -> Option<Common> {
     };
     let data = if flags & 0x02 != 0 {
         let d = r.vint("Data size")?;
-        r.with(|n| n.summary(human_size(d)));
+        r.with(|n| n.summary(fmt::size(d)));
         d
     } else {
         0
@@ -807,11 +797,11 @@ async fn dissect5(cx: &Cx, input: Input) -> Result<()> {
                 let s = if b.directory {
                     "directory".to_owned()
                 } else {
-                    human_size(b.unpacked)
+                    fmt::size(b.unpacked)
                 };
                 (n, s)
             }
-            (3, Some(n)) => (format!("Service {n}"), human_size(b.unpacked)),
+            (3, Some(n)) => (format!("Service {n}"), fmt::size(b.unpacked)),
             (k, _) => (
                 capitalize(crate::value::lookup(HEADER5, k).unwrap_or("unknown header")),
                 String::new(),
@@ -850,7 +840,7 @@ async fn dissect5(cx: &Cx, input: Input) -> Result<()> {
         "RAR archive (v5), {}{}, {} uncompressed",
         if solid { "solid, " } else { "" },
         count(files, "file", "files"),
-        human_size(total)
+        fmt::size(total)
     ));
     Ok(())
 }
@@ -867,7 +857,7 @@ async fn block5(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let stored = r.u32("Header CRC32", LE).ok_or_else(bad)?;
     let computed = crc32(header.get(4..).unwrap_or_default());
     r.with(|n| {
-        let n = n.value(hex(stored.into()));
+        let n = n.value(hex(stored, 64));
         if computed == stored {
             n.summary("valid")
         } else {
@@ -1056,7 +1046,7 @@ const CRC_LIMIT: u64 = 32 << 20;
 
 /// A node for a file's content, decoded and checked when expanded.
 fn content_node(name: &'static str, input: Input, part: Part) -> Node {
-    let mut summary = format!("{}, {}", part.how.name(), human_size(part.unpacked));
+    let mut summary = format!("{}, {}", part.how.name(), fmt::size(part.unpacked));
     if part.solid {
         summary.push_str(", solid");
     }
@@ -1255,7 +1245,7 @@ async fn content(cx: Cx, (input, part): (Input, Part)) -> Result<()> {
         && span.len <= CRC_LIMIT
     {
         let (got, len) = crc_of(&cx, span).await?;
-        let node = Node::new("CRC32").value(hex(got.into()));
+        let node = Node::new("CRC32").value(hex(got, 64));
         cx.emit(if len < part.unpacked {
             node.diag(Diagnostic::malformed(format!(
                 "decoded {len:#x} of {:#x} bytes",

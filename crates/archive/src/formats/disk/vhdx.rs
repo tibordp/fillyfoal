@@ -633,7 +633,7 @@ async fn log_entries(cx: Cx, log: Span) -> Result<()> {
             .span(span)
             .summary(format!(
                 "sequence {seq}, {}, {}",
-                crate::formats::util::arcutil::count(count.into(), "descriptor", "descriptors"),
+                crate::formats::util::fmt::count(count, "descriptor", "descriptors"),
                 size(len)
             ))
             .lazy(log_entry, span);

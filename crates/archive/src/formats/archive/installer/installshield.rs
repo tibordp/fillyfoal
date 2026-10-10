@@ -33,13 +33,15 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::{count, emit_nodes, hex, text, uint};
+use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Input, Probe, dissect_or_data};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::value::{FlagTable, Value, flag};
 
-use super::size;
+use crate::formats::util::fmt::size;
 
 const LE: Endian = Endian::Little;
 
@@ -174,8 +176,8 @@ async fn isz(cx: Cx, input: Input) -> Result<()> {
     ));
     let summary = format!(
         "InstallShield 3 archive, {}, {}",
-        count(nfiles.into(), "file", "files"),
-        count(ndirs.into(), "directory", "directories")
+        count(nfiles, "file", "files"),
+        count(ndirs, "directory", "directories")
     );
     if dirs_at < Z_HEADER || dirs_at > file.len {
         cx.annotate(summary);
@@ -238,10 +240,10 @@ async fn z_dirs(cx: Cx, (file, a): (Span, Arc<ZArchive>)) -> Result<()> {
         let fields = vec![
             Node::new("Files")
                 .span(span.sub(0, 2))
-                .value(uint(d.files.into())),
+                .value(uint(d.files, 64)),
             Node::new("Entry size")
                 .span(span.sub(2, 2))
-                .value(uint(d.len)),
+                .value(uint(d.len, 64)),
             Node::new("Name length").span(span.sub(4, 2)),
             Node::new("Name")
                 .span(span.sub(6, to_u64(d.name.len())))
@@ -255,7 +257,7 @@ async fn z_dirs(cx: Cx, (file, a): (Span, Arc<ZArchive>)) -> Result<()> {
         cx.push(
             Node::new(name)
                 .span(span)
-                .summary(count(d.files.into(), "file", "files"))
+                .summary(count(d.files, "file", "files"))
                 .lazy(emit_nodes, Arc::new(fields)),
         )
         .await;
@@ -284,16 +286,16 @@ async fn z_files(cx: Cx, (input, a): (Input, Arc<ZArchive>)) -> Result<()> {
         let fields = vec![
             Node::new("Directory")
                 .span(span.sub(1, 2))
-                .value(uint(f.dir.into())),
+                .value(uint(f.dir, 64)),
             Node::new("Size")
                 .span(span.sub(3, 4))
-                .value(uint(f.size.into())),
+                .value(uint(f.size, 64)),
             Node::new("Compressed size")
                 .span(span.sub(7, 4))
-                .value(uint(f.packed.into())),
+                .value(uint(f.packed, 64)),
             Node::new("Data offset")
                 .span(span.sub(0x0b, 4))
-                .value(hex(f.offset.into()))
+                .value(hex(f.offset, 64))
                 .target(data),
             Node::new("Modification time (DOS)")
                 .span(span.sub(0x0f, 4))
@@ -301,7 +303,7 @@ async fn z_files(cx: Cx, (input, a): (Input, Arc<ZArchive>)) -> Result<()> {
             Node::new("Unknown").span(span.sub(0x13, 4)),
             Node::new("Entry size")
                 .span(span.sub(0x17, 2))
-                .value(uint(f.len)),
+                .value(uint(f.len, 64)),
             Node::new("Unknown").span(span.sub(0x19, 4)),
             Node::new("Name length").span(span.sub(0x1d, 1)),
             Node::new("Name")
@@ -480,12 +482,12 @@ async fn iscab(cx: Cx, input: Input) -> Result<()> {
                 cab.at(cab.table)
                     .sub(0, u64::from(cab.dirs).saturating_mul(4)),
             )
-            .summary(count(cab.dirs.into(), "directory", "directories"))
+            .summary(count(cab.dirs, "directory", "directories"))
             .lazy(directories, cab),
     );
     cx.emit(
         Node::new("Files")
-            .summary(count(cab.files.into(), "file", "files"))
+            .summary(count(cab.files, "file", "files"))
             .lazy(files, (input, cab)),
     );
     cx.emit(
@@ -500,8 +502,8 @@ async fn iscab(cx: Cx, input: Input) -> Result<()> {
     );
     summary.push_str(&format!(
         ", {}, {}",
-        count(cab.files.into(), "file", "files"),
-        count(cab.dirs.into(), "directory", "directories")
+        count(cab.files, "file", "files"),
+        count(cab.dirs, "directory", "directories")
     ));
     if volume.is_none() {
         summary.push_str(" (header only)");
@@ -649,19 +651,19 @@ fn descriptor_fields(cab: &Cab, f: &IsFile) -> Vec<Node> {
         vec![
             Node::new("Name offset")
                 .span(s.sub(0, 4))
-                .value(hex(f.name.into())),
+                .value(hex(f.name, 64)),
             Node::new("Directory")
                 .span(s.sub(4, 4))
-                .value(uint(f.dir.into())),
+                .value(uint(f.dir, 64)),
             Node::new("Flags").span(s.sub(8, 2)).value(flags),
-            Node::new("Size").span(s.sub(10, 4)).value(uint(f.size)),
+            Node::new("Size").span(s.sub(10, 4)).value(uint(f.size, 64)),
             Node::new("Compressed size")
                 .span(s.sub(14, 4))
-                .value(uint(f.packed)),
+                .value(uint(f.packed, 64)),
             Node::new("Unknown").span(s.sub(18, 0x14)),
             Node::new("Data offset")
                 .span(s.sub(0x26, 4))
-                .value(hex(f.data)),
+                .value(hex(f.data, 64)),
             Node::new("MD5")
                 .span(s.sub(0x2a, 16))
                 .value(Value::Bytes(f.md5.clone())),
@@ -669,23 +671,23 @@ fn descriptor_fields(cab: &Cab, f: &IsFile) -> Vec<Node> {
     } else {
         vec![
             Node::new("Flags").span(s.sub(0, 2)).value(flags),
-            Node::new("Size").span(s.sub(2, 8)).value(uint(f.size)),
+            Node::new("Size").span(s.sub(2, 8)).value(uint(f.size, 64)),
             Node::new("Compressed size")
                 .span(s.sub(10, 8))
-                .value(uint(f.packed)),
+                .value(uint(f.packed, 64)),
             Node::new("Data offset")
                 .span(s.sub(18, 8))
-                .value(hex(f.data)),
+                .value(hex(f.data, 64)),
             Node::new("MD5")
                 .span(s.sub(26, 16))
                 .value(Value::Bytes(f.md5.clone())),
             Node::new("Unknown").span(s.sub(42, 16)),
             Node::new("Name offset")
                 .span(s.sub(58, 4))
-                .value(hex(f.name.into())),
+                .value(hex(f.name, 64)),
             Node::new("Directory")
                 .span(s.sub(62, 2))
-                .value(uint(f.dir.into())),
+                .value(uint(f.dir, 64)),
             Node::new("Unknown").span(s.sub(64, 12)),
             Node::new("Previous link").span(s.sub(76, 4)),
             Node::new("Next link").span(s.sub(80, 4)),
@@ -793,8 +795,11 @@ async fn file_content(
         match cx.derived(origin) {
             Some(d) => d.span,
             None => {
-                let (bytes, error) = inflate_chunks(&cx, data, len).await?;
-                cx.add_derived(origin, bytes, data.len, error)?.span
+                let (pieces, error) = inflate_chunks(&cx, data, len).await?;
+                if let Some(e) = error {
+                    cx.diag(e);
+                }
+                cx.add_pieces_stepped(origin, &pieces).await?
             }
         }
     } else {
@@ -819,10 +824,12 @@ async fn file_content(
 }
 
 /// Inflates the chunks of a compressed file: each a 16-bit length and a
-/// raw DEFLATE stream (flushed, possibly without a final block).
-async fn inflate_chunks(cx: &Cx, data: Span, len: u64) -> Result<(Vec<u8>, Option<Diagnostic>)> {
-    let limit = cx.limits().max_derived;
+/// raw DEFLATE stream (flushed, possibly without a final block). Returns
+/// the decoded chunks, in order, to be joined into one piecewise source.
+async fn inflate_chunks(cx: &Cx, data: Span, len: u64) -> Result<(Vec<Span>, Option<Diagnostic>)> {
+    let limit = len.saturating_add(1 << 16);
     let mut out = Vec::new();
+    let mut total = 0u64;
     let mut pos = 0u64;
     while pos < data.len {
         let n = cx.read(data.sub(pos, 2)).await?;
@@ -838,8 +845,9 @@ async fn inflate_chunks(cx: &Cx, data: Span, len: u64) -> Result<(Vec<u8>, Optio
         if d.span.len == 0 {
             return Ok((out, d.error));
         }
-        out.extend(read_all(cx, d.span).await?);
-        if to_u64(out.len()) > limit.min(len.saturating_add(1 << 16)) {
+        total = total.saturating_add(d.span.len);
+        out.push(d.span);
+        if total > limit {
             return Ok((
                 out,
                 Some(Diagnostic::limit("decoded more than the file's size")),
@@ -887,7 +895,7 @@ async fn groups(cx: Cx, (cab, components): (Cab, bool)) -> Result<()> {
                 }
                 Node::new(name)
                     .span(entry.sub(0, 4u64.saturating_add(skip).saturating_add(6)))
-                    .summary(count(n.into(), "file group", "file groups"))
+                    .summary(count(n, "file group", "file groups"))
                     .lazy(emit_nodes, Arc::new(names))
             } else {
                 let skip: u64 = if cab.major == 5 { 0x48 } else { 0x12 };

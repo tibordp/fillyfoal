@@ -5,6 +5,8 @@ use crate::bytes::{to_u64, to_usize, u16_be, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
+use crate::formats::disk::acl;
+use crate::formats::disk::name_field;
 use crate::formats::disk::{PieceList, size, uuid_value};
 use crate::node::Node;
 use crate::span::Span;
@@ -50,22 +52,7 @@ fn acl_text(value: &[u8]) -> Option<String> {
         let tag = u32_be(e, 0)?;
         let id = u32_be(e, 4)?;
         let perm = u16_be(e, 8)?;
-        let who = match tag {
-            0x01 => "user::".to_owned(),
-            0x02 => format!("user:{id}:"),
-            0x04 => "group::".to_owned(),
-            0x08 => format!("group:{id}:"),
-            0x10 => "mask::".to_owned(),
-            0x20 => "other::".to_owned(),
-            _ => format!("tag {tag:#x}:"),
-        };
-        let bit = |b: u16, c: char| if perm & b != 0 { c } else { '-' };
-        out.push(format!(
-            "{who}{}{}{}",
-            bit(4, 'r'),
-            bit(2, 'w'),
-            bit(1, 'x')
-        ));
+        out.push(acl::entry(tag, id, perm));
     }
     Some(out.join(", "))
 }
@@ -101,12 +88,6 @@ fn value_node(name: &'static str, span: Span, flags: u8, attr: &[u8], value: &[u
     }
 }
 
-fn name_text(f: &mut Fields<'_>, len: u64) -> Result<Vec<u8>> {
-    f.bytes("Name", len)
-        .with(|b, n| n.value(Value::Text(String::from_utf8_lossy(b).into_owned())))
-        .emit()
-}
-
 /// The bytes of the next `len` bytes of the cursor's block.
 fn ahead<'a>(f: &Fields<'a>, len: u64) -> &'a [u8] {
     let data: &'a [u8] = &f.block().data;
@@ -119,7 +100,7 @@ fn sf_entry_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     let namelen = f.u8("Name length").emit()?;
     let valuelen = f.u8("Value length").emit()?;
     let flags = f.u8("Flags").hex().flags(ATTR_FLAGS).emit()?;
-    let name = name_text(f, namelen.into())?;
+    let name = name_field(f, namelen.into())?;
     let len = u64::from(valuelen);
     let value = ahead(f, len);
     f.node(value_node("Value", f.peek_span(len), flags, &name, value));
@@ -303,7 +284,7 @@ fn entry_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
 fn local_name_layout(f: &mut Fields<'_>, flags: &u8) -> Result<()> {
     let valuelen = f.u16("Value length").emit()?;
     let namelen = f.u8("Name length").emit()?;
-    let name = name_text(f, namelen.into())?;
+    let name = name_field(f, namelen.into())?;
     let len = u64::from(valuelen);
     let value = ahead(f, len);
     f.node(value_node("Value", f.peek_span(len), *flags, &name, value));
@@ -318,7 +299,7 @@ fn remote_name_layout(f: &mut Fields<'_>, _: &u8) -> Result<()> {
         .emit()?;
     f.u32("Value length").emit()?;
     let namelen = f.u8("Name length").emit()?;
-    name_text(f, namelen.into())?;
+    name_field(f, namelen.into())?;
     rest_unused(f, "Padding");
     Ok(())
 }

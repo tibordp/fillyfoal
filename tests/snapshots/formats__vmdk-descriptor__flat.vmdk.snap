@@ -10,7 +10,7 @@ expression: "common::explore(&display_name(&path), &data)"
     parentCID: "ffffffff"  [0x3e+0x13]
     createType: "monolithicFlat"  [0x51+0x1c]
     Comment: "Extent description"  [0x6e+0x15]
-    Extent: "RW 4194304 FLAT \"fixture-flat.vmdk\" 0" — RW FLAT, 2 GiB in "fixture-flat.vmdk" 0  [0x83+0x26]
+    Extent: "RW 4194304 FLAT \"fixture-flat.vmdk\" 0" — RW FLAT, 2.0 GiB in "fixture-flat.vmdk" 0  [0x83+0x26]
     Comment: "The Disk Data Base"  [0xaa+0x15]
     Comment: "DDB"  [0xbf+0x5]
     ddb.virtualHWVersion: "4"  [0xc5+0x1b]

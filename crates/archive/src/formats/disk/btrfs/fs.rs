@@ -64,7 +64,7 @@ async fn inode_item(cx: &Cx, fs: &Fs, tree: u64, ino: u64) -> Result<(Span, Vec<
 fn inode_summary(raw: &[u8]) -> String {
     format!(
         "{}, {}",
-        unix_mode(u32_le(raw, 52).unwrap_or(0)),
+        unix_mode(u32_le(raw, 52).unwrap_or(0).into()),
         size(u64_le(raw, 16).unwrap_or(0))
     )
 }

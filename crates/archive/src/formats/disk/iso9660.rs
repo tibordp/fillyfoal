@@ -24,9 +24,12 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields, struct_node};
 use crate::formats::disk::PieceList;
 use crate::formats::disk::qcow::Regions;
-use crate::formats::util::arcutil::{
-    ByteReader, count, emit_nodes, human_size, text, uint, unix_mode,
-};
+use crate::formats::util::arcutil::{ByteReader, emit_nodes, unix_mode};
+use crate::formats::util::civil::days_from_civil;
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::capitalize;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Codec, Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -108,7 +111,7 @@ fn both32<'a>(f: &mut Fields<'a>, name: &'static str) -> Field<'a, u32> {
     f.bytes(name, 8)
         .with(|b, n| {
             let le = u32_le(b, 0).unwrap_or(0);
-            let n = n.value(uint(le.into()));
+            let n = n.value(uint(le, 64));
             if u32_be(b, 4) == Some(le) {
                 n
             } else {
@@ -122,7 +125,7 @@ fn both16<'a>(f: &mut Fields<'a>, name: &'static str) -> Field<'a, u16> {
     f.bytes(name, 4)
         .with(|b, n| {
             let le = u16_le(b, 0).unwrap_or(0);
-            let n = n.value(uint(le.into()));
+            let n = n.value(uint(le, 64));
             if u16_be(b, 2) == Some(le) {
                 n
             } else {
@@ -138,7 +141,7 @@ fn read_both32(r: &mut ByteReader<'_>, name: &'static str) -> Option<u32> {
     let le = u32_le(b, 0).unwrap_or(0);
     let same = u32_be(b, 4) == Some(le);
     r.with(|n| {
-        let n = n.value(uint(le.into()));
+        let n = n.value(uint(le, 64));
         if same {
             n
         } else {
@@ -148,29 +151,6 @@ fn read_both32(r: &mut ByteReader<'_>, name: &'static str) -> Option<u32> {
     Some(le)
 }
 
-/// Days since 1970-01-01 of a civil date (Howard Hinnant's algorithm).
-fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
-    let y = if m <= 2 { y.saturating_sub(1) } else { y };
-    let era = y.div_euclid(400);
-    let yoe = y.saturating_sub(era.saturating_mul(400));
-    let mp = if m > 2 {
-        m.saturating_sub(3)
-    } else {
-        m.saturating_add(9)
-    };
-    let doy = (153i64.saturating_mul(mp).saturating_add(2) / 5)
-        .saturating_add(d)
-        .saturating_sub(1);
-    let doe = yoe
-        .saturating_mul(365)
-        .saturating_add(yoe / 4)
-        .saturating_sub(yoe / 100)
-        .saturating_add(doy);
-    era.saturating_mul(146_097)
-        .saturating_add(doe)
-        .saturating_sub(719_468)
-}
-
 /// The 7-byte directory record date (years since 1900, ..., GMT offset in
 /// 15-minute units) as Unix seconds.
 fn record_time(b: &[u8]) -> Option<i64> {
@@ -178,7 +158,7 @@ fn record_time(b: &[u8]) -> Option<i64> {
     if b.get(..6).is_some_and(|d| d.iter().all(|&x| x == 0)) {
         return None;
     }
-    let days = days_from_civil(get(0)?.saturating_add(1900), get(1)?, get(2)?);
+    let days = days_from_civil(get(0)?.saturating_add(1900), get(1)?, get(2)?)?;
     let offset = i64::from(b.get(6)?.cast_signed()).saturating_mul(15 * 60);
     Some(
         days.saturating_mul(86_400)
@@ -312,18 +292,18 @@ fn volume_layout(f: &mut Fields<'_>, _: &()) -> Result<Volume> {
     both16(f, "Volume sequence number").emit()?;
     let block_size = both16(f, "Logical block size").emit()?;
     let path_table_size = both32(f, "Path table size")
-        .with(|&v, n| n.summary(human_size(v.into())))
+        .with(|&v, n| n.summary(fmt::size(v.into())))
         .emit()?;
     let l = f.u32("L path table location").emit()?;
     let ol = f.u32("Optional L path table location").emit()?;
     let m = f
         .bytes("M path table location", 4)
-        .with(|b, n| n.value(uint(u32_be(b, 0).unwrap_or(0).into())))
+        .with(|b, n| n.value(uint(u32_be(b, 0).unwrap_or(0), 64)))
         .map(|b| u32_be(&b, 0).unwrap_or(0))
         .emit()?;
     let om = f
         .bytes("Optional M path table location", 4)
-        .with(|b, n| n.value(uint(u32_be(b, 0).unwrap_or(0).into())))
+        .with(|b, n| n.value(uint(u32_be(b, 0).unwrap_or(0), 64)))
         .map(|b| u32_be(&b, 0).unwrap_or(0))
         .emit()?;
     let root = f.peek_span(34);
@@ -638,7 +618,7 @@ fn record_fields(f: &mut Fields<'_>, joliet: bool, ctx: Option<RecCtx>) -> Resul
     f.u8("Extended attribute length").emit()?;
     both32(f, "Extent location").emit()?;
     both32(f, "Data length")
-        .with(|&s, n| n.summary(human_size(s.into())))
+        .with(|&s, n| n.summary(fmt::size(s.into())))
         .emit()?;
     f.bytes("Recording time", 7)
         .with(|b, n| match record_time(b) {
@@ -836,7 +816,7 @@ fn susp_fields(entry: &[u8], span: Span) -> (Arc<Vec<Node>>, Option<Value>, Stri
                 unix_mode(mode.into()),
                 if links == 1 { "" } else { "s" }
             );
-            value = Some(uint(mode.into()));
+            value = Some(uint(mode, 64));
         }
         b"PN" => {
             let hi = read_both32(&mut r, "Device number (high)").unwrap_or(0);
@@ -929,17 +909,17 @@ fn susp_fields(entry: &[u8], span: Span) -> (Arc<Vec<Node>>, Option<Value>, Stri
             let hi = read_both32(&mut r, "Virtual size (high)").unwrap_or(0);
             let lo = read_both32(&mut r, "Virtual size (low)").unwrap_or(0);
             let _ = r.u8("Table depth");
-            summary = human_size((u64::from(hi) << 32) | u64::from(lo));
+            summary = fmt::size((u64::from(hi) << 32) | u64::from(lo));
         }
         b"ZF" => {
             let alg = r.text("Algorithm", 2).unwrap_or_default();
             let header = r.u8("Header size (4-byte units)").unwrap_or(0);
             let log2 = r.u8("Block size (log2)").unwrap_or(0);
-            r.with(|n| n.summary(human_size(1u64.checked_shl(log2.into()).unwrap_or(0))));
+            r.with(|n| n.summary(fmt::size(1u64.checked_shl(log2.into()).unwrap_or(0))));
             let size = read_both32(&mut r, "Uncompressed size").unwrap_or(0);
             summary = format!(
                 "{alg}, {} uncompressed, {}-byte header",
-                human_size(size.into()),
+                fmt::size(size.into()),
                 u32::from(header).saturating_mul(4)
             );
         }
@@ -1031,11 +1011,11 @@ fn entry_node(name: String, r: &Record, state: Entry) -> Node {
     } else if let Some(z) = r.zisofs {
         format!(
             "{} (zisofs, {} stored)",
-            human_size(z.size.into()),
-            human_size(r.size.into())
+            fmt::size(z.size.into()),
+            fmt::size(r.size.into())
         )
     } else {
-        human_size(r.size.into())
+        fmt::size(r.size.into())
     };
     if let Some(m) = r.rr_mode {
         summary = format!("{summary}, {}", unix_mode(m.into()));
@@ -1093,14 +1073,14 @@ async fn entry(cx: Cx, e: Entry) -> Result<()> {
                     .span(extent)
                     .summary(format!(
                         "zisofs: {} in {} blocks",
-                        human_size(extent.len),
-                        human_size(1u64.checked_shl(z.block_log2.into()).unwrap_or(0))
+                        fmt::size(extent.len),
+                        fmt::size(1u64.checked_shl(z.block_log2.into()).unwrap_or(0))
                     ))
                     .lazy(zisofs_node, (e.input, extent, z)),
             );
             return Ok(());
         }
-        let node = embedded("Content", e.input.nested(extent)).summary(human_size(r.size.into()));
+        let node = embedded("Content", e.input.nested(extent)).summary(fmt::size(r.size.into()));
         cx.emit(crate::formats::util::arcutil::check_len(
             node,
             extent,
@@ -1189,7 +1169,7 @@ async fn list_directory(cx: &Cx, e: &Entry, extent: Span, path: Arc<Vec<u32>>) -
     }
     cx.push(Node::new("Directory extent").span(extent).summary(format!(
         "{}, {records} records (with . and ..), the rest padding",
-        human_size(extent.len)
+        fmt::size(extent.len)
     )))
     .await;
     Ok(())
@@ -1209,7 +1189,7 @@ async fn zisofs_node(cx: Cx, (input, extent, z): (Input, Span, Zf)) -> Result<()
         })
         .emit()?;
     f.u32("Uncompressed size")
-        .with(|&v, n| n.summary(human_size(v.into())))
+        .with(|&v, n| n.summary(fmt::size(v.into())))
         .emit()?;
     f.u8("Header size (4-byte units)").emit()?;
     f.u8("Block size (log2)").emit()?;
@@ -1544,7 +1524,7 @@ async fn boot_catalog(cx: Cx, (input, span, block_size): (Input, Span, u64)) -> 
                 };
                 let fields = vec![
                     struct_node("Fields", espan, LE, (), boot_entry_layout),
-                    embedded("Boot image", input.nested(image)).summary(human_size(image.len)),
+                    embedded("Boot image", input.nested(image)).summary(fmt::size(image.len)),
                 ];
                 cx.emit(
                     Node::new(name)
@@ -1553,7 +1533,7 @@ async fn boot_catalog(cx: Cx, (input, span, block_size): (Input, Span, u64)) -> 
                             "{}{}, {} at sector {rba}",
                             if indicator == 0x88 { "bootable, " } else { "" },
                             lookup(MEDIA, (media & 0x0f).into()).unwrap_or("?"),
-                            human_size(image.len)
+                            fmt::size(image.len)
                         ))
                         .target(image)
                         .lazy(emit_nodes, Arc::new(fields)),
@@ -1592,7 +1572,7 @@ async fn boot_catalog(cx: Cx, (input, span, block_size): (Input, Span, u64)) -> 
     }
     let rest = span.tail(to_u64(at));
     if !rest.is_empty() {
-        cx.emit(Node::new("Unused").span(rest).summary(human_size(rest.len)));
+        cx.emit(Node::new("Unused").span(rest).summary(fmt::size(rest.len)));
     }
     Ok(())
 }
@@ -1792,7 +1772,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                         } else {
                             format!(
                                 "{vol:?}, {}",
-                                human_size(u64::from(v.blocks).saturating_mul(v.block_size.into()))
+                                fmt::size(u64::from(v.blocks).saturating_mul(v.block_size.into()))
                             )
                         };
                         if kind == 1 && primary.is_none() {
@@ -1912,7 +1892,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
             cx.emit(node);
         }
-        cx.emit(entry_node(name.to_owned(), &r, state).summary(human_size(r.size.into())));
+        cx.emit(entry_node(name.to_owned(), &r, state).summary(fmt::size(r.size.into())));
     }
     let block_size = primary.map_or(SECTOR, |(v, _)| u64::from(v.block_size.max(1)));
     let mut catalog_span = None;
@@ -1943,7 +1923,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     "{} image {:?}, {}",
                     vol.version(),
                     super::udf::label(&vol),
-                    human_size(file.len)
+                    fmt::size(file.len)
                 ));
             }
             None => cx.diag(Diagnostic::warning(
@@ -1955,11 +1935,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         u64::from(v.blocks).saturating_mul(v.block_size.into())
     });
     let mut summary = if primary.is_some() {
-        format!("ISO 9660 image {label:?}, {}", human_size(size))
+        format!("ISO 9660 image {label:?}, {}", fmt::size(size))
     } else if let Some(s) = udf_summary {
         s
     } else if udf {
-        format!("UDF image, {}", human_size(file.len))
+        format!("UDF image, {}", fmt::size(file.len))
     } else {
         "ISO 9660 image".to_owned()
     };
@@ -1990,12 +1970,4 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(summary);
     Ok(())
-}
-
-fn capitalize(s: &str) -> String {
-    let mut c = s.chars();
-    match c.next() {
-        Some(first) => first.to_uppercase().chain(c).collect(),
-        None => String::new(),
-    }
 }

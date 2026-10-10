@@ -2,11 +2,11 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ volume.fv — UEFI firmware volume (FFS v3), 4 KiB  [0x0+0x1000]
+▾ volume.fv — UEFI firmware volume (FFS v3), 4.0 KiB  [0x0+0x1000]
   ▾ Volume header  [0x0+0x48]
       Zero vector: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x0+0x10]
       File system GUID: {8c8ce578-8a3d-4f1c-9935-896185c32dd3} — FFS v3  [0x10+0x10]
-      Volume length: 4096 — 4 KiB  [0x20+0x8]
+      Volume length: 4096 — 4.0 KiB  [0x20+0x8]
       Signature: "_FVH"  [0x28+0x4]
       Attributes: 0x4feff [READ_DISABLED_CAP | READ_ENABLED_CAP | READ_STATUS | WRITE_DISABLED_CAP | WRITE_ENABLED_CAP | WRITE_STATUS | LOCK_CAP | LOCK_STATUS | STICKY_WRITE | MEMORY_MAPPED | ERASE_POLARITY | READ_LOCK_CAP | READ_LOCK_STATUS | WRITE_LOCK_CAP | WRITE_LOCK_STATUS | 0x40000]  [0x2c+0x4]
       Header length: 72  [0x30+0x2]
@@ -14,7 +14,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Extended header offset: 0x0  [0x34+0x2]
       Reserved: 0  [0x36+0x1]
       Revision: 2  [0x37+0x1]
-    Block map — 1 × 4 KiB  [0x38+0x10]
+    Block map — 1 × 4.0 KiB  [0x38+0x10]
   ▾ Files  [0x48+0xfb8]
     ▾ {7c79ac8c-5e6c-4e3d-ba6f-c260ee7c172e} — application, 392 bytes  [0x48+0x188]
       ▾ File header  [0x48+0x18]
@@ -193,6 +193,10 @@ expression: "common::explore(&display_name(&path), &data)"
                   Attributes: 0x0 []  [0x2af+0x1]
                   Size: 38 00 00  |8..| — 56 bytes  [0x2b0+0x3]
                   State: 0xf8  [0x2b3+0x1]
-                Raw — 25 bytes  [0x2b4+0x1d]
+              ▾ Raw data — UTF-8 text, 1 line  [0x2b8+0x19]
+                  Encoding: "UTF-8"
+                  Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+                ▾ Lines — 1 line  [0x2b8+0x19]
+                    Line 1: "inner raw section payload"  [0x2b8+0x19]
               Free space — 384 bytes  [0x2d4+0x180]
       Free space — 2.9 KiB  [0x458+0xba8]

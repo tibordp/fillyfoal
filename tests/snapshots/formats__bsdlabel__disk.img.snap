@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ disk.img — BSD disklabel "fixture disk", 3 partitions  [0x0+0x8000]
   ▾ Disklabel  [0x200+0x94]
@@ -14,7 +14,7 @@ expression: "common::explore(&name, &data)"
       Tracks per cylinder: 2  [0x230+0x4]
       Cylinders: 1  [0x234+0x4]
       Sectors per cylinder: 64  [0x238+0x4]
-      Sectors per unit: 64 — 32 KiB  [0x23c+0x4]
+      Sectors per unit: 64 — 32.0 KiB  [0x23c+0x4]
       Spare sectors per track: 0  [0x240+0x2]
       Spare sectors per cylinder: 0  [0x242+0x2]
       Alternate cylinders: 0  [0x244+0x4]
@@ -32,7 +32,7 @@ expression: "common::explore(&name, &data)"
       Partitions: 3  [0x28a+0x2]
       Boot area size: 8192  [0x28c+0x4]
       Superblock size: 8192  [0x290+0x4]
-  ▾ Partition a — 4.2BSD (FFS/UFS), 12 KiB at sector 16  [0x294+0x10]
+  ▾ Partition a — 4.2BSD (FFS/UFS), 12.0 KiB at sector 16  [0x294+0x10]
     ▾ Entry  [0x294+0x10]
         Sectors: 24  [0x294+0x4]
         Offset (sectors): 16  [0x298+0x4]
@@ -42,7 +42,7 @@ expression: "common::explore(&name, &data)"
         Cylinders per group: 16  [0x2a2+0x2]
     ▾ Volume  [0x2000+0x3000]
         ! unsupported: unrecognized format [0x2000+0x3000]
-  ▾ Partition b — swap, 8 KiB at sector 40  [0x2a4+0x10]
+  ▾ Partition b — swap, 8.0 KiB at sector 40  [0x2a4+0x10]
     ▾ Entry  [0x2a4+0x10]
         Sectors: 16  [0x2a4+0x4]
         Offset (sectors): 40  [0x2a8+0x4]
@@ -50,7 +50,7 @@ expression: "common::explore(&name, &data)"
         Filesystem type: swap (0x1)  [0x2b0+0x1]
         Fragments per block: 0  [0x2b1+0x1]
         Cylinders per group: 0  [0x2b2+0x2]
-    ▾ Volume — Linux swap v1 "bsdswap", 8 KiB (2 pages of 4 KiB)  [0x5000+0x2000]
+    ▾ Volume — Linux swap v1 "bsdswap", 8.0 KiB (2 pages of 4.0 KiB)  [0x5000+0x2000]
         Boot bits  [0x5000+0x400]
       ▾ Header  [0x5400+0x2c]
           Version: 1  [0x5400+0x4]
@@ -59,8 +59,8 @@ expression: "common::explore(&name, &data)"
           UUID: "8a7b6c5d-4e3f-4a2b-9c1d-0e1f2a3b4c5d"  [0x540c+0x10]
           Label: "bsdswap"  [0x541c+0x10]
         Signature: "SWAPSPACE2"  [0x5ff6+0xa]
-        Swap pages — 4 KiB  [0x6000+0x1000]
-  ▾ Partition c — unused, 32 KiB at sector 0  [0x2b4+0x10]
+        Swap pages — 4.0 KiB  [0x6000+0x1000]
+  ▾ Partition c — unused, 32.0 KiB at sector 0  [0x2b4+0x10]
     ▾ Entry  [0x2b4+0x10]
         Sectors: 64  [0x2b4+0x4]
         Offset (sectors): 0  [0x2b8+0x4]

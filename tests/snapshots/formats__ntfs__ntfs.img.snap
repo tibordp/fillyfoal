@@ -24,7 +24,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Unused: 00 00 00  |...|  [0x45+0x3]
       Volume serial number: 0x1a2b3c4d5e6f7081  [0x48+0x8]
       Checksum: 0x0  [0x50+0x4]
-  ▾ MFT — 32 records of 1 KiB
+  ▾ MFT — 32 records of 1.0 KiB
     ▾ Record 0 — $MFT  [0x2000+0x400]
       ▾ Header  [#1:0x0+0x30]
           Magic: "FILE"  [#1:0x0+0x4]
@@ -65,12 +65,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Name length: 4  [#1:0xd8+0x1]
             Namespace: Win32 and DOS (0x3)  [#1:0xd9+0x1]
           Name: "$MFT"  [#1:0xda+0x8]
-      ▾ $DATA — non-resident, 32 KiB  [#1:0xe8+0x48]
+      ▾ $DATA — non-resident, 32.0 KiB  [#1:0xe8+0x48]
           Run 0 — VCN 0: 64 clusters at LCN 16 → 0x2000+0x8000
       ▾ $BITMAP — resident, 8 bytes  [#1:0x130+0x20]
           Value — 8 bytes  [#1:0x148+0x8]
-      ▾ Clusters — contiguous, 32 KiB
-          Fragment 0 — file offset 0x0, 32 KiB  [0x2000+0x8000]
+      ▾ Clusters — contiguous, 32.0 KiB
+          Fragment 0 — file offset 0x0, 32.0 KiB  [0x2000+0x8000]
         Content — the MFT itself (its records are listed above)  [0x2000+0x8000]
     ▾ Record 1 — $MFTMirr  [0x2400+0x400]
       ▾ Header  [#3:0x0+0x30]
@@ -112,10 +112,10 @@ expression: "common::explore(&display_name(&path), &data)"
             Name length: 8  [#3:0xd8+0x1]
             Namespace: Win32 and DOS (0x3)  [#3:0xd9+0x1]
           Name: "$MFTMirr"  [#3:0xda+0x10]
-      ▾ $DATA — non-resident, 4 KiB  [#3:0xf0+0x48]
+      ▾ $DATA — non-resident, 4.0 KiB  [#3:0xf0+0x48]
           Run 0 — VCN 0: 8 clusters at LCN 80 → 0xa000+0x1000
-      ▾ Clusters — contiguous, 4 KiB
-          Fragment 0 — file offset 0x0, 4 KiB  [0xa000+0x1000]
+      ▾ Clusters — contiguous, 4.0 KiB
+          Fragment 0 — file offset 0x0, 4.0 KiB  [0xa000+0x1000]
       ▾ Content — NTFS MFT, 4 records of 1024 bytes, 4 in use (0 directories)  [0xa000+0x1000]
         ▾ Record 0: 2024-05-15 05:17:43 UTC — $MFT — file  [0xa000+0x400]
           ▾ Header  [0xa000+0x38]
@@ -581,7 +581,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Modified: 2024-05-15 05:17:43 UTC  [#6:0x58+0x8]
             MFT record modified: 2024-05-15 05:17:44 UTC  [#6:0x60+0x8]
             Accessed: 2024-05-15 05:17:45 UTC  [#6:0x68+0x8]
-            File attributes: 0x16 [HIDDEN | SYSTEM | 0x10]  [#6:0x70+0x4]
+            File attributes: 0x16 [HIDDEN | SYSTEM | DIRECTORY]  [#6:0x70+0x4]
             Maximum versions: 0  [#6:0x74+0x4]
             Version: 0  [#6:0x78+0x4]
             Class id: 0  [#6:0x7c+0x4]
@@ -594,14 +594,14 @@ expression: "common::explore(&display_name(&path), &data)"
             Accessed: 2024-05-15 05:17:42 UTC  [#6:0xb8+0x8]
             Allocated size: 0  [#6:0xc0+0x8]
             Real size: 0  [#6:0xc8+0x8]
-            File attributes: 0x10000000 [DIRECTORY]  [#6:0xd0+0x4]
+            File attributes: 0x10000000 [DUP_FILE_NAME_INDEX_PRESENT]  [#6:0xd0+0x4]
             Reparse tag / EA size: 0x0  [#6:0xd4+0x4]
             Name length: 1  [#6:0xd8+0x1]
             Namespace: Win32 and DOS (0x3)  [#6:0xd9+0x1]
           Name: "."  [#6:0xda+0x2]
       ▾ $INDEX_ROOT:$I30 — resident, 56 bytes  [#6:0xe0+0x58]
           Value — 56 bytes  [#6:0x100+0x38]
-      ▾ $INDEX_ALLOCATION:$I30 — non-resident, 2 KiB  [#6:0x138+0x50]
+      ▾ $INDEX_ALLOCATION:$I30 — non-resident, 2.0 KiB  [#6:0x138+0x50]
           Run 0 — VCN 0: 4 clusters at LCN 88 → 0xb000+0x800
       ▾ $BITMAP:$I30 — resident, 8 bytes  [#6:0x188+0x28]
           Value — 8 bytes  [#6:0x1a8+0x8]
@@ -861,7 +861,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Accessed: 2024-05-15 05:17:42 UTC  [#12:0xb8+0x8]
             Allocated size: 0  [#12:0xc0+0x8]
             Real size: 0  [#12:0xc8+0x8]
-            File attributes: 0x10000000 [DIRECTORY]  [#12:0xd0+0x4]
+            File attributes: 0x10000000 [DUP_FILE_NAME_INDEX_PRESENT]  [#12:0xd0+0x4]
             Reparse tag / EA size: 0x0  [#12:0xd4+0x4]
             Name length: 7  [#12:0xd8+0x1]
             Namespace: Win32 and DOS (0x3)  [#12:0xd9+0x1]
@@ -973,13 +973,13 @@ expression: "common::explore(&display_name(&path), &data)"
             Name length: 14  [#14:0x150+0x1]
             Namespace: Win32 (0x1)  [#14:0x151+0x1]
           Name: "fragmented.bin"  [#14:0x152+0x1c]
-      ▾ $DATA — non-resident, 1.1 KiB  [#14:0x170+0x48]
+      ▾ $DATA — non-resident, 1.2 KiB  [#14:0x170+0x48]
           Run 0 — VCN 0: 2 clusters at LCN 96 → 0xc000+0x400
           Run 1 — VCN 2: 1 clusters at LCN 92 → 0xb800+0x200
-      ▾ Clusters — 2 fragments, 1.1 KiB
-          Fragment 0 — file offset 0x0, 1 KiB  [0xc000+0x400]
+      ▾ Clusters — 2 fragments, 1.2 KiB
+          Fragment 0 — file offset 0x0, 1.0 KiB  [0xc000+0x400]
           Fragment 1 — file offset 0x400, 176 bytes  [0xb800+0xb0]
-      ▾ Content — 1.1 KiB  [#19:0x0+0x4b0]
+      ▾ Content — 1.2 KiB  [#19:0x0+0x4b0]
           Data  [#19:0x0+0x4b0]
     ▾ Record 18 — Sub dir  [0x6800+0x400]
       ▾ Header  [#15:0x0+0x30]
@@ -1003,7 +1003,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Modified: 2024-05-15 05:17:43 UTC  [#15:0x58+0x8]
             MFT record modified: 2024-05-15 05:17:44 UTC  [#15:0x60+0x8]
             Accessed: 2024-05-15 05:17:45 UTC  [#15:0x68+0x8]
-            File attributes: 0x10 [0x10]  [#15:0x70+0x4]
+            File attributes: 0x10 [DIRECTORY]  [#15:0x70+0x4]
             Maximum versions: 0  [#15:0x74+0x4]
             Version: 0  [#15:0x78+0x4]
             Class id: 0  [#15:0x7c+0x4]
@@ -1016,7 +1016,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Accessed: 2024-05-15 05:17:42 UTC  [#15:0xb8+0x8]
             Allocated size: 0  [#15:0xc0+0x8]
             Real size: 0  [#15:0xc8+0x8]
-            File attributes: 0x10000000 [DIRECTORY]  [#15:0xd0+0x4]
+            File attributes: 0x10000000 [DUP_FILE_NAME_INDEX_PRESENT]  [#15:0xd0+0x4]
             Reparse tag / EA size: 0x0  [#15:0xd4+0x4]
             Name length: 7  [#15:0xd8+0x1]
             Namespace: Win32 and DOS (0x3)  [#15:0xd9+0x1]
@@ -1092,7 +1092,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Modified: 2024-05-15 05:17:43 UTC  [#17:0x58+0x8]
             MFT record modified: 2024-05-15 05:17:44 UTC  [#17:0x60+0x8]
             Accessed: 2024-05-15 05:17:45 UTC  [#17:0x68+0x8]
-            File attributes: 0x220 [ARCHIVE | SPARSE]  [#17:0x70+0x4]
+            File attributes: 0x220 [ARCHIVE | SPARSE_FILE]  [#17:0x70+0x4]
             Maximum versions: 0  [#17:0x74+0x4]
             Version: 0  [#17:0x78+0x4]
             Class id: 0  [#17:0x7c+0x4]
@@ -1168,13 +1168,13 @@ expression: "common::explore(&display_name(&path), &data)"
           Run 4 — VCN 48: 1 clusters at LCN 93 → 0xba00+0x200
           Run 5 — VCN 49: 2 clusters at LCN 122 → 0xf400+0x400
           Run 6 — VCN 51: 13 sparse clusters
-      ▾ Compression units — 4 of 8 KiB
-          Unit 0 — LZNT1, 2 KiB in 1 fragment(s)  [0xcc00+0x800]
-          Unit 1 — stored, 8 KiB in 1 fragment(s)  [0xd400+0x2000]
+      ▾ Compression units — 4 of 8.0 KiB
+          Unit 0 — LZNT1, 2.0 KiB in 1 fragment(s)  [0xcc00+0x800]
+          Unit 1 — stored, 8.0 KiB in 1 fragment(s)  [0xd400+0x2000]
           Unit 2 — sparse (zeros)
         ▾ Unit 3 — LZNT1, 1.5 KiB in 2 fragment(s)
             Fragment 0 — 512 bytes  [0xba00+0x200]
-            Fragment 1 — 1 KiB  [0xf400+0x400]
+            Fragment 1 — 1.0 KiB  [0xf400+0x400]
       ▾ Content — U-Boot image "packed.txt LZNT1 test": Linux ARM kernel, none, 27.5 KiB  [#24:0x0+0x6e10]
         ▾ Header — packed.txt LZNT1 test, header CRC valid  [#24:0x0+0x40]
             Magic: 0x27051956  [#24:0x0+0x4]
@@ -1225,7 +1225,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Modified: 2024-05-15 05:17:43 UTC  [#6:0x58+0x8]
             MFT record modified: 2024-05-15 05:17:44 UTC  [#6:0x60+0x8]
             Accessed: 2024-05-15 05:17:45 UTC  [#6:0x68+0x8]
-            File attributes: 0x16 [HIDDEN | SYSTEM | 0x10]  [#6:0x70+0x4]
+            File attributes: 0x16 [HIDDEN | SYSTEM | DIRECTORY]  [#6:0x70+0x4]
             Maximum versions: 0  [#6:0x74+0x4]
             Version: 0  [#6:0x78+0x4]
             Class id: 0  [#6:0x7c+0x4]
@@ -1238,14 +1238,14 @@ expression: "common::explore(&display_name(&path), &data)"
             Accessed: 2024-05-15 05:17:42 UTC  [#6:0xb8+0x8]
             Allocated size: 0  [#6:0xc0+0x8]
             Real size: 0  [#6:0xc8+0x8]
-            File attributes: 0x10000000 [DIRECTORY]  [#6:0xd0+0x4]
+            File attributes: 0x10000000 [DUP_FILE_NAME_INDEX_PRESENT]  [#6:0xd0+0x4]
             Reparse tag / EA size: 0x0  [#6:0xd4+0x4]
             Name length: 1  [#6:0xd8+0x1]
             Namespace: Win32 and DOS (0x3)  [#6:0xd9+0x1]
           Name: "."  [#6:0xda+0x2]
       ▾ $INDEX_ROOT:$I30 — resident, 56 bytes  [#6:0xe0+0x58]
           Value — 56 bytes  [#6:0x100+0x38]
-      ▾ $INDEX_ALLOCATION:$I30 — non-resident, 2 KiB  [#6:0x138+0x50]
+      ▾ $INDEX_ALLOCATION:$I30 — non-resident, 2.0 KiB  [#6:0x138+0x50]
           Run 0 — VCN 0: 4 clusters at LCN 88 → 0xb000+0x800
       ▾ $BITMAP:$I30 — resident, 8 bytes  [#6:0x188+0x28]
           Value — 8 bytes  [#6:0x1a8+0x8]
@@ -1426,7 +1426,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Value — 0 bytes  [#4:0x108+0x0]
       ▾ Content — 0 bytes  [#4:0x108+0x0]
           Data  [#4:0x108+0x0]
-    ▾ $MFT — 32 KiB, record 0  [#25:0x1e0+0x4a]
+    ▾ $MFT — 32.0 KiB, record 0  [#25:0x1e0+0x4a]
       ▾ Header  [#1:0x0+0x30]
           Magic: "FILE"  [#1:0x0+0x4]
           Update sequence offset: 48  [#1:0x4+0x2]
@@ -1466,14 +1466,14 @@ expression: "common::explore(&display_name(&path), &data)"
             Name length: 4  [#1:0xd8+0x1]
             Namespace: Win32 and DOS (0x3)  [#1:0xd9+0x1]
           Name: "$MFT"  [#1:0xda+0x8]
-      ▾ $DATA — non-resident, 32 KiB  [#1:0xe8+0x48]
+      ▾ $DATA — non-resident, 32.0 KiB  [#1:0xe8+0x48]
           Run 0 — VCN 0: 64 clusters at LCN 16 → 0x2000+0x8000
       ▾ $BITMAP — resident, 8 bytes  [#1:0x130+0x20]
           Value — 8 bytes  [#1:0x148+0x8]
-      ▾ Clusters — contiguous, 32 KiB
-          Fragment 0 — file offset 0x0, 32 KiB  [0x2000+0x8000]
+      ▾ Clusters — contiguous, 32.0 KiB
+          Fragment 0 — file offset 0x0, 32.0 KiB  [0x2000+0x8000]
         Content — the MFT itself (its records are listed above)  [0x2000+0x8000]
-    ▾ $MFTMirr — 4 KiB, record 1  [#25:0x240+0x52]
+    ▾ $MFTMirr — 4.0 KiB, record 1  [#25:0x240+0x52]
       ▾ Header  [#3:0x0+0x30]
           Magic: "FILE"  [#3:0x0+0x4]
           Update sequence offset: 48  [#3:0x4+0x2]
@@ -1513,10 +1513,10 @@ expression: "common::explore(&display_name(&path), &data)"
             Name length: 8  [#3:0xd8+0x1]
             Namespace: Win32 and DOS (0x3)  [#3:0xd9+0x1]
           Name: "$MFTMirr"  [#3:0xda+0x10]
-      ▾ $DATA — non-resident, 4 KiB  [#3:0xf0+0x48]
+      ▾ $DATA — non-resident, 4.0 KiB  [#3:0xf0+0x48]
           Run 0 — VCN 0: 8 clusters at LCN 80 → 0xa000+0x1000
-      ▾ Clusters — contiguous, 4 KiB
-          Fragment 0 — file offset 0x0, 4 KiB  [0xa000+0x1000]
+      ▾ Clusters — contiguous, 4.0 KiB
+          Fragment 0 — file offset 0x0, 4.0 KiB  [0xa000+0x1000]
       ▾ Content — NTFS MFT, 4 records of 1024 bytes, 4 in use (0 directories)  [0xa000+0x1000]
         ▾ Record 0: 2024-05-15 05:17:43 UTC — $MFT — file  [0xa000+0x400]
           ▾ Header  [0xa000+0x38]
@@ -1956,7 +1956,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Accessed: 2024-05-15 05:17:42 UTC  [#12:0xb8+0x8]
               Allocated size: 0  [#12:0xc0+0x8]
               Real size: 0  [#12:0xc8+0x8]
-              File attributes: 0x10000000 [DIRECTORY]  [#12:0xd0+0x4]
+              File attributes: 0x10000000 [DUP_FILE_NAME_INDEX_PRESENT]  [#12:0xd0+0x4]
               Reparse tag / EA size: 0x0  [#12:0xd4+0x4]
               Name length: 7  [#12:0xd8+0x1]
               Namespace: Win32 and DOS (0x3)  [#12:0xd9+0x1]
@@ -2049,7 +2049,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Value — 0 bytes  [#11:0x100+0x0]
       ▾ Content — 0 bytes  [#11:0x100+0x0]
           Data  [#11:0x100+0x0]
-    ▾ fragmented.bin — 1.1 KiB, record 17  [#26:0x1d8+0x5e]
+    ▾ fragmented.bin — 1.2 KiB, record 17  [#26:0x1d8+0x5e]
       ▾ Header  [#14:0x0+0x30]
           Magic: "FILE"  [#14:0x0+0x4]
           Update sequence offset: 48  [#14:0x4+0x2]
@@ -2103,13 +2103,13 @@ expression: "common::explore(&display_name(&path), &data)"
             Name length: 14  [#14:0x150+0x1]
             Namespace: Win32 (0x1)  [#14:0x151+0x1]
           Name: "fragmented.bin"  [#14:0x152+0x1c]
-      ▾ $DATA — non-resident, 1.1 KiB  [#14:0x170+0x48]
+      ▾ $DATA — non-resident, 1.2 KiB  [#14:0x170+0x48]
           Run 0 — VCN 0: 2 clusters at LCN 96 → 0xc000+0x400
           Run 1 — VCN 2: 1 clusters at LCN 92 → 0xb800+0x200
-      ▾ Clusters — 2 fragments, 1.1 KiB
-          Fragment 0 — file offset 0x0, 1 KiB  [0xc000+0x400]
+      ▾ Clusters — 2 fragments, 1.2 KiB
+          Fragment 0 — file offset 0x0, 1.0 KiB  [0xc000+0x400]
           Fragment 1 — file offset 0x400, 176 bytes  [0xb800+0xb0]
-      ▾ Content — 1.1 KiB  [#19:0x0+0x4b0]
+      ▾ Content — 1.2 KiB  [#19:0x0+0x4b0]
           Data  [#19:0x0+0x4b0]
     ▾ hello.txt — 17 bytes, record 16  [#26:0x248+0x54]
       ▾ Header  [#13:0x0+0x30]
@@ -2180,7 +2180,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Modified: 2024-05-15 05:17:43 UTC  [#17:0x58+0x8]
             MFT record modified: 2024-05-15 05:17:44 UTC  [#17:0x60+0x8]
             Accessed: 2024-05-15 05:17:45 UTC  [#17:0x68+0x8]
-            File attributes: 0x220 [ARCHIVE | SPARSE]  [#17:0x70+0x4]
+            File attributes: 0x220 [ARCHIVE | SPARSE_FILE]  [#17:0x70+0x4]
             Maximum versions: 0  [#17:0x74+0x4]
             Version: 0  [#17:0x78+0x4]
             Class id: 0  [#17:0x7c+0x4]
@@ -2231,7 +2231,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Modified: 2024-05-15 05:17:43 UTC  [#15:0x58+0x8]
               MFT record modified: 2024-05-15 05:17:44 UTC  [#15:0x60+0x8]
               Accessed: 2024-05-15 05:17:45 UTC  [#15:0x68+0x8]
-              File attributes: 0x10 [0x10]  [#15:0x70+0x4]
+              File attributes: 0x10 [DIRECTORY]  [#15:0x70+0x4]
               Maximum versions: 0  [#15:0x74+0x4]
               Version: 0  [#15:0x78+0x4]
               Class id: 0  [#15:0x7c+0x4]
@@ -2244,7 +2244,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Accessed: 2024-05-15 05:17:42 UTC  [#15:0xb8+0x8]
               Allocated size: 0  [#15:0xc0+0x8]
               Real size: 0  [#15:0xc8+0x8]
-              File attributes: 0x10000000 [DIRECTORY]  [#15:0xd0+0x4]
+              File attributes: 0x10000000 [DUP_FILE_NAME_INDEX_PRESENT]  [#15:0xd0+0x4]
               Reparse tag / EA size: 0x0  [#15:0xd4+0x4]
               Name length: 7  [#15:0xd8+0x1]
               Namespace: Win32 and DOS (0x3)  [#15:0xd9+0x1]

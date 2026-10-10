@@ -17,11 +17,12 @@ mod zmap;
 
 use std::sync::Arc;
 
-use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
+use crate::bytes::{align_up, to_u64, to_usize, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
+use crate::formats::disk::DIRENT_TYPES;
 use crate::formats::disk::{
     PieceList, content_node, crc32c_update, size, text, unix_mode, uuid_value,
 };
@@ -94,17 +95,6 @@ const LAYOUTS: EnumTable = &[
     (2, "flat, tail inline"),
     (3, "compressed (compact index)"),
     (4, "chunk-based"),
-];
-
-const FTYPES: EnumTable = &[
-    (0, "unknown"),
-    (1, "regular file"),
-    (2, "directory"),
-    (3, "character device"),
-    (4, "block device"),
-    (5, "FIFO"),
-    (6, "socket"),
-    (7, "symbolic link"),
 ];
 
 const LAYOUT_FLAT_PLAIN: u8 = 0;
@@ -340,10 +330,6 @@ impl Ino {
     }
 }
 
-fn align(v: u64, a: u64) -> u64 {
-    crate::formats::disk::align(v, a)
-}
-
 /// The superblock checksum: CRC-32C of the rest of the superblock's block,
 /// checksum zeroed, without final inversion.
 fn sb_checksum(data: &[u8]) -> u32 {
@@ -430,7 +416,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             if sb.u1 & 1u16.checked_shl(alg.into()).unwrap_or(0) == 0 {
                 continue;
             }
-            pos = align(pos, 4);
+            pos = align_up(pos, 4);
             let rec = cx.read_avail(vol.sub(pos, 16)).await?;
             let len = u64::from(u16_le(&rec, 0).unwrap_or(0));
             if alg == 1 {
@@ -529,7 +515,7 @@ async fn long_prefixes(cx: &Cx, fs: &Fs, sb: &Sb) -> Result<(Vec<(u8, Vec<u8>)>,
     let mut out = Vec::new();
     let mut spans = Vec::new();
     for _ in 0..sb.prefix_count {
-        pos = align(pos, 4);
+        pos = align_up(pos, 4);
         let len_bytes = cx.read(source.sub(pos, 2)).await?;
         let len = u64::from(u16_le(&len_bytes, 0).unwrap_or(0));
         let rec = source.sub(pos, len.saturating_add(2));
@@ -843,7 +829,7 @@ async fn chunk_table(cx: &Cx, fs: &Fs, ino: &Ino) -> Result<ChunkTable> {
         .ok_or_else(|| Diagnostic::malformed("chunk size overflows"))?;
     let count = ino.size.div_ceil(chunk);
     let unit: u64 = if indexes { 8 } else { 4 };
-    let start = align(ino.after(), unit);
+    let start = align_up(ino.after(), unit);
     let span = fs
         .vol
         .sub_exact(start, count.saturating_mul(unit))
@@ -924,7 +910,7 @@ async fn chunk_view(cx: Cx, (fs, nid): (FsRef, u64)) -> Result<()> {
         }
     }
     let end = table.span.end().saturating_sub(fs.vol.offset);
-    let aligned = align(end, 32);
+    let aligned = align_up(end, 32);
     if aligned > end {
         cx.push(
             Node::new("Padding")
@@ -938,7 +924,7 @@ async fn chunk_view(cx: Cx, (fs, nid): (FsRef, u64)) -> Result<()> {
 
 /// Emits the padding from `end` to the next 32-byte inode slot.
 fn slot_padding(cx: &Cx, fs: &Fs, end: u64) {
-    let aligned = align(end, 32);
+    let aligned = align_up(end, 32);
     if aligned > end {
         cx.emit(
             Node::new("Padding")
@@ -1011,7 +997,7 @@ async fn view(cx: Cx, (fs, nid): (FsRef, u64)) -> Result<()> {
                 Node::new("Data blocks")
                     .span(fs.vol.sub(
                         u64::from(ino.iu).saturating_mul(fs.blk),
-                        align(ino.size, fs.blk),
+                        align_up(ino.size, fs.blk),
                     ))
                     .summary(format!("block {}, {}", ino.iu, size(ino.size))),
             );
@@ -1150,7 +1136,7 @@ async fn directory(cx: Cx, st: DirState) -> Result<()> {
             if e.name == b"." || e.name == b".." {
                 continue;
             }
-            let kind = lookup(FTYPES, e.ftype.into()).unwrap_or("unknown");
+            let kind = lookup(DIRENT_TYPES, e.ftype.into()).unwrap_or("unknown");
             let node = Node::new(String::from_utf8_lossy(&e.name).into_owned())
                 .span(span.sub(e.off, 12))
                 .value(Value::UInt {
@@ -1186,7 +1172,7 @@ async fn directory(cx: Cx, st: DirState) -> Result<()> {
 fn dirent_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u64("nid").emit()?;
     f.u16("Name offset").emit()?;
-    f.u8("File type").enumeration(FTYPES).emit()?;
+    f.u8("File type").enumeration(DIRENT_TYPES).emit()?;
     f.u8("Reserved").emit()?;
     Ok(())
 }
@@ -1228,7 +1214,7 @@ async fn dir_block(cx: Cx, span: Span) -> Result<()> {
             )
             .summary(format!(
                 "{}, nid {}",
-                lookup(FTYPES, e.ftype.into()).unwrap_or("unknown"),
+                lookup(DIRENT_TYPES, e.ftype.into()).unwrap_or("unknown"),
                 e.nid
             )),
         );

@@ -31,9 +31,9 @@ expression: "common::explore(&display_name(&path), &data)"
             Data  [#1:0x0+0x60]
     ▾ Inodes — 3 inodes
         ! malformed: inode type 0 [#1:0x24+0x2]
-      ▾ Inode 1 — ?rw-r--r--, regular file, 80 bytes  [#1:0x0+0x24]
+      ▾ Inode 1 — -rw-r--r--, regular file, 80 bytes  [#1:0x0+0x24]
           Type: regular file (0x2)  [#1:0x0+0x2]
-          Mode: 0x1a4 — ?rw-r--r--  [#1:0x2+0x2]
+          Mode: 0x1a4 — -rw-r--r--  [#1:0x2+0x2]
           Owner (ID index): 0  [#1:0x4+0x2]
           Group (ID index): 0  [#1:0x6+0x2]
           Modified: 2024-01-02 03:04:00 UTC  [#1:0x8+0x4]

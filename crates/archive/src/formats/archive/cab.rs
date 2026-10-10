@@ -15,7 +15,10 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, text, uint, unsupported};
+use crate::formats::util::arcutil::{emit_nodes, unsupported};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Codec, Format, Input, Probe, dissect_or_data, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -54,7 +57,7 @@ record! {
     pub struct Header {
         signature: ascii[4] "Signature",
         reserved1: u32 "Reserved",
-        size: u32 "Cabinet size" .with(|&s, n| n.summary(human_size(s.into()))),
+        size: u32 "Cabinet size" .with(|&s, n| n.summary(fmt::size(s.into()))),
         reserved2: u32 "Reserved",
         files_offset: u32 "First file entry offset" .hex(),
         reserved3: u32 "Reserved",
@@ -191,13 +194,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Folders")
             .span(folders_span)
-            .summary(count(h.folders.into(), "folder", "folders"))
+            .summary(count(h.folders, "folder", "folders"))
             .lazy(folders, (input, layout)),
     );
     cx.emit(
         Node::new("Files")
             .span(file.tail(layout.files_at))
-            .summary(count(h.files.into(), "file", "files"))
+            .summary(count(h.files, "file", "files"))
             .lazy(files, (input, layout)),
     );
     let mut methods = Vec::new();
@@ -210,8 +213,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(format!(
         "Microsoft Cabinet, {}, {}, {}",
-        count(h.files.into(), "file", "files"),
-        count(h.folders.into(), "folder", "folders"),
+        count(h.files, "file", "files"),
+        count(h.folders, "folder", "folders"),
         methods.join(", ")
     ));
     Ok(())
@@ -247,11 +250,11 @@ async fn folders(cx: Cx, (input, l): (Input, Layout)) -> Result<()> {
         let mut fields = vec![
             Node::new("First data block offset")
                 .span(span.sub(0, 4))
-                .value(hex(f.data_at))
+                .value(hex(f.data_at, 64))
                 .target(l.file.sub(f.data_at, 0)),
             Node::new("Data blocks")
                 .span(span.sub(4, 2))
-                .value(uint(f.blocks.into())),
+                .value(uint(f.blocks, 64)),
             Node::new("Compression")
                 .span(span.sub(6, 2))
                 .value(Value::Enum {
@@ -262,7 +265,7 @@ async fn folders(cx: Cx, (input, l): (Input, Layout)) -> Result<()> {
                 .summary(compression_name(f.kind)),
             Node::new("Data")
                 .span(l.file.tail(f.data_at))
-                .summary(count(f.blocks.into(), "block", "blocks"))
+                .summary(count(f.blocks, "block", "blocks"))
                 .lazy(data_blocks, (input, l, f)),
         ];
         if f.kind & 0x0f != 0 {
@@ -283,7 +286,7 @@ async fn folders(cx: Cx, (input, l): (Input, Layout)) -> Result<()> {
                 .summary(format!(
                     "{}, {}",
                     compression_name(f.kind),
-                    count(f.blocks.into(), "data block", "data blocks")
+                    count(f.blocks, "data block", "data blocks")
                 ))
                 .lazy(emit_nodes, Arc::new(fields)),
         )
@@ -308,7 +311,7 @@ async fn data_blocks(cx: Cx, (input, l, f): (Input, Layout, FolderInfo)) -> Resu
         let span = cur.since(start);
         let mut checksum = Node::new("Checksum")
             .span(span.sub(0, 4))
-            .value(hex(csum.into()));
+            .value(hex(csum, 64));
         if csum == 0 {
             checksum = checksum.summary("not used");
         }
@@ -316,10 +319,10 @@ async fn data_blocks(cx: Cx, (input, l, f): (Input, Layout, FolderInfo)) -> Resu
             checksum,
             Node::new("Packed size")
                 .span(span.sub(4, 2))
-                .value(uint(packed.into())),
+                .value(uint(packed, 64)),
             Node::new("Unpacked size")
                 .span(span.sub(6, 2))
-                .value(uint(unpacked.into())),
+                .value(uint(unpacked, 64)),
         ];
         fields.push(match f.kind & 0x0f {
             0 => embedded("Data", input.nested(data)),
@@ -346,8 +349,8 @@ async fn data_blocks(cx: Cx, (input, l, f): (Input, Layout, FolderInfo)) -> Resu
                 .span(span)
                 .summary(format!(
                     "{} → {}, at {uncompressed_at:#x} in the folder",
-                    human_size(packed.into()),
-                    human_size(unpacked.into())
+                    fmt::size(packed.into()),
+                    fmt::size(unpacked.into())
                 ))
                 .lazy(emit_nodes, Arc::new(fields)),
             data,
@@ -374,7 +377,7 @@ async fn files(cx: Cx, (input, l): (Input, Layout)) -> Result<()> {
         cx.push(
             Node::new(name)
                 .span(span)
-                .summary(human_size(size.into()))
+                .summary(fmt::size(size.into()))
                 .lazy(file_entry, (input, l, span, size, offset, folder)),
         )
         .await;
@@ -389,7 +392,7 @@ async fn file_entry(
     let block = cx.block(span).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
     f.u32("Size")
-        .with(|&s, n| n.summary(human_size(s.into())))
+        .with(|&s, n| n.summary(fmt::size(s.into())))
         .emit()?;
     f.u32("Offset in folder").hex().emit()?;
     f.u16("Folder")
@@ -432,7 +435,7 @@ async fn file_entry(
             if fo.kind & 0x0f == 0 && want_end <= end {
                 // Within one stored block: the cabinet's own bytes.
                 let s = data.sub(want_start.saturating_sub(uncompressed_at), size.into());
-                cx.emit(embedded("Content", input.nested(s)).summary(human_size(size.into())));
+                cx.emit(embedded("Content", input.nested(s)).summary(fmt::size(size.into())));
                 return Ok(());
             }
             cx.emit(Node::new("Location").span(data).summary(format!(
@@ -457,7 +460,7 @@ async fn file_entry(
         embedded("Content", input.nested(stream.sub(want_start, size.into()))).summary(format!(
             "{}, {}",
             compression_name(fo.kind),
-            human_size(size.into())
+            fmt::size(size.into())
         )),
     );
     Ok(())

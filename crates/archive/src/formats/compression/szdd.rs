@@ -9,7 +9,8 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::{human_size, unsupported};
+use crate::formats::util::arcutil::unsupported;
+use crate::formats::util::fmt;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::record;
 use crate::value::{EnumTable, FlagTable, flag};
@@ -42,7 +43,7 @@ record! {
         magic: bytes[8] "Magic",
         mode: ascii[1] "Compression mode" .desc("'A': LZSS with a 4 KiB window"),
         missing: ascii[1] "Missing last character" .desc("Replaces the '_' at the end of the file name"),
-        size: u32 "Uncompressed size" .with(|&s, n| n.summary(human_size(s.into()))),
+        size: u32 "Uncompressed size" .with(|&s, n| n.summary(fmt::size(s.into()))),
     }
 }
 
@@ -64,7 +65,7 @@ pub async fn dissect_szdd(cx: Cx, input: Input) -> Result<()> {
             codec,
             Some(h.size.into()),
         )
-        .summary(human_size(h.size.into())),
+        .summary(fmt::size(h.size.into())),
     );
     let missing = if h.missing.trim_matches('\0').is_empty() {
         String::new()
@@ -73,7 +74,7 @@ pub async fn dissect_szdd(cx: Cx, input: Input) -> Result<()> {
     };
     cx.annotate(format!(
         "MS-DOS COMPRESS (SZDD), {} uncompressed{missing}",
-        human_size(h.size.into())
+        fmt::size(h.size.into())
     ));
     Ok(())
 }
@@ -104,7 +105,7 @@ fn kwaj_header(f: &mut Fields<'_>, _: &()) -> Result<(u16, u16, Option<u32>)> {
     if flags & 0x01 != 0 {
         size = Some(
             f.u32("Uncompressed size")
-                .with(|&s, n| n.summary(human_size(s.into())))
+                .with(|&s, n| n.summary(fmt::size(s.into())))
                 .emit()?,
         );
     }
@@ -153,7 +154,7 @@ pub async fn dissect_kwaj(cx: Cx, input: Input) -> Result<()> {
         _ => unsupported("Compressed data", data, &format!("KWAJ {name}")),
     });
     let size = size.map_or_else(String::new, |s| {
-        format!(", {} uncompressed", human_size(s.into()))
+        format!(", {} uncompressed", fmt::size(s.into()))
     });
     cx.annotate(format!("MS-DOS COMPRESS (KWAJ), {name}{size}"));
     Ok(())

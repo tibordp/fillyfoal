@@ -156,7 +156,7 @@ fn dinode_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u32("Group GID").emit()?;
     f.u32("Mode")
         .hex()
-        .with(|&m, n| n.summary(unix_mode(m & 0xffff)))
+        .with(|&m, n| n.summary(unix_mode((m & 0xffff).into())))
         .desc("Unix mode in the low 16 bits; JFS flags above")
         .emit()?;
     time_field(f, "Accessed")?;

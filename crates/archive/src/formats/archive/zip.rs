@@ -476,7 +476,7 @@ zip_variant!(
     ["pt", "pth", "ptl"],
     "application/x-torchscript",
     |h| has_entry_suffix(h, b"/constants.pkl")
-        || entry_names(h).any(|n| probe_contains(n, b"/code/"))
+        || entry_names(h).any(|n| crate::bytes::contains(n, b"/code/"))
 );
 zip_variant!(
     APEX,
@@ -518,10 +518,6 @@ zip_variant!(
     "application/x-ipsw",
     |h| has_entry(h, b"BuildManifest.plist") || has_entry(h, b"Restore.plist")
 );
-
-fn probe_contains(hay: &[u8], needle: &[u8]) -> bool {
-    hay.windows(needle.len()).any(|w| w == needle)
-}
 
 pub static FORMAT: Format = Format {
     name: "zip",
@@ -1057,23 +1053,15 @@ async fn zip64_sizes(cx: &Cx, extra: Span, h: &CentralHeader) -> Sizes {
     sizes
 }
 
+/// A name: UTF-8 if flagged or valid, else IBM code page 437 (the historical
+/// default for ZIP file names).
 fn decode_name(bytes: &[u8], flags: u16) -> String {
     if flags & 0x0800 != 0 {
         return String::from_utf8_lossy(bytes).into_owned();
     }
     match std::str::from_utf8(bytes) {
         Ok(s) => s.to_owned(),
-        Err(_) => bytes.iter().map(|&b| cp437(b)).collect(),
-    }
-}
-
-/// IBM code page 437, the historical default for ZIP file names.
-fn cp437(b: u8) -> char {
-    const HIGH: &str = "ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■\u{a0}";
-    if b < 0x80 {
-        char::from(b)
-    } else {
-        HIGH.chars().nth(usize::from(b & 0x7f)).unwrap_or('?')
+        Err(_) => crate::codec::charset::Charset::Cp437.decode(bytes),
     }
 }
 

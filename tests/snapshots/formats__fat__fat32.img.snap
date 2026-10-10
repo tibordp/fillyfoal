@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ fat32.img — FAT32 filesystem "FAT32 TINY", 48 KiB, 62 clusters of 512 bytes  [0x0+0xc000]
+▾ fat32.img — FAT32 filesystem "FAT32 TINY", 48.0 KiB, 62 clusters of 512 bytes  [0x0+0xc000]
   ▾ Boot sector (BPB) — OEM "MSWIN4.1"  [0x0+0x200]
       Jump instruction: eb 58 90  |.X.|  [0x0+0x3]
       OEM name: "MSWIN4.1"  [0x3+0x8]
@@ -149,8 +149,8 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Lines — 1 line  [0x4c00+0xc]
             Line 1: "key = value"  [0x4c00+0xb]
       Unused entries — 10 free slots (end of directory)  [0x44c0+0x140]
-    Data region — 31 KiB  [0x4400+0x7c00]
+    Data region — 31.0 KiB  [0x4400+0x7c00]
   ▾ Free clusters — from the FAT
-      Clusters 4–5 — free, 1 KiB  [0x4800+0x400]
-      Clusters 8–9 — free, 1 KiB  [0x5000+0x400]
+      Clusters 4–5 — free, 1.0 KiB  [0x4800+0x400]
+      Clusters 8–9 — free, 1.0 KiB  [0x5000+0x400]
       Clusters 11–63 — free, 26.5 KiB  [0x5600+0x6a00]

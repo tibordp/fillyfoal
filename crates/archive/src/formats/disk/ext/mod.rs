@@ -27,7 +27,7 @@ use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Radix, Value, flag};
+use crate::value::{EnumTable, FlagTable, flag};
 
 const LE: Endian = Endian::Little;
 const SUPER: u64 = 1024;
@@ -966,14 +966,7 @@ async fn inode_table(cx: Cx, (fs, g): (FsRef, u64)) -> Result<()> {
     Ok(())
 }
 
-/// A value node with a decimal integer.
-fn uint(name: impl Into<std::borrow::Cow<'static, str>>, span: Span, value: u64, bits: u8) -> Node {
-    Node::new(name).span(span).value(Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    })
-}
+use crate::formats::disk::uint_node as uint;
 
 /// The first `len` bytes of the next part of a cursor's block.
 fn ahead<'a>(f: &Fields<'a>, len: u64) -> &'a [u8] {

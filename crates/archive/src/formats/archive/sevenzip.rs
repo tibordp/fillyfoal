@@ -22,7 +22,10 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, text, uint, unsupported};
+use crate::formats::util::arcutil::{emit_nodes, unsupported};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Codec, Format, Input, Probe, dissect_or_data, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -113,7 +116,7 @@ record! {
         minor: u8 "Minor version",
         start_crc: u32 "Start header CRC" .hex(),
         next_offset: u64 "Next header offset" .hex() .desc("Relative to the end of this header"),
-        next_size: u64 "Next header size" .with(|&s, n| n.summary(human_size(s))),
+        next_size: u64 "Next header size" .with(|&s, n| n.summary(fmt::size(s))),
         next_crc: u32 "Next header CRC" .hex(),
     }
 }
@@ -674,7 +677,7 @@ impl Parser<'_> {
             let name = crate::value::lookup(PROPERTY, kind.into())
                 .map_or_else(|| format!("Property {kind:#04x}"), str::to_owned);
             let mut item = self.item(name, at);
-            item.summary = summary.or_else(|| Some(human_size(size)));
+            item.summary = summary.or_else(|| Some(fmt::size(size)));
             children.push(item);
         }
         a.files = files;
@@ -1001,7 +1004,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .folders
             .first()
             .map_or(0, Folder::unpack_size);
-        let summary = format!("{methods}, {} → {}", human_size(packed), human_size(size));
+        let summary = format!("{methods}, {} → {}", fmt::size(packed), fmt::size(size));
         match decode_header(&cx, &archive, file, pack_base).await {
             Ok((span, mut inner)) => {
                 cx.emit(
@@ -1022,7 +1025,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     cx.emit(
                         Node::new("Packed data")
                             .span(file.sub(SIGNATURE_HEADER, data_len))
-                            .summary(human_size(data_len)),
+                            .summary(fmt::size(data_len)),
                     );
                 }
                 cx.emit(
@@ -1038,7 +1041,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 );
                 cx.annotate(format!(
                     "7-Zip archive, header compressed ({methods}), {} packed",
-                    human_size(file.len)
+                    fmt::size(file.len)
                 ));
                 return Ok(());
             }
@@ -1169,10 +1172,10 @@ async fn list_folders(
             .collect();
         children.push(
             Node::new("Unpacked size")
-                .value(uint(f.unpack_size()))
-                .summary(human_size(f.unpack_size())),
+                .value(uint(f.unpack_size(), 64))
+                .summary(fmt::size(f.unpack_size())),
         );
-        children.push(Node::new("Streams").value(uint(f.streams)));
+        children.push(Node::new("Streams").value(uint(f.streams, 64)));
         children.push(match plan(f) {
             Ok(p) if p.codec == Codec::Stored && p.post.is_empty() => {
                 embedded("Data", input.nested(span))
@@ -1190,8 +1193,8 @@ async fn list_folders(
                 .span(span)
                 .summary(format!(
                     "{methods}, {} → {}, {}",
-                    human_size(span.len),
-                    human_size(f.unpack_size()),
+                    fmt::size(span.len),
+                    fmt::size(f.unpack_size()),
                     count(f.streams, "stream", "streams")
                 ))
                 .lazy(emit_nodes, Arc::new(children)),
@@ -1219,7 +1222,7 @@ async fn list_files(cx: Cx, (input, archive, pack_base): (Input, Arc<Archive>, u
             }));
         }
         if let Some(a) = f.attributes {
-            let mut attr = Node::new("Attributes").value(hex(a.into()));
+            let mut attr = Node::new("Attributes").value(hex(a, 64));
             if a & 0x8000 != 0 {
                 // p7zip keeps the Unix mode in the high 16 bits.
                 attr = attr.summary(crate::formats::util::arcutil::unix_mode(u64::from(a >> 16)));
@@ -1244,10 +1247,10 @@ async fn list_files(cx: Cx, (input, archive, pack_base): (Input, Arc<Archive>, u
             let span = spans.get(folder).copied().unwrap_or(file.sub(0, 0));
             children.push(
                 Node::new("Size")
-                    .value(uint(size))
-                    .summary(human_size(size)),
+                    .value(uint(size, 64))
+                    .summary(fmt::size(size)),
             );
-            children.push(Node::new("Folder").value(uint(to_u64(folder))));
+            children.push(Node::new("Folder").value(uint(to_u64(folder), 64)));
             let methods = fo.map(Folder::methods).unwrap_or_default();
             let content_node = match fo.map(plan) {
                 Some(Ok(p)) if p.codec == Codec::Stored && p.post.is_empty() => {
@@ -1264,7 +1267,7 @@ async fn list_files(cx: Cx, (input, archive, pack_base): (Input, Arc<Archive>, u
                     if fo.is_some_and(|f| f.streams > 1) {
                         c = c.summary(format!(
                             "{methods}, in a {} solid block",
-                            human_size(fo.map_or(0, Folder::unpack_size))
+                            fmt::size(fo.map_or(0, Folder::unpack_size))
                         ));
                     }
                     c
@@ -1273,19 +1276,19 @@ async fn list_files(cx: Cx, (input, archive, pack_base): (Input, Arc<Archive>, u
                     node = node.span(span);
                     unsupported("Content", span, &why).summary(format!(
                         "{methods}, in a {} solid block",
-                        human_size(fo.map_or(0, Folder::unpack_size))
+                        fmt::size(fo.map_or(0, Folder::unpack_size))
                     ))
                 }
                 None => {
                     node = node.span(span);
                     unsupported("Content", span, &methods).summary(format!(
                         "{methods}, in a {} solid block",
-                        human_size(fo.map_or(0, Folder::unpack_size))
+                        fmt::size(fo.map_or(0, Folder::unpack_size))
                     ))
                 }
             };
             children.push(content_node);
-            node = node.summary(human_size(size));
+            node = node.summary(fmt::size(size));
             stream = stream.saturating_add(1);
             in_folder = in_folder.saturating_add(1);
             offset_in_folder = offset_in_folder.saturating_add(size);

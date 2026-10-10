@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ stand.img — BFS filesystem "fixvol", 32 KiB, 16 inodes  [0x0+0x8000]
+▾ stand.img — BFS filesystem "fixvol", 32.0 KiB, 16 inodes  [0x0+0x8000]
   ▾ Superblock  [0x0+0x200]
       Magic: 0x1badface  [0x0+0x4]
       Data start: 0x600  [0x4+0x4]

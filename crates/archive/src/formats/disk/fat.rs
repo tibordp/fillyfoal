@@ -14,6 +14,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
+use crate::formats::disk::ntfs::FILE_ATTRIBUTES;
 use crate::formats::disk::{
     assemble, content_node, dos_date, dos_stamp, fragments_node, size, size_summary,
 };
@@ -143,22 +144,13 @@ record! {
     }
 }
 
-const ATTRS: FlagTable = &[
-    flag(0x01, "READ_ONLY"),
-    flag(0x02, "HIDDEN"),
-    flag(0x04, "SYSTEM"),
-    flag(0x08, "VOLUME_ID"),
-    flag(0x10, "DIRECTORY"),
-    flag(0x20, "ARCHIVE"),
-];
-
 const CASE: FlagTable = &[flag(0x08, "LOWERCASE_BASE"), flag(0x10, "LOWERCASE_EXT")];
 
 record! {
     /// A short (8.3) directory entry.
     pub struct DirEntry {
         name: bytes[11] "Short name" .with(|b, n| n.value(Value::Text(short_name(b, 0)))),
-        attr: u8 "Attributes" .flags(ATTRS),
+        attr: u8 "Attributes" .flags(FILE_ATTRIBUTES),
         case: u8 "Case flags (NT)" .flags(CASE),
         created_cs: u8 "Creation time, 10 ms units",
         created: u32 "Created" .with(dos_stamp),

@@ -2,11 +2,11 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ xfs.img — XFS v5 "fixture", 32 KiB, 2 × 16 KiB allocation groups, 4 KiB blocks (finobt)  [0x0+0x8000]
-  ▾ Superblock — 64 inodes (61 free), 12 KiB free  [0x0+0x200]
+▾ xfs.img — XFS v5 "fixture", 32.0 KiB, 2 × 16.0 KiB allocation groups, 4.0 KiB blocks (finobt)  [0x0+0x8000]
+  ▾ Superblock — 64 inodes (61 free), 12.0 KiB free  [0x0+0x200]
       Magic: "XFSB"  [0x0+0x4]
-      Block size: 4096 — 4 KiB  [0x4+0x4]
-      Data blocks: 8 — 32 KiB  [0x8+0x8]
+      Block size: 4096 — 4.0 KiB  [0x4+0x4]
+      Data blocks: 8 — 32.0 KiB  [0x8+0x8]
       Realtime blocks: 0  [0x10+0x8]
       Realtime extents: 0  [0x18+0x8]
       UUID: "aabbccdd-eeff-0011-2233-445566778899"  [0x20+0x10]
@@ -34,7 +34,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Maximum inode space (%): 25  [0x7f+0x1]
       Allocated inodes: 64  [0x80+0x8]
       Free inodes: 61  [0x88+0x8]
-      Free data blocks: 3 — 12 KiB  [0x90+0x8]
+      Free data blocks: 3 — 12.0 KiB  [0x90+0x8]
       Free realtime extents: 0  [0x98+0x8]
       User quota inode: 0  [0xa0+0x8]
       Group quota inode: 0  [0xa8+0x8]
@@ -60,10 +60,10 @@ expression: "common::explore(&display_name(&path), &data)"
       Last write LSN: 0x0 — cycle 0, block 0  [0xf0+0x8]
       Metadata UUID: "00000000-0000-0000-0000-000000000000"  [0xf8+0x10]
       Unused — 248 bytes  [0x108+0xf8]
-  ▾ Allocation groups — 2 × 16 KiB
-    ▾ AG 0 — 16 KiB, from block 0  [0x0+0x4000]
+  ▾ Allocation groups — 2 × 16.0 KiB
+    ▾ AG 0 — 16.0 KiB, from block 0  [0x0+0x4000]
         Superblock (primary) — shown at the top level  [0x0+0x200]
-      ▾ AGF (free space) — 1 free blocks (4 KiB), longest free extent 1 blocks  [0x200+0x200]
+      ▾ AGF (free space) — 1 free blocks (4.0 KiB), longest free extent 1 blocks  [0x200+0x200]
           ! warning: AGF CRC mismatch: stored 0x00000000, computed 0x5abfa5e0
           Magic: "XAGF"  [0x200+0x4]
           Version: 1  [0x204+0x4]
@@ -232,11 +232,11 @@ expression: "common::explore(&display_name(&path), &data)"
               ! warning: mismatch: computed 0x98f94189
           ! malformed: expected magic IAB3 [0x3000+0x4]
         Free inode B+tree — empty
-    ▾ AG 1 — 16 KiB, from block 4  [0x4000+0x4000]
+    ▾ AG 1 — 16.0 KiB, from block 4  [0x4000+0x4000]
       ▾ Superblock (secondary)  [0x4000+0x200]
           ! malformed: bad superblock magic
           Magic: "INA�"  [0x4000+0x4]
-          Block size: 50397184 — 48 MiB  [0x4004+0x4]
+          Block size: 50397184 — 48.1 MiB  [0x4004+0x4]
           Data blocks: 0 — 0 bytes  [0x4008+0x8]
           Realtime blocks: 12884901888  [0x4010+0x8]
           Realtime extents: 0  [0x4018+0x8]
@@ -282,7 +282,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Features 2: 0x0 []  [0x40c8+0x4]
           Features 2 (copy): 0x0 []  [0x40cc+0x4]
           Unused — 304 bytes  [0x40d0+0x130]
-      ▾ AGF (free space) — 1 free blocks (4 KiB), longest free extent 1 blocks  [0x4200+0x200]
+      ▾ AGF (free space) — 1 free blocks (4.0 KiB), longest free extent 1 blocks  [0x4200+0x200]
           ! warning: AGF CRC mismatch: stored 0x00000000, computed 0x2c4bb351
           Magic: "XAGF"  [0x4200+0x4]
           Version: 1  [0x4204+0x4]

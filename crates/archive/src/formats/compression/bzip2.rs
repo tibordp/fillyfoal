@@ -11,7 +11,9 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::{count, hex, human_size, uint};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -102,7 +104,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .span(body)
             .summary(format!(
                 "up to {} each, found by a bit-level scan",
-                human_size(block_size)
+                fmt::size(block_size)
             ))
             .lazy(blocks, body),
     );
@@ -160,7 +162,7 @@ fn block_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.node(
         Node::new("Original pointer")
             .span(at)
-            .value(uint(orig))
+            .value(uint(orig, 64))
             .desc("Position of the original string in the BWT matrix (24 bits)"),
     );
     Ok(())
@@ -170,13 +172,13 @@ async fn end_of_stream(cx: Cx, (span, shift, crc): (Span, u64, u64)) -> Result<(
     cx.emit(
         Node::new("End-of-stream magic")
             .span(span.sub(0, 7))
-            .value(hex(EOS_MAGIC))
+            .value(hex(EOS_MAGIC, 64))
             .summary(format!("√π (BCD), bit offset {shift} in its first byte")),
     );
     cx.emit(
         Node::new("Combined CRC")
             .span(span.sub(6, 5))
-            .value(hex(crc)),
+            .value(hex(crc, 64)),
     );
     Ok(())
 }
@@ -242,10 +244,10 @@ async fn push_block(cx: &Cx, body: Span, index: u64, start: u64, end: u64) {
         .span(span)
         .summary(format!(
             "bit offset {start:#x}, {} compressed",
-            human_size(end.saturating_sub(start) / 8)
+            fmt::size(end.saturating_sub(start) / 8)
         ));
     if let Some(crc) = crc {
-        node = node.value(hex(crc));
+        node = node.value(hex(crc, 64));
     }
     cx.progress_in(body, body.offset.saturating_add(first));
     cx.push(node).await;

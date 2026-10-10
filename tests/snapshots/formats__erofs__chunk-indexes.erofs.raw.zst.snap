@@ -2,19 +2,19 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ chunk-indexes.erofs — EROFS filesystem "fillyfoal", 160 KiB, 36 inodes, uncompressed  [0x0+0x28000]
+▾ chunk-indexes.erofs — EROFS filesystem "fillyfoal", 160.0 KiB, 36 inodes, uncompressed  [0x0+0x28000]
     Boot area — 1 KiB left for a boot loader; not used by EROFS  [0x0+0x400]
-  ▾ Superblock — 36 inodes, 40 blocks of 4 KiB  [0x400+0x80]
+  ▾ Superblock — 36 inodes, 40 blocks of 4.0 KiB  [0x400+0x80]
       Magic: 0xe0f5e1e2  [0x400+0x4]
       Checksum: 0xc1abfc16 — valid CRC-32C  [0x404+0x4]
       Compatible features: 0x7 [SB_CHKSUM | MTIME | XATTR_FILTER]  [0x408+0x4]
-      log2(block size): 12 — 4 KiB  [0x40c+0x1]
+      log2(block size): 12 — 4.0 KiB  [0x40c+0x1]
       Extension slots: 0 — superblock of 128 bytes  [0x40d+0x1]
       Root directory nid: 38  [0x40e+0x2]
       Inodes: 36  [0x410+0x8]
       Build time: 2024-01-01 00:00:00 UTC  [0x418+0x8]
       Build time (ns): 0  [0x420+0x4]
-      Blocks: 40 — 160 KiB  [0x424+0x4]
+      Blocks: 40 — 160.0 KiB  [0x424+0x4]
       Metadata area block: 0  [0x428+0x4]
       Shared xattr area block: 0  [0x42c+0x4]
       UUID: "00000000-0000-4000-8000-0000000000e0"  [0x430+0x10]
@@ -128,11 +128,11 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x5d8+0x2]
             Group GID: 0  [0x5da+0x2]
             Reserved: 0  [0x5dc+0x4]
-          Data blocks — block 2, 4 KiB  [0x2000+0x1000]
+          Data blocks — block 2, 4.0 KiB  [0x2000+0x1000]
           Inline tail — 1.2 KiB after the inode  [0x5e0+0x4f2]
           Padding — to the next inode slot  [0xad2+0xe]
         ▾ Directory blocks — 5.2 KiB  [#1:0x0+0x14f2]
-          ▾ Block 0 — 4 KiB  [#1:0x0+0x1000]
+          ▾ Block 0 — 4.0 KiB  [#1:0x0+0x1000]
             ▾ . — directory, nid 46  [#1:0x0+0xc]
                 nid: 46  [#1:0x0+0x8]
                 Name offset: 252  [#1:0x8+0x2]
@@ -312,12 +312,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0xd58+0x2]
             Group GID: 0  [0xd5a+0x2]
             Reserved: 0  [0xd5c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 14  [0xd60+0x8]
               Start block (high): 0  [0xd60+0x2]
               Device: 0  [0xd62+0x2]
               Start block: 14  [0xd64+0x4]
-            Chunk 0 data — 8 KiB at block 14  [0xe000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 14  [0xe000+0x2000]
             Padding — to the next inode slot  [0xd68+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0xe000+0x9]
             Encoding: "UTF-8"
@@ -338,12 +338,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0xd98+0x2]
             Group GID: 0  [0xd9a+0x2]
             Reserved: 0  [0xd9c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 15  [0xda0+0x8]
               Start block (high): 0  [0xda0+0x2]
               Device: 0  [0xda2+0x2]
               Start block: 15  [0xda4+0x4]
-            Chunk 0 data — 8 KiB at block 15  [0xf000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 15  [0xf000+0x2000]
             Padding — to the next inode slot  [0xda8+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0xf000+0x9]
             Encoding: "UTF-8"
@@ -364,12 +364,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0xdd8+0x2]
             Group GID: 0  [0xdda+0x2]
             Reserved: 0  [0xddc+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 16  [0xde0+0x8]
               Start block (high): 0  [0xde0+0x2]
               Device: 0  [0xde2+0x2]
               Start block: 16  [0xde4+0x4]
-            Chunk 0 data — 8 KiB at block 16  [0x10000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 16  [0x10000+0x2000]
             Padding — to the next inode slot  [0xde8+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x10000+0x9]
             Encoding: "UTF-8"
@@ -390,12 +390,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0xe18+0x2]
             Group GID: 0  [0xe1a+0x2]
             Reserved: 0  [0xe1c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 17  [0xe20+0x8]
               Start block (high): 0  [0xe20+0x2]
               Device: 0  [0xe22+0x2]
               Start block: 17  [0xe24+0x4]
-            Chunk 0 data — 8 KiB at block 17  [0x11000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 17  [0x11000+0x2000]
             Padding — to the next inode slot  [0xe28+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x11000+0x9]
             Encoding: "UTF-8"
@@ -416,12 +416,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0xe58+0x2]
             Group GID: 0  [0xe5a+0x2]
             Reserved: 0  [0xe5c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 18  [0xe60+0x8]
               Start block (high): 0  [0xe60+0x2]
               Device: 0  [0xe62+0x2]
               Start block: 18  [0xe64+0x4]
-            Chunk 0 data — 8 KiB at block 18  [0x12000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 18  [0x12000+0x2000]
             Padding — to the next inode slot  [0xe68+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x12000+0x9]
             Encoding: "UTF-8"
@@ -442,12 +442,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0xe98+0x2]
             Group GID: 0  [0xe9a+0x2]
             Reserved: 0  [0xe9c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 19  [0xea0+0x8]
               Start block (high): 0  [0xea0+0x2]
               Device: 0  [0xea2+0x2]
               Start block: 19  [0xea4+0x4]
-            Chunk 0 data — 8 KiB at block 19  [0x13000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 19  [0x13000+0x2000]
             Padding — to the next inode slot  [0xea8+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x13000+0x9]
             Encoding: "UTF-8"
@@ -468,12 +468,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0xed8+0x2]
             Group GID: 0  [0xeda+0x2]
             Reserved: 0  [0xedc+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 20  [0xee0+0x8]
               Start block (high): 0  [0xee0+0x2]
               Device: 0  [0xee2+0x2]
               Start block: 20  [0xee4+0x4]
-            Chunk 0 data — 8 KiB at block 20  [0x14000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 20  [0x14000+0x2000]
             Padding — to the next inode slot  [0xee8+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x14000+0x9]
             Encoding: "UTF-8"
@@ -494,12 +494,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0xf18+0x2]
             Group GID: 0  [0xf1a+0x2]
             Reserved: 0  [0xf1c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 21  [0xf20+0x8]
               Start block (high): 0  [0xf20+0x2]
               Device: 0  [0xf22+0x2]
               Start block: 21  [0xf24+0x4]
-            Chunk 0 data — 8 KiB at block 21  [0x15000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 21  [0x15000+0x2000]
             Padding — to the next inode slot  [0xf28+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x15000+0x9]
             Encoding: "UTF-8"
@@ -520,12 +520,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0xf58+0x2]
             Group GID: 0  [0xf5a+0x2]
             Reserved: 0  [0xf5c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 22  [0xf60+0x8]
               Start block (high): 0  [0xf60+0x2]
               Device: 0  [0xf62+0x2]
               Start block: 22  [0xf64+0x4]
-            Chunk 0 data — 8 KiB at block 22  [0x16000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 22  [0x16000+0x2000]
             Padding — to the next inode slot  [0xf68+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x16000+0x9]
             Encoding: "UTF-8"
@@ -546,12 +546,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0xf98+0x2]
             Group GID: 0  [0xf9a+0x2]
             Reserved: 0  [0xf9c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 23  [0xfa0+0x8]
               Start block (high): 0  [0xfa0+0x2]
               Device: 0  [0xfa2+0x2]
               Start block: 23  [0xfa4+0x4]
-            Chunk 0 data — 8 KiB at block 23  [0x17000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 23  [0x17000+0x2000]
             Padding — to the next inode slot  [0xfa8+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x17000+0x9]
             Encoding: "UTF-8"
@@ -572,12 +572,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0xfd8+0x2]
             Group GID: 0  [0xfda+0x2]
             Reserved: 0  [0xfdc+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 24  [0xfe0+0x8]
               Start block (high): 0  [0xfe0+0x2]
               Device: 0  [0xfe2+0x2]
               Start block: 24  [0xfe4+0x4]
-            Chunk 0 data — 8 KiB at block 24  [0x18000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 24  [0x18000+0x2000]
             Padding — to the next inode slot  [0xfe8+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x18000+0x9]
             Encoding: "UTF-8"
@@ -598,12 +598,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x1018+0x2]
             Group GID: 0  [0x101a+0x2]
             Reserved: 0  [0x101c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 25  [0x1020+0x8]
               Start block (high): 0  [0x1020+0x2]
               Device: 0  [0x1022+0x2]
               Start block: 25  [0x1024+0x4]
-            Chunk 0 data — 8 KiB at block 25  [0x19000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 25  [0x19000+0x2000]
             Padding — to the next inode slot  [0x1028+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x19000+0x9]
             Encoding: "UTF-8"
@@ -624,12 +624,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x1058+0x2]
             Group GID: 0  [0x105a+0x2]
             Reserved: 0  [0x105c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 26  [0x1060+0x8]
               Start block (high): 0  [0x1060+0x2]
               Device: 0  [0x1062+0x2]
               Start block: 26  [0x1064+0x4]
-            Chunk 0 data — 8 KiB at block 26  [0x1a000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 26  [0x1a000+0x2000]
             Padding — to the next inode slot  [0x1068+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x1a000+0x9]
             Encoding: "UTF-8"
@@ -650,12 +650,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x1098+0x2]
             Group GID: 0  [0x109a+0x2]
             Reserved: 0  [0x109c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 27  [0x10a0+0x8]
               Start block (high): 0  [0x10a0+0x2]
               Device: 0  [0x10a2+0x2]
               Start block: 27  [0x10a4+0x4]
-            Chunk 0 data — 8 KiB at block 27  [0x1b000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 27  [0x1b000+0x2000]
             Padding — to the next inode slot  [0x10a8+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x1b000+0x9]
             Encoding: "UTF-8"
@@ -676,12 +676,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x10d8+0x2]
             Group GID: 0  [0x10da+0x2]
             Reserved: 0  [0x10dc+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 28  [0x10e0+0x8]
               Start block (high): 0  [0x10e0+0x2]
               Device: 0  [0x10e2+0x2]
               Start block: 28  [0x10e4+0x4]
-            Chunk 0 data — 8 KiB at block 28  [0x1c000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 28  [0x1c000+0x2000]
             Padding — to the next inode slot  [0x10e8+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x1c000+0x9]
             Encoding: "UTF-8"
@@ -702,12 +702,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x1118+0x2]
             Group GID: 0  [0x111a+0x2]
             Reserved: 0  [0x111c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 29  [0x1120+0x8]
               Start block (high): 0  [0x1120+0x2]
               Device: 0  [0x1122+0x2]
               Start block: 29  [0x1124+0x4]
-            Chunk 0 data — 8 KiB at block 29  [0x1d000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 29  [0x1d000+0x2000]
             Padding — to the next inode slot  [0x1128+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x1d000+0x9]
             Encoding: "UTF-8"
@@ -728,12 +728,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x1158+0x2]
             Group GID: 0  [0x115a+0x2]
             Reserved: 0  [0x115c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 30  [0x1160+0x8]
               Start block (high): 0  [0x1160+0x2]
               Device: 0  [0x1162+0x2]
               Start block: 30  [0x1164+0x4]
-            Chunk 0 data — 8 KiB at block 30  [0x1e000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 30  [0x1e000+0x2000]
             Padding — to the next inode slot  [0x1168+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x1e000+0x9]
             Encoding: "UTF-8"
@@ -754,12 +754,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x1198+0x2]
             Group GID: 0  [0x119a+0x2]
             Reserved: 0  [0x119c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 31  [0x11a0+0x8]
               Start block (high): 0  [0x11a0+0x2]
               Device: 0  [0x11a2+0x2]
               Start block: 31  [0x11a4+0x4]
-            Chunk 0 data — 8 KiB at block 31  [0x1f000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 31  [0x1f000+0x2000]
             Padding — to the next inode slot  [0x11a8+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x1f000+0x9]
             Encoding: "UTF-8"
@@ -780,12 +780,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x11d8+0x2]
             Group GID: 0  [0x11da+0x2]
             Reserved: 0  [0x11dc+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 32  [0x11e0+0x8]
               Start block (high): 0  [0x11e0+0x2]
               Device: 0  [0x11e2+0x2]
               Start block: 32  [0x11e4+0x4]
-            Chunk 0 data — 8 KiB at block 32  [0x20000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 32  [0x20000+0x2000]
             Padding — to the next inode slot  [0x11e8+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x20000+0x9]
             Encoding: "UTF-8"
@@ -806,12 +806,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x1218+0x2]
             Group GID: 0  [0x121a+0x2]
             Reserved: 0  [0x121c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 33  [0x1220+0x8]
               Start block (high): 0  [0x1220+0x2]
               Device: 0  [0x1222+0x2]
               Start block: 33  [0x1224+0x4]
-            Chunk 0 data — 8 KiB at block 33  [0x21000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 33  [0x21000+0x2000]
             Padding — to the next inode slot  [0x1228+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x21000+0x9]
             Encoding: "UTF-8"
@@ -832,12 +832,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x1258+0x2]
             Group GID: 0  [0x125a+0x2]
             Reserved: 0  [0x125c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 34  [0x1260+0x8]
               Start block (high): 0  [0x1260+0x2]
               Device: 0  [0x1262+0x2]
               Start block: 34  [0x1264+0x4]
-            Chunk 0 data — 8 KiB at block 34  [0x22000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 34  [0x22000+0x2000]
             Padding — to the next inode slot  [0x1268+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x22000+0x9]
             Encoding: "UTF-8"
@@ -858,12 +858,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x1298+0x2]
             Group GID: 0  [0x129a+0x2]
             Reserved: 0  [0x129c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 35  [0x12a0+0x8]
               Start block (high): 0  [0x12a0+0x2]
               Device: 0  [0x12a2+0x2]
               Start block: 35  [0x12a4+0x4]
-            Chunk 0 data — 8 KiB at block 35  [0x23000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 35  [0x23000+0x2000]
             Padding — to the next inode slot  [0x12a8+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x23000+0x9]
             Encoding: "UTF-8"
@@ -884,12 +884,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x12d8+0x2]
             Group GID: 0  [0x12da+0x2]
             Reserved: 0  [0x12dc+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 36  [0x12e0+0x8]
               Start block (high): 0  [0x12e0+0x2]
               Device: 0  [0x12e2+0x2]
               Start block: 36  [0x12e4+0x4]
-            Chunk 0 data — 8 KiB at block 36  [0x24000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 36  [0x24000+0x2000]
             Padding — to the next inode slot  [0x12e8+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x24000+0x9]
             Encoding: "UTF-8"
@@ -910,12 +910,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x1318+0x2]
             Group GID: 0  [0x131a+0x2]
             Reserved: 0  [0x131c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 37  [0x1320+0x8]
               Start block (high): 0  [0x1320+0x2]
               Device: 0  [0x1322+0x2]
               Start block: 37  [0x1324+0x4]
-            Chunk 0 data — 8 KiB at block 37  [0x25000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 37  [0x25000+0x2000]
             Padding — to the next inode slot  [0x1328+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x25000+0x9]
             Encoding: "UTF-8"
@@ -936,12 +936,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x1358+0x2]
             Group GID: 0  [0x135a+0x2]
             Reserved: 0  [0x135c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–8 → block 38  [0x1360+0x8]
               Start block (high): 0  [0x1360+0x2]
               Device: 0  [0x1362+0x2]
               Start block: 38  [0x1364+0x4]
-            Chunk 0 data — 8 KiB at block 38  [0x26000+0x2000]
+            Chunk 0 data — 8.0 KiB at block 38  [0x26000+0x2000]
             Padding — to the next inode slot  [0x1368+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x26000+0x9]
             Encoding: "UTF-8"
@@ -1012,12 +1012,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Owner UID: 0  [0x1398+0x2]
             Group GID: 0  [0x139a+0x2]
             Reserved: 0  [0x139c+0x4]
-        ▾ Chunk table — chunks of 8 KiB
+        ▾ Chunk table — chunks of 8.0 KiB
           ▾ Chunk 0 — bytes 0–6 → block 39  [0x13a0+0x8]
               Start block (high): 0  [0x13a0+0x2]
               Device: 0  [0x13a2+0x2]
               Start block: 39  [0x13a4+0x4]
-            Chunk 0 data — 8 KiB at block 39  [0x27000+0x1000]
+            Chunk 0 data — 8.0 KiB at block 39  [0x27000+0x1000]
             Padding — to the next inode slot  [0x13a8+0x18]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [0x27000+0x7]
             Encoding: "UTF-8"
@@ -1058,12 +1058,12 @@ expression: "common::explore(&display_name(&path), &data)"
             Name: "comment"  [0xb94+0x7]
             Value: "an inline attribute"  [0xb9b+0x13]
             Padding: 00 00  |..|  [0xbae+0x2]
-      ▾ Chunk table — chunks of 8 KiB
+      ▾ Chunk table — chunks of 8.0 KiB
         ▾ Chunk 0 — bytes 0–17 → block 3  [0xbb0+0x8]
             Start block (high): 0  [0xbb0+0x2]
             Device: 0  [0xbb2+0x2]
             Start block: 3  [0xbb4+0x4]
-          Chunk 0 data — 8 KiB at block 3  [0x3000+0x2000]
+          Chunk 0 data — 8.0 KiB at block 3  [0x3000+0x2000]
           Padding — to the next inode slot  [0xbb8+0x8]
       ▾ Content — UTF-8 text, LF line endings, 1 line  [0x3000+0x12]
           Encoding: "UTF-8"
@@ -1113,27 +1113,27 @@ expression: "common::explore(&display_name(&path), &data)"
           Owner UID: 0  [0xc38+0x2]
           Group GID: 0  [0xc3a+0x2]
           Reserved: 0  [0xc3c+0x4]
-      ▾ Chunk table — chunks of 8 KiB
+      ▾ Chunk table — chunks of 8.0 KiB
         ▾ Chunk 0 — bytes 0–8191 → block 4  [0xc40+0x8]
             Start block (high): 0  [0xc40+0x2]
             Device: 0  [0xc42+0x2]
             Start block: 4  [0xc44+0x4]
-          Chunk 0 data — 8 KiB at block 4  [0x4000+0x2000]
+          Chunk 0 data — 8.0 KiB at block 4  [0x4000+0x2000]
         ▾ Chunk 1 — bytes 8192–16383 → block 6  [0xc48+0x8]
             Start block (high): 0  [0xc48+0x2]
             Device: 0  [0xc4a+0x2]
             Start block: 6  [0xc4c+0x4]
-          Chunk 1 data — 8 KiB at block 6  [0x6000+0x2000]
+          Chunk 1 data — 8.0 KiB at block 6  [0x6000+0x2000]
         ▾ Chunk 2 — bytes 16384–24575 → block 8  [0xc50+0x8]
             Start block (high): 0  [0xc50+0x2]
             Device: 0  [0xc52+0x2]
             Start block: 8  [0xc54+0x4]
-          Chunk 2 data — 8 KiB at block 8  [0x8000+0x2000]
+          Chunk 2 data — 8.0 KiB at block 8  [0x8000+0x2000]
         ▾ Chunk 3 — bytes 24576–28892 → block 10  [0xc58+0x8]
             Start block (high): 0  [0xc58+0x2]
             Device: 0  [0xc5a+0x2]
             Start block: 10  [0xc5c+0x4]
-          Chunk 3 data — 8 KiB at block 10  [0xa000+0x2000]
+          Chunk 3 data — 8.0 KiB at block 10  [0xa000+0x2000]
       ▾ Content — UTF-8 text, LF line endings, 1 line  [0x4000+0x70dd]
           Encoding: "UTF-8"
           Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
@@ -1172,27 +1172,27 @@ expression: "common::explore(&display_name(&path), &data)"
             Value size: 44  [0xc92+0x2]
             Name: ""  [0xc94+0x0]
             Value: 02 00 00 00 01 00 06 00 ff ff ff ff 02 00 04 00 …  |................| — POSIX ACL: user::rw-, user:1000:r--, group::r--, mask::r--, other::r--  [0xc94+0x2c]
-      ▾ Chunk table — chunks of 8 KiB
+      ▾ Chunk table — chunks of 8.0 KiB
         ▾ Chunk 0 — bytes 0–8191 → block 4  [0xcc0+0x8]
             Start block (high): 0  [0xcc0+0x2]
             Device: 0  [0xcc2+0x2]
             Start block: 4  [0xcc4+0x4]
-          Chunk 0 data — 8 KiB at block 4  [0x4000+0x2000]
+          Chunk 0 data — 8.0 KiB at block 4  [0x4000+0x2000]
         ▾ Chunk 1 — bytes 8192–16383 → block 6  [0xcc8+0x8]
             Start block (high): 0  [0xcc8+0x2]
             Device: 0  [0xcca+0x2]
             Start block: 6  [0xccc+0x4]
-          Chunk 1 data — 8 KiB at block 6  [0x6000+0x2000]
+          Chunk 1 data — 8.0 KiB at block 6  [0x6000+0x2000]
         ▾ Chunk 2 — bytes 16384–24575 → block 8  [0xcd0+0x8]
             Start block (high): 0  [0xcd0+0x2]
             Device: 0  [0xcd2+0x2]
             Start block: 8  [0xcd4+0x4]
-          Chunk 2 data — 8 KiB at block 8  [0x8000+0x2000]
+          Chunk 2 data — 8.0 KiB at block 8  [0x8000+0x2000]
         ▾ Chunk 3 — bytes 24576–28892 → block 10  [0xcd8+0x8]
             Start block (high): 0  [0xcd8+0x2]
             Device: 0  [0xcda+0x2]
             Start block: 10  [0xcdc+0x4]
-          Chunk 3 data — 8 KiB at block 10  [0xa000+0x2000]
+          Chunk 3 data — 8.0 KiB at block 10  [0xa000+0x2000]
       ▾ Content — UTF-8 text, LF line endings, 1 line  [0x4000+0x70dd]
           Encoding: "UTF-8"
           Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
@@ -1211,13 +1211,13 @@ expression: "common::explore(&display_name(&path), &data)"
           Owner UID: 0  [0xcf8+0x2]
           Group GID: 0  [0xcfa+0x2]
           Reserved: 0  [0xcfc+0x4]
-    ▾ zeros.txt: 104 — -rw-r--r--, 4.8 KiB, chunk-based  [0x558+0xc]
+    ▾ zeros.txt: 104 — -rw-r--r--, 4.9 KiB, chunk-based  [0x558+0xc]
       ▾ Core — nid 104, compact inode, 1 links  [0xd00+0x20]
           Format: 0x8 — compact, chunk-based  [0xd00+0x2]
           Xattr count: 2  [0xd02+0x2]
           Mode: 0x81a4 — -rw-r--r--  [0xd04+0x2]
           Link count: 1  [0xd06+0x2]
-          Size: 5000 — 4.8 KiB  [0xd08+0x4]
+          Size: 5000 — 4.9 KiB  [0xd08+0x4]
           Modification time: 2024-01-01 00:00:00 UTC  [0xd0c+0x4]
           Chunk format: 0x21 — chunks of 2^1 blocks, index table  [0xd10+0x2]
           Reserved: 0  [0xd12+0x2]
@@ -1238,12 +1238,12 @@ expression: "common::explore(&display_name(&path), &data)"
               Name: "shared"  [0x484+0x6]
               Value: "shared by several inodes"  [0x48a+0x18]
               Padding: 00 00  |..|  [0x4a2+0x2]
-      ▾ Chunk table — chunks of 8 KiB
+      ▾ Chunk table — chunks of 8.0 KiB
         ▾ Chunk 0 — bytes 0–4999 → block 12  [0xd30+0x8]
             Start block (high): 0  [0xd30+0x2]
             Device: 0  [0xd32+0x2]
             Start block: 12  [0xd34+0x4]
-          Chunk 0 data — 8 KiB at block 12  [0xc000+0x2000]
+          Chunk 0 data — 8.0 KiB at block 12  [0xc000+0x2000]
           Padding — to the next inode slot  [0xd38+0x8]
       ▾ Content — UTF-8 text, 1 line  [0xc000+0x1388]
           Encoding: "UTF-8"

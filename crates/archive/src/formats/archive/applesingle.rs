@@ -10,15 +10,15 @@ use crate::bytes::{to_u64, u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::datakit::{fourcc, size};
+use crate::formats::util::civil::EPOCH_2000;
+use crate::formats::util::finder::finder_info;
+use crate::formats::util::fmt::size;
 use crate::formats::{Codec, Format, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{EnumTable, Value, lookup};
 
 const BE: Endian = Endian::Big;
-/// Seconds between 1970-01-01 and 2000-01-01.
-const EPOCH_2000: i64 = 946_684_800;
 
 pub static APPLESINGLE: Format = Format {
     name: "applesingle",
@@ -53,19 +53,6 @@ const ENTRY_IDS: EnumTable = &[
     (13, "AFP short name"),
     (14, "AFP file info"),
     (15, "AFP directory ID"),
-];
-
-const FINDER_FLAGS: FlagTable = &[
-    flag(0x0001, "isOnDesk"),
-    flag(0x0040, "isShared"),
-    flag(0x0080, "hasNoINITs"),
-    flag(0x0100, "hasBeenInited"),
-    flag(0x0400, "hasCustomIcon"),
-    flag(0x0800, "isStationery"),
-    flag(0x1000, "nameLocked"),
-    flag(0x2000, "hasBundle"),
-    flag(0x4000, "isInvisible"),
-    flag(0x8000, "isAlias"),
 ];
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
@@ -165,16 +152,7 @@ async fn entry(cx: Cx, (input, desc, span, id): (Input, Span, Span, u32)) -> Res
             }
         }
         9 => {
-            f.bytes("File type", 4)
-                .with(|b, n| n.value(Value::Text(fourcc(b))))
-                .emit()?;
-            f.bytes("Creator", 4)
-                .with(|b, n| n.value(Value::Text(fourcc(b))))
-                .emit()?;
-            f.u16("Finder flags").flags(FINDER_FLAGS).emit()?;
-            f.int::<i16>("Location v").emit()?;
-            f.int::<i16>("Location h").emit()?;
-            f.u16("Folder").emit()?;
+            finder_info(&mut f)?;
             f.bytes("Extended Finder info", 16).emit()?;
             if span.len > 34 {
                 let data = cx.read_avail(span.sub(32, 0x10000)).await?;

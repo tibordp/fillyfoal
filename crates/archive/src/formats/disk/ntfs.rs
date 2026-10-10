@@ -20,11 +20,12 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{PieceList, content_node, fragments_node, size};
+use crate::formats::util::val::name_or;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{EnumTable, FlagTable, Value, flag};
 
 const LE: Endian = Endian::Little;
 const ROOT_RECORD: u64 = 5;
@@ -97,7 +98,8 @@ record! {
     }
 }
 
-const ATTR_TYPES: EnumTable = &[
+/// NTFS attribute type codes (`$AttrDef`).
+pub const ATTR_TYPES: EnumTable = &[
     (0x10, "$STANDARD_INFORMATION"),
     (0x20, "$ATTRIBUTE_LIST"),
     (0x30, "$FILE_NAME"),
@@ -115,22 +117,34 @@ const ATTR_TYPES: EnumTable = &[
     (0x100, "$LOGGED_UTILITY_STREAM"),
 ];
 
-const FILE_ATTRIBUTES: FlagTable = &[
+/// Windows `FILE_ATTRIBUTE_*` flags (`winnt.h`), as stored by NTFS, FAT and
+/// exFAT directory entries, archivers (ACE) and Windows artifacts. Bit 3 is
+/// the FAT volume label; the top two are NTFS's `$FILE_NAME` index flags.
+pub const FILE_ATTRIBUTES: FlagTable = &[
     flag(0x1, "READONLY"),
     flag(0x2, "HIDDEN"),
     flag(0x4, "SYSTEM"),
+    flag(0x8, "VOLUME_ID"),
+    flag(0x10, "DIRECTORY"),
     flag(0x20, "ARCHIVE"),
     flag(0x40, "DEVICE"),
     flag(0x80, "NORMAL"),
     flag(0x100, "TEMPORARY"),
-    flag(0x200, "SPARSE"),
+    flag(0x200, "SPARSE_FILE"),
     flag(0x400, "REPARSE_POINT"),
     flag(0x800, "COMPRESSED"),
     flag(0x1000, "OFFLINE"),
     flag(0x2000, "NOT_CONTENT_INDEXED"),
     flag(0x4000, "ENCRYPTED"),
-    flag(0x1000_0000, "DIRECTORY"),
-    flag(0x2000_0000, "INDEX_VIEW"),
+    flag(0x8000, "INTEGRITY_STREAM"),
+    flag(0x1_0000, "VIRTUAL"),
+    flag(0x2_0000, "NO_SCRUB_DATA"),
+    flag(0x4_0000, "RECALL_ON_OPEN"),
+    flag(0x8_0000, "PINNED"),
+    flag(0x10_0000, "UNPINNED"),
+    flag(0x40_0000, "RECALL_ON_DATA_ACCESS"),
+    flag(0x1000_0000, "DUP_FILE_NAME_INDEX_PRESENT"),
+    flag(0x2000_0000, "DUP_VIEW_INDEX_PRESENT"),
 ];
 
 record! {
@@ -146,7 +160,8 @@ record! {
     }
 }
 
-const NAMESPACES: EnumTable = &[(0, "POSIX"), (1, "Win32"), (2, "DOS"), (3, "Win32 and DOS")];
+/// `$FILE_NAME` namespaces.
+pub const NAMESPACES: EnumTable = &[(0, "POSIX"), (1, "Win32"), (2, "DOS"), (3, "Win32 and DOS")];
 
 record! {
     pub struct FileName {
@@ -308,9 +323,15 @@ impl Volume {
     }
 }
 
-/// A multi-sector protected structure (MFT or index record) as a piecewise
-/// source with the update sequence applied.
-async fn fixed_up(cx: &Cx, span: Span, magic: &[u8]) -> Result<Span> {
+/// A multi-sector protected structure (an NTFS `FILE` or `INDX` record, or
+/// any record with the same header: `magic`, then the update sequence
+/// array's offset and entry count at 4 and 6) as a piecewise source with
+/// the update sequence applied: the last two bytes of each 512-byte sector
+/// are replaced by their saved copies from the array. A sector whose last
+/// two bytes are not the update sequence number (a torn write) gets a
+/// warning on `span`; a wrong magic or an array that does not fit the
+/// record is an error. Read the result with `cx.read`/`cx.block`.
+pub async fn fixed_up(cx: &Cx, span: Span, magic: &[u8]) -> Result<Span> {
     let head = cx.read(span.sub(0, 8)).await?;
     if head.get(..4) != Some(magic) {
         return Err(Diagnostic::malformed(format!(
@@ -665,8 +686,7 @@ async fn record_node(cx: Cx, (fs, n): (Vol, u64)) -> Result<()> {
 }
 
 fn attribute_node(fs: &Vol, a: &Attr) -> Node {
-    let kind = lookup(ATTR_TYPES, a.kind.into())
-        .map_or_else(|| format!("Attribute {:#x}", a.kind), str::to_owned);
+    let kind = name_or(ATTR_TYPES, a.kind.into(), "Attribute");
     let name = if a.name.is_empty() {
         kind
     } else {

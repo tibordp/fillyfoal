@@ -9,7 +9,10 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::{count, hex, human_size, uint, unix_mode};
+use crate::formats::util::arcutil::unix_mode;
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, uint};
 use crate::formats::{Codec, Format, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -48,7 +51,7 @@ const MAX_DEPTH: usize = 64;
 record! {
     pub struct CramSuper {
         magic: u32 "Magic" .hex(),
-        size: u32 "Size" .with(|&s, n| n.summary(human_size(s.into()))),
+        size: u32 "Size" .with(|&s, n| n.summary(fmt::size(s.into()))),
         flags: u32 "Flags" .flags(CRAM_FLAGS),
         future: u32 "Reserved",
         signature: ascii[16] "Signature",
@@ -92,25 +95,25 @@ fn inode_fields(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.node(
         Node::new("Size")
             .span(at.sub(0, 3))
-            .value(uint((sg & 0x00ff_ffff).into())),
+            .value(uint(sg & 0x00ff_ffff, 64)),
     );
     f.node(
         Node::new("GID")
             .span(at.sub(3, 1))
-            .value(uint((sg >> 24).into())),
+            .value(uint(sg >> 24, 64)),
     );
     let no = f.u32("Name length and offset").hex().get()?;
     let at = Span::new(span.source, span.offset, 4);
     f.node(
         Node::new("Name length")
             .span(at)
-            .value(uint(u64::from(no & 0x3f).saturating_mul(4)))
+            .value(uint(u64::from(no & 0x3f).saturating_mul(4), 64))
             .summary("bytes (stored in units of 4)"),
     );
     f.node(
         Node::new("Data offset")
             .span(at)
-            .value(hex(u64::from(no >> 6).saturating_mul(4)))
+            .value(hex(u64::from(no >> 6).saturating_mul(4), 64))
             .summary("stored in units of 4"),
     );
     Ok(())
@@ -147,14 +150,14 @@ pub async fn dissect_cramfs(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Root directory")
             .span(root_span)
-            .summary(human_size(root_inode.size.into()))
+            .summary(fmt::size(root_inode.size.into()))
             .lazy(crate::expander!(self::cram_entry: CramEntry), state),
     );
     cx.annotate(format!(
         "CramFS {:?}, {}, {}",
         sb.name,
-        count(sb.files.into(), "file", "files"),
-        human_size(sb.size.into())
+        count(sb.files, "file", "files"),
+        fmt::size(sb.size.into())
     ));
     Ok(())
 }
@@ -192,7 +195,7 @@ async fn cram_entry(cx: Cx, e: CramEntry) -> Result<()> {
                 let entry_span = dir.sub(to_u64(at), 12u64.saturating_add(child.namelen));
                 let kind = crate::formats::util::arcutil::unix_kind(child.mode.into());
                 let summary = if kind == "file" {
-                    human_size(child.size.into())
+                    fmt::size(child.size.into())
                 } else {
                     kind.to_owned()
                 };
@@ -217,7 +220,11 @@ async fn cram_entry(cx: Cx, e: CramEntry) -> Result<()> {
             let blocks = u64::from(inode.size).div_ceil(PAGE);
             let ptrs = file.sub(data_at, blocks.saturating_mul(4));
             let raw = cx.read(ptrs).await?;
-            cx.emit(Node::new("Block pointers").span(ptrs).value(uint(blocks)));
+            cx.emit(
+                Node::new("Block pointers")
+                    .span(ptrs)
+                    .value(uint(blocks, 64)),
+            );
             let mut start = data_at.saturating_add(ptrs.len);
             let mut nodes = Vec::new();
             for i in 0..blocks {
@@ -233,7 +240,7 @@ async fn cram_entry(cx: Cx, e: CramEntry) -> Result<()> {
             if let [(span, expected)] = nodes.as_slice() {
                 cx.emit(
                     content("Content", e.input, *span, Codec::Zlib, Some(*expected))
-                        .summary(human_size(*expected)),
+                        .summary(fmt::size(*expected)),
                 );
             } else {
                 cx.set_count(Count::AtLeast(blocks));

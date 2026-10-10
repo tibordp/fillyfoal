@@ -16,7 +16,11 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::{check_len, count, emit_nodes, hex, human_size, uint, xxh32};
+use crate::formats::util::arcutil::{check_len, emit_nodes, xxh32};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::capitalize;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -109,7 +113,7 @@ fn descriptor(f: &mut Fields<'_>, _: &()) -> Result<Descriptor> {
     if flg & 0x08 != 0 {
         d.content_size = Some(
             f.u64("Content size")
-                .with(|&s, n| n.summary(human_size(s)))
+                .with(|&s, n| n.summary(fmt::size(s)))
                 .emit()?,
         );
     }
@@ -202,7 +206,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                         .map(|(a, b)| a.saturating_add(b));
                     let size = info
                         .content_size
-                        .map_or_else(|| "size unknown".to_owned(), human_size);
+                        .map_or_else(|| "size unknown".to_owned(), fmt::size);
                     cx.push(
                         Node::new(name)
                             .span(info.span)
@@ -240,16 +244,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.push(check_len(
                 Node::new(format!("Skippable frame {:#x}", magic & 0xf))
                     .span(span)
-                    .summary(human_size(len.into()))
+                    .summary(fmt::size(len.into()))
                     .lazy(
                         emit_nodes,
                         Arc::new(vec![
                             Node::new("Magic")
                                 .span(span.sub(0, 4))
-                                .value(hex(magic.into())),
+                                .value(hex(magic, 64)),
                             Node::new("Frame size")
                                 .span(span.sub(4, 4))
-                                .value(uint(len.into())),
+                                .value(uint(len, 64)),
                             Node::new("User data").span(span.tail(8)),
                         ]),
                     ),
@@ -271,7 +275,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let kind = if legacy { "LZ4 (legacy)" } else { "LZ4" };
     let mut summary = format!("{kind}, {}", count(frames, "frame", "frames"));
     if let Some(t) = total {
-        summary = format!("{summary}, {} uncompressed", human_size(t));
+        summary = format!("{summary}, {} uncompressed", fmt::size(t));
     }
     cx.annotate(summary);
     Ok(())
@@ -296,7 +300,7 @@ async fn legacy_frame(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Magic")
             .span(span.sub(0, 4))
-            .value(hex(LEGACY_MAGIC.into())),
+            .value(hex(LEGACY_MAGIC, 64)),
     );
     let mut cur = Cursor::new(&cx, span.tail(4), LE);
     let mut index = 0u64;
@@ -313,13 +317,13 @@ async fn legacy_frame(cx: Cx, span: Span) -> Result<()> {
         cx.push(check_len(
             Node::new(format!("Block {index}"))
                 .span(block_span)
-                .summary(human_size(size.into()))
+                .summary(fmt::size(size.into()))
                 .lazy(
                     emit_nodes,
                     Arc::new(vec![
                         Node::new("Compressed size")
                             .span(block_span.sub(0, 4))
-                            .value(uint(size.into())),
+                            .value(uint(size, 64)),
                         Node::new("Compressed data")
                             .span(data)
                             .desc("Decoded as part of the whole stream (see Decompressed)"),
@@ -338,14 +342,14 @@ async fn frame(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Magic")
             .span(span.sub(0, 4))
-            .value(hex(FRAME_MAGIC.into())),
+            .value(hex(FRAME_MAGIC, 64)),
     );
     let flg = cx.read(span.sub(4, 1)).await?.first().copied().unwrap_or(0);
     let dspan = span.sub(4, descriptor_len(flg));
     let d = crate::fields::parse(&cx, dspan, LE, &(), descriptor).await?;
     let summary = d.content_size.map_or_else(
         || "content size not recorded".to_owned(),
-        |s| format!("content {}", human_size(s)),
+        |s| format!("content {}", fmt::size(s)),
     );
     cx.emit(struct_node("Frame descriptor", dspan, LE, (), descriptor).summary(summary));
     let mut cur = Cursor::new(&cx, span, LE);
@@ -355,8 +359,12 @@ async fn frame(cx: Cx, span: Span) -> Result<()> {
         let start = cur.pos();
         let raw = cur.u32().await?;
         if raw == 0 {
-            cx.push(Node::new("End mark").span(cur.since(start)).value(hex(0)))
-                .await;
+            cx.push(
+                Node::new("End mark")
+                    .span(cur.since(start))
+                    .value(hex(0u8, 64)),
+            )
+            .await;
             break;
         }
         let stored = raw & 0x8000_0000 != 0;
@@ -366,10 +374,10 @@ async fn frame(cx: Cx, span: Span) -> Result<()> {
         let mut children = vec![
             Node::new("Block size")
                 .span(span.sub(start, 4))
-                .value(hex(raw.into()))
+                .value(hex(raw, 64))
                 .summary(format!(
                     "{}, {}",
-                    human_size(size),
+                    fmt::size(size),
                     if stored { "uncompressed" } else { "compressed" }
                 )),
             if stored {
@@ -387,7 +395,7 @@ async fn frame(cx: Cx, span: Span) -> Result<()> {
             children.push(
                 Node::new("Block checksum")
                     .span(span.sub(at, 4))
-                    .value(hex(u32_le(&c, 0).unwrap_or(0).into())),
+                    .value(hex(u32_le(&c, 0).unwrap_or(0), 64)),
             );
         }
         let block_span = cur.since(start);
@@ -398,7 +406,7 @@ async fn frame(cx: Cx, span: Span) -> Result<()> {
                 .summary(format!(
                     "{}, {}",
                     if stored { "uncompressed" } else { "compressed" },
-                    human_size(size)
+                    fmt::size(size)
                 ))
                 .lazy(emit_nodes, Arc::new(children)),
             data,
@@ -413,7 +421,7 @@ async fn frame(cx: Cx, span: Span) -> Result<()> {
         cx.emit(
             Node::new("Content checksum")
                 .span(span.sub(at, 4))
-                .value(hex(u32_le(&c, 0).unwrap_or(0).into()))
+                .value(hex(u32_le(&c, 0).unwrap_or(0), 64))
                 .desc("XXH32 of the decompressed content"),
         );
     }
@@ -460,7 +468,7 @@ pub async fn dissect_snappy(cx: Cx, input: Input) -> Result<()> {
         let mut node = check_len(
             Node::new(capitalize(&name))
                 .span(span)
-                .summary(human_size(len))
+                .summary(fmt::size(len))
                 .lazy(snappy_chunk, (span, kind)),
             body,
             len,
@@ -484,14 +492,6 @@ pub async fn dissect_snappy(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-fn capitalize(s: &str) -> String {
-    let mut c = s.chars();
-    match c.next() {
-        Some(first) => first.to_uppercase().chain(c).collect(),
-        None => String::new(),
-    }
-}
-
 async fn snappy_chunk(cx: Cx, (span, kind): (Span, u8)) -> Result<()> {
     cx.emit(
         Node::new("Chunk type")
@@ -505,7 +505,7 @@ async fn snappy_chunk(cx: Cx, (span, kind): (Span, u8)) -> Result<()> {
     cx.emit(
         Node::new("Length")
             .span(span.sub(1, 3))
-            .value(uint(span.len.saturating_sub(4))),
+            .value(uint(span.len.saturating_sub(4), 64)),
     );
     let body = span.tail(4);
     match kind {
@@ -514,7 +514,7 @@ async fn snappy_chunk(cx: Cx, (span, kind): (Span, u8)) -> Result<()> {
             let stored = u32_le(&crc, 0).unwrap_or(0);
             let mut crc_node = Node::new("Masked CRC-32C")
                 .span(body.sub(0, 4))
-                .value(hex(stored.into()));
+                .value(hex(stored, 64));
             let data = body.tail(4);
             if kind == 0x01 {
                 if data.len <= cx.limits().max_read {
@@ -538,8 +538,8 @@ async fn snappy_chunk(cx: Cx, (span, kind): (Span, u8)) -> Result<()> {
                     cx.emit(
                         Node::new("Uncompressed length")
                             .span(data.sub(0, to_u64(n)))
-                            .value(uint(len))
-                            .summary(human_size(len)),
+                            .value(uint(len, 64))
+                            .summary(fmt::size(len)),
                     );
                 }
                 cx.emit(
@@ -552,7 +552,7 @@ async fn snappy_chunk(cx: Cx, (span, kind): (Span, u8)) -> Result<()> {
         0xff => {
             let id = cx.read_avail(body).await?;
             cx.emit(Node::new("Stream identifier").span(body).value(
-                crate::formats::util::arcutil::text(String::from_utf8_lossy(&id)),
+                crate::formats::util::val::text(String::from_utf8_lossy(&id)),
             ));
         }
         _ => cx.emit(Node::new("Data").span(body)),

@@ -15,6 +15,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{assemble, coalesce, content_node, fragments_node, size, unix_mode};
+use crate::formats::util::finder::FINDER_FLAGS;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
@@ -310,7 +311,7 @@ record! {
         special: u32 "Special (link count / device)",
         file_type: ascii[4] "File type",
         creator: ascii[4] "Creator",
-        finder_flags: u16 "Finder flags" .hex(),
+        finder_flags: u16 "Finder flags" .hex() .flags(FINDER_FLAGS),
         _location: bytes[6] "Finder location",
         finder_info: bytes[16] "Extended Finder info",
         encoding: u32 "Text encoding",
@@ -695,9 +696,11 @@ record! {
     }
 }
 
+/// A Str27 volume name: length byte, then Mac OS Roman text.
 fn pascal(b: &[u8]) -> String {
     let len = usize::from(b.first().copied().unwrap_or(0)).min(27);
-    crate::text::latin1(b.get(1..len.saturating_add(1)).unwrap_or_default())
+    crate::codec::charset::Charset::MacRoman
+        .decode(b.get(1..len.saturating_add(1)).unwrap_or_default())
 }
 
 /// Classic HFS: show the MDB; an embedded HFS+ volume is dissected.

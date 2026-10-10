@@ -7,12 +7,16 @@
 //! in pages; a member's headers are decoded when it is expanded, and its
 //! content is dissected as an embedded file.
 
+use crate::bytes::align_up;
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::{Num, ascii_num, count, human_size, parse_tar_number, text};
+use crate::formats::util::arcutil::{Num, ascii_num, parse_tar_number};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -166,10 +170,6 @@ fn raw_header(block: &[u8]) -> Raw {
     }
 }
 
-fn padded(size: u64) -> u64 {
-    size.div_ceil(BLOCK).saturating_mul(BLOCK)
-}
-
 /// A member: its metadata headers and the main header, as found by a walk.
 struct Member {
     /// From the first metadata header to the end of the padded data.
@@ -212,7 +212,7 @@ async fn next_member(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Option<Member>> {
         let data = cur.span(raw.size);
         match raw.typeflag {
             b'L' | b'K' | b'x' => {
-                cur.skip(padded(raw.size));
+                cur.skip(align_up(raw.size, BLOCK));
                 if raw.size > MAX_META {
                     continue;
                 }
@@ -248,7 +248,7 @@ async fn next_member(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Option<Member>> {
                     b'1' | b'2' | b'3' | b'4' | b'5' | b'6' => 0,
                     _ => pax_size.unwrap_or(raw.size),
                 };
-                cur.skip(padded(size));
+                cur.skip(align_up(size, BLOCK));
                 return Ok(Some(Member {
                     span: cur.since(start),
                     name,
@@ -356,7 +356,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         "tar archive ({}), {}, {}",
         flavor.name(),
         count(members, "entry", "entries"),
-        human_size(total)
+        fmt::size(total)
     ));
 
     // End-of-archive marker: zero blocks.
@@ -391,13 +391,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .iter()
             .any(|&b| b != 0);
         if nonzero {
-            cx.emit(embedded("Trailing data", input.nested(rest)).summary(human_size(rest.len)));
+            cx.emit(embedded("Trailing data", input.nested(rest)).summary(fmt::size(rest.len)));
         } else {
-            cx.emit(
-                Node::new("Padding")
-                    .span(rest)
-                    .summary(human_size(rest.len)),
-            );
+            cx.emit(Node::new("Padding").span(rest).summary(fmt::size(rest.len)));
         }
     }
     Ok(())
@@ -413,8 +409,8 @@ fn member_node(input: Input, m: &Member) -> Node {
             .to_owned(),
         b'g' => "pax global header".to_owned(),
         b'V' => "volume label".to_owned(),
-        b'S' => format!("sparse file, {} stored", human_size(m.size)),
-        _ => human_size(m.size),
+        b'S' => format!("sparse file, {} stored", fmt::size(m.size)),
+        _ => fmt::size(m.size),
     };
     let summary = if m.mode != 0 {
         format!(
@@ -477,7 +473,7 @@ async fn member(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         let data = cur.span(raw.size);
         match raw.typeflag {
             b'L' | b'K' => {
-                cur.skip(padded(raw.size));
+                cur.skip(align_up(raw.size, BLOCK));
                 let bytes = cx.read_avail(data.sub(0, MAX_META)).await?;
                 let name = if raw.typeflag == b'L' {
                     "Long name"
@@ -492,7 +488,7 @@ async fn member(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
                 continue;
             }
             b'x' | b'g' => {
-                cur.skip(padded(raw.size));
+                cur.skip(align_up(raw.size, BLOCK));
                 cx.emit(
                     Node::new("Extended attributes")
                         .span(data)
@@ -519,7 +515,7 @@ async fn member(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
                 cx.emit(
                     Node::new("Sparse data")
                         .span(data)
-                        .summary(human_size(raw.size))
+                        .summary(fmt::size(raw.size))
                         .diag(Diagnostic::note(
                             "stored fragments of a sparse file; see the sparse map",
                         )),
@@ -531,7 +527,7 @@ async fn member(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
                 let size = pax_size(&cx, span, start).await?.unwrap_or(raw.size);
                 let data = cur.span(size);
                 if size > 0 {
-                    let node = embedded("Content", input.nested(data)).summary(human_size(size));
+                    let node = embedded("Content", input.nested(data)).summary(fmt::size(size));
                     cx.emit(crate::formats::util::arcutil::check_len(node, data, size));
                 }
             }
@@ -549,7 +545,7 @@ async fn pax_size(cx: &Cx, member: Span, main: u64) -> Result<Option<u64>> {
         let block = cur.bytes(BLOCK).await?;
         let raw = raw_header(&block);
         let data = cur.span(raw.size);
-        cur.skip(padded(raw.size));
+        cur.skip(align_up(raw.size, BLOCK));
         if raw.typeflag == b'x' && raw.size <= MAX_META {
             let bytes = cx.read_avail(data).await?;
             if let Some(r) = pax_records(cx, &bytes)
@@ -585,8 +581,24 @@ async fn pax_header(cx: Cx, span: Span) -> Result<()> {
                     })
                     .unwrap_or_default(),
             ),
-            "size" | "GNU.sparse.realsize" | "GNU.sparse.size" => {
-                node.summary(r.value.parse().map(human_size).unwrap_or_default())
+            "size" | "GNU.sparse.realsize" | "GNU.sparse.size" => node.summary(
+                r.value
+                    .parse()
+                    .map(crate::formats::util::fmt::size)
+                    .unwrap_or_default(),
+            ),
+            // libarchive's xattrs: a URL-encoded name, a base64 value; ACLs
+            // are in the kernel's posix_acl_xattr form.
+            key if key
+                .strip_prefix("LIBARCHIVE.xattr.")
+                .is_some_and(|name| crate::formats::disk::acl::is_acl_name(name.as_bytes())) =>
+            {
+                match crate::formats::disk::acl::xattr_v2(
+                    &crate::formats::text::decode::base64(r.value.as_bytes()).bytes,
+                ) {
+                    Some(acl) => node.summary(format!("POSIX ACL: {acl}")),
+                    None => node,
+                }
             }
             _ => node,
         };
@@ -625,7 +637,7 @@ async fn sparse_map(cx: Cx, (header, ext): (Span, Option<Span>)) -> Result<()> {
                     (),
                     sparse_entry,
                 )
-                .summary(format!("{offset:#x}, {}", human_size(size))),
+                .summary(format!("{offset:#x}, {}", fmt::size(size))),
             )
             .await;
         }
@@ -648,7 +660,7 @@ fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     ascii_num(f, "GID", 8, 8, Num::Dec).emit()?;
     ascii_num(f, "Size", 12, 8, Num::Dec)
         .with(|&v, n| match v {
-            Some(v) => n.summary(human_size(v)),
+            Some(v) => n.summary(fmt::size(v)),
             None => n,
         })
         .emit()?;

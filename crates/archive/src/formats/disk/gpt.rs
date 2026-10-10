@@ -14,6 +14,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::disk::ptypes::gpt_type;
 use crate::formats::disk::{mbr, size, volume};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -224,8 +225,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(match used {
         Some(n) => format!(
-            "GPT disk, {n} partition{}, {sector}-byte sectors, {}, disk GUID {}",
-            if n == 1 { "" } else { "s" },
+            "GPT disk, {}, {sector}-byte sectors, {}, disk GUID {}",
+            plural(crate::bytes::to_u64(n), "partition"),
             size(disk.len),
             header.disk_guid
         ),

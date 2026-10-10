@@ -11,7 +11,8 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::arcutil::{count, human_size};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -81,9 +82,9 @@ fn props_summary(props: u8) -> String {
 record! {
     pub struct LzmaHeader {
         props: u8 "Properties" .with(|&p, n| n.summary(props_summary(p))),
-        dict: u32 "Dictionary size" .with(|&d, n| n.summary(human_size(d.into()))),
+        dict: u32 "Dictionary size" .with(|&d, n| n.summary(fmt::size(d.into()))),
         size: u64 "Uncompressed size"
-            .with(|&s, n| n.summary(if s == u64::MAX { "unknown (end marker)".to_owned() } else { human_size(s) })),
+            .with(|&s, n| n.summary(if s == u64::MAX { "unknown (end marker)".to_owned() } else { fmt::size(s) })),
     }
 }
 
@@ -104,11 +105,11 @@ pub async fn dissect_lzma(cx: Cx, input: Input) -> Result<()> {
     let size = if header.size == u64::MAX {
         "unknown size".to_owned()
     } else {
-        format!("{} uncompressed", human_size(header.size))
+        format!("{} uncompressed", fmt::size(header.size))
     };
     cx.annotate(format!(
         "LZMA, {size}, dictionary {}, {}",
-        human_size(header.dict.into()),
+        fmt::size(header.dict.into()),
         props_summary(header.props)
     ));
     Ok(())
@@ -124,15 +125,15 @@ record! {
     pub struct LzipHeader {
         magic: ascii[4] "Magic",
         version: u8 "Version",
-        dict: u8 "Coded dictionary size" .with(|&b, n| n.summary(human_size(lzip_dict(b)))),
+        dict: u8 "Coded dictionary size" .with(|&b, n| n.summary(fmt::size(lzip_dict(b)))),
     }
 }
 
 record! {
     pub struct LzipTrailer {
         crc: u32 "CRC32" .hex() .desc("CRC32 of the uncompressed data"),
-        data_size: u64 "Data size" .with(|&s, n| n.summary(human_size(s))) .desc("Uncompressed size"),
-        member_size: u64 "Member size" .with(|&s, n| n.summary(human_size(s))) .desc("Header, compressed data and trailer"),
+        data_size: u64 "Data size" .with(|&s, n| n.summary(fmt::size(s))) .desc("Uncompressed size"),
+        member_size: u64 "Member size" .with(|&s, n| n.summary(fmt::size(s))) .desc("Header, compressed data and trailer"),
     }
 }
 
@@ -199,7 +200,7 @@ pub async fn dissect_lzip(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "lzip, {}, {} uncompressed",
         count(to_u64(members.len()), "member", "members"),
-        human_size(total)
+        fmt::size(total)
     ));
     if let [member] = members.as_slice() {
         return emit_member(&cx, input, member.span, member.data_size).await;
@@ -208,7 +209,7 @@ pub async fn dissect_lzip(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Member {i}"))
                 .span(m.span)
-                .summary(format!("{} uncompressed", human_size(m.data_size)))
+                .summary(format!("{} uncompressed", fmt::size(m.data_size)))
                 .lazy(member, (input, m.span, m.data_size)),
         )
         .await;

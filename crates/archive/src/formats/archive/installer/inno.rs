@@ -46,13 +46,16 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::{count, emit_nodes, hex, text, uint};
+use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Input, Probe, dissect_or_data};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 
-use super::{filetime, size};
+use super::filetime;
+use crate::formats::util::fmt::size;
 
 const LE: Endian = Endian::Little;
 
@@ -1263,7 +1266,7 @@ async fn block_chunks(cx: Cx, region: Span) -> Result<()> {
         let stored = u32_le(&crc, 0).unwrap_or(0);
         let mut node = Node::new(format!("Chunk at {pos:#x}"))
             .span(region.sub(pos, body.len.saturating_add(4)))
-            .value(hex(stored.into()));
+            .value(hex(stored, 64));
         node = if crc32(&bytes) == stored {
             node.summary(format!("{}, CRC valid", size(body.len)))
         } else {
@@ -1299,7 +1302,7 @@ async fn header_fields(cx: Cx, (l, ver, unicode): (Layout, Version, bool)) -> Re
         .map(|(i, (name, c))| {
             Node::new(*name)
                 .span(s.sub(s.counts_at.saturating_add(i.saturating_mul(4)), 4))
-                .value(uint(c.into()))
+                .value(uint(c, 64))
         })
         .collect();
     cx.emit(
@@ -1343,8 +1346,10 @@ async fn header_fields(cx: Cx, (l, ver, unicode): (Layout, Version, bool)) -> Re
                 name: lookup(YES_NO_AUTO, le(bytes)),
             }),
             ("MinVersion" | "OnlyBelowVersion", _) => node.summary(winver(bytes)),
-            ("BackColor" | "BackColor2" | "WizardImageBackColor", _) => node.value(hex(le(bytes))),
-            (_, 1 | 4 | 8) => node.value(uint(le(bytes))),
+            ("BackColor" | "BackColor2" | "WizardImageBackColor", _) => {
+                node.value(hex(le(bytes), 64))
+            }
+            (_, 1 | 4 | 8) => node.value(uint(le(bytes), 64)),
             _ => node.value(Value::Bytes(bytes.to_vec())),
         });
         p = p.saturating_add(n);
@@ -1434,10 +1439,10 @@ fn file_fields(s: &Setup, e: &Entry) -> Vec<Node> {
             }),
         Node::new("Attributes")
             .span(s.sub(at(24), 4))
-            .value(hex(u32_le(d, at(24)).unwrap_or(0).into())),
+            .value(hex(u32_le(d, at(24)).unwrap_or(0), 64)),
         Node::new("ExternalSize")
             .span(s.sub(at(28), 8))
-            .value(uint(u64_le(d, at(28)).unwrap_or(0))),
+            .value(uint(u64_le(d, at(28)).unwrap_or(0), 64)),
         Node::new("PermissionsEntry")
             .span(s.sub(at(36), 2))
             .value(Value::Int {
@@ -1473,21 +1478,21 @@ fn location_fields(s: &Setup, loc: &Location) -> Vec<Node> {
     let mut out = vec![
         Node::new("FirstSlice")
             .span(f(0, 4))
-            .value(uint(loc.first_slice.into())),
+            .value(uint(loc.first_slice, 64)),
         Node::new("StartOffset")
             .span(f(8, 4))
-            .value(hex(loc.start.into()))
+            .value(hex(loc.start, 64))
             .desc("Of the chunk, from Offset1"),
         Node::new("ChunkSubOffset")
             .span(f(12, 8))
-            .value(hex(loc.sub)),
+            .value(hex(loc.sub, 64)),
         Node::new("OriginalSize")
             .span(f(20, 8))
-            .value(uint(loc.size))
+            .value(uint(loc.size, 64))
             .summary(size(loc.size)),
         Node::new("ChunkCompressedSize")
             .span(f(28, 8))
-            .value(uint(loc.packed)),
+            .value(uint(loc.packed, 64)),
         Node::new("SHA-1")
             .span(f(36, 20))
             .value(Value::Bytes(loc.sha1.to_vec())),
@@ -1610,7 +1615,7 @@ async fn files(cx: Cx, (l, ver, unicode): (Layout, Version, bool)) -> Result<()>
             .unwrap_or_default();
         let mut children = vec![
             Node::new("Entry")
-                .value(uint(to_u64(i)))
+                .value(uint(to_u64(i), 64))
                 .target(s.sub(e.start, e.end.saturating_sub(e.start))),
             Node::new("Source").value(text(source)),
         ];

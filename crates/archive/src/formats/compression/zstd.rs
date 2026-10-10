@@ -13,7 +13,10 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use std::sync::Arc;
 
-use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, uint};
+use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -94,7 +97,7 @@ fn frame_header(f: &mut Fields<'_>, _: &()) -> Result<FrameHeader> {
     if !single {
         let wd = f
             .u8("Window descriptor")
-            .with(|&w, n| n.summary(human_size(window_size(w))))
+            .with(|&w, n| n.summary(fmt::size(window_size(w))))
             .emit()?;
         header.window = Some(window_size(wd));
     }
@@ -178,12 +181,7 @@ async fn walk_frame(cx: &Cx, cur: &mut Cursor<'_>) -> Result<FrameInfo> {
     let mut blocks = 0u64;
     loop {
         let bh = cur.bytes(3).await?;
-        let h = u32::from_le_bytes([
-            bh.first().copied().unwrap_or(0),
-            bh.get(1).copied().unwrap_or(0),
-            bh.get(2).copied().unwrap_or(0),
-            0,
-        ]);
+        let h = crate::bytes::u24_le(&bh, 0).unwrap_or(0);
         let kind = (h >> 1) & 3;
         if kind == 3 {
             return Err(Diagnostic::malformed("reserved block type").at(cur.since(start)));
@@ -257,7 +255,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             let content = info
                 .header
                 .content_size
-                .map_or_else(|| "size unknown".to_owned(), human_size);
+                .map_or_else(|| "size unknown".to_owned(), fmt::size);
             cx.push(
                 Node::new(format!("Frame {frames}"))
                     .span(info.span)
@@ -282,7 +280,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.push(crate::formats::util::arcutil::check_len(
                 Node::new(name)
                     .span(span)
-                    .summary(human_size(len.into()))
+                    .summary(fmt::size(len.into()))
                     .lazy(skippable, span),
                 span,
                 u64::from(len).saturating_add(8),
@@ -302,7 +300,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let mut summary = format!("Zstandard, {}", count(frames, "frame", "frames"));
     if let Some(t) = total {
-        summary = format!("{summary}, {} uncompressed", human_size(t));
+        summary = format!("{summary}, {} uncompressed", fmt::size(t));
     }
     cx.annotate(summary);
     Ok(())
@@ -354,7 +352,7 @@ async fn frame(cx: Cx, (_input, span): (Input, Span)) -> Result<()> {
     cx.emit(
         Node::new("Magic")
             .span(span.sub(0, 4))
-            .value(hex(FRAME_MAGIC.into())),
+            .value(hex(FRAME_MAGIC, 64)),
     );
     let fhd = cx.read(span.sub(4, 1)).await?.first().copied().unwrap_or(0);
     let hlen = header_len(fhd);
@@ -362,10 +360,10 @@ async fn frame(cx: Cx, (_input, span): (Input, Span)) -> Result<()> {
     let header = crate::fields::parse(&cx, header_span, LE, &(), frame_header).await?;
     let mut parts = Vec::new();
     if let Some(s) = header.content_size {
-        parts.push(format!("content {}", human_size(s)));
+        parts.push(format!("content {}", fmt::size(s)));
     }
     if let Some(w) = header.window {
-        parts.push(format!("window {}", human_size(w)));
+        parts.push(format!("window {}", fmt::size(w)));
     }
     cx.emit(
         struct_node("Frame header", header_span, LE, (), frame_header).summary(parts.join(", ")),
@@ -389,7 +387,7 @@ async fn frame(cx: Cx, (_input, span): (Input, Span)) -> Result<()> {
         cx.emit(
             Node::new("Content checksum")
                 .span(span.sub(at, 4))
-                .value(hex(u32_le(&bytes, 0).unwrap_or(0).into()))
+                .value(hex(u32_le(&bytes, 0).unwrap_or(0), 64))
                 .desc("Low 32 bits of the XXH64 of the content"),
         );
     }
@@ -402,12 +400,7 @@ async fn blocks(cx: Cx, span: Span) -> Result<()> {
     while !cur.at_end() {
         let start = cur.pos();
         let bh = cur.bytes(3).await?;
-        let h = u32::from_le_bytes([
-            bh.first().copied().unwrap_or(0),
-            bh.get(1).copied().unwrap_or(0),
-            bh.get(2).copied().unwrap_or(0),
-            0,
-        ]);
+        let h = crate::bytes::u24_le(&bh, 0).unwrap_or(0);
         let last = h & 1 != 0;
         let kind = (h >> 1) & 3;
         let size = u64::from(h >> 3);
@@ -415,7 +408,7 @@ async fn blocks(cx: Cx, span: Span) -> Result<()> {
         cur.skip(payload);
         let block_span = cur.since(start);
         let kind_name = crate::value::lookup(BLOCK_TYPE, kind.into()).unwrap_or("?");
-        let mut summary = format!("{kind_name}, {}", human_size(size));
+        let mut summary = format!("{kind_name}, {}", fmt::size(size));
         if last {
             summary.push_str(", last");
         }
@@ -439,12 +432,7 @@ async fn blocks(cx: Cx, span: Span) -> Result<()> {
 
 async fn block(cx: Cx, span: Span) -> Result<()> {
     let bh = cx.read(span.sub(0, 3)).await?;
-    let h = u32::from_le_bytes([
-        bh.first().copied().unwrap_or(0),
-        bh.get(1).copied().unwrap_or(0),
-        bh.get(2).copied().unwrap_or(0),
-        0,
-    ]);
+    let h = crate::bytes::u24_le(&bh, 0).unwrap_or(0);
     let header = span.sub(0, 3);
     cx.emit(
         Node::new("Last block")
@@ -465,11 +453,11 @@ async fn block(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Block size")
             .span(header)
-            .value(uint(size))
+            .value(uint(size, 64))
             .summary(if kind == 1 {
                 format!("{size} repetitions")
             } else {
-                human_size(size)
+                fmt::size(size)
             }),
     );
     let body = span.tail(3);
@@ -500,12 +488,12 @@ async fn skippable(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Magic")
             .span(span.sub(0, 4))
-            .value(hex(magic.into())),
+            .value(hex(magic, 64)),
     );
     cx.emit(
         Node::new("Frame size")
             .span(span.sub(4, 4))
-            .value(uint(len.into())),
+            .value(uint(len, 64)),
     );
     let data = span.tail(8);
     if magic == SEEK_TABLE_FRAME && is_seek_table(&cx, span).await {
@@ -534,17 +522,17 @@ async fn seek_table(cx: &Cx, data: Span) -> Result<()> {
         let mut children = vec![
             Node::new("Compressed size")
                 .span(table.sub(start, 4))
-                .value(uint(compressed.into())),
+                .value(uint(compressed, 64)),
             Node::new("Decompressed size")
                 .span(table.sub(start.saturating_add(4), 4))
-                .value(uint(decompressed.into())),
+                .value(uint(decompressed, 64)),
         ];
         if checksums {
             let c = cur.u32().await?;
             children.push(
                 Node::new("Checksum")
                     .span(table.sub(start.saturating_add(8), 4))
-                    .value(hex(c.into())),
+                    .value(hex(c, 64)),
             );
         }
         cx.progress(i.into(), frames.into());
@@ -553,8 +541,8 @@ async fn seek_table(cx: &Cx, data: Span) -> Result<()> {
                 .span(cur.since(start))
                 .summary(format!(
                     "at {compressed_at:#x}, {} → {}",
-                    human_size(compressed.into()),
-                    human_size(decompressed.into())
+                    fmt::size(compressed.into()),
+                    fmt::size(decompressed.into())
                 ))
                 .lazy(emit_nodes, Arc::new(children)),
         )
@@ -566,7 +554,7 @@ async fn seek_table(cx: &Cx, data: Span) -> Result<()> {
             .span(footer_span)
             .summary(format!(
                 "{}, {}",
-                count(frames.into(), "frame", "frames"),
+                count(frames, "frame", "frames"),
                 if checksums {
                     "with checksums"
                 } else {
@@ -578,13 +566,13 @@ async fn seek_table(cx: &Cx, data: Span) -> Result<()> {
                 Arc::new(vec![
                     Node::new("Number of frames")
                         .span(footer_span.sub(0, 4))
-                        .value(uint(frames.into())),
+                        .value(uint(frames, 64)),
                     Node::new("Descriptor")
                         .span(footer_span.sub(4, 1))
-                        .value(hex(descriptor.into())),
+                        .value(hex(descriptor, 64)),
                     Node::new("Seekable magic")
                         .span(footer_span.sub(5, 4))
-                        .value(hex(SEEKABLE_MAGIC.into())),
+                        .value(hex(SEEKABLE_MAGIC, 64)),
                 ]),
             ),
     );

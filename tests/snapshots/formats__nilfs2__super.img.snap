@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ super.img — NILFS2 filesystem "nilfsvol", 16 KiB, 4 segments of 2048 blocks, checkpoint 3  [0x0+0x4000]
+▾ super.img — NILFS2 filesystem "nilfsvol", 16.0 KiB, 4 segments of 2048 blocks, checkpoint 3  [0x0+0x4000]
   ▾ Superblock  [0x400+0x400]
       Revision: 2  [0x400+0x4]
       Minor revision: 0  [0x404+0x2]
@@ -13,7 +13,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Checksum: 0x65e35714  [0x410+0x4]
       Block size (log2 - 10): 2  [0x414+0x4]
       Segments: 4  [0x418+0x8]
-      Device size: 16384 — 16 KiB  [0x420+0x8]
+      Device size: 16384 — 16.0 KiB  [0x420+0x8]
       First data block: 1  [0x428+0x8]
       Blocks per segment: 2048  [0x430+0x4]
       Reserved segments (%): 5  [0x434+0x4]

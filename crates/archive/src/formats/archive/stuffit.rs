@@ -29,9 +29,12 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::arcutil::{
-    ByteReader, count, crc16_arc, emit_nodes, hex, human_size, unsupported,
-};
+use crate::formats::util::arcutil::{ByteReader, crc16_arc, emit_nodes, unsupported};
+use crate::formats::util::finder::FINDER_FLAGS;
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::fmt::fourcc_value;
+use crate::formats::util::val::hex;
 use crate::formats::{Format, Head, Input, Probe, content, embedded};
 use crate::node::Node;
 use crate::record;
@@ -46,6 +49,17 @@ const MAX_ENTRIES: u64 = 1 << 20;
 const MAX_DEPTH: usize = 256;
 /// The longest StuffIt 5 folder path that children are named under.
 const MAX_PATH: usize = 4096;
+
+/// A Finder flags word as a flag set.
+fn finder_flags(v: u16) -> Value {
+    let (set, unknown) = crate::value::decode_flags(FINDER_FLAGS, v.into());
+    Value::Flags {
+        raw: v.into(),
+        bits: 16,
+        set,
+        unknown,
+    }
+}
 
 pub static FORMAT: Format = Format {
     name: "stuffit",
@@ -114,11 +128,11 @@ fn fork_node(
     if encrypted {
         return Node::new(name)
             .span(span)
-            .summary(human_size(len))
+            .summary(fmt::size(len))
             .diag(Diagnostic::unsupported("StuffIt encryption"));
     }
     if method == 0 {
-        return embedded(name, input.nested(span.sub(0, len))).summary(human_size(len));
+        return embedded(name, input.nested(span.sub(0, len))).summary(fmt::size(len));
     }
     if !crate::codec::stuffit::supported(method) {
         return unsupported(name, span, &format!("StuffIt {}", method_name(method)));
@@ -131,7 +145,7 @@ fn fork_node(
     });
     content(name, input, span, codec, Some(len)).summary(format!(
         "{}, {}",
-        human_size(len),
+        fmt::size(len),
         method_name(method)
     ))
 }
@@ -143,7 +157,7 @@ record! {
     pub struct Header {
         signature: ascii[4] "Signature",
         files: u16 "Number of entries",
-        length: u32 "Archive length" .with(|&l, n| n.summary(human_size(l.into()))),
+        length: u32 "Archive length" .with(|&l, n| n.summary(fmt::size(l.into()))),
         signature2: ascii[4] "Signature 2",
         version: u8 "Version",
         reserved: bytes[7] "Reserved",
@@ -236,9 +250,9 @@ pub async fn dissect_classic(cx: Cx, input: Input) -> Result<()> {
                 full.join("/"),
                 format!(
                     "data {} ({}), resource {} ({})",
-                    human_size(e.data_len.into()),
+                    fmt::size(e.data_len.into()),
                     method_name(e.data_method),
-                    human_size(e.rsrc_len.into()),
+                    fmt::size(e.rsrc_len.into()),
                     method_name(e.rsrc_method)
                 ),
             )
@@ -262,7 +276,7 @@ pub async fn dissect_classic(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "StuffIt archive, {}, {} uncompressed",
         count(files, "file", "files"),
-        human_size(total)
+        fmt::size(total)
     ));
     Ok(())
 }
@@ -293,12 +307,11 @@ async fn classic_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     r.bytes("Name", 63).ok_or_else(bad)?;
     r.with(|n| n.value(Value::Text(name)));
     for name in ["File type", "Creator"] {
-        let v = r.bytes(name, 4).ok_or_else(bad)?;
-        let t = String::from_utf8_lossy(v).into_owned();
-        r.with(|n| n.value(Value::Text(t)));
+        let v = fourcc_value(r.bytes(name, 4).ok_or_else(bad)?);
+        r.with(|n| n.value(v));
     }
     let flags = r.u16("Finder flags", BE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(flags.into())));
+    r.with(|n| n.value(finder_flags(flags)));
     for name in ["Creation time", "Modification time"] {
         let t = r.u32(name, BE).ok_or_else(bad)?;
         r.with(|n| {
@@ -314,13 +327,13 @@ async fn classic_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     r.u32("Data fork compressed length", BE).ok_or_else(bad)?;
     for name in ["Resource fork CRC-16", "Data fork CRC-16"] {
         let c = r.u16(name, BE).ok_or_else(bad)?;
-        r.with(|n| n.value(hex(c.into())));
+        r.with(|n| n.value(hex(c, 64)));
     }
     r.bytes("Reserved", 6).ok_or_else(bad)?;
     let stored = r.u16("Header CRC", BE).ok_or_else(bad)?;
     let ok = e.crc_ok;
     r.with(|n| {
-        let n = n.value(hex(stored.into()));
+        let n = n.value(hex(stored, 64));
         if ok {
             n.summary("valid")
         } else {
@@ -487,13 +500,13 @@ pub async fn dissect_sit5(cx: Cx, input: Input) -> Result<()> {
     r.bytes("Banner end", 2).ok_or_else(bad)?;
     r.u8("Version").ok_or_else(bad)?;
     let flags = r.u8("Flags").ok_or_else(bad)?;
-    r.with(|n| n.value(hex(flags.into())));
+    r.with(|n| n.value(hex(flags, 64)));
     let total = r.u32("Total size", BE).ok_or_else(bad)?;
-    r.with(|n| n.summary(human_size(total.into())));
+    r.with(|n| n.summary(fmt::size(total.into())));
     r.u32("Unknown", BE).ok_or_else(bad)?;
     let entries = r.u16("Root entries", BE).ok_or_else(bad)?;
     let first = r.u32("First entry offset", BE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(first.into())));
+    r.with(|n| n.value(hex(first, 64)));
     let header_len = to_u64(r.at).max(u64::from(first).min(100));
     if r.at < head.len() && u64::from(first) > to_u64(r.at) {
         let rest = u64::from(first).min(100).saturating_sub(to_u64(r.at));
@@ -534,7 +547,7 @@ pub async fn dissect_sit5(cx: Cx, input: Input) -> Result<()> {
             if path.len() <= MAX_PATH {
                 dirs.insert(at, path.clone());
             }
-            format!("folder, {}", count(e.children.into(), "entry", "entries"))
+            format!("folder, {}", count(e.children, "entry", "entries"))
         } else {
             files = files.saturating_add(1);
             let rsrc_len = e.rsrc.map_or(0, |r| u64::from(r.0));
@@ -543,13 +556,13 @@ pub async fn dissect_sit5(cx: Cx, input: Input) -> Result<()> {
                 .saturating_add(rsrc_len);
             let mut s = format!(
                 "data {} ({})",
-                human_size(e.data_len.into()),
+                fmt::size(e.data_len.into()),
                 method_name(e.data_method)
             );
             if let Some((len, _, _, m)) = e.rsrc {
                 s.push_str(&format!(
                     ", resource {} ({})",
-                    human_size(len.into()),
+                    fmt::size(len.into()),
                     method_name(m)
                 ));
             }
@@ -580,7 +593,7 @@ pub async fn dissect_sit5(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "StuffIt 5 archive, {}, {} uncompressed",
         count(files, "file", "files"),
-        human_size(bytes)
+        fmt::size(bytes)
     ));
     Ok(())
 }
@@ -590,14 +603,14 @@ async fn sit5_entry(cx: Cx, (input, e): (Input, Arc<Sit5Entry>)) -> Result<()> {
     let mut r = ByteReader::new(&raw, e.header);
     let bad = || Diagnostic::truncated(e.header, 0);
     r.u32("Magic", BE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(SIT5_MAGIC.into())));
+    r.with(|n| n.value(hex(SIT5_MAGIC, 64)));
     r.u8("Version").ok_or_else(bad)?;
     r.u8("Unknown").ok_or_else(bad)?;
     r.u16("Header size", BE).ok_or_else(bad)?;
     r.u8("Unknown").ok_or_else(bad)?;
     let flags = r.u8("Flags").ok_or_else(bad)?;
     r.with(|n| {
-        n.value(hex(flags.into()))
+        n.value(hex(flags, 64))
             .summary(match (flags & 0x40 != 0, flags & 0x20 != 0) {
                 (true, _) => "directory",
                 (false, true) => "encrypted",
@@ -614,7 +627,7 @@ async fn sit5_entry(cx: Cx, (input, e): (Input, Arc<Sit5Entry>)) -> Result<()> {
     }
     for name in ["Previous entry", "Next entry", "Parent directory"] {
         let o = r.u32(name, BE).ok_or_else(bad)?;
-        r.with(|n| n.value(hex(o.into())));
+        r.with(|n| n.value(hex(o, 64)));
     }
     let name_len = r.u16("Name length", BE).ok_or_else(bad)?;
     let crc = r.u16("Header CRC", BE).ok_or_else(bad)?;
@@ -629,13 +642,13 @@ async fn sit5_entry(cx: Cx, (input, e): (Input, Arc<Sit5Entry>)) -> Result<()> {
     }
     let matches = crc16_arc(&zeroed) == crc;
     r.with(|n| {
-        let n = n.value(hex(crc.into()));
+        let n = n.value(hex(crc, 64));
         if matches { n.summary("valid") } else { n }
     });
     r.u32("Data length", BE).ok_or_else(bad)?;
     r.u32("Data compressed length", BE).ok_or_else(bad)?;
     let dcrc = r.u16("Data CRC-16", BE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(dcrc.into())));
+    r.with(|n| n.value(hex(dcrc, 64)));
     r.u16("Unknown", BE).ok_or_else(bad)?;
     if e.directory() {
         r.u16("Number of entries", BE).ok_or_else(bad)?;
@@ -656,7 +669,7 @@ async fn sit5_entry(cx: Cx, (input, e): (Input, Arc<Sit5Entry>)) -> Result<()> {
     // The second part.
     let flags2 = r.u16("Flags 2", BE).ok_or_else(bad)?;
     r.with(|n| {
-        let n = n.value(hex(flags2.into()));
+        let n = n.value(hex(flags2, 64));
         if flags2 & 1 != 0 {
             n.summary("has a resource fork")
         } else {
@@ -665,12 +678,11 @@ async fn sit5_entry(cx: Cx, (input, e): (Input, Arc<Sit5Entry>)) -> Result<()> {
     });
     r.u16("Unknown", BE).ok_or_else(bad)?;
     for name in ["File type", "Creator"] {
-        let v = r.bytes(name, 4).ok_or_else(bad)?;
-        let t = String::from_utf8_lossy(v).into_owned();
-        r.with(|n| n.value(Value::Text(t)));
+        let v = fourcc_value(r.bytes(name, 4).ok_or_else(bad)?);
+        r.with(|n| n.value(v));
     }
     let finder = r.u16("Finder flags", BE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(finder.into())));
+    r.with(|n| n.value(finder_flags(finder)));
     r.bytes("Unknown", if e.version == 1 { 22 } else { 18 })
         .ok_or_else(bad)?;
     if e.rsrc.is_some() {
@@ -678,7 +690,7 @@ async fn sit5_entry(cx: Cx, (input, e): (Input, Arc<Sit5Entry>)) -> Result<()> {
         r.u32("Resource fork compressed length", BE)
             .ok_or_else(bad)?;
         let c = r.u16("Resource fork CRC-16", BE).ok_or_else(bad)?;
-        r.with(|n| n.value(hex(c.into())));
+        r.with(|n| n.value(hex(c, 64)));
         r.u16("Unknown", BE).ok_or_else(bad)?;
         let m = r.u8("Resource fork method").ok_or_else(bad)?;
         r.with(|n| n.summary(method_name(m)));

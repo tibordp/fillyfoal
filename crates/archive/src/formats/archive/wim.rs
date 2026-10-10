@@ -14,8 +14,11 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, uint, unsupported};
-use crate::formats::{Format, Input, Probe, content, embedded};
+use crate::formats::util::arcutil::{emit_nodes, unsupported};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, uint};
+use crate::formats::{Format, Input, Probe, content, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -81,8 +84,8 @@ fn resource_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.node(
         Node::new("Compressed size")
             .span(span.sub(0, 7))
-            .value(uint(r.size))
-            .summary(human_size(r.size)),
+            .value(uint(r.size, 64))
+            .summary(fmt::size(r.size)),
     );
     let (set, unknown) = crate::value::decode_flags(RESOURCE_FLAGS, r.flags.into());
     f.node(
@@ -98,7 +101,7 @@ fn resource_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.skip(8);
     f.u64("Offset").hex().emit()?;
     f.u64("Original size")
-        .with(|&s, n| n.summary(human_size(s)))
+        .with(|&s, n| n.summary(fmt::size(s)))
         .emit()?;
     Ok(())
 }
@@ -109,7 +112,7 @@ record! {
         size: u32 "Header size",
         version: u32 "Version" .hex(),
         flags: u32 "Flags" .flags(HEADER_FLAGS),
-        chunk: u32 "Chunk size" .with(|&c, n| n.summary(human_size(c.into()))),
+        chunk: u32 "Chunk size" .with(|&c, n| n.summary(fmt::size(c.into()))),
         guid: guid "GUID",
         part: u16 "Part number",
         parts: u16 "Total parts",
@@ -237,14 +240,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .span(data)
                 .summary(count(r.size / LOOKUP_ENTRY, "entry", "entries"))
                 .lazy(lookup_table, (input, data, codec, scheme)),
-            ("XML data", false) => Node::new("XML").span(data).lazy(xml_text, data),
+            // UTF-16LE, usually with a byte order mark; the XML dissector
+            // transcodes it.
+            ("XML data", false) => embedded_as(
+                "XML",
+                input.nested(data),
+                &crate::formats::text::xml::FORMAT,
+            ),
             _ => embedded("Data", input.nested(data)),
         };
         children.push(payload);
         cx.emit(
             Node::new(name)
                 .span(data)
-                .summary(human_size(r.original))
+                .summary(fmt::size(r.original))
                 .lazy(emit_nodes, Arc::new(children)),
         );
     }
@@ -252,12 +261,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Boot index")
                 .span(file.sub(120, 4))
-                .value(uint(boot.into())),
+                .value(uint(boot, 64)),
         );
     }
     cx.annotate(format!(
         "Windows image, {}, {codec}, part {} of {}",
-        count(h.images.into(), "image", "images"),
+        count(h.images, "image", "images"),
         h.part,
         h.parts
     ));
@@ -290,10 +299,10 @@ async fn lookup_table(
             struct_node("Resource header", entry.sub(0, 24), LE, (), resource_layout),
             Node::new("Part number")
                 .span(entry.sub(24, 2))
-                .value(uint(part.into())),
+                .value(uint(part, 64)),
             Node::new("Reference count")
                 .span(entry.sub(26, 4))
-                .value(uint(refs.into())),
+                .value(uint(refs, 64)),
             Node::new("SHA-1")
                 .span(entry.sub(30, 20))
                 .value(Value::Bytes(hash.clone())),
@@ -308,24 +317,11 @@ async fn lookup_table(
         cx.push(
             Node::new(format!("{kind} {hex_hash}…"))
                 .span(entry)
-                .value(hex(r.offset))
-                .summary(format!(
-                    "{} → {}",
-                    human_size(r.size),
-                    human_size(r.original)
-                ))
+                .value(hex(r.offset, 64))
+                .summary(format!("{} → {}", fmt::size(r.size), fmt::size(r.original)))
                 .lazy(emit_nodes, Arc::new(children)),
         )
         .await;
     }
-    Ok(())
-}
-
-/// The image description: UTF-16LE XML, usually with a byte order mark.
-async fn xml_text(cx: Cx, span: Span) -> Result<()> {
-    let data = cx.read(span.sub(0, 1 << 20)).await?;
-    let body = data.strip_prefix(b"\xff\xfe".as_slice()).unwrap_or(&data);
-    let text = crate::text::utf16(body, LE);
-    cx.emit(Node::new("Text").span(span).value(Value::Text(text)));
     Ok(())
 }

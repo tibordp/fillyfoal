@@ -14,13 +14,15 @@
 
 use std::sync::Arc;
 
-use crate::bytes::{to_u64, to_usize, u16_be, u32_be, u64_be};
+use crate::bytes::{align_up, to_u64, to_usize, u16_be, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::disk::{PieceList, align, size};
-use crate::formats::util::datakit::{enumv, hex, uint};
+use crate::formats::disk::{PieceList, size};
+use crate::formats::util::fmt::capitalize;
+use crate::formats::util::fmt::plural;
+use crate::formats::util::val::{enumv, hex, uint};
 use crate::formats::{Codec, Format, Head, Input, Probe, dissect_or_data, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
@@ -242,14 +244,6 @@ fn ext_name(kind: u32) -> String {
     }
 }
 
-fn capitalize(s: &str) -> String {
-    let mut c = s.chars();
-    match c.next() {
-        Some(first) => first.to_uppercase().chain(c).collect(),
-        None => String::new(),
-    }
-}
-
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 8)).await?;
@@ -393,14 +387,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         ));
     }
     if h.snapshots > 0 {
-        summary.push_str(&format!(
-            ", {} snapshot{}",
-            h.snapshots,
-            if h.snapshots == 1 { "" } else { "s" }
-        ));
+        summary.push_str(&format!(", {}", plural(h.snapshots, "snapshot")));
     }
     if let Some((_, _, n)) = bitmaps {
-        summary.push_str(&format!(", {n} bitmap{}", if n == 1 { "" } else { "s" }));
+        summary.push_str(&format!(", {}", plural(n, "bitmap")));
     }
     if let Some((name, _)) = &backing {
         summary.push_str(&format!(", backed by {name:?}"));
@@ -533,7 +523,7 @@ async fn read_extensions(cx: &Cx, area: Span) -> Result<(Vec<Ext>, u64)> {
         };
         let data = area.sub(at.saturating_add(8), len.into());
         out.push(Ext { kind, data });
-        at = at.saturating_add(8u64.saturating_add(align(len.into(), 8)));
+        at = at.saturating_add(8u64.saturating_add(align_up(len.into(), 8)));
         if kind == 0 {
             break;
         }
@@ -544,7 +534,7 @@ async fn read_extensions(cx: &Cx, area: Span) -> Result<(Vec<Ext>, u64)> {
 async fn extensions(cx: Cx, (area, exts): (Span, Arc<Vec<Ext>>)) -> Result<()> {
     for e in exts.iter() {
         let start = e.data.offset.saturating_sub(8).saturating_sub(area.offset);
-        let span = area.sub(start, 8u64.saturating_add(align(e.data.len, 8)));
+        let span = area.sub(start, 8u64.saturating_add(align_up(e.data.len, 8)));
         let mut node = struct_node(ext_name(e.kind), span, BE, (), ext_layout);
         node = match e.kind {
             EXT_BACKING_FORMAT | EXT_DATA_FILE => node.summary(format!(
@@ -623,7 +613,7 @@ fn ext_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     }
     // Whatever the known fields left of the declared length, then padding.
     f.seek(start.saturating_add(len));
-    let pad = align(len, 8).saturating_sub(len);
+    let pad = align_up(len, 8).saturating_sub(len);
     if pad > 0 {
         f.bytes("Padding", pad).emit()?;
     }
@@ -727,7 +717,7 @@ fn l1_node(name: &'static str, image: &Arc<Image>, l1: Span) -> Node {
         .span(l1)
         .summary(format!(
             "{}, each covering {} of the guest",
-            crate::formats::util::arcutil::count(l1.len / 8, "entry", "entries"),
+            crate::formats::util::fmt::count(l1.len / 8, "entry", "entries"),
             size(image.l2_covers())
         ))
         .lazy(l1_table, (image.clone(), l1))
@@ -1293,7 +1283,7 @@ async fn snapshots(cx: Cx, image: Arc<Image>) -> Result<()> {
             String::from_utf8_lossy(&cx.read_avail(file.sub(name_at, s.name_size.into())).await?)
                 .into_owned();
         let end = name_at.saturating_add(s.name_size.into());
-        let total = align(end.saturating_sub(at), 8);
+        let total = align_up(end.saturating_sub(at), 8);
         cx.push(
             struct_node(
                 format!("Snapshot {i}: {name}"),
@@ -1374,7 +1364,7 @@ async fn snapshot_table(cx: &Cx, image: &Image) -> Result<Vec<(Span, Span)>> {
         let Ok(s) = parse(cx, span, BE, &(), SnapshotHeader::layout).await else {
             break;
         };
-        let total = align(
+        let total = align_up(
             SnapshotHeader::SIZE
                 .saturating_add(s.extra_size.into())
                 .saturating_add(s.id_size.into())
@@ -1417,7 +1407,7 @@ async fn read_bitmaps(cx: &Cx, image: &Image) -> Result<Vec<(Span, u64, u32, Str
             .get(name_at..name_at.saturating_add(name_size.into()))
             .map(|b| String::from_utf8_lossy(b).into_owned())
             .unwrap_or_default();
-        let len = to_usize(align(
+        let len = to_usize(align_up(
             to_u64(name_at.saturating_add(name_size.into()).saturating_sub(at)),
             8,
         ));
@@ -1742,7 +1732,7 @@ async fn cluster_map(cx: Cx, image: Arc<Image>) -> Result<()> {
         if image.version == 1 {
             s
         } else {
-            Span::new(s.source, s.offset, align(s.len, cluster))
+            Span::new(s.source, s.offset, align_up(s.len, cluster))
         }
     };
     r.span(file, whole(image.l1), "L1 table");
@@ -1766,7 +1756,12 @@ async fn cluster_map(cx: Cx, image: Arc<Image>) -> Result<()> {
         map_l1(&cx, &image, l1, true, &mut r).await?;
     }
     if let Some((offset, dir_size, _)) = image.bitmaps {
-        r.add(offset, align(dir_size, cluster), "Bitmap directory", None);
+        r.add(
+            offset,
+            align_up(dir_size, cluster),
+            "Bitmap directory",
+            None,
+        );
         for (_, table, entries, _) in read_bitmaps(&cx, &image).await? {
             let span = file.sub(table, u64::from(entries).saturating_mul(8));
             r.span(file, whole(span), "Bitmap table");
