@@ -501,6 +501,7 @@ pub static FORMATS: &[&Format] = &[
     &data::jet::MDB,
     &data::jet::ACCDB,
     &data::arrow::FORMAT,
+    &data::arrow::STREAM,
     // Schemaless wire encodings: by extension or "inspect as" only.
     &data::wire::protobuf::FORMAT,
     &data::wire::thrift::BINARY,

@@ -1,12 +1,11 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ plain.orc — ORC, NONE compression, 3 rows, 1 stripes, 3 types  [0x0+0xac]
     Magic: "ORC"  [0x0+0x3]
   ▾ Stripes — 1
     ▾ Stripe 0 — 3 rows  [0x3+0x31]
-        Data streams  [0x3+0x8]
       ▾ Stripe footer  [0xb+0x29]
         ▾ streams — Stream  [0xb+0x8]
             kind: DATA (0x1)  [0xd+0x2]
@@ -27,9 +26,12 @@ expression: "common::explore(&name, &data)"
         ▾ columns — ColumnEncoding  [0x2b+0x4]
             kind: DIRECT_V2 (0x2)  [0x2d+0x2]
           writerTimezone: "UTC"  [0x2f+0x5]
-        DATA (column 1) — 3 bytes  [0x3+0x3]
-        DATA (column 2) — 3 bytes  [0x6+0x3]
-        LENGTH (column 2) — 2 bytes  [0x9+0x2]
+      ▾ DATA (column 1) — 3 bytes  [0x3+0x3]
+          Encoded values: 02 00 01  |...| — 3 bytes, values (run-length encoded)  [0x3+0x3]
+      ▾ DATA (column 2) — 3 bytes  [0x6+0x3]
+          Encoded values: 61 62 63  |abc| — 3 bytes, values (run-length encoded)  [0x6+0x3]
+      ▾ LENGTH (column 2) — 2 bytes  [0x9+0x2]
+          Encoded values: 01 02  |..| — 2 bytes, lengths (integer run-length)  [0x9+0x2]
   ▾ Footer  [0x34+0x60]
       headerLength: 3  [0x34+0x2]
       contentLength: 49  [0x36+0x2]

@@ -161,6 +161,18 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `orc/lz4.orc` | pyarrow 25 (Apache ORC C++ 2.2.2) | reproduced byte-for-byte by re-writing the table with `pyarrow.orc.write_table(compression="lz4")` |
 | `orc/snappy.orc` | pyarrow 25 (Apache ORC C++ 2.2.2) | reproduced byte-for-byte (`compression="snappy"`) |
 | `orc/zstd.orc` | pyarrow 25 (Apache ORC C++ 2.2.2) | reproduced byte-for-byte (`compression="zstd"`) |
+| `hdf5/earliest.h5` | h5py 3.16.0 (HDF5 2.0.0) | `tests/data/hdf5/make_fixtures.py` (`libver="earliest"`): superblock 0, symbol-table groups, every datatype class h5py writes, deflate/shuffle/Fletcher-32 and scale-offset chunks, compact data, soft and external links; reproduced except the modification times of `chunked` and `compact` |
+| `hdf5/latest.h5` | h5py 3.16.0 (HDF5 2.0.0) | same script (`libver="latest"`): superblock 3, dense links and attributes (fractal heaps, v2 B-trees), single-chunk, implicit, fixed-array, extensible-array and v2 B-tree chunk indexes; reproduced except the times in the `implicit` dataset's object header |
+| `hdf5/userblock-v2.h5` | h5py 3.16.0 (HDF5 2.0.0) | same script (`libver=("v108", "v108")`, 512-byte user block): superblock 2; the script writes `fillyfoal user block` into the user block; reproduced byte-for-byte |
+| `hdf5/netcdf4.nc` | netCDF4-python 1.7.4 (netCDF-C 4.9.3, HDF5 1.14.6) | `tests/data/netcdf/make_fixtures.py` (`format="NETCDF4"`): dimension scales, a group, a compound type, a vlen string variable, a deflate+shuffle variable; `_NCProperties` records the library versions |
+| `netcdf/classic.nc` | netCDF4-python 1.7.4 (netCDF-C 4.9.3) | `tests/data/netcdf/make_fixtures.py` (`NETCDF3_CLASSIC`); reproduced byte-for-byte |
+| `netcdf/offset64.nc` | netCDF4-python 1.7.4 (netCDF-C 4.9.3) | same script (`NETCDF3_64BIT_OFFSET`); reproduced byte-for-byte |
+| `netcdf/cdf5.nc` | netCDF4-python 1.7.4 (netCDF-C 4.9.3) | same script (`NETCDF3_64BIT_DATA`), with `uint64` and `ushort` variables; reproduced byte-for-byte |
+| `netcdf/scipy.nc` | SciPy 1.18.1 (`scipy.io.netcdf_file`) | same script; one record variable; reproduced byte-for-byte |
+| `arrow/` | pyarrow 26.0.0 | `tests/data/arrow/make_fixtures.py`: an IPC file with two record batches (`plain.arrow`), LZ4-frame and Zstandard compressed bodies (`lz4.arrow`, `zstd.arrow`) and `feather.write_feather` (`table.feather`), with dictionary-encoded, list, struct, boolean and timestamp columns; reproduced byte-for-byte |
+| `arrow-stream/table.arrows` | pyarrow 26.0.0 | same script (`ipc.new_stream`); reproduced byte-for-byte |
+| `parquet/indexed.parquet` | pyarrow 26.0.0 (parquet-cpp-arrow 26.0.0) | `tests/data/parquet/make_fixtures.py`: two row groups, dictionary and PLAIN encodings, Snappy, statistics, the page index and a bloom filter; reproduced byte-for-byte |
+| `parquet/v2.parquet` | pyarrow 26.0.0 (parquet-cpp-arrow 26.0.0) | same script: data page v2, Zstandard, page CRCs; reproduced byte-for-byte |
 | `rocksdb-sst/bzip2.sst` | RocksDB via rocksdict | edit: db/host/session identity properties overwritten with `x`; RocksDB still ingests the file |
 | `rocksdb-sst/lz4.sst` | RocksDB via rocksdict | edit: identity properties overwritten with `x`; RocksDB still ingests the file |
 | `rocksdb-sst/snappy.sst` | RocksDB via rocksdict | edit: identity properties overwritten with `x`; RocksDB still ingests the file |
