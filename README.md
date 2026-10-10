@@ -15,7 +15,7 @@ read or decoded until you do.
 
 ## What's in the box
 
-About 200 kLOC of Rust. It takes a while to compile. You've been warned.
+About 400 kLOC of Rust. It takes a while to compile. You've been warned.
 
 About 1,500 formats so far: executables, archives, disk images and
 filesystems, audio and video, images, documents, databases, game assets,

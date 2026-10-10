@@ -564,6 +564,8 @@ and reproduce every file byte for byte.
 | `unityfs/raw.unity3d` | UnityPy 1.25.4 (`save_web_raw`) | same script; UnityRaw 3, Unity 5.2, SerializedFile 15 |
 | `unityfs/web.unity3d` | UnityPy 1.25.4 (`save_web_raw`, LZMA) | same script; UnityWeb 3 |
 | `unity-serialized/sharedassets0.assets` | UnityPy 1.25.4 (`SerializedFile.save`) | same script; standalone SerializedFile 19, Unity 2019.4 |
+| `dweep/kitchen-sink.dwp` | Dweep Gold level editor (Dexterity Software, 2000) | made for fillyfoal: every placeable tile (each fixed object and item in all directions, wrenches, bucket, torch, hammer), Dweep at (0, 0) and the goal at (15, 9), a 39-character title (the most its 40-byte buffer holds) and a 155-character tip, a starting inventory of the second mirror, bomb, bucket, both wrenches, torch and hammer, theme 1. The 8 unused bytes at the end of the record are 1, 1: memory the editor never clears |
+| `dweep/empty.dwp` | Dweep Gold level editor | made for fillyfoal: only Dweep and the goal, at (0, 0) and (1, 0); empty title and tip, whose bytes after the terminator are leftover memory (the words "level title" and "level tip" from an earlier edit, and heap pointers) |
 
 ## Mail stores
 

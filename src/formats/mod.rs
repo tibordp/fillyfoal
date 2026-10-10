@@ -1059,6 +1059,7 @@ pub static FORMATS: &[&Format] = &[
     &games::engines::MD3,
     &games::engines::UNREAL,
     &games::engines::BSP,
+    &games::dweep::FORMAT,
     &engineering::models::GLB,
     &engineering::models::FBX,
     &engineering::models::BLEND,
