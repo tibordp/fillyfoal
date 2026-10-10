@@ -8,7 +8,7 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use super::record::{self, Column, Encoding, Val};
+use super::record::{self, Affinity, Column, Encoding, Val};
 use crate::bytes::{to_u64, to_usize, u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
@@ -25,6 +25,7 @@ const MAX_VISITED: usize = 1 << 20;
 const VALUE_PREVIEW: u64 = 4096;
 
 /// What the dissector knows about the database, shared by all expansions.
+#[derive(Clone, Copy)]
 pub struct Db {
     pub input: Input,
     pub page_size: u64,
@@ -32,8 +33,11 @@ pub struct Db {
     pub page_count: u64,
     pub encoding: Encoding,
     /// Whether page numbers refer to pages of `input` (false for page images
-    /// inside WAL and journal files).
+    /// inside WAL and journal files, and for stale content of free pages).
     pub linked: bool,
+    /// From the database header (0 for page images).
+    pub freelist_trunk: u32,
+    pub largest_root: u32,
 }
 
 pub type DbRef = Arc<Db>;
@@ -343,8 +347,18 @@ pub async fn payload_span(cx: &Cx, db: &Db, cell: &Cell) -> Result<(Span, Option
     let (Some(payload), Some(local)) = (cell.payload, cell.local_span()) else {
         return Err(Diagnostic::internal("cell has no payload"));
     };
-    if payload.overflow.is_none() {
+    let Some(first) = payload.overflow else {
         return Ok((local, None));
+    };
+    if !db.linked {
+        // A page image in a WAL or journal: the overflow pages are in the
+        // database file.
+        return Ok((
+            local,
+            Some(Diagnostic::note(format!(
+                "payload continues on overflow page {first}, not followed from a page image"
+            ))),
+        ));
     }
     let (chain, diag) = overflow_chain(cx, db, &payload).await;
     // The chain can be as long as the file has pages.
@@ -517,11 +531,177 @@ fn step(frame: &mut Frame, usable: u64) -> Action {
 }
 
 // ---------------------------------------------------------------------------
+// Free space
+
+/// How the space of a B-tree page outside its header, cell pointers and
+/// cells is used. Offsets are relative to the page.
+#[derive(Default)]
+pub struct Free {
+    /// Between the cell pointer array and the cell content area.
+    pub unallocated: Option<(u64, u64)>,
+    /// `(offset, next, size)` of each freeblock, in chain order.
+    pub freeblocks: Vec<(u64, u16, u16)>,
+    /// Gaps between cells and freeblocks in the content area: fragments
+    /// (1 to 3 bytes) or, in a damaged page, larger unaccounted runs.
+    pub gaps: Vec<(u64, u64)>,
+    pub problems: Vec<Diagnostic>,
+}
+
+impl Page {
+    /// Where the cell content area starts (0 in the header means 65536).
+    pub fn content_start(&self) -> u64 {
+        match u16_be(&self.data, self.base.saturating_add(5)) {
+            Some(0) => 65536,
+            Some(n) => n.into(),
+            None => 0,
+        }
+    }
+
+    pub fn first_freeblock(&self) -> u16 {
+        u16_be(&self.data, self.base.saturating_add(1)).unwrap_or(0)
+    }
+
+    /// The header's count of fragmented free bytes.
+    pub fn fragmented(&self) -> u8 {
+        self.data
+            .get(self.base.saturating_add(7))
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// End of the cell pointer array, relative to the page.
+    pub fn pointers_end(&self) -> u64 {
+        to_u64(self.base.saturating_add(self.kind.header_len()))
+            .saturating_add(u64::from(self.cells).saturating_mul(2))
+    }
+
+    /// Accounts for the free space of the page, given the cells found on it
+    /// (`(offset, length)` within the page). Work is bounded by the page
+    /// size.
+    pub fn free_space(&self, usable: u64, cells: &[(u64, u64)]) -> Free {
+        let mut free = Free::default();
+        let at = |o: u64, n: u64| self.span.sub(o, n);
+        let pointers_end = self.pointers_end();
+        let content = self.content_start();
+        if content > usable {
+            free.problems.push(
+                Diagnostic::malformed(format!(
+                    "cell content area starts at {content:#x}, beyond the usable page size {usable:#x}"
+                ))
+                .at(at(to_u64(self.base).saturating_add(5), 2)),
+            );
+        } else if content < pointers_end {
+            free.problems.push(
+                Diagnostic::malformed(format!(
+                    "cell content area starts at {content:#x}, inside the cell pointer array"
+                ))
+                .at(at(to_u64(self.base).saturating_add(5), 2)),
+            );
+        } else if content > pointers_end {
+            free.unallocated = Some((pointers_end, content.saturating_sub(pointers_end)));
+        }
+        let content = content.clamp(pointers_end.min(usable), usable);
+
+        // Freeblocks: in ascending order, each at least 4 bytes, linked by
+        // offset; at most usable / 4 of them fit.
+        let mut next = u64::from(self.first_freeblock());
+        let mut floor = content;
+        while next != 0 {
+            if to_u64(free.freeblocks.len()) >= usable / 4 {
+                break;
+            }
+            let here = next;
+            if here < floor || here.saturating_add(4) > usable {
+                free.problems.push(
+                    Diagnostic::malformed(format!(
+                        "freeblock at {here:#x} lies outside the free part of the content area"
+                    ))
+                    .at(at(here, 4)),
+                );
+                break;
+            }
+            let link = u16_be(&self.data, to_usize(here)).unwrap_or(0);
+            let size = u16_be(&self.data, to_usize(here.saturating_add(2))).unwrap_or(0);
+            if size < 4 || here.saturating_add(size.into()) > usable {
+                free.problems.push(
+                    Diagnostic::malformed(format!(
+                        "freeblock at {here:#x} has an impossible size of {size} bytes"
+                    ))
+                    .at(at(here, 4)),
+                );
+                break;
+            }
+            free.freeblocks.push((here, link, size));
+            floor = here.saturating_add(size.into());
+            next = link.into();
+        }
+
+        // Whatever cells and freeblocks leave of the content area.
+        let mut used: Vec<(u64, u64)> = cells
+            .iter()
+            .copied()
+            .chain(free.freeblocks.iter().map(|&(o, _, s)| (o, u64::from(s))))
+            .collect();
+        used.sort_unstable();
+        let mut pos = content;
+        let mut overlap = false;
+        for (o, n) in used {
+            if o < content {
+                free.problems.push(
+                    Diagnostic::malformed(format!(
+                        "cell at {o:#x} lies before the cell content area ({content:#x})"
+                    ))
+                    .at(at(o, n)),
+                );
+            } else if o < pos {
+                if !overlap {
+                    free.problems.push(
+                        Diagnostic::malformed(format!("cells overlap at {o:#x}")).at(at(o, n)),
+                    );
+                }
+                overlap = true;
+            } else if o > pos {
+                free.gaps.push((pos, o.saturating_sub(pos)));
+            }
+            pos = pos.max(o.saturating_add(n));
+        }
+        if pos < usable {
+            free.gaps.push((pos, usable.saturating_sub(pos)));
+        }
+        let counted = free
+            .gaps
+            .iter()
+            .fold(0u64, |a, &(_, n)| a.saturating_add(n));
+        if counted != u64::from(self.fragmented()) {
+            free.problems.push(
+                Diagnostic::warning(format!(
+                    "the header counts {} fragmented bytes, the content area has {counted}",
+                    self.fragmented()
+                ))
+                .at(at(to_u64(self.base).saturating_add(7), 1)),
+            );
+        }
+        free
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Rows and records
 
 /// How a B-tree's records are labelled.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Columns(pub Arc<Vec<Column>>);
+
+/// A value as the column's affinity presents it: an integer stored in a
+/// REAL column reads back as a float.
+fn shown(val: Val, column: Option<&Column>) -> (Val, bool) {
+    match val {
+        Val::Int(v) if column.is_some_and(|c| c.affinity == Affinity::Real) => {
+            (Val::Float(v as f64), true)
+        }
+        v => (v, false),
+    }
+}
 
 /// Values of a record decoded from the bytes at hand (the local part of a
 /// payload), for summaries.
@@ -541,11 +721,12 @@ pub fn record_summary(
         let end = to_usize(field.offset.saturating_add(field.len)).min(data.len());
         let bytes = data.get(start..end).unwrap_or_default();
         let complete = to_u64(bytes.len()) == field.len;
+        let column = columns.get(i);
         let text = match record::decode(field.serial, bytes, encoding) {
-            Some(Val::Null) if columns.get(i).is_some_and(|c| c.rowid_alias) => {
+            Some(Val::Null) if column.is_some_and(|c| c.rowid_alias) => {
                 rowid.map_or_else(|| "NULL".to_owned(), |r| r.to_string())
             }
-            Some(v) => record::short(&v, complete),
+            Some(v) => record::short(&shown(v, column).0, complete),
             None => "…".to_owned(),
         };
         parts.push(text);
@@ -603,13 +784,18 @@ pub async fn expand_cell(cx: Cx, state: CellState) -> Result<()> {
         if let Some(d) = diag {
             cx.diag(d);
         }
-        record_nodes(&cx, &state, payload).await?;
+        let rowid = if cell.kind == Kind::TableLeaf {
+            cell.rowid
+        } else {
+            None
+        };
+        record_nodes(&cx, db, &state.columns.0, rowid, payload).await?;
     }
     cx.emit(
         Node::new("Cell")
             .span(cell.span())
             .summary(format!(
-                "{:#x} bytes at page offset {:#x}",
+                "{} bytes at page offset {:#x}",
                 cell.len, cell.offset
             ))
             .lazy(cell_fields, state.clone()),
@@ -621,6 +807,7 @@ pub async fn expand_cell(cx: Cx, state: CellState) -> Result<()> {
             left,
             &state.path,
             super::Role::BTree,
+            &state.columns,
         ));
     }
     Ok(())
@@ -630,54 +817,90 @@ async fn cell_fields(cx: Cx, state: CellState) -> Result<()> {
     let cell = &state.cell;
     let at = |offset: u64, len: u64| cell.page_span.sub(offset, len);
     if let Some(left) = cell.left {
-        cx.emit(uint("Left child page", left.into(), at(cell.offset, 4)));
+        let mut node = uint("Left child page", left.into(), at(cell.offset, 4))
+            .desc("Page holding the keys that sort before this cell's key");
+        if state.db.linked
+            && let Ok(target) = state.db.page(left)
+        {
+            node = node.target(target);
+        }
+        cx.emit(node);
     }
     if let Some(p) = cell.payload {
         let (o, n) = cell.payload_len_at;
         cx.emit(
             uint("Payload size", p.total, at(o, n))
-                .desc("Varint: bytes of payload, including overflow"),
+                .desc("Varint: bytes of payload, including any part on overflow pages"),
         );
     }
     if let Some(rowid) = cell.rowid {
         let (o, n) = cell.rowid_at;
-        cx.emit(
-            Node::new(if cell.kind == Kind::TableInterior {
-                "Key (rowid)"
-            } else {
-                "Rowid"
-            })
-            .span(at(o, n))
-            .value(Value::Int {
-                value: rowid,
-                bits: 64,
-            }),
-        );
+        let (name, desc) = if cell.kind == Kind::TableInterior {
+            (
+                "Key (rowid)",
+                "Varint: the largest rowid in the left child's subtree",
+            )
+        } else {
+            ("Rowid", "Varint: the row's 64-bit signed integer key")
+        };
+        cx.emit(Node::new(name).span(at(o, n)).desc(desc).value(Value::Int {
+            value: rowid,
+            bits: 64,
+        }));
     }
     if let Some(p) = cell.payload {
-        cx.emit(
-            Node::new("Local payload")
-                .span(at(p.local_at, p.local_len))
-                .summary(format!("{} of {} bytes", p.local_len, p.total)),
-        );
+        let mut local = Node::new("Local payload")
+            .span(at(p.local_at, p.local_len))
+            .summary(if p.overflow.is_some() {
+                format!(
+                    "{} of {} bytes; the rest is on overflow pages",
+                    p.local_len, p.total
+                )
+            } else {
+                format!("all {} bytes", p.total)
+            });
+        if p.overflow.is_some() {
+            local = local.desc(
+                "How much stays on the page follows from the payload size and the usable page size (the spill rule of the file format)",
+            );
+        }
+        cx.emit(local);
         if let Some(first) = p.overflow {
             let end = p.local_at.saturating_add(p.local_len);
             let mut node = uint("First overflow page", first.into(), at(end, 4));
-            if let Ok(target) = state.db.page(first) {
+            if state.db.linked
+                && let Ok(target) = state.db.page(first)
+            {
                 node = node.target(target);
             }
             cx.emit(node);
-            cx.emit(
-                Node::new("Overflow chain")
-                    .summary(format!(
-                        "{:#x} bytes on overflow pages",
-                        p.total.saturating_sub(p.local_len)
-                    ))
-                    .lazy(overflow_pages, state.clone()),
-            );
+            if state.db.linked {
+                cx.emit(
+                    Node::new("Overflow chain")
+                        .summary(format!(
+                            "{} bytes on {}",
+                            p.total.saturating_sub(p.local_len),
+                            super::plural(
+                                overflow_page_count(&state.db, &p),
+                                "overflow page",
+                                "overflow pages"
+                            )
+                        ))
+                        .lazy(overflow_pages, state.clone()),
+                );
+            }
         }
     }
     Ok(())
+}
+
+/// Overflow pages a payload needs: the bytes beyond the local part, at
+/// usable size minus 4 per page.
+pub fn overflow_page_count(db: &Db, payload: &Payload) -> u64 {
+    payload
+        .total
+        .saturating_sub(payload.local_len)
+        .div_ceil(db.usable.saturating_sub(4).max(1))
 }
 
 async fn overflow_pages(cx: Cx, state: CellState) -> Result<()> {
@@ -685,7 +908,8 @@ async fn overflow_pages(cx: Cx, state: CellState) -> Result<()> {
         return Ok(());
     };
     let (chain, diag) = overflow_chain(&cx, &state.db, &payload).await;
-    for (no, content) in chain {
+    let total = chain.len();
+    for (i, (no, content)) in chain.into_iter().enumerate() {
         cx.push(
             super::page_link(
                 "Overflow page",
@@ -693,8 +917,13 @@ async fn overflow_pages(cx: Cx, state: CellState) -> Result<()> {
                 no,
                 &state.path,
                 super::Role::Overflow,
+                &Columns::default(),
             )
-            .summary(format!("page {no}, {:#x} payload bytes", content.len)),
+            .summary(format!(
+                "{} of {total}, {} payload bytes",
+                i.saturating_add(1),
+                content.len
+            )),
         )
         .await;
     }
@@ -704,9 +933,15 @@ async fn overflow_pages(cx: Cx, state: CellState) -> Result<()> {
     Ok(())
 }
 
-/// The values of the record in `payload`, one node per column, plus the
-/// record header.
-async fn record_nodes(cx: &Cx, state: &CellState, payload: Span) -> Result<()> {
+/// The values of the record in `payload`, one node per column (labelled by
+/// `columns`), then the record header.
+pub async fn record_nodes(
+    cx: &Cx,
+    db: &DbRef,
+    columns: &[Column],
+    rowid: Option<i64>,
+    payload: Span,
+) -> Result<()> {
     let head = cx.read_avail(payload.sub(0, 9)).await?;
     let (size, _) = record::varint(&head, 0)
         .ok_or_else(|| Diagnostic::malformed("invalid record header size").at(payload.sub(0, 9)))?;
@@ -714,38 +949,47 @@ async fn record_nodes(cx: &Cx, state: &CellState, payload: Span) -> Result<()> {
     let header = cx.read(header_span.sub(0, 0x10000)).await?;
     let (_, fields) = record::header(&header)
         .ok_or_else(|| Diagnostic::malformed("invalid record header").at(header_span))?;
-    let columns = &state.columns.0;
     for (i, field) in fields.iter().enumerate() {
         cx.checkpoint().await;
-        let name = columns
-            .get(i)
-            .map_or_else(|| format!("Column {i}"), |c| c.name.clone());
+        let column = columns.get(i);
+        let name = column.map_or_else(|| format!("Column {i}"), |c| c.name.clone());
         let span = payload.sub(field.offset, field.len);
         let mut node = Node::new(name).span(span);
         if span.len < field.len {
-            node = node.diag(Diagnostic::truncated(
-                Span::new(span.source, span.offset, field.len),
-                span.len,
-            ));
+            node = node.diag(if db.linked {
+                Diagnostic::truncated(Span::new(span.source, span.offset, field.len), span.len)
+            } else {
+                Diagnostic::note(format!(
+                    "{} of {} bytes here; the rest is on overflow pages, not followed from a page image",
+                    span.len, field.len
+                ))
+            });
         }
         let data = cx.read_avail(span.sub(0, VALUE_PREVIEW)).await?;
         let complete = to_u64(data.len()) == field.len;
-        node = match record::decode(field.serial, &data, state.db.encoding) {
-            Some(Val::Null) if columns.get(i).is_some_and(|c| c.rowid_alias) => {
-                match state.cell.rowid {
-                    Some(rowid) => node
-                        .value(Value::Int {
-                            value: rowid,
-                            bits: 64,
-                        })
-                        .summary("INTEGER PRIMARY KEY (stored as NULL; the rowid)"),
-                    None => node.summary("NULL"),
+        let decoded = record::decode(field.serial, &data, db.encoding);
+        node = match decoded.map(|v| shown(v, column)) {
+            Some((Val::Null, _)) if column.is_some_and(|c| c.rowid_alias) => match rowid {
+                Some(rowid) => node
+                    .value(Value::Int {
+                        value: rowid,
+                        bits: 64,
+                    })
+                    .summary("INTEGER PRIMARY KEY: stored as NULL, the value is the rowid"),
+                None => node.summary("NULL"),
+            },
+            Some((Val::Null, _)) => node.summary("NULL"),
+            Some((Val::Int(v), _)) => node.value(Value::Int { value: v, bits: 64 }),
+            Some((Val::Float(v), converted)) => {
+                let node = node.value(Value::Float(v));
+                let extreme = v != 0.0 && !(1e-4..1e16).contains(&v.abs());
+                match (converted, extreme) {
+                    (true, _) => node.summary(format!("{v:?}: stored as an integer (REAL column)")),
+                    (false, true) => node.summary(format!("{v:e}")),
+                    (false, false) => node,
                 }
             }
-            Some(Val::Null) => node.summary("NULL"),
-            Some(Val::Int(v)) => node.value(Value::Int { value: v, bits: 64 }),
-            Some(Val::Float(v)) => node.value(Value::Float(v)),
-            Some(Val::Text(s)) => {
+            Some((Val::Text(s), _)) => {
                 let node = node.value(Value::Text(s));
                 if complete {
                     node
@@ -753,12 +997,17 @@ async fn record_nodes(cx: &Cx, state: &CellState, payload: Span) -> Result<()> {
                     node.summary(format!("{} bytes", field.len))
                 }
             }
-            Some(Val::Blob(b)) => {
+            Some((Val::Blob(b), _)) => {
                 let node = node
                     .value(Value::Bytes(b.into_iter().take(32).collect()))
                     .summary(format!("{} bytes", field.len));
-                if field.len >= 16 {
-                    node.lazy(crate::formats::dissect_or_data, state.db.input.nested(span))
+                if column.is_some_and(|c| c.record) {
+                    node.desc("A record: the sampled index entry").lazy(
+                        crate::expander!(self::record_blob: (DbRef, Span)),
+                        (db.clone(), span),
+                    )
+                } else if field.len >= 16 {
+                    node.lazy(crate::formats::dissect_or_data, db.input.nested(span))
                 } else {
                     node
                 }
@@ -770,16 +1019,29 @@ async fn record_nodes(cx: &Cx, state: &CellState, payload: Span) -> Result<()> {
     cx.emit(
         Node::new("Record header")
             .span(header_span)
-            .summary(format!("{} columns", fields.len()))
+            .summary(format!(
+                "{} {}",
+                fields.len(),
+                if fields.len() == 1 { "column" } else { "columns" }
+            ))
+            .desc("A varint header size, then one varint serial type per column giving its storage class and length")
             .lazy(record_header, (header_span, Arc::new(fields))),
     );
     Ok(())
 }
 
+/// A blob that holds a record (`sqlite_stat4.sample`).
+async fn record_blob(cx: Cx, (db, span): (DbRef, Span)) -> Result<()> {
+    record_nodes(&cx, &db, &[], None, span).await
+}
+
 async fn record_header(cx: Cx, (span, fields): (Span, Arc<Vec<record::Field>>)) -> Result<()> {
     let head = cx.read_avail(span.sub(0, 9)).await?;
     if let Some((size, n)) = record::varint(&head, 0) {
-        cx.emit(uint("Header size", size, span.sub(0, to_u64(n))));
+        cx.emit(
+            uint("Header size", size, span.sub(0, to_u64(n)))
+                .desc("Varint: bytes in the header, including this one"),
+        );
     }
     for (i, field) in fields.iter().enumerate() {
         cx.push(

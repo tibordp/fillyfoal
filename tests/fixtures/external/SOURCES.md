@@ -149,6 +149,12 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `sqlite/shop.sqlite` | SQLite 3.51.0 | header records SQLite version 3051000 |
 | `sqlite-wal/t.db-wal` | SQLite 3.51 | WAL of a `t.db` written by the same library |
 | `sqlite-journal/t.db-journal` | SQLite 3.51 | rollback journal of the same `t.db` |
+| `sqlite/catalog.sqlite` | SQLite 3.50.4 (Python 3 `sqlite3`) | `uv run python3 -I tests/data/sqlite/make_fixtures.py /tmp/fixtures/sqlite-out` (reproduces it byte for byte): 512-byte pages, tables with AUTOINCREMENT, UNIQUE (automatic indexes), an explicit DESC index, a WITHOUT ROWID table, a view, a trigger, overflow rows, a freelist left by DELETE, `sqlite_stat1` from ANALYZE |
+| `sqlite/utf16.sqlite` | SQLite 3.50.4 (Python 3 `sqlite3`) | same script, byte for byte: `PRAGMA encoding = 'UTF-16le'`, an indexed text column |
+| `sqlite/incremental.sqlite` | SQLite 3.50.4 (Python 3 `sqlite3`) | same script, byte for byte: `auto_vacuum = INCREMENTAL` (pointer-map page), overflow chains, free pages |
+| `sqlite/wal.sqlite` | SQLite 3.50.4 (Python 3 `sqlite3`) | same script: the database file copied while a connection had a transaction open in WAL mode (`wal-copy.sqlite`); its WAL is `sqlite-wal/wal.sqlite-wal` |
+| `sqlite-wal/wal.sqlite-wal` | SQLite 3.50.4 (Python 3 `sqlite3`) | same script (`wal-copy.sqlite-wal`), copied while the last transaction was open: a restarted log (stale frames of the first generation after the new ones), committed frames, an open transaction's frames; salts are random, so not reproducible byte for byte |
+| `sqlite-journal/journal.sqlite-journal` | SQLite 3.50.4 (Python 3 `sqlite3`) | same script (`journal-copy.sqlite-journal`), copied during a transaction with a one-page cache: two segments (each spill syncs the journal); the nonces are random, so not reproducible byte for byte |
 | `gpkg/geo.gpkg` | SQLite 3.51.0 | header records SQLite version 3051000; GeoPackage tables created with SQL by us |
 | `mbtiles/tiles.mbtiles` | SQLite 3.51.0 | header records SQLite version 3051000; MBTiles tables created with SQL by us |
 | `bgcode/` | libbgcode (pybgcode built from prusa3d/libbgcode commit d4da907) | reproduced byte-for-byte by `tests/data/bgcode/make_bgcode.py`: `from_ascii_to_binary` of our PrusaSlicer-style `synthetic/gcode/prusaslicer.gcode` (thumbnails made with Pillow 12.3), one file per compression (none, zlib, Heatshrink 11/4 and 12/4), G-code encoding (none, MeatPack, MeatPack with comments) and checksum type (none, CRC-32) |
