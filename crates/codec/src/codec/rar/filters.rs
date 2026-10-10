@@ -118,14 +118,6 @@ fn set(d: &mut [u8], i: usize, v: u8) {
     }
 }
 
-fn le32(d: &[u8], i: usize) -> u32 {
-    let mut v = 0u32;
-    for k in (0..4).rev() {
-        v = v << 8 | u32::from(get(d, i.saturating_add(k)));
-    }
-    v
-}
-
 fn put32(d: &mut [u8], i: usize, v: u32) {
     for (k, b) in v.to_le_bytes().into_iter().enumerate() {
         set(d, i.saturating_add(k), b);
@@ -162,7 +154,7 @@ fn e8(d: &mut [u8], offset: u64, e9: bool, rar3: bool) {
             continue;
         }
         let pos = offset.wrapping_add(i as u64);
-        let addr = le32(d, i);
+        let addr = crate::bytes::u32_le(d, i).unwrap_or(0);
         if rar3 {
             let cur = pos as u32;
             let signed = addr as i32;
@@ -192,7 +184,7 @@ fn arm(d: &mut [u8], offset: u64) {
     let mut i = 0usize;
     while i.saturating_add(3) < len {
         if get(d, i.saturating_add(3)) == 0xeb {
-            let v = le32(d, i) & 0xff_ffff;
+            let v = crate::bytes::u32_le(d, i).unwrap_or(0) & 0xff_ffff;
             let at = (offset.wrapping_add(i as u64) >> 2) as u32;
             let v = v.wrapping_sub(at) & 0xff_ffff | 0xeb00_0000;
             put32(d, i, v);

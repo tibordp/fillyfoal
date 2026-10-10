@@ -11,55 +11,27 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{Radix, Value};
+use crate::value::Value;
 
+/// A 64-bit unsigned decimal value (archive fields are shown as 64-bit
+/// whatever their width).
 pub fn uint(value: u64) -> Value {
-    Value::UInt {
-        value,
-        bits: 64,
-        radix: Radix::Dec,
-    }
+    super::val::uint(value, 64)
 }
 
+/// A 64-bit unsigned hexadecimal value.
 pub fn hex(value: u64) -> Value {
-    Value::UInt {
-        value,
-        bits: 64,
-        radix: Radix::Hex,
-    }
+    super::val::hex(value, 64)
 }
 
-pub fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
+pub use super::val::text;
 
 /// A byte count for summaries: `"512 bytes"`, `"1.2 MiB"`.
-pub fn human_size(n: u64) -> String {
-    const UNITS: [&str; 6] = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
-    if n < 1024 {
-        return if n == 1 {
-            "1 byte".to_owned()
-        } else {
-            format!("{n} bytes")
-        };
-    }
-    let mut value = n as f64 / 1024.0;
-    let mut unit = 0usize;
-    while value >= 1024.0 && unit < 5 {
-        value /= 1024.0;
-        unit = unit.saturating_add(1);
-    }
-    let name = UNITS.get(unit).copied().unwrap_or("EiB");
-    format!("{value:.1} {name}")
-}
+pub use super::fmt::size as human_size;
 
-/// `"1 entry"`, `"3 entries"`.
+/// `"1 entry"`, `"3 entries"` ([`super::fmt::count`] taking a `u64`).
 pub fn count(n: u64, one: &str, many: &str) -> String {
-    if n == 1 {
-        format!("1 {one}")
-    } else {
-        format!("{n} {many}")
-    }
+    super::fmt::count(n, one, many)
 }
 
 /// A leaf for data compressed with a codec we do not decode. It keeps the

@@ -18,10 +18,6 @@ fn bad(what: &str) -> Diagnostic {
     Diagnostic::malformed(format!("LZNT1: {what}"))
 }
 
-fn too_big(limit: usize) -> Diagnostic {
-    Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
-}
-
 /// Ends a step that ran out of input: keep what it produced, or ask for
 /// more (the caller rolls the step back).
 fn need(progress: bool) -> Result<Step> {
@@ -121,7 +117,7 @@ impl Decode for Lznt1 {
         if let Some(size) = self.size
             && size.saturating_sub(self.produced) > limit.saturating_sub(out.len())
         {
-            return Err(too_big(limit));
+            return Err(Diagnostic::output_limit(limit));
         }
         let goal = out.len().saturating_add(step);
         let (from, first) = (self.pos, out.len());
@@ -199,7 +195,7 @@ impl Decode for Lznt1 {
                 .produced
                 .saturating_add(out.len().saturating_sub(before));
             if out.len() > limit {
-                return Err(too_big(limit));
+                return Err(Diagnostic::output_limit(limit));
             }
             // A compression unit is cut to its size.
             if let Some(size) = self.size

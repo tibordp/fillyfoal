@@ -161,5 +161,8 @@ mod tests {
         assert_eq!(capitalize("élan"), "Élan");
         assert_eq!(uuid(&[0; 16]), "00000000-0000-0000-0000-000000000000");
         assert_eq!(fourcc(b"ab\0c"), "ab\\x00c");
+        // The variants built on it: QuickTime's ©, and trimmed padding.
+        assert_eq!(super::super::vidutil::fourcc(b"\xa9nam\x01"), "©nam\\x01");
+        assert_eq!(super::super::sound::fourcc(b"ab  "), "ab");
     }
 }

@@ -24,10 +24,6 @@ fn bad(what: &str) -> Diagnostic {
     Diagnostic::malformed(format!("Xpress: {what}"))
 }
 
-fn too_big(limit: usize) -> Diagnostic {
-    Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
-}
-
 /// Ends a step that ran out of input: keep what it produced, or ask for
 /// more (the caller rolls the step back).
 fn need(progress: bool) -> Result<Step> {
@@ -76,14 +72,7 @@ fn continue_match(
 }
 
 fn u16_at(data: &[u8], at: usize) -> Option<usize> {
-    let b = data.get(at..at.checked_add(2)?)?;
-    Some(usize::from(u16::from_le_bytes([*b.first()?, *b.get(1)?])))
-}
-
-fn u32_at(data: &[u8], at: usize) -> Option<u32> {
-    data.get(at..at.checked_add(4)?)
-        .and_then(|s| s.try_into().ok())
-        .map(u32::from_le_bytes)
+    crate::bytes::u16_le(data, at).map(usize::from)
 }
 
 /// Plain LZ77, decoded to the end of the input or `size` bytes.
@@ -143,7 +132,7 @@ impl Decode for Xpress {
         if let Some(size) = self.size
             && size.saturating_sub(self.produced) > limit.saturating_sub(out.len())
         {
-            return Err(too_big(limit));
+            return Err(Diagnostic::output_limit(limit));
         }
         let goal = out.len().saturating_add(step);
         let first = out.len();
@@ -162,7 +151,7 @@ impl Decode for Xpress {
             let progress = out.len() > first;
             match self.size {
                 Some(s) if self.produced >= s => return self.finish(input, eof, progress),
-                None if out.len() > limit => return Err(too_big(limit)),
+                None if out.len() > limit => return Err(Diagnostic::output_limit(limit)),
                 _ => {}
             }
             if out.len() >= goal {
@@ -172,7 +161,7 @@ impl Decode for Xpress {
                 if self.pos >= input.len() {
                     return self.finish(input, eof, progress);
                 }
-                let Some(flags) = u32_at(input, self.pos) else {
+                let Some(flags) = crate::bytes::u32_le(input, self.pos) else {
                     if eof {
                         return Err(bad("truncated flags"));
                     }
@@ -225,7 +214,8 @@ impl Decode for Xpress {
                         pos = pos.saturating_add(2);
                         if len == 0 {
                             len = usize::try_from(
-                                u32_at(input, pos).ok_or_else(|| bad("truncated match length"))?,
+                                crate::bytes::u32_le(input, pos)
+                                    .ok_or_else(|| bad("truncated match length"))?,
                             )
                             .unwrap_or(usize::MAX);
                             pos = pos.saturating_add(4);
@@ -241,7 +231,7 @@ impl Decode for Xpress {
             self.pos = pos;
             len = len.saturating_add(3);
             if self.size.is_none() && out.len().saturating_add(len) > limit {
-                return Err(too_big(limit));
+                return Err(Diagnostic::output_limit(limit));
             }
             if offset > self.produced {
                 return Err(Diagnostic::malformed("match offset outside the output"));
@@ -393,7 +383,8 @@ impl Bits {
     }
 
     fn u32(&mut self, data: &[u8]) -> Result<usize> {
-        let v = u32_at(data, self.pos).ok_or_else(|| bad("truncated match length"))?;
+        let v =
+            crate::bytes::u32_le(data, self.pos).ok_or_else(|| bad("truncated match length"))?;
         self.pos = self.pos.saturating_add(4);
         Ok(usize::try_from(v).unwrap_or(usize::MAX))
     }
@@ -476,7 +467,7 @@ impl Decode for XpressHuffman {
         limit: usize,
     ) -> Result<Step> {
         if self.size.saturating_sub(self.produced) > limit.saturating_sub(out.len()) {
-            return Err(too_big(limit));
+            return Err(Diagnostic::output_limit(limit));
         }
         self.held = input.len();
         let goal = out.len().saturating_add(step);
@@ -593,9 +584,7 @@ mod tests {
     }
 
     fn hex(s: &str) -> Vec<u8> {
-        s.split_whitespace()
-            .map(|h| u8::from_str_radix(h, 16).unwrap())
-            .collect()
+        crate::text::unhex(s).unwrap()
     }
 
     fn abc300() -> Vec<u8> {

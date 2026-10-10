@@ -40,10 +40,6 @@ fn bad(what: &str) -> Diagnostic {
     Diagnostic::malformed(format!("LZMA: {what}"))
 }
 
-fn too_large(limit: usize) -> Diagnostic {
-    Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
-}
-
 const PROB_INIT: u16 = 1024;
 
 /// Input bytes a raw LZMA decoder keeps in hand before starting a symbol
@@ -374,7 +370,7 @@ impl State {
                 return Ok(true);
             }
             if out.len() > b.limit {
-                return Err(too_large(b.limit));
+                return Err(Diagnostic::output_limit(b.limit));
             }
             if out.len() >= b.stop || rc.pos > b.avail {
                 return Ok(false);
@@ -910,7 +906,7 @@ impl Lzma2 {
                 out.extend_from_slice(data);
                 self.pos = pos.saturating_add(3).saturating_add(size);
                 if out.len() > limit {
-                    return Err(too_large(limit));
+                    return Err(Diagnostic::output_limit(limit));
                 }
                 Ok(Chunk::Decoded)
             }
@@ -961,7 +957,7 @@ impl Lzma2 {
                 )?
                 .registers();
                 if out.len().saturating_add(unpacked) > limit {
-                    return Err(too_large(limit));
+                    return Err(Diagnostic::output_limit(limit));
                 }
                 let end = view.position(out.len()).saturating_add(unpacked);
                 self.open = Some(Open {

@@ -103,28 +103,7 @@ pub fn number(text: &str) -> Option<Value> {
 
 /// `n` with thousands separators, for summaries.
 pub fn count(n: u64) -> String {
-    let digits = n.to_string();
-    let mut out = String::with_capacity(digits.len().saturating_add(digits.len() / 3));
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len().saturating_sub(i)) % 3 == 0 {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
-}
-
-/// Days from 1970-01-01 to a civil date (proleptic Gregorian).
-#[allow(clippy::arithmetic_side_effects)] // callers validate ranges: no overflow
-fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
-    // Howard Hinnant's days_from_civil.
-    let y = if month <= 2 { year - 1 } else { year };
-    let era = y.div_euclid(400);
-    let yoe = y - era * 400;
-    let mp = (month + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + day - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
+    crate::formats::util::fmt::grouped(n)
 }
 
 /// Parses an ISO 8601 / RFC 3339 date or date-time (`2024-01-31`,
@@ -192,21 +171,19 @@ pub fn parse_datetime(text: &str) -> Option<i64> {
     if h > 24 || min > 59 || s > 60 {
         return None;
     }
-    let days = days_from_civil(y, m, d);
-    Some(
-        days.saturating_mul(86_400)
-            .saturating_add(h.saturating_mul(3600))
-            .saturating_add(min.saturating_mul(60))
-            .saturating_add(s)
-            .saturating_sub(offset),
-    )
+    let u32_of = |v: i64| u32::try_from(v).ok();
+    let seconds = crate::formats::util::civil::civil_to_unix(
+        y,
+        u32_of(m)?,
+        u32_of(d)?,
+        u32_of(h)?,
+        u32_of(min)?,
+        u32_of(s)?,
+    );
+    Some(seconds.saturating_sub(offset))
 }
 
-/// `"1 line"` / `"3 lines"`.
+/// `"1 line"` / `"3 lines"`, with thousands separators.
 pub fn plural(n: u64, one: &str, many: &str) -> String {
-    if n == 1 {
-        format!("1 {one}")
-    } else {
-        format!("{} {many}", count(n))
-    }
+    crate::formats::util::fmt::grouped_count(n, one, many)
 }

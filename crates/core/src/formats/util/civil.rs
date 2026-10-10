@@ -18,11 +18,13 @@ pub fn days_from_civil(year: i64, month: i64, day: i64) -> Option<i64> {
 }
 
 /// `(year, month, day)` of a day count since 1970-01-01 (Howard Hinnant's
-/// `civil_from_days`).
+/// `civil_from_days`), exact for any day of an `i64` count of seconds
+/// (larger counts are clamped).
 pub fn civil(days: i64) -> (i64, i64, i64) {
-    let z = days
-        .clamp(-1_000_000_000, 1_000_000_000)
-        .saturating_add(719_468);
+    // i64::MAX seconds is 106,751,991,167,300 days; nothing below overflows
+    // for days in this range.
+    const MAX_DAYS: i64 = 106_751_991_167_301;
+    let z = days.clamp(-MAX_DAYS, MAX_DAYS).saturating_add(719_468);
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097);
     let yoe = doe
@@ -128,5 +130,8 @@ mod tests {
             Some(EPOCH_2000 + 1)
         );
         assert_eq!(civil_to_unix(2000, 1, 1, 0, 0, 0), EPOCH_2000);
+        // Exact across the range of an i64 count of seconds.
+        assert_eq!(civil(i64::MAX / 86_400), (292_277_026_596, 12, 4));
+        assert_eq!(civil(-719_468), (0, 3, 1));
     }
 }

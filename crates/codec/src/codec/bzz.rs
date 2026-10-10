@@ -338,9 +338,7 @@ impl Bzz {
         }
         let size = usize::try_from(size).unwrap_or(usize::MAX);
         if out.len().saturating_add(size).saturating_sub(1) > limit {
-            return Err(Diagnostic::limit(format!(
-                "decompressed data exceeds {limit:#x} bytes"
-            )));
+            return Err(Diagnostic::output_limit(limit));
         }
         let mut fshift = 0u32;
         if self.zp.raw_bit(input, eof)? == 1 {

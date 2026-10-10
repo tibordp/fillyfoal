@@ -74,16 +74,10 @@ pub fn aes_gcm_open(
 )]
 mod tests {
     use super::*;
-
-    fn hex(b: &[u8]) -> String {
-        b.iter().map(|x| format!("{x:02x}")).collect()
-    }
+    use crate::text::hex_lower as hex;
 
     fn unhex(s: &str) -> Vec<u8> {
-        (0..s.len())
-            .step_by(2)
-            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
-            .collect()
+        crate::text::unhex(s).unwrap()
     }
 
     #[test]

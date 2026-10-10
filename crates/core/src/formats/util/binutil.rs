@@ -9,7 +9,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Prim};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::Value;
 
 /// Decodes a `T` at `offset` in `data` with the given byte order.
 pub fn get<T: Prim>(data: &[u8], offset: usize, endian: Endian) -> Option<T> {
@@ -22,31 +22,16 @@ pub fn get_at<T: Prim>(data: &[u8], offset: u64, endian: Endian) -> Option<T> {
     get(data, to_usize(offset), endian)
 }
 
-/// A hexadecimal unsigned value.
+pub use super::val::{name_or, text};
+
+/// A hexadecimal unsigned value ([`super::val::hex`] taking a `u64`).
 pub fn hex(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Hex,
-    }
+    super::val::hex(value, bits)
 }
 
-/// A decimal unsigned value.
+/// A decimal unsigned value ([`super::val::uint`] taking a `u64`).
 pub fn dec(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-pub fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-/// The table's name for `raw`, or `"<prefix> <raw:#x>"`.
-pub fn name_or(table: EnumTable, raw: u64, prefix: &str) -> String {
-    lookup(table, raw).map_or_else(|| format!("{prefix} {raw:#x}"), str::to_owned)
+    super::val::uint(value, bits)
 }
 
 /// A leaf for raw bytes that were expected to be `wanted` long, with a
@@ -81,14 +66,7 @@ impl NodeExt for Node {
 }
 
 /// Lower-case hex digits of `bytes`, without separators.
-pub fn hex_string(bytes: &[u8]) -> String {
-    use std::fmt::Write;
-    let mut out = String::with_capacity(bytes.len().saturating_mul(2));
-    for b in bytes {
-        let _ = write!(out, "{b:02x}");
-    }
-    out
-}
+pub use crate::text::hex_lower as hex_string;
 
 /// `"rwx"`-style permission letters.
 pub fn perms(read: bool, write: bool, exec: bool) -> String {
@@ -99,15 +77,7 @@ pub fn perms(read: bool, write: bool, exec: bool) -> String {
 }
 
 /// A short, printable rendering of a string for summaries.
-pub fn ellipsize(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_owned()
-    } else {
-        let mut out: String = s.chars().take(max).collect();
-        out.push('…');
-        out
-    }
-}
+pub use super::fmt::clip as ellipsize;
 
 /// Modified UTF-8 (Java class files, DEX): like UTF-8, but NUL is encoded
 /// as `C0 80` and supplementary characters as surrogate pairs. Decoded

@@ -188,7 +188,7 @@ impl Inflate {
                         .and_then(|end| input.get(start..end))
                         .ok_or_else(|| bad("input ends inside a stored block"))?;
                     if out.len().saturating_add(n) > limit {
-                        return Err(limit_error(limit));
+                        return Err(Diagnostic::output_limit(limit));
                     }
                     out.extend_from_slice(bytes);
                     self.bit = self.bit.saturating_add(n.saturating_mul(8));
@@ -258,7 +258,7 @@ impl Inflate {
             let symbol = usize::from(self.decode(input, lit)?);
             if symbol < 256 {
                 if out.len() >= limit {
-                    return Err(limit_error(limit));
+                    return Err(Diagnostic::output_limit(limit));
                 }
                 out.push(u8::try_from(symbol).unwrap_or(0));
                 continue;
@@ -284,7 +284,7 @@ impl Inflate {
                 return Err(bad("distance reaches before the start of the output"));
             }
             if out.len().saturating_add(len) > limit {
-                return Err(limit_error(limit));
+                return Err(Diagnostic::output_limit(limit));
             }
             let from = out.len().saturating_sub(distance);
             for i in 0..len {
@@ -369,10 +369,6 @@ fn fixed() -> Result<State> {
         lit: Huffman::new(&lit)?,
         dist: Huffman::new(&[5u8; 30])?,
     })
-}
-
-fn limit_error(limit: usize) -> Diagnostic {
-    Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
 }
 
 /// Inflates a whole buffer (for tests and small inputs).

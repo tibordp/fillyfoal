@@ -1,6 +1,8 @@
 //! Byte filters (PDF/PostScript/TIFF/Type 1): ASCIIHex, ASCII85, RunLength,
 //! PackBits, LZW (MSB-first, with early change), the PNG and TIFF
-//! predictors, and eexec.
+//! predictors, and eexec; the transfer encodings of mail and Usenet
+//! (base64, quoted-printable, uu/xxencoding, yEnc); and byte rearrangements
+//! (repeating-key XOR, byte swapping, and un-shuffling byte planes).
 //!
 //! Each is a [`ByteFilter`], fed a byte at a time; [`Bytes`] makes it an
 //! incremental [`Decode`]. [`Filter`] and [`Whole`] remain for codecs
@@ -8,6 +10,7 @@
 
 use crate::codec::pipeline::{Decode, Step};
 use crate::error::{Diagnostic, Result};
+use crate::text::hex_digit as hex_value;
 
 /// A filter over complete input.
 pub trait Filter: Clone + Send + 'static {
@@ -91,6 +94,11 @@ pub trait ByteFilter: Clone + Send + 'static {
 
     /// Rebases output positions after the first `n` bytes were dropped.
     fn release_output(&mut self, _n: usize) {}
+
+    /// A problem that did not stop decoding, once the data has ended.
+    fn warning(&self) -> Option<Diagnostic> {
+        None
+    }
 }
 
 /// Adapts a [`ByteFilter`] into a [`Decode`]: each step decodes about
@@ -190,12 +198,10 @@ impl<F: ByteFilter> Decode for Bytes<F> {
     fn release_output(&mut self, n: usize) {
         self.filter.release_output(n);
     }
-}
 
-fn hex_value(b: u8) -> Option<u8> {
-    char::from(b)
-        .to_digit(16)
-        .and_then(|d| u8::try_from(d).ok())
+    fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
+        self.filter.warning()
+    }
 }
 
 /// ASCIIHexDecode: hex digit pairs, whitespace ignored, `>` ends the data
@@ -752,6 +758,450 @@ impl ByteFilter for Eexec {
     }
 }
 
+/// The value of a base64 digit in the standard (`+/`) or URL-safe (`-_`)
+/// alphabet.
+pub fn base64_value(b: u8) -> Option<u8> {
+    match b {
+        b'A'..=b'Z' => Some(b.wrapping_sub(b'A')),
+        b'a'..=b'z' => Some(b.wrapping_sub(b'a').wrapping_add(26)),
+        b'0'..=b'9' => Some(b.wrapping_sub(b'0').wrapping_add(52)),
+        b'+' | b'-' => Some(62),
+        b'/' | b'_' => Some(63),
+        _ => None,
+    }
+}
+
+/// Base64 (RFC 4648, standard or URL-safe alphabet, mixed freely), with
+/// ASCII whitespace ignored. The data ends at the first `=` (padding); any
+/// other character outside the alphabet is an error giving its offset (the
+/// bytes decoded before it are kept). The bits of an incomplete final
+/// group that do not make a whole byte are dropped.
+#[derive(Clone, Copy, Default)]
+pub struct Base64 {
+    acc: u32,
+    bits: u32,
+    /// Input bytes seen.
+    pos: usize,
+}
+
+impl ByteFilter for Base64 {
+    fn byte(&mut self, b: u8, out: &mut Vec<u8>) -> Result<bool> {
+        let at = self.pos;
+        self.pos = at.saturating_add(1);
+        if b.is_ascii_whitespace() {
+            return Ok(true);
+        }
+        if b == b'=' {
+            return Ok(false);
+        }
+        let v = base64_value(b).ok_or_else(|| {
+            Diagnostic::malformed(format!(
+                "invalid base64 character {:?} at {at}",
+                char::from(b)
+            ))
+        })?;
+        self.acc = (self.acc << 6 | u32::from(v)) & 0x00ff_ffff;
+        self.bits = self.bits.saturating_add(6);
+        if self.bits >= 8 {
+            self.bits = self.bits.saturating_sub(8);
+            out.push((self.acc >> self.bits).to_le_bytes()[0]);
+        }
+        Ok(true)
+    }
+}
+
+/// Where a quoted-printable decoder is.
+#[derive(Clone, Copy, Default)]
+enum Qp {
+    #[default]
+    Text,
+    /// After a `=`.
+    Eq,
+    /// After a `=` and this byte.
+    EqThen(u8),
+}
+
+/// Quoted-printable (RFC 2045): `=XX` escapes (either case), and `=` at the
+/// end of a line (LF or CRLF) is a soft line break. A `=` that starts
+/// neither is kept as it is, and what follows it is decoded as text.
+#[derive(Clone, Copy, Default)]
+pub struct QuotedPrintable(Qp);
+
+impl QuotedPrintable {
+    fn text(&mut self, b: u8, out: &mut Vec<u8>) {
+        if b == b'=' {
+            self.0 = Qp::Eq;
+        } else {
+            out.push(b);
+        }
+    }
+}
+
+impl ByteFilter for QuotedPrintable {
+    fn byte(&mut self, b: u8, out: &mut Vec<u8>) -> Result<bool> {
+        match std::mem::take(&mut self.0) {
+            Qp::Text => self.text(b, out),
+            Qp::Eq if b == b'\n' => {}
+            Qp::Eq => self.0 = Qp::EqThen(b),
+            Qp::EqThen(b'\r') if b == b'\n' => {}
+            Qp::EqThen(h) => match (hex_value(h), hex_value(b)) {
+                (Some(h), Some(l)) => out.push(h << 4 | l),
+                _ => {
+                    // Not an escape: the `=` is literal, and both bytes
+                    // after it are text (the first may start an escape;
+                    // then the second is in the escape state, which does
+                    // not recurse further).
+                    out.push(b'=');
+                    self.text(h, out);
+                    self.byte(b, out)?;
+                }
+            },
+        }
+        Ok(true)
+    }
+
+    fn finish(&mut self, out: &mut Vec<u8>) -> Result<()> {
+        loop {
+            match std::mem::take(&mut self.0) {
+                Qp::Text => return Ok(()),
+                Qp::Eq => out.push(b'='),
+                Qp::EqThen(h) => {
+                    out.push(b'=');
+                    self.text(h, out);
+                }
+            }
+        }
+    }
+}
+
+/// The xxencode alphabet.
+pub const XX_ALPHABET: &[u8; 64] =
+    b"+-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+/// The value of an xxencoded character (0 for characters outside the
+/// alphabet).
+pub fn xx_value(b: u8) -> u8 {
+    XX_ALPHABET
+        .iter()
+        .position(|&c| c == b)
+        .and_then(|i| u8::try_from(i).ok())
+        .unwrap_or(0)
+}
+
+/// The value of a uuencoded character (space or backquote for 0).
+pub fn uu_value(b: u8) -> u8 {
+    b.wrapping_sub(0x20) & 0x3f
+}
+
+/// The body of a uuencoded (or xxencoded) file: lines of a length
+/// character, then groups of four 6-bit characters for three bytes each (a
+/// short final group is padded with zeros). Lines end with LF or CRLF;
+/// empty lines are skipped, and a line of just the zero-length character
+/// (backquote or space; `+` for xxencoding) ends the data. Lines holding
+/// fewer bytes than their length character says are reported once, as a
+/// warning; decoding goes on.
+#[derive(Clone, Copy, Default)]
+pub struct UuLines {
+    xx: bool,
+    /// The current line's decoded length (`None` before its first
+    /// character).
+    len: Option<u8>,
+    /// The line's first character.
+    first: u8,
+    /// Characters in the line so far (counting stops at 2).
+    chars: u8,
+    group: [u8; 4],
+    n: usize,
+    produced: u8,
+    /// A CR, held until the next byte shows whether it ends the line.
+    cr: bool,
+    short: bool,
+}
+
+impl UuLines {
+    pub fn uu() -> Self {
+        UuLines::default()
+    }
+
+    pub fn xx() -> Self {
+        UuLines {
+            xx: true,
+            ..UuLines::default()
+        }
+    }
+
+    fn char(&mut self, b: u8, out: &mut Vec<u8>) {
+        self.chars = self.chars.saturating_add(1).min(2);
+        let v = if self.xx { xx_value(b) } else { uu_value(b) };
+        if self.len.is_none() {
+            self.first = b;
+            self.len = Some(v);
+            return;
+        }
+        if let Some(slot) = self.group.get_mut(self.n) {
+            *slot = v;
+        }
+        self.n = self.n.saturating_add(1);
+        if self.n == 4 {
+            self.flush(out);
+        }
+    }
+
+    /// Decodes the group so far, zero-padded, up to the line's length.
+    fn flush(&mut self, out: &mut Vec<u8>) {
+        if self.n == 0 {
+            return;
+        }
+        let c = |i: usize| {
+            if i < self.n {
+                self.group.get(i).copied().unwrap_or(0)
+            } else {
+                0
+            }
+        };
+        let triple = [
+            c(0) << 2 | c(1) >> 4,
+            (c(1) & 0x0f) << 4 | c(2) >> 2,
+            (c(2) & 0x03) << 6 | c(3),
+        ];
+        let len = self.len.unwrap_or(0);
+        for b in triple {
+            if self.produced < len {
+                out.push(b);
+                self.produced = self.produced.saturating_add(1);
+            }
+        }
+        self.n = 0;
+    }
+
+    /// Ends a line; `false` at the terminating line.
+    fn end_line(&mut self, out: &mut Vec<u8>) -> bool {
+        let Some(len) = self.len else {
+            return true;
+        };
+        self.flush(out);
+        let last = self.chars == 1
+            && if self.xx {
+                self.first == b'+'
+            } else {
+                matches!(self.first, b'`' | b' ')
+            };
+        let short = self.short || self.produced != len;
+        *self = UuLines {
+            xx: self.xx,
+            short,
+            ..UuLines::default()
+        };
+        !last
+    }
+}
+
+impl ByteFilter for UuLines {
+    fn byte(&mut self, b: u8, out: &mut Vec<u8>) -> Result<bool> {
+        if std::mem::take(&mut self.cr) {
+            if b == b'\n' {
+                return Ok(self.end_line(out));
+            }
+            self.char(b'\r', out);
+        }
+        match b {
+            b'\n' => return Ok(self.end_line(out)),
+            b'\r' => self.cr = true,
+            _ => self.char(b, out),
+        }
+        Ok(true)
+    }
+
+    fn finish(&mut self, out: &mut Vec<u8>) -> Result<()> {
+        // A CR at the very end ends the last line too.
+        self.cr = false;
+        self.end_line(out);
+        Ok(())
+    }
+
+    fn warning(&self) -> Option<Diagnostic> {
+        self.short
+            .then(|| Diagnostic::malformed("line shorter than its length character says"))
+    }
+}
+
+/// yEnc 1.3 data: each byte is its value plus 42, and critical bytes are
+/// escaped as `=` and the value plus 106. CR and LF are line breaks, not
+/// data (even right after a `=`). The `=ybegin`/`=ypart`/`=yend` lines are
+/// the caller's to strip: this decodes the lines between them.
+#[derive(Clone, Copy, Default)]
+pub struct YEnc {
+    escape: bool,
+}
+
+impl ByteFilter for YEnc {
+    fn byte(&mut self, b: u8, out: &mut Vec<u8>) -> Result<bool> {
+        match b {
+            b'\r' | b'\n' => {}
+            b'=' if !self.escape => self.escape = true,
+            _ => {
+                let v = if self.escape { b.wrapping_sub(64) } else { b };
+                self.escape = false;
+                out.push(v.wrapping_sub(42));
+            }
+        }
+        Ok(true)
+    }
+}
+
+/// XOR with a repeating key, from its first byte at the first data byte; an
+/// empty key leaves the data as it is.
+#[derive(Clone)]
+pub struct Xor {
+    key: Vec<u8>,
+    pos: usize,
+}
+
+impl Xor {
+    pub fn new(key: &[u8]) -> Self {
+        Xor {
+            key: key.to_vec(),
+            pos: 0,
+        }
+    }
+}
+
+impl ByteFilter for Xor {
+    fn byte(&mut self, b: u8, out: &mut Vec<u8>) -> Result<bool> {
+        let k = self.key.get(self.pos).copied().unwrap_or(0);
+        self.pos = self.pos.saturating_add(1);
+        if self.pos >= self.key.len() {
+            self.pos = 0;
+        }
+        out.push(b ^ k);
+        Ok(true)
+    }
+}
+
+/// Reverses the bytes of each `width`-byte group (2: a 16-bit byte swap,
+/// 4: 32-bit); an incomplete final group is left as it is. Widths are
+/// clamped to 1..=8.
+#[derive(Clone, Copy)]
+pub struct ByteSwap {
+    width: usize,
+    group: [u8; 8],
+    n: usize,
+}
+
+impl ByteSwap {
+    pub fn new(width: usize) -> Self {
+        ByteSwap {
+            width: width.clamp(1, 8),
+            group: [0; 8],
+            n: 0,
+        }
+    }
+}
+
+impl ByteFilter for ByteSwap {
+    fn byte(&mut self, b: u8, out: &mut Vec<u8>) -> Result<bool> {
+        if let Some(slot) = self.group.get_mut(self.n) {
+            *slot = b;
+        }
+        self.n = self.n.saturating_add(1);
+        if self.n >= self.width {
+            out.extend(
+                self.group
+                    .get(..self.width)
+                    .unwrap_or_default()
+                    .iter()
+                    .rev(),
+            );
+            self.n = 0;
+        }
+        Ok(true)
+    }
+
+    fn finish(&mut self, out: &mut Vec<u8>) -> Result<()> {
+        out.extend_from_slice(self.group.get(..self.n).unwrap_or_default());
+        self.n = 0;
+        Ok(())
+    }
+}
+
+/// Un-shuffles byte planes (HDF5's shuffle filter, Parquet's
+/// `BYTE_STREAM_SPLIT`): the input holds the first byte of every
+/// `width`-byte element, then every second byte, and so on; the output is
+/// the elements. Bytes past the last whole plane (HDF5 leaves `len % width`
+/// bytes at the end unshuffled) are copied as they are.
+///
+/// Where an output byte comes from depends on the total input length, so
+/// nothing is produced until all input is in (decoded lazily, the first
+/// read reads the whole encoded span). From then on output is produced a
+/// bounded step at a time, and all of it can be released as it goes.
+#[derive(Clone, Copy)]
+pub struct Unshuffle {
+    width: usize,
+    /// Output bytes produced.
+    next: usize,
+    consumed: usize,
+}
+
+impl Unshuffle {
+    /// `width` is the element size (0 is taken as 1: a plain copy).
+    pub fn new(width: usize) -> Self {
+        Unshuffle {
+            width: width.max(1),
+            next: 0,
+            consumed: 0,
+        }
+    }
+}
+
+impl Decode for Unshuffle {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
+        if !eof {
+            return Err(Diagnostic::malformed("waiting for the whole input"));
+        }
+        let len = input.len();
+        self.consumed = len;
+        let plane = len.checked_div(self.width).unwrap_or(0);
+        let body = plane.saturating_mul(self.width);
+        let end = self.next.saturating_add(step.max(1)).min(len);
+        while self.next < end {
+            let j = self.next;
+            // Byte `j % width` of element `j / width` is in plane
+            // `j % width`.
+            let src = if j < body {
+                j.checked_rem(self.width)
+                    .unwrap_or(0)
+                    .saturating_mul(plane)
+                    .saturating_add(j.checked_div(self.width).unwrap_or(0))
+            } else {
+                j
+            };
+            out.push(input.get(src).copied().unwrap_or(0));
+            self.next = j.saturating_add(1);
+        }
+        check_limit(out, limit)?;
+        Ok(if self.next >= len {
+            Step::Done
+        } else {
+            Step::More
+        })
+    }
+
+    fn consumed(&self) -> usize {
+        self.consumed
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len
+    }
+}
+
 /// Type 1 decryption with seed `r`, dropping `skip` leading bytes (eexec:
 /// 55665 and 4; charstrings: 4330 and lenIV).
 pub fn type1_decrypt(data: &[u8], mut r: u16, skip: usize) -> Vec<u8> {
@@ -873,5 +1323,162 @@ mod tests {
     fn limits() {
         assert!(apply(RunLength::default(), &[129, b'x'], 100).is_err());
         assert!(apply(RunLength::default(), &[129, b'x'], 128).is_ok());
+    }
+
+    use crate::codec::Codec;
+    use crate::codec::pipeline::Status;
+
+    /// Decodes `input` with `codec` all at once, and again fed one byte at
+    /// a time with one-byte steps (as a lazy source decodes); both must
+    /// agree. Returns the output and the warning, if any.
+    #[allow(clippy::indexing_slicing, clippy::panic)]
+    fn both_ways(codec: &Codec, input: &[u8]) -> (Vec<u8>, Option<String>) {
+        let mut d = codec.decoder().unwrap();
+        let whole = crate::codec::pipeline::decode_all(d.as_mut(), input, 1 << 20).unwrap();
+        let warning = d.warning(&whole).map(|w| w.message);
+        let mut d = codec.decoder().unwrap();
+        let mut out = Vec::new();
+        'feed: for k in 0..=input.len() {
+            loop {
+                match d.decode(&input[..k], k == input.len(), &mut out, 1, 1 << 20) {
+                    Ok(Status::More) => {}
+                    Ok(Status::NeedInput) => break,
+                    Ok(Status::Done) => break 'feed,
+                    Err(e) => panic!("{e}"),
+                }
+            }
+        }
+        assert_eq!(out, whole, "{codec:?} fed incrementally");
+        assert_eq!(d.consumed(), input.len());
+        (whole, warning)
+    }
+
+    fn decoded(codec: &Codec, input: &[u8]) -> Vec<u8> {
+        both_ways(codec, input).0
+    }
+
+    #[test]
+    fn base64() {
+        let b64 = |s: &[u8]| decoded(&Codec::Base64, s);
+        assert_eq!(b64(b"SGVsbG8sIFdvcmxkIQ=="), b"Hello, World!");
+        // Line breaks (LF and CRLF) and other whitespace are ignored.
+        assert_eq!(b64(b"SGVs\r\nbG8s\nIFdv cmxk\tIQ=="), b"Hello, World!");
+        // Without padding, and truncated mid-group: whole bytes only.
+        assert_eq!(b64(b"SGVsbG8"), b"Hello");
+        assert_eq!(b64(b"SGVsbG"), b"Hell");
+        assert_eq!(b64(b"S"), b"");
+        // The data ends at the padding; what follows is ignored.
+        assert_eq!(b64(b"QQ==QUJD"), b"A");
+        assert_eq!(b64(b"QUI=\n!!"), b"AB");
+        // Both alphabets.
+        assert_eq!(b64(b"-_-_"), [0xfb, 0xff, 0xbf]);
+        assert_eq!(b64(b"+/+/"), [0xfb, 0xff, 0xbf]);
+        assert_eq!(b64(b""), b"");
+        // An invalid character stops decoding, with its offset.
+        let mut d = Codec::Base64.decoder().unwrap();
+        let mut out = Vec::new();
+        let e = d.decode(b"QUJD\nR*xx", true, &mut out, 1 << 20, 1 << 20);
+        assert_eq!(out, b"ABC");
+        assert_eq!(e.unwrap_err().message, "invalid base64 character '*' at 6");
+        assert!(apply(Base64::default(), b"QUJD", 2).is_err());
+    }
+
+    #[test]
+    fn quoted_printable() {
+        let qp = |s: &[u8]| decoded(&Codec::QuotedPrintable, s);
+        assert_eq!(qp(b"a=3Db=\r\nc=\nd=4"), b"a=bcd=4");
+        assert_eq!(qp(b"caf=C3=A9 =e2=82=ac"), "café €".as_bytes());
+        // Hard line breaks are data.
+        assert_eq!(qp(b"one\r\ntwo\n"), b"one\r\ntwo\n");
+        // A `=` that starts no escape is kept, and what follows is text
+        // (possibly another escape).
+        assert_eq!(qp(b"=4g"), b"=4g");
+        assert_eq!(qp(b"==41"), b"=A");
+        assert_eq!(qp(b"=\rX"), b"=\rX");
+        assert_eq!(qp(b"x=\r"), b"x=\r");
+        assert_eq!(qp(b"x="), b"x=");
+        assert_eq!(qp(b"x=="), b"x==");
+        assert_eq!(qp(b"x==4"), b"x==4");
+        assert_eq!(qp(b"=\r\n=\n"), b"");
+    }
+
+    #[test]
+    fn uu_and_xx() {
+        // `uuencode` output for "Hello, World!" and "Cat", then the
+        // zero-length line and something after it.
+        let body = b"-2&5L;&\\L(%=O<FQD(0  \n#0V%T\n`\nend\n";
+        assert_eq!(
+            both_ways(&Codec::Uu, body),
+            (b"Hello, World!Cat".to_vec(), None)
+        );
+        // CRLF line ends, empty lines, a space as the zero-length line.
+        let crlf = b"#0V%T\r\n\r\n#0V%T\r\n \r\nignored";
+        assert_eq!(decoded(&Codec::Uu, crlf), b"CatCat");
+        // Truncated: no terminator, last line cut short (zero-padded, and
+        // reported).
+        let (out, warning) = both_ways(&Codec::Uu, b"-2&5L;&\\L(%=O");
+        assert_eq!(out, b"Hello, Wo");
+        assert_eq!(
+            warning.as_deref(),
+            Some("line shorter than its length character says")
+        );
+        // A final line without a line end.
+        assert_eq!(decoded(&Codec::Uu, b"#0V%T"), b"Cat");
+        assert_eq!(decoded(&Codec::Uu, b"#0V%T\r"), b"Cat");
+        // The same with the xxencode alphabet, ending at `+`.
+        let xx = b"BG4JgP4wg63RjQalY6E++\n+\nBG4JgP4wg63RjQalY6E++\n";
+        assert_eq!(both_ways(&Codec::Xx, xx), (b"Hello, World!".to_vec(), None));
+    }
+
+    #[test]
+    fn yenc() {
+        // 0x00 -> '*', 0xd6 -> NUL (escaped as "=@"), 0xe0 -> LF ("=J"),
+        // 0x13 -> '=' ("=}"); line breaks (even after `=`) are not data.
+        assert_eq!(
+            decoded(&Codec::YEnc, b"*=@\r\n=J=}\n=\r\nJ+"),
+            [0x00, 0xd6, 0xe0, 0x13, 0xe0, 0x01]
+        );
+        // A trailing `=` produces nothing.
+        assert_eq!(decoded(&Codec::YEnc, b"+="), [0x01]);
+    }
+
+    #[test]
+    fn rearrangements() {
+        // Two planes of three 2-byte elements, plus a remainder.
+        let shuffled = [1, 3, 5, 2, 4, 6, 9];
+        assert_eq!(
+            decoded(&Codec::Unshuffle { width: 2 }, &shuffled),
+            [1, 2, 3, 4, 5, 6, 9]
+        );
+        // Little-endian f32s 1.0 and 2.0, BYTE_STREAM_SPLIT.
+        let split = [0, 0, 0, 0, 0x80, 0, 0x3f, 0x40];
+        assert_eq!(
+            decoded(&Codec::Unshuffle { width: 4 }, &split),
+            [0, 0, 0x80, 0x3f, 0, 0, 0, 0x40]
+        );
+        assert_eq!(decoded(&Codec::Unshuffle { width: 4 }, &[1, 2]), [1, 2]);
+        assert_eq!(decoded(&Codec::Unshuffle { width: 0 }, &[1, 2]), [1, 2]);
+        assert_eq!(decoded(&Codec::Unshuffle { width: 3 }, &[]), [0u8; 0]);
+        let xor = Codec::Xor {
+            key: vec![0x50, 0x01],
+        };
+        assert_eq!(
+            decoded(&xor, &[0x50, 0x01, 0x51, 0x03, 0xff]),
+            [0, 0, 1, 2, 0xaf]
+        );
+        assert_eq!(decoded(&Codec::Xor { key: vec![] }, &[7, 8]), [7, 8]);
+        assert_eq!(decoded(&Codec::ByteSwap { width: 2 }, b"ABCDE"), b"BADCE");
+        assert_eq!(
+            decoded(&Codec::ByteSwap { width: 4 }, b"\x40\x12\x37\x80\x01\x02"),
+            b"\x80\x37\x12\x40\x01\x02"
+        );
+        assert!(
+            crate::codec::pipeline::decode_all(
+                Codec::Unshuffle { width: 2 }.decoder().unwrap().as_mut(),
+                &[0; 8],
+                4
+            )
+            .is_err()
+        );
     }
 }

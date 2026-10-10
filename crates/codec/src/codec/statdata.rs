@@ -102,9 +102,7 @@ impl Decode for SpssBytecode {
                 return Ok(Step::Done);
             }
             if out.len().saturating_add(64) > limit {
-                return Err(Diagnostic::limit(format!(
-                    "decompressed data exceeds {limit:#x} bytes"
-                )));
+                return Err(Diagnostic::output_limit(limit));
             }
             if self.block(input, eof, out)?.is_none() {
                 return Err(Diagnostic::malformed("waiting for input"));
@@ -436,10 +434,7 @@ mod tests {
     }
 
     fn hex(s: &str) -> Vec<u8> {
-        (0..s.len())
-            .step_by(2)
-            .filter_map(|i| u8::from_str_radix(s.get(i..i + 2)?, 16).ok())
-            .collect()
+        crate::text::unhex(s).unwrap_or_default()
     }
 
     /// Data records of a `.sav`: everything after the dictionary

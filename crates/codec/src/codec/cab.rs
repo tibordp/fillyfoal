@@ -127,9 +127,7 @@ impl FolderDecoder {
 
 fn check_limit(len: usize, limit: usize) -> Result<()> {
     if len > limit {
-        Err(Diagnostic::limit(format!(
-            "decompressed data exceeds {limit:#x} bytes"
-        )))
+        Err(Diagnostic::output_limit(limit))
     } else {
         Ok(())
     }

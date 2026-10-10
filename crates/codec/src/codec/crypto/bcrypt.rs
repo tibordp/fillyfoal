@@ -484,10 +484,7 @@ const S: [[u32; 256]; 4] = [
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-
-    fn hex(b: &[u8]) -> String {
-        b.iter().map(|x| format!("{x:02x}")).collect()
-    }
+    use crate::text::hex_lower as hex;
 
     #[test]
     fn blowfish_vector() {

@@ -40,10 +40,6 @@ fn bad(what: &str) -> Diagnostic {
     Diagnostic::malformed(format!("StuffIt: {what}"))
 }
 
-fn too_big(limit: usize) -> Diagnostic {
-    Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
-}
-
 /// A compressed fork.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Params {
@@ -1551,7 +1547,7 @@ impl pipeline::Decoder for Decoder {
         let fresh = out.get(mark..).unwrap_or_default();
         self.crc16 = crate::codec::crc::CRC16_ARC.update(self.crc16, fresh);
         if out.len() > limit {
-            return Err(too_big(limit));
+            return Err(Diagnostic::output_limit(limit));
         }
         match status {
             // The stream has ended; the rest of the input is padding,

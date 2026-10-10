@@ -77,10 +77,7 @@ pub fn chacha20(key: &[u8], nonce: &[u8], counter: u32, data: &[u8]) -> Option<V
 )]
 mod tests {
     use super::*;
-
-    fn hex(b: &[u8]) -> String {
-        b.iter().map(|x| format!("{x:02x}")).collect()
-    }
+    use crate::text::hex_lower as hex;
 
     #[test]
     fn reference_library() {

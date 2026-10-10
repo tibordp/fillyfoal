@@ -220,9 +220,7 @@ impl Decode for MeatPack {
             };
             self.pos = self.pos.saturating_add(n);
             if self.produced > limit {
-                return Err(Diagnostic::limit(format!(
-                    "decompressed data exceeds {limit:#x} bytes"
-                )));
+                return Err(Diagnostic::output_limit(limit));
             }
         }
     }

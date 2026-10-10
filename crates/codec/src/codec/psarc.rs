@@ -108,9 +108,7 @@ impl Decoder {
             };
         };
         if self.produced.saturating_add(want) > crate::bytes::to_u64(limit) {
-            return Err(Diagnostic::limit(format!(
-                "decompressed data exceeds {limit:#x} bytes"
-            )));
+            return Err(Diagnostic::output_limit(limit));
         }
         let want = usize::try_from(want).unwrap_or(usize::MAX);
         let kind = if stored == 0 || u64::from(stored) == crate::bytes::to_u64(want) {

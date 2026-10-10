@@ -19,10 +19,6 @@ use std::sync::Arc;
 use crate::codec::pipeline::{Decode, Step, Streaming, decode_all};
 use crate::error::{Diagnostic, Result};
 
-fn too_big(limit: usize) -> Diagnostic {
-    Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
-}
-
 struct Bits<'a> {
     data: &'a [u8],
     /// Position in bits.
@@ -266,7 +262,7 @@ impl Decode for Explode {
         if let Some(s) = size
             && s.saturating_sub(self.produced) > limit.saturating_sub(out.len())
         {
-            return Err(too_big(limit));
+            return Err(Diagnostic::output_limit(limit));
         }
         let (low_bits, min_len) = (
             if self.params.large_window { 7 } else { 6 },
@@ -319,12 +315,12 @@ impl Decode for Explode {
                     len = len.min(s.saturating_sub(self.produced));
                 }
                 if out.len().saturating_add(len) > limit {
-                    return Err(too_big(limit));
+                    return Err(Diagnostic::output_limit(limit));
                 }
                 copy_back(out, dist, len);
             }
             if out.len() > limit {
-                return Err(too_big(limit));
+                return Err(Diagnostic::output_limit(limit));
             }
             self.bit = bits.pos;
             self.produced = self
@@ -490,7 +486,7 @@ impl Decode for DclExplode {
                     return Err(bad("distance before the start of the output"));
                 }
                 if out.len().saturating_add(len) > limit {
-                    return Err(too_big(limit));
+                    return Err(Diagnostic::output_limit(limit));
                 }
                 copy_back(out, dist, len);
             } else {
@@ -501,7 +497,7 @@ impl Decode for DclExplode {
                 };
                 out.push(u8::try_from(b).unwrap_or(0));
                 if out.len() > limit {
-                    return Err(too_big(limit));
+                    return Err(Diagnostic::output_limit(limit));
                 }
             }
             self.bit = bits.pos;

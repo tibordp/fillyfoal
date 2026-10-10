@@ -717,9 +717,7 @@ fn compressed_block(
             return Err(bad("match offset beyond the window"));
         }
         if out.len().saturating_add(match_len) > limit {
-            return Err(Diagnostic::limit(format!(
-                "decompressed data exceeds {limit:#x} bytes"
-            )));
+            return Err(Diagnostic::output_limit(limit));
         }
         let from = out.len().saturating_sub(offset);
         for k in 0..match_len {
@@ -861,10 +859,6 @@ pub fn xxh64(data: &[u8], seed: u64) -> u64 {
     let mut h = Xxh64::new(seed);
     h.update(data);
     h.finish()
-}
-
-fn limit_error(limit: usize) -> Diagnostic {
-    Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
 }
 
 /// The frame being decoded.
@@ -1043,14 +1037,14 @@ impl Zstd {
                     .get(pos..pos.saturating_add(size))
                     .ok_or_else(|| bad("truncated raw block"))?;
                 if before.saturating_add(size) > limit {
-                    return Err(limit_error(limit));
+                    return Err(Diagnostic::output_limit(limit));
                 }
                 out.extend_from_slice(body);
             }
             1 => {
                 let b = *input.get(pos).ok_or_else(|| bad("truncated RLE block"))?;
                 if before.saturating_add(size) > limit {
-                    return Err(limit_error(limit));
+                    return Err(Diagnostic::output_limit(limit));
                 }
                 out.resize(before.saturating_add(size), b);
             }
@@ -1063,7 +1057,7 @@ impl Zstd {
             _ => return Err(bad("reserved block type")),
         }
         if out.len() > limit {
-            return Err(limit_error(limit));
+            return Err(Diagnostic::output_limit(limit));
         }
         let block_out = out.get(before..).unwrap_or_default();
         frame.produced = frame

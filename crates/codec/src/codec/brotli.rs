@@ -112,9 +112,7 @@ impl Stream {
         }
         let mlen = mlen.saturating_add(1);
         if out.len().saturating_add(mlen) > limit {
-            return Err(Diagnostic::limit(format!(
-                "decompressed data exceeds {limit:#x} bytes"
-            )));
+            return Err(Diagnostic::output_limit(limit));
         }
         if !last && b.bit()? {
             b.align()?;

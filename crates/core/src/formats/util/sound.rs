@@ -13,40 +13,11 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Radix, Value, lookup};
+use crate::value::{EnumTable, FlagTable, Value};
 
-/// An unsigned decimal value.
-pub fn uint(value: impl Into<u64>, bits: u8) -> Value {
-    Value::UInt {
-        value: value.into(),
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-/// An unsigned hexadecimal value.
-pub fn hex(value: impl Into<u64>, bits: u8) -> Value {
-    Value::UInt {
-        value: value.into(),
-        bits,
-        radix: Radix::Hex,
-    }
-}
-
-/// An enumerated value.
-pub fn enumerated(raw: impl Into<u64>, bits: u8, table: EnumTable) -> Value {
-    let raw = raw.into();
-    Value::Enum {
-        raw,
-        bits,
-        name: lookup(table, raw),
-    }
-}
-
-/// Text value.
-pub fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
+pub use super::floats::f80_be;
+pub use super::val::enumv as enumerated;
+pub use super::val::{hex, text, uint};
 
 /// A leaf node with a value.
 pub fn leaf(name: impl Into<Cow<'static, str>>, span: Span, value: Value) -> Node {
@@ -56,14 +27,7 @@ pub fn leaf(name: impl Into<Cow<'static, str>>, span: Span, value: Value) -> Nod
 /// A four-character code as text, trailing spaces and NULs removed,
 /// non-printable bytes escaped.
 pub fn fourcc(bytes: &[u8]) -> String {
-    let mut out = String::new();
-    for &b in bytes {
-        if b.is_ascii_graphic() || b == b' ' {
-            out.push(char::from(b));
-        } else {
-            out.push_str(&format!("\\x{b:02x}"));
-        }
-    }
+    let out = super::fmt::fourcc(bytes);
     let trimmed = out.trim_end_matches([' ', '\0']);
     if trimmed.is_empty() {
         out
@@ -97,24 +61,6 @@ pub fn duration_of(count: u64, rate: u64) -> Option<String> {
 /// A channel count for summaries: "2 ch".
 pub fn channels(n: impl Into<u64>) -> String {
     format!("{} ch", n.into())
-}
-
-/// An IEEE 754 80-bit extended float (as in AIFF sample rates), big-endian.
-pub fn f80_be(b: &[u8]) -> Option<f64> {
-    let b: [u8; 10] = crate::bytes::array(b, 0)?;
-    let [e0, e1, m @ ..] = b;
-    let sign = if e0 & 0x80 != 0 { -1.0 } else { 1.0 };
-    let exponent = i32::from(u16::from_be_bytes([e0 & 0x7f, e1]));
-    let mantissa = u64::from_be_bytes(m);
-    if exponent == 0 && mantissa == 0 {
-        return Some(0.0);
-    }
-    if exponent == 0x7fff {
-        return Some(f64::NAN);
-    }
-    // value = mantissa * 2^(exponent - 16383 - 63)
-    let shift = exponent.saturating_sub(16383 + 63);
-    Some(sign * mantissa as f64 * 2f64.powi(shift))
 }
 
 /// Formats a sample rate without a needless fraction.
@@ -163,14 +109,8 @@ pub fn latin1_z(data: &[u8]) -> String {
 
 /// Shortens text for a summary line.
 pub fn clip(s: &str, max: usize) -> String {
-    let s = s.trim();
-    if s.chars().count() <= max {
-        return s.replace(['\r', '\n'], " ");
-    }
-    let mut out: String = s.chars().take(max).collect();
-    out = out.replace(['\r', '\n'], " ");
-    out.push('…');
-    out
+    // Each line break becomes one space, so the clip is unchanged.
+    super::fmt::clip(&s.trim().replace(['\r', '\n'], " "), max)
 }
 
 /// Reads up to `max` bytes of `span` as text (for summaries).

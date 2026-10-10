@@ -42,16 +42,17 @@ const MAGIC: &[u8; 6] = b"\xfd7zXZ\0";
 
 /// A multibyte integer (7 bits per byte, little-endian groups).
 fn varint(data: &[u8], pos: &mut usize) -> Result<u64> {
-    let mut v = 0u64;
-    for i in 0..9u32 {
-        let b = *data.get(*pos).ok_or_else(|| bad("truncated integer"))?;
-        *pos = pos.saturating_add(1);
-        v |= u64::from(b & 0x7f) << i.wrapping_mul(7);
-        if b & 0x80 == 0 {
-            return Ok(v);
-        }
-    }
-    Err(bad("integer too long"))
+    // At most nine bytes (63 bits).
+    let rest = data.get(*pos..).unwrap_or_default();
+    let (v, n) = crate::bytes::uleb128(rest.get(..9).unwrap_or(rest)).ok_or_else(|| {
+        bad(if rest.len() < 9 {
+            "truncated integer"
+        } else {
+            "integer too long"
+        })
+    })?;
+    *pos = pos.saturating_add(n);
+    Ok(v)
 }
 
 /// Rounds input position `pos` up to a multiple of four in the file, whose

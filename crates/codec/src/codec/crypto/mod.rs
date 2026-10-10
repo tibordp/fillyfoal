@@ -17,7 +17,7 @@ pub mod stream;
 pub mod twofish;
 
 pub use cipher::{
-    Aes, BlockCipher, Des, Rc2, TripleDes, aes_ctr_le, cbc_decrypt, rc4, unpad_pkcs7,
+    Aes, BlockCipher, Des, Rc2, Rc4State, TripleDes, aes_ctr_le, cbc_decrypt, rc4, unpad_pkcs7,
 };
 pub use hash::{Hash, Hmac, Md5, Pbkdf2, Sha1, Sha256, Sha384, Sha512, hmac, pbkdf2};
 
@@ -171,16 +171,10 @@ pub fn bmp_password(password: &[u8]) -> Vec<u8> {
 )]
 mod tests {
     use super::*;
-
-    fn hex(b: &[u8]) -> String {
-        b.iter().map(|x| format!("{x:02x}")).collect()
-    }
+    use crate::text::hex_lower as hex;
 
     fn unhex(s: &str) -> Vec<u8> {
-        (0..s.len())
-            .step_by(2)
-            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
-            .collect()
+        crate::text::unhex(s).unwrap()
     }
 
     #[test]

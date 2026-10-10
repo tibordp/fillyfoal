@@ -147,9 +147,7 @@ impl Lzw {
             self.stack.push(self.fin);
             out.extend(self.stack.iter().rev());
             if out.len() > limit {
-                return Err(Diagnostic::limit(format!(
-                    "decompressed data exceeds {limit:#x} bytes"
-                )));
+                return Err(Diagnostic::output_limit(limit));
             }
             if self.free < self.max_max_code {
                 if let Some(p) = self.prefix.get_mut(self.free) {

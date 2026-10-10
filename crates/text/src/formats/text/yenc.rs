@@ -16,7 +16,9 @@ use crate::node::Node;
 use crate::span::{Origin, Span};
 use crate::value::{Radix, Value};
 
-use super::decode::{self, Decoded};
+use crate::codec::Codec;
+
+use super::decode;
 use super::scan::Lines;
 use super::{plural, text_node};
 
@@ -114,64 +116,6 @@ fn parse(line: &[u8], keyword: &[u8]) -> Option<YLine> {
     Some(y)
 }
 
-/// Decodes yEnc-encoded lines: each byte is its value plus 42, and critical
-/// bytes are escaped as `=` and the value plus 106. Line breaks are not
-/// data.
-pub fn ydecode(data: &[u8]) -> Vec<u8> {
-    let mut y = YDecoder::new(Expect::default(), data.len());
-    decode::Step::step(&mut y, data, usize::MAX);
-    y.out
-}
-
-/// [`ydecode`] a bounded number of bytes at a time, with the decoded size
-/// checked against the promise at the end.
-struct YDecoder {
-    expect: Expect,
-    pos: usize,
-    escape: bool,
-    out: Vec<u8>,
-}
-
-impl YDecoder {
-    fn new(expect: Expect, len: usize) -> Self {
-        YDecoder {
-            expect,
-            pos: 0,
-            escape: false,
-            out: Vec::with_capacity(len),
-        }
-    }
-}
-
-impl decode::Step for YDecoder {
-    fn step(&mut self, data: &[u8], limit: usize) -> bool {
-        let end = self.pos.saturating_add(limit).min(data.len());
-        for &b in data.get(self.pos..end).unwrap_or_default() {
-            match b {
-                b'\r' | b'\n' => continue,
-                b'=' if !self.escape => {
-                    self.escape = true;
-                    continue;
-                }
-                _ => {}
-            }
-            let v = if self.escape { b.wrapping_sub(64) } else { b };
-            self.escape = false;
-            self.out.push(v.wrapping_sub(42));
-        }
-        self.pos = end;
-        self.pos >= data.len()
-    }
-
-    fn finish(self) -> Decoded {
-        let error = self.expect.check(&self.out);
-        Decoded {
-            bytes: self.out,
-            error,
-        }
-    }
-}
-
 /// What a block's trailer and headers promise about its decoded bytes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct Expect {
@@ -180,10 +124,9 @@ struct Expect {
 }
 
 impl Expect {
-    /// A mismatch between the size of `data` and the promise (the CRC is
-    /// checked separately, see [`crc_node`]).
-    fn check(&self, data: &[u8]) -> Option<String> {
-        let len = crate::bytes::to_u64(data.len());
+    /// A mismatch between the decoded length `len` and the promise (the
+    /// CRC is checked separately, see [`crc_node`]).
+    fn check(&self, len: u64) -> Option<String> {
         if let Some(size) = self.size
             && size != len
         {
@@ -469,8 +412,12 @@ async fn block_fields(cx: Cx, b: Block) -> Result<()> {
 /// Decodes a block's body into a derived source (once), with its size
 /// checked.
 async fn decode_block(cx: &Cx, b: &Block) -> Result<(Span, Option<Diagnostic>)> {
-    let expect = b.expect();
-    decode::derive_stepped(cx, b.body, "ydecode", |len| YDecoder::new(expect, len)).await
+    let (span, error) = decode::derive_codec(cx, b.body, &Codec::YEnc).await?;
+    let error = error.or_else(|| {
+        let e = b.expect().check(span.len)?;
+        Some(Diagnostic::malformed(format!("ydecode: {e}")).at(b.body))
+    });
+    Ok((span, error))
 }
 
 /// The CRC-32 of the bytes of `span`, checked against the trailer.
@@ -585,6 +532,8 @@ mod tests {
                 .is_some_and(|y| y.crc("crc32") == Some(0xabcd_ef12))
         );
         // 0x00 -> '*', 0xd6 -> NUL (escaped as "=@"), 0xe0 -> LF ("=J").
-        assert_eq!(ydecode(b"*=@\r\n=J"), [0x00, 0xd6, 0xe0]);
+        let decoded =
+            crate::codec::filters::apply(crate::codec::filters::YEnc::default(), b"*=@\r\n=J", 9);
+        assert_eq!(decoded.ok().unwrap_or_default(), [0x00, 0xd6, 0xe0]);
     }
 }

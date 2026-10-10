@@ -306,35 +306,48 @@ pub fn aes_ctr_le(aes: &Aes, data: &[u8]) -> Vec<u8> {
 // ---------------------------------------------------------------------------
 // RC4
 
-pub fn rc4(key: &[u8], data: &[u8]) -> Vec<u8> {
-    let mut s: [u8; 256] = std::array::from_fn(|i| u8::try_from(i).unwrap_or(0));
-    if !key.is_empty() {
-        let mut j = 0u8;
-        for i in 0..256usize {
-            let k = key
-                .get(i.checked_rem(key.len()).unwrap_or(0))
-                .copied()
-                .unwrap_or(0);
-            j = j
-                .wrapping_add(s.get(i).copied().unwrap_or(0))
-                .wrapping_add(k);
-            s.swap(i, usize::from(j));
+/// An RC4 keystream (an empty key leaves the identity permutation).
+#[derive(Clone)]
+pub struct Rc4State {
+    s: [u8; 256],
+    i: u8,
+    j: u8,
+}
+
+impl Rc4State {
+    /// The key schedule.
+    pub fn new(key: &[u8]) -> Self {
+        let mut s: [u8; 256] = std::array::from_fn(|i| u8::try_from(i).unwrap_or(0));
+        if !key.is_empty() {
+            let mut j = 0u8;
+            for i in 0..256usize {
+                let k = key
+                    .get(i.checked_rem(key.len()).unwrap_or(0))
+                    .copied()
+                    .unwrap_or(0);
+                j = j
+                    .wrapping_add(s.get(i).copied().unwrap_or(0))
+                    .wrapping_add(k);
+                s.swap(i, usize::from(j));
+            }
         }
+        Rc4State { s, i: 0, j: 0 }
     }
-    let (mut i, mut j) = (0u8, 0u8);
-    data.iter()
-        .map(|&b| {
-            i = i.wrapping_add(1);
-            j = j.wrapping_add(s.get(usize::from(i)).copied().unwrap_or(0));
-            s.swap(usize::from(i), usize::from(j));
-            let t = s
-                .get(usize::from(i))
-                .copied()
-                .unwrap_or(0)
-                .wrapping_add(s.get(usize::from(j)).copied().unwrap_or(0));
-            b ^ s.get(usize::from(t)).copied().unwrap_or(0)
-        })
-        .collect()
+
+    /// `b` XORed with the next keystream byte.
+    pub fn apply(&mut self, b: u8) -> u8 {
+        let get = |s: &[u8; 256], x: u8| s.get(usize::from(x)).copied().unwrap_or(0);
+        self.i = self.i.wrapping_add(1);
+        self.j = self.j.wrapping_add(get(&self.s, self.i));
+        self.s.swap(usize::from(self.i), usize::from(self.j));
+        let t = get(&self.s, self.i).wrapping_add(get(&self.s, self.j));
+        b ^ get(&self.s, t)
+    }
+}
+
+pub fn rc4(key: &[u8], data: &[u8]) -> Vec<u8> {
+    let mut state = Rc4State::new(key);
+    data.iter().map(|&b| state.apply(b)).collect()
 }
 
 // ---------------------------------------------------------------------------

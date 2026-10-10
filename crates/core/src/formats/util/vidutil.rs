@@ -24,7 +24,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value};
+use crate::value::{EnumTable, Value};
 
 pub mod audio;
 pub mod av1;
@@ -79,29 +79,19 @@ pub fn seconds_f64(seconds: f64) -> String {
     seconds_ms(millis)
 }
 
-/// `n` followed by a noun, pluralised with an `s` unless `n` is 1.
-pub fn plural(n: impl Into<u64>, noun: &str) -> String {
-    let n = n.into();
-    if n == 1 {
-        format!("1 {noun}")
-    } else {
-        format!("{n} {noun}s")
-    }
-}
+pub use super::fmt::{plural, uuid};
 
-/// A four-character code, with non-printable bytes escaped.
+/// A four-character code, with non-printable bytes escaped, except that
+/// QuickTime's 0xA9 (the first byte of user-data atoms such as `©nam`) is
+/// shown as `©`.
 pub fn fourcc(bytes: &[u8]) -> String {
-    let mut out = String::new();
-    for &b in bytes {
-        if b.is_ascii_graphic() || b == b' ' {
-            out.push(char::from(b));
-        } else if b == 0xa9 {
-            out.push('©');
-        } else {
-            out.push_str(&format!("\\x{b:02x}"));
-        }
-    }
-    out
+    bytes
+        .split_inclusive(|&b| b == 0xa9)
+        .map(|part| match part.split_last() {
+            Some((0xa9, head)) => format!("{}©", super::fmt::fourcc(head)),
+            _ => super::fmt::fourcc(part),
+        })
+        .collect()
 }
 
 /// 16.16 fixed point.
@@ -160,19 +150,15 @@ pub fn num(v: f64) -> String {
 /// An unsigned value node for a bit field (or any number not read through
 /// [`Fields`]); `span` is the bytes containing it.
 pub fn uint(name: impl Into<Cow<'static, str>>, span: Span, value: u64, bits: u8) -> Node {
-    Node::new(name).span(span).value(Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    })
+    Node::new(name)
+        .span(span)
+        .value(super::val::uint(value, bits))
 }
 
 pub fn hex(name: impl Into<Cow<'static, str>>, span: Span, value: u64, bits: u8) -> Node {
-    Node::new(name).span(span).value(Value::UInt {
-        value,
-        bits,
-        radix: Radix::Hex,
-    })
+    Node::new(name)
+        .span(span)
+        .value(super::val::hex(value, bits))
 }
 
 pub fn enumerated(
@@ -182,11 +168,9 @@ pub fn enumerated(
     bits: u8,
     table: EnumTable,
 ) -> Node {
-    Node::new(name).span(span).value(Value::Enum {
-        raw: value,
-        bits,
-        name: crate::value::lookup(table, value),
-    })
+    Node::new(name)
+        .span(span)
+        .value(super::val::enumv(value, bits, table))
 }
 
 pub fn flag_node(name: impl Into<Cow<'static, str>>, span: Span, set: bool) -> Node {
@@ -194,19 +178,7 @@ pub fn flag_node(name: impl Into<Cow<'static, str>>, span: Span, set: bool) -> N
 }
 
 pub fn text(name: impl Into<Cow<'static, str>>, span: Span, text: impl Into<String>) -> Node {
-    Node::new(name).span(span).value(Value::Text(text.into()))
-}
-
-/// Formats a 16-byte UUID in the usual big-endian textual form.
-pub fn uuid(b: &[u8]) -> String {
-    let mut out = String::new();
-    for (i, byte) in b.iter().enumerate() {
-        if matches!(i, 4 | 6 | 8 | 10) {
-            out.push('-');
-        }
-        out.push_str(&format!("{byte:02x}"));
-    }
-    out
+    Node::new(name).span(span).value(super::val::text(text))
 }
 
 // ---------------------------------------------------------------------------
@@ -278,21 +250,6 @@ impl<'a> Bits<'a> {
             magnitude.checked_neg()?
         })
     }
-}
-
-/// Removes emulation-prevention bytes (`00 00 03` → `00 00`).
-pub fn unescape_rbsp(data: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(data.len());
-    let mut zeros = 0usize;
-    for &b in data {
-        if zeros >= 2 && b == 3 {
-            zeros = 0;
-            continue;
-        }
-        zeros = if b == 0 { zeros.saturating_add(1) } else { 0 };
-        out.push(b);
-    }
-    out
 }
 
 // ---------------------------------------------------------------------------
@@ -489,12 +446,12 @@ pub async fn read_small(cx: &Cx, span: Span, max: u64) -> Result<Vec<u8>> {
     cx.read_avail(span.sub(0, len)).await
 }
 
-/// Searches `data` for `needle`.
+/// Searches `data` for `needle` (an empty needle is not found).
 pub fn find(data: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() {
         return None;
     }
-    data.windows(needle.len()).position(|w| w == needle)
+    crate::bytes::find(data, needle, 0)
 }
 
 /// Converts a slice index to a span offset helper.

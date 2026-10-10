@@ -334,9 +334,7 @@ fn block_v2(block: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<usize> {
             }
         }
         if out.len() > limit {
-            return Err(Diagnostic::limit(format!(
-                "decompressed data exceeds {limit:#x} bytes"
-            )));
+            return Err(Diagnostic::output_limit(limit));
         }
     }
     if out.len().saturating_sub(start) != n_raw {
@@ -475,9 +473,7 @@ impl Lzfse {
             _ => return Err(bad("bad block magic")),
         };
         if out.len() > limit {
-            return Err(Diagnostic::limit(format!(
-                "decompressed data exceeds {limit:#x} bytes"
-            )));
+            return Err(Diagnostic::output_limit(limit));
         }
         self.pos = self.pos.saturating_add(len);
         Ok(true)
