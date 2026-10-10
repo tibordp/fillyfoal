@@ -41,6 +41,11 @@ jobs:
             .
             web/wasm
       - run: cargo clippy --all-targets
+      # Each category feature builds alone (with the categories it needs).
+      - run: |
+          for f in text archive data image av security exec docs system science games; do
+            cargo check -p fillyfoal --lib --no-default-features --features "$f"
+          done
       # The library has to build for the browser too.
       - run: cargo clippy --manifest-path web/wasm/Cargo.toml --target wasm32-unknown-unknown
 
