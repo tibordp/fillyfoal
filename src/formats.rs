@@ -112,6 +112,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "archive")]
     &archive::packaging::APPIMAGE,
     #[cfg(feature = "exec")]
+    &android::oat::FORMAT,
+    #[cfg(feature = "exec")]
     &executable::elf::FORMAT,
     #[cfg(feature = "exec")]
     &executable::macho::FORMAT,

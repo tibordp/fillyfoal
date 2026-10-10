@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ base.vdex — Android VDEX v027, 1 DEX files  [0x0+0x3e8]
+▾ base.vdex — Android VDEX v027, 1 DEX file  [0x0+0x3e8]
     magic: "vdex"  [0x0+0x4]
     version: "027"  [0x4+0x4]
     number_of_sections: 4  [0x8+0x4]
@@ -512,9 +512,17 @@ expression: "common::explore(&display_name(&path), &data)"
       section_kind: kVerifierDepsSection (0x2)  [0x24+0x4]
       section_offset: 0x3d0  [0x28+0x4]
       section_size: 0x10  [0x2c+0x4]
-    kVerifierDepsSection  [0x3d0+0x10]
+  ▾ Verifier dependencies — 1 DEX file  [0x3d0+0x10]
+      DEX offsets — 1 offset  [0x3d0+0x4]
+    ▾ DEX 0 — 1 class  [0x3e0+0x0]
+        Dependencies  [0x3e0+0x0]
+          ! malformed: offsets outside the section
   ▾ kTypeLookupTableSection — 0x8 bytes at 0x3e0  [0x30+0xc] → 0x3e0+0x8
       section_kind: kTypeLookupTableSection (0x3)  [0x30+0x4]
       section_offset: 0x3e0  [0x34+0x4]
       section_size: 0x8  [0x38+0x4]
-    kTypeLookupTableSection  [0x3e0+0x8]
+  ▾ Type lookup tables — 1 DEX file  [0x3e0+0x8]
+    ▾ DEX 0 — 0 slots  [0x3e0+0x4]
+        size: 0  [0x3e0+0x4]
+    ▾ DEX 1 — 0 slots  [0x3e4+0x4]
+        size: 0  [0x3e4+0x4]

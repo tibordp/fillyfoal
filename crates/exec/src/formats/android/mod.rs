@@ -5,5 +5,6 @@ pub mod apksig;
 pub mod art;
 mod dalvik;
 pub mod dex;
+pub mod oat;
 pub mod resources;
 pub mod vdex;
