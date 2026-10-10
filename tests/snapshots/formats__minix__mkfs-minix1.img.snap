@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ mkfs-minix1.img — Minix v1 filesystem, 64 KiB, 32 inodes, 30-character names  [0x0+0x10000]
+▾ mkfs-minix1.img — Minix v1 filesystem, 64.0 KiB, 32 inodes, 30-character names  [0x0+0x10000]
   ▾ Superblock  [0x400+0x18]
       Inodes: 32  [0x400+0x2]
       Zones (v1): 64  [0x402+0x2]
@@ -29,7 +29,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Zones (7 direct, indirect, double indirect): 05 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x100e+0x12]
       Inodes 2–32 — 31 unused  [0x1020+0x3e0]
   ▾ Free zones — from the zone bitmap
-      Zones 6–63 — free, 58 KiB  [0x1800+0xe800]
+      Zones 6–63 — free, 58.0 KiB  [0x1800+0xe800]
   ▾ Root directory — inode 1
     ▾ Inode 1  [0x1000+0x20]
         Mode: 0x41ed — drwxr-xr-x  [0x1000+0x2]

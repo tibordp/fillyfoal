@@ -5,6 +5,7 @@ use crate::cx::Cx;
 use crate::dsl::{Path, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
+use crate::formats::disk::name_field;
 use crate::formats::disk::{crc32c, size, unix_mode, uuid_value};
 use crate::node::Node;
 use crate::record;
@@ -120,17 +121,7 @@ pub(super) const ITEM_TYPES: EnumTable = &[
     (253, "STRING_ITEM"),
 ];
 
-pub(super) const DIR_TYPES: EnumTable = &[
-    (0, "unknown"),
-    (1, "regular file"),
-    (2, "directory"),
-    (3, "character device"),
-    (4, "block device"),
-    (5, "FIFO"),
-    (6, "socket"),
-    (7, "symbolic link"),
-    (8, "xattr"),
-];
+pub(super) const DIR_TYPES: EnumTable = crate::formats::disk::dirent_types!((8, "xattr"));
 
 const COMPRESSION: EnumTable = &[(0, "none"), (1, "zlib"), (2, "LZO"), (3, "zstd")];
 const EXTENT_TYPES: EnumTable = &[(0, "inline"), (1, "regular"), (2, "preallocated")];
@@ -228,7 +219,7 @@ fn inode_item(f: &mut Fields<'_>) -> Result<()> {
     f.u32("Group GID").emit()?;
     f.u32("Mode")
         .hex()
-        .with(|&m, n| n.summary(unix_mode(m)))
+        .with(|&m, n| n.summary(unix_mode(m.into())))
         .emit()?;
     f.u64("Device").emit()?;
     f.u64("Flags").hex().flags(INODE_FLAGS).emit()?;
@@ -238,13 +229,6 @@ fn inode_item(f: &mut Fields<'_>) -> Result<()> {
     timespec(f, "Changed")?;
     timespec(f, "Modified")?;
     timespec(f, "Created")?;
-    Ok(())
-}
-
-fn name_field(f: &mut Fields<'_>, len: u64) -> Result<()> {
-    f.bytes("Name", len)
-        .with(|b, n| n.value(Value::Text(String::from_utf8_lossy(b).into_owned())))
-        .emit()?;
     Ok(())
 }
 
@@ -496,7 +480,7 @@ fn item_summary(ty: u8, data: &[u8], len: u64) -> String {
     match ty {
         1 => format!(
             "{}, {}",
-            unix_mode(u32_le(data, 52).unwrap_or(0)),
+            unix_mode(u32_le(data, 52).unwrap_or(0).into()),
             size(u64_le(data, 16).unwrap_or(0))
         ),
         12 => {

@@ -23,7 +23,11 @@ use crate::codec::{Codec, crc32};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::arcutil::{ByteReader, count, emit_nodes, hex, human_size, unsupported};
+use crate::formats::disk::ntfs::FILE_ATTRIBUTES;
+use crate::formats::util::arcutil::{ByteReader, emit_nodes, unsupported};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::hex;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::{Origin, Span};
@@ -113,24 +117,6 @@ const ACE_QUALITY: EnumTable = &[
     (3, "normal"),
     (4, "good"),
     (5, "best"),
-];
-
-const ACE_ATTRIBUTES: FlagTable = &[
-    flag(0x0001, "READONLY"),
-    flag(0x0002, "HIDDEN"),
-    flag(0x0004, "SYSTEM"),
-    flag(0x0008, "VOLUME_ID"),
-    flag(0x0010, "DIRECTORY"),
-    flag(0x0020, "ARCHIVE"),
-    flag(0x0040, "DEVICE"),
-    flag(0x0080, "NORMAL"),
-    flag(0x0100, "TEMPORARY"),
-    flag(0x0200, "SPARSE_FILE"),
-    flag(0x0400, "REPARSE_POINT"),
-    flag(0x0800, "COMPRESSED"),
-    flag(0x1000, "OFFLINE"),
-    flag(0x2000, "NOT_CONTENT_INDEXED"),
-    flag(0x4000, "ENCRYPTED"),
 ];
 
 const ACE_FLAG_COMMENT: u16 = 0x0002;
@@ -239,7 +225,7 @@ pub async fn dissect_ace(cx: Cx, input: Input) -> Result<()> {
                 total = total.saturating_add(block.original);
                 let m = ace_member(&header, &block);
                 let method = crate::value::lookup(ACE_COMP, m.method.into()).unwrap_or("unknown");
-                let mut summary = format!("{}, {method}", human_size(block.original));
+                let mut summary = format!("{}, {method}", fmt::size(block.original));
                 if block.flags & ACE_FLAG_PASSWORD != 0 {
                     summary.push_str(", encrypted");
                 }
@@ -249,7 +235,7 @@ pub async fn dissect_ace(cx: Cx, input: Input) -> Result<()> {
                 crate::value::lookup(ACE_TYPE, block.kind.into())
                     .unwrap_or("unknown block")
                     .to_owned(),
-                human_size(block.packed),
+                fmt::size(block.packed),
             ),
         };
         let mut node = Node::new(name)
@@ -273,7 +259,7 @@ pub async fn dissect_ace(cx: Cx, input: Input) -> Result<()> {
         if v20 { "2.0" } else { "1.0" },
         if solid { " (solid)" } else { "" },
         count(files, "file", "files"),
-        human_size(total)
+        fmt::size(total)
     ));
     Ok(())
 }
@@ -423,7 +409,7 @@ async fn ace_block(
     let stored = r.u16("Header CRC", LE).ok_or_else(bad)?;
     let computed = ace_crc(header.get(4..).unwrap_or_default());
     r.with(|n| {
-        let n = n.value(hex(stored.into()));
+        let n = n.value(hex(stored, 64));
         if stored == computed {
             n.summary("valid")
         } else {
@@ -496,7 +482,7 @@ async fn ace_block(
             dos_time(&mut r, "Modification time").ok_or_else(bad)?;
             let attr = r.u32("Attributes", LE).ok_or_else(bad)?;
             r.with(|n| {
-                let (set, unknown) = crate::value::decode_flags(ACE_ATTRIBUTES, attr.into());
+                let (set, unknown) = crate::value::decode_flags(FILE_ATTRIBUTES, attr.into());
                 n.value(Value::Flags {
                     raw: attr.into(),
                     bits: 32,
@@ -505,7 +491,7 @@ async fn ace_block(
                 })
             });
             let crc = r.u32("CRC-32", LE).ok_or_else(bad)?;
-            r.with(|n| n.value(hex(crc.into())).desc("ACE CRC-32 (not inverted)"));
+            r.with(|n| n.value(hex(crc, 64)).desc("ACE CRC-32 (not inverted)"));
             let comp = r.u8("Compression type").ok_or_else(bad)?;
             r.with(|n| {
                 n.value(Value::Enum {
@@ -524,9 +510,9 @@ async fn ace_block(
             });
             let params = r.u16("Compression parameters", LE).ok_or_else(bad)?;
             r.with(|n| {
-                n.value(hex(params.into())).summary(format!(
+                n.value(hex(params, 64)).summary(format!(
                     "dictionary {}",
-                    human_size(1u64 << (u32::from(params & 15).saturating_add(10)))
+                    fmt::size(1u64 << (u32::from(params & 15).saturating_add(10)))
                 ))
             });
             r.u16("Reserved", LE).ok_or_else(bad)?;
@@ -558,11 +544,11 @@ async fn ace_block(
             } else if original == 0 && packed == 0 {
                 Node::new("Content").span(d).summary("empty")
             } else if comp == 0 && !solid {
-                embedded("Content", input.nested(d)).summary(human_size(packed))
+                embedded("Content", input.nested(d)).summary(fmt::size(packed))
             } else if comp <= 2 {
                 Node::new("Content")
                     .span(d)
-                    .summary(human_size(original))
+                    .summary(fmt::size(original))
                     .lazy(ace_content, (input, d, member, solid))
             } else {
                 unsupported("Compressed data", d, &format!("ACE method {comp}"))
@@ -582,7 +568,7 @@ async fn ace_block(
             } else {
                 r.u32("Relative start", LE).ok_or_else(bad)?.into()
             };
-            r.with(|n| n.value(hex(start)));
+            r.with(|n| n.value(hex(start, 64)));
             if kind == 5 {
                 r.u16("Sectors", LE).ok_or_else(bad)?;
                 r.u16("Sectors per cluster", LE).ok_or_else(bad)?;
@@ -591,7 +577,7 @@ async fn ace_block(
                 r.u32("Clusters", LE).ok_or_else(bad)?;
                 r.u32("Cluster size", LE).ok_or_else(bad)?;
                 let c = r.u16("Recovery CRC", LE).ok_or_else(bad)?;
-                r.with(|n| n.value(hex(c.into())));
+                r.with(|n| n.value(hex(c, 64)));
             }
             extra.push(Node::new("Recovery data").span(data.sub(0, size)));
         }
@@ -632,7 +618,7 @@ fn ace_comment(r: &mut ByteReader<'_>) -> Option<Node> {
 fn dos_time(r: &mut ByteReader<'_>, name: &'static str) -> Option<()> {
     let t = r.u32(name, LE)?;
     r.with(|n| {
-        n.value(hex(t.into())).summary(crate::text::dos_datetime(
+        n.value(hex(t, 64)).summary(crate::text::dos_datetime(
             u16::try_from(t >> 16).unwrap_or(0),
             u16::try_from(t & 0xffff).unwrap_or(0),
         ))
@@ -712,7 +698,7 @@ pub async fn dissect_arc(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(name)
                 .span(span)
-                .summary(format!("{}, {m}", human_size(original)))
+                .summary(format!("{}, {m}", fmt::size(original)))
                 .lazy(arc_entry, (input, span, header_len)),
         )
         .await;
@@ -724,7 +710,7 @@ pub async fn dissect_arc(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "ARC archive, {}, {} uncompressed",
         count(files, "file", "files"),
-        human_size(total)
+        fmt::size(total)
     ));
     Ok(())
 }
@@ -751,7 +737,7 @@ async fn arc_entry(cx: Cx, (input, span, header_len): (Input, Span, u64)) -> Res
     let time = r.u16("Time", LE).ok_or_else(bad)?;
     r.with(|n| n.summary(crate::text::dos_datetime(date, time)));
     let crc = r.u16("CRC-16", LE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(crc.into())));
+    r.with(|n| n.value(hex(crc, 64)));
     if method != 1 {
         r.u32("Original size", LE).ok_or_else(bad)?;
     }
@@ -762,7 +748,7 @@ async fn arc_entry(cx: Cx, (input, span, header_len): (Input, Span, u64)) -> Res
     );
     let data = span.sub(header_len, packed.into());
     let node = if method <= 2 {
-        embedded("Content", input.nested(data)).summary(human_size(packed.into()))
+        embedded("Content", input.nested(data)).summary(fmt::size(packed.into()))
     } else {
         let m = crate::value::lookup(ARC_METHOD, method.into()).unwrap_or("unknown");
         unsupported("Compressed data", data, &format!("ARC {m}"))

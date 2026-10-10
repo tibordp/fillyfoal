@@ -41,7 +41,7 @@
 
 use std::sync::Arc;
 
-use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
+use crate::bytes::{align_up, to_u64, to_usize, u16_le, u32_le, u64_le};
 use crate::codec::crc::crc16_xmodem;
 use crate::cx::Cx;
 use crate::dsl::Path;
@@ -49,9 +49,12 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::Input;
 use crate::formats::disk::{
-    align, assemble, civil_to_unix, coalesce_stepped, content_node, fragments_node,
+    assemble, civil_to_unix, coalesce_stepped, content_node, fragments_node,
 };
-use crate::formats::util::arcutil::{count, human_size, text, uint};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::capitalize;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{text, uint};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, field, flag};
@@ -345,7 +348,7 @@ impl LongAd {
 }
 
 fn ad_summary(ad: LongAd, with_part: bool) -> String {
-    let mut s = format!("{} at block {}", human_size(ad.size()), ad.lbn);
+    let mut s = format!("{} at block {}", fmt::size(ad.size()), ad.lbn);
     if with_part {
         s = format!("{s} of partition {}", ad.part);
     }
@@ -486,8 +489,8 @@ fn extent_ad(f: &mut Fields<'_>, name: &'static str) -> Result<(u32, u32)> {
             if len == 0 {
                 n.summary("none")
             } else {
-                n.value(uint(loc.into()))
-                    .summary(format!("{} at block {loc}", human_size(len.into())))
+                n.value(uint(loc, 64))
+                    .summary(format!("{} at block {loc}", fmt::size(len.into())))
             }
         })
         .map(|b| (u32_le(&b, 4).unwrap_or(0), u32_le(&b, 0).unwrap_or(0)))
@@ -497,7 +500,7 @@ fn extent_ad(f: &mut Fields<'_>, name: &'static str) -> Result<(u32, u32)> {
 fn long_ad(f: &mut Fields<'_>, name: &'static str) -> Result<LongAd> {
     f.bytes(name, 16)
         .with(|b, n| match LongAd::parse(b) {
-            Some(ad) if ad.size() > 0 => n.value(uint(ad.lbn.into())).summary(ad_summary(ad, true)),
+            Some(ad) if ad.size() > 0 => n.value(uint(ad.lbn, 64)).summary(ad_summary(ad, true)),
             _ => n.summary("none"),
         })
         .map(|b| LongAd::parse(&b).unwrap_or_default())
@@ -515,7 +518,7 @@ fn short_ad(f: &mut Fields<'_>, name: &'static str) -> Result<()> {
             if ad.size() == 0 {
                 n.summary("none")
             } else {
-                n.value(uint(ad.lbn.into())).summary(ad_summary(ad, false))
+                n.value(uint(ad.lbn, 64)).summary(ad_summary(ad, false))
             }
         })
         .emit()?;
@@ -621,7 +624,7 @@ fn pd_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u32("Access type").enumeration(ACCESS_TYPES).emit()?;
     f.u32("Partition starting location").emit()?;
     f.u32("Partition length")
-        .with(|&n, node| node.summary(count(n.into(), "block", "blocks")))
+        .with(|&n, node| node.summary(count(n, "block", "blocks")))
         .emit()?;
     regid(f, "Implementation identifier")?;
     f.bytes("Implementation use", 128).emit()?;
@@ -652,11 +655,8 @@ fn lvd_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     extent_ad(f, "Integrity sequence extent")?;
     let span = f.peek_span(u64::from(table_len).min(f.remaining()));
     f.node(
-        struct_node("Partition maps", span, LE, maps, maps_layout).summary(count(
-            maps.into(),
-            "map",
-            "maps",
-        )),
+        struct_node("Partition maps", span, LE, maps, maps_layout)
+            .summary(count(maps, "map", "maps")),
     );
     Ok(())
 }
@@ -711,7 +711,7 @@ fn map_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
             match id.as_str() {
                 "*UDF Sparable Partition" => {
                     f.u16("Packet length")
-                        .with(|&n, node| node.summary(count(n.into(), "block", "blocks")))
+                        .with(|&n, node| node.summary(count(n, "block", "blocks")))
                         .emit()?;
                     let tables = f.u8("Number of sparing tables").emit()?;
                     f.u8("Reserved").emit()?;
@@ -728,7 +728,7 @@ fn map_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
                     f.u32("Metadata mirror file location").emit()?;
                     f.u32("Metadata bitmap file location").emit()?;
                     f.u32("Allocation unit size")
-                        .with(|&n, node| node.summary(count(n.into(), "block", "blocks")))
+                        .with(|&n, node| node.summary(count(n, "block", "blocks")))
                         .emit()?;
                     f.u16("Alignment unit size").emit()?;
                     f.u8("Flags").flags(METADATA_FLAGS).emit()?;
@@ -774,12 +774,12 @@ fn lvid_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     let n = u64::from(n).min(f.remaining() / 8);
     for _ in 0..n {
         f.u32("Free space")
-            .with(|&v, node| node.summary(count(v.into(), "block", "blocks")))
+            .with(|&v, node| node.summary(count(v, "block", "blocks")))
             .emit()?;
     }
     for _ in 0..n {
         f.u32("Partition size")
-            .with(|&v, node| node.summary(count(v.into(), "block", "blocks")))
+            .with(|&v, node| node.summary(count(v, "block", "blocks")))
             .emit()?;
     }
     if iu >= 46 {
@@ -879,7 +879,7 @@ fn icb_tag_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u8("File type").enumeration(FILE_TYPES).emit()?;
     f.bytes("Parent ICB location", 6)
         .with(|b, n| {
-            n.value(uint(u32_le(b, 0).unwrap_or(0).into()))
+            n.value(uint(u32_le(b, 0).unwrap_or(0), 64))
                 .summary(format!("partition {}", u16_le(b, 4).unwrap_or(0)))
         })
         .emit()?;
@@ -916,11 +916,11 @@ fn fe_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u8("Record display attributes").emit()?;
     f.u32("Record length").emit()?;
     f.u64("Information length")
-        .with(|&v, n| n.summary(human_size(v)))
+        .with(|&v, n| n.summary(fmt::size(v)))
         .emit()?;
     if efe {
         f.u64("Object size")
-            .with(|&v, n| n.summary(human_size(v)))
+            .with(|&v, n| n.summary(fmt::size(v)))
             .emit()?;
     }
     f.u64("Logical blocks recorded").emit()?;
@@ -946,7 +946,7 @@ fn fe_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     if l_ea > 0 {
         let span = f.peek_span(l_ea);
         f.node(
-            struct_node("Extended attributes", span, LE, (), ea_layout).summary(human_size(l_ea)),
+            struct_node("Extended attributes", span, LE, (), ea_layout).summary(fmt::size(l_ea)),
         );
         f.skip(l_ea);
     }
@@ -957,7 +957,7 @@ fn fe_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
             f.node(
                 Node::new("Embedded data")
                     .span(span)
-                    .summary(human_size(l_ad)),
+                    .summary(fmt::size(l_ad)),
             );
         } else {
             f.node(struct_node(
@@ -1018,13 +1018,13 @@ fn ads_layout(f: &mut Fields<'_>, ad_type: &u16) -> Result<()> {
         }
         let mut node = Node::new(format!("Extent {i}"))
             .span(span)
-            .value(uint(ad.lbn.into()))
+            .value(uint(ad.lbn, 64))
             .summary(ad_summary(ad, *ad_type != 0));
         if *ad_type == 2 {
             node = node.desc(format!(
                 "recorded {}, information {}",
-                human_size(u32_le(raw, 4).unwrap_or(0).into()),
-                human_size(u32_le(raw, 8).unwrap_or(0).into())
+                fmt::size(u32_le(raw, 4).unwrap_or(0).into()),
+                fmt::size(u32_le(raw, 8).unwrap_or(0).into())
             ));
         }
         f.node(node);
@@ -1132,14 +1132,6 @@ fn ea_one_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     Ok(())
 }
 
-fn capitalize(s: &str) -> String {
-    let mut c = s.chars();
-    match c.next() {
-        Some(first) => first.to_uppercase().chain(c).collect(),
-        None => String::new(),
-    }
-}
-
 fn descriptor_node(id: u16, span: Span) -> Node {
     let name = crate::value::lookup(TAG_IDS, id.into())
         .map_or_else(|| format!("Descriptor {id}"), capitalize);
@@ -1211,11 +1203,11 @@ impl Map {
             } => match (data, mirror) {
                 (None, _) => format!("metadata partition on {number}, unreadable"),
                 (Some(d), false) => {
-                    format!("metadata partition on {number}, {}", human_size(d.len))
+                    format!("metadata partition on {number}, {}", fmt::size(d.len))
                 }
                 (Some(d), true) => format!(
                     "metadata partition on {number} (from the mirror), {}",
-                    human_size(d.len)
+                    fmt::size(d.len)
                 ),
             },
             Map::Virtual { number, table, .. } => match table {
@@ -1978,7 +1970,7 @@ fn entry_node(name: String, icb: Option<&Icb>, is_dir: bool, e: Entry) -> Node {
             } else if i.file_type == 12 {
                 "symbolic link".to_owned()
             } else {
-                human_size(i.size)
+                fmt::size(i.size)
             };
             s = format!("{s}, {}", i.mode());
             if let Some(t) = i.mtime {
@@ -2069,7 +2061,7 @@ async fn directory(cx: Cx, e: Entry) -> Result<()> {
         let chars = head.get(18).copied().unwrap_or(0);
         let l_fi = u64::from(head.get(19).copied().unwrap_or(0));
         let l_iu = u64::from(u16_le(&head, 36).unwrap_or(0));
-        let total = align(FID_HEAD.saturating_add(l_iu).saturating_add(l_fi), 4);
+        let total = align_up(FID_HEAD.saturating_add(l_iu).saturating_add(l_fi), 4);
         let fid = span.sub(pos, total);
         if chars & 0x08 != 0 {
             pos = pos.saturating_add(total);
@@ -2195,7 +2187,7 @@ async fn sequence_node(cx: Cx, (vol, ext): (Arc<Vol>, (u32, u32))) -> Result<()>
             5 => Some(format!(
                 "partition {}, {} at block {}",
                 u16_le(&data, 22).unwrap_or(0),
-                count(u32_le(&data, 192).unwrap_or(0).into(), "block", "blocks"),
+                count(u32_le(&data, 192).unwrap_or(0), "block", "blocks"),
                 u32_le(&data, 188).unwrap_or(0)
             )),
             6 => Some(format!(
@@ -2236,8 +2228,8 @@ async fn integrity_node(cx: Cx, vol: Arc<Vol>) -> Result<()> {
                 if let (Some(f), Some(d)) = (files, dirs) {
                     s = format!(
                         "{s}, {}, {}",
-                        count(f.into(), "file", "files"),
-                        count(d.into(), "directory", "directories")
+                        count(f, "file", "files"),
+                        count(d, "directory", "directories")
                     );
                 }
                 node = node.summary(s);
@@ -2309,7 +2301,7 @@ pub async fn emit(cx: &Cx, vol: &Arc<Vol>) -> Result<()> {
         cx.emit(
             Node::new(name)
                 .span(span)
-                .summary(format!("{} at block {}", human_size(ext.1.into()), ext.0))
+                .summary(format!("{} at block {}", fmt::size(ext.1.into()), ext.0))
                 .lazy(sequence_node, (vol.clone(), ext)),
         );
     }
@@ -2434,7 +2426,7 @@ async fn layout(cx: Cx, vol: Arc<Vol>) -> Result<()> {
         if ext.1 > 0 {
             r.add(
                 u64::from(ext.0).saturating_mul(bs),
-                align(ext.1.into(), bs),
+                align_up(ext.1.into(), bs),
                 name,
                 None,
             );

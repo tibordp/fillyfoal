@@ -10,14 +10,15 @@
 
 use std::sync::Arc;
 
-use crate::bytes::{to_u64, to_usize, u32_be, u64_be};
+use crate::bytes::{align_up, to_u64, to_usize, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::disk::qcow::Regions;
 use crate::formats::disk::{PieceList, size, uuid_value};
-use crate::formats::util::datakit::{enumv, uint};
+use crate::formats::util::civil::EPOCH_2000;
+use crate::formats::util::val::{enumv, uint};
 use crate::formats::{Format, Head, Input, Probe, dissect_or_data, embedded};
 use crate::node::Node;
 use crate::record;
@@ -27,8 +28,6 @@ use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 const BE: Endian = Endian::Big;
 const COOKIE: &[u8] = b"conectix";
 const SECTOR: u64 = 512;
-/// Seconds between 1970-01-01 and 2000-01-01 (the VHD epoch).
-const EPOCH_2000: i64 = 946_684_800;
 const UNUSED: u32 = u32::MAX;
 
 pub static FORMAT: Format = Format {
@@ -355,7 +354,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         input,
         bat,
         block,
-        bitmap: (block / SECTOR).div_ceil(8).next_multiple_of(SECTOR),
+        bitmap: align_up((block / SECTOR).div_ceil(8), SECTOR),
         size: footer.current_size,
         differencing,
         header: header_span,
@@ -389,7 +388,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .lazy(bat_entries, disk.clone()),
     );
     let bat_end = bat.end().saturating_sub(file.offset);
-    let padded = bat_end.next_multiple_of(SECTOR);
+    let padded = align_up(bat_end, SECTOR);
     if padded > bat_end {
         cx.emit(
             Node::new("BAT padding")
@@ -579,15 +578,11 @@ async fn layout(cx: Cx, d: Arc<Dynamic>) -> Result<()> {
     r.span(file, d.header, "Dynamic header");
     r.span(
         file,
-        Span::new(
-            d.bat.source,
-            d.bat.offset,
-            d.bat.len.next_multiple_of(SECTOR),
-        ),
+        Span::new(d.bat.source, d.bat.offset, align_up(d.bat.len, SECTOR)),
         "Block allocation table",
     );
     for l in &d.locators {
-        let padded = l.data.len.next_multiple_of(SECTOR);
+        let padded = align_up(l.data.len, SECTOR);
         r.span(
             file,
             Span::new(l.data.source, l.data.offset, padded),

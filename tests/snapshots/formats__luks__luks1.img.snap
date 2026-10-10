@@ -68,4 +68,4 @@ expression: "common::explore(&display_name(&path), &data)"
       Header — 208 bytes  [0x0+0xd0]
       Key slots — 384 bytes  [0xd0+0x180]
       Key material — 4.4 KiB  [0x250+0x11b0]
-    Encrypted payload — 1 KiB of aes-xts-plain64  [0x1000+0x400]
+    Encrypted payload — 1.0 KiB of aes-xts-plain64  [0x1000+0x400]

@@ -16,6 +16,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{fletcher64, size, uuid_value};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Codec, Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -357,10 +358,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!(
-        "APFS container, {}, {} volume{}{}",
+        "APFS container, {}, {}{}",
         size(sb.block_count.saturating_mul(block)),
-        oids.len(),
-        if oids.len() == 1 { "" } else { "s" },
+        plural(crate::bytes::to_u64(oids.len()), "volume"),
         if names.is_empty() {
             String::new()
         } else {

@@ -9,13 +9,16 @@
 
 use std::sync::Arc;
 
-use crate::bytes::{to_u64, to_usize, u32_le};
+use crate::bytes::{align_up, to_u64, to_usize, u32_le};
 use crate::codec::crc32;
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, uint};
+use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -114,10 +117,6 @@ fn varint(data: &[u8], at: usize) -> Option<(u64, usize)> {
     Some((value, len))
 }
 
-fn padded4(n: u64) -> u64 {
-    n.div_ceil(4).saturating_mul(4)
-}
-
 /// Parses an index: indicator, record count, records, padding, CRC32.
 async fn parse_index(cx: &Cx, data: &[u8]) -> std::result::Result<Vec<(u64, u64)>, &'static str> {
     if data.first() != Some(&0) {
@@ -184,7 +183,7 @@ async fn find_streams(cx: &Cx, file: Span) -> Result<Vec<Stream>> {
             if i.is_multiple_of(4096) {
                 cx.checkpoint().await;
             }
-            blocks = blocks.saturating_add(padded4(u));
+            blocks = blocks.saturating_add(align_up(u, 4));
             uncompressed = uncompressed.saturating_add(size);
         }
         let start = index_at
@@ -239,7 +238,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut summary = format!(
         "xz, {}, {} uncompressed, {}",
         count(blocks, "block", "blocks"),
-        human_size(size),
+        fmt::size(size),
         check_name(check)
     );
     if streams.len() > 1 {
@@ -266,7 +265,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .summary(format!(
                     "{}, {} uncompressed",
                     count(to_u64(stream.records.len()), "block", "blocks"),
-                    human_size(stream.uncompressed)
+                    fmt::size(stream.uncompressed)
                 ))
                 .lazy(stream_node, (input, stream.clone())),
         )
@@ -337,15 +336,15 @@ async fn blocks(cx: Cx, (input, stream): (Input, Stream)) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(stream.records.len())));
     let mut at = stream.span.offset.saturating_add(12);
     for (i, &(unpadded, uncompressed)) in stream.records.iter().enumerate() {
-        let len = padded4(unpadded);
+        let len = align_up(unpadded, 4);
         let span = Span::new(stream.span.source, at, len);
         cx.push(
             Node::new(format!("Block {i}"))
                 .span(span)
                 .summary(format!(
                     "{} → {}",
-                    human_size(unpadded),
-                    human_size(uncompressed)
+                    fmt::size(unpadded),
+                    fmt::size(uncompressed)
                 ))
                 .lazy(block, (input, span, unpadded, stream.check)),
         )
@@ -372,17 +371,14 @@ impl Reader<'_> {
         let from = self.at;
         let v = *self.data.get(self.at)?;
         self.at = self.at.saturating_add(1);
-        Some((
-            v,
-            Node::new(name).span(self.span(from)).value(uint(v.into())),
-        ))
+        Some((v, Node::new(name).span(self.span(from)).value(uint(v, 64))))
     }
 
     fn varint(&mut self, name: &'static str) -> Option<(u64, Node)> {
         let from = self.at;
         let (v, len) = varint(self.data, self.at)?;
         self.at = self.at.saturating_add(len);
-        Some((v, Node::new(name).span(self.span(from)).value(uint(v))))
+        Some((v, Node::new(name).span(self.span(from)).value(uint(v, 64))))
     }
 
     fn bytes(&mut self, name: &'static str, n: u64) -> Option<(Vec<u8>, Node)> {
@@ -402,7 +398,7 @@ fn filter_summary(id: u64, props: &[u8]) -> Option<String> {
     match id {
         0x21 => p
             .and_then(lzma2_dict)
-            .map(|d| format!("dictionary {}", human_size(d))),
+            .map(|d| format!("dictionary {}", fmt::size(d))),
         0x03 => p.map(|d| format!("distance {}", u16::from(d).saturating_add(1))),
         0x04..=0x0b => u32_le(props, 0).map(|o| format!("start offset {o:#x}")),
         _ => None,
@@ -437,10 +433,10 @@ async fn block(cx: Cx, (_input, span, unpadded, check): (Input, Span, u64, u8)) 
         .iter()
         .map(|&id| crate::value::lookup(FILTERS, id).unwrap_or("?"))
         .collect();
-    node = node.summary(format!("{}, {}", chain.join(" + "), human_size(compressed)));
+    node = node.summary(format!("{}, {}", chain.join(" + "), fmt::size(compressed)));
     cx.emit(node);
     let pad_at = header_len.saturating_add(compressed);
-    let pad = padded4(pad_at).saturating_sub(pad_at);
+    let pad = align_up(pad_at, 4).saturating_sub(pad_at);
     if pad > 0 {
         cx.emit(Node::new("Block padding").span(span.sub(pad_at, pad)));
     }
@@ -505,14 +501,14 @@ async fn block_header(cx: Cx, span: Span) -> Result<()> {
     if flags & 0x80 != 0 {
         parts.push("uncompressed size present".to_owned());
     }
-    cx.emit(node.value(hex(flags.into())).summary(parts.join(", ")));
+    cx.emit(node.value(hex(flags, 64)).summary(parts.join(", ")));
     if flags & 0x40 != 0 {
         let (v, node) = r.varint("Compressed size").ok_or_else(bad)?;
-        cx.emit(node.summary(human_size(v)));
+        cx.emit(node.summary(fmt::size(v)));
     }
     if flags & 0x80 != 0 {
         let (v, node) = r.varint("Uncompressed size").ok_or_else(bad)?;
-        cx.emit(node.summary(human_size(v)));
+        cx.emit(node.summary(fmt::size(v)));
     }
     for _ in 0..filters {
         let from = r.at;
@@ -540,7 +536,7 @@ async fn block_header(cx: Cx, span: Span) -> Result<()> {
     let stored = u32_le(&data, to_usize(crc_at)).unwrap_or(0);
     let node = Node::new("CRC32")
         .span(span.sub(crc_at, 4))
-        .value(hex(stored.into()));
+        .value(hex(stored, 64));
     let covered = data.get(..to_usize(crc_at)).unwrap_or_default();
     cx.emit(verify(node, crc32(covered), stored));
     Ok(())
@@ -569,8 +565,8 @@ async fn index(cx: Cx, span: Span) -> Result<()> {
                 .span(r.span(from))
                 .summary(format!(
                     "{} → {}",
-                    human_size(unpadded),
-                    human_size(uncompressed)
+                    fmt::size(unpadded),
+                    fmt::size(uncompressed)
                 ))
                 .lazy(emit_nodes, Arc::new(vec![a, b])),
         )
@@ -583,7 +579,7 @@ async fn index(cx: Cx, span: Span) -> Result<()> {
     let stored = u32_le(&data, to_usize(crc_at)).unwrap_or(0);
     let node = Node::new("CRC32")
         .span(span.sub(crc_at, 4))
-        .value(hex(stored.into()));
+        .value(hex(stored, 64));
     let covered = data.get(..to_usize(crc_at)).unwrap_or_default();
     let computed = crate::formats::util::datakit::crc32_paced(&cx, covered).await;
     cx.emit(verify(node, computed, stored));

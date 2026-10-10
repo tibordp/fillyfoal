@@ -12,7 +12,10 @@ use crate::codec::{Codec, lzh};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::arcutil::{ByteReader, count, emit_nodes, hex, human_size, unsupported};
+use crate::formats::util::arcutil::{ByteReader, emit_nodes, unsupported};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::hex;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -44,24 +47,24 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut r = ByteReader::new(&head, file.sub(0, 34));
     r.text("Banner", 20);
     r.with(|n| {
-        n.value(crate::formats::util::arcutil::text(
+        n.value(crate::formats::util::val::text(
             banner.trim_end_matches('\x1a').trim(),
         ))
     });
     r.u32("Tag", LE);
-    r.with(|n| n.value(hex(TAG.into())));
+    r.with(|n| n.value(hex(TAG, 64)));
     r.u32("First entry offset", LE);
     r.with(|n| {
-        n.value(hex(start.into()))
+        n.value(hex(start, 64))
             .target(file.sub(start.into(), ENTRY))
     });
     r.u32("Consistency check", LE);
     r.with(|n| {
         if start.wrapping_add(minus) == 0 {
-            n.value(hex(minus.into()))
+            n.value(hex(minus, 64))
                 .summary("valid (negated first entry offset)")
         } else {
-            n.value(hex(minus.into())).diag(Diagnostic::warning(
+            n.value(hex(minus, 64)).diag(Diagnostic::warning(
                 "does not negate the first entry offset",
             ))
         }
@@ -108,10 +111,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         total = total.saturating_add(original);
         let mut node = Node::new(name)
             .span(entry_span)
-            .summary(human_size(original))
+            .summary(fmt::size(original))
             .lazy(directory_entry, (input, entry_span));
         if deleted {
-            node = node.summary(format!("{}, deleted", human_size(original)));
+            node = node.summary(format!("{}, deleted", fmt::size(original)));
         }
         cx.progress_in(file, entry_span.end());
         cx.push(node).await;
@@ -124,7 +127,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "ZOO archive, {}, {} uncompressed",
         count(files, "file", "files"),
-        human_size(total)
+        fmt::size(total)
     ));
     Ok(())
 }
@@ -161,7 +164,7 @@ async fn directory_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let mut r = ByteReader::new(&e, span);
     let bad = || Diagnostic::malformed("truncated directory entry").at(span);
     r.u32("Tag", LE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(TAG.into())));
+    r.with(|n| n.value(hex(TAG, 64)));
     let kind = r.u8("Type").ok_or_else(bad)?;
     let method = r.u8("Packing method").ok_or_else(bad)?;
     r.with(|n| {
@@ -172,27 +175,27 @@ async fn directory_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         })
     });
     let next = r.u32("Next entry", LE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(next.into())));
+    r.with(|n| n.value(hex(next, 64)));
     let offset = r.u32("Data offset", LE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(offset.into())));
+    r.with(|n| n.value(hex(offset, 64)));
     let date = r.u16("Date", LE).ok_or_else(bad)?;
     let time = r.u16("Time", LE).ok_or_else(bad)?;
     r.with(|n| n.summary(crate::text::dos_datetime(date, time)));
     let crc = r.u16("File CRC-16", LE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(crc.into())));
+    r.with(|n| n.value(hex(crc, 64)));
     let original = r.u32("Original size", LE).ok_or_else(bad)?;
-    r.with(|n| n.summary(human_size(original.into())));
+    r.with(|n| n.summary(fmt::size(original.into())));
     let packed = r.u32("Compressed size", LE).ok_or_else(bad)?;
     r.u8("Major version").ok_or_else(bad)?;
     r.u8("Minor version").ok_or_else(bad)?;
     r.u8("Deleted").ok_or_else(bad)?;
     r.u8("Structure").ok_or_else(bad)?;
     let comment = r.u32("Comment offset", LE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(comment.into())));
+    r.with(|n| n.value(hex(comment, 64)));
     r.u16("Comment size", LE).ok_or_else(bad)?;
     let short = crate::text::until_nul(e.get(38..51).unwrap_or_default());
     r.bytes("Short name", 13).ok_or_else(bad)?;
-    r.with(|n| n.value(crate::formats::util::arcutil::text(short)));
+    r.with(|n| n.value(crate::formats::util::val::text(short)));
     if kind == 2 {
         r.u16("Variable part length", LE).ok_or_else(bad)?;
         r.u8("Time zone").ok_or_else(bad)?;
@@ -202,7 +205,7 @@ async fn directory_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         for (name, len) in [("Long name", namlen), ("Directory", dirlen)] {
             if len > 0 {
                 let raw = r.bytes(name, len.into()).ok_or_else(bad)?;
-                let value = crate::formats::util::arcutil::text(crate::text::until_nul(raw));
+                let value = crate::formats::util::val::text(crate::text::until_nul(raw));
                 r.with(|n| n.value(value));
             }
         }
@@ -222,7 +225,7 @@ async fn directory_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let file = input.span;
     let data = file.sub(offset.into(), packed.into());
     let node = if method == 0 {
-        embedded("Content", input.nested(data)).summary(human_size(packed.into()))
+        embedded("Content", input.nested(data)).summary(fmt::size(packed.into()))
     } else if let 1 | 2 = method {
         let m = if method == 1 {
             lzh::Method::ZooLzw
@@ -235,7 +238,7 @@ async fn directory_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             lzh::Check::Crc16(crc),
         ));
         crate::formats::content("Content", input, data, codec, Some(original.into()))
-            .summary(human_size(original.into()))
+            .summary(fmt::size(original.into()))
     } else {
         let m = crate::value::lookup(METHOD, method.into()).unwrap_or("unknown");
         unsupported("Compressed data", data, &format!("ZOO {m}"))

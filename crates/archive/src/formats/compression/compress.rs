@@ -5,7 +5,9 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::{human_size, uint, unsupported};
+use crate::formats::util::arcutil::unsupported;
+use crate::formats::util::fmt;
+use crate::formats::util::val::uint;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -84,7 +86,7 @@ pub async fn dissect_compress(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "compress, {}-bit LZW{mode}, {} compressed",
         header.flags & 0x1f,
-        human_size(body.len)
+        fmt::size(body.len)
     ));
     Ok(())
 }
@@ -94,7 +96,7 @@ pub async fn dissect_compress(cx: Cx, input: Input) -> Result<()> {
 fn pack_header(f: &mut Fields<'_>, _: &()) -> Result<u64> {
     f.bytes("Magic", 2).emit()?;
     f.u32("Original size")
-        .with(|&s, n| n.summary(human_size(s.into())))
+        .with(|&s, n| n.summary(fmt::size(s.into())))
         .emit()?;
     let levels = f.u8("Tree depth").emit()?;
     let mut leaves = 0u64;
@@ -108,7 +110,7 @@ fn pack_header(f: &mut Fields<'_>, _: &()) -> Result<u64> {
         f.node(
             Node::new(format!("Leaves at level {level}"))
                 .span(span)
-                .value(uint(n)),
+                .value(uint(n, 64)),
         );
         leaves = leaves.saturating_add(n);
     }
@@ -136,6 +138,6 @@ pub async fn dissect_pack(cx: Cx, input: Input) -> Result<()> {
         file.tail(len),
         "pack Huffman",
     ));
-    cx.annotate(format!("pack, {} uncompressed", human_size(size.into())));
+    cx.annotate(format!("pack, {} uncompressed", fmt::size(size.into())));
     Ok(())
 }

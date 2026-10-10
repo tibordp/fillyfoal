@@ -20,6 +20,8 @@ use crate::fields::{Endian, parse};
 use crate::formats::disk::qcow::Regions;
 use crate::formats::disk::{guid_le, size};
 use crate::formats::util::arcutil::ByteReader;
+use crate::formats::util::fmt::capitalize;
+use crate::formats::util::val::enumv;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -338,14 +340,6 @@ async fn push_entries(cx: &Cx, data: &[u8], span: Span, depth: usize) -> usize {
     count
 }
 
-fn capitalized(s: &str) -> String {
-    let mut s = s.to_owned();
-    if let Some(first) = s.get_mut(..1) {
-        first.make_ascii_uppercase();
-    }
-    s
-}
-
 /// A metadata entry: name, value and summary from its header and value;
 /// its fields (and nested entries) on expansion.
 fn entry_node(bytes: &[u8], span: Span, depth: usize) -> Node {
@@ -354,8 +348,8 @@ fn entry_node(bytes: &[u8], span: Span, depth: usize) -> Node {
     let value = bytes.get(8..).unwrap_or_default();
     let name = match (kind, lookup(ENTRY_TYPES, kind.into())) {
         (0, _) => lookup(VALUE_TYPES, value_type.into())
-            .map_or_else(|| format!("Value {value_type:#06x}"), capitalized),
-        (_, Some(n)) => capitalized(n),
+            .map_or_else(|| format!("Value {value_type:#06x}"), capitalize),
+        (_, Some(n)) => capitalize(n),
         (_, None) => format!("Entry {kind:#06x}"),
     };
     let mut node = Node::new(name).span(span);
@@ -401,9 +395,9 @@ async fn entry_fields(cx: Cx, (span, bytes, depth): (Span, Arc<Vec<u8>>, usize))
     let mut r = ByteReader::new(&bytes, span);
     let _ = r.u16("Entry size", LE);
     let kind = r.u16("Entry type", LE).unwrap_or(0);
-    r.with(|n| n.value(enum16(kind, ENTRY_TYPES)));
+    r.with(|n| n.value(enumv(kind, 16, ENTRY_TYPES)));
     let value_type = r.u16("Value type", LE).unwrap_or(0);
-    r.with(|n| n.value(enum16(value_type, VALUE_TYPES)));
+    r.with(|n| n.value(enumv(value_type, 16, VALUE_TYPES)));
     let _ = r.u16("Version", LE);
     // Nested entries start here (for the value types that have them).
     let mut nested_at = None;
@@ -465,7 +459,7 @@ async fn entry_fields(cx: Cx, (span, bytes, depth): (Span, Arc<Vec<u8>>, usize))
             if value_type == 0x0008 {
                 let _ = r.u16("Unknown", LE);
                 let p = r.u16("Protection type", LE).unwrap_or(0);
-                r.with(|n| n.value(enum16(p, PROTECTION)));
+                r.with(|n| n.value(enumv(p, 16, PROTECTION)));
             }
             nested_at = Some(r.at);
         }
@@ -512,14 +506,6 @@ fn method(r: &mut ByteReader<'_>) {
                 name: lookup(METHODS, m.into()),
             })
         });
-    }
-}
-
-fn enum16(raw: u16, table: EnumTable) -> Value {
-    Value::Enum {
-        raw: raw.into(),
-        bits: 16,
-        name: lookup(table, raw.into()),
     }
 }
 

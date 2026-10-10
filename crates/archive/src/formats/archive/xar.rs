@@ -14,7 +14,10 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::{count, emit_nodes, human_size, text, uint, unsupported};
+use crate::formats::util::arcutil::{emit_nodes, unsupported};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Codec, Format, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -39,8 +42,8 @@ record! {
         magic: ascii[4] "Magic",
         size: u16 "Header size",
         version: u16 "Version",
-        toc_compressed: u64 "TOC compressed size" .with(|&s, n| n.summary(human_size(s))),
-        toc_uncompressed: u64 "TOC uncompressed size" .with(|&s, n| n.summary(human_size(s))),
+        toc_compressed: u64 "TOC compressed size" .with(|&s, n| n.summary(fmt::size(s))),
+        toc_uncompressed: u64 "TOC uncompressed size" .with(|&s, n| n.summary(fmt::size(s))),
         checksum: u32 "Checksum algorithm" .enumeration(CHECKSUM),
     }
 }
@@ -73,13 +76,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             Codec::Zlib,
             Some(h.toc_uncompressed),
         )
-        .summary(format!("XML, {} compressed", human_size(toc.len))),
+        .summary(format!("XML, {} compressed", fmt::size(toc.len))),
     );
-    cx.emit(Node::new("Heap").span(heap).summary(human_size(heap.len)));
+    cx.emit(Node::new("Heap").span(heap).summary(fmt::size(heap.len)));
     cx.annotate(format!(
         "xar archive, TOC {} ({} compressed)",
-        human_size(h.toc_uncompressed),
-        human_size(h.toc_compressed)
+        fmt::size(h.toc_uncompressed),
+        fmt::size(h.toc_compressed)
     ));
     Ok(())
 }
@@ -238,7 +241,11 @@ async fn files(cx: Cx, (input, toc, expected, heap): (Input, Span, u64, Span)) -
         if let (Some(offset), Some(length)) = (e.offset, e.length) {
             let data = heap.sub(offset, length);
             let size = e.size.unwrap_or(length);
-            children.push(Node::new("Heap offset").value(uint(offset)).target(data));
+            children.push(
+                Node::new("Heap offset")
+                    .value(uint(offset, 64))
+                    .target(data),
+            );
             children.push(Node::new("Encoding").value(text(e.encoding.clone())));
             let c = match e.encoding.as_str() {
                 "application/x-gzip" => content("Content", input, data, Codec::Zlib, Some(size)),
@@ -253,8 +260,8 @@ async fn files(cx: Cx, (input, toc, expected, heap): (Input, Span, u64, Span)) -
                     .lazy(lzma_content, (input, data, size)),
                 other => unsupported("Content", data, other),
             };
-            children.push(c.summary(human_size(size)));
-            node = node.span(data).summary(human_size(size));
+            children.push(c.summary(fmt::size(size)));
+            node = node.span(data).summary(fmt::size(size));
         } else {
             node = node.summary(e.kind.clone());
         }

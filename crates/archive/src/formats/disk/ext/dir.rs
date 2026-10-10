@@ -17,17 +17,7 @@ use super::{FsRef, HASH, LE, MAX_DIR_DEPTH, csum32};
 /// Directory bytes read at most.
 const MAX_DIR_BYTES: u64 = 64 << 20;
 
-const FILE_TYPES: EnumTable = &[
-    (0, "unknown"),
-    (1, "regular file"),
-    (2, "directory"),
-    (3, "character device"),
-    (4, "block device"),
-    (5, "FIFO"),
-    (6, "socket"),
-    (7, "symbolic link"),
-    (0xde, "checksum tail"),
-];
+const FILE_TYPES: EnumTable = crate::formats::disk::dirent_types!((0xde, "checksum tail"));
 
 #[derive(Clone)]
 pub(super) struct Dir {

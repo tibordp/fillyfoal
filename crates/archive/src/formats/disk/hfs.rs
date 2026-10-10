@@ -695,9 +695,11 @@ record! {
     }
 }
 
+/// A Str27 volume name: length byte, then Mac OS Roman text.
 fn pascal(b: &[u8]) -> String {
     let len = usize::from(b.first().copied().unwrap_or(0)).min(27);
-    crate::text::latin1(b.get(1..len.saturating_add(1)).unwrap_or_default())
+    crate::codec::charset::Charset::MacRoman
+        .decode(b.get(1..len.saturating_add(1)).unwrap_or_default())
 }
 
 /// Classic HFS: show the MDB; an embedded HFS+ volume is dissected.

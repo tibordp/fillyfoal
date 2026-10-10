@@ -12,7 +12,10 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::{Num, ascii_num, count, hex, human_size, parse_ascii, text};
+use crate::formats::util::arcutil::{Num, ascii_num, parse_ascii};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, text};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -166,7 +169,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     let v = cx.read_avail(m.data.sub(0, 16)).await?;
                     deb_version = Some(String::from_utf8_lossy(&v).trim().to_owned());
                 }
-                node.summary(human_size(m.data.len))
+                node.summary(fmt::size(m.data.len))
             }
         };
         cx.progress_in(file, file.offset.saturating_add(cur.pos()));
@@ -204,7 +207,7 @@ fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     ascii_num(f, "Mode", 8, 8, Num::Mode).emit()?;
     ascii_num(f, "Size", 10, 10, Num::Dec)
         .with(|&s, n| match s {
-            Some(s) => n.summary(human_size(s)),
+            Some(s) => n.summary(fmt::size(s)),
             None => n,
         })
         .emit()?;
@@ -252,7 +255,7 @@ async fn member(cx: Cx, (input, span, name): (Input, Span, String)) -> Result<()
         }
         Kind::File => {
             if data.len > 0 {
-                cx.emit(embedded("Content", input.nested(data)).summary(human_size(data.len)));
+                cx.emit(embedded("Content", input.nested(data)).summary(fmt::size(data.len)));
             }
         }
     }
@@ -321,7 +324,7 @@ async fn symbol_table(cx: Cx, (span, wide, bsd, file): (Span, bool, bool, Span))
         cx.emit(
             Node::new("Ranlib size")
                 .span(span.sub(0, to_u64(word)))
-                .value(crate::formats::util::arcutil::uint(to_u64(ranlib_len)))
+                .value(crate::formats::util::val::uint(to_u64(ranlib_len), 64))
                 .summary(count(to_u64(entries), "symbol", "symbols")),
         );
         for i in 0..entries {
@@ -347,7 +350,7 @@ async fn symbol_table(cx: Cx, (span, wide, bsd, file): (Span, bool, bool, Span))
     cx.emit(
         Node::new("Symbol count")
             .span(span.sub(0, to_u64(word)))
-            .value(crate::formats::util::arcutil::uint(to_u64(n))),
+            .value(crate::formats::util::val::uint(to_u64(n), 64)),
     );
     let mut name_at = word.saturating_add(n.saturating_mul(word));
     for i in 0..n {
@@ -371,7 +374,7 @@ async fn symbol_table(cx: Cx, (span, wide, bsd, file): (Span, bool, bool, Span))
 fn symbol(name: String, span: Span, member: u64, file: Span) -> Node {
     Node::new(name)
         .span(span)
-        .value(hex(member))
+        .value(hex(member, 64))
         .summary("member header offset")
         .target(file.sub(member, HEADER))
 }

@@ -24,7 +24,10 @@ use crate::dsl::{Path, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::disk::{PieceList, content_node, unix_mode};
-use crate::formats::util::arcutil::{count, hex, human_size, unsupported};
+use crate::formats::util::arcutil::unsupported;
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::hex;
 use crate::formats::{Codec, Format, Input, Probe, content};
 use crate::node::Node;
 use crate::record;
@@ -98,7 +101,7 @@ record! {
         magic: ascii[4] "Magic",
         inodes: u32 "Inode count",
         mtime: u32 "Modification time" .timestamp(),
-        block_size: u32 "Block size" .with(|&b, n| n.summary(human_size(b.into()))),
+        block_size: u32 "Block size" .with(|&b, n| n.summary(fmt::size(b.into()))),
         fragments: u32 "Fragment count",
         compressor: u16 "Compression" .enumeration(COMPRESSOR),
         block_log: u16 "Block size (log2)",
@@ -108,7 +111,7 @@ record! {
         minor: u16 "Minor version",
         root: u64 "Root inode reference" .hex()
             .with(|&r, n| n.summary(format!("block {:#x}, offset {:#x}", r >> 16, r & 0xffff))),
-        bytes_used: u64 "Bytes used" .with(|&b, n| n.summary(human_size(b))),
+        bytes_used: u64 "Bytes used" .with(|&b, n| n.summary(fmt::size(b))),
         id_table: u64 "ID table" .hex(),
         xattr_table: u64 "Xattr ID table" .hex(),
         inode_table: u64 "Inode table" .hex(),
@@ -178,9 +181,9 @@ pub async fn dissect_squashfs(cx: Cx, input: Input) -> Result<()> {
         "SquashFS {}.{}, {compressor}, {}, {} blocks, {}",
         sb.major,
         sb.minor,
-        count(sb.inodes.into(), "inode", "inodes"),
-        human_size(sb.block_size.into()),
-        human_size(sb.bytes_used)
+        count(sb.inodes, "inode", "inodes"),
+        fmt::size(sb.block_size.into()),
+        fmt::size(sb.bytes_used)
     ));
     if sb.major != 4 {
         return Err(Diagnostic::unsupported(format!(
@@ -249,18 +252,18 @@ pub async fn dissect_squashfs(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Data and fragment blocks")
             .span(data)
-            .summary(format!("{}, {compressor}", human_size(data.len))),
+            .summary(format!("{}, {compressor}", fmt::size(data.len))),
     );
     cx.emit(
         Node::new("Inode table")
             .span(file.sub(fs.inode_table, fs.inode_end.saturating_sub(fs.inode_table)))
-            .summary(human_size(fs.inode_end.saturating_sub(fs.inode_table)))
+            .summary(fmt::size(fs.inode_end.saturating_sub(fs.inode_table)))
             .lazy(inode_table, fs.clone()),
     );
     cx.emit(
         Node::new("Directory table")
             .span(file.sub(fs.dir_table, fs.dir_end.saturating_sub(fs.dir_table)))
-            .summary(human_size(fs.dir_end.saturating_sub(fs.dir_table)))
+            .summary(fmt::size(fs.dir_end.saturating_sub(fs.dir_table)))
             .lazy(dir_table, fs.clone()),
     );
     for (name, at, n, kind) in [
@@ -339,7 +342,7 @@ fn compressor_options(f: &mut Fields<'_>, compressor: &u16) -> Result<()> {
         }
         4 => {
             f.u32("Dictionary size")
-                .with(|&d, n| n.summary(human_size(d.into())))
+                .with(|&d, n| n.summary(fmt::size(d.into())))
                 .emit()?;
             f.u32("Executable filters").hex().emit()?;
         }
@@ -451,10 +454,10 @@ async fn meta_blocks(cx: &Cx, fs: &FsRef, start: u64, end: u64) -> Result<()> {
         cx.push(
             Node::new(format!("Metadata block {index}"))
                 .span(block)
-                .value(hex(h.into()))
+                .value(hex(h, 64))
                 .summary(format!(
                     "{}, {}",
-                    human_size(len),
+                    fmt::size(len),
                     if stored {
                         "uncompressed"
                     } else {
@@ -537,7 +540,7 @@ impl Inode {
             format!(
                 "{}, {what}, {}",
                 unix_mode(self.mode.into()),
-                human_size(self.file_size)
+                fmt::size(self.file_size)
             )
         } else if matches!(self.kind, 4 | 5 | 11 | 12) {
             format!(
@@ -754,15 +757,12 @@ fn inode_layout(f: &mut Fields<'_>, ctx: &InodeCtx) -> Result<()> {
                 f.u32("Offset in fragment").emit()?;
                 let size = f
                     .u32("Size")
-                    .with(|&v, n| n.summary(human_size(v.into())))
+                    .with(|&v, n| n.summary(fmt::size(v.into())))
                     .emit()?;
                 (u64::from(size), frag)
             } else {
                 f.u64("First block").hex().emit()?;
-                let size = f
-                    .u64("Size")
-                    .with(|&v, n| n.summary(human_size(v)))
-                    .emit()?;
+                let size = f.u64("Size").with(|&v, n| n.summary(fmt::size(v))).emit()?;
                 f.u64("Sparse bytes").emit()?;
                 f.u32("Links").emit()?;
                 let frag = f
@@ -847,7 +847,7 @@ async fn block_sizes(cx: Cx, span: Span) -> Result<()> {
         } else {
             format!(
                 "{}, {}",
-                human_size((v & 0x00ff_ffff).into()),
+                fmt::size((v & 0x00ff_ffff).into()),
                 if v & 0x0100_0000 != 0 {
                     "uncompressed"
                 } else {
@@ -1213,7 +1213,7 @@ fn fragment_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
         .with(|&v, n| {
             n.summary(format!(
                 "{}, {}",
-                human_size((v & 0x00ff_ffff).into()),
+                fmt::size((v & 0x00ff_ffff).into()),
                 if v & 0x0100_0000 != 0 {
                     "uncompressed"
                 } else {
@@ -1258,14 +1258,14 @@ async fn lookup_table(cx: Cx, (fs, kind): (FsRef, Lookup)) -> Result<()> {
         cx.emit(
             Node::new(format!("Index {i}"))
                 .span(span)
-                .value(hex(*p))
+                .value(hex(*p, 64))
                 .summary(format!("metadata block at {p:#x}"))
                 .lazy(
                     crate::formats::util::arcutil::emit_nodes,
                     Arc::new(vec![
                         Node::new("Metadata block")
                             .span(block)
-                            .summary(human_size(len))
+                            .summary(fmt::size(len))
                             .lazy(
                                 crate::formats::util::arcutil::emit_nodes,
                                 Arc::new(vec![child]),
@@ -1295,7 +1295,7 @@ async fn lookup_entries(cx: Cx, (fs, kind, decoded): (FsRef, Lookup, Span)) -> R
                 let word = u32_le(&raw, 8).unwrap_or(0);
                 let block = fs.file.sub(start, (word & 0x00ff_ffff).into());
                 let node = struct_node(format!("Fragment {i}"), span, LE, (), fragment_layout)
-                    .summary(format!("{} at {start:#x}", human_size(block.len)));
+                    .summary(format!("{} at {start:#x}", fmt::size(block.len)));
                 cx.push(node).await;
                 cx.push(if word & 0x0100_0000 != 0 {
                     Node::new(format!("Fragment block {i}"))
@@ -1320,7 +1320,7 @@ async fn lookup_entries(cx: Cx, (fs, kind, decoded): (FsRef, Lookup, Span)) -> R
                 let r = u64_le(&raw, 0).unwrap_or(0);
                 Node::new(format!("Inode {}", i.saturating_add(1)))
                     .span(span)
-                    .value(hex(r))
+                    .value(hex(r, 64))
                     .summary(format!("block {:#x}, offset {:#x}", r >> 16, r & 0xffff))
             }
             Lookup::Ids => {

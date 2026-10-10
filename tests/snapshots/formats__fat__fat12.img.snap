@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ fat12.img — FAT12 filesystem "FIXTURE", 64 KiB, 121 clusters of 512 bytes  [0x0+0x10000]
+▾ fat12.img — FAT12 filesystem "FIXTURE", 64.0 KiB, 121 clusters of 512 bytes  [0x0+0x10000]
   ▾ Boot sector (BPB) — OEM "MSWIN4.1"  [0x0+0x200]
       Jump instruction: eb 3c 90  |.<.|  [0x0+0x3]
       OEM name: "MSWIN4.1"  [0x3+0x8]
@@ -233,7 +233,7 @@ expression: "common::explore(&display_name(&path), &data)"
           First cluster (low word): 16  [0x73a+0x2]
           File size: 1857 — 1.8 KiB  [0x73c+0x4]
       ▾ Clusters — 3 fragments, 1.8 KiB
-          Fragment 0 — file offset 0x0, 1 KiB  [0x2a00+0x400]
+          Fragment 0 — file offset 0x0, 1.0 KiB  [0x2a00+0x400]
           Fragment 1 — file offset 0x400, 512 bytes  [0x1e00+0x200]
           Fragment 2 — file offset 0x600, 321 bytes  [0x2400+0x141]
       ▾ Content — gzip, originally notes.txt, 1824 bytes uncompressed  [#1:0x0+0x741]
@@ -264,7 +264,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Unused entries — 53 free slots (end of directory)  [0x760+0x6a0]
     Data region — 60.5 KiB  [0xe00+0xf200]
   ▾ Free clusters — from the FAT
-      Clusters 8–9 — free, 1 KiB  [0x1a00+0x400]
-      Clusters 11–12 — free, 1 KiB  [0x2000+0x400]
-      Clusters 14–15 — free, 1 KiB  [0x2600+0x400]
+      Clusters 8–9 — free, 1.0 KiB  [0x1a00+0x400]
+      Clusters 11–12 — free, 1.0 KiB  [0x2000+0x400]
+      Clusters 14–15 — free, 1.0 KiB  [0x2600+0x400]
       Clusters 18–122 — free, 52.5 KiB  [0x2e00+0xd200]

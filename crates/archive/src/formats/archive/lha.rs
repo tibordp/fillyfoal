@@ -14,9 +14,10 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::arcutil::{
-    ByteReader, count, emit_nodes, hex, human_size, text, unix_mode, unsupported,
-};
+use crate::formats::util::arcutil::{ByteReader, emit_nodes, unix_mode, unsupported};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, text};
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -276,7 +277,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let summary = if m.directory {
             "directory".to_owned()
         } else {
-            format!("{}, {}", m.method, human_size(m.original))
+            format!("{}, {}", m.method, fmt::size(m.original))
         };
         cx.progress_in(file, m.span.end());
         cx.push(
@@ -296,7 +297,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "LHA archive, {}, {} uncompressed, {}",
         count(files, "file", "files"),
-        human_size(total),
+        fmt::size(total),
         methods.join(" ")
     ));
     Ok(())
@@ -305,9 +306,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 fn common_fields(r: &mut ByteReader<'_>, level: u8) -> Option<(String, u32)> {
     let method = r.text("Method", 5)?;
     let compressed = r.u32("Compressed size", LE)?;
-    r.with(|n| n.summary(human_size(compressed.into())));
+    r.with(|n| n.summary(fmt::size(compressed.into())));
     let original = r.u32("Original size", LE)?;
-    r.with(|n| n.summary(human_size(original.into())));
+    r.with(|n| n.summary(fmt::size(original.into())));
     let time = r.u32(
         if level == 2 {
             "Modification time"
@@ -322,14 +323,14 @@ fn common_fields(r: &mut ByteReader<'_>, level: u8) -> Option<(String, u32)> {
                 unix_seconds: time.into(),
             })
         } else {
-            n.value(hex(time.into())).summary(crate::text::dos_datetime(
+            n.value(hex(time, 64)).summary(crate::text::dos_datetime(
                 u16::try_from(time >> 16).unwrap_or(0),
                 u16::try_from(time & 0xffff).unwrap_or(0),
             ))
         }
     });
     let attr = r.u8(if level == 2 { "Reserved" } else { "Attribute" })?;
-    r.with(|n| n.value(hex(attr.into())));
+    r.with(|n| n.value(hex(attr, 64)));
     r.u8("Level")?;
     Some((method, compressed))
 }
@@ -355,7 +356,7 @@ fn ext_node(kind: u8, body: &[u8], span: Span) -> Node {
     match kind {
         0x00 => {
             if let Some(crc) = r.u16("Header CRC-16", LE) {
-                r.with(|n| n.value(hex(crc.into())));
+                r.with(|n| n.value(hex(crc, 64)));
             }
         }
         0x01 | 0x3f | 0x52 | 0x53 => {
@@ -371,7 +372,7 @@ fn ext_node(kind: u8, body: &[u8], span: Span) -> Node {
         }
         0x40 => {
             if let Some(a) = r.u16("Attributes", LE) {
-                r.with(|n| n.value(hex(a.into())));
+                r.with(|n| n.value(hex(a, 64)));
             }
         }
         0x41 => {
@@ -432,7 +433,7 @@ async fn member(cx: Cx, (input, span, level): (Input, Span, u8)) -> Result<()> {
         r.u16("Header size", LE).ok_or_else(bad)?;
         let (method, compressed) = common_fields(&mut r, level).ok_or_else(bad)?;
         r.u16("CRC-16", LE).ok_or_else(bad)?;
-        r.with(|n| n.value(hex(u16_le(&header, 21).unwrap_or(0).into())));
+        r.with(|n| n.value(hex(u16_le(&header, 21).unwrap_or(0), 64)));
         os_id(&mut r).ok_or_else(bad)?;
         r.u16("Next header size", LE).ok_or_else(bad)?;
         let mut pos = r.at;
@@ -455,7 +456,7 @@ async fn member(cx: Cx, (input, span, level): (Input, Span, u8)) -> Result<()> {
             .iter()
             .fold(0u8, |a, &b| a.wrapping_add(b));
         r.with(|n| {
-            let n = n.value(hex(sum.into()));
+            let n = n.value(hex(sum, 64));
             if computed == sum {
                 n.summary("valid")
             } else {
@@ -468,7 +469,7 @@ async fn member(cx: Cx, (input, span, level): (Input, Span, u8)) -> Result<()> {
         let name_len = r.u8("Name length").ok_or_else(bad)?;
         r.text("Name", name_len.into()).ok_or_else(bad)?;
         let crc = r.u16("CRC-16", LE).ok_or_else(bad)?;
-        r.with(|n| n.value(hex(crc.into())));
+        r.with(|n| n.value(hex(crc, 64)));
         if level == 1 {
             os_id(&mut r).ok_or_else(bad)?;
             r.u16("Next header size", LE).ok_or_else(bad)?;
@@ -513,12 +514,12 @@ async fn member(cx: Cx, (input, span, level): (Input, Span, u8)) -> Result<()> {
         u16_le(&header, 22usize.saturating_add(name_len))
     };
     let node = if stored(&method) {
-        embedded("Content", input.nested(data)).summary(human_size(data_len))
+        embedded("Content", input.nested(data)).summary(fmt::size(data_len))
     } else if let Some(m) = codec_method(&method) {
         let check = crc.map_or(lzh::Check::None, lzh::Check::Crc16);
         let codec = Codec::Lzh(lzh::Params::new(m, Some(original), check));
         crate::formats::content("Content", input, data, codec, Some(original))
-            .summary(format!("{}, {method}", human_size(original)))
+            .summary(format!("{}, {method}", fmt::size(original)))
     } else {
         unsupported("Compressed data", data, &format!("LHA {method}"))
     };

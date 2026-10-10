@@ -5,37 +5,12 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::archive::legacy::signature_and_body;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
-use crate::span::Span;
-use crate::value::{Radix, Value};
 
 const LE: Endian = Endian::Little;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-/// Header-only dissector body: emits a signature and the rest as one node.
-async fn signature_and_body(
-    cx: &Cx,
-    file: Span,
-    magic_len: u64,
-    body: &'static str,
-) -> Result<Vec<u8>> {
-    let head = cx.read_avail(file.sub(0, 64)).await?;
-    cx.emit(Node::new("Signature").span(file.sub(0, magic_len)));
-    cx.emit(Node::new(body).span(file.tail(magic_len)));
-    Ok(head)
-}
 
 // ---------------------------------------------------------------------------
 // Unix and CP/M compressors: freeze, compact, squeeze, crunch
@@ -126,12 +101,12 @@ async fn crunch(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Reference revision")
             .span(file.sub(at, 1))
-            .value(uint(info.first().copied().unwrap_or(0).into(), 8)),
+            .value(uint(info.first().copied().unwrap_or(0), 8)),
     );
     cx.emit(
         Node::new("Significant revision")
             .span(file.sub(at.saturating_add(1), 1))
-            .value(uint(info.get(1).copied().unwrap_or(0).into(), 8)),
+            .value(uint(info.get(1).copied().unwrap_or(0), 8)),
     );
     cx.emit(Node::new("Crunched data").span(file.tail(at.saturating_add(4))));
     cx.annotate(format!("crunched {name:?} (LZW)"));

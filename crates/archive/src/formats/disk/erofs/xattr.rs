@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
+use crate::bytes::{align_up, to_u64, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Fields, struct_node};
@@ -12,7 +12,7 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value, lookup};
 
-use super::{Fs, FsRef, Ino, LE, align};
+use super::{Fs, FsRef, Ino, LE};
 
 const INDEXES: EnumTable = &[
     (1, "user."),
@@ -94,7 +94,7 @@ fn entry_at(data: &[u8], at: usize) -> Option<(u8, Vec<u8>, Vec<u8>, usize)> {
     let end = value_at.checked_add(value_len)?;
     let name = data.get(name_at..value_at)?.to_vec();
     let value = data.get(value_at..end)?.to_vec();
-    let len = to_usize(align(to_u64(end.checked_sub(at)?), 4));
+    let len = to_usize(align_up(to_u64(end.checked_sub(at)?), 4));
     Some((index, name, value, len))
 }
 
@@ -169,7 +169,7 @@ pub(super) async fn view(cx: Cx, (fs, nid): (FsRef, u64)) -> Result<()> {
         let head = cx.read_avail(fs.vol.sub(entry_off, 4)).await?;
         let name_len = u64::from(head.first().copied().unwrap_or(0));
         let value_len = u64::from(u16_le(&head, 2).unwrap_or(0));
-        let elen = align(4u64.saturating_add(name_len).saturating_add(value_len), 4);
+        let elen = align_up(4u64.saturating_add(name_len).saturating_add(value_len), 4);
         let espan = fs.vol.sub(entry_off, elen);
         let raw = cx.read_avail(espan).await?;
         let summary = match entry_at(&raw, 0) {

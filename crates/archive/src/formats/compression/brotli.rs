@@ -7,7 +7,7 @@
 
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::formats::util::arcutil::human_size;
+use crate::formats::util::fmt;
 use crate::formats::{Codec, Format, Head, Input, Probe, content};
 use crate::node::Node;
 
@@ -35,11 +35,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(content("Decompressed", input, file, Codec::Brotli, None));
     cx.emit(Node::new("Compressed data").span(file));
     let window = crate::codec::brotli::window_bits_of(&first)
-        .map(|w| format!(", {} window", human_size((1u64 << w).saturating_sub(16))))
+        .map(|w| format!(", {} window", fmt::size((1u64 << w).saturating_sub(16))))
         .unwrap_or_default();
     cx.annotate(format!(
         "Brotli{window}, {} compressed",
-        human_size(file.len)
+        fmt::size(file.len)
     ));
     Ok(())
 }

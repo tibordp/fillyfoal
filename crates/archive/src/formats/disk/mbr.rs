@@ -15,6 +15,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::ptypes::{MBR_TYPES, is_extended};
 use crate::formats::disk::{size, volume};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -136,8 +137,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         "Protective MBR (GPT disk)".to_owned()
     } else {
         format!(
-            "MBR partition table, {used} primary partition{}{}, {}",
-            if used == 1 { "" } else { "s" },
+            "MBR partition table, {}{}, {}",
+            plural(crate::bytes::to_u64(used), "primary partition"),
             if logical > 0 {
                 format!(" and {logical} logical")
             } else {

@@ -10,15 +10,14 @@ use crate::bytes::{to_u64, u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::datakit::{fourcc, size};
+use crate::formats::util::civil::EPOCH_2000;
+use crate::formats::util::fmt::{fourcc, size};
 use crate::formats::{Codec, Format, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 
 const BE: Endian = Endian::Big;
-/// Seconds between 1970-01-01 and 2000-01-01.
-const EPOCH_2000: i64 = 946_684_800;
 
 pub static APPLESINGLE: Format = Format {
     name: "applesingle",

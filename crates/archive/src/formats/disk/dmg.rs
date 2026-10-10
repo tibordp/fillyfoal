@@ -14,7 +14,10 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, uint};
+use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, uint};
 use crate::formats::{Codec, Format, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -68,7 +71,7 @@ record! {
         flags: u32 "Flags" .flags(FLAGS),
         running: u64 "Running data fork offset" .hex(),
         data_offset: u64 "Data fork offset" .hex(),
-        data_length: u64 "Data fork length" .with(|&l, n| n.summary(human_size(l))),
+        data_length: u64 "Data fork length" .with(|&l, n| n.summary(fmt::size(l))),
         rsrc_offset: u64 "Resource fork offset" .hex(),
         rsrc_length: u64 "Resource fork length",
         segment: u32 "Segment number",
@@ -78,13 +81,13 @@ record! {
         data_checksum_bits: u32 "Data checksum size (bits)",
         data_checksum: bytes[128] "Data checksum",
         xml_offset: u64 "XML offset" .hex(),
-        xml_length: u64 "XML length" .with(|&l, n| n.summary(human_size(l))),
+        xml_length: u64 "XML length" .with(|&l, n| n.summary(fmt::size(l))),
         reserved: bytes[120] "Reserved",
         checksum_type: u32 "Master checksum type" .enumeration(CHECKSUM),
         checksum_bits: u32 "Master checksum size (bits)",
         checksum: bytes[128] "Master checksum",
         variant: u32 "Image variant" .enumeration(VARIANT),
-        sectors: u64 "Sector count" .with(|&s, n| n.summary(human_size(s.saturating_mul(512)))),
+        sectors: u64 "Sector count" .with(|&s, n| n.summary(fmt::size(s.saturating_mul(512)))),
         reserved2: bytes[12] "Reserved",
     }
 }
@@ -114,7 +117,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Data fork")
             .span(data)
-            .summary(human_size(data.len)),
+            .summary(fmt::size(data.len)),
     );
     if koly.rsrc_length > 0 {
         cx.emit(Node::new("Resource fork").span(file.sub(koly.rsrc_offset, koly.rsrc_length)));
@@ -126,12 +129,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .span(xml)
                 .lazy(partitions, (input, xml, data)),
         );
-        cx.emit(embedded("Property list", input.nested(xml)).summary(human_size(xml.len)));
+        cx.emit(embedded("Property list", input.nested(xml)).summary(fmt::size(xml.len)));
     }
     cx.emit(Koly::node("Trailer (koly)", trailer, BE));
     cx.annotate(format!(
         "Apple disk image (UDIF), {} ({} sectors)",
-        human_size(koly.sectors.saturating_mul(512)),
+        fmt::size(koly.sectors.saturating_mul(512)),
         koly.sectors
     ));
     Ok(())
@@ -250,8 +253,8 @@ async fn partitions(cx: Cx, (input, xml_span, data_fork): (Input, Span, Span)) -
                 node = node
                     .summary(format!(
                         "{}, {}",
-                        human_size(sectors.saturating_mul(512)),
-                        count(chunks.into(), "chunk", "chunks")
+                        fmt::size(sectors.saturating_mul(512)),
+                        count(chunks, "chunk", "chunks")
                     ))
                     .lazy(partition, (input, mish.span, data_fork));
             }
@@ -292,25 +295,22 @@ async fn partition(cx: Cx, (input, mish, data_fork): (Input, Span, Span)) -> Res
                 bits: 32,
                 name: crate::value::lookup(CHUNK_TYPE, kind.into()),
             }),
-            Node::new("Comment").span(span.sub(4, 4)).value(hex(u32_be(
-                &raw,
-                at.saturating_add(4),
-            )
-            .unwrap_or(0)
-            .into())),
+            Node::new("Comment")
+                .span(span.sub(4, 4))
+                .value(hex(u32_be(&raw, at.saturating_add(4)).unwrap_or(0), 64)),
             Node::new("First sector")
                 .span(span.sub(8, 8))
-                .value(uint(first)),
+                .value(uint(first, 64)),
             Node::new("Sector count")
                 .span(span.sub(16, 8))
-                .value(uint(sectors)),
+                .value(uint(sectors, 64)),
             Node::new("Compressed offset")
                 .span(span.sub(24, 8))
-                .value(hex(offset))
+                .value(hex(offset, 64))
                 .target(data),
             Node::new("Compressed length")
                 .span(span.sub(32, 8))
-                .value(uint(length)),
+                .value(uint(length, 64)),
         ];
         match kind {
             0x8000_0005 => fields.push(content("Data", input, data, Codec::Zlib, Some(size))),
@@ -325,10 +325,10 @@ async fn partition(cx: Cx, (input, mish, data_fork): (Input, Span, Span)) -> Res
         }
         let mut summary = format!(
             "{kind_name}, sectors {first}..+{sectors} ({})",
-            human_size(size)
+            fmt::size(size)
         );
         if length > 0 {
-            summary = format!("{summary} from {}", human_size(length));
+            summary = format!("{summary} from {}", fmt::size(length));
         }
         cx.push(
             Node::new(format!("Chunk {i}"))

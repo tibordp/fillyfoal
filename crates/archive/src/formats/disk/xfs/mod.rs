@@ -226,14 +226,7 @@ struct HdrCtx {
     crc: Option<u32>,
 }
 
-/// A decimal unsigned value node.
-fn uint(name: impl Into<std::borrow::Cow<'static, str>>, span: Span, value: u64, bits: u8) -> Node {
-    Node::new(name).span(span).value(Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    })
-}
+use crate::formats::disk::uint_node as uint;
 
 /// Emits whatever is left of the cursor's block as an unused region.
 fn rest_unused(f: &mut Fields<'_>, name: &'static str) {

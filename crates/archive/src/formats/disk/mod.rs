@@ -58,51 +58,7 @@ use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::value::Value;
 
-/// Human-readable size: `512 bytes`, `64 KiB`, `1.5 GiB`.
-pub fn size(n: u64) -> String {
-    const UNITS: [&str; 6] = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
-    if n < 1024 {
-        return format!("{n} bytes");
-    }
-    let mut div = 1024u64;
-    let mut unit = 0usize;
-    while unit < 5 && n.checked_div(div).is_some_and(|q| q >= 1024) {
-        div = div.saturating_mul(1024);
-        unit = unit.saturating_add(1);
-    }
-    let whole = n.checked_div(div).unwrap_or(0);
-    let tenths = n
-        .checked_rem(div)
-        .unwrap_or(0)
-        .saturating_mul(10)
-        .checked_div(div)
-        .unwrap_or(0);
-    let name = UNITS.get(unit).copied().unwrap_or("?");
-    if tenths == 0 {
-        format!("{whole} {name}")
-    } else {
-        format!("{whole}.{tenths} {name}")
-    }
-}
-
-/// A UUID stored in RFC 4122 (big-endian) byte order.
-pub fn uuid(b: &[u8]) -> String {
-    let hex = |r: std::ops::Range<usize>| -> String {
-        b.get(r)
-            .unwrap_or_default()
-            .iter()
-            .map(|x| format!("{x:02x}"))
-            .collect()
-    };
-    format!(
-        "{}-{}-{}-{}-{}",
-        hex(0..4),
-        hex(4..6),
-        hex(6..8),
-        hex(8..10),
-        hex(10..16)
-    )
-}
+pub use crate::formats::util::fmt::{size, uuid};
 
 /// Decorator for `bytes[16]` record fields holding an RFC 4122 UUID.
 #[allow(clippy::ptr_arg)] // used as a `Field::with` decorator
@@ -400,43 +356,43 @@ pub fn fletcher64(block: &[u8]) -> u64 {
     c2 << 32 | c1
 }
 
-/// A Unix mode as `ls -l` shows it, e.g. `drwxr-xr-x`.
-pub fn unix_mode(mode: u32) -> String {
-    let kind = match mode & 0o170_000 {
-        0o040_000 => 'd',
-        0o100_000 => '-',
-        0o120_000 => 'l',
-        0o020_000 => 'c',
-        0o060_000 => 'b',
-        0o010_000 => 'p',
-        0o140_000 => 's',
-        _ => '?',
-    };
-    let mut out = String::from(kind);
-    for shift in [6u32, 3, 0] {
-        let bits = (mode >> shift) & 7;
-        out.push(if bits & 4 != 0 { 'r' } else { '-' });
-        out.push(if bits & 2 != 0 { 'w' } else { '-' });
-        let special = match shift {
-            6 => mode & 0o4000 != 0,
-            3 => mode & 0o2000 != 0,
-            _ => mode & 0o1000 != 0,
-        };
-        out.push(match (bits & 1 != 0, special, shift) {
-            (true, true, 0) => 't',
-            (false, true, 0) => 'T',
-            (true, true, _) => 's',
-            (false, true, _) => 'S',
-            (true, false, _) => 'x',
-            (false, false, _) => '-',
-        });
-    }
-    out
-}
+pub use crate::formats::util::arcutil::unix_mode;
 
 pub use crate::formats::util::datakit::guid_le;
 
-/// Rounds `v` up to a multiple of `a`, saturating instead of overflowing.
-pub fn align(v: u64, a: u64) -> u64 {
-    v.checked_next_multiple_of(a).unwrap_or(u64::MAX)
+/// Directory-entry file types: Linux's `FT_*` codes (`fs_types.h`) shared
+/// by ext, XFS, Btrfs, F2FS and EROFS, followed by a filesystem's own
+/// extra entries.
+macro_rules! dirent_types {
+    ($($extra:expr),* $(,)?) => {
+        &[
+            (0, "unknown"),
+            (1, "regular file"),
+            (2, "directory"),
+            (3, "character device"),
+            (4, "block device"),
+            (5, "FIFO"),
+            (6, "socket"),
+            (7, "symbolic link"),
+            $($extra),*
+        ]
+    };
+}
+pub(crate) use dirent_types;
+
+/// The Linux directory-entry file types, without filesystem extras.
+pub const DIRENT_TYPES: crate::value::EnumTable = dirent_types!();
+
+/// A `len`-byte name field (directory entry, xattr), shown as lossy UTF-8.
+pub fn name_field(f: &mut crate::fields::Fields<'_>, len: u64) -> Result<Vec<u8>> {
+    f.bytes("Name", len)
+        .with(|b, n| n.value(Value::Text(String::from_utf8_lossy(b).into_owned())))
+        .emit()
+}
+
+/// A value node holding a decimal integer.
+pub fn uint_node(name: impl Into<Cow<'static, str>>, span: Span, value: u64, bits: u8) -> Node {
+    Node::new(name)
+        .span(span)
+        .value(crate::formats::util::val::uint(value, bits))
 }

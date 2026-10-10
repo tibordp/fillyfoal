@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ apfs.img — APFS container, 4 MiB, 1 volume ("FIXTURE")  [0x0+0x400000]
+▾ apfs.img — APFS container, 4.0 MiB, 1 volume ("FIXTURE")  [0x0+0x400000]
   ▾ Container superblock (block 0) — transaction 4  [0x0+0x1000]
       Checksum: 0xfa757b3951ec3da5  [0x0+0x8]
       Object id: 1  [0x8+0x8]
@@ -224,7 +224,7 @@ expression: "common::explore(&display_name(&path), &data)"
         16: inode — -rw-r--r--, parent 2  [0x63187+0x8] → 0x63d77+0xa0
         16: extended attribute  [0x6318f+0x1f] → 0x63e3f+0xf
         16: data stream  [0x631ae+0x8] → 0x63e3b+0x4
-      ▾ 16: file extent — offset 0x0: 4 KiB at block 93  [0x5d000+0x1000]
+      ▾ 16: file extent — offset 0x0: 4.0 KiB at block 93  [0x5d000+0x1000]
           Data  [0x5d000+0x1000]
         17: inode — drwxr-xr-x, parent 2  [0x631e0+0x8] → 0x63d03+0x74
         17: extended attribute  [0x631e8+0x1f] → 0x63e60+0xf
@@ -232,17 +232,17 @@ expression: "common::explore(&display_name(&path), &data)"
         18: inode — -rw-r--r--, parent 17  [0x6321d+0x8] → 0x63be3+0xa0
         18: extended attribute  [0x63225+0x1f] → 0x63e81+0xf
         18: data stream  [0x63244+0x8] → 0x63e17+0x4
-      ▾ 18: file extent — offset 0x0: 4 KiB at block 95  [0x5f000+0x1000]
+      ▾ 18: file extent — offset 0x0: 4.0 KiB at block 95  [0x5f000+0x1000]
           Data  [0x5f000+0x1000]
         19: inode — -rw-r--r--, parent 2  [0x6328b+0x8] → 0x63a93+0xb8
         19: extended attribute  [0x63293+0x1f] → 0x63ca1+0xf
         19: data stream  [0x632b2+0x8] → 0x63c83+0x4
-      ▾ 19: file extent — offset 0x0: 4 KiB at block 96  [0x60000+0x1000]
+      ▾ 19: file extent — offset 0x0: 4.0 KiB at block 96  [0x60000+0x1000]
           Data  [0x60000+0x1000]
         20: inode — -rw-r--r--, parent 2  [0x632e1+0x8] → 0x639e7+0xa0
         20: extended attribute  [0x632e9+0x1f] → 0x63cc8+0xf
         20: data stream  [0x63308+0x8] → 0x63b4b+0x4
-      ▾ 20: file extent — offset 0x0: 8 KiB at block 97  [0x61000+0x2000]
+      ▾ 20: file extent — offset 0x0: 8.0 KiB at block 97  [0x61000+0x2000]
           Data  [0x61000+0x2000]
         21: inode — -rw-r--r--, parent 2  [0x63342+0x8] → 0x6396b+0x7c
         21: extended attribute  [0x6334a+0x1f] → 0x63b7b+0xf

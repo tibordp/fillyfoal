@@ -17,12 +17,13 @@ use crate::cx::Cx;
 use crate::dsl::{Path, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
+use crate::formats::disk::DIRENT_TYPES;
 use crate::formats::disk::{PieceList, content_node, crc32_update, size, unix_mode, uuid_value};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Radix, Value, flag, lookup};
+use crate::value::{FlagTable, Radix, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const SUPER: u64 = 1024;
@@ -96,17 +97,6 @@ const INLINE_FLAGS: FlagTable = &[
     flag(0x20, "EXTRA_ATTR"),
     flag(0x40, "PIN_FILE"),
     flag(0x80, "COMPRESS_RELEASED"),
-];
-
-const FILE_TYPES: EnumTable = &[
-    (0, "unknown"),
-    (1, "regular file"),
-    (2, "directory"),
-    (3, "character device"),
-    (4, "block device"),
-    (5, "FIFO"),
-    (6, "socket"),
-    (7, "symbolic link"),
 ];
 
 record! {
@@ -1058,7 +1048,7 @@ async fn directory(cx: Cx, st: DirState) -> Result<()> {
         if d.name == b"." || d.name == b".." {
             continue;
         }
-        let what = lookup(FILE_TYPES, d.file_type.into()).unwrap_or("unknown");
+        let what = lookup(DIRENT_TYPES, d.file_type.into()).unwrap_or("unknown");
         let node = Node::new(String::from_utf8_lossy(&d.name).into_owned())
             .span(span)
             .value(Value::UInt {

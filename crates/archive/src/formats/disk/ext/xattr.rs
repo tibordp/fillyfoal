@@ -2,11 +2,11 @@
 //! block of their own (shared by inodes with the same attributes). Both
 //! are a list of entries growing up and values growing down.
 
-use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
+use crate::bytes::{align_up, to_u64, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
-use crate::formats::disk::{align, size};
+use crate::formats::disk::size;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Value, lookup};
@@ -55,7 +55,7 @@ fn entries(data: &[u8], start: usize) -> (Vec<Entry>, usize, Option<Diagnostic>)
             Some(_) => {}
         }
         let name_len = usize::from(data.get(at).copied().unwrap_or(0));
-        let len = to_usize(align(to_u64(16usize.saturating_add(name_len)), 4));
+        let len = to_usize(align_up(to_u64(16usize.saturating_add(name_len)), 4));
         let Some(name) =
             data.get(at.saturating_add(16)..at.saturating_add(16).saturating_add(name_len))
         else {

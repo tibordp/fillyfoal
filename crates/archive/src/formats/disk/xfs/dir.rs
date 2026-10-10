@@ -13,6 +13,7 @@ use crate::cx::Cx;
 use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
+use crate::formats::disk::name_field;
 use crate::formats::disk::{size, uuid_value};
 use crate::node::Node;
 use crate::span::Span;
@@ -29,17 +30,7 @@ const MAX_DIR_BLOCKS: usize = 1 << 16;
 const LEAF_OFFSET: u64 = 1 << 35;
 const FREE_OFFSET: u64 = 1 << 36;
 
-pub(super) const FTYPES: EnumTable = &[
-    (0, "unknown"),
-    (1, "regular file"),
-    (2, "directory"),
-    (3, "character device"),
-    (4, "block device"),
-    (5, "FIFO"),
-    (6, "socket"),
-    (7, "symbolic link"),
-    (8, "whiteout"),
-];
+pub(super) const FTYPES: EnumTable = crate::formats::disk::dirent_types!((8, "whiteout"));
 
 /// A file type from a Unix mode.
 fn mode_kind(mode: u16) -> &'static str {
@@ -128,13 +119,6 @@ fn sf_parse(data: &[u8], ftype: bool) -> Sf {
 struct SfEntCtx {
     ftype: bool,
     wide: bool,
-}
-
-fn name_field(f: &mut Fields<'_>, len: u64) -> Result<()> {
-    f.bytes("Name", len)
-        .with(|b, n| n.value(Value::Text(String::from_utf8_lossy(b).into_owned())))
-        .emit()?;
-    Ok(())
 }
 
 fn sf_entry_layout(f: &mut Fields<'_>, ctx: &SfEntCtx) -> Result<()> {

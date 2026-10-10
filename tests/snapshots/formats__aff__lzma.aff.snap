@@ -37,7 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Data length: 95  [0x9f+0x4]
       Flags: 0x21 [COMPRESSED | ALG_LZMA]  [0xa3+0x4]
       Name: "page0"  [0xa7+0x5]
-    ▾ Data (LZMA) — MBR partition table, 1 primary partition, 16 KiB  [0xac+0x5f]
+    ▾ Data (LZMA) — MBR partition table, 1 primary partition, 16.0 KiB  [0xac+0x5f]
         Bootstrap code — empty  [#1:0x0+0x1b8]
         Disk signature: 0x0  [#1:0x1b8+0x4]
         Copy protection: 0x0 — not protected  [#1:0x1bc+0x2]

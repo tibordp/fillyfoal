@@ -2,12 +2,12 @@
 //! FFS files, each made of sections. PE32 sections are dissected as PE
 //! images, nested firmware volume sections as firmware volumes.
 
-use crate::bytes::{u16_le, u32_le, u64_le};
+use crate::bytes::{align_up, u16_le, u24_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::disk::{align, guid_le, size};
+use crate::formats::disk::{guid_le, size};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
@@ -113,7 +113,7 @@ record! {
         file_checksum: u8 "File checksum" .hex(),
         kind: u8 "Type" .enumeration(FILE_TYPES),
         attributes: u8 "Attributes" .hex() .flags(FILE_ATTRIBUTES),
-        size: bytes[3] "Size" .with(|b, n| n.summary(size(u24(b).into()))),
+        size: bytes[3] "Size" .with(|b, n| n.summary(size(u24_le(b, 0).unwrap_or(0).into()))),
         state: u8 "State" .hex(),
     }
 }
@@ -135,15 +135,6 @@ const SECTION_TYPES: EnumTable = &[
     (0x1b, "PEI dependency"),
     (0x1c, "MM dependency"),
 ];
-
-fn u24(b: &[u8]) -> u32 {
-    u32::from_le_bytes([
-        b.first().copied().unwrap_or(0),
-        b.get(1).copied().unwrap_or(0),
-        b.get(2).copied().unwrap_or(0),
-        0,
-    ])
-}
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let fv = input.span;
@@ -236,7 +227,7 @@ async fn list_files(cx: Cx, (input, area, erase): (Input, Span, u8)) -> Result<(
             break;
         }
         let h = parse(&cx, head_span, LE, &(), FileHeader::layout).await?;
-        let mut len = u64::from(u24(&h.size));
+        let mut len = u64::from(u24_le(&h.size, 0).unwrap_or(0));
         let mut header_len = FileHeader::SIZE;
         if h.attributes & 0x01 != 0 {
             let ext = cx
@@ -259,7 +250,7 @@ async fn list_files(cx: Cx, (input, area, erase): (Input, Span, u8)) -> Result<(
                 .lazy(file_node, (input, file, header_len, h.kind)),
         )
         .await;
-        at = align(at.saturating_add(len), 8);
+        at = align_up(at.saturating_add(len), 8);
         count = count.saturating_add(1);
     }
     Ok(())
@@ -282,7 +273,7 @@ async fn sections(cx: Cx, (input, area, depth): (Input, Span, u32)) -> Result<()
     while at.saturating_add(4) <= area.len && count < MAX_ITEMS {
         let raw = cx.read(area.sub(at, 4)).await?;
         let kind = raw.get(3).copied().unwrap_or(0);
-        let mut len = u64::from(u24(&raw));
+        let mut len = u64::from(u24_le(&raw, 0).unwrap_or(0));
         let mut header = 4u64;
         if len == 0xff_ffff {
             let ext = cx.read(area.sub(at.saturating_add(4), 4)).await?;
@@ -354,7 +345,7 @@ async fn sections(cx: Cx, (input, area, depth): (Input, Span, u32)) -> Result<()
             _ => node.summary(size(body.len)),
         };
         cx.push(node).await;
-        at = align(at.saturating_add(len), 4);
+        at = align_up(at.saturating_add(len), 4);
         count = count.saturating_add(1);
     }
     Ok(())

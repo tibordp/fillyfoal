@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ mkswap.img — Linux swap v1 "realswap", 40 KiB (10 pages of 4 KiB)  [0x0+0xa000]
+▾ mkswap.img — Linux swap v1 "realswap", 40.0 KiB (10 pages of 4.0 KiB)  [0x0+0xa000]
     Boot bits  [0x0+0x400]
   ▾ Header  [0x400+0x2c]
       Version: 1  [0x400+0x4]
@@ -11,4 +11,4 @@ expression: "common::explore(&display_name(&path), &data)"
       UUID: "11223344-5566-7788-99aa-bbccddeeff00"  [0x40c+0x10]
       Label: "realswap"  [0x41c+0x10]
     Signature: "SWAPSPACE2"  [0xff6+0xa]
-    Swap pages — 36 KiB  [0x1000+0x9000]
+    Swap pages — 36.0 KiB  [0x1000+0x9000]

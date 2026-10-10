@@ -11,7 +11,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::datakit::{hex_string, size};
+use crate::formats::util::fmt::{hex_lower, size};
 use crate::formats::util::wire::protobuf as pb;
 use crate::formats::{Format, Input, Probe, archive::zip, embedded_as};
 use crate::node::Node;
@@ -142,12 +142,8 @@ async fn message(cx: Cx, (span, kind, depth): (Span, Kind, u32)) -> Result<()> {
                 bits: 64,
                 radix: crate::value::Radix::Dec,
             }),
-            pb::Payload::I64(v) => {
-                Node::new(label).value(crate::formats::util::datakit::hex(v, 64))
-            }
-            pb::Payload::I32(v) => {
-                Node::new(label).value(crate::formats::util::datakit::hex(v, 32))
-            }
+            pb::Payload::I64(v) => Node::new(label).value(crate::formats::util::val::hex(v, 64)),
+            pb::Payload::I32(v) => Node::new(label).value(crate::formats::util::val::hex(v, 32)),
             pb::Payload::Len(body) => {
                 let bytes = cx.read_avail(body.sub(0, 32)).await?;
                 let mut node = Node::new(label).summary(format!("{} bytes", body.len));
@@ -174,7 +170,7 @@ async fn message(cx: Cx, (span, kind, depth): (Span, Kind, u32)) -> Result<()> {
 
 /// The extension ID: the first 16 bytes of the key hash in letters `a`–`p`.
 fn crx_id(bytes: &[u8]) -> String {
-    let hex = hex_string(bytes.get(..16).unwrap_or(bytes));
+    let hex = hex_lower(bytes.get(..16).unwrap_or(bytes));
     hex.chars()
         .map(|c| {
             let v = c.to_digit(16).unwrap_or(0);

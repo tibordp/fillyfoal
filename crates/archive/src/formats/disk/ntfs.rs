@@ -97,7 +97,8 @@ record! {
     }
 }
 
-const ATTR_TYPES: EnumTable = &[
+/// NTFS attribute type codes (`$AttrDef`).
+pub const ATTR_TYPES: EnumTable = &[
     (0x10, "$STANDARD_INFORMATION"),
     (0x20, "$ATTRIBUTE_LIST"),
     (0x30, "$FILE_NAME"),
@@ -115,22 +116,34 @@ const ATTR_TYPES: EnumTable = &[
     (0x100, "$LOGGED_UTILITY_STREAM"),
 ];
 
-const FILE_ATTRIBUTES: FlagTable = &[
+/// Windows `FILE_ATTRIBUTE_*` flags (`winnt.h`), as stored by NTFS, FAT and
+/// exFAT directory entries, archivers (ACE) and Windows artifacts. Bit 3 is
+/// the FAT volume label; the top two are NTFS's `$FILE_NAME` index flags.
+pub const FILE_ATTRIBUTES: FlagTable = &[
     flag(0x1, "READONLY"),
     flag(0x2, "HIDDEN"),
     flag(0x4, "SYSTEM"),
+    flag(0x8, "VOLUME_ID"),
+    flag(0x10, "DIRECTORY"),
     flag(0x20, "ARCHIVE"),
     flag(0x40, "DEVICE"),
     flag(0x80, "NORMAL"),
     flag(0x100, "TEMPORARY"),
-    flag(0x200, "SPARSE"),
+    flag(0x200, "SPARSE_FILE"),
     flag(0x400, "REPARSE_POINT"),
     flag(0x800, "COMPRESSED"),
     flag(0x1000, "OFFLINE"),
     flag(0x2000, "NOT_CONTENT_INDEXED"),
     flag(0x4000, "ENCRYPTED"),
-    flag(0x1000_0000, "DIRECTORY"),
-    flag(0x2000_0000, "INDEX_VIEW"),
+    flag(0x8000, "INTEGRITY_STREAM"),
+    flag(0x1_0000, "VIRTUAL"),
+    flag(0x2_0000, "NO_SCRUB_DATA"),
+    flag(0x4_0000, "RECALL_ON_OPEN"),
+    flag(0x8_0000, "PINNED"),
+    flag(0x10_0000, "UNPINNED"),
+    flag(0x40_0000, "RECALL_ON_DATA_ACCESS"),
+    flag(0x1000_0000, "DUP_FILE_NAME_INDEX_PRESENT"),
+    flag(0x2000_0000, "DUP_VIEW_INDEX_PRESENT"),
 ];
 
 record! {

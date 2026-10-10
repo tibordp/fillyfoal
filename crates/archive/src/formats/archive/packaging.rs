@@ -7,20 +7,12 @@ use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::text::scan::head_lines;
+use crate::formats::util::val::uint;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
-use crate::value::{Radix, Value};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Packaging: AppImage, Solaris datastream, Haiku packages, Electron ASAR
@@ -81,7 +73,7 @@ async fn appimage(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("AppImage type")
             .span(file.sub(8, 3))
-            .value(uint(kind.into(), 8)),
+            .value(uint(kind, 8)),
     );
     // ELF lives in a crate that depends on this one.
     cx.emit(crate::formats::embedded_named(

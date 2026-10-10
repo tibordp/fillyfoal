@@ -4,14 +4,20 @@
 //! file, which gives the original size without decompressing). The content is
 //! decompressed only when expanded, then dissected in place (e.g. a tarball).
 
-use crate::bytes::{to_u64, u32_le};
+use std::sync::Arc;
+
+use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Codec, Format, Input, Probe, content_hinted};
 use crate::node::Node;
 use crate::record;
+use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag};
 
 const LE: Endian = Endian::Little;
@@ -73,6 +79,87 @@ record! {
     }
 }
 
+/// Registered extra subfield ids (SI1 SI2).
+const SUBFIELDS: &[(&[u8; 2], &str)] = &[
+    (b"AC", "Acorn RISC OS file type"),
+    (b"Ap", "Apollo file type"),
+    (b"BC", "BGZF block size"),
+    (b"cp", "compressed by cpio"),
+    (b"GS", "gzsig signature"),
+    (b"KN", "KeyNote assertion"),
+    (b"Mc", "Macintosh type and creator"),
+    (b"RA", "random access index (dictzip)"),
+    (b"RO", "Acorn RISC OS file type"),
+];
+
+/// The FEXTRA field (XLEN, then subfields of SI1 SI2 LEN data), spanning
+/// `span`; `data` is the field's XLEN bytes at `data_span`. Also used by
+/// BGZF, whose blocks are gzip members with a `BC` subfield.
+pub fn extra_field(span: Span, data: &[u8], data_span: Span) -> Node {
+    let mut children = vec![
+        Node::new("XLEN")
+            .span(span.sub(0, 2))
+            .value(uint(data_span.len, 16)),
+    ];
+    let mut at = 0usize;
+    let mut count = 0u64;
+    while let (Some(id), Some(len)) = (
+        data.get(at..at.saturating_add(2)),
+        u16_le(data, at.saturating_add(2)),
+    ) {
+        let len = usize::from(len);
+        let body_at = at.saturating_add(4);
+        let sub = data_span.sub(to_u64(at), to_u64(len.saturating_add(4)));
+        let body = data_span.sub(to_u64(body_at), to_u64(len));
+        let known = SUBFIELDS
+            .iter()
+            .find(|(k, _)| k.as_slice() == id)
+            .map(|(_, v)| *v);
+        let id_text = String::from_utf8_lossy(id).into_owned();
+        let mut data_node = Node::new("Data").span(body);
+        if id == b"BC" && len == 2 {
+            let bsize = u16_le(data, body_at).unwrap_or(0);
+            data_node = data_node
+                .value(uint(bsize, 16))
+                .summary(format!("block size {}", u32::from(bsize).saturating_add(1)));
+        }
+        let mut node = Node::new(format!("Subfield {id_text}"))
+            .span(sub)
+            .summary(match known {
+                Some(what) => format!("{what}, {}", size(to_u64(len))),
+                None => size(to_u64(len)),
+            });
+        if body.len < to_u64(len) {
+            node = node.diag(Diagnostic::truncated(body, body.len));
+        }
+        children.push(node.lazy(
+            emit_nodes,
+            Arc::new(vec![
+                Node::new("SI1 SI2").span(sub.sub(0, 2)).value(text(id_text)),
+                Node::new("LEN").span(sub.sub(2, 2)).value(uint(to_u64(len), 16)),
+                data_node,
+            ]),
+        ));
+        count = count.saturating_add(1);
+        at = body_at.saturating_add(len);
+    }
+    if at < data.len() {
+        children.push(
+            Node::new("Trailing bytes")
+                .span(data_span.tail(to_u64(at)))
+                .diag(Diagnostic::malformed("not a whole subfield")),
+        );
+    }
+    Node::new("Extra field")
+        .span(span)
+        .summary(format!(
+            "{}, {}",
+            crate::formats::util::fmt::count(count, "subfield", "subfields"),
+            size(data_span.len)
+        ))
+        .lazy(emit_nodes, Arc::new(children))
+}
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut cur = Cursor::new(&cx, file, LE);
@@ -80,13 +167,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Header::node("Header", header_span, LE));
     if header.flags & 0x04 != 0 {
         let start = cur.pos();
-        let len = cur.u16().await?;
-        cur.skip(len.into());
-        cx.emit(
-            Node::new("Extra field")
-                .span(cur.since(start))
-                .summary(format!("{len} bytes")),
-        );
+        let xlen = cur.u16().await?;
+        let data_span = cur.span(xlen.into());
+        let data = cur.bytes(xlen.into()).await?;
+        cx.emit(extra_field(cur.since(start), &data, data_span));
     }
     let mut name = None;
     if header.flags & 0x08 != 0 {
@@ -108,11 +192,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Header CRC16")
                 .span(cur.since(start))
-                .value(Value::UInt {
-                    value: crc.into(),
-                    bits: 16,
-                    radix: crate::value::Radix::Hex,
-                }),
+                .value(hex(crc, 16)),
         );
     }
 

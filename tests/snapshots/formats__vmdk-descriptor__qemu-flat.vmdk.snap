@@ -10,7 +10,7 @@ expression: "common::explore(&display_name(&path), &data)"
     parentCID: "ffffffff"  [0x2d+0x13]
     createType: "monolithicFlat"  [0x40+0x1c]
     Comment: "Extent description"  [0x5d+0x15]
-    Extent: "RW 512 FLAT \"qemu-flat-flat.vmdk\" 0" — RW FLAT, 256 KiB in "qemu-flat-flat.vmdk" 0  [0x72+0x24]
+    Extent: "RW 512 FLAT \"qemu-flat-flat.vmdk\" 0" — RW FLAT, 256.0 KiB in "qemu-flat-flat.vmdk" 0  [0x72+0x24]
     Comment: "The Disk Data Base"  [0x97+0x15]
     Comment: "DDB"  [0xac+0x5]
     ddb.virtualHWVersion: "6"  [0xb2+0x1b]

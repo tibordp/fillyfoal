@@ -15,7 +15,10 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::arcutil::{ByteReader, count, emit_nodes, hex, human_size, unsupported};
+use crate::formats::util::arcutil::{ByteReader, emit_nodes, unsupported};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::hex;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -164,7 +167,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             _ => {
                 files = files.saturating_add(1);
                 total = total.saturating_add(e.original.into());
-                (e.name.clone(), human_size(e.original.into()))
+                (e.name.clone(), fmt::size(e.original.into()))
             }
         };
         cx.progress_in(file, e.span.end());
@@ -182,7 +185,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut summary = format!(
         "ARJ archive, {}, {} uncompressed",
         count(files, "file", "files"),
-        human_size(total)
+        fmt::size(total)
     );
     if !archive.is_empty() {
         summary = format!("{summary} ({archive})");
@@ -239,7 +242,7 @@ fn basic_header(r: &mut ByteReader<'_>, main: bool) -> Option<(u8, u32, usize)> 
         LE,
     )?;
     r.with(|n| {
-        n.value(hex(time.into())).summary(crate::text::dos_datetime(
+        n.value(hex(time, 64)).summary(crate::text::dos_datetime(
             u16::try_from(time >> 16).unwrap_or(0),
             u16::try_from(time & 0xffff).unwrap_or(0),
         ))
@@ -269,11 +272,11 @@ fn basic_header(r: &mut ByteReader<'_>, main: bool) -> Option<(u8, u32, usize)> 
         LE,
     )?;
     if !main {
-        r.with(|n| n.value(hex(crc.into())));
+        r.with(|n| n.value(hex(crc, 64)));
     }
     r.u16("Entry name position", LE)?;
     let mode = r.u16("File access mode", LE)?;
-    r.with(|n| n.value(hex(mode.into())));
+    r.with(|n| n.value(hex(mode, 64)));
     r.u8("First chapter")?;
     r.u8("Last chapter")?;
     let fixed_end = usize::from(first);
@@ -292,7 +295,7 @@ async fn entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let mut r = ByteReader::new(&header, header_span);
     let bad = || Diagnostic::malformed("truncated header").at(header_span);
     r.u16("Header ID", LE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(0xea60)));
+    r.with(|n| n.value(hex(0xea60u32, 64)));
     r.u16("Basic header size", LE).ok_or_else(bad)?;
     let kind = header.get(4 + 6).copied().unwrap_or(0);
     let main = kind == 2;
@@ -311,7 +314,7 @@ async fn entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let stored = r.u32("Header CRC-32", LE).ok_or_else(bad)?;
     let computed = crc32(header.get(4..names_end).unwrap_or_default());
     r.with(|n| {
-        let n = n.value(hex(stored.into()));
+        let n = n.value(hex(stored, 64));
         if computed == stored {
             n.summary("valid")
         } else {
@@ -340,7 +343,7 @@ async fn entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         cx.emit(
             Node::new(format!("Extended header {index}"))
                 .span(cur.since(start))
-                .summary(human_size(ext.into())),
+                .summary(fmt::size(ext.into())),
         );
         index = index.saturating_add(1);
     }
@@ -355,7 +358,7 @@ async fn entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             .span(data)
             .diag(Diagnostic::unsupported("garbled (encrypted) file"))
     } else if method == 0 {
-        embedded("Content", input.nested(data)).summary(human_size(data.len))
+        embedded("Content", input.nested(data)).summary(fmt::size(data.len))
     } else if let 1..=4 = method {
         let original = u64::from(u32_le(&header, 20).unwrap_or(0));
         let crc = u32_le(&header, 24).unwrap_or(0);
@@ -366,7 +369,7 @@ async fn entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         };
         let codec = Codec::Lzh(lzh::Params::new(m, Some(original), lzh::Check::Crc32(crc)));
         crate::formats::content("Content", input, data, codec, Some(original))
-            .summary(format!("{}, method {method}", human_size(original)))
+            .summary(format!("{}, method {method}", fmt::size(original)))
     } else {
         let m = crate::value::lookup(METHOD, method.into()).unwrap_or("unknown method");
         unsupported(

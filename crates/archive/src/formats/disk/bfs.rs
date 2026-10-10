@@ -51,7 +51,7 @@ record! {
         last_block: u32 "Last block",
         last_byte: u32 "Last byte offset" .hex(),
         kind: u32 "Type" .enumeration(TYPES),
-        mode: u32 "Mode" .with(|&m, n| n.summary(unix_mode(m))),
+        mode: u32 "Mode" .with(|&m, n| n.summary(unix_mode(m.into()))),
         uid: u32 "Owner",
         gid: u32 "Group",
         links: u32 "Links",

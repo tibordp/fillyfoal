@@ -15,6 +15,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
+use crate::formats::disk::ntfs::FILE_ATTRIBUTES;
 use crate::formats::disk::{
     assemble, coalesce_stepped, content_node, dos_stamp, fragments_node, size,
 };
@@ -69,21 +70,13 @@ record! {
     }
 }
 
-const ATTRS: FlagTable = &[
-    flag(0x01, "READ_ONLY"),
-    flag(0x02, "HIDDEN"),
-    flag(0x04, "SYSTEM"),
-    flag(0x10, "DIRECTORY"),
-    flag(0x20, "ARCHIVE"),
-];
-
 record! {
     /// File directory entry (0x85).
     pub struct FileEntry {
         kind: u8 "Entry type" .hex(),
         secondary: u8 "Secondary entries",
         checksum: u16 "Set checksum" .hex(),
-        attributes: u16 "Attributes" .hex() .flags(ATTRS),
+        attributes: u16 "Attributes" .hex() .flags(FILE_ATTRIBUTES),
         _reserved: u16 "Reserved",
         created: u32 "Created" .with(dos_stamp),
         modified: u32 "Modified" .with(dos_stamp),

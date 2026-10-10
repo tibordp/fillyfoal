@@ -17,6 +17,7 @@ use crate::fields::{Endian, parse};
 use crate::formats::disk::qcow::Regions;
 use crate::formats::disk::size;
 use crate::formats::util::datakit::digest_paced;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
@@ -342,17 +343,12 @@ async fn luks2(cx: &Cx, input: Input) -> Result<()> {
         .and_then(Json::as_str)
         .unwrap_or("?");
     cx.annotate(format!(
-        "LUKS2 encrypted volume{label}, {cipher}, {} keyslot{}{}, UUID {}",
-        keyslots.len(),
-        if keyslots.len() == 1 { "" } else { "s" },
+        "LUKS2 encrypted volume{label}, {cipher}, {}{}, UUID {}",
+        plural(crate::bytes::to_u64(keyslots.len()), "keyslot"),
         if tokens.is_empty() {
             String::new()
         } else {
-            format!(
-                ", {} token{}",
-                tokens.len(),
-                if tokens.len() == 1 { "" } else { "s" }
-            )
+            format!(", {}", plural(crate::bytes::to_u64(tokens.len()), "token"))
         },
         h.uuid
     ));

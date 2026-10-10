@@ -12,7 +12,9 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::arcutil::{emit_nodes, hex, human_size, text, uint};
+use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::fmt;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -192,7 +194,7 @@ record! {
         version: u8 "Version",
         reserved: bytes[4] "Reserved",
         entries: u32 "Index entries",
-        size: u32 "Data store size" .with(|&s, n| n.summary(human_size(s.into()))),
+        size: u32 "Data store size" .with(|&s, n| n.summary(fmt::size(s.into()))),
     }
 }
 
@@ -373,7 +375,7 @@ async fn decode(cx: &Cx, e: &Entry, s: &Store<'_>, base: Span, limit: u32) -> Op
                 ));
             }
             let v = u64::from(*bytes.first()?);
-            return Some(Decoded::One(uint(v), span(start, 1)));
+            return Some(Decoded::One(uint(v, 64), span(start, 1)));
         }
         7 => {
             let bytes = store.get(start..start.checked_add(to_usize(e.count.into()))?)?;
@@ -397,7 +399,7 @@ async fn decode(cx: &Cx, e: &Entry, s: &Store<'_>, base: Span, limit: u32) -> Op
                     4 => u64::from(u32_be(store, at)?),
                     _ => u64_be(store, at)?,
                 };
-                items.push((uint(v), span(at, width)));
+                items.push((uint(v, 64), span(at, width)));
                 at = at.checked_add(width)?;
             }
         }
@@ -487,7 +489,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let payload = file.tail(main.span.end().saturating_sub(file.offset));
     cx.emit(embedded("Payload", input.nested(payload)).summary(format!(
         "{format}, {compressor}, {}",
-        human_size(payload.len)
+        fmt::size(payload.len)
     )));
     cx.annotate(format!("RPM {nevra}, payload {format}/{compressor}"));
     Ok(())
@@ -496,11 +498,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 fn header_node(name: &'static str, h: Header, signature: bool) -> Node {
     Node::new(name)
         .span(h.span)
-        .summary(format!(
-            "{} entries, {}",
-            h.entries,
-            human_size(h.store.len)
-        ))
+        .summary(format!("{} entries, {}", h.entries, fmt::size(h.store.len)))
         .lazy(header, (h, signature))
 }
 
@@ -543,11 +541,11 @@ async fn header(cx: Cx, (h, signature): (Header, bool)) -> Result<()> {
                 }),
             Node::new("Offset")
                 .span(entry_span.sub(8, 4))
-                .value(hex(e.offset.into()))
+                .value(hex(e.offset, 64))
                 .target(h.store.sub(e.offset.into(), 0)),
             Node::new("Count")
                 .span(entry_span.sub(12, 4))
-                .value(uint(e.count.into())),
+                .value(uint(e.count, 64)),
         ]);
         let mut node = Node::new(name).span(entry_span);
         match decode(&cx, &e, &store, h.store, INLINE_ITEMS).await {

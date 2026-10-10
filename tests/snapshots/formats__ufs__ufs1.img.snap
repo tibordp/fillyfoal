@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ ufs1.img — UFS1 filesystem (last mounted on /fixture), 4 MiB, 1 cylinder groups, 16384-byte blocks  [0x0+0x4000]
+▾ ufs1.img — UFS1 filesystem (last mounted on /fixture), 4.0 MiB, 1 cylinder groups, 16384-byte blocks  [0x0+0x4000]
   ▾ Superblock  [0x2000+0x560]
       Unused (link): 0  [0x2000+0x4]
       Unused (rlink): 0  [0x2004+0x4]

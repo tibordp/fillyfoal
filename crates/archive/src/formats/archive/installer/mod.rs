@@ -18,7 +18,6 @@ pub mod inno;
 pub mod installshield;
 pub mod nsis;
 
-use crate::formats::util::arcutil::human_size;
 use crate::node::Node;
 use crate::value::Value;
 
@@ -29,9 +28,4 @@ fn filetime(name: &'static str, ticks: u64) -> Option<Node> {
             unix_seconds: crate::text::filetime_to_unix(ticks),
         })
     })
-}
-
-/// "N bytes" for summaries.
-fn size(n: u64) -> String {
-    human_size(n)
 }

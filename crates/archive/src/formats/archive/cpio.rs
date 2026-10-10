@@ -5,14 +5,15 @@
 //! format-specific alignment; `TRAILER!!!` ends the archive. Members are
 //! listed in pages and dissected on expansion.
 
-use crate::bytes::{u16_be, u16_le};
+use crate::bytes::{align_up, u16_be, u16_le};
 use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::{
-    Num, ascii_num, check_len, count, human_size, present, text, unix_kind,
-};
+use crate::formats::util::arcutil::{Num, ascii_num, check_len, present, unix_kind};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -112,10 +113,6 @@ struct Header {
     check: u64,
 }
 
-fn align(n: u64, to: u64) -> u64 {
-    n.div_ceil(to).saturating_mul(to)
-}
-
 /// Decodes (and, when emitting, shows) a header of any variant.
 fn header_layout(f: &mut Fields<'_>, variant: &Variant) -> Result<Header> {
     let variant = *variant;
@@ -187,7 +184,7 @@ fn header_layout(f: &mut Fields<'_>, variant: &Variant) -> Result<Header> {
             f.node(
                 Node::new("File size")
                     .span(span_back(f, 4))
-                    .value(crate::formats::util::arcutil::uint(filesize)),
+                    .value(crate::formats::util::val::uint(filesize, 64)),
             );
             Ok(Header {
                 mode: mode.into(),
@@ -236,9 +233,9 @@ async fn next_member(cx: &Cx, cur: &mut Cursor<'_>, variant: Variant) -> Result<
     cur.skip(hlen);
     let name_bytes = cur.peek(header.namesize.min(4096)).await?;
     let name = crate::text::until_nul(&name_bytes);
-    let after_name = align(hlen.saturating_add(header.namesize), variant.align());
+    let after_name = align_up(hlen.saturating_add(header.namesize), variant.align());
     cur.seek(start.saturating_add(after_name));
-    cur.skip(align(header.filesize, variant.align()));
+    cur.skip(align_up(header.filesize, variant.align()));
     Ok(Member {
         span: cur.since(start),
         name,
@@ -263,7 +260,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         } else {
             let kind = unix_kind(m.header.mode);
             if kind == "file" {
-                human_size(m.header.filesize)
+                fmt::size(m.header.filesize)
             } else {
                 kind.to_owned()
             }
@@ -276,7 +273,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .span(m.span)
             .summary(summary)
             .lazy(member, (input, m.span, variant));
-        let wanted = align(
+        let wanted = align_up(
             variant.header_len().saturating_add(m.header.namesize),
             variant.align(),
         )
@@ -300,7 +297,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             "Trailing data"
         })
         .span(rest)
-        .summary(human_size(rest.len));
+        .summary(fmt::size(rest.len));
         if Variant::of(&data).is_some() {
             // Some tools (initramfs) concatenate archives.
             cx.emit(embedded("Next archive", input.nested(rest)));
@@ -312,7 +309,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         "cpio archive ({}), {}, {}",
         variant.name(),
         count(members, "entry", "entries"),
-        human_size(total)
+        fmt::size(total)
     ));
     Ok(())
 }
@@ -336,7 +333,7 @@ async fn member(cx: Cx, (input, span, variant): (Input, Span, Variant)) -> Resul
             .span(name_span)
             .value(text(crate::text::until_nul(&name))),
     );
-    let data_at = align(hlen.saturating_add(header.namesize), variant.align());
+    let data_at = align_up(hlen.saturating_add(header.namesize), variant.align());
     let data = span.sub(data_at, header.filesize);
     match header.mode & 0o170_000 {
         0o120_000 => {
@@ -348,7 +345,7 @@ async fn member(cx: Cx, (input, span, variant): (Input, Span, Variant)) -> Resul
             );
         }
         _ if header.filesize > 0 => {
-            let mut node = embedded("Content", input.nested(data)).summary(human_size(data.len));
+            let mut node = embedded("Content", input.nested(data)).summary(fmt::size(data.len));
             if variant == Variant::Crc && data.len <= cx.limits().max_read {
                 let bytes = cx.read(data).await?;
                 let sum = bytes

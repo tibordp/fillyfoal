@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
+use crate::bytes::{align_up, to_u64, to_usize, u16_le, u32_le};
 use crate::codec::Codec;
 use crate::codec::lzma::Props;
 use crate::cx::Cx;
@@ -21,7 +21,7 @@ use crate::node::Node;
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 
-use super::{ALG_NAMES, Fs, FsRef, Ino, LAYOUT_COMPRESSED_FULL, LE, align, data_boxed};
+use super::{ALG_NAMES, Fs, FsRef, Ino, LAYOUT_COMPRESSED_FULL, LE, data_boxed};
 
 const ADVISE: FlagTable = &[
     flag(0x01, "COMPACTED_2B"),
@@ -147,7 +147,7 @@ fn bits(pack: &[u8], lobits: u32, pos: u64) -> (u32, u8) {
 
 impl Map {
     async fn read(cx: &Cx, fs: &Fs, ino: &Ino) -> Result<Map> {
-        let hpos = align(ino.after(), 8);
+        let hpos = align_up(ino.after(), 8);
         let h = cx.read(fs.vol.sub(hpos, 8)).await?;
         let adv = u16_le(&h, 4).unwrap_or(0);
         let cbits = h.get(7).copied().unwrap_or(0);
@@ -716,7 +716,7 @@ pub(super) async fn view(cx: Cx, (fs, nid): (FsRef, u64)) -> Result<()> {
     if map.adv & 0x8 != 0 {
         end = end.saturating_add(map.idata.into());
     }
-    let aligned = align(end, 32);
+    let aligned = align_up(end, 32);
     cx.emit(
         Node::new("Extents")
             .summary(format!("{} extents", exts.len()))
