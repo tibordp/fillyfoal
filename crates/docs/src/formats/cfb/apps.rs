@@ -62,33 +62,16 @@ impl Context {
 }
 
 /// The Windows Installer CLSIDs of the root storage.
-pub fn installer_kind(clsid: &[u8; 16]) -> Option<&'static str> {
-    const TAIL: [u8; 12] = [
-        0x00, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46,
-    ];
-    if clsid.get(4..) != Some(&TAIL[..]) {
+pub fn installer_kind(clsid: &Guid) -> Option<&'static str> {
+    if clsid.data2 != 0 || clsid.data3 != 0 || clsid.data4 != [0xc0, 0, 0, 0, 0, 0, 0, 0x46] {
         return None;
     }
-    match u32_le(clsid, 0)? {
+    match clsid.data1 {
         0x000c_1084 => Some("Windows Installer package"),
         0x000c_1086 => Some("Windows Installer patch"),
         0x000c_1082 => Some("Windows Installer transform"),
         _ => None,
     }
-}
-
-fn guid_bytes(g: &Guid) -> [u8; 16] {
-    let mut out = [0u8; 16];
-    let d1 = g.data1.to_le_bytes();
-    let d2 = g.data2.to_le_bytes();
-    let d3 = g.data3.to_le_bytes();
-    for (slot, b) in out
-        .iter_mut()
-        .zip(d1.iter().chain(&d2).chain(&d3).chain(&g.data4))
-    {
-        *slot = *b;
-    }
-    out
 }
 
 /// Recognises the application from the root storage, and finds a title.
@@ -97,7 +80,7 @@ pub async fn application(
     cfb: &super::CfbRef,
     root: &DirEntry,
 ) -> (Option<String>, Context) {
-    if let Some(kind) = installer_kind(&guid_bytes(&root.clsid)) {
+    if let Some(kind) = installer_kind(&root.clsid) {
         let title = match super::msi::product(cx, cfb).await {
             Some(p) => Some(p),
             None => summary_title(cx, cfb, root).await,

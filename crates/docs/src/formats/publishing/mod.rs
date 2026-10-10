@@ -24,39 +24,6 @@ pub mod fonts;
 pub mod printing;
 
 use crate::fields::Endian;
-use crate::value::{Radix, Value};
-
-pub(crate) fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-pub(crate) fn uint(value: impl Into<u64>, bits: u8) -> Value {
-    Value::UInt {
-        value: value.into(),
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-pub(crate) fn hex(value: impl Into<u64>, bits: u8) -> Value {
-    Value::UInt {
-        value: value.into(),
-        bits,
-        radix: Radix::Hex,
-    }
-}
-
-pub(crate) fn int(value: impl Into<i64>, bits: u8) -> Value {
-    Value::Int {
-        value: value.into(),
-        bits,
-    }
-}
-
-/// A four-character code as text (lossy).
-pub(crate) fn fourcc(b: &[u8]) -> String {
-    String::from_utf8_lossy(b).into_owned()
-}
 
 /// A synchronous reader over bytes already in memory, for structures that
 /// must be measured before they can be shown lazily (descriptors, action

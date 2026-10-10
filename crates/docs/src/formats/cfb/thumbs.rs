@@ -3,12 +3,13 @@
 //! stream named by its index written backwards, holding a small header and
 //! a JPEG image.
 
-use super::rec::{LE, uint};
+use super::rec::LE;
 use crate::bytes::{u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::Input;
+use crate::formats::util::val::uint;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::Value;

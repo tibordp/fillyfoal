@@ -958,25 +958,6 @@ impl<'c> Reader<'c> {
     }
 }
 
-/// Finds `needle` in `data` starting at `from`.
-pub fn find(data: &[u8], needle: &[u8], from: usize) -> Option<usize> {
-    let hay = data.get(from..)?;
-    if needle.is_empty() || hay.len() < needle.len() {
-        return None;
-    }
-    hay.windows(needle.len())
-        .position(|w| w == needle)
-        .and_then(|i| i.checked_add(from))
-}
-
-/// Finds the last `needle` in `data`.
-pub fn rfind(data: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() || data.len() < needle.len() {
-        return None;
-    }
-    data.windows(needle.len()).rposition(|w| w == needle)
-}
-
 /// Text of a PDF string: UTF-16BE with a byte order mark, UTF-8 with one,
 /// or PDFDocEncoding (approximated by Latin-1).
 pub fn text(bytes: &[u8]) -> String {

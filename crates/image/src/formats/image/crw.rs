@@ -14,14 +14,15 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, Prim};
 use crate::formats::util::arcutil::human_size;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, Value, lookup};
 
+use super::dims;
 use super::tiff::maker::{Note, array_enum, array_fields};
 use super::tiff::render::{exposure_time, fnumber, trim};
-use super::{dims, text, uint};
 
 pub static FORMAT: Format = Format {
     name: "crw",
@@ -300,7 +301,7 @@ async fn list(cx: Cx, (input, heap, endian, depth): (Input, Span, Endian, u32)) 
     cx.emit(
         Node::new("Entry count")
             .span(count_span)
-            .value(uint(crate::bytes::to_u64(entries.len()))),
+            .value(uint(crate::bytes::to_u64(entries.len()), 64)),
     );
     for e in entries {
         let name =
@@ -400,7 +401,7 @@ fn describe(node: Node, e: &Entry, bytes: &[u8], endian: Endian) -> Node {
         (_, 0x1000) => {
             let v = u16s();
             match v.as_slice() {
-                [one] => node.value(uint(*one)),
+                [one] => node.value(uint(*one, 64)),
                 many => node.summary(format!(
                     "[{}{}]",
                     many.iter()
@@ -420,7 +421,7 @@ fn describe(node: Node, e: &Entry, bytes: &[u8], endian: Endian) -> Node {
                 .filter_map(|c| u32::decode(c, endian))
                 .collect();
             match v.as_slice() {
-                [one] => node.value(uint(*one)),
+                [one] => node.value(uint(*one, 64)),
                 many => node.summary(format!(
                     "[{}{}]",
                     many.iter()
@@ -467,7 +468,7 @@ async fn words(cx: Cx, (e, endian): (Entry, Endian)) -> Result<()> {
                 bits: 16,
                 name: lookup(table, v),
             },
-            None => uint(v),
+            None => uint(v, 64),
         };
         cx.push(Node::new(name).span(span).value(value)).await;
     }

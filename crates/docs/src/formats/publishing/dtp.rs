@@ -9,12 +9,11 @@ use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::text::{probe, xml};
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::Value;
-
-use super::{hex, text, uint};
 
 // ---------------------------------------------------------------------------
 // Adobe InDesign

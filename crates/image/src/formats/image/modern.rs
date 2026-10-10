@@ -5,12 +5,13 @@
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value, lookup};
 
-use super::{dims, region, text, uint};
+use super::{dims, region};
 
 pub static BPG: Format = Format {
     name: "bpg",
@@ -39,15 +40,7 @@ pub static FLIF: Format = Format {
 /// Big-endian base-128 with a continuation bit (BPG `ue7`, FLIF varint):
 /// `(value, length)`.
 fn varint(data: &[u8], pos: usize) -> Option<(u64, usize)> {
-    let mut value = 0u64;
-    for i in 0..9usize {
-        let b = *data.get(pos.checked_add(i)?)?;
-        value = value.checked_shl(7)? | u64::from(b & 0x7f);
-        if b & 0x80 == 0 {
-            return Some((value, i.checked_add(1)?));
-        }
-    }
-    None
+    crate::bytes::vlq_be(data.get(pos..)?, 9)
 }
 
 /// Emits a varint field at `*pos` within `span` and advances.
@@ -62,7 +55,7 @@ fn varint_node(
     })?;
     let node = Node::new(name)
         .span(span.sub(to_u64(*pos), to_u64(len)))
-        .value(uint(value));
+        .value(uint(value, 64));
     *pos = pos.saturating_add(len);
     Ok((node, value))
 }

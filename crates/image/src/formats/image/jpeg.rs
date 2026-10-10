@@ -25,12 +25,14 @@ use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, Layout, Prim, struct_node};
 use crate::formats::util::arcutil::human_size;
+use crate::formats::util::fmt::plural;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, flag, lookup};
 
-use super::{ColorOrder, dims, palette, region, text, uint};
+use super::{ColorOrder, dims, palette, region};
 
 const BE: Endian = Endian::Big;
 
@@ -1363,7 +1365,12 @@ fn conditioning(f: &mut Fields<'_>, _: &()) -> Result<usize> {
         } else {
             (format!("AC table {}", tc & 15), format!("Kx = {cs}"))
         };
-        f.node(Node::new(name).span(span).value(uint(cs)).summary(summary));
+        f.node(
+            Node::new(name)
+                .span(span)
+                .value(uint(cs, 64))
+                .summary(summary),
+        );
         n = n.saturating_add(1);
     }
     Ok(n)
@@ -1709,16 +1716,7 @@ fn uuid_text(b: &[u8]) -> String {
     {
         return format!("'{}'", String::from_utf8_lossy(cc));
     }
-    let hex: String = b.iter().take(16).map(|x| format!("{x:02x}")).collect();
-    let part = |a: usize, z: usize| hex.get(a..z).unwrap_or_default().to_owned();
-    format!(
-        "{}-{}-{}-{}-{}",
-        part(0, 8),
-        part(8, 12),
-        part(12, 16),
-        part(16, 20),
-        part(20, 32)
-    )
+    crate::formats::util::fmt::uuid(b.get(..16).unwrap_or(b))
 }
 
 fn jfif_summary(head: &[u8]) -> String {
@@ -2003,8 +2001,7 @@ fn irb_summary(g: &IrbGroup, index: usize) -> String {
     if index > 0 {
         return "Photoshop 3.0, continued".to_owned();
     }
-    let plural = if g.count == 1 { "" } else { "s" };
-    let mut s = format!("Photoshop 3.0: {} resource{plural}", g.count);
+    let mut s = format!("Photoshop 3.0: {}", plural(to_u64(g.count), "resource"));
     if g.iptc {
         s.push_str(", IPTC");
     }
@@ -2317,7 +2314,7 @@ async fn ducky(cx: &Cx, rest: Span) -> Result<()> {
         cur.skip(len);
         let bytes = cx.read_avail(data).await?;
         let (name, value) = match tag {
-            1 => ("Quality", u32_be(&bytes, 0).map(uint)),
+            1 => ("Quality", u32_be(&bytes, 0).map(|v| uint(v, 64))),
             2 => (
                 "Comment",
                 Some(text(crate::text::utf16(

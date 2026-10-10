@@ -7,13 +7,14 @@
 use std::sync::Arc;
 
 use super::CfbRef;
-use super::rec::{LE, hex, uint};
+use super::rec::LE;
 use crate::bytes::{to_u64, to_usize, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::Input;
 use crate::formats::util::mapi::{self, Named, TYPES, guid, set_label, set_name};
+use crate::formats::util::val::{hex, uint};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};

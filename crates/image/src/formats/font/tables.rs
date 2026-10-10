@@ -7,7 +7,7 @@ use crate::bytes::{to_u64, u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::datakit::{clip, fourcc, mac_roman};
+use crate::formats::util::fmt::{clip, fourcc};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, field, flag, lookup};
@@ -180,7 +180,7 @@ fn language_name(platform: u16, language: u16) -> String {
 pub fn decode_name(platform: u16, encoding: u16, bytes: &[u8]) -> String {
     match (platform, encoding) {
         (0, _) | (3, _) => crate::text::utf16(bytes, BE),
-        (1, 0) => mac_roman(bytes),
+        (1, 0) => crate::codec::charset::Charset::MacRoman.decode(bytes),
         _ => crate::text::latin1(bytes),
     }
 }

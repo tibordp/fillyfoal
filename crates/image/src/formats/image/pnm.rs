@@ -7,11 +7,12 @@
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
 
-use super::{dims, region, text, uint};
+use super::{dims, region};
 
 macro_rules! pnm_format {
     ($id:ident, $name:literal, $title:literal, [$($ext:literal),*], $mime:literal, $magics:expr) => {
@@ -188,7 +189,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 let Some(n) = number(&t) else {
                     return Err(Diagnostic::malformed(format!("bad {name}")).at(at(&t)));
                 };
-                cx.emit(node.value(uint(n)));
+                cx.emit(node.value(uint(n, 64)));
                 values.push(n);
             }
             if values.len() == names.len() {
@@ -286,7 +287,7 @@ async fn pam_header(cx: &Cx, file: Span, head: &[u8]) -> Result<(u64, u64, u64, 
         }
         let node = Node::new(key).span(span);
         cx.emit(match n {
-            Some(n) => node.value(uint(n)),
+            Some(n) => node.value(uint(n, 64)),
             None => node.value(text(value)),
         });
     }

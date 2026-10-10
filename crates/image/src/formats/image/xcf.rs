@@ -10,12 +10,13 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::{hex, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, lookup};
 
-use super::{dims, hex, text};
+use super::dims;
 
 const BE: Endian = Endian::Big;
 
@@ -313,7 +314,7 @@ async fn layer(cx: Cx, (file, offset, wide): (Span, u64, bool)) -> Result<()> {
         } else {
             cur.u32().await?.into()
         };
-        let mut node = Node::new(what).span(at).value(hex(ptr));
+        let mut node = Node::new(what).span(at).value(hex(ptr, 64));
         if ptr != 0 {
             node = node.target(file.sub(ptr, 12));
         }

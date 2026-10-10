@@ -16,7 +16,8 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::arcutil::human_size;
-use crate::formats::util::vidutil::plural;
+use crate::formats::util::fmt::plural;
+use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -523,7 +524,7 @@ fn file_header(f: &mut Fields<'_>, _: &()) -> Result<(u16, u32, u32)> {
         .u16(if os2 { "usType" } else { "bfType" })
         .with(|&t, n| {
             let b = t.to_le_bytes();
-            n.value(super::text(String::from_utf8_lossy(&b).into_owned()))
+            n.value(text(String::from_utf8_lossy(&b).into_owned()))
                 .summary(lookup(FILE_TYPES, t.into()).unwrap_or("unknown"))
         })
         .emit()?;
@@ -831,7 +832,7 @@ async fn dib_at_with(
         cx.emit(
             Node::new("Linked profile")
                 .span(at)
-                .value(super::text(crate::text::latin1(
+                .value(text(crate::text::latin1(
                     name.split(|&b| b == 0).next().unwrap_or_default(),
                 )))
                 .desc("File name of the ICC profile (Windows-1252, NUL-terminated)"),

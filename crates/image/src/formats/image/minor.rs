@@ -5,27 +5,13 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
-use crate::value::{Radix, Value};
+use crate::text::until_nul;
+use crate::value::Value;
 
 const LE: Endian = Endian::Little;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-fn zstr(b: &[u8]) -> String {
-    crate::text::until_nul(b)
-}
 
 use crate::formats::text::scan::head_lines as lines;
 
@@ -127,22 +113,18 @@ async fn viff(cx: Cx, input: Input) -> Result<()> {
                 }),
             }),
     );
-    let comment = zstr(head.get(8..520).unwrap_or_default());
+    let comment = until_nul(head.get(8..520).unwrap_or_default());
     cx.emit(
         Node::new("Comment")
             .span(file.sub(8, 512))
             .value(text(comment)),
     );
     let (w, h) = (int(520), int(524));
-    cx.emit(
-        Node::new("Width")
-            .span(file.sub(520, 4))
-            .value(uint(w.into(), 32)),
-    );
+    cx.emit(Node::new("Width").span(file.sub(520, 4)).value(uint(w, 32)));
     cx.emit(
         Node::new("Height")
             .span(file.sub(524, 4))
-            .value(uint(h.into(), 32)),
+            .value(uint(h, 32)),
     );
     cx.emit(Node::new("Image data").span(file.tail(1024)));
     cx.annotate(format!("VIFF image, {w}×{h}"));

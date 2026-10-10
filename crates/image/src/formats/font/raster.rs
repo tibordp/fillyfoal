@@ -7,21 +7,14 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::text;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
+use crate::text::until_nul;
 use crate::value::{FlagTable, Radix, Value, flag};
 
 const LE: Endian = Endian::Little;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-/// NUL-terminated (or padded) Latin-1 text.
-fn zstr(b: &[u8]) -> String {
-    crate::text::until_nul(b)
-}
 
 use crate::formats::text::scan::head_lines as header_lines;
 
@@ -111,7 +104,7 @@ async fn bmfont(cx: Cx, input: Input) -> Result<()> {
         let (label, summary) = match kind {
             1 => {
                 let b = cx.read_avail(body.sub(0, 256)).await?;
-                name = zstr(b.get(14..).unwrap_or_default());
+                name = until_nul(b.get(14..).unwrap_or_default());
                 (
                     "Info",
                     format!(

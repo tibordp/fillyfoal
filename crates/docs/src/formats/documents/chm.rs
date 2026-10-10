@@ -15,7 +15,8 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::util::datakit::{clip, size};
+use crate::formats::util::datakit::size;
+use crate::formats::util::fmt::clip;
 use crate::formats::{Codec, Format, Input, Probe, content, dissect_or_data};
 use crate::node::Node;
 use crate::record;
@@ -75,16 +76,9 @@ record! {
 
 /// ENCINT: big-endian base-128 with continuation bits.
 fn encint(data: &[u8], at: &mut usize) -> Option<u64> {
-    let mut value = 0u64;
-    for _ in 0..10 {
-        let b = *data.get(*at)?;
-        *at = at.saturating_add(1);
-        value = value.checked_shl(7)? | u64::from(b & 0x7f);
-        if b & 0x80 == 0 {
-            return Some(value);
-        }
-    }
-    None
+    let (value, len) = crate::bytes::vlq_be(data.get(*at..)?, 10)?;
+    *at = at.saturating_add(len);
+    Some(value)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -104,17 +98,21 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let hspan = file.sub(0, Header::SIZE);
     let h = parse(&cx, hspan, LE, &(), Header::layout).await?;
     cx.emit(Header::node("Header", hspan, LE));
-    let content_offset =
-        if h.version >= 3 {
-            let span = file.sub(Header::SIZE, 8);
-            let b = cx.read(span).await?;
-            cx.emit(Node::new("Content offset").span(span).value(
-                crate::formats::util::datakit::hex(crate::bytes::u64_le(&b, 0).unwrap_or(0), 64),
-            ));
-            crate::bytes::u64_le(&b, 0).unwrap_or(0)
-        } else {
-            h.dir_offset.saturating_add(h.dir_len)
-        };
+    let content_offset = if h.version >= 3 {
+        let span = file.sub(Header::SIZE, 8);
+        let b = cx.read(span).await?;
+        cx.emit(
+            Node::new("Content offset")
+                .span(span)
+                .value(crate::formats::util::val::hex(
+                    crate::bytes::u64_le(&b, 0).unwrap_or(0),
+                    64,
+                )),
+        );
+        crate::bytes::u64_le(&b, 0).unwrap_or(0)
+    } else {
+        h.dir_offset.saturating_add(h.dir_len)
+    };
     cx.emit(Node::new("Section 0 (file size)").span(file.sub(h.section0_offset, h.section0_len)));
     let dir = file.sub(h.dir_offset, h.dir_len);
     let d = parse(&cx, dir.sub(0, Directory::SIZE), LE, &(), Directory::layout).await?;

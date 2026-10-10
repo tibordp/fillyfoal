@@ -51,10 +51,12 @@ use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::datakit::guid_le;
+use crate::formats::util::fmt::preview;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{Radix, Value, lookup};
+use crate::value::{Value, lookup};
 
 use model::{Model, Page, Space};
 use props::{ObjectPropSet, PValue, PropSet};
@@ -126,36 +128,6 @@ fn page_title(p: &Page) -> String {
     p.title.clone().unwrap_or_else(|| "(untitled)".to_owned())
 }
 
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn hex(v: u64, bits: u8) -> Value {
-    Value::UInt {
-        value: v,
-        bits,
-        radix: Radix::Hex,
-    }
-}
-
-fn dec(v: u64, bits: u8) -> Value {
-    Value::UInt {
-        value: v,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-fn clip(s: &str, max: usize) -> String {
-    let line = s.replace(['\r', '\n', '\u{b}'], " ");
-    if line.chars().count() <= max {
-        line
-    } else {
-        let cut: String = line.chars().take(max).collect();
-        format!("{cut}…")
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Top level
 
@@ -179,8 +151,8 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let pages = load_pages(&cx, &store, &model).await;
         let titles: Vec<String> = pages.0.iter().map(page_title).collect();
         let mut node = Node::new("Pages")
-            .value(dec(to_u64(titles.len()), 32))
-            .summary(clip(&titles.join(" · "), 120))
+            .value(uint(to_u64(titles.len()), 32))
+            .summary(preview(&titles.join(" · "), 120))
             .lazy(pages_view, input);
         for d in &pages.1 {
             node = node.diag(d.clone());
@@ -188,13 +160,16 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(node);
         annotation = match titles.len() {
             0 => format!("{annotation}, no pages"),
-            1 => format!("{annotation}, 1 page: {}", clip(&titles.join(""), 60)),
-            n => format!("{annotation}, {n} pages: {}", clip(&titles.join(", "), 80)),
+            1 => format!("{annotation}, 1 page: {}", preview(&titles.join(""), 60)),
+            n => format!(
+                "{annotation}, {n} pages: {}",
+                preview(&titles.join(", "), 80)
+            ),
         };
     }
 
     let mut spaces = Node::new("Object spaces")
-        .value(dec(to_u64(model.spaces.len()), 32))
+        .value(uint(to_u64(model.spaces.len()), 32))
         .lazy(spaces_view, input);
     if model.spaces.iter().any(|s| s.encrypted) {
         annotation = format!("{annotation}, password-protected");
@@ -250,7 +225,7 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("File data store")
                 .span(fcr.span(file))
-                .value(dec(to_u64(files), 32))
+                .value(uint(to_u64(files), 32))
                 .summary(if files == 1 {
                     "1 file".to_owned()
                 } else {
@@ -423,7 +398,7 @@ async fn list_view(cx: Cx, st: ListState) -> Result<()> {
         None => {
             cx.emit(
                 Node::new("Fragments")
-                    .value(dec(to_u64(list.fragments.len()), 32))
+                    .value(uint(to_u64(list.fragments.len()), 32))
                     .summary(match list.id {
                         Some(id) => format!("FileNodeListID {id:#x}"),
                         None => String::new(),
@@ -596,11 +571,7 @@ async fn file_node_view(cx: Cx, st: NodeState) -> Result<()> {
         bits: 10,
         name: lookup(tables::FILE_NODE_IDS, hdr.id.into()),
     }));
-    cx.emit(
-        Node::new("Size")
-            .span(hspan)
-            .value(dec(hdr.size.into(), 13)),
-    );
+    cx.emit(Node::new("Size").span(hspan).value(uint(hdr.size, 13)));
     cx.emit(Node::new("StpFormat").span(hspan).value(Value::Enum {
         raw: hdr.stp_format.into(),
         bits: 2,
@@ -783,14 +754,14 @@ fn emit_streams(cx: &Cx, ps: &ObjectPropSet, span: Span, table: &IdTable) {
         cx.emit(
             Node::new(name)
                 .span(model::inner(span, s.at, s.len()))
-                .value(dec(to_u64(s.ids.len()), 24))
+                .value(uint(to_u64(s.ids.len()), 24))
                 .summary(summary),
         );
     }
     cx.emit(
         Node::new("cProperties")
             .span(model::inner(span, ps.body.at, 2))
-            .value(dec(to_u64(ps.body.props.len()), 16)),
+            .value(uint(to_u64(ps.body.props.len()), 16)),
     );
 }
 
@@ -857,7 +828,7 @@ fn prop_node(
                     };
                     node.value(hex(*v, bits)).summary(summary)
                 }
-                _ => node.value(dec(*v, bits)),
+                _ => node.value(uint(*v, bits)),
             }
         }
         PValue::Bytes(at, len) => {
@@ -880,14 +851,14 @@ fn prop_node(
                 props::Stream::Contexts => "context",
             };
             if *array {
-                node.value(dec(to_u64(ids.len()), 32))
+                node.value(uint(to_u64(ids.len()), 32))
                     .summary(format!("{what}s: {}", ids_summary(ids, table)))
             } else {
                 node.value(text(ids_summary(ids, table))).summary(what)
             }
         }
         PValue::Array(sets) => node
-            .value(dec(to_u64(sets.len()), 32))
+            .value(uint(to_u64(sets.len()), 32))
             .summary("property sets")
             .lazy(
                 crate::expander!(self::propset_view: PropState),
@@ -1043,7 +1014,7 @@ async fn revision_view(cx: Cx, (input, si, ri): (Input, usize, usize)) -> Result
         .ok_or_else(|| Diagnostic::internal("revision not found"))?;
     cx.emit(Node::new("rid").value(text(r.rid.label())));
     cx.emit(Node::new("ridDependent").value(text(r.dependent.label())));
-    cx.emit(Node::new("RevisionRole").value(dec(r.role.into(), 32)));
+    cx.emit(Node::new("RevisionRole").value(uint(r.role, 32)));
     if !r.context.is_nil() {
         cx.emit(Node::new("gctxid").value(text(r.context.label())));
     }
@@ -1067,7 +1038,7 @@ async fn revision_view(cx: Cx, (input, si, ri): (Input, usize, usize)) -> Result
         cx.emit(node);
     }
     let mut objects = Node::new("Objects")
-        .value(dec(to_u64(r.objects.len()), 32))
+        .value(uint(to_u64(r.objects.len()), 32))
         .lazy(objects_view, (input, si, ri));
     if view.objects.len() > r.objects.len() {
         objects = objects.summary(format!(
@@ -1424,7 +1395,7 @@ async fn txlog_view(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Transaction {}", t.saturating_add(1)))
                 .span(span)
-                .summary(clip(&format!("node counts: {}", lists.join(", ")), 100))
+                .summary(preview(&format!("node counts: {}", lists.join(", ")), 100))
                 .lazy(tx_view, (input, t)),
         )
         .await;
@@ -1443,11 +1414,11 @@ async fn tx_view(cx: Cx, (input, t): (Input, u32)) -> Result<()> {
         }
         let node = if e.src == 1 {
             Node::new("End of transaction")
-                .value(hex(e.switch.into(), 32))
+                .value(hex(e.switch, 32))
                 .desc("srcID 1; TransactionEntrySwitch is a CRC of the transaction")
         } else {
             Node::new(format!("List {:#x}", e.src))
-                .value(dec(e.switch.into(), 32))
+                .value(uint(e.switch, 32))
                 .summary("file nodes committed")
         };
         cx.push(node.span(e.span)).await;
@@ -1474,7 +1445,7 @@ async fn free_view(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Fragment {fragment}"))
                 .span(span.sub(0, 16))
-                .value(hex(u32_le(&data, 0).unwrap_or(0).into(), 32))
+                .value(hex(u32_le(&data, 0).unwrap_or(0), 32))
                 .summary(format!(
                     "crc; next {}",
                     next.map(|n| n.label()).unwrap_or_default()

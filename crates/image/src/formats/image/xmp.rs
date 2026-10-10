@@ -11,12 +11,13 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::formats::text::probe;
 use crate::formats::text::scan::Scanner;
 use crate::formats::text::xml::{self, Kind, Lexer, Mode};
-use crate::formats::util::datakit::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -488,15 +489,12 @@ fn prop_node(p: &Prop, name: String) -> Node {
         }
         Val::Array(kind, items) => {
             let count = items.len();
-            let mut summary = format!("{kind}, {count} item{}", if count == 1 { "" } else { "s" });
+            let mut summary = format!("{kind}, {}", plural(to_u64(count), "item"));
             if *kind == "Alt"
                 && let Some(t) = text_of(p)
             {
                 node = node.value(Value::Text(t));
-                summary = format!(
-                    "{count} language alternative{}",
-                    if count == 1 { "" } else { "s" }
-                );
+                summary = plural(to_u64(count), "language alternative");
             } else if let Some(t) = text_of(p) {
                 summary = format!("{summary}: {}", clip(&t, 80));
             }
@@ -505,10 +503,7 @@ fn prop_node(p: &Prop, name: String) -> Node {
         Val::Struct(fields) => {
             let count = fields.len();
             node = node
-                .summary(format!(
-                    "structure, {count} field{}",
-                    if count == 1 { "" } else { "s" }
-                ))
+                .summary(format!("structure, {}", plural(to_u64(count), "field")))
                 .lazy(list, fields.clone());
         }
     }

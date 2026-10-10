@@ -10,13 +10,14 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Input, Probe, embedded, embedded_as};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, flag, lookup};
 
-use super::{dims, region, text, uint};
+use super::{dims, region};
 
 const BE: Endian = Endian::Big;
 
@@ -519,7 +520,7 @@ async fn resources(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         let span = cur.since(start);
         let mut node = Node::new(resource_name(id))
             .span(span)
-            .value(uint(id))
+            .value(uint(id, 64))
             .summary(format!("{size:#x} bytes"));
         if !name.is_empty() {
             node = node.summary(format!("{:?}, {size:#x} bytes", crate::text::latin1(&name)));

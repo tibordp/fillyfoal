@@ -165,7 +165,7 @@ async fn find_endstream(cx: &Cx, region: Span, start: u64) -> Result<u64> {
         cx.checkpoint().await;
         let span = region.sub(pos, PIECE.saturating_add(16));
         let data = cx.read_avail(span).await?;
-        if let Some(i) = syntax::find(&data, b"endstream", 0) {
+        if let Some(i) = crate::bytes::find(&data, b"endstream", 0) {
             let mut len = pos.saturating_add(to_u64(i)).saturating_sub(start);
             let before = cx
                 .read_avail(region.sub(start.saturating_add(len).saturating_sub(2), 2))
@@ -936,7 +936,7 @@ pub async fn scan(cx: &Cx, region: Span) -> Result<(Xref, Option<Located>, BTree
         cx.progress_in(region, region.offset.saturating_add(pos));
         let mut from = 0usize;
         let mut hits = 0u32;
-        while let Some(at) = syntax::find(&data, b"obj", from) {
+        while let Some(at) = crate::bytes::find(&data, b"obj", from) {
             from = at.saturating_add(3);
             hits = hits.wrapping_add(1);
             if hits.is_multiple_of(1024) {
@@ -954,7 +954,7 @@ pub async fn scan(cx: &Cx, region: Span) -> Result<(Xref, Option<Located>, BTree
             }
         }
         let mut from = 0usize;
-        while let Some(at) = syntax::find(&data, b"xref", from) {
+        while let Some(at) = crate::bytes::find(&data, b"xref", from) {
             from = at.saturating_add(4);
             hits = hits.wrapping_add(1);
             if hits.is_multiple_of(1024) {
@@ -968,7 +968,7 @@ pub async fn scan(cx: &Cx, region: Span) -> Result<(Xref, Option<Located>, BTree
                 tables.insert(base.saturating_add(to_u64(at)));
             }
         }
-        if let Some(at) = syntax::rfind(&data, b"trailer") {
+        if let Some(at) = crate::bytes::rfind(&data, b"trailer") {
             trailer = Some(base.saturating_add(to_u64(at)));
         }
         pos = pos.saturating_add(PIECE);

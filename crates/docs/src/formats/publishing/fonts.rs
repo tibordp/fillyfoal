@@ -12,13 +12,14 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::text::scan::Lines;
 use crate::formats::text::{probe, xml};
+use crate::formats::util::val::{hex, int, text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
 use crate::value::{EnumTable, Value};
 
-use super::{Rd, hex, int, text, uint};
+use super::Rd;
 
 const BE: Endian = Endian::Big;
 const LE: Endian = Endian::Little;

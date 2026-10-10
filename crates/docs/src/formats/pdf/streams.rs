@@ -8,10 +8,11 @@ use std::sync::Arc;
 use super::content::{self, Syntax};
 use super::objects::{self, Located, ObjStmIndex, SectionKind};
 use super::syntax::{Item, Obj};
-use super::{DocRef, located_node, plural};
+use super::{DocRef, located_node};
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::{content as content_node, dissect_or_data, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -39,8 +40,8 @@ pub(super) fn kind(item: &Item) -> Option<String> {
         (Some("ObjStm"), _) => {
             let n = int("N").unwrap_or(0);
             Some(format!(
-                "object stream, {n} object{}",
-                plural(n.unsigned_abs())
+                "object stream, {}",
+                plural(n.unsigned_abs(), "object")
             ))
         }
         (Some("XRef"), _) => Some("cross-reference stream".to_owned()),
@@ -51,9 +52,8 @@ pub(super) fn kind(item: &Item) -> Option<String> {
         (None, None) if has("Length1") && has("Length2") => Some("Type 1 font program".to_owned()),
         (None, None) if has("Length1") => Some("TrueType font program".to_owned()),
         (None, None) if has("N") && !has("First") => Some(format!(
-            "ICC profile, {} component{}",
-            int("N").unwrap_or(0),
-            plural(int("N").unwrap_or(0).unsigned_abs())
+            "ICC profile, {}",
+            plural(int("N").unwrap_or(0).unsigned_abs(), "component")
         )),
         _ => None,
     }
@@ -124,10 +124,7 @@ pub(super) fn filters_summary(item: &Item) -> Option<String> {
                     }
                     if int("Predictor").unwrap_or(1) > 1 {
                         let columns = int("Columns").unwrap_or(1);
-                        details.push(format!(
-                            "{columns} column{}",
-                            plural(columns.unsigned_abs())
-                        ));
+                        details.push(plural(columns.unsigned_abs(), "column"));
                         if let Some(colors) = int("Colors").filter(|&c| c != 1) {
                             details.push(format!("{colors} colours"));
                         }
@@ -306,7 +303,7 @@ async fn encrypted(cx: Cx, (doc, located): (DocRef, Located)) -> Result<()> {
 async fn operators(cx: Cx, (doc, located): (DocRef, Located)) -> Result<()> {
     let span = objects::decode(&cx, &located, doc.security.as_ref()).await?;
     let head = cx.read_avail(span.sub(0, 1024)).await?;
-    let syntax = if super::syntax::find(&head, b"begincmap", 0).is_some() {
+    let syntax = if crate::bytes::find(&head, b"begincmap", 0).is_some() {
         cx.annotate("CMap");
         Syntax::CMap
     } else {
@@ -327,8 +324,8 @@ async fn object_stream(cx: Cx, (doc, located): (DocRef, Located)) -> Result<()> 
         .unwrap_or(0);
     let n = index.entries.len();
     cx.annotate(format!(
-        "{n} object{}, {:#x} bytes decoded",
-        plural(to_u64(n)),
+        "{}, {:#x} bytes decoded",
+        plural(to_u64(n), "object"),
         decoded.len
     ));
     cx.set_count(Count::Exact(to_u64(n).saturating_add(1)));
@@ -336,8 +333,8 @@ async fn object_stream(cx: Cx, (doc, located): (DocRef, Located)) -> Result<()> 
         Node::new("Offsets")
             .span(decoded.sub(0, first))
             .summary(format!(
-                "{n} pair{} of object number and offset",
-                plural(to_u64(n))
+                "{} of object number and offset",
+                plural(to_u64(n), "pair")
             ))
             .desc("Each object's number and its offset from /First")
             .lazy(

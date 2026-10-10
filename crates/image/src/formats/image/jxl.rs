@@ -9,11 +9,12 @@ use crate::bytes::{to_u64, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Input, Probe, embedded, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
 
-use super::{dims, region, text, uint};
+use super::{dims, region};
 
 const BE: Endian = Endian::Big;
 const SIGNATURE: &[u8] = b"\0\0\0\x0cJXL \r\n\x87\n";
@@ -111,8 +112,8 @@ async fn codestream(cx: &Cx, span: Span) -> Result<()> {
 
 /// The size header is bit-packed, so both fields share its span.
 async fn size_fields(cx: Cx, (span, w, h): (Span, u64, u64)) -> Result<()> {
-    cx.emit(Node::new("Width").span(span).value(uint(w)));
-    cx.emit(Node::new("Height").span(span).value(uint(h)));
+    cx.emit(Node::new("Width").span(span).value(uint(w, 64)));
+    cx.emit(Node::new("Height").span(span).value(uint(h, 64)));
     Ok(())
 }
 

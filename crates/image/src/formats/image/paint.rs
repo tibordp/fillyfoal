@@ -7,24 +7,12 @@ use crate::declare_format;
 use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Input, Probe, embedded, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{Radix, Value};
 
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
 
 use crate::formats::text::scan::head_lines as lines;
 

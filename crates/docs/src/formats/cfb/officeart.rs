@@ -5,12 +5,13 @@
 //! PowerPoint records nested in drawings (client data, text boxes) are
 //! decoded too.
 
-use super::rec::{K, LE, enumv, hex, uint};
+use super::rec::{K, LE};
 use crate::bytes::{i32_le, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
 use crate::formats::Input;
+use crate::formats::util::val::{enumv, hex, uint};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};

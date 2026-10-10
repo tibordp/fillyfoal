@@ -8,12 +8,13 @@
 use std::sync::Arc;
 
 use super::CfbRef;
-use super::rec::{LE, hex, quoted, uint};
+use super::rec::{LE, quoted};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::Input;
+use crate::formats::util::val::{hex, uint};
 use crate::node::Node;
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, Value, lookup};
@@ -350,7 +351,11 @@ fn record_node(span: Span, r: &DirRec, codepage: u16) -> Node {
         node.value(Value::Text(super::rec::codepage_text(codepage, d)))
     } else {
         match (r.id, d.len()) {
-            (0x0001, 4) => node.value(super::rec::enumv(u32_le(d, 0).unwrap_or(0), 32, SYSKIND)),
+            (0x0001, 4) => node.value(crate::formats::util::val::enumv(
+                u32_le(d, 0).unwrap_or(0),
+                32,
+                SYSKIND,
+            )),
             (0x0002 | 0x0014, 4) => {
                 let v = u32_le(d, 0).unwrap_or(0);
                 node.value(hex(v, 32))

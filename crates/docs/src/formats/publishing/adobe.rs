@@ -14,12 +14,14 @@ use crate::declare_format;
 use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::fourcc;
+use crate::formats::util::val::{int, text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Value};
 
-use super::{Rd, fourcc, int, text, uint};
+use super::Rd;
 
 const BE: Endian = Endian::Big;
 

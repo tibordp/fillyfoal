@@ -20,16 +20,17 @@
 //!   object counts are not knowable without the object layouts);
 //! - the preview image, a PNG found by scanning the start of the model.
 
+use crate::bytes::find;
 use crate::bytes::{to_u64, to_usize, u16_le, u32_be};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{Radix, Value};
 
 const LE: Endian = Endian::Little;
 /// How far into the model the preview image is looked for.
@@ -44,18 +45,6 @@ const PNG_MAGIC: &[u8] = b"\x89PNG\r\n\x1a\n";
 
 declare_format!(pub SKETCHUP = "sketchup", "SketchUp model", ["skp", "skb"], "application/vnd.sketchup.skp",
     Probe::Magic(&[(0, b"\xff\xfe\xff\x0eS\0k\0e\0t\0c\0h\0U\0p\0 \0M\0o\0d\0e\0l\0")]), sketchup);
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
 
 /// An MFC `CString` (`AfxReadStringLength`): a length byte, or `FF` and a
 /// 16-bit length, or `FF FFFF` and a 32-bit length; `FF FEFF` before the
@@ -109,13 +98,6 @@ fn class_tag(data: &[u8], at: usize) -> Option<(u16, String, usize)> {
     let ok =
         name.first() == Some(&b'C') && name.iter().all(|&b| b.is_ascii_alphanumeric() || b == b'_');
     ok.then(|| (schema, crate::text::latin1(name), len.saturating_add(6)))
-}
-
-fn find(data: &[u8], needle: &[u8], from: usize) -> Option<usize> {
-    data.get(from..)?
-        .windows(needle.len())
-        .position(|w| w == needle)
-        .and_then(|p| p.checked_add(from))
 }
 
 /// The length of the PNG starting at `at` in `span`, by walking its chunks
@@ -258,12 +240,8 @@ async fn version_map(cx: Cx, (file, tag, start): (Span, u64, u64)) -> Result<()>
             break;
         }
         let version = cur.u32().await?;
-        cx.push(
-            Node::new(s)
-                .span(cur.since(at))
-                .value(uint(version.into(), 32)),
-        )
-        .await;
+        cx.push(Node::new(s).span(cur.since(at)).value(uint(version, 32)))
+            .await;
         entries = entries.saturating_add(1);
     }
     Ok(())

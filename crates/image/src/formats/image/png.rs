@@ -14,8 +14,10 @@ use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::arcutil::human_size;
+use crate::formats::util::fmt::{count, plural};
+use crate::formats::util::val::{text, uint};
 use crate::formats::util::vidutil::{
-    COLOUR_PRIMARIES, MATRIX_COEFFICIENTS, TRANSFER_CHARACTERISTICS, lookup_or, plural,
+    COLOUR_PRIMARIES, MATRIX_COEFFICIENTS, TRANSFER_CHARACTERISTICS, lookup_or,
 };
 use crate::formats::{Format, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
@@ -23,7 +25,7 @@ use crate::span::{Origin, Span};
 use crate::text::latin1;
 use crate::value::{EnumTable, Value, lookup};
 
-use super::{ColorOrder, dims, palette, text, uint};
+use super::{ColorOrder, dims, palette, playing_time};
 
 const BE: Endian = Endian::Big;
 
@@ -606,15 +608,6 @@ fn summarize(kind: &Kind, d: &[u8], len: u64, image: &Image) -> Option<String> {
     })
 }
 
-/// "1 entry", "3 entries".
-fn count(n: u64, one: &str, many: &str) -> String {
-    if n == 1 {
-        format!("1 {one}")
-    } else {
-        format!("{n} {many}")
-    }
-}
-
 /// Splits `d` at its first NUL: the bytes before it, and those after it
 /// (empty if there is none).
 fn cut(d: &[u8]) -> (&[u8], &[u8]) {
@@ -720,16 +713,6 @@ impl Fctl {
             lookup(DISPOSE, self.dispose.into()).unwrap_or("?"),
             lookup(BLEND, self.blend.into()).unwrap_or("?")
         )
-    }
-}
-
-/// A total playing time: "300 ms", "1.5 s", "2:05".
-fn playing_time(seconds: f64) -> String {
-    if (1.0..60.0).contains(&seconds) {
-        let s = format!("{seconds:.2}");
-        format!("{} s", s.trim_end_matches('0').trim_end_matches('.'))
-    } else {
-        crate::formats::util::sound::duration(seconds)
     }
 }
 
@@ -1403,7 +1386,7 @@ async fn list_values(cx: Cx, (span, size): (Span, u64)) -> Result<()> {
         cx.push(
             Node::new(format!("[{index}]"))
                 .span(entry)
-                .value(uint(value)),
+                .value(uint(value, 64)),
         )
         .await;
     }

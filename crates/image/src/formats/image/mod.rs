@@ -1,7 +1,6 @@
 //! Raster image formats.
 //!
-//! Shared helpers for the family live here: palettes, sized regions and a few
-//! value constructors.
+//! Shared helpers for the family live here: palettes and sized regions.
 //!
 //! Also here: PNG and MNG (`png`), ICC profiles (`icc_profile`), Windows
 //! metafiles (`metafile`), film frames (`dpx`: DPX and Cineon), GPU textures
@@ -60,29 +59,16 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::value::{Radix, Value};
+use crate::value::Value;
 
-/// An unsigned decimal value.
-pub fn uint(value: impl Into<u64>) -> Value {
-    Value::UInt {
-        value: value.into(),
-        bits: 64,
-        radix: Radix::Dec,
+/// The total playing time of an animation: "300 ms", "1.5 s", "2:05".
+pub fn playing_time(seconds: f64) -> String {
+    if (1.0..60.0).contains(&seconds) {
+        let s = format!("{seconds:.2}");
+        format!("{} s", s.trim_end_matches('0').trim_end_matches('.'))
+    } else {
+        crate::formats::util::sound::duration(seconds)
     }
-}
-
-/// An unsigned hexadecimal value.
-pub fn hex(value: impl Into<u64>) -> Value {
-    Value::UInt {
-        value: value.into(),
-        bits: 64,
-        radix: Radix::Hex,
-    }
-}
-
-/// A text value.
-pub fn text(value: impl Into<String>) -> Value {
-    Value::Text(value.into())
 }
 
 /// `len` bytes at `offset` within `parent`, with a truncation diagnostic if

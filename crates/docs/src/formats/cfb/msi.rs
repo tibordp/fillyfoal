@@ -8,11 +8,12 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use super::rec::{hex, quoted, uint};
+use super::rec::quoted;
 use super::{CfbRef, TreeWalk, entry_name};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::val::{hex, uint};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{FlagTable, Value, flag};

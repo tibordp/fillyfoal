@@ -10,6 +10,7 @@ use super::syntax::Item;
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{Radix, Value};
@@ -225,12 +226,10 @@ pub async fn hint_tables(cx: Cx, (doc, located): (DocRef, Located)) -> Result<()
         let span = decoded.sub(at, end.saturating_sub(at));
         let node = Node::new(name).span(span);
         let node = match key {
-            "P" => node
-                .summary(format!("{pages} page{}", super::plural(pages)))
-                .lazy(
-                    crate::expander!(self::page_table: (Span, u64)),
-                    (span, pages),
-                ),
+            "P" => node.summary(plural(pages, "page")).lazy(
+                crate::expander!(self::page_table: (Span, u64)),
+                (span, pages),
+            ),
             "S" => node.lazy(crate::expander!(self::shared_table: Span), span),
             _ => node.summary(format!("at {at:#x}")),
         };
@@ -273,7 +272,7 @@ async fn page_table(cx: Cx, (span, pages): (Span, u64)) -> Result<()> {
     cx.emit(
         Node::new("Pages")
             .span(span.tail(entries_at))
-            .summary(format!("{pages} page{}", super::plural(pages)))
+            .summary(plural(pages, "page"))
             .desc("Per page: objects, length, shared objects, content stream position")
             .lazy(
                 crate::expander!(self::page_entries: (Span, u64, Vec<u64>)),
@@ -346,8 +345,8 @@ async fn page_entries(cx: Cx, (span, pages, h): (Span, u64, Vec<u64>)) -> Result
             if n > 0 {
                 let more = if n > 8 { ", …" } else { "" };
                 parts.push(format!(
-                    "{n} shared object group{} ({}{more})",
-                    super::plural(to_u64(n)),
+                    "{} ({}{more})",
+                    plural(to_u64(n), "shared object group"),
                     list.join(", ")
                 ));
             }
@@ -377,12 +376,12 @@ async fn shared_table(cx: Cx, span: Span) -> Result<()> {
     emit_header(&cx, span, SHARED_HEADER, &h);
     let at = |i: usize| h.get(i).copied().unwrap_or(0);
     let groups = at(3);
-    cx.annotate(format!("{groups} group{}", super::plural(groups)));
+    cx.annotate(plural(groups, "group"));
     let entries_at = bits.byte();
     cx.emit(
         Node::new("Groups")
             .span(span.tail(entries_at))
-            .summary(format!("{groups} group{}", super::plural(groups)))
+            .summary(plural(groups, "group"))
             .desc("Per group: length, objects, MD5 signature")
             .lazy(
                 crate::expander!(self::shared_entries: (Span, Vec<u64>)),
@@ -432,7 +431,7 @@ async fn shared_entries(cx: Cx, (span, h): (Span, Vec<u64>)) -> Result<()> {
         let mut summary = format!("{} bytes", at(5).saturating_add(len));
         if let Some(n) = objects.get(i) {
             let n = n.saturating_add(1);
-            summary = format!("{summary}, {n} object{}", super::plural(n));
+            summary = format!("{summary}, {}", plural(n, "object"));
         }
         if signed.get(i).is_some_and(|&s| s != 0) {
             summary.push_str(", MD5 signature");

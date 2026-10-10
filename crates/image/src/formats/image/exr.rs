@@ -10,12 +10,13 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, field, flag, lookup};
 
-use super::{dims, hex, region, text};
+use super::{dims, region};
 
 const LE: Endian = Endian::Little;
 
@@ -272,7 +273,7 @@ async fn offsets(cx: Cx, (file, table, multipart): (Span, Span, bool)) -> Result
         cx.push(
             Node::new(format!("[{i}]"))
                 .span(span)
-                .value(hex(offset))
+                .value(hex(offset, 64))
                 .target(target),
         )
         .await;
@@ -384,7 +385,7 @@ async fn attribute(cx: Cx, (span, kind): (Span, String)) -> Result<()> {
     cx.emit(Node::new("Type").span(kind_span).value(text(kind.clone())));
     let size_span = cur.span(4);
     let size = u64::from(cur.u32().await?);
-    cx.emit(Node::new("Size").span(size_span).value(super::uint(size)));
+    cx.emit(Node::new("Size").span(size_span).value(uint(size, 64)));
     let value = cur.span(size);
     if kind == "chlist" {
         let mut c = Cursor::new(&cx, value, LE);

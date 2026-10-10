@@ -10,7 +10,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
-use crate::formats::util::datakit::clip;
+use crate::formats::util::fmt::clip;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;

@@ -10,13 +10,14 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse, struct_node};
+use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, field, lookup};
 
-use super::{ColorOrder, dims, palette, region, text};
+use super::{ColorOrder, dims, palette, region};
 
 const LE: Endian = Endian::Little;
 const SIGNATURE: &[u8] = b"TRUEVISION-XFILE.\0";

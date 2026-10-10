@@ -12,11 +12,10 @@ use crate::bytes::{to_u64, u16_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::arcutil::human_size;
+use crate::formats::util::val::uint;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Value, lookup};
-
-use super::uint;
 
 /// How much of a dataset's data is read for its value.
 const PEEK: u64 = 1024;
@@ -288,7 +287,7 @@ async fn datasets(cx: Cx, span: Span) -> Result<()> {
             let v = bytes.iter().fold(0u64, |acc, &b| {
                 acc.checked_shl(8).unwrap_or(0) | u64::from(b)
             });
-            node = node.value(uint(v));
+            node = node.value(uint(v, 64));
         } else if key == id(1, 90) {
             utf8 = bytes == b"\x1b%G";
             node = node.value(Value::Bytes(bytes));

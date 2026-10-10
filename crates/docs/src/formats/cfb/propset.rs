@@ -7,11 +7,13 @@
 
 use std::sync::Arc;
 
-use super::rec::{LE, codepage_text, hex, quoted, uint};
-use crate::bytes::{i16_le, i32_le, to_u64, to_usize, u16_le, u32_le, u64_le};
+use super::rec::{LE, codepage_text, quoted};
+use crate::bytes::{align_up, i16_le, i32_le, to_u64, to_usize, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::datakit::guid_le;
+use crate::formats::util::val::{hex, uint};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -202,12 +204,7 @@ fn property_name(kind: SetKind, id: u32, dictionary: &[(u32, String)]) -> String
 }
 
 fn guid_at(data: &[u8], at: usize) -> Option<Guid> {
-    Some(Guid {
-        data1: u32_le(data, at)?,
-        data2: u16_le(data, at.checked_add(4)?)?,
-        data3: u16_le(data, at.checked_add(6)?)?,
-        data4: crate::bytes::array(data, at.checked_add(8)?)?,
-    })
+    data.get(at..)?.get(..16).map(guid_le)
 }
 
 /// The property sets of a stream.
@@ -358,10 +355,6 @@ struct Decoded {
     children: Vec<Child>,
 }
 
-fn pad4(n: usize) -> usize {
-    n.saturating_add(3) & !3
-}
-
 /// Decodes a value of type `vt` at `data[at..]` (after the type field).
 fn decode(
     vt: u16,
@@ -436,7 +429,7 @@ fn decode(
             ));
             pos = end;
         }
-        let total = pad4(pos).saturating_sub(at);
+        let total = to_usize(align_up(to_u64(pos), 4)).saturating_sub(at);
         let mut summary = format!("{count} elements");
         if !texts.is_empty() {
             summary = format!(
@@ -464,17 +457,28 @@ fn decode(
             let v = u64_le(data, at)?.cast_signed();
             Some(Decoded {
                 value: int(v, 64),
-                summary: Some(format!("{}.{:04}", v / 10_000, (v % 10_000).unsigned_abs())),
+                summary: Some(crate::formats::data::valuetree::decimal_string(
+                    v < 0,
+                    &v.unsigned_abs().to_string(),
+                    -4,
+                )),
                 len: 8,
                 children: Vec::new(),
             })
         }
-        0x0007 => Some(Decoded {
-            value: Some(Value::Float(f64::from_bits(u64_le(data, at)?))),
-            summary: Some("days since 1899-12-30".to_owned()),
-            len: 8,
-            children: Vec::new(),
-        }),
+        0x0007 => {
+            let days = f64::from_bits(u64_le(data, at)?);
+            let value = match crate::formats::util::civil::ole_date(days) {
+                Some(unix_seconds) => Value::Timestamp { unix_seconds },
+                None => Value::Float(days),
+            };
+            Some(Decoded {
+                value: Some(value),
+                summary: Some(format!("{days} days since 1899-12-30")),
+                len: 8,
+                children: Vec::new(),
+            })
+        }
         0x000a => simple(Some(hex(u32_le(data, at)?, 32)), 4),
         0x000b => simple(Some(Value::Bool(u16_le(data, at)? != 0)), 4),
         0x0010 => simple(int(i64::from(data.get(at)?.cast_signed()), 8), 4),
@@ -490,7 +494,10 @@ fn decode(
             let text = codepage_text(codepage, raw)
                 .trim_end_matches('\0')
                 .to_owned();
-            simple(Some(Value::Text(text)), pad4(size.saturating_add(4)))
+            simple(
+                Some(Value::Text(text)),
+                to_usize(align_up(to_u64(size.saturating_add(4)), 4)),
+            )
         }
         0x001f => {
             let cch = to_usize(u32_le(data, at)?.into());
@@ -501,7 +508,7 @@ fn decode(
                 .to_owned();
             simple(
                 Some(Value::Text(text)),
-                pad4(cch.saturating_mul(2).saturating_add(4)),
+                to_usize(align_up(to_u64(cch.saturating_mul(2).saturating_add(4)), 4)),
             )
         }
         0x0040 => {
@@ -529,7 +536,7 @@ fn decode(
             Some(Decoded {
                 value: Some(Value::Bytes(raw.get(..64).unwrap_or(raw).to_vec())),
                 summary: Some(format!("{size} bytes")),
-                len: pad4(size.saturating_add(4)),
+                len: to_usize(align_up(to_u64(size.saturating_add(4)), 4)),
                 children: Vec::new(),
             })
         }
@@ -552,7 +559,7 @@ fn decode(
             Some(Decoded {
                 value: None,
                 summary: Some(summary),
-                len: pad4(size.saturating_add(4)),
+                len: to_usize(align_up(to_u64(size.saturating_add(4)), 4)),
                 children: Vec::new(),
             })
         }
@@ -567,7 +574,7 @@ fn decode(
                         .to_owned(),
                 )),
                 summary: Some("name of a stream or storage".to_owned()),
-                len: pad4(size.saturating_add(4)),
+                len: to_usize(align_up(to_u64(size.saturating_add(4)), 4)),
                 children: Vec::new(),
             })
         }
@@ -706,7 +713,7 @@ type DictEntries = Arc<Vec<(u32, String, usize, usize)>>;
 async fn value_node(cx: Cx, (span, vt, children): (Span, u16, Children)) -> Result<()> {
     let mut type_node = Node::new("Type")
         .span(span.sub(0, 2))
-        .value(super::rec::enumv(vt & 0x0fff, 16, TYPES));
+        .value(crate::formats::util::val::enumv(vt & 0x0fff, 16, TYPES));
     if vt & 0x1000 != 0 {
         type_node = type_node.summary("VT_VECTOR");
     }
