@@ -124,27 +124,57 @@ const LP_PARTITION_ATTRS: FlagTable = &[
 
 async fn lp_super(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    cx.emit(Node::new("Reserved").span(file.sub(0, LP_GEOMETRY_AT)));
+    cx.emit(
+        Node::new("Reserved")
+            .span(file.sub(0, LP_GEOMETRY_AT))
+            .desc("LP_PARTITION_RESERVED_BYTES: left for a partition table or boot data"),
+    );
     let geo_span = file.sub(LP_GEOMETRY_AT, 52);
     let (max, slots) = crate::fields::parse(&cx, geo_span, LE, &(), lp_geometry).await?;
-    cx.emit(struct_node("Geometry", geo_span, LE, (), lp_geometry));
-    cx.emit(struct_node(
-        "Backup geometry",
-        file.sub(LP_GEOMETRY_AT.saturating_add(LP_GEOMETRY_SIZE), 52),
-        LE,
-        (),
-        lp_geometry,
-    ));
+    for (i, name) in ["Geometry", "Backup geometry"].into_iter().enumerate() {
+        let at = LP_GEOMETRY_AT.saturating_add(LP_GEOMETRY_SIZE.saturating_mul(to_u64(i)));
+        let g = cx.read(file.sub(at, 52)).await?;
+        let ok = g.get(8..40) == Some(&sha256_zeroed(&g, 8)[..]);
+        let mut node = struct_node(name, file.sub(at, 52), LE, (), lp_geometry).summary(if ok {
+            "checksum valid"
+        } else {
+            "checksum INVALID"
+        });
+        if !ok {
+            node = node.diag(Diagnostic::warning("SHA-256 checksum mismatch"));
+        }
+        cx.emit(node);
+        crate::formats::system::firmware::padding(
+            &cx,
+            file,
+            at.saturating_add(52),
+            at.saturating_add(LP_GEOMETRY_SIZE),
+            "Geometry padding",
+        );
+    }
     let meta_at = LP_GEOMETRY_AT.saturating_add(LP_GEOMETRY_SIZE.saturating_mul(2));
     let head = file.sub(meta_at, 256);
     let h = crate::fields::parse(&cx, head, LE, &(), lp_header).await?;
-    cx.emit(struct_node(
-        "Metadata header (slot 0)",
-        head.sub(0, h.header_size.into()),
-        LE,
-        (),
-        lp_header,
-    ));
+    // Metadata slots: the primary copies, then the backup copies, each
+    // `max` bytes.
+    let max64 = u64::from(max);
+    let slot_count = u64::from(slots.min(64));
+    for copy in 0..2u64 {
+        for slot in 0..slot_count {
+            let index = copy.saturating_mul(slot_count).saturating_add(slot);
+            let at = meta_at.saturating_add(index.saturating_mul(max64));
+            let name = if copy == 0 {
+                format!("Metadata (slot {slot})")
+            } else {
+                format!("Backup metadata (slot {slot})")
+            };
+            cx.emit(
+                Node::new(name)
+                    .span(file.sub(at, max64))
+                    .lazy(lp_slot, file.sub(at, max64)),
+            );
+        }
+    }
     let tables = file.sub_exact(
         meta_at.saturating_add(h.header_size.into()),
         h.tables_size.into(),
@@ -167,18 +197,17 @@ async fn lp_super(cx: Cx, input: Input) -> Result<()> {
         }
         group_names.push(until_nul(g.get(..36).unwrap_or_default()));
     }
-    cx.emit(
-        Node::new("Block devices")
-            .span(table(h.devices))
-            .summary(device_names.join(", "))
-            .lazy(lp_devices, (table(h.devices), h.devices.2)),
-    );
-    cx.emit(
-        Node::new("Groups")
-            .span(table(h.groups))
-            .summary(group_names.join(", "))
-            .lazy(lp_groups, (table(h.groups), h.groups.2)),
-    );
+    // Between the last metadata copy and the first logical sector.
+    let meta_end = meta_at.saturating_add(slot_count.saturating_mul(2).saturating_mul(max64));
+    let first_sector = u64_le(&devices, 0).unwrap_or(0).saturating_mul(SECTOR);
+    if first_sector > meta_end {
+        cx.emit(
+            Node::new("Unused")
+                .span(file.sub(meta_end, first_sector.saturating_sub(meta_end)))
+                .summary(size(first_sector.saturating_sub(meta_end)))
+                .desc("Up to the first logical sector (alignment)"),
+        );
+    }
     let extents = cx.read(table(h.extents)).await?;
     let parts = cx.read(table(h.partitions)).await?;
     let mut names = Vec::new();
@@ -231,8 +260,14 @@ async fn lp_super(cx: Cx, input: Input) -> Result<()> {
             }
         );
         names.push(name.clone());
+        let single = (count == 1).then(|| pieces.first().copied()).flatten();
         let node = if pieces.is_empty() {
             Node::new(name).span(entry).summary(summary)
+        } else if let Some(one) = single.filter(|s| s.source == file.source) {
+            // One linear extent: the partition is a plain range of the file.
+            embedded(name, input.nested(one))
+                .summary(summary)
+                .target(entry)
         } else {
             let data = cx.add_pieces(
                 Origin {
@@ -256,6 +291,141 @@ async fn lp_super(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
+/// SHA-256 of `data` with the 32-byte checksum at `at` taken as zeros.
+fn sha256_zeroed(data: &[u8], at: usize) -> Vec<u8> {
+    use crate::codec::crypto::{Hash, Sha256};
+    let mut h = Sha256::new();
+    h.update(data.get(..at).unwrap_or_default());
+    h.update(&[0u8; 32]);
+    h.update(data.get(at.saturating_add(32)..).unwrap_or_default());
+    h.finish()
+}
+
+/// SHA-256 of a span, read and hashed 64 KiB at a time.
+async fn sha256_span(cx: &Cx, span: Span) -> Result<Vec<u8>> {
+    use crate::codec::crypto::{Hash, Sha256};
+    let mut h = Sha256::new();
+    let mut at = 0u64;
+    while at < span.len {
+        let chunk = cx.read(span.sub(at, 1 << 16)).await?;
+        if chunk.is_empty() {
+            break;
+        }
+        h.update(&chunk);
+        at = at.saturating_add(to_u64(chunk.len()));
+        cx.checkpoint().await;
+    }
+    Ok(h.finish())
+}
+
+const LP_EXTENT_TYPE: EnumTable = &[(0, "LINEAR"), (1, "ZERO")];
+
+/// One metadata slot: header, the four tables, padding up to the slot size.
+async fn lp_slot(cx: Cx, slot: Span) -> Result<()> {
+    let head = slot.sub(0, 256);
+    let h = crate::fields::parse(&cx, head, LE, &(), lp_header).await?;
+    let header_span = head.sub(0, h.header_size.into());
+    let tables = slot.sub(u64::from(h.header_size), h.tables_size.into());
+    let header_bytes = cx.read(header_span).await?;
+    let header_ok = header_bytes.get(12..44) == Some(&sha256_zeroed(&header_bytes, 12)[..]);
+    let tables_ok = header_bytes.get(48..80) == Some(&sha256_span(&cx, tables).await?[..]);
+    let mut node = struct_node("Header", header_span, LE, (), lp_header).summary(format!(
+        "header checksum {}, tables checksum {}",
+        if header_ok { "valid" } else { "INVALID" },
+        if tables_ok { "valid" } else { "INVALID" }
+    ));
+    if !header_ok || !tables_ok {
+        node = node.diag(Diagnostic::warning("SHA-256 checksum mismatch"));
+    }
+    cx.emit(node);
+    let table = |d: TableDesc| tables.sub(d.0.into(), u64::from(d.1).saturating_mul(d.2.into()));
+    let mut ordered = [
+        ("Partitions", h.partitions, 0u8),
+        ("Extents", h.extents, 1),
+        ("Groups", h.groups, 2),
+        ("Block devices", h.devices, 3),
+    ];
+    ordered.sort_by_key(|(_, d, _)| d.0);
+    for (name, d, kind) in ordered {
+        let span = table(d);
+        let node = Node::new(name)
+            .span(span)
+            .summary(format!("{} × {} bytes", d.1, d.2));
+        cx.emit(match kind {
+            0 => node.lazy(lp_partitions, (span, d.2)),
+            1 => node.lazy(lp_extents, (span, d.2)),
+            2 => node.lazy(lp_groups, (span, d.2)),
+            _ => node.lazy(lp_devices, (span, d.2)),
+        });
+    }
+    let used = u64::from(h.header_size).saturating_add(h.tables_size.into());
+    if used < slot.len {
+        cx.emit(
+            Node::new("Unused")
+                .span(slot.tail(used))
+                .summary(size(slot.len.saturating_sub(used))),
+        );
+    }
+    Ok(())
+}
+
+async fn lp_partitions(cx: Cx, (span, entry): (Span, u32)) -> Result<()> {
+    let mut at = 0u64;
+    while at.saturating_add(52) <= span.len && entry >= 52 {
+        let one = span.sub(at, entry.into());
+        let name = until_nul(cx.read(one.sub(0, 36)).await?.as_slice());
+        cx.push(struct_node(name, one, LE, (), |f, _| {
+            f.ascii("Name", 36).emit()?;
+            f.u32("Attributes").flags(LP_PARTITION_ATTRS).emit()?;
+            f.u32("First extent").emit()?;
+            f.u32("Extent count").emit()?;
+            f.u32("Group").emit()?;
+            Ok(())
+        }))
+        .await;
+        at = at.saturating_add(entry.into());
+    }
+    Ok(())
+}
+
+async fn lp_extents(cx: Cx, (span, entry): (Span, u32)) -> Result<()> {
+    let mut at = 0u64;
+    let mut i = 0u64;
+    while at.saturating_add(24) <= span.len && entry >= 24 {
+        let one = span.sub(at, entry.into());
+        let e = cx.read(one.sub(0, 24)).await?;
+        let sectors = u64_le(&e, 0).unwrap_or(0);
+        let summary = if u32_le(&e, 8) == Some(0) {
+            format!(
+                "{} at sector {} of device {}",
+                size(sectors.saturating_mul(SECTOR)),
+                u64_le(&e, 12).unwrap_or(0),
+                u32_le(&e, 20).unwrap_or(0)
+            )
+        } else {
+            format!("{} of zeros", size(sectors.saturating_mul(SECTOR)))
+        };
+        cx.push(
+            struct_node(format!("Extent {i}"), one, LE, (), |f, _| {
+                f.u64("Sectors")
+                    .with(|&s, n| n.summary(size(s.saturating_mul(SECTOR))))
+                    .emit()?;
+                f.u32("Target type").enumeration(LP_EXTENT_TYPE).emit()?;
+                f.u64("Target data")
+                    .desc("First physical sector (LINEAR)")
+                    .emit()?;
+                f.u32("Target source").desc("Block device index").emit()?;
+                Ok(())
+            })
+            .summary(summary),
+        )
+        .await;
+        at = at.saturating_add(entry.into());
+        i = i.saturating_add(1);
+    }
+    Ok(())
+}
+
 /// A table entry size usable with `chunks` (never zero).
 fn chunk_size(n: u32) -> usize {
     crate::bytes::to_usize(n.into()).max(1)
@@ -265,15 +435,22 @@ async fn lp_devices(cx: Cx, (span, entry): (Span, u32)) -> Result<()> {
     let mut at = 0u64;
     while at.saturating_add(64) <= span.len && entry >= 64 {
         let one = span.sub(at, entry.into());
-        cx.push(struct_node("Block device", one, LE, (), |f, _| {
-            f.u64("First logical sector").emit()?;
-            f.u32("Alignment").emit()?;
-            f.u32("Alignment offset").emit()?;
-            f.u64("Size").with(|&s, n| n.summary(size(s))).emit()?;
-            f.ascii("Partition name", 36).emit()?;
-            f.u32("Flags").flags(SLOT_SUFFIXED).emit()?;
-            Ok(())
-        }))
+        let name = until_nul(cx.read(one.sub(24, 36)).await?.as_slice());
+        cx.push(struct_node(
+            format!("Block device {name}"),
+            one,
+            LE,
+            (),
+            |f, _| {
+                f.u64("First logical sector").emit()?;
+                f.u32("Alignment").emit()?;
+                f.u32("Alignment offset").emit()?;
+                f.u64("Size").with(|&s, n| n.summary(size(s))).emit()?;
+                f.ascii("Partition name", 36).emit()?;
+                f.u32("Flags").flags(SLOT_SUFFIXED).emit()?;
+                Ok(())
+            },
+        ))
         .await;
         at = at.saturating_add(entry.into());
     }
@@ -284,7 +461,8 @@ async fn lp_groups(cx: Cx, (span, entry): (Span, u32)) -> Result<()> {
     let mut at = 0u64;
     while at.saturating_add(48) <= span.len && entry >= 48 {
         let one = span.sub(at, entry.into());
-        cx.push(struct_node("Group", one, LE, (), |f, _| {
+        let name = until_nul(cx.read(one.sub(0, 36)).await?.as_slice());
+        cx.push(struct_node(format!("Group {name}"), one, LE, (), |f, _| {
             f.ascii("Name", 36).emit()?;
             f.u32("Flags").flags(SLOT_SUFFIXED).emit()?;
             f.u64("Maximum size")
@@ -374,14 +552,29 @@ async fn vendor_boot(cx: Cx, input: Input) -> Result<()> {
         struct_node("Header", file.sub(0, header_len), LE, (), vendor_layout)
             .summary(format!("version {}", b.version)),
     );
+    // Every section starts on a page; the rest of its last page is padding.
+    let pad = |start: u64, end: u64, name: &'static str| {
+        crate::formats::system::firmware::padding(&cx, file, start, end, name);
+    };
     let mut at = align_up(header_len, page);
+    pad(header_len, at, "Header padding");
     let ramdisk = file.sub(at, b.ramdisk.into());
-    at = align_up(at.saturating_add(b.ramdisk.into()), page);
+    let mut next = align_up(at.saturating_add(b.ramdisk.into()), page);
+    let ramdisk_pad = (at.saturating_add(b.ramdisk.into()), next);
+    at = next;
     let dtb = file.sub(at, b.dtb.into());
-    at = align_up(at.saturating_add(b.dtb.into()), page);
+    next = align_up(at.saturating_add(b.dtb.into()), page);
+    let dtb_pad = (at.saturating_add(b.dtb.into()), next);
+    at = next;
     let table = file.sub(at, b.table.into());
-    at = align_up(at.saturating_add(b.table.into()), page);
+    next = align_up(at.saturating_add(b.table.into()), page);
+    let table_pad = (at.saturating_add(b.table.into()), next);
+    at = next;
     let bootconfig = file.sub(at, b.bootconfig.into());
+    let bootconfig_pad = (
+        at.saturating_add(b.bootconfig.into()),
+        align_up(at.saturating_add(b.bootconfig.into()), page),
+    );
     if b.entries > 0 && b.entry_size >= 108 {
         cx.emit(
             Node::new("Vendor ramdisks")
@@ -395,18 +588,34 @@ async fn vendor_boot(cx: Cx, input: Input) -> Result<()> {
     } else if !ramdisk.is_empty() {
         cx.emit(embedded("Vendor ramdisk", input.nested(ramdisk)).summary(size(ramdisk.len)));
     }
+    if !ramdisk.is_empty() {
+        pad(ramdisk_pad.0, ramdisk_pad.1, "Padding");
+    }
     if !dtb.is_empty() {
         cx.emit(embedded("DTB", input.nested(dtb)).summary(size(dtb.len)));
+        pad(dtb_pad.0, dtb_pad.1, "Padding");
     }
     if !table.is_empty() {
         cx.emit(
             Node::new("Ramdisk table")
                 .span(table)
-                .summary(format!("{} entries", b.entries)),
+                .summary(format!("{} entries", b.entries))
+                .lazy(ramdisk_table, (table, b.entries, b.entry_size)),
         );
+        pad(table_pad.0, table_pad.1, "Padding");
     }
     if !bootconfig.is_empty() {
         cx.emit(embedded("Bootconfig", input.nested(bootconfig)).summary(size(bootconfig.len)));
+        pad(bootconfig_pad.0, bootconfig_pad.1, "Padding");
+    }
+    let end = bootconfig_pad
+        .1
+        .max(table_pad.1)
+        .max(dtb_pad.1)
+        .max(ramdisk_pad.1);
+    if end < file.len {
+        let rest = file.tail(end);
+        cx.emit(embedded("Trailing data", input.nested(rest)).summary(size(rest.len)));
     }
     cx.annotate(format!(
         "Android vendor boot image v{}, ramdisk {}, DTB {}",
@@ -414,6 +623,44 @@ async fn vendor_boot(cx: Cx, input: Input) -> Result<()> {
         size(ramdisk.len),
         size(dtb.len)
     ));
+    Ok(())
+}
+
+/// `vendor_ramdisk_table_entry_v4` records.
+async fn ramdisk_table(cx: Cx, (table, entries, entry_size): (Span, u32, u32)) -> Result<()> {
+    if entry_size < 108 {
+        return Err(Diagnostic::malformed(format!("entry size {entry_size}")).at(table));
+    }
+    for i in 0..entries.min(4096) {
+        let Ok(entry) = table.sub_exact(
+            u64::from(i).saturating_mul(entry_size.into()),
+            entry_size.into(),
+        ) else {
+            break;
+        };
+        let e = cx.read(entry).await?;
+        let name = until_nul(e.get(12..44).unwrap_or_default());
+        cx.push(
+            struct_node(format!("Entry {i}"), entry, LE, (), |f, _| {
+                f.u32("Ramdisk size")
+                    .with(|&s, n| n.summary(size(s.into())))
+                    .emit()?;
+                f.u32("Ramdisk offset").hex().emit()?;
+                f.u32("Ramdisk type").enumeration(RAMDISK_TYPE).emit()?;
+                f.ascii("Ramdisk name", 32).emit()?;
+                f.bytes("Board ID", 64)
+                    .desc("Sixteen u32 words a bootloader may match against the board")
+                    .emit()?;
+                let rest = f.remaining();
+                if rest > 0 {
+                    f.bytes("Reserved", rest).emit()?;
+                }
+                Ok(())
+            })
+            .summary(name),
+        )
+        .await;
+    }
     Ok(())
 }
 
