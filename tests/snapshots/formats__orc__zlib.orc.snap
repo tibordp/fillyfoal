@@ -1,12 +1,11 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ zlib.orc — ORC, ZLIB compression, 3 rows, 1 stripes, 3 types  [0x0+0xa7]
     Magic: "ORC"  [0x0+0x3]
   ▾ Stripes — 1
     ▾ Stripe 0 — 3 rows  [0x3+0x2b]
-        Data streams  [0x3+0x8]
       ▾ Stripe footer  [0xb+0x23]
         ▾ streams — Stream  [#4:0x0+0x8]
             kind: DATA (0x1)  [#4:0x2+0x2]
@@ -27,9 +26,24 @@ expression: "common::explore(&name, &data)"
         ▾ columns — ColumnEncoding  [#4:0x20+0x4]
             kind: DIRECT_V2 (0x2)  [#4:0x22+0x2]
           writerTimezone: "UTC"  [#4:0x24+0x5]
-        DATA (column 1) — 3 bytes  [0x3+0x3]
-        DATA (column 2) — 3 bytes  [0x6+0x3]
-        LENGTH (column 2) — 2 bytes  [0x9+0x2]
+      ▾ DATA (column 1) — 3 bytes  [0x3+0x3]
+        ▾ Compression chunks  [0x3+0x3]
+            Chunk header: 32769 — compressed  [0x3+0x3]
+            Compressed chunk — 32769 bytes  [0x6+0x0]
+              ! malformed: chunk of 32769 bytes runs past the end of its section
+          ! malformed: deflate: input ends unexpectedly [0x6+0x0]
+      ▾ DATA (column 2) — 3 bytes  [0x6+0x3]
+        ▾ Compression chunks  [0x6+0x3]
+            Chunk header: 3256624 — stored  [0x6+0x3]
+            Stored chunk — 3256624 bytes  [0x9+0x0]
+              ! malformed: chunk of 3256624 bytes runs past the end of its section
+          Encoded values:   || — 0 bytes, values (run-length encoded)  [#5:0x0+0x0]
+      ▾ LENGTH (column 2) — 2 bytes  [0x9+0x2]
+        ▾ Compression chunks  [0x9+0x2]
+            Chunk header: 256 — stored  [0x9+0x2]
+            Stored chunk — 256 bytes  [0xb+0x0]
+              ! malformed: chunk of 256 bytes runs past the end of its section
+          Encoded values:   || — 0 bytes, lengths (integer run-length)  [#6:0x0+0x0]
   ▾ Footer  [0x2e+0x61]
       headerLength: 3  [#2:0x0+0x2]
       contentLength: 43  [#2:0x2+0x2]

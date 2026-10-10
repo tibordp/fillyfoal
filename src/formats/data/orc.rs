@@ -56,6 +56,8 @@ pub enum Kind {
     /// A zigzag-encoded signed varint (`sint64`).
     Signed,
     Text,
+    /// A `double` (fixed 64-bit).
+    Double,
 }
 
 pub struct FieldDef {
@@ -128,6 +130,7 @@ async fn message(cx: Cx, state: MsgState) -> Result<()> {
                 bits: 64,
                 radix: Radix::Dec,
             }),
+            (1, Kind::Double) => node.value(Value::Float(f64::from_bits(fd.value))),
             (1, _) => node.value(Value::UInt {
                 value: fd.value,
                 bits: 64,
@@ -311,6 +314,7 @@ static TYPE: MessageDef = MessageDef {
         f(4, "maximumLength", P),
         f(5, "precision", P),
         f(6, "scale", P),
+        f(7, "attributes", Kind::Message(&STRING_PAIR)),
     ],
 };
 
@@ -333,21 +337,122 @@ static STRING_STATISTICS: MessageDef = MessageDef {
     fields: &[f(1, "minimum", T), f(2, "maximum", T), f(3, "sum", P)],
 };
 
+static DOUBLE_STATISTICS: MessageDef = MessageDef {
+    name: "DoubleStatistics",
+    fields: &[
+        f(1, "minimum", Kind::Double),
+        f(2, "maximum", Kind::Double),
+        f(3, "sum", Kind::Double),
+    ],
+};
+
+static BUCKET_STATISTICS: MessageDef = MessageDef {
+    name: "BucketStatistics",
+    fields: &[f(1, "count", Kind::Packed)],
+};
+
+static DECIMAL_STATISTICS: MessageDef = MessageDef {
+    name: "DecimalStatistics",
+    fields: &[f(1, "minimum", T), f(2, "maximum", T), f(3, "sum", T)],
+};
+
+static DATE_STATISTICS: MessageDef = MessageDef {
+    name: "DateStatistics",
+    fields: &[f(1, "minimum", Kind::Signed), f(2, "maximum", Kind::Signed)],
+};
+
+static BINARY_STATISTICS: MessageDef = MessageDef {
+    name: "BinaryStatistics",
+    fields: &[f(1, "sum", Kind::Signed)],
+};
+
+static TIMESTAMP_STATISTICS: MessageDef = MessageDef {
+    name: "TimestampStatistics",
+    fields: &[
+        f(1, "minimum", Kind::Signed),
+        f(2, "maximum", Kind::Signed),
+        f(3, "minimumUtc", Kind::Signed),
+        f(4, "maximumUtc", Kind::Signed),
+        f(5, "minimumNanos", P),
+        f(6, "maximumNanos", P),
+    ],
+};
+
+static COLLECTION_STATISTICS: MessageDef = MessageDef {
+    name: "CollectionStatistics",
+    fields: &[
+        f(1, "minChildren", P),
+        f(2, "maxChildren", P),
+        f(3, "totalChildren", P),
+    ],
+};
+
 static COLUMN_STATISTICS: MessageDef = MessageDef {
     name: "ColumnStatistics",
     fields: &[
         f(1, "numberOfValues", P),
         f(2, "intStatistics", Kind::Message(&INTEGER_STATISTICS)),
-        f(3, "doubleStatistics", P),
+        f(3, "doubleStatistics", Kind::Message(&DOUBLE_STATISTICS)),
         f(4, "stringStatistics", Kind::Message(&STRING_STATISTICS)),
-        f(5, "bucketStatistics", P),
-        f(6, "decimalStatistics", P),
-        f(7, "dateStatistics", P),
-        f(8, "binaryStatistics", P),
-        f(9, "timestampStatistics", P),
+        f(5, "bucketStatistics", Kind::Message(&BUCKET_STATISTICS)),
+        f(6, "decimalStatistics", Kind::Message(&DECIMAL_STATISTICS)),
+        f(7, "dateStatistics", Kind::Message(&DATE_STATISTICS)),
+        f(8, "binaryStatistics", Kind::Message(&BINARY_STATISTICS)),
+        f(
+            9,
+            "timestampStatistics",
+            Kind::Message(&TIMESTAMP_STATISTICS),
+        ),
         f(10, "hasNull", P),
         f(11, "bytesOnDisk", P),
+        f(
+            12,
+            "collectionStatistics",
+            Kind::Message(&COLLECTION_STATISTICS),
+        ),
     ],
+};
+
+static STRIPE_STATISTICS: MessageDef = MessageDef {
+    name: "StripeStatistics",
+    fields: &[f(1, "colStats", Kind::Message(&COLUMN_STATISTICS))],
+};
+
+static METADATA: MessageDef = MessageDef {
+    name: "Metadata",
+    fields: &[f(1, "stripeStats", Kind::Message(&STRIPE_STATISTICS))],
+};
+
+static ROW_INDEX_ENTRY: MessageDef = MessageDef {
+    name: "RowIndexEntry",
+    fields: &[
+        f(1, "positions", Kind::Packed),
+        f(2, "statistics", Kind::Message(&COLUMN_STATISTICS)),
+    ],
+};
+
+static ROW_INDEX: MessageDef = MessageDef {
+    name: "RowIndex",
+    fields: &[f(1, "entry", Kind::Message(&ROW_INDEX_ENTRY))],
+};
+
+static BLOOM_FILTER: MessageDef = MessageDef {
+    name: "BloomFilter",
+    fields: &[
+        f(1, "numHashFunctions", P),
+        f(2, "bitset", P),
+        f(3, "utf8bitset", P),
+    ],
+};
+
+static BLOOM_FILTER_INDEX: MessageDef = MessageDef {
+    name: "BloomFilterIndex",
+    fields: &[f(1, "bloomFilter", Kind::Message(&BLOOM_FILTER))],
+};
+
+static STRING_PAIR: MessageDef = MessageDef {
+    name: "StringPair",
+    fields: &[f(1, "key", T), f(2, "value", T)],
 };
 
 static FOOTER: MessageDef = MessageDef {
@@ -484,7 +589,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Metadata")
                 .span(file.sub(start, metadata_len))
-                .summary("stripe statistics"),
+                .summary("stripe statistics")
+                .lazy(
+                    section_message,
+                    (file.sub(start, metadata_len), compression, &METADATA),
+                ),
         );
     }
     let mut summary = format!(
@@ -590,10 +699,6 @@ async fn stripe(
     cx: Cx,
     (whole, index, data, foot, compression): (Span, u64, u64, u64, u64),
 ) -> Result<()> {
-    if index > 0 {
-        cx.emit(Node::new("Index streams").span(whole.sub(0, index)));
-    }
-    cx.emit(Node::new("Data streams").span(whole.sub(index, data)));
     let footer_raw = whole.sub(index.saturating_add(data), foot);
     let span = section(&cx, footer_raw, compression).await?;
     if span.len > MAX_SECTION {
@@ -610,14 +715,16 @@ async fn stripe(
         let fields = ints(bytes.get(s..e).unwrap_or_default());
         let get = |id: u64| fields.iter().find(|(f, _)| *f == id).map_or(0, |(_, v)| *v);
         let (kind, column, len) = (get(1), get(2), get(3));
-        stream_nodes.push(
-            Node::new(format!(
-                "{} (column {column})",
-                lookup(STREAM_KINDS, kind).unwrap_or("stream")
-            ))
-            .span(whole.sub(pos, len))
-            .summary(format!("{len} bytes")),
-        );
+        let mut node = Node::new(format!(
+            "{} (column {column})",
+            lookup(STREAM_KINDS, kind).unwrap_or("stream")
+        ))
+        .span(whole.sub(pos, len))
+        .summary(format!("{len} bytes"));
+        if len > 0 {
+            node = node.lazy(stream, (whole.sub(pos, len), compression, kind));
+        }
+        stream_nodes.push(node);
         pos = pos.saturating_add(len);
     }
     let state = MsgState {
@@ -638,5 +745,152 @@ async fn stripe(
     for node in stream_nodes {
         cx.push(node).await;
     }
+    Ok(())
+}
+
+/// A protobuf message stored as a (possibly compressed) section.
+async fn section_message(
+    cx: Cx,
+    (raw, compression, def): (Span, u64, &'static MessageDef),
+) -> Result<()> {
+    if compression != 0 {
+        cx.emit(
+            Node::new("Compression chunks")
+                .span(raw)
+                .lazy(chunks, (raw, compression)),
+        );
+    }
+    let span = section(&cx, raw, compression).await?;
+    if span.len > MAX_SECTION {
+        return Err(Diagnostic::limit("section too large").at(span));
+    }
+    let data = Arc::new(cx.read(span).await?);
+    let end = data.len();
+    message(
+        cx,
+        MsgState {
+            buf: Buf { data, span },
+            start: 0,
+            end,
+            def,
+            depth: 0,
+        },
+    )
+    .await
+}
+
+/// The compression chunks of a section: 3-byte headers (length and an
+/// "original" flag), then compressed or stored bytes.
+async fn chunks(cx: Cx, (span, compression): (Span, u64)) -> Result<()> {
+    let codec = match compression {
+        1 => Some(crate::codec::Codec::Deflate),
+        2 => Some(crate::codec::Codec::Snappy),
+        4 => Some(crate::codec::Codec::Lz4Block),
+        5 => Some(crate::codec::Codec::Zstd),
+        _ => None,
+    };
+    let mut pos = 0u64;
+    let mut i = 0usize;
+    while pos < span.len && i < MAX_CHUNKS {
+        let head = cx.read(span.sub(pos, 3)).await?;
+        let header = u32::from_le_bytes([
+            head.first().copied().unwrap_or(0),
+            head.get(1).copied().unwrap_or(0),
+            head.get(2).copied().unwrap_or(0),
+            0,
+        ]);
+        let len = u64::from(header >> 1);
+        let original = header & 1 != 0;
+        cx.push(
+            Node::new("Chunk header")
+                .span(span.sub(pos, 3))
+                .value(Value::UInt {
+                    value: len,
+                    bits: 23,
+                    radix: Radix::Dec,
+                })
+                .summary(if original { "stored" } else { "compressed" }),
+        )
+        .await;
+        let body = span.sub(pos.saturating_add(3), len);
+        let mut node = Node::new(if original {
+            "Stored chunk"
+        } else {
+            "Compressed chunk"
+        })
+        .span(body)
+        .summary(format!("{len} bytes"));
+        if body.len < len {
+            cx.push(node.diag(Diagnostic::malformed(format!(
+                "chunk of {len} bytes runs past the end of its section"
+            ))))
+            .await;
+            break;
+        }
+        if original {
+            let preview = cx.read_avail(body.sub(0, 32)).await?;
+            node = node.value(Value::Bytes(preview));
+        }
+        if !original && let Some(codec) = codec.clone() {
+            node = node.lazy(decoded_chunk, (body, codec));
+        }
+        cx.push(node).await;
+        pos = pos.saturating_add(3).saturating_add(len);
+        i = i.saturating_add(1);
+    }
+    Ok(())
+}
+
+async fn decoded_chunk(cx: Cx, (span, codec): (Span, crate::codec::Codec)) -> Result<()> {
+    let decoded = crate::codec::decode_span(&cx, span, &codec, None).await?;
+    if let Some(e) = decoded.error {
+        cx.diag(e);
+    }
+    cx.emit(
+        Node::new("Decompressed")
+            .span(decoded.span)
+            .summary(format!("{} bytes", decoded.span.len)),
+    );
+    Ok(())
+}
+
+/// A stream of a stripe: its compression chunks, then its contents
+/// (index streams are protobuf messages; data streams run-length encoded
+/// values).
+async fn stream(cx: Cx, (raw, compression, kind): (Span, u64, u64)) -> Result<()> {
+    let def = match kind {
+        6 => Some(&ROW_INDEX),
+        7 | 8 => Some(&BLOOM_FILTER_INDEX),
+        _ => None,
+    };
+    if let Some(def) = def {
+        return section_message(cx, (raw, compression, def)).await;
+    }
+    if compression != 0 {
+        cx.emit(
+            Node::new("Compression chunks")
+                .span(raw)
+                .lazy(chunks, (raw, compression)),
+        );
+    }
+    let span = section(&cx, raw, compression).await?;
+    let data = cx.read_avail(span.sub(0, 32)).await?;
+    cx.emit(
+        Node::new("Encoded values")
+            .span(span)
+            .value(Value::Bytes(data))
+            .summary(format!(
+                "{} bytes, {}",
+                span.len,
+                match kind {
+                    0 => "present bits (boolean run-length)",
+                    1 | 5 => "values (run-length encoded)",
+                    2 => "lengths (integer run-length)",
+                    3 => "dictionary bytes",
+                    4 => "dictionary counts",
+                    _ => "encoded",
+                }
+            )),
+    );
     Ok(())
 }
