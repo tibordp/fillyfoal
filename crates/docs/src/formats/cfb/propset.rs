@@ -12,8 +12,10 @@ use crate::bytes::{align_up, i16_le, i32_le, to_u64, to_usize, u16_le, u32_le, u
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
+use crate::formats::image::bmp::CLIPBOARD_FORMATS;
 use crate::formats::util::datakit::guid_le;
 use crate::formats::util::val::{hex, uint};
+use crate::formats::{Input, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -150,13 +152,6 @@ pub const TYPES: EnumTable = &[
     (0x0049, "VT_VERSIONED_STREAM"),
 ];
 
-const CLIPBOARD: EnumTable = &[
-    (2, "CF_BITMAP"),
-    (3, "CF_METAFILEPICT"),
-    (8, "CF_DIB"),
-    (14, "CF_ENHMETAFILE"),
-];
-
 /// A set's kind: its name and its property names.
 #[derive(Clone, Copy)]
 enum SetKind {
@@ -208,7 +203,7 @@ fn guid_at(data: &[u8], at: usize) -> Option<Guid> {
 }
 
 /// The property sets of a stream.
-pub async fn emit(cx: &Cx, span: Span) -> Result<()> {
+pub async fn emit(cx: &Cx, input: Input, span: Span) -> Result<()> {
     let header_span = span.sub(0, StreamHeader::SIZE);
     cx.emit(StreamHeader::node("Header", header_span, LE));
     let header = crate::fields::parse(cx, header_span, LE, &(), StreamHeader::layout).await?;
@@ -251,7 +246,7 @@ pub async fn emit(cx: &Cx, span: Span) -> Result<()> {
             Err(e) => node = node.diag(e.clone()),
         }
         if let Ok(p) = parsed {
-            node = node.lazy(properties, (set, fmtid, Arc::new(p)));
+            node = node.lazy(properties, (input, set, fmtid, Arc::new(p)));
         }
         cx.emit(node);
         end = end.max(set.end().saturating_sub(span.offset));
@@ -342,7 +337,7 @@ fn parse_dictionary(data: &[u8], codepage: u16) -> (Vec<(u32, String, usize, usi
         out.push((id, name, at, end.saturating_sub(at)));
         at = end;
     }
-    let total = at.saturating_add(3) & !3;
+    let total = to_usize(align_up(to_u64(at), 4));
     (out, total)
 }
 
@@ -546,7 +541,8 @@ fn decode(
                     let cf = u32_le(data, at.checked_add(8)?)?;
                     format!(
                         "{size} bytes, Windows clipboard format {}",
-                        lookup(CLIPBOARD, cf.into()).map_or_else(|| cf.to_string(), str::to_owned)
+                        lookup(CLIPBOARD_FORMATS, cf.into())
+                            .map_or_else(|| cf.to_string(), str::to_owned)
                     )
                 }
                 -2 => format!("{size} bytes, Macintosh clipboard format"),
@@ -580,7 +576,10 @@ fn decode(
     }
 }
 
-async fn properties(cx: Cx, (set, fmtid, parsed): (Span, Guid, Arc<Set>)) -> Result<()> {
+async fn properties(
+    cx: Cx,
+    (input, set, fmtid, parsed): (Input, Span, Guid, Arc<Set>),
+) -> Result<()> {
     let kind = set_kind(&fmtid);
     let dictionary: Vec<(u32, String)> = parsed.dictionary.clone();
     let count = parsed.entries.len();
@@ -648,7 +647,11 @@ async fn properties(cx: Cx, (set, fmtid, parsed): (Span, Guid, Arc<Set>)) -> Res
                 if id == 1 {
                     node = node.desc("Code page of the set's 8-bit strings");
                 }
-                node = node.lazy(value_node, (span, vt, Arc::new(d.children)));
+                node = if vt == 0x0047 {
+                    node.lazy(clipboard_value, (input, span))
+                } else {
+                    node.lazy(value_node, (span, vt, Arc::new(d.children)))
+                };
             }
             None => {
                 node = node
@@ -708,7 +711,8 @@ type Names = Arc<Vec<(u32, String)>>;
 /// Dictionary entries: ID, name, offset, length.
 type DictEntries = Arc<Vec<(u32, String, usize, usize)>>;
 
-async fn value_node(cx: Cx, (span, vt, children): (Span, u16, Children)) -> Result<()> {
+/// The type and padding fields before a property's value.
+fn type_fields(cx: &Cx, span: Span, vt: u16) {
     let mut type_node = Node::new("Type")
         .span(span.sub(0, 2))
         .value(crate::formats::util::val::enumv(vt & 0x0fff, 16, TYPES));
@@ -721,6 +725,78 @@ async fn value_node(cx: Cx, (span, vt, children): (Span, u16, Children)) -> Resu
             .span(span.sub(2, 2))
             .value(uint(0u8, 16)),
     );
+}
+
+/// A `VT_CF` value: its size and format, then the data, with DIBs and
+/// metafiles (document thumbnails) dissected.
+async fn clipboard_value(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
+    type_fields(&cx, span, 0x0047);
+    let head = cx.read_avail(span.sub(4, 12)).await?;
+    let size = u32_le(&head, 0).unwrap_or(0);
+    cx.emit(
+        Node::new("Size")
+            .span(span.sub(4, 4))
+            .value(uint(size, 32))
+            .desc("Bytes of the format and data fields"),
+    );
+    let format = i32_le(&head, 4).unwrap_or(0);
+    cx.emit(
+        Node::new("Format")
+            .span(span.sub(8, 4))
+            .value(crate::formats::util::val::int(format, 32))
+            .desc("-1: a Windows clipboard format follows; -2: a Macintosh one; -3: an FMTID; 0: none; else the length of a format name"),
+    );
+    let body = span.sub(12, u64::from(size).saturating_sub(4));
+    if format != -1 {
+        if !body.is_empty() {
+            cx.emit(Node::new("Data").span(body));
+        }
+        return Ok(());
+    }
+    let cf = u32_le(&head, 8).unwrap_or(0);
+    cx.emit(
+        Node::new("Clipboard format")
+            .span(body.sub(0, 4))
+            .value(crate::formats::util::val::enumv(cf, 32, CLIPBOARD_FORMATS)),
+    );
+    let data = body.tail(4);
+    let node = match cf {
+        8 | 17 => embedded_as(
+            "Picture",
+            input.nested(data),
+            &crate::formats::image::bmp::DIB,
+        ),
+        14 => embedded_as(
+            "Picture",
+            input.nested(data),
+            &crate::formats::image::metafile::EMF,
+        ),
+        3 => {
+            // A 16-bit METAFILEPICT (mapping mode, extents, handle), then
+            // the metafile.
+            let header = data.sub(0, 8);
+            let block = cx.block(header).await?;
+            let mut f = crate::fields::Fields::emitting(&cx, &block, LE);
+            f.u16("mm")
+                .desc("Mapping mode (8: MM_ANISOTROPIC)")
+                .emit()?;
+            f.int::<i16>("xExt").emit()?;
+            f.int::<i16>("yExt").emit()?;
+            f.u16("hMF").desc("Unused handle").emit()?;
+            embedded_as(
+                "Picture",
+                input.nested(data.tail(8)),
+                &crate::formats::image::metafile::WMF,
+            )
+        }
+        _ => Node::new("Data").span(data),
+    };
+    cx.emit(node);
+    Ok(())
+}
+
+async fn value_node(cx: Cx, (span, vt, children): (Span, u16, Children)) -> Result<()> {
+    type_fields(&cx, span, vt);
     if children.is_empty() {
         let body = span.tail(4);
         if !body.is_empty() {

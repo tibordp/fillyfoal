@@ -358,7 +358,8 @@ struct Entry {
     inline: bool,
 }
 
-fn type_size(kind: u16) -> u64 {
+/// Bytes per value of a field type (0 for unknown types).
+pub(super) fn type_size(kind: u16) -> u64 {
     match kind {
         1 | 2 | 6 | 7 => 1,
         3 | 8 => 2,
@@ -1275,6 +1276,13 @@ async fn entry(cx: Cx, st: EntryState) -> Result<()> {
             cx.emit(super::psd::resources_node(
                 "Photoshop image resources",
                 t.input,
+                e.data,
+            ));
+            return Ok(());
+        }
+        (Ns::Main, 0x935c) => {
+            cx.emit(super::psd::document_data_node(
+                "Photoshop document data",
                 e.data,
             ));
             return Ok(());

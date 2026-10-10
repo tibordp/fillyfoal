@@ -280,7 +280,7 @@ pub async fn content(cx: &Cx, state: &StreamState, span: Span) -> Result<()> {
     let input = cfb.input;
     let name = state.name.as_str();
     match (state.context, name) {
-        (_, n) if n.starts_with('\u{5}') => propset::emit(cx, span).await,
+        (_, n) if n.starts_with('\u{5}') => propset::emit(cx, input, span).await,
         (_, "\u{1}CompObj") => compobj(cx, span).await,
         (_, "\u{1}Ole") => ole_stream(cx, span).await,
         (Context::Plain, "WordDocument") => {

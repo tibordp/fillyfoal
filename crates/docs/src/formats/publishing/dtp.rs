@@ -313,7 +313,10 @@ declare_format!(pub SCRIBUS = "scribus", "Scribus document", ["sla", "scd"], "ap
 async fn scribus(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(input.span.sub(0, 4096)).await?;
     let attr = |tag: &[u8], name| tag_attr(&head, input.span, tag, name);
-    let version = attr(b"<SCRIBUS", "Version").unwrap_or_default();
+    let version = [&b"<SCRIBUSUTF8NEW"[..], b"<SCRIBUSUTF8", b"<SCRIBUS"]
+        .into_iter()
+        .find_map(|tag| attr(tag, "Version"))
+        .unwrap_or_default();
     let title = attr(b"<DOCUMENT", "TITLE").filter(|t| !t.is_empty());
     let pages = attr(b"<DOCUMENT", "ANZPAGES");
     xml::dissect(cx.clone(), input).await?;

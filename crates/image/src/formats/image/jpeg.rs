@@ -23,8 +23,9 @@ use crate::bytes::{to_u64, to_usize, u16_be, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
-use crate::fields::{Endian, Fields, Layout, Prim, struct_node};
+use crate::fields::{Endian, Fields, Layout, struct_node};
 use crate::formats::util::arcutil::human_size;
+use crate::formats::util::binutil::get;
 use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Input, Probe, embedded, embedded_as};
@@ -1419,10 +1420,6 @@ fn tiff_endian(data: &[u8]) -> Option<Endian> {
     }
 }
 
-fn get<T: Prim>(data: &[u8], offset: usize, endian: Endian) -> Option<T> {
-    T::decode(data.get(offset..offset.checked_add(T::SIZE)?)?, endian)
-}
-
 /// The entries of the IFD at `offset` in an in-memory TIFF stream: tag,
 /// type, where the value is and its bytes.
 fn ifd_entries(data: &[u8], endian: Endian, offset: u32) -> Vec<(u16, u16, usize, &[u8])> {
@@ -1448,13 +1445,10 @@ fn ifd_entries(data: &[u8], endian: Endian, offset: u32) -> Vec<(u16, u16, usize
         ) else {
             break;
         };
-        let unit: usize = match kind {
-            1 | 2 | 6 | 7 => 1,
-            3 | 8 => 2,
-            4 | 9 | 11 | 13 => 4,
-            5 | 10 | 12 => 8,
-            _ => continue,
-        };
+        let unit = to_usize(super::tiff::type_size(kind));
+        if unit == 0 {
+            continue;
+        }
         let Some(size) = usize::try_from(n).ok().and_then(|n| n.checked_mul(unit)) else {
             continue;
         };
@@ -2545,16 +2539,9 @@ async fn jumbf_segment(cx: &Cx, input: Input, payload: Span) -> Result<()> {
     }
     match jumbf_box(cx, input.span, en).await {
         Ok((span, packets)) => {
-            let mut node = Node::new("JUMBF").span(span).lazy(
-                crate::expander!(self::jumbf_boxes: Boxes),
-                Boxes {
-                    input: input.nested(span),
-                    span,
-                    depth: 0,
-                },
-            );
+            let mut node = embedded_as("JUMBF", input.nested(span), &JUMBF);
             if packets > 1 {
-                node = node.summary(format!(
+                node = node.desc(format!(
                     "{}, reassembled from {packets} packets",
                     human_size(span.len)
                 ));
@@ -2600,6 +2587,36 @@ async fn jumbf_box(cx: &Cx, file: Span, en: u16) -> Result<(Span, usize)> {
         super::reassembled(cx, first, "jpeg-jumbf-packets", data)?,
         n,
     ))
+}
+
+/// A JUMBF superbox stream (ISO 19566-5): ISO BMFF-style boxes, as in JPEG
+/// APP11 segments, PNG `caBX` chunks and C2PA manifest stores.
+pub static JUMBF: Format = Format {
+    name: "jumbf",
+    title: "JPEG universal metadata box format (JUMBF)",
+    extensions: &["jumbf", "c2pa"],
+    mime: "application/c2pa",
+    probe: Probe::Never,
+    dissect: crate::expander!(dissect_jumbf: Input),
+};
+
+async fn dissect_jumbf(cx: Cx, input: Input) -> Result<()> {
+    let head = cx.read_avail(input.span.sub(0, 32)).await?;
+    let boxes = Boxes {
+        input,
+        span: input.span,
+        depth: 0,
+    };
+    jumbf_boxes(cx.clone(), boxes).await?;
+    if head.get(4..8) == Some(b"jumb".as_slice()) && head.get(12..16) == Some(b"jumd".as_slice()) {
+        let kind = uuid_text(head.get(16..32).unwrap_or_default());
+        cx.annotate(if kind == "'c2pa'" {
+            "JUMBF: C2PA manifest store".to_owned()
+        } else {
+            format!("JUMBF {kind}")
+        });
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug)]

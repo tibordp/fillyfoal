@@ -354,7 +354,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
             _ => {}
         }
-        let mut node = Node::new(crate::formats::util::sound::fourcc(&kind))
+        let mut node = Node::new(crate::formats::util::fmt::fourcc(&kind))
             .span(span)
             .summary(summary.unwrap_or_else(|| human_size(len)));
         if let Some(d) = describe_kind(&kind) {
@@ -545,7 +545,7 @@ fn summarize(kind: &Kind, d: &[u8], len: u64, image: &Image) -> Option<String> {
             if keyword.starts_with("Raw profile type ") {
                 return Some(keyword);
             }
-            format!("{keyword}: {}", clip(&latin1(rest), 60))
+            format!("{keyword}: {}", first_line(&latin1(rest), 60))
         }
         b"zTXt" => {
             let keyword = latin1(cut(d).0);
@@ -566,7 +566,10 @@ fn summarize(kind: &Kind, d: &[u8], len: u64, image: &Image) -> Option<String> {
             // Skip compression flag and method, language and translated keyword.
             let (_, rest) = cut(rest.get(2..)?);
             let (_, rest) = cut(rest);
-            format!("{keyword}: {}", clip(&String::from_utf8_lossy(rest), 60))
+            format!(
+                "{keyword}: {}",
+                first_line(&String::from_utf8_lossy(rest), 60)
+            )
         }
         b"eXIf" => match d.get(..2)? {
             b"MM" => "Exif, big-endian".to_owned(),
@@ -620,7 +623,9 @@ fn cut(d: &[u8]) -> (&[u8], &[u8]) {
     }
 }
 
-fn clip(s: &str, max: usize) -> String {
+/// The first line of `s`, clipped to `max` characters; the ellipsis also
+/// marks lines dropped after it.
+fn first_line(s: &str, max: usize) -> String {
     let line = s.lines().next().unwrap_or_default();
     if line.chars().count() > max || line.len() < s.len() {
         let mut out: String = line.chars().take(max).collect();
@@ -950,6 +955,11 @@ async fn chunk(cx: Cx, st: ChunkState) -> Result<()> {
         b"MHDR" => fields(&cx, data, &image, mhdr).await?,
         b"JHDR" => fields(&cx, data, &image, jhdr).await?,
         b"JDAT" | b"JDAA" => cx.emit(embedded("JPEG stream", input.nested(data))),
+        b"caBX" => cx.emit(embedded_as(
+            "JUMBF",
+            input.nested(data),
+            &super::jpeg::JUMBF,
+        )),
         b"IEND" | b"MEND" => {}
         _ => cx.emit(Node::new("Data").span(data)),
     }
@@ -1619,6 +1629,7 @@ async fn raw_profile(
             embedded_as("Exif", input.nested(profile.tail(6)), &super::tiff::FORMAT)
         }
         "xmp" => xmp(input, profile),
+        "8bim" | "iptc" => photoshop_profile(cx, input, profile, kind).await?,
         _ => embedded(format!("{kind} profile"), input.nested(profile)),
     }
     .summary(format!(
@@ -1631,6 +1642,24 @@ async fn raw_profile(
         )));
     }
     Ok(Some(node))
+}
+
+/// A raw `8bim` or `iptc` profile: Photoshop image resources (perhaps
+/// after JPEG APP13's identifier), or bare IPTC-IIM datasets.
+async fn photoshop_profile(cx: &Cx, input: Input, profile: Span, kind: &str) -> Result<Node> {
+    const APP13: &[u8] = b"Photoshop 3.0\0";
+    let head = cx.read_avail(profile.sub(0, 14)).await?;
+    let name = format!("{kind} profile");
+    Ok(if head.starts_with(APP13) {
+        let rest = profile.tail(crate::bytes::to_u64(APP13.len()));
+        embedded_as(name, input.nested(rest), &super::psd::IRB)
+    } else if head.starts_with(b"8BIM") {
+        embedded_as(name, input.nested(profile), &super::psd::IRB)
+    } else if head.first() == Some(&0x1c) {
+        embedded_as(name, input.nested(profile), &super::iptc::FORMAT)
+    } else {
+        embedded(name, input.nested(profile))
+    })
 }
 
 /// A run of `IDAT` (or one frame's `fdAT`) chunks.
@@ -1720,7 +1749,7 @@ async fn image_data(cx: Cx, g: Group) -> Result<()> {
     for span in chunks {
         let kind = g.kind;
         cx.push(
-            Node::new(crate::formats::util::sound::fourcc(&kind))
+            Node::new(crate::formats::util::fmt::fourcc(&kind))
                 .span(span)
                 .summary(human_size(span.len.saturating_sub(12)))
                 .lazy(

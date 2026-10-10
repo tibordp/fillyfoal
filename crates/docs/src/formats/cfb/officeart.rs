@@ -713,10 +713,17 @@ fn blip(cx: &Cx, f: &mut Fields<'_>, input: Input, body: Span, kind: u16, inst: 
     } else {
         f.u8("tag").emit()?;
         let data = body.tail(f.pos());
-        f.node(
+        let node = if kind == 0xf01f {
+            // A DIB without its file header.
+            crate::formats::embedded_as(
+                "Picture",
+                input.nested(data),
+                &crate::formats::image::bmp::DIB,
+            )
+        } else {
             crate::formats::embedded("Picture", input.nested(data))
-                .summary(format!("{} bytes", data.len)),
-        );
+        };
+        f.node(node.summary(format!("{} bytes", data.len)));
     }
     f.seek(body.len);
     Ok(())

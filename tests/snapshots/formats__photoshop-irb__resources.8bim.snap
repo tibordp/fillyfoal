@@ -1,0 +1,46 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ resources.8bim — Photoshop image resources  [0x0+0xc6]
+  ▾ Resolution info: 1005 — 0x10 bytes  [0x0+0x1c]
+      Signature: "8BIM"  [0x0+0x4]
+      Resource ID: 1005 — Resolution info  [0x4+0x2]
+      Name length: 0  [0x6+0x1]
+      Name: ""  [0x7+0x0]
+      Data size: 16  [0x8+0x4]
+    ▾ Resolution  [0xc+0x10]
+        Horizontal resolution: 4718592 — 72.00  [0xc+0x4]
+        Horizontal resolution unit: 1  [0x10+0x2]
+        Width unit: 1  [0x12+0x2]
+        Vertical resolution: 4718592 — 72.00  [0x14+0x4]
+        Vertical resolution unit: 1  [0x18+0x2]
+        Height unit: 1  [0x1a+0x2]
+  ▾ IPTC-NAA record: 1028 — 0x26 bytes  [0x1c+0x32]
+      Signature: "8BIM"  [0x1c+0x4]
+      Resource ID: 1028 — IPTC-NAA record  [0x20+0x2]
+      Name length: 0  [0x22+0x1]
+      Name: ""  [0x23+0x0]
+      Data size: 38  [0x24+0x4]
+    ▾ IPTC-IIM — IPTC Information Interchange Model datasets  [0x28+0x26]
+        Coded character set: 1b 25 47  |.%G| — UTF-8  [0x28+0x8] → 0x2d+0x3
+        Record version: 4  [0x30+0x7] → 0x35+0x2
+        Object name: "Fixture"  [0x37+0xc] → 0x3c+0x7
+        Keywords: "sample"  [0x43+0xb] → 0x48+0x6
+  ▾ Layer comps: 1065 — 0x6c bytes  [0x4e+0x78]
+      Signature: "8BIM"  [0x4e+0x4]
+      Resource ID: 1065 — Layer comps  [0x52+0x2]
+      Name length: 0  [0x54+0x1]
+      Name: ""  [0x55+0x0]
+      Data size: 108  [0x56+0x4]
+    ▾ Descriptor — descriptor version 16  [0x5e+0x68]
+        Name: ""  [0x5e+0x6]
+        Class: "null"  [0x64+0x8]
+        Items: 1  [0x6c+0x4]
+      ▾ list — list: 1 items  [0x70+0x56]
+        ▾ [0] — descriptor: Comp, 2 items  [0x80+0x46]
+            Name: ""  [0x84+0x6]
+            Class: "Comp"  [0x8a+0x8]
+            Items: 2  [0x92+0x4]
+            Nm: "Comp 1" — string  [0x96+0x1e]
+            compID: 7 — integer  [0xb4+0x12]

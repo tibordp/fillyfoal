@@ -6,7 +6,7 @@
 //! format descriptor, key/value data and supercompression data, and a level
 //! index giving each mip level's offset and length.
 
-use crate::bytes::u32_le;
+use crate::bytes::{align_up, u32_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
@@ -175,10 +175,6 @@ record! {
     }
 }
 
-fn round4(v: u64) -> u64 {
-    v.saturating_add(3) & !3
-}
-
 fn format_name(table: EnumTable, v: u32) -> String {
     lookup(table, v.into()).map_or_else(|| format!("format {v:#x}"), str::to_owned)
 }
@@ -231,11 +227,11 @@ async fn ktx1_levels(
         let size_bytes = cx.read(data.sub(pos, 4)).await?;
         let size = u64::from(u32::decode(&size_bytes, endian).unwrap_or(0));
         let body = if cube {
-            round4(size).saturating_mul(6)
+            align_up(size, 4).saturating_mul(6)
         } else {
             size
         };
-        let len = round4(body.saturating_add(4));
+        let len = align_up(body.saturating_add(4), 4);
         cx.push(
             region(format!("Level {level}"), data, pos, len)
                 .summary(format!("imageSize {size:#x}")),
@@ -274,7 +270,7 @@ async fn key_values(cx: Cx, (span, endian): (Span, Endian)) -> Result<()> {
                 .value(shown),
         )
         .await;
-        pos = pos.saturating_add(round4(size.saturating_add(4)));
+        pos = pos.saturating_add(align_up(size.saturating_add(4), 4));
         if size == 0 {
             break;
         }

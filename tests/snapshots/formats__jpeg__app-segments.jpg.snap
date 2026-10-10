@@ -259,7 +259,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Common identifier: "JP"  [0x66f+0x2]
       Box instance: 1  [0x671+0x2]
       Packet sequence: 1  [0x673+0x4]
-    ▾ JUMBF — 268 bytes, reassembled from 2 packets  [#2:0x0+0x10c]
+    ▾ JUMBF — JUMBF: C2PA manifest store  [#2:0x0+0x10c]
       ▾ 'jumb' superbox — 'c2pa' "c2pa"  [#2:0x0+0x10c]
         ▾ 'jumd' description  [#2:0x8+0x1e]
             Box length: 30  [#2:0x8+0x4]
