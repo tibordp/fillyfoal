@@ -16,6 +16,7 @@ use crate::bytes::{i32_le, to_u64, to_usize, u32_le, u64_le};
 use crate::codec::Codec;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::val::int;
 use crate::formats::util::wire::flatbuffers::mem::{Table, deref, root, table};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -221,10 +222,6 @@ fn root_offset(buf: &Buf) -> Node {
             bits: 32,
             radix: Radix::Hex,
         })
-}
-
-fn int(v: i64, bits: u8) -> Value {
-    Value::Int { value: v, bits }
 }
 
 fn enumv(raw: i64, bits: u8, table: EnumTable) -> Value {
@@ -466,13 +463,7 @@ fn field_nodes(buf: &Buf, t: &Table, depth: u32) -> Vec<Node> {
             )
         };
         let i32f = |slot: usize, name: &'static str| {
-            buf.scalar(
-                &ty,
-                slot,
-                name,
-                4,
-                int(ty.i32(data, slot).unwrap_or(0).into(), 32),
-            )
+            buf.scalar(&ty, slot, name, 4, int(ty.i32(data, slot).unwrap_or(0), 32))
         };
         match kind {
             2 => {
@@ -543,7 +534,7 @@ fn field_nodes(buf: &Buf, t: &Table, depth: u32) -> Vec<Node> {
                 0,
                 "Bit width",
                 4,
-                int(index.i32(data, 0).unwrap_or(0).into(), 32),
+                int(index.i32(data, 0).unwrap_or(0), 32),
             ));
             fields.extend(buf.scalar(
                 &index,
@@ -1072,7 +1063,7 @@ async fn messages(
                     .unwrap_or(0);
                 summary = format!(
                     "{rows} rows, body {}",
-                    crate::formats::util::datakit::size(body)
+                    crate::formats::util::fmt::size(body)
                 );
                 batch = batch.saturating_add(1);
                 format!("Record batch {}", batch.saturating_sub(1))
@@ -1201,7 +1192,7 @@ async fn message(cx: Cx, (input, pos, schema): (Input, u64, Option<Arc<Schema>>)
     emit_all(&cx, fields);
     let mut body_node = Node::new("Body")
         .span(body)
-        .summary(crate::formats::util::datakit::size(body_len));
+        .summary(crate::formats::util::fmt::size(body_len));
     if let Some(info) = layout_info {
         body_node = body_node.lazy(body_expand, (input, body, Arc::new(info)));
     }
@@ -1411,7 +1402,7 @@ async fn body_expand(cx: Cx, (input, body, info): (Input, Span, Arc<BatchInfo>))
         );
         let mut node = Node::new(name)
             .span(span)
-            .summary(crate::formats::util::datakit::size(len));
+            .summary(crate::formats::util::fmt::size(len));
         if len > 0 {
             node = node.lazy(buffer_expand, (input, body, info.clone(), i));
         }
@@ -1483,8 +1474,8 @@ async fn buffer_expand(
                 .span(span.tail(8))
                 .summary(format!(
                     "{} → {}",
-                    crate::formats::util::datakit::size(span.len.saturating_sub(8)),
-                    crate::formats::util::datakit::size(raw.cast_unsigned())
+                    crate::formats::util::fmt::size(span.len.saturating_sub(8)),
+                    crate::formats::util::fmt::size(raw.cast_unsigned())
                 ))
                 .lazy(values, (input, body, info.clone(), i)),
             );

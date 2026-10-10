@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::val::text;
 use crate::formats::{Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -14,10 +15,6 @@ use crate::value::{Radix, Value};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
 
 // ---------------------------------------------------------------------------
 // DICOM

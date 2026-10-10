@@ -2,14 +2,15 @@
 //! PIC, Princeton Instruments SPE, Image Cytometry Standard, IMOD models,
 //! Analyze 7.5 headers and FreeSurfer volumes and surfaces.
 
+use super::{field_text, kv_spans};
 use crate::bytes::{to_u64, u16_be, u16_le, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
-use crate::formats::util::lines::{Lines, float32, int, is_text, number, preview, text, uint};
-use crate::formats::{Head, Input, Probe};
+use crate::formats::util::lines::{Lines, float32, int, is_text, preview, text, uint};
+use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -17,12 +18,6 @@ use crate::value::{EnumTable, Value, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn field_text(b: &[u8]) -> String {
-    String::from_utf8_lossy(b)
-        .trim_matches(['\0', ' '])
-        .to_owned()
-}
 
 // ---------------------------------------------------------------------------
 // ImageJ ROI
@@ -330,13 +325,11 @@ async fn princeton_spe(cx: Cx, input: Input) -> Result<()> {
     );
     cx.emit(Node::new("Frames").span(data).value(int(frames.into())));
     if xml > 0 {
-        let x = file.tail(xml);
-        let head = cx.read_avail(x.sub(0, 512)).await?;
-        cx.emit(
-            Node::new("XML footer")
-                .span(x)
-                .value(text(preview(&String::from_utf8_lossy(&head), 200))),
-        );
+        cx.emit(embedded_as(
+            "XML footer",
+            input.nested(file.tail(xml)),
+            &crate::formats::text::xml::FORMAT,
+        ));
     }
     cx.annotate(format!(
         "Princeton SPE {version}, {xdim}×{ydim} {} × {frames} frame(s), exposure {exposure} s",
@@ -518,17 +511,8 @@ fn analyze_probe(h: &Head<'_>) -> bool {
 declare_format!(pub ANALYZE = "analyze-hdr", "Analyze 7.5 image header", ["hdr"], "application/x-analyze",
     Probe::Custom(analyze_probe), analyze);
 
-const ANALYZE_TYPES: EnumTable = &[
-    (0, "unknown"),
-    (1, "binary"),
-    (2, "uint8"),
-    (4, "int16"),
-    (8, "int32"),
-    (16, "float32"),
-    (32, "complex64"),
-    (64, "float64"),
-    (128, "RGB24"),
-];
+// Analyze 7.5 data types: the NIfTI table, which extends them.
+use super::nifti::DATATYPES as ANALYZE_TYPES;
 
 record! {
     pub struct AnalyzeHeader {
@@ -778,13 +762,6 @@ async fn surf_vertices(cx: Cx, span: Span) -> Result<()> {
             c(8)
         ))))
         .await;
-    }
-    Ok(())
-}
-
-async fn kv_spans(cx: Cx, items: Vec<(String, String, Span)>) -> Result<()> {
-    for (k, v, span) in items {
-        cx.push(Node::new(k).span(span).value(number(&v))).await;
     }
     Ok(())
 }

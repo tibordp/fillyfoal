@@ -18,6 +18,7 @@ use crate::bytes::{to_u64, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::binutil::get;
 use crate::formats::{Head, Input, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -30,7 +31,8 @@ pub fn probe(h: &Head<'_>) -> bool {
         || (sizeof(540) && (h.at(4, b"n+2\0") || h.at(4, b"ni2\0")))
 }
 
-const DATATYPES: EnumTable = &[
+/// NIfTI data types (a superset of Analyze 7.5's).
+pub(crate) const DATATYPES: EnumTable = &[
     (0, "unknown"),
     (1, "binary"),
     (2, "uint8"),
@@ -1031,7 +1033,7 @@ async fn count_extensions(cx: &Cx, span: Span, endian: Endian) -> u32 {
         let Ok(head) = cx.read(span.sub(pos, 8)).await else {
             break;
         };
-        let esize = word(&head, 0, endian);
+        let esize = get::<u32>(&head, 0, endian).unwrap_or(0);
         if esize < 8 {
             break;
         }
@@ -1041,22 +1043,13 @@ async fn count_extensions(cx: &Cx, span: Span, endian: Endian) -> u32 {
     n
 }
 
-fn word(data: &[u8], at: usize, endian: Endian) -> u32 {
-    if endian == Endian::Big {
-        u32_be(data, at)
-    } else {
-        u32_le(data, at)
-    }
-    .unwrap_or(0)
-}
-
 async fn extension_list(cx: Cx, (input, span, endian): (Input, Span, Endian)) -> Result<()> {
     let mut pos = 0u64;
     let mut index = 0u32;
     while pos.saturating_add(8) <= span.len && index < MAX_EXTENSIONS {
         let head = cx.read(span.sub(pos, 8)).await?;
-        let esize = u64::from(word(&head, 0, endian));
-        let ecode = u64::from(word(&head, 4, endian));
+        let esize = u64::from(get::<u32>(&head, 0, endian).unwrap_or(0));
+        let ecode = u64::from(get::<u32>(&head, 4, endian).unwrap_or(0));
         if esize < 8 {
             cx.diag(Diagnostic::malformed(format!("extension size {esize}")).at(span.sub(pos, 4)));
             break;

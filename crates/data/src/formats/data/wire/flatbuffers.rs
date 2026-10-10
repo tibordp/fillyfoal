@@ -66,7 +66,7 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Root table offset")
             .span(buf.sub(0, 4))
-            .value(hex(root_off.into(), 32))
+            .value(hex(root_off, 32))
             .target(buf.sub(root_off.into(), 4)),
     );
     let id = cx.read_avail(buf.sub(4, 4)).await?;
@@ -302,12 +302,12 @@ async fn vtable(cx: Cx, (buf, t): (Span, Table)) -> Result<()> {
     cx.emit(
         Node::new("vtable size")
             .span(buf.sub(t.vtable, 2))
-            .value(uint(t.vtable_len.into(), 16)),
+            .value(uint(t.vtable_len, 16)),
     );
     cx.emit(
         Node::new("table size")
             .span(buf.sub(t.vtable.saturating_add(2), 2))
-            .value(uint(t.size.into(), 16)),
+            .value(uint(t.size, 16)),
     );
     for slot in 0..t.slots() {
         let at = t
@@ -317,7 +317,7 @@ async fn vtable(cx: Cx, (buf, t): (Span, Table)) -> Result<()> {
         let off = fb.u16_at(at).await?;
         let node = Node::new(format!("slot {slot}"))
             .span(buf.sub(at, 2))
-            .value(uint(off.into(), 16));
+            .value(uint(off, 16));
         cx.push(if off == 0 {
             node.summary("absent")
         } else {
@@ -385,7 +385,7 @@ async fn slot_node(
         }
         _ => {
             let v = raw.first().copied().unwrap_or(0);
-            node.value(uint(v.into(), 8)).summary("8-bit")
+            node.value(uint(v, 8)).summary("8-bit")
         }
     })
 }
@@ -475,7 +475,7 @@ async fn vector(cx: Cx, (buf, at, kind, path): VectorState) -> Result<()> {
                 target_node(node, &fb, elem, t, &path)?
             }
             _ => node
-                .value(hex(fb.u32_at(elem).await?.into(), 32))
+                .value(hex(fb.u32_at(elem).await?, 32))
                 .summary(match kind {
                     Elems::Strings => "not a string",
                     _ => "not a table",

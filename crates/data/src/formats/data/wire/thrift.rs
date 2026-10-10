@@ -16,6 +16,7 @@ use crate::bytes::to_u64;
 use crate::cx::{Cx, lock};
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::uuid;
 use crate::formats::util::wire::thrift::{
     Container, Header, MAX_DEPTH, MESSAGE_TYPES, Memo, Protocol, Scalar, Skip, Type,
 };
@@ -255,19 +256,6 @@ async fn fields(cx: &Cx, buf: &Buf, at: usize, depth: u32) -> Result<u64> {
             }
         }
     }
-}
-
-fn uuid(bytes: &[u8]) -> String {
-    let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
-    let part = |a: usize, b: usize| hex.get(a..b).unwrap_or_default();
-    format!(
-        "{}-{}-{}-{}-{}",
-        part(0, 8),
-        part(8, 12),
-        part(12, 16),
-        part(16, 20),
-        part(20, 32)
-    )
 }
 
 /// The node for a value of type `t` at `at` (without its span), and where

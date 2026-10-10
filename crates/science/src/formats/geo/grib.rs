@@ -21,9 +21,11 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::Input;
 use crate::formats::science::numarray::num;
+use crate::formats::util::floats::ibm;
+use crate::formats::util::val::uint;
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::{EnumTable, Value, lookup};
 
 const BE: Endian = Endian::Big;
 
@@ -39,7 +41,8 @@ const DISCIPLINES: EnumTable = &[
     (10, "oceanographic"),
 ];
 
-const CENTRES: EnumTable = &[
+/// Originating centres (WMO Common Code Table C-11), shared with BUFR.
+pub(super) const CENTRES: EnumTable = &[
     (7, "US NCEP"),
     (34, "Japan JMA"),
     (54, "Canada CMC"),
@@ -385,26 +388,11 @@ fn signed(raw: u64, bits: u32) -> i64 {
     }
 }
 
-/// An IBM System/360 single-precision float (GRIB1 reference values).
-fn ibm_float(raw: u32) -> f64 {
-    let mantissa = f64::from(raw & 0x00ff_ffff) / f64::from(1u32 << 24);
-    let exponent = i32::try_from((raw >> 24) & 0x7f)
-        .unwrap_or(64)
-        .saturating_sub(64);
-    let v = mantissa * 16f64.powi(exponent);
-    if raw & 0x8000_0000 != 0 { -v } else { v }
-}
-
 /// Reads `n` (≤ 64) bits starting at bit `at` of `buf`, MSB first.
 fn bits_at(buf: &[u8], at: u64, n: u8) -> Option<u64> {
-    let mut v = 0u64;
-    for i in 0..u64::from(n) {
-        let bit = at.saturating_add(i);
-        let byte = *buf.get(usize::try_from(bit / 8).ok()?)?;
-        let shift = 7u64.saturating_sub(bit % 8);
-        v = (v << 1) | u64::from((byte >> shift) & 1);
-    }
-    Some(v)
+    let mut bits = crate::formats::util::vidutil::Bits::new(buf);
+    bits.skip(usize::try_from(at).ok()?)?;
+    bits.bits(n.into())
 }
 
 fn date(y: u64, mo: u64, d: u64, h: u64, mi: u64) -> String {
@@ -422,14 +410,6 @@ fn timestamp(y: u64, mo: u64, d: u64, h: u64, mi: u64, s: u64) -> Value {
             c(mi),
             c(s),
         ),
-    }
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
     }
 }
 
@@ -456,7 +436,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             // Padding or a bulletin header between messages: look ahead
             // for the next message.
             let window = cx.read_avail(file.sub(w.pos, SEARCH_WINDOW)).await?;
-            let next = window.windows(4).position(|x| x == b"GRIB");
+            let next = crate::bytes::find(&window, b"GRIB", 0);
             match next {
                 Some(off) if off > 0 => {
                     let off = to_u64(off);
@@ -1014,7 +994,8 @@ fn identification2(f: &mut Fields<'_>, _: &()) -> Result<()> {
     rest(f, "Reserved")
 }
 
-fn rest(f: &mut Fields<'_>, name: &'static str) -> Result<()> {
+/// The rest of a section as bytes (shared with BUFR).
+pub(super) fn rest(f: &mut Fields<'_>, name: &'static str) -> Result<()> {
     let n = f.remaining();
     if n > 0 {
         f.bytes(name, n).emit()?;
@@ -1380,7 +1361,7 @@ async fn message1(cx: Cx, span: Span) -> Result<()> {
                 let bflags = b.get(3).copied().unwrap_or(0);
                 if bflags & 0xc0 == 0 {
                     ctx.packing = Some(Packing::Simple {
-                        reference: ibm_float(u32_be(&b, 6).unwrap_or(0)),
+                        reference: ibm(b.get(6..10).unwrap_or(&[0; 4])).unwrap_or(0.0),
                         binary: i32::try_from(signed(
                             crate::bytes::u16_be(&b, 4).unwrap_or(0).into(),
                             16,
@@ -1442,7 +1423,8 @@ fn grid1(b: &[u8]) -> Option<Grid> {
     })
 }
 
-fn u24(f: &mut Fields<'_>, name: &'static str) -> Result<u64> {
+/// A 24-bit big-endian unsigned field (shared with BUFR).
+pub(super) fn u24(f: &mut Fields<'_>, name: &'static str) -> Result<u64> {
     let raw = f
         .bytes(name, 3)
         .with(|b, n| n.value(uint(crate::formats::util::datakit::be_uint(b), 24)))
@@ -1460,7 +1442,8 @@ fn s24(f: &mut Fields<'_>, name: &'static str, scale: f64) -> Result<()> {
     Ok(())
 }
 
-fn indicator1(f: &mut Fields<'_>, _: &()) -> Result<()> {
+/// The GRIB1 indicator section; BUFR's has the same layout.
+pub(super) fn indicator1(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.ascii("Magic", 4).emit()?;
     u24(f, "Total length")?;
     f.u8("Edition").emit()?;
@@ -1613,7 +1596,7 @@ fn bds1(f: &mut Fields<'_>, _: &()) -> Result<()> {
         .emit()?;
     f.u32("Reference value (R)")
         .with(|&v, n| {
-            n.value(Value::Float(ibm_float(v)))
+            n.value(Value::Float(ibm(&v.to_be_bytes()).unwrap_or(0.0)))
                 .summary("IBM single precision")
         })
         .emit()?;

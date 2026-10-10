@@ -7,13 +7,12 @@ use std::sync::Arc;
 use crate::bytes::{to_u64, to_usize, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{FlagTable, Radix, Value, flag};
 
-use super::util::{
-    File, FileRef, Rd, checksum_node, group, limit_enc_size, log2, size_text, uint, undefined,
-};
+use super::util::{File, FileRef, Rd, checksum_node, group, limit_enc_size, log2, uint, undefined};
 
 /// Largest metadata block read whole (heap data segments, collections).
 const MAX_BLOCK: u64 = 4 << 20;
@@ -115,7 +114,7 @@ async fn local_heap_expand(cx: Cx, (file, addr): (FileRef, u64)) -> Result<()> {
         cx.emit(
             Node::new("Data segment")
                 .span(file.at(heap.data, heap.size))
-                .summary(size_text(heap.size))
+                .summary(fmt::size(heap.size))
                 .lazy(data_segment, (file.clone(), heap)),
         );
     }
@@ -163,7 +162,7 @@ async fn data_segment(cx: Cx, (file, heap): (FileRef, LocalHeap)) -> Result<()> 
             cx.push(
                 group("Free block", sub.out)
                     .span(span.sub(here, to_u64(n)))
-                    .summary(size_text(size)),
+                    .summary(fmt::size(size)),
             )
             .await;
             pos = pos.saturating_add(n);
@@ -294,7 +293,7 @@ async fn gcol_expand(cx: Cx, (file, addr): (FileRef, u64)) -> Result<()> {
         } else {
             format!("Object {}", o.index)
         };
-        cx.push(group(name, rd.out).span(span).summary(size_text(o.size)))
+        cx.push(group(name, rd.out).span(span).summary(fmt::size(o.size)))
             .await;
     }
     Ok(())
@@ -665,7 +664,7 @@ async fn frheap_expand(cx: Cx, (file, addr): (FileRef, u64)) -> Result<()> {
 fn dblock_node(file: &FileRef, heap: Arc<FrHeap>, addr: u64, size: u64) -> Node {
     Node::new(format!("Direct block at {addr:#x}"))
         .span(file.at(addr, size))
-        .summary(size_text(size))
+        .summary(fmt::size(size))
         .lazy(dblock_expand, (file.clone(), heap, addr, size))
 }
 
@@ -715,7 +714,7 @@ async fn dblock_expand(
     let body = span.tail(to_u64(hlen));
     cx.emit(Node::new("Objects").span(body).summary(format!(
         "{}, found through their heap IDs",
-        size_text(body.len)
+        fmt::size(body.len)
     )));
     Ok(())
 }

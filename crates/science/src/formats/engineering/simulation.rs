@@ -8,8 +8,9 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::science::kv_spans;
 use crate::formats::util::lines::{
-    Lines, contains, head_lines, is_text, number, preview, summarize, tally, text, uint,
+    Lines, contains, head_lines, is_text, preview, summarize, tally, text, uint,
 };
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -380,7 +381,7 @@ async fn ensight_case(cx: Cx, input: Input) -> Result<()> {
                 Node::new(name)
                     .span(file.sub(start, end.saturating_sub(start)))
                     .value(uint(to_u64(items.len())))
-                    .lazy(case_items, items),
+                    .lazy(kv_spans, items),
             )
             .await;
         }
@@ -402,13 +403,6 @@ async fn ensight_case(cx: Cx, input: Input) -> Result<()> {
         "EnSight case file, files {}",
         preview(&files.join(", "), 80)
     ));
-    Ok(())
-}
-
-async fn case_items(cx: Cx, items: Vec<(String, String, Span)>) -> Result<()> {
-    for (k, v, span) in items {
-        cx.push(Node::new(k).span(span).value(number(&v))).await;
-    }
     Ok(())
 }
 
@@ -587,7 +581,7 @@ async fn openvdb(cx: Cx, input: Input) -> Result<()> {
         Node::new("File metadata")
             .span(cur.since(s))
             .value(uint(n.into()))
-            .lazy(case_items, meta),
+            .lazy(kv_spans, meta),
     );
     let mut grids = Vec::new();
     if offsets != 0 {

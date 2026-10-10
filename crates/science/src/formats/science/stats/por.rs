@@ -51,7 +51,7 @@ fn probe(h: &Head<'_>) -> bool {
     logical.get(456..464) == Some(b"SPSSPORT")
         || logical
             .get(..40)
-            .is_some_and(|s| s.windows(15).any(|w| w == b"SPSS PORT FILE"))
+            .is_some_and(|s| crate::bytes::contains(s, b"SPSS PORT FILE"))
 }
 
 declare_format!(pub POR = "spss-por", "SPSS portable file", ["por"], "application/x-spss-por",

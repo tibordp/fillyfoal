@@ -41,3 +41,13 @@ pq.write_table(
     compression="zstd",
     write_page_checksum=True,
 )
+
+# GZIP pages (each a complete RFC 1952 stream), one row group, no
+# dictionary or statistics.
+pq.write_table(
+    t.select(["id", "city"]),
+    "gzip.parquet",
+    use_dictionary=False,
+    compression="gzip",
+    write_statistics=False,
+)

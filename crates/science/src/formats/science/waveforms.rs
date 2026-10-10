@@ -2,6 +2,7 @@
 //! Igor text and LabVIEW measurement files, oscilloscope waveforms (Keysight,
 //! Tektronix, LeCroy) and GTKWave FST traces.
 
+use super::kv_spans;
 use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
@@ -9,7 +10,7 @@ use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::lines::{
-    Lines, contains, head_lines, is_text, number, preview, summarize, text, uint,
+    Lines, contains, head_lines, is_text, preview, summarize, text, uint,
 };
 use crate::formats::{Input, Probe, embedded};
 use crate::node::Node;
@@ -455,7 +456,7 @@ async fn tektronix_isf(cx: Cx, input: Input) -> Result<()> {
     let curve = head
         .windows(7)
         .position(|w| w == b":CURVE ")
-        .or_else(|| head.windows(6).position(|w| w == b"CURVE "))
+        .or_else(|| crate::bytes::find(&head, b"CURVE ", 0))
         .ok_or_else(|| Diagnostic::malformed("no CURVE block"))?;
     let text_part = String::from_utf8_lossy(head.get(..curve).unwrap_or_default()).into_owned();
     let mut items = Vec::new();
@@ -737,12 +738,5 @@ async fn fst_hier(cx: Cx, (input, body): (Input, Span)) -> Result<()> {
             .value(uint(crate::bytes::u64_be(&b, 0).unwrap_or(0))),
     );
     cx.emit(embedded("Hierarchy (gzip)", input.nested(body.tail(8))));
-    Ok(())
-}
-
-async fn kv_spans(cx: Cx, items: Vec<(String, String, Span)>) -> Result<()> {
-    for (k, v, span) in items {
-        cx.push(Node::new(k).span(span).value(number(&v))).await;
-    }
     Ok(())
 }

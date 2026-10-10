@@ -6,24 +6,13 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
-use crate::value::{Radix, Value};
+use crate::value::Value;
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
 
 fn zstr(b: &[u8]) -> String {
     crate::text::until_nul(b)
@@ -95,17 +84,17 @@ async fn kyoto(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Library version")
             .span(file.sub(4, 1))
-            .value(uint(head.get(4).copied().unwrap_or(0).into(), 8)),
+            .value(uint(head.get(4).copied().unwrap_or(0), 8)),
     );
     cx.emit(
         Node::new("Library revision")
             .span(file.sub(5, 1))
-            .value(uint(head.get(5).copied().unwrap_or(0).into(), 8)),
+            .value(uint(head.get(5).copied().unwrap_or(0), 8)),
     );
     cx.emit(
         Node::new("Format version")
             .span(file.sub(6, 1))
-            .value(uint(head.get(6).copied().unwrap_or(0).into(), 8)),
+            .value(uint(head.get(6).copied().unwrap_or(0), 8)),
     );
     let kind = head.get(8).copied().unwrap_or(0);
     let kind_name = match kind {

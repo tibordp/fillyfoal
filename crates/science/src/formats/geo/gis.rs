@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use super::emit_nodes;
 use super::{enumv, fixed, hex, int, leaf, text, uint};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_be, u32_le, u64_le};
 use crate::cx::Cx;
@@ -117,24 +118,21 @@ async fn gdb_fields(cx: Cx, section: Span) -> Result<()> {
     ));
     let at = cur.pos();
     let version = cur.u32().await?;
-    cx.emit(leaf("Version", cur.since(at), uint(version.into(), 32)));
+    cx.emit(leaf("Version", cur.since(at), uint(version, 32)));
     let at = cur.pos();
     let flags = cur.u32().await?;
-    cx.emit(
-        leaf("Layer flags", cur.since(at), hex(flags.into(), 32)).summary(
-            crate::value::lookup(GDB_GEOMETRY, u64::from(flags & 0xff))
-                .unwrap_or("unknown geometry"),
-        ),
-    );
+    cx.emit(leaf("Layer flags", cur.since(at), hex(flags, 32)).summary(
+        crate::value::lookup(GDB_GEOMETRY, u64::from(flags & 0xff)).unwrap_or("unknown geometry"),
+    ));
     let at = cur.pos();
     let count = cur.u16().await?;
-    cx.emit(leaf("Field count", cur.since(at), uint(count.into(), 16)));
+    cx.emit(leaf("Field count", cur.since(at), uint(count, 16)));
     for _ in 0..count {
         let start = cur.pos();
         let name = utf16_counted(&mut cur).await?;
         let alias = utf16_counted(&mut cur).await?;
         let ty = cur.u8().await?;
-        let mut node = Node::new(name.clone()).value(enumv(GDB_TYPES, ty.into(), 8));
+        let mut node = Node::new(name.clone()).value(enumv(ty, 8, GDB_TYPES));
         if !alias.is_empty() && alias != name {
             node = node.summary(format!("alias {alias:?}"));
         }
@@ -541,7 +539,7 @@ fn ntv2_value(label: &str, v: &[u8], endian: Endian) -> Value {
     }
     .map_or(0.0, f64::from_bits);
     match label {
-        "NUM_OREC" | "NUM_SREC" | "NUM_FILE" | "GS_COUNT" => uint(i.into(), 32),
+        "NUM_OREC" | "NUM_SREC" | "NUM_FILE" | "GS_COUNT" => uint(i, 32),
         "MAJOR_F" | "MINOR_F" | "MAJOR_T" | "MINOR_T" | "S_LAT" | "N_LAT" | "E_LONG" | "W_LONG"
         | "LAT_INC" | "LONG_INC" => Value::Float(d),
         _ => text(fixed(v)),
@@ -622,11 +620,13 @@ async fn ntv2(cx: Cx, input: Input) -> Result<()> {
         .unwrap_or_default();
     cx.emit(
         Node::new("Overview header").span(ospan).lazy(
-            super::emit_nodes,
-            overview
-                .into_iter()
-                .map(|(l, v, s)| leaf(l, s, v))
-                .collect::<Vec<_>>(),
+            emit_nodes,
+            std::sync::Arc::new(
+                overview
+                    .into_iter()
+                    .map(|(l, v, s)| leaf(l, s, v))
+                    .collect::<Vec<_>>(),
+            ),
         ),
     );
     let mut pos = ospan.len;
@@ -656,7 +656,7 @@ async fn ntv2(cx: Cx, input: Input) -> Result<()> {
             Node::new(format!("Sub-grid {name}"))
                 .span(file.sub(pos, hspan.len.saturating_add(grid.len)))
                 .summary(format!("{count} nodes"))
-                .lazy(super::emit_nodes, nodes),
+                .lazy(emit_nodes, std::sync::Arc::new(nodes)),
         )
         .await;
         pos = pos.saturating_add(hspan.len).saturating_add(grid.len);
@@ -846,7 +846,7 @@ async fn laszip_vlr(cx: Cx, body: Span) -> Result<()> {
         cx.emit(
             Node::new(format!("Item {i}"))
                 .span(cur.since(at))
-                .value(enumv(LAZ_ITEMS, ty.into(), 16))
+                .value(enumv(ty, 16, LAZ_ITEMS))
                 .summary(format!("{size} bytes, version {version}")),
         );
     }
@@ -887,7 +887,7 @@ async fn garmin_img(cx: Cx, input: Input) -> Result<()> {
     let x = cx.read(file.sub(0, 1)).await?.first().copied().unwrap_or(0);
     let h = read_xor(&cx, file.sub_exact(0, 0x200)?, x).await?;
     let byte = |at: usize| h.get(at).copied().unwrap_or(0);
-    cx.emit(leaf("XOR mask", file.sub(0, 1), hex(x.into(), 8)));
+    cx.emit(leaf("XOR mask", file.sub(0, 1), hex(x, 8)));
     cx.emit(leaf(
         "Signature",
         file.sub(0x10, 7),

@@ -34,9 +34,10 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::Input;
+use crate::formats::util::val::{hex, uint};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::{EnumTable, Value, lookup};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -176,22 +177,6 @@ fn type_label(code: u16) -> String {
             }
         },
     )
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-fn hex(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Hex,
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -624,14 +609,10 @@ async fn object_bytes(cx: &Cx, file: Span, m: &Model, dd: &Dd) -> Result<Span> {
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    cx.emit(
-        Node::new("Magic").span(file.sub(0, 4)).value(hex(
-            u32_be(&cx.read(file.sub(0, 4)).await?, 0)
-                .unwrap_or(0)
-                .into(),
-            32,
-        )),
-    );
+    cx.emit(Node::new("Magic").span(file.sub(0, 4)).value(hex(
+        u32_be(&cx.read(file.sub(0, 4)).await?, 0).unwrap_or(0),
+        32,
+    )));
     let m = build(&cx, file).await?;
     for d in &m.diagnostics {
         cx.diag(d.clone());
@@ -808,7 +789,7 @@ async fn version_fields(cx: Cx, span: Span) -> Result<()> {
         cx.emit(
             Node::new(*name)
                 .span(span.sub(to_u64(at), 4))
-                .value(uint(u32_be(&b, at).unwrap_or(0).into(), 32)),
+                .value(uint(u32_be(&b, at).unwrap_or(0), 32)),
         );
     }
     cx.emit(
@@ -867,12 +848,12 @@ async fn dd_block(cx: Cx, (file, block, first): (Span, usize, usize)) -> Result<
     cx.emit(
         Node::new("Number of descriptors")
             .span(file.sub(b.at, 2))
-            .value(uint(b.count.into(), 16)),
+            .value(uint(b.count, 16)),
     );
     cx.emit(
         Node::new("Next block")
             .span(file.sub(b.at.saturating_add(2), 4))
-            .value(hex(b.next.into(), 32)),
+            .value(hex(b.next, 32)),
     );
     let dds = m
         .dds
@@ -917,23 +898,19 @@ async fn dd_fields(cx: Cx, (file, dd): (Span, Dd)) -> Result<()> {
         cx.emit(
             Node::new("Special flag")
                 .span(at(0, 1))
-                .value(hex(SPECIAL.into(), 16)),
+                .value(hex(SPECIAL, 16)),
         );
     }
     cx.emit(
         Node::new("Reference")
             .span(at(2, 2))
-            .value(uint(dd.reference.into(), 16)),
+            .value(uint(dd.reference, 16)),
     );
-    cx.emit(
-        Node::new("Offset")
-            .span(at(4, 4))
-            .value(hex(dd.offset.into(), 32)),
-    );
+    cx.emit(Node::new("Offset").span(at(4, 4)).value(hex(dd.offset, 32)));
     cx.emit(
         Node::new("Length")
             .span(at(8, 4))
-            .value(uint(dd.length.into(), 32)),
+            .value(uint(dd.length, 32)),
     );
     if dd.tag & SPECIAL != 0
         && let Some(span) = dd.data(file)
@@ -1310,18 +1287,14 @@ fn array_count(dims: &[u64]) -> u64 {
 async fn sdd_fields(cx: Cx, span: Span) -> Result<()> {
     let b = cx.read_avail(span).await?;
     let rank = u16_be(&b, 0).unwrap_or(0);
-    cx.emit(
-        Node::new("Rank")
-            .span(span.sub(0, 2))
-            .value(uint(rank.into(), 16)),
-    );
+    cx.emit(Node::new("Rank").span(span.sub(0, 2)).value(uint(rank, 16)));
     let mut at = 2usize;
     for i in 0..usize::from(rank).min(32) {
         let _ = i;
         cx.emit(
             Node::new("Dimension size")
                 .span(span.sub(to_u64(at), 4))
-                .value(uint(u32_be(&b, at).unwrap_or(0).into(), 32)),
+                .value(uint(u32_be(&b, at).unwrap_or(0), 32)),
         );
         at = at.saturating_add(4);
     }
@@ -1479,9 +1452,9 @@ async fn vgroup_detail(cx: Cx, (file, reference): (Span, u16)) -> Result<()> {
 fn tail_fields(cx: &Cx, span: Span, data: &[u8], mut pos: usize, vdata: bool) {
     let field = |name: &'static str, len: usize, pos: &mut usize| {
         let v = match len {
-            2 => u16_be(data, *pos).map(|v| uint(v.into(), 16)),
-            4 => u32_be(data, *pos).map(|v| uint(v.into(), 32)),
-            _ => data.get(*pos).map(|&v| uint(v.into(), 8)),
+            2 => u16_be(data, *pos).map(|v| uint(v, 16)),
+            4 => u32_be(data, *pos).map(|v| uint(v, 32)),
+            _ => data.get(*pos).map(|&v| uint(v, 8)),
         };
         if let Some(v) = v {
             cx.emit(
@@ -1621,12 +1594,12 @@ async fn vdata_detail(cx: Cx, (file, reference): (Span, u16)) -> Result<()> {
     cx.emit(
         Node::new("Number of records")
             .span(at(2, 4))
-            .value(uint(v.records.into(), 32)),
+            .value(uint(v.records, 32)),
     );
     cx.emit(
         Node::new("Record size")
             .span(at(6, 2))
-            .value(uint(v.record_size.into(), 16)),
+            .value(uint(v.record_size, 16)),
     );
     let n = v.fields.len();
     cx.emit(
@@ -1929,16 +1902,8 @@ async fn raster8(
     (span, dims, palette): (Span, Option<(u16, u16, Span)>, Option<Span>),
 ) -> Result<()> {
     if let Some((w, h, s)) = dims {
-        cx.emit(
-            Node::new("Width")
-                .span(s.sub(0, 2))
-                .value(uint(w.into(), 16)),
-        );
-        cx.emit(
-            Node::new("Height")
-                .span(s.sub(2, 2))
-                .value(uint(h.into(), 16)),
-        );
+        cx.emit(Node::new("Width").span(s.sub(0, 2)).value(uint(w, 16)));
+        cx.emit(Node::new("Height").span(s.sub(2, 2)).value(uint(h, 16)));
         let expected = u64::from(w).saturating_mul(h.into());
         let mut node = Node::new("Pixels")
             .span(span)
@@ -1990,12 +1955,12 @@ async fn image_dims(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Width")
             .span(at(0, 4))
-            .value(uint(u32_be(&b, 0).unwrap_or(0).into(), 32)),
+            .value(uint(u32_be(&b, 0).unwrap_or(0), 32)),
     );
     cx.emit(
         Node::new("Height")
             .span(at(4, 4))
-            .value(uint(u32_be(&b, 4).unwrap_or(0).into(), 32)),
+            .value(uint(u32_be(&b, 4).unwrap_or(0), 32)),
     );
     cx.emit(
         Node::new("Number type")
@@ -2009,7 +1974,7 @@ async fn image_dims(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Components")
             .span(at(12, 2))
-            .value(uint(u16_be(&b, 12).unwrap_or(0).into(), 16)),
+            .value(uint(u16_be(&b, 12).unwrap_or(0), 16)),
     );
     let il = u16_be(&b, 14).unwrap_or(0);
     cx.emit(Node::new("Interlace").span(at(14, 2)).value(Value::Enum {

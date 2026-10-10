@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ data.duckdb — DuckDB database, storage version 64, 0 blocks of 256 KiB  [0x0+0x3040]
+▾ data.duckdb — DuckDB database, storage version 64, 0 blocks of 256.0 KiB  [0x0+0x3040]
   ▾ Main header — storage version 64  [0x0+0x1000]
       Checksum: 0x0  [0x0+0x8]
         ! warning: checksum mismatch (computed 0x05694108ff7e6721)
@@ -38,4 +38,4 @@ expression: "common::explore(&display_name(&path), &data)"
       ! malformed: metadata pointer (block 0, sub-block 0) is outside the file
     Free list
       ! malformed: metadata pointer (block 0, sub-block 0) is outside the file
-  ▾ Blocks — 0 blocks of 256 KiB  [0x3000+0x40]
+  ▾ Blocks — 0 blocks of 256.0 KiB  [0x3000+0x40]

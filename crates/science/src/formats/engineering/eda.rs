@@ -10,6 +10,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::floats::ibm;
 use crate::formats::util::lines::{
     Line, Lines, contains, head_lines, hex, is_text, number, preview, summarize, tally, text, uint,
 };
@@ -96,18 +97,9 @@ fn gds_name(kind: u8) -> String {
         .map_or_else(|| format!("record {kind:#04x}"), |s| (*s).to_owned())
 }
 
-/// GDSII 8-byte real: sign, excess-64 base-16 exponent, 56-bit mantissa.
+/// GDSII 8-byte real: an IBM hexadecimal float (0 if truncated).
 fn gds_real8(b: &[u8]) -> f64 {
-    let Some(v) = crate::bytes::u64_be(b, 0) else {
-        return 0.0;
-    };
-    let sign = if v >> 63 == 0 { 1.0 } else { -1.0 };
-    let exponent = i32::try_from((v >> 56) & 0x7f)
-        .unwrap_or(64)
-        .saturating_sub(64);
-    #[allow(clippy::cast_precision_loss)]
-    let mantissa = (v & 0x00ff_ffff_ffff_ffff) as f64 / 72_057_594_037_927_936.0;
-    sign * mantissa * 16f64.powi(exponent)
+    b.get(..8).and_then(ibm).unwrap_or(0.0)
 }
 
 /// Renders a record's payload by data type.
@@ -2586,7 +2578,7 @@ async fn xilinx_bit(cx: Cx, input: Input) -> Result<()> {
 /// Finds the sync word and the IDCODE write in the first configuration packets.
 async fn xilinx_idcode(cx: &Cx, data: Span) -> Result<Option<u32>> {
     let head = cx.read_avail(data.sub(0, 4096)).await?;
-    let Some(sync) = head.windows(4).position(|w| w == b"\xaa\x99\x55\x66") else {
+    let Some(sync) = crate::bytes::find(&head, b"\xaa\x99\x55\x66", 0) else {
         return Ok(None);
     };
     let mut at = sync.saturating_add(4);
@@ -2606,7 +2598,7 @@ async fn xilinx_idcode(cx: &Cx, data: Span) -> Result<Option<u32>> {
 
 async fn xilinx_packets(cx: Cx, data: Span) -> Result<()> {
     let head = cx.read_avail(data.sub(0, 4096)).await?;
-    let Some(sync) = head.windows(4).position(|w| w == b"\xaa\x99\x55\x66") else {
+    let Some(sync) = crate::bytes::find(&head, b"\xaa\x99\x55\x66", 0) else {
         return Err(Diagnostic::malformed("no sync word"));
     };
     cx.emit(Node::new("Dummy/bus width words").span(data.sub(0, to_u64(sync))));

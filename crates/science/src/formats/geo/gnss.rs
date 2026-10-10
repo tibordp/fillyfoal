@@ -6,7 +6,7 @@
 //! do not start a valid packet are skipped up to the next sync pattern and
 //! shown as a gap. Common messages expand to decoded fields.
 
-use super::{Bits, crc16_xmodem, crc24q, enumv, hex, int, leaf, text, uint};
+use super::{crc16_xmodem, crc24q, enumv, hex, int, leaf, text, uint};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
@@ -14,6 +14,7 @@ use crate::dsl::{Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::text::scan::{Lines, Scanner};
+use crate::formats::util::vidutil::Bits;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -223,12 +224,8 @@ async fn ubx(cx: Cx, input: Input) -> Result<()> {
 }
 
 async fn ubx_packet(cx: Cx, (span, id): (Span, u16)) -> Result<()> {
-    cx.emit(leaf("Sync", span.sub(0, 2), hex(0xb562, 16)));
-    cx.emit(leaf(
-        "Message",
-        span.sub(2, 2),
-        enumv(UBX_MESSAGES, id.into(), 16),
-    ));
+    cx.emit(leaf("Sync", span.sub(0, 2), hex(0xb562u16, 16)));
+    cx.emit(leaf("Message", span.sub(2, 2), enumv(id, 16, UBX_MESSAGES)));
     let len = span.len.saturating_sub(8);
     cx.emit(leaf("Length", span.sub(4, 2), uint(len, 16)));
     let payload = span.sub(6, len);
@@ -269,7 +266,7 @@ async fn ubx_packet(cx: Cx, (span, id): (Span, u16)) -> Result<()> {
             cx.emit(leaf(
                 "Acknowledged message",
                 payload,
-                enumv(UBX_MESSAGES, acked.into(), 16),
+                enumv(acked, 16, UBX_MESSAGES),
             ));
         }
         _ => cx.emit(Node::new("Payload").span(payload)),
@@ -374,8 +371,8 @@ async fn rtcm3(cx: Cx, input: Input) -> Result<()> {
         };
         let payload = frame.get(3..total.saturating_sub(3)).unwrap_or_default();
         let mut bits = Bits::new(payload);
-        let number = bits.u(12).unwrap_or(0);
-        let id = bits.u(12).unwrap_or(0);
+        let number = bits.bits(12).unwrap_or(0);
+        let id = bits.bits(12).unwrap_or(0);
         if (1001..=1230).contains(&number) && station.is_none() {
             station = Some(id);
         }
@@ -405,7 +402,7 @@ async fn rtcm3(cx: Cx, input: Input) -> Result<()> {
 
 async fn rtcm_frame(cx: Cx, span: Span) -> Result<()> {
     let frame = cx.read(span).await?;
-    cx.emit(leaf("Preamble", span.sub(0, 1), hex(0xd3, 8)));
+    cx.emit(leaf("Preamble", span.sub(0, 1), hex(0xd3u8, 8)));
     let len = span.len.saturating_sub(6);
     cx.emit(leaf("Length", span.sub(1, 2), uint(len, 10)));
     let payload = frame
@@ -413,24 +410,29 @@ async fn rtcm_frame(cx: Cx, span: Span) -> Result<()> {
         .unwrap_or_default();
     let pspan = span.sub(3, len);
     let mut bits = Bits::new(payload);
-    let number = bits.u(12).unwrap_or(0);
+    let number = bits.bits(12).unwrap_or(0);
     cx.emit(leaf(
         "Message number",
         pspan.sub(0, 2),
-        enumv(RTCM_MESSAGES, number, 12),
+        enumv(number, 12, RTCM_MESSAGES),
     ));
     if matches!(number, 1005 | 1006) {
         let mut fields = Vec::new();
-        let station = bits.u(12).unwrap_or(0);
+        let station = bits.bits(12).unwrap_or(0);
         fields.push(("Reference station ID", uint(station, 12)));
-        fields.push(("ITRF realization year", uint(bits.u(6).unwrap_or(0), 6)));
-        let flags = bits.u(4).unwrap_or(0);
+        fields.push(("ITRF realization year", uint(bits.bits(6).unwrap_or(0), 6)));
+        let flags = bits.bits(4).unwrap_or(0);
         fields.push(("GPS / GLONASS / Galileo / reference flags", hex(flags, 4)));
-        let x = bits.i(38).unwrap_or(0);
-        bits.u(2);
-        let y = bits.i(38).unwrap_or(0);
-        bits.u(2);
-        let z = bits.i(38).unwrap_or(0);
+        // 38-bit two's-complement coordinates, two reserved bits apart.
+        let coord = |bits: &mut Bits<'_>| {
+            let v = bits.bits(38).unwrap_or(0).cast_signed();
+            v.wrapping_shl(26).wrapping_shr(26)
+        };
+        let x = coord(&mut bits);
+        bits.skip(2);
+        let y = coord(&mut bits);
+        bits.skip(2);
+        let z = coord(&mut bits);
         for (label, v) in [
             ("ECEF X (0.1 mm)", x),
             ("ECEF Y (0.1 mm)", y),
@@ -439,7 +441,10 @@ async fn rtcm_frame(cx: Cx, span: Span) -> Result<()> {
             fields.push((label, int(v, 38)));
         }
         if number == 1006 {
-            fields.push(("Antenna height (0.1 mm)", uint(bits.u(16).unwrap_or(0), 16)));
+            fields.push((
+                "Antenna height (0.1 mm)",
+                uint(bits.bits(16).unwrap_or(0), 16),
+            ));
         }
         for (label, value) in fields {
             cx.emit(Node::new(label).span(pspan).value(value));
@@ -454,7 +459,7 @@ async fn rtcm_frame(cx: Cx, span: Span) -> Result<()> {
         cx.emit(leaf(
             "Station ID",
             pspan.sub(1, 2),
-            uint(bits.u(12).unwrap_or(0), 12),
+            uint(bits.bits(12).unwrap_or(0), 12),
         ));
         cx.emit(Node::new("Payload").span(pspan));
     }
@@ -594,19 +599,14 @@ async fn sbf_block(cx: Cx, (span, number): (Span, u16)) -> Result<()> {
         leaf(
             "CRC",
             span.sub(2, 2),
-            hex(
-                u16_le(&cx.read(span.sub(2, 2)).await?, 0)
-                    .unwrap_or(0)
-                    .into(),
-                16,
-            ),
+            hex(u16_le(&cx.read(span.sub(2, 2)).await?, 0).unwrap_or(0), 16),
         )
         .summary("valid"),
     );
     cx.emit(leaf(
         "Block number",
         span.sub(4, 2),
-        enumv(SBF_BLOCKS, number.into(), 13),
+        enumv(number, 13, SBF_BLOCKS),
     ));
     cx.emit(leaf("Length", span.sub(6, 2), uint(span.len, 16)));
     let body = span.tail(8);
@@ -618,12 +618,12 @@ async fn sbf_block(cx: Cx, (span, number): (Span, u16)) -> Result<()> {
         cx.emit(leaf(
             "TOW (ms)",
             body.sub(0, 4),
-            uint(u32_le(&b, 0).unwrap_or(0).into(), 32),
+            uint(u32_le(&b, 0).unwrap_or(0), 32),
         ));
         cx.emit(leaf(
             "Week number",
             body.sub(4, 2),
-            uint(u16_le(&b, 4).unwrap_or(0).into(), 16),
+            uint(u16_le(&b, 4).unwrap_or(0), 16),
         ));
         cx.emit(Node::new("Body").span(body.tail(6)));
     }
@@ -800,9 +800,7 @@ async fn novatel_message(cx: Cx, (span, hlen, id): (Span, u64, u16)) -> Result<(
         "CRC-32",
         span.tail(span.len.saturating_sub(4)),
         hex(
-            u32_le(&cx.read(span.tail(span.len.saturating_sub(4))).await?, 0)
-                .unwrap_or(0)
-                .into(),
+            u32_le(&cx.read(span.tail(span.len.saturating_sub(4))).await?, 0).unwrap_or(0),
             32,
         ),
     ));

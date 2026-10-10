@@ -768,11 +768,9 @@ pub fn local_bytes<'a>(page: &'a Page, cell: &Cell) -> &'a [u8] {
 }
 
 fn uint(name: &'static str, value: u64, span: Span) -> Node {
-    Node::new(name).span(span).value(Value::UInt {
-        value,
-        bits: 64,
-        radix: Radix::Dec,
-    })
+    Node::new(name)
+        .span(span)
+        .value(crate::formats::util::val::uint(value, 64))
 }
 
 /// Expands a cell: its values, then its raw structure.
@@ -880,7 +878,7 @@ async fn cell_fields(cx: Cx, state: CellState) -> Result<()> {
                         .summary(format!(
                             "{} bytes on {}",
                             p.total.saturating_sub(p.local_len),
-                            super::plural(
+                            crate::formats::util::fmt::grouped_count(
                                 overflow_page_count(&state.db, &p),
                                 "overflow page",
                                 "overflow pages"

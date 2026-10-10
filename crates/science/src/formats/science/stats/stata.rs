@@ -13,19 +13,18 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use super::{Cell, Item, date_cell, row_node, trim_end, until_nul};
+use crate::bytes::find;
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::civil::SAS_EPOCH;
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::Value;
-
-/// Stata dates count days (`%td`) or milliseconds (`%tc`) from 1960.
-const EPOCH_1960: i64 = -315_619_200;
 
 /// Binary releases we read (113–115), with a plausible header and the
 /// first variable types valid.
@@ -212,13 +211,6 @@ fn kind_old(code: u8) -> Option<Kind> {
 }
 
 /// Finds `tag` in `hay` at or after `from`.
-fn find(hay: &[u8], tag: &[u8], from: usize) -> Option<usize> {
-    hay.get(from..)?
-        .windows(tag.len())
-        .position(|w| w == tag)
-        .map(|p| p.saturating_add(from))
-}
-
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if cx.read_avail(input.span.sub(0, 11)).await? == b"<stata_dta>" {
         tagged(cx, input.span).await
@@ -827,9 +819,9 @@ fn missing(n: u64) -> Cell {
 fn number_cell(var: &Var, v: f64) -> Cell {
     let f = var.format.trim_start_matches('%').trim_start_matches('-');
     if f.starts_with("td") || f.starts_with('d') {
-        date_cell(v, 86_400.0, EPOCH_1960, false)
+        date_cell(v, 86_400.0, SAS_EPOCH, false)
     } else if f.starts_with("tc") || f.starts_with("tC") {
-        date_cell(v, 0.001, EPOCH_1960, true)
+        date_cell(v, 0.001, SAS_EPOCH, true)
     } else {
         Cell::Number(v)
     }

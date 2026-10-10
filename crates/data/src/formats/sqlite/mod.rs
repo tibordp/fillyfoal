@@ -37,6 +37,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::fmt::{grouped_count, size};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -123,32 +124,6 @@ const SCHEMA_FORMATS: EnumTable = &[
 
 fn sqlite_version(v: u32) -> String {
     format!("{}.{}.{}", v / 1_000_000, v / 1000 % 1000, v % 1000)
-}
-
-/// `"512 bytes"`, `"4 KiB"`.
-fn page_size_text(size: u64) -> String {
-    if size >= 1024 {
-        format!("{} KiB", size / 1024)
-    } else {
-        format!("{size} bytes")
-    }
-}
-
-/// `1234567` as `"1,234,567"`.
-fn thousands(n: u64) -> String {
-    let digits = n.to_string();
-    let mut out = String::with_capacity(digits.len().saturating_add(digits.len() / 3));
-    for (i, c) in digits.chars().enumerate() {
-        if i != 0 && digits.len().saturating_sub(i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
-}
-
-fn plural(n: u64, one: &str, many: &str) -> String {
-    format!("{} {}", thousands(n), if n == 1 { one } else { many })
 }
 
 fn vacuum_mode(largest_root: u32, incremental: u32) -> &'static str {
@@ -285,7 +260,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if header.freelist_trunk != 0 {
         cx.emit(
             Node::new("Freelist")
-                .summary(plural(header.freelist_count.into(), "page", "pages"))
+                .summary(grouped_count(header.freelist_count, "page", "pages"))
                 .desc("Pages no longer in use, kept for reuse: trunk pages list leaf pages")
                 .lazy(freelist, (db.clone(), header.freelist_trunk)),
         );
@@ -296,7 +271,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             Node::new("Pointer map")
                 .summary(format!(
                     "{}, {}",
-                    plural(to_u64(count), "page", "pages"),
+                    grouped_count(to_u64(count), "page", "pages"),
                     vacuum_mode(header.largest_root, header.incremental_vacuum)
                 ))
                 .desc("Auto-vacuum back-pointers: the type and parent of every page, so pages can be moved")
@@ -318,8 +293,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut pages_node = Node::new("Pages")
         .summary(format!(
             "{} of {}",
-            plural(db.page_count, "page", "pages"),
-            page_size_text(page_size)
+            grouped_count(db.page_count, "page", "pages"),
+            size(page_size)
         ))
         .desc("Every page by number and what it is used for")
         .lazy(pages, db.clone());
@@ -351,8 +326,8 @@ fn annotation(header: &Header, db: &Db, schema: &Schema, map: Option<&PageMap>) 
         format!("SQLite {}", sqlite_version(header.sqlite_version)),
         format!(
             "{} of {}",
-            plural(db.page_count, "page", "pages"),
-            page_size_text(db.page_size)
+            grouped_count(db.page_count, "page", "pages"),
+            size(db.page_size)
         ),
     ];
     if header.application_id != 0
@@ -376,7 +351,7 @@ fn annotation(header: &Header, db: &Db, schema: &Schema, map: Option<&PageMap>) 
     }
     parts.push(schema.describe());
     if let Some(rows) = map.and_then(|m| m.total_rows(schema)) {
-        parts.push(plural(rows, "row", "rows"));
+        parts.push(grouped_count(rows, "row", "rows"));
     }
     parts.join(", ")
 }
@@ -422,7 +397,7 @@ impl Schema {
     }
 
     fn describe(&self) -> String {
-        let mut parts = vec![plural(self.count("table"), "table", "tables")];
+        let mut parts = vec![grouped_count(self.count("table"), "table", "tables")];
         for (kind, one, many) in [
             ("index", "index", "indexes"),
             ("view", "view", "views"),
@@ -430,7 +405,7 @@ impl Schema {
         ] {
             let n = self.count(kind);
             if n != 0 {
-                parts.push(plural(n, one, many));
+                parts.push(grouped_count(n, one, many));
             }
         }
         let mut out = parts.join(", ");
@@ -667,9 +642,9 @@ async fn schema_entries(cx: Cx, db: DbRef) -> Result<()> {
         let owner = u32::try_from(index.saturating_add(1)).unwrap_or(u32::MAX);
         if let Some(n) = map.as_ref().and_then(|m| m.records(owner)) {
             let count = if e.kind == "index" {
-                plural(n, "entry", "entries")
+                grouped_count(n, "entry", "entries")
             } else {
-                plural(n, "row", "rows")
+                grouped_count(n, "row", "rows")
             };
             summary = format!("{count}; {summary}");
         }
@@ -749,19 +724,19 @@ async fn schema_entry(cx: Cx, state: EntryState) -> Result<()> {
             );
         if let Some(n) = count {
             rows_node = rows_node.summary(if is_index {
-                plural(n, "entry", "entries")
+                grouped_count(n, "entry", "entries")
             } else {
-                plural(n, "row", "rows")
+                grouped_count(n, "row", "rows")
             });
         }
         cx.emit(rows_node);
         if let Some(map) = &map {
             let (pages, overflow) = map.pages_of(owner);
-            let mut summary = plural(pages, "B-tree page", "B-tree pages");
+            let mut summary = grouped_count(pages, "B-tree page", "B-tree pages");
             if overflow != 0 {
                 summary = format!(
                     "{summary}, {}",
-                    plural(overflow, "overflow page", "overflow pages")
+                    grouped_count(overflow, "overflow page", "overflow pages")
                 );
             }
             let mut root = page_link("Root page", db, e.root, &path, Role::BTree, &e.columns);
@@ -1382,7 +1357,7 @@ async fn btree_page(cx: &Cx, state: &PageState) -> Result<()> {
     cx.emit(
         Node::new("Cell pointer array")
             .span(page.pointers_span())
-            .summary(plural(page.cells.into(), "cell", "cells"))
+            .summary(grouped_count(page.cells, "cell", "cells"))
             .desc("Offsets of the cells, in key order")
             .lazy(cell_pointers, (page.pointers_span(), page.span)),
     );
@@ -1573,7 +1548,7 @@ async fn freelist(cx: Cx, (db, first): (DbRef, u32)) -> Result<()> {
                 span,
                 Role::FreelistTrunk,
             )
-            .summary(plural(leaves.into(), "leaf page", "leaf pages")),
+            .summary(grouped_count(leaves, "leaf page", "leaf pages")),
         )
         .await;
         next = u32_be(&head, 0).unwrap_or(0);
@@ -1775,7 +1750,7 @@ async fn pages(cx: Cx, db: DbRef) -> Result<()> {
     if !map.complete {
         cx.diag(Diagnostic::limit(format!(
             "page uses are known for the first {} of the database; others are guessed from their first byte",
-            crate::formats::util::arcutil::human_size(MAX_MAP_BYTES)
+            size(MAX_MAP_BYTES)
         )));
     }
     let start = cx.resume::<u64>().unwrap_or(1);

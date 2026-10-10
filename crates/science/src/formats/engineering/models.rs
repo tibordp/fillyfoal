@@ -6,6 +6,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::uint;
 use crate::formats::{Codec, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -13,14 +14,6 @@ use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value, lookup};
 
 const LE: Endian = Endian::Little;
-
-fn uint(value: u64) -> Value {
-    Value::UInt {
-        value,
-        bits: 64,
-        radix: Radix::Dec,
-    }
-}
 
 // ---------------------------------------------------------------------------
 // STL
@@ -32,7 +25,7 @@ fn stl_binary_probe(h: &Head<'_>) -> bool {
 }
 
 fn stl_ascii_probe(h: &Head<'_>) -> bool {
-    h.starts_with(b"solid") && h.data.windows(12).any(|w| w == b"facet normal")
+    h.starts_with(b"solid") && crate::bytes::contains(h.data, b"facet normal")
 }
 
 declare_format!(pub STL = "stl", "Stereolithography mesh (binary)", ["stl"], "model/stl",
@@ -71,7 +64,7 @@ async fn stl(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Triangle count")
             .span(file.sub(80, 4))
-            .value(uint(count.into())),
+            .value(uint(count, 64)),
     );
     let triangles = file.tail(84);
     cx.emit(
@@ -244,6 +237,9 @@ async fn emit_nodes(cx: Cx, nodes: Vec<Node>) -> Result<()> {
 // ---------------------------------------------------------------------------
 // glTF binary (GLB)
 
+/// JSON chunks up to this size are parsed for the summary.
+const MAX_GLB_JSON: u64 = 4 << 20;
+
 declare_format!(pub GLB = "glb", "glTF binary", ["glb", "vrm"], "model/gltf-binary",
     Probe::Magic(&[(0, b"glTF")]), glb);
 
@@ -270,13 +266,13 @@ async fn glb(cx: Cx, input: Input) -> Result<()> {
         cur.skip(len.into());
         let node = match kind.as_slice() {
             b"JSON" => {
-                let json = cx.read_avail(data.sub(0, 65536)).await?;
-                let text = String::from_utf8_lossy(&json);
-                if let Some(at) = text.find("\"generator\"") {
-                    generator = text
-                        .get(at.saturating_add(11)..)
-                        .and_then(|r| r.split('"').nth(1))
-                        .map(str::to_owned);
+                // asset.generator, for the summary.
+                if data.len <= MAX_GLB_JSON {
+                    let text = cx.read(data).await?;
+                    generator = crate::formats::util::json::parse(&cx, &text)
+                        .await
+                        .ok()
+                        .and_then(|j| Some(j.get("asset")?.get("generator")?.as_str()?.to_owned()));
                 }
                 embedded("JSON chunk", input.nested(data))
             }

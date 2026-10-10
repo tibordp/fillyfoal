@@ -9,6 +9,7 @@
 
 use std::borrow::Cow;
 
+use super::emit_nodes;
 use super::{leaf, text};
 use crate::cx::Cx;
 use crate::declare_format;
@@ -480,7 +481,7 @@ async fn sinex(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Header line")
             .span(line.span)
-            .lazy(super::emit_nodes, nodes),
+            .lazy(emit_nodes, std::sync::Arc::new(nodes)),
     );
     let version = words.get(1).map(Piece::text).unwrap_or_default();
     let agency = words.get(2).map(Piece::text).unwrap_or_default();

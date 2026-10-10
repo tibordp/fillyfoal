@@ -5,6 +5,9 @@
 //! separated, multi-valued, ...). Column types come from the catalog.
 
 use crate::bytes::{u16_le, u32_le, u64_le};
+use crate::formats::data::valuetree::decimal_string;
+use crate::formats::util::civil::ole_date;
+use crate::formats::util::datakit::guid_le;
 use crate::value::{EnumTable, FlagTable, Value, flag};
 
 pub const COLUMN_TYPES: EnumTable = &[
@@ -309,56 +312,35 @@ pub fn value(def: &ColDef, b: &[u8]) -> Value {
         2 => unsigned(1),
         3 => signed(2),
         4 => signed(4),
-        5 => le(8).map(|v| Value::Text(currency(v as i64))),
+        // Currency: a 64-bit integer in units of 1/10 000.
+        5 => le(8).map(|v| {
+            let v = v.cast_signed();
+            Value::Text(decimal_string(v < 0, &v.unsigned_abs().to_string(), -4))
+        }),
         6 => le(4).map(|v| Value::Float(f64::from(f32::from_bits(v as u32)))),
         7 => le(8).map(|v| Value::Float(f64::from_bits(v))),
-        8 => le(8).map(|v| ole_date(f64::from_bits(v))),
+        8 => le(8).map(|v| {
+            let days = f64::from_bits(v);
+            ole_date(days).map_or(Value::Float(days), |unix_seconds| Value::Timestamp {
+                unix_seconds,
+            })
+        }),
         10 | 12 => Some(Value::Text(text(def.codepage, b))),
         14 => unsigned(4),
         15 => signed(8),
-        16 if b.len() == 16 => Some(Value::Guid(guid(b))),
+        16 if b.len() == 16 => Some(Value::Guid(guid_le(b))),
         17 => unsigned(2),
         _ => None,
     };
     v.unwrap_or_else(|| Value::Bytes(b.get(..64).unwrap_or(b).to_vec()))
 }
 
-/// Currency: a 64-bit integer in units of 1/10 000.
-fn currency(v: i64) -> String {
-    let sign = if v < 0 { "-" } else { "" };
-    let a = v.unsigned_abs();
-    format!("{sign}{}.{:04}", a / 10_000, a % 10_000)
-}
-
-/// An OLE automation date (days since 1899-12-30) as a timestamp.
-fn ole_date(days: f64) -> Value {
-    if !days.is_finite() {
-        return Value::Float(days);
-    }
-    let secs = ((days - 25_569.0) * 86_400.0).round();
-    let secs = secs.clamp(-1e15, 1e15) as i64;
-    Value::Timestamp { unix_seconds: secs }
-}
-
 /// Text in a column's code page (1200: UTF-16LE; otherwise single-byte).
 pub fn text(codepage: u32, b: &[u8]) -> String {
     if codepage == 1200 {
-        crate::text::utf16(b, crate::fields::Endian::Little)
-            .trim_end_matches('\0')
-            .to_owned()
+        crate::text::utf16_trimmed(b, crate::fields::Endian::Little)
     } else {
         crate::text::latin1(b).trim_end_matches('\0').to_owned()
-    }
-}
-
-pub fn guid(b: &[u8]) -> crate::value::Guid {
-    let mut data4 = [0u8; 8];
-    data4.copy_from_slice(b.get(8..16).unwrap_or(&[0; 8]));
-    crate::value::Guid {
-        data1: u32_le(b, 0).unwrap_or(0),
-        data2: u16_le(b, 4).unwrap_or(0),
-        data3: u16_le(b, 6).unwrap_or(0),
-        data4,
     }
 }
 
@@ -451,6 +433,5 @@ mod tests {
             multi_values(&[2, b'a', 0, b'b', 0], 0x18),
             [(1, 2, false), (3, 2, false)]
         );
-        assert_eq!(currency(-123_456), "-12.3456");
     }
 }

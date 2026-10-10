@@ -11,8 +11,7 @@
 
 use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
-use crate::formats::text::plural;
-use crate::formats::util::datakit::clip;
+use crate::formats::util::fmt::{clip, grouped_count};
 use crate::node::Node;
 use crate::value::Value;
 
@@ -35,7 +34,7 @@ pub fn enter(path: &Path, offset: u64) -> Result<Path> {
 /// without scanning.
 pub fn array_summary(kind: &str, count: Option<u64>) -> String {
     match count {
-        Some(n) => format!("{kind}, {}", plural(n, "element", "elements")),
+        Some(n) => format!("{kind}, {}", grouped_count(n, "element", "elements")),
         None => kind.to_owned(),
     }
 }
@@ -43,7 +42,7 @@ pub fn array_summary(kind: &str, count: Option<u64>) -> String {
 /// `"map, 3 entries"` (or `"object, 3 members"`, with other nouns).
 pub fn map_summary(kind: &str, count: Option<u64>, one: &str, many: &str) -> String {
     match count {
-        Some(n) => format!("{kind}, {}", plural(n, one, many)),
+        Some(n) => format!("{kind}, {}", grouped_count(n, one, many)),
         None => kind.to_owned(),
     }
 }
@@ -62,7 +61,7 @@ pub fn text(node: Node, data: &[u8], total: u64) -> Node {
     let node = if cut {
         node.summary(format!(
             "text, {} (truncated)",
-            plural(total, "byte", "bytes")
+            grouped_count(total, "byte", "bytes")
         ))
     } else {
         node
@@ -77,7 +76,7 @@ pub fn text(node: Node, data: &[u8], total: u64) -> Node {
 /// A binary leaf showing the first bytes of `total`.
 pub fn bytes(node: Node, kind: &str, data: Vec<u8>, total: u64) -> Node {
     node.value(Value::Bytes(data))
-        .summary(format!("{kind}, {}", plural(total, "byte", "bytes")))
+        .summary(format!("{kind}, {}", grouped_count(total, "byte", "bytes")))
 }
 
 /// A node name for a map key given as text (empty keys get a placeholder).
@@ -89,15 +88,8 @@ pub fn key_name(key: &str, index: u64) -> String {
     }
 }
 
-/// An unsigned decimal leaf value.
-pub fn uint(value: u64, bits: u8) -> Value {
-    crate::formats::util::datakit::uint(value, bits)
-}
-
-/// A signed leaf value.
-pub fn int(value: i64, bits: u8) -> Value {
-    Value::Int { value, bits }
-}
+/// Leaf values.
+pub use crate::formats::util::val::{int, uint};
 
 /// Decimal digits of a big-endian unsigned magnitude of any length
 /// (inputs longer than `MAX_BIG` bytes are described, not converted).

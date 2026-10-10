@@ -208,7 +208,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Type: byte (0x1)  [0x294+0x4]
         Size: 4 — bytes per record, padded to 4  [0x298+0x4]
         Begin: 0x310  [0x29c+0x8] → 0x310+0x1
-      ▾ flag — byte flag(time), 2 records of 1 bytes → 0x310+0x1
+      ▾ flag — byte flag(time), 2 records of 1 byte → 0x310+0x1
         ▾ Record 0  [0x310+0x1]
             [0]: 0  [0x310+0x1]
         ▾ Record 1  [0x334+0x1]

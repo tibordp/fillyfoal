@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use super::emit_nodes;
 use super::{hex, leaf, text, uint};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_be, u64_le};
 use crate::cx::Cx;
@@ -99,7 +100,7 @@ async fn ulog(cx: Cx, input: Input) -> Result<()> {
     cx.emit(leaf(
         "Version",
         file.sub(7, 1),
-        uint(h.get(7).copied().unwrap_or(0).into(), 8),
+        uint(h.get(7).copied().unwrap_or(0), 8),
     ));
     let start = u64_le(&h, 8).unwrap_or(0);
     cx.emit(leaf("Timestamp (µs)", file.sub(8, 8), uint(start, 64)));
@@ -409,17 +410,12 @@ async fn dataflash(cx: Cx, input: Input) -> Result<()> {
 
 async fn df_message(cx: Cx, (span, fmt): (Span, Arc<Fmt>)) -> Result<()> {
     let body = cx.read(span.tail(3)).await?;
-    cx.emit(leaf("Header", span.sub(0, 2), hex(0xa395, 16)));
+    cx.emit(leaf("Header", span.sub(0, 2), hex(0xa395u16, 16)));
     cx.emit(leaf(
         "Message type",
         span.sub(2, 1),
         uint(
-            cx.read(span.sub(2, 1))
-                .await?
-                .first()
-                .copied()
-                .unwrap_or(0)
-                .into(),
+            cx.read(span.sub(2, 1)).await?.first().copied().unwrap_or(0),
             8,
         ),
     ));
@@ -657,35 +653,32 @@ async fn mavlink_packet(cx: Cx, (span, v2, id): (Span, bool, u32)) -> Result<()>
     cx.emit(leaf(
         "Magic",
         span.sub(8, 1),
-        hex(b.get(8).copied().unwrap_or(0).into(), 8),
+        hex(b.get(8).copied().unwrap_or(0), 8),
     ));
     cx.emit(leaf("Payload length", span.sub(9, 1), uint(len, 8)));
     if v2 {
         cx.emit(leaf(
             "Incompatibility flags",
             span.sub(10, 1),
-            hex(b.get(10).copied().unwrap_or(0).into(), 8),
+            hex(b.get(10).copied().unwrap_or(0), 8),
         ));
         cx.emit(leaf(
             "Compatibility flags",
             span.sub(11, 1),
-            hex(b.get(11).copied().unwrap_or(0).into(), 8),
+            hex(b.get(11).copied().unwrap_or(0), 8),
         ));
     }
     let s = if v2 { 12 } else { 10 };
     cx.emit(leaf(
         "Sequence",
         span.sub(s, 1),
-        uint(b.get(to_usize(s)).copied().unwrap_or(0).into(), 8),
+        uint(b.get(to_usize(s)).copied().unwrap_or(0), 8),
     ));
     cx.emit(leaf(
         "System ID",
         span.sub(s.saturating_add(1), 1),
         uint(
-            b.get(to_usize(s.saturating_add(1)))
-                .copied()
-                .unwrap_or(0)
-                .into(),
+            b.get(to_usize(s.saturating_add(1))).copied().unwrap_or(0),
             8,
         ),
     ));
@@ -693,10 +686,7 @@ async fn mavlink_packet(cx: Cx, (span, v2, id): (Span, bool, u32)) -> Result<()>
         "Component ID",
         span.sub(s.saturating_add(2), 1),
         uint(
-            b.get(to_usize(s.saturating_add(2)))
-                .copied()
-                .unwrap_or(0)
-                .into(),
+            b.get(to_usize(s.saturating_add(2))).copied().unwrap_or(0),
             8,
         ),
     ));
@@ -724,34 +714,34 @@ async fn mavlink_packet(cx: Cx, (span, v2, id): (Span, bool, u32)) -> Result<()>
             cx.emit(leaf(
                 "Custom mode",
                 payload_span.sub(0, 4),
-                uint(u32_le(&p, 0).unwrap_or(0).into(), 32),
+                uint(u32_le(&p, 0).unwrap_or(0), 32),
             ));
             cx.emit(leaf(
                 "Vehicle type",
                 payload_span.sub(4, 1),
-                uint(p.get(4).copied().unwrap_or(0).into(), 8),
+                uint(p.get(4).copied().unwrap_or(0), 8),
             ));
             cx.emit(leaf(
                 "Autopilot",
                 payload_span.sub(5, 1),
-                uint(p.get(5).copied().unwrap_or(0).into(), 8),
+                uint(p.get(5).copied().unwrap_or(0), 8),
             ));
             cx.emit(leaf(
                 "Base mode",
                 payload_span.sub(6, 1),
-                hex(p.get(6).copied().unwrap_or(0).into(), 8),
+                hex(p.get(6).copied().unwrap_or(0), 8),
             ));
             cx.emit(leaf(
                 "System status",
                 payload_span.sub(7, 1),
-                uint(p.get(7).copied().unwrap_or(0).into(), 8),
+                uint(p.get(7).copied().unwrap_or(0), 8),
             ));
         }
         33 => {
             cx.emit(leaf(
                 "Time since boot (ms)",
                 payload_span.sub(0, 4),
-                uint(u32_le(&p, 0).unwrap_or(0).into(), 32),
+                uint(u32_le(&p, 0).unwrap_or(0), 32),
             ));
             cx.emit(
                 leaf(
@@ -796,7 +786,7 @@ async fn mavlink_packet(cx: Cx, (span, v2, id): (Span, bool, u32)) -> Result<()>
             cx.emit(leaf(
                 "Severity",
                 payload_span.sub(0, 1),
-                uint(p.first().copied().unwrap_or(0).into(), 8),
+                uint(p.first().copied().unwrap_or(0), 8),
             ));
             cx.emit(leaf(
                 "Text",
@@ -810,9 +800,7 @@ async fn mavlink_packet(cx: Cx, (span, v2, id): (Span, bool, u32)) -> Result<()>
         "Checksum",
         span.sub(pstart.saturating_add(len), 2),
         hex(
-            u16_le(&b, to_usize(pstart.saturating_add(len)))
-                .unwrap_or(0)
-                .into(),
+            u16_le(&b, to_usize(pstart.saturating_add(len))).unwrap_or(0),
             16,
         ),
     ));
@@ -1022,9 +1010,7 @@ fn ros_field_value(name: &str, v: &[u8]) -> Value {
             }
         }
         (_, 8) if !v.iter().all(|b| b.is_ascii_graphic()) => uint(u64_le(v, 0).unwrap_or(0), 64),
-        (_, 4) if !v.iter().all(|b| b.is_ascii_graphic()) => {
-            uint(u32_le(v, 0).unwrap_or(0).into(), 32)
-        }
+        (_, 4) if !v.iter().all(|b| b.is_ascii_graphic()) => uint(u32_le(v, 0).unwrap_or(0), 32),
         _ => Value::Text(lossy(v)),
     }
 }
@@ -1132,7 +1118,7 @@ async fn ros_record(
             cx.emit(
                 Node::new("Connection header")
                     .span(data)
-                    .lazy(super::emit_nodes, nodes),
+                    .lazy(emit_nodes, std::sync::Arc::new(nodes)),
             );
         }
         _ => cx.emit(Node::new("Data").span(data)),

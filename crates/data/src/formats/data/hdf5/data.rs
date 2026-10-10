@@ -8,6 +8,8 @@ use crate::bytes::{to_u64, to_usize};
 use crate::codec::Codec;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::data::netcdf::coords;
+use crate::formats::util::fmt;
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::value::{Radix, Value};
@@ -15,7 +17,7 @@ use crate::value::{Radix, Value};
 use super::btree::{EaIter, FaIter, V1Iter, V2Iter};
 use super::datatype::{self, Ty};
 use super::message::{ChunkIndex, Filter, Layout, Space};
-use super::util::{FileRef, join, size_text, uint};
+use super::util::{FileRef, join, uint};
 
 /// Elements read at once.
 const WINDOW: u64 = 64 * 1024;
@@ -53,17 +55,6 @@ fn product(dims: &[u64]) -> u64 {
     dims.iter().fold(1u64, |a, &d| a.saturating_mul(d))
 }
 
-/// Row-major coordinates of element `i` in `shape`.
-fn coords(mut i: u64, shape: &[u64]) -> Vec<u64> {
-    let mut out = vec![0u64; shape.len()];
-    for (slot, &d) in out.iter_mut().zip(shape).rev() {
-        let d = d.max(1);
-        *slot = i.checked_rem(d).unwrap_or(0);
-        i = i.checked_div(d).unwrap_or(0);
-    }
-    out
-}
-
 /// A node listing the elements of `block`.
 pub fn values_node(name: &'static str, block: Block) -> Node {
     let size = u64::from(block.ty.size()).max(1);
@@ -73,7 +64,7 @@ pub fn values_node(name: &'static str, block: Block) -> Node {
         .summary(format!(
             "{n} element{}, {}",
             if n == 1 { "" } else { "s" },
-            size_text(block.span.len)
+            fmt::size(block.span.len)
         ))
         .lazy(values, block)
 }
@@ -359,7 +350,7 @@ pub fn data_node(d: &Arc<Dset>) -> Option<Node> {
                 .summary(format!(
                     "chunks of {} ({})",
                     super::util::shape(dims),
-                    size_text(bytes)
+                    fmt::size(bytes)
                 ))
                 .lazy(chunks, d.clone())
         }
@@ -603,7 +594,7 @@ fn active(filters: &[Filter], mask: u32) -> Vec<Filter> {
 fn chunk_node(d: &Arc<Dset>, c: Chunk) -> Node {
     let filters = active(&d.filters, c.mask);
     let names: Vec<String> = filters.iter().map(Filter::label).collect();
-    let mut summary = size_text(c.stored);
+    let mut summary = fmt::size(c.stored);
     if !names.is_empty() {
         summary = format!("{summary}, {}", names.join(" → "));
     }
@@ -704,7 +695,7 @@ async fn chunk_expand(cx: Cx, (d, c): (Arc<Dset>, Chunk)) -> Result<()> {
                 cx.emit(
                     Node::new("Filtered data")
                         .span(span)
-                        .summary(size_text(span.len))
+                        .summary(fmt::size(span.len))
                         .diag(Diagnostic::unsupported(format!("the {} filter", f.label()))),
                 );
                 return Ok(());
@@ -724,7 +715,7 @@ async fn chunk_expand(cx: Cx, (d, c): (Arc<Dset>, Chunk)) -> Result<()> {
     cx.emit(
         Node::new(name)
             .span(span)
-            .summary(format!("{} → {}", size_text(span.len), size_text(full)))
+            .summary(format!("{} → {}", fmt::size(span.len), fmt::size(full)))
             .lazy(decoded, (d.clone(), c, span, codec, shuffle, full)),
     );
     Ok(())

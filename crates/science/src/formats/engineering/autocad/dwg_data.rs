@@ -14,11 +14,12 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use super::bits::{Bits, modular_char, modular_short};
-use super::dwg::{Drawing, Kind, Ver, hex, uint};
+use super::dwg::{Drawing, Kind, Ver};
 use crate::bytes::{to_u64, to_usize, u16_be, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::{hex, uint};
 use crate::formats::{Input, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
@@ -147,8 +148,7 @@ async fn parse_classes(cx: &Cx, data: &[u8], ver: Ver, high: bool) -> Classes {
             out.error = Some(Diagnostic::truncated(Span::zeros(0), 0));
             return out;
         };
-        out.header
-            .push(("Bit size", uint(bitsize.into()), at, r.pos));
+        out.header.push(("Bit size", uint(bitsize, 64), at, r.pos));
         strings = string_stream(bytes, area.saturating_mul(8), u64::from(bitsize));
         if strings.is_none() {
             out.error = Some(Diagnostic::malformed("no string stream"));
@@ -166,7 +166,7 @@ async fn parse_classes(cx: &Cx, data: &[u8], ver: Ver, high: bool) -> Classes {
             return out;
         };
         out.header
-            .push(("Maximum class number", uint(max.into()), at, r.pos));
+            .push(("Maximum class number", uint(max, 64), at, r.pos));
         count = Some(usize::from(max.saturating_sub(499)));
     }
     loop {
@@ -244,10 +244,10 @@ fn read_class(
 ) -> Option<(u16, String, String, String, u16)> {
     let at = r.pos;
     let number = r.bs()?;
-    fields.push(("Class number", uint(number.into()), at, r.pos));
+    fields.push(("Class number", uint(number, 64), at, r.pos));
     let at = r.pos;
     let proxy = r.bs()?;
-    fields.push(("Proxy flags", hex(proxy.into()), at, r.pos));
+    fields.push(("Proxy flags", hex(proxy, 64), at, r.pos));
     let app = text_field(r, strings, "Application", fields, string_fields)?;
     let cpp = text_field(r, strings, "C++ class", fields, string_fields)?;
     let dxf = text_field(r, strings, "DXF name", fields, string_fields)?;
@@ -280,7 +280,7 @@ fn read_class(
         ] {
             let at = r.pos;
             let v = r.bl()?;
-            fields.push((name, uint(v.into()), at, r.pos));
+            fields.push((name, uint(v, 64), at, r.pos));
         }
     }
     Some((number, app, cpp, dxf, item))
@@ -498,7 +498,7 @@ async fn map_block(
     cx.emit(
         Node::new("Size")
             .span(span.sub(0, 2))
-            .value(uint(u16_be(&bytes, 0).unwrap_or(0).into()))
+            .value(uint(u16_be(&bytes, 0).unwrap_or(0), 64))
             .desc("Big-endian, counting itself"),
     );
     let mut pos = 2usize;
@@ -511,7 +511,7 @@ async fn map_block(
             Node::new(format!("Handle {handle:#X}"))
                 .span(span.sub(to_u64(pos), to_u64(len)))
                 .value(match u64::try_from(loc) {
-                    Ok(v) => hex(v),
+                    Ok(v) => hex(v, 64),
                     Err(_) => Value::Int {
                         value: loc,
                         bits: 64,
@@ -525,7 +525,7 @@ async fn map_block(
     cx.push(
         Node::new("CRC")
             .span(span.sub(to_u64(pos), 2))
-            .value(hex(u16_be(&bytes, pos).unwrap_or(0).into())),
+            .value(hex(u16_be(&bytes, pos).unwrap_or(0), 64)),
     )
     .await;
     Ok(())
@@ -667,19 +667,19 @@ fn parse_object(bytes: &[u8], ver: Ver) -> Option<ObjectHead> {
         return Some(head);
     };
     head.kind = Some(kind);
-    head.fields.push(("Type", uint(kind.into()), from, r.pos));
+    head.fields.push(("Type", uint(kind, 64), from, r.pos));
     if (Ver::R2000..Ver::R2010).contains(&ver) {
         let from = r.pos;
         let Some(bits) = r.rl() else {
             return Some(head);
         };
         head.fields
-            .push(("Data size in bits", uint(bits.into()), from, r.pos));
+            .push(("Data size in bits", uint(bits, 64), from, r.pos));
     }
     let from = r.pos;
     if let Some((_, handle)) = r.h() {
         head.handle = Some(handle);
-        head.fields.push(("Handle", hex(handle), from, r.pos));
+        head.fields.push(("Handle", hex(handle, 64), from, r.pos));
     }
     Some(head)
 }
@@ -714,7 +714,7 @@ pub async fn objects(cx: Cx, d: Arc<Drawing>) -> Result<()> {
         cx.push(
             Node::new("Signature")
                 .span(base.sub(0, 4))
-                .value(hex(u32_le(&sig, 0).unwrap_or(0).into())),
+                .value(hex(u32_le(&sig, 0).unwrap_or(0), 64)),
         )
         .await;
     }
@@ -789,7 +789,7 @@ async fn object_fields(cx: Cx, (span, ver, _handle): (Span, Ver, u64)) -> Result
     cx.emit(
         Node::new("Size")
             .span(span.sub(0, to_u64(head.ms_len)))
-            .value(uint(head.size))
+            .value(uint(head.size, 64))
             .desc("MS: bytes of object data, without the CRC"),
     );
     let mut data_start = to_u64(head.ms_len);
@@ -797,7 +797,7 @@ async fn object_fields(cx: Cx, (span, ver, _handle): (Span, Ver, u64)) -> Result
         cx.emit(
             Node::new("Handle stream size")
                 .span(span.sub(data_start, to_u64(n)))
-                .value(uint(h))
+                .value(uint(h, 64))
                 .desc("UMC, in bits"),
         );
         data_start = data_start.saturating_add(to_u64(n));
@@ -813,11 +813,7 @@ async fn object_fields(cx: Cx, (span, ver, _handle): (Span, Ver, u64)) -> Result
     let crc_at = data_start.saturating_add(head.size);
     let crc = cx.read_avail(span.sub(crc_at, 2)).await?;
     if let Some(v) = u16_le(&crc, 0) {
-        cx.emit(
-            Node::new("CRC")
-                .span(span.sub(crc_at, 2))
-                .value(hex(v.into())),
-        );
+        cx.emit(Node::new("CRC").span(span.sub(crc_at, 2)).value(hex(v, 64)));
     }
     Ok(())
 }
@@ -850,7 +846,7 @@ async fn object_types(cx: Cx, d: Arc<Drawing>) -> Result<()> {
     sorted.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
     cx.annotate(format!("{} types", sorted.len()));
     for (name, n) in sorted {
-        cx.push(Node::new(name).value(uint(n))).await;
+        cx.push(Node::new(name).value(uint(n, 64))).await;
     }
     Ok(())
 }
@@ -1013,7 +1009,7 @@ fn string_at(data: &[u8], pos: usize, wide: bool) -> Option<(String, usize)> {
 /// Julian day number and milliseconds of the day, as Unix seconds.
 fn julian(day: u32, ms: u32) -> i64 {
     i64::from(day)
-        .saturating_sub(2_440_588)
+        .saturating_sub(crate::formats::util::civil::UNIX_JULIAN_DAY)
         .saturating_mul(86_400)
         .saturating_add(i64::from(ms / 1000))
 }
@@ -1119,7 +1115,7 @@ pub async fn summary_info(cx: &Cx, d: &Drawing, data: Span) -> Result<()> {
     cx.emit(
         Node::new("Total editing time")
             .span(Span::new(a.source, a.offset, 8))
-            .value(uint(days.into()))
+            .value(uint(days, 64))
             .summary(format!(
                 "{days} days, {:02}:{:02}:{:02}",
                 secs / 3600,
@@ -1133,7 +1129,7 @@ pub async fn summary_info(cx: &Cx, d: &Drawing, data: Span) -> Result<()> {
     cx.emit(
         Node::new("Custom properties")
             .span(span)
-            .value(uint(count.into())),
+            .value(uint(count, 64)),
     );
     for _ in 0..count {
         let (name, a) = r.string_value().ok_or_else(truncated)?;
@@ -1150,7 +1146,7 @@ pub async fn summary_info(cx: &Cx, d: &Drawing, data: Span) -> Result<()> {
     }
     for _ in 0..2 {
         if let Some((v, span)) = r.u32() {
-            cx.emit(Node::new("Unknown").span(span).value(hex(v.into())));
+            cx.emit(Node::new("Unknown").span(span).value(hex(v, 64)));
         }
     }
     if let Some(t) = title {
@@ -1170,10 +1166,10 @@ pub async fn app_info(cx: &Cx, d: &Drawing, data: Span) -> Result<()> {
     };
     let truncated = || Diagnostic::malformed("application info truncated");
     let (v, span) = r.u32().ok_or_else(truncated)?;
-    cx.emit(Node::new("Unknown").span(span).value(uint(v.into())));
+    cx.emit(Node::new("Unknown").span(span).value(uint(v, 64)));
     cx.emit(r.string("Name").ok_or_else(truncated)?);
     let (v, span) = r.u32().ok_or_else(truncated)?;
-    cx.emit(Node::new("Unknown").span(span).value(uint(v.into())));
+    cx.emit(Node::new("Unknown").span(span).value(uint(v, 64)));
     let mut product = None;
     for name in ["Version", "Comment", "Product"] {
         if wide {

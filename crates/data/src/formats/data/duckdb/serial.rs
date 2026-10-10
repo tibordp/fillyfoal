@@ -24,7 +24,7 @@ use crate::formats::data::valuetree::datetime;
 use crate::formats::util::binutil::Tree;
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::{EnumTable, Value, lookup};
 
 /// The id that ends an object.
 pub const END: u16 = 0xffff;
@@ -321,25 +321,7 @@ fn deeper(depth: usize, bs: &Bs<'_>) -> Result<usize> {
     Ok(depth.saturating_add(1))
 }
 
-pub fn uint(value: u64) -> Value {
-    Value::UInt {
-        value,
-        bits: 64,
-        radix: Radix::Dec,
-    }
-}
-
-pub fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-pub fn enumv(table: EnumTable, raw: u64) -> Value {
-    Value::Enum {
-        raw,
-        bits: 8,
-        name: lookup(table, raw),
-    }
-}
+pub use crate::formats::util::val::{enumv, text, uint};
 
 /// Adds a leaf for the field that started at `at` and ends here.
 pub fn leaf(t: &mut Tree, p: usize, bs: &Bs<'_>, at: usize, name: &'static str, v: Value) -> usize {
@@ -782,7 +764,7 @@ pub fn scalar(bs: &mut Bs<'_>, ty: &Ty, p: Phys) -> Result<(String, Option<Value
         }
         Phys::Unsigned => {
             let v = bs.uvar()?;
-            (v.to_string(), Some(uint(v)))
+            (v.to_string(), Some(uint(v, 64)))
         }
         Phys::Huge => {
             let v = hugeint(bs, ty.id == 49)?;
@@ -840,16 +822,8 @@ pub fn scalar(bs: &mut Bs<'_>, ty: &Ty, p: Phys) -> Result<(String, Option<Value
 
 /// `hugeint` as a UUID (DuckDB flips the top bit so UUIDs sort as text).
 fn uuid(v: i128) -> String {
-    let u = (v as u128) ^ 1u128.wrapping_shl(127);
-    let h = format!("{u:032x}");
-    format!(
-        "{}-{}-{}-{}-{}",
-        h.get(0..8).unwrap_or_default(),
-        h.get(8..12).unwrap_or_default(),
-        h.get(12..16).unwrap_or_default(),
-        h.get(16..20).unwrap_or_default(),
-        h.get(20..32).unwrap_or_default()
-    )
+    let u = v.cast_unsigned() ^ 1u128.wrapping_shl(127);
+    crate::formats::util::fmt::uuid(&u.to_be_bytes())
 }
 
 fn decimal(v: i128, scale: u8) -> String {

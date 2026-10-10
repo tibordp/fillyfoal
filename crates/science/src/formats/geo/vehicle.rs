@@ -12,6 +12,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Path, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::science::systemtime;
 use crate::formats::text::piece::Piece;
 use crate::formats::text::probe;
 use crate::formats::text::scan::Lines;
@@ -28,20 +29,6 @@ const LE: Endian = Endian::Little;
 
 declare_format!(pub BLF = "vector-blf", "Vector binary logging format (CAN log)", ["blf"], "application/x-vector-blf",
     Probe::Custom(|h| h.starts_with(b"LOGG") && u32_le(h.data, 4).is_some_and(|s| (72..=4096).contains(&s))), blf);
-
-fn systemtime(raw: &[u8]) -> String {
-    let w = |i: usize| u16_le(raw, i).unwrap_or(0);
-    format!(
-        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
-        w(0),
-        w(2),
-        w(6),
-        w(8),
-        w(10),
-        w(12),
-        w(14)
-    )
-}
 
 record! {
     pub struct BlfHeader {
@@ -228,7 +215,7 @@ async fn can_message(cx: Cx, (span, header_size): (Span, u64)) -> Result<()> {
     cx.emit(leaf(
         "Flags",
         span.sub(16, 4),
-        hex(u32_le(&h, 16).unwrap_or(0).into(), 32),
+        hex(u32_le(&h, 16).unwrap_or(0), 32),
     ));
     cx.emit(leaf(
         "Timestamp",
@@ -240,13 +227,13 @@ async fn can_message(cx: Cx, (span, header_size): (Span, u64)) -> Result<()> {
     cx.emit(leaf(
         "Channel",
         body.sub(0, 2),
-        uint(u16_le(&b, 0).unwrap_or(0).into(), 16),
+        uint(u16_le(&b, 0).unwrap_or(0), 16),
     ));
     cx.emit(
         leaf(
             "Flags",
             body.sub(2, 1),
-            hex(b.get(2).copied().unwrap_or(0).into(), 8),
+            hex(b.get(2).copied().unwrap_or(0), 8),
         )
         .summary(if b.get(2).is_some_and(|f| f & 1 != 0) {
             "Tx"
@@ -257,12 +244,12 @@ async fn can_message(cx: Cx, (span, header_size): (Span, u64)) -> Result<()> {
     cx.emit(leaf(
         "DLC",
         body.sub(3, 1),
-        uint(b.get(3).copied().unwrap_or(0).into(), 8),
+        uint(b.get(3).copied().unwrap_or(0), 8),
     ));
     cx.emit(leaf(
         "ID",
         body.sub(4, 4),
-        hex(u32_le(&b, 4).unwrap_or(0).into(), 32),
+        hex(u32_le(&b, 4).unwrap_or(0), 32),
     ));
     cx.emit(leaf(
         "Data",
@@ -476,7 +463,7 @@ async fn candump_fields(cx: Cx, span: Span) -> Result<()> {
         cx.emit(leaf(
             "ID",
             id.span(),
-            hex(raw.into(), if id.len() > 3 { 29 } else { 11 }),
+            hex(raw, if id.len() > 3 { 29 } else { 11 }),
         ));
         cx.emit(leaf("Data", data.span(), text(data.text())));
     }

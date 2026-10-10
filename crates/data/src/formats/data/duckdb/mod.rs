@@ -42,8 +42,10 @@ use crate::bytes::{to_u64, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::Input;
-use crate::formats::text::plural;
+use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::binutil::{Tree, dec, text};
+use crate::formats::util::fmt;
+use crate::formats::util::fmt::grouped_count;
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, Value};
@@ -233,7 +235,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Node::new("Main header")
             .span(file.sub(0, HEADER))
             .summary(main_summary)
-            .lazy(emit_all, Arc::new(main)),
+            .lazy(emit_nodes, Arc::new(main)),
     );
 
     // Database headers.
@@ -308,7 +310,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             Node::new(format!("Database header {}", i.saturating_add(1)))
                 .span(span)
                 .summary(format!("{state}, iteration {}", h.iteration))
-                .lazy(emit_all, Arc::new(kids)),
+                .lazy(emit_nodes, Arc::new(kids)),
         );
     }
     let h = headers.get(active).copied().unwrap_or_default();
@@ -325,8 +327,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
     let mut summary = format!(
         "DuckDB database, storage version {version}, {} of {}",
-        plural(h.blocks, "block", "blocks"),
-        size(alloc)
+        grouped_count(h.blocks, "block", "blocks"),
+        fmt::size(alloc)
     );
     if version < 64 {
         cx.annotate(summary);
@@ -362,12 +364,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             Ok(cat) => {
                 summary.push_str(&format!(
                     ", {}, {}",
-                    plural(cat.counts.0, "table", "tables"),
-                    plural(cat.counts.1, "view", "views")
+                    grouped_count(cat.counts.0, "table", "tables"),
+                    grouped_count(cat.counts.1, "view", "views")
                 ));
                 let mut n = Node::new("Catalog")
                     .span(cat.stream)
-                    .summary(plural(to_u64(cat.roots.len()), "entry", "entries"))
+                    .summary(grouped_count(to_u64(cat.roots.len()), "entry", "entries"))
                     .lazy(emit_tree, (cat.tree.clone(), cat.roots.clone()));
                 if let Some(e) = cat.error.clone() {
                     n = n.diag(e);
@@ -390,10 +392,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                         .span(stream)
                         .summary(format!(
                             "{} free, {} metadata",
-                            plural(to_u64(usage.free.len()), "block", "blocks"),
+                            grouped_count(to_u64(usage.free.len()), "block", "blocks"),
                             to_u64(usage.metadata.len())
                         ))
-                        .lazy(emit_all, Arc::new(kids)),
+                        .lazy(emit_nodes, Arc::new(kids)),
                 );
                 Arc::new(usage)
             }
@@ -408,29 +410,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .span(file.tail(BLOCKS_AT))
             .summary(format!(
                 "{} of {}",
-                plural(h.blocks, "block", "blocks"),
-                size(alloc)
+                grouped_count(h.blocks, "block", "blocks"),
+                fmt::size(alloc)
             ))
             .lazy(blocks, (geo, usage)),
     );
     cx.annotate(summary);
-    Ok(())
-}
-
-fn size(n: u64) -> String {
-    if n >= 1 << 20 && n.is_multiple_of(1 << 20) {
-        format!("{} MiB", n >> 20)
-    } else if n >= 1 << 10 && n.is_multiple_of(1 << 10) {
-        format!("{} KiB", n >> 10)
-    } else {
-        format!("{n} bytes")
-    }
-}
-
-async fn emit_all(cx: Cx, nodes: Arc<Vec<Node>>) -> Result<()> {
-    for n in nodes.iter() {
-        cx.emit(n.clone());
-    }
     Ok(())
 }
 

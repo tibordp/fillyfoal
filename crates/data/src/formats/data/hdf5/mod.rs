@@ -36,9 +36,10 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag};
 
+use crate::formats::util::val::hex;
 use datatype::Ty;
 use message::{Dense, Info, Layout, Link, Space, Target};
-use util::{File, FileRef, Rd, checksum_node, emit_all, group, hex, shape};
+use util::{File, FileRef, Rd, checksum_node, emit_all, group, shape};
 
 const SIGNATURE: &[u8] = b"\x89HDF\r\n\x1a\n";
 /// Objects followed below one another.
@@ -176,12 +177,12 @@ fn user_block(data: &[u8], span: Span) -> Vec<Node> {
         out.push(
             Node::new("Subsystem data offset")
                 .span(span.sub(116, 8))
-                .value(hex(util::uint(data, 116, 8).unwrap_or(0))),
+                .value(hex(util::uint(data, 116, 8).unwrap_or(0), 64)),
         );
         out.push(
             Node::new("Version")
                 .span(span.sub(124, 2))
-                .value(hex(util::uint(data, 124, 2).unwrap_or(0))),
+                .value(hex(util::uint(data, 124, 2).unwrap_or(0), 64)),
         );
         out.push(
             Node::new("Endian indicator")
@@ -579,7 +580,7 @@ struct ObjState {
 
 /// A node that expands into the object at `addr`.
 fn object_node(file: &FileRef, name: String, addr: u64, path: &[u64]) -> Node {
-    let node = Node::new(name).value(hex(addr));
+    let node = Node::new(name).value(hex(addr, 64));
     if file.undef(addr) {
         return node.summary("undefined address");
     }
@@ -825,11 +826,10 @@ async fn structures(cx: &Cx, st: &ObjState, info: &Info) -> Vec<Node> {
         Info::Layout(Layout::Virtual { heap, .. }) => out.push(heap::gcol_node(file, *heap)),
         Info::Attr(a) => {
             // The values are listed under the object's "Attributes".
-            out.push(
-                Node::new("Data")
-                    .span(a.data)
-                    .summary(format!("{}; see Attributes", util::size_text(a.data.len))),
-            );
+            out.push(Node::new("Data").span(a.data).summary(format!(
+                "{}; see Attributes",
+                crate::formats::util::fmt::size(a.data.len)
+            )));
         }
         Info::Shared(Some(addr)) => {
             out.push(object_node(

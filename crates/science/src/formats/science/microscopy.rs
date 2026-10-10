@@ -9,7 +9,8 @@ use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::lines::{float, int, preview, summarize, text, uint};
-use crate::formats::{Head, Input, Probe, embedded};
+use crate::formats::util::val::hex;
+use crate::formats::{Head, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -365,12 +366,11 @@ async fn czi_segment(cx: Cx, (input, pos, id, used): (Input, u64, String, u64)) 
                     .span(data.sub(4, 4))
                     .value(uint(att)),
             );
-            let x = cx.read_avail(data.sub(256, xml.min(512))).await?;
-            cx.emit(
-                Node::new("XML")
-                    .span(data.sub(256, xml))
-                    .value(text(preview(&String::from_utf8_lossy(&x), 200))),
-            );
+            cx.emit(embedded_as(
+                "XML",
+                input.nested(data.sub(256, xml)),
+                &crate::formats::text::xml::FORMAT,
+            ));
         }
         "ZISRAWDIRECTORY" => {
             let b = cx.read_avail(data.sub(0, 4)).await?;
@@ -650,18 +650,39 @@ declare_format!(pub LIF = "lif", "Leica Image File (LIF)", ["lif", "lof", "xlif"
 async fn lif(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut cur = Cursor::new(&cx, file, LE);
-    let start = cur.pos();
-    cur.skip(9);
+    let test = cur.u32().await?;
+    cx.emit(
+        Node::new("Test value")
+            .span(file.sub(0, 4))
+            .value(hex(test, 32)),
+    );
+    let len = cur.u32().await?;
+    cx.emit(
+        Node::new("Block length")
+            .span(file.sub(4, 4))
+            .value(uint(len.into())),
+    );
+    cur.skip(1);
     let chars = cur.u32().await?;
+    cx.emit(
+        Node::new("XML length")
+            .span(file.sub(9, 4))
+            .value(uint(chars.into()))
+            .summary("UTF-16 code units"),
+    );
     let xml_span = cur.span(u64::from(chars).saturating_mul(2));
+    // The version decides the memory blocks' layout; names make the summary.
     let head = cx.read_avail(xml_span.sub(0, 0x10000)).await?;
     let xml = crate::text::utf16(&head, LE);
     cur.skip(xml_span.len);
+    // UTF-16LE without a byte order mark: the XML dissector sniffs it.
     cx.emit(
-        Node::new("XML header")
-            .span(cur.since(start))
-            .value(text(preview(&xml, 200)))
-            .summary(format!("{chars} characters")),
+        embedded_as(
+            "XML header",
+            input.nested(xml_span),
+            &crate::formats::text::xml::FORMAT,
+        )
+        .summary(format!("{chars} characters")),
     );
     let version: u32 = xml
         .split_once("Version=\"")

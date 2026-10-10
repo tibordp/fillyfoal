@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ shop.duckdb — DuckDB database, storage version 64, 4 blocks of 256 KiB, 2 tables, 1 view  [0x0+0x103000]
+▾ shop.duckdb — DuckDB database, storage version 64, 4 blocks of 256.0 KiB, 2 tables, 1 view  [0x0+0x103000]
   ▾ Main header — storage version 64, written by DuckDB v1.5.6  [0x0+0x1000]
       Checksum: 0xf8f6e815a892d94 — valid  [0x0+0x8]
       Magic: "DUCK"  [0x8+0x4]
@@ -525,7 +525,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Free blocks: 0 —   [#2:0x0+0x8]
       Shared blocks: 3 — 1 (5 uses), 2 (2 uses), 3 (6 uses)  [#2:0x8+0x2c]
       Metadata blocks: 1 — 0 (9/64 used)  [#2:0x34+0x18]
-  ▾ Blocks — 4 blocks of 256 KiB  [0x3000+0x100000]
+  ▾ Blocks — 4 blocks of 256.0 KiB  [0x3000+0x100000]
     ▾ Block 0 — metadata, 9 of 64 sub-blocks used  [0x3000+0x40000]
         Checksum: 0xdde2ec8bd91e5edd — valid  [0x3000+0x8]
         Sub-block 0: 0xffffffffffffffff — next: none  [0x3008+0xff8]

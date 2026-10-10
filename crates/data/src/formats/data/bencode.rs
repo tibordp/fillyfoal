@@ -7,7 +7,8 @@
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::util::datakit::{clip, hex_string, size};
+use crate::formats::util::datakit::hex_string;
+use crate::formats::util::fmt::{clip, size};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -42,7 +43,7 @@ fn probe(h: &Head<'_>) -> bool {
     if !(1..=3).contains(&digits) || data.get(digits.saturating_add(1)) != Some(&b':') {
         return false;
     }
-    let has = |needle: &[u8]| data.windows(needle.len()).any(|w| w == needle);
+    let has = |needle: &[u8]| crate::bytes::contains(data, needle);
     has(b"4:infod") || has(b"8:announce")
 }
 
