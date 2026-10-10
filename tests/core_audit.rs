@@ -482,3 +482,43 @@ fn chains_checkpoint_when_little_is_in_flight() {
     assert_eq!(bytes, content[at as usize..at as usize + 4096]);
     assert!(steps <= 10, "{steps} steps of 50 units");
 }
+
+async fn seeded_source(cx: Cx, (span, len, block): (Span, u64, u64)) -> Result<()> {
+    // Stored DEFLATE blocks need no history: every block start is a point
+    // the stream can be decoded from.
+    let seeds = (1..len.div_ceil(block))
+        .map(|i| fillyfoal::Seed {
+            out_pos: i * block,
+            in_pos: i * (block + 5),
+            decoder: Codec::Deflate.decoder().unwrap(),
+        })
+        .collect();
+    let decoded = cx.decode_lazy_seeded(span, &Codec::Deflate, len, seeds)?;
+    cx.emit(Node::new("decoded").span(decoded));
+    Ok(())
+}
+
+#[test]
+fn seeded_streams_start_decoding_near_a_read() {
+    let content = pattern(24 << 20);
+    let encoded = deflate_stored(&content);
+    let mut session = Session::new(checkpoint_limits());
+    let source = session.add_source(encoded.len() as u64);
+    let span = Span::new(source, 0, encoded.len() as u64);
+    let len = content.len() as u64;
+    let root = session.add_root(Node::new("seeded").lazy(seeded_source, (span, len, 0xffff)));
+    session.expand(root, 10);
+    run(&mut session, &encoded, 1_000_000, 100);
+    let child = session.children(root).unwrap().ids[0];
+    let decoded = session.node(child).unwrap().span.unwrap();
+    // The first read, 20 MiB in, decodes from the block before it.
+    let at = 20 << 20;
+    let (bytes, steps) = read_in_steps(&mut session, &encoded, decoded.sub(at, 4096), 50);
+    assert_eq!(bytes, content[at as usize..at as usize + 4096]);
+    assert!(steps <= 5, "{steps} steps of 50 units");
+    // Then back to the start, and to the end.
+    for at in [0u64, 7_777_777, len - 1000] {
+        let (bytes, _) = read_in_steps(&mut session, &encoded, decoded.sub(at, 1000), 1 << 20);
+        assert_eq!(bytes, content[at as usize..at as usize + 1000], "at {at}");
+    }
+}

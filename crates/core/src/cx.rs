@@ -145,6 +145,16 @@ impl SourceEntry {
     }
 }
 
+/// A point a stream can be decoded from that the container records (an
+/// xz index entry, a zstd seek table entry, a BGZF block): a decoder that
+/// starts there, at output position `out_pos` and offset `in_pos` of the
+/// encoded span, needing no history. See [`Cx::decode_lazy_seeded`].
+pub struct Seed {
+    pub out_pos: u64,
+    pub in_pos: u64,
+    pub decoder: Box<dyn crate::codec::pipeline::Decoder>,
+}
+
 /// A point a lazily decoded stream can resume from without decoding what
 /// comes before (see "Checkpoints" in `codec::pipeline`).
 struct Checkpoint {
@@ -255,12 +265,17 @@ impl LazyDecode {
     /// dropped.
     fn checkpoint(&mut self, max_bytes: u64) {
         let front = self.out_base.saturating_add(to_u64(self.out.len()));
-        let last = self.checkpoints.last().map_or(0, |c| c.out_pos);
-        // Behind the furthest checkpoint (decoding again after a rewind),
-        // the ones taken the first time serve.
-        if self.done || front <= last {
+        if self.done {
             return;
         }
+        // Spaced from the checkpoints on either side: the previous one, and
+        // a later one (taken before a rewind, or seeded from an index).
+        let at = self.checkpoints.partition_point(|c| c.out_pos <= front);
+        let last = at
+            .checked_sub(1)
+            .and_then(|i| self.checkpoints.get(i))
+            .map_or(0, |c| c.out_pos);
+        let next = self.checkpoints.get(at).map(|c| c.out_pos);
         let keep_from = self
             .decoder
             .releasable_output(self.out.len())
@@ -271,7 +286,9 @@ impl LazyDecode {
             .saturating_mul(CHECKPOINT_RATIO)
             .max(MIN_CHECKPOINT_SPACING)
             .saturating_mul(self.spread);
-        if front.saturating_sub(last) < spacing {
+        if front.saturating_sub(last) < spacing
+            || next.is_some_and(|n| n.saturating_sub(front) < spacing)
+        {
             return;
         }
         let Some(mut decoder) = self.decoder.checkpoint() else {
@@ -280,13 +297,16 @@ impl LazyDecode {
         let unread_from = decoder.releasable_input().min(self.input.len());
         decoder.release_input(unread_from);
         decoder.release_output(keep_from);
-        self.checkpoints.push(Checkpoint {
-            out_pos: front,
-            in_pos: self.in_base.saturating_add(to_u64(unread_from)),
-            window: self.out.get(keep_from..).unwrap_or_default().to_vec(),
-            decoder,
-            cost,
-        });
+        self.checkpoints.insert(
+            at,
+            Checkpoint {
+                out_pos: front,
+                in_pos: self.in_base.saturating_add(to_u64(unread_from)),
+                window: self.out.get(keep_from..).unwrap_or_default().to_vec(),
+                decoder,
+                cost,
+            },
+        );
         self.checkpoint_bytes = self.checkpoint_bytes.saturating_add(cost);
         while self.checkpoint_bytes > max_bytes && self.checkpoints.len() > 1 {
             self.thin();
@@ -1330,10 +1350,51 @@ impl Cx {
         self.register_lazy(span, codec, bound, false)
     }
 
+    /// [`Cx::decode_lazy`] for a stream whose container records points it
+    /// can be decoded from (see [`Seed`]): reads anywhere start decoding at
+    /// the nearest one instead of the start. Seeds past `len`, or not
+    /// increasing, are ignored.
+    pub fn decode_lazy_seeded(
+        &self,
+        span: Span,
+        codec: &Codec,
+        len: u64,
+        seeds: Vec<Seed>,
+    ) -> Result<Span> {
+        self.register_lazy_seeded(span, codec, len, true, seeds)
+    }
+
     fn register_lazy(&self, span: Span, codec: &Codec, len: u64, len_known: bool) -> Result<Span> {
-        let Some(fresh) = LazyDecode::new(span, codec) else {
+        self.register_lazy_seeded(span, codec, len, len_known, Vec::new())
+    }
+
+    fn register_lazy_seeded(
+        &self,
+        span: Span,
+        codec: &Codec,
+        len: u64,
+        len_known: bool,
+        seeds: Vec<Seed>,
+    ) -> Result<Span> {
+        let Some(mut fresh) = LazyDecode::new(span, codec) else {
             return Ok(span);
         };
+        let mut last = 0u64;
+        for seed in seeds {
+            if seed.out_pos <= last || seed.out_pos >= len || seed.in_pos > span.len {
+                continue;
+            }
+            last = seed.out_pos;
+            let cost = to_u64(seed.decoder.state_size());
+            fresh.checkpoints.push(Checkpoint {
+                out_pos: seed.out_pos,
+                in_pos: seed.in_pos,
+                window: Vec::new(),
+                decoder: seed.decoder,
+                cost,
+            });
+            fresh.checkpoint_bytes = fresh.checkpoint_bytes.saturating_add(cost);
+        }
         let origin = Origin {
             parent: span,
             transform: codec.lazy_name(),
@@ -1344,6 +1405,7 @@ impl Cx {
         let mut sh = lock(&self.shared);
         let id = SourceId(u32::try_from(sh.sources.len()).unwrap_or(u32::MAX));
         let tick = sh.tick;
+        sh.derived_bytes = sh.derived_bytes.saturating_add(fresh.checkpoint_bytes);
         sh.sources.push(SourceEntry {
             len,
             data: None,

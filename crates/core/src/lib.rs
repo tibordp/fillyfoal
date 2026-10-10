@@ -30,7 +30,7 @@ pub mod session;
 pub mod sync;
 pub mod value;
 
-pub use cx::{Block, Cx};
+pub use cx::{Block, Cx, Seed};
 pub use dsl::{Chunk, ChunkLayout, Cursor, Path, Record};
 pub use error::{DiagKind, Diagnostic, Error, Result};
 pub use fields::{Endian, Field, Fields};
