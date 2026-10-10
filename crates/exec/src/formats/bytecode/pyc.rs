@@ -13,7 +13,9 @@ use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::binutil::{NodeExt, Reader, Tree, ellipsize, text};
+use crate::formats::util::binutil::{NodeExt, Reader, Tree};
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -117,7 +119,7 @@ fn header(f: &mut Fields<'_>, v: &(u8, u8)) -> Result<()> {
         let flags = f.u32("flags").flags(PYC_FLAGS).emit()?;
         if flags & 1 != 0 {
             f.bytes("source_hash", 8)
-                .with(|b, n| n.summary(crate::formats::util::binutil::hex_string(b)))
+                .with(|b, n| n.summary(crate::text::hex_lower(b)))
                 .desc("SipHash of the source file")
                 .emit()?;
         } else {
@@ -276,7 +278,7 @@ impl Unmarshal<'_> {
                 label,
                 start,
                 text(s.clone()),
-                format!("{:?}", ellipsize(&s, 40)),
+                format!("{:?}", clip(&s, 40)),
             );
             obj.text = Some(s);
             Ok(obj)
@@ -305,7 +307,7 @@ impl Unmarshal<'_> {
             }
         }
         let span = self.at(start);
-        let joined = ellipsize(&items.join(", "), 100);
+        let joined = clip(&items.join(", "), 100);
         self.tree.update(node, |x| {
             x.span(span)
                 .value(text(format!("{kind} of {n}")))

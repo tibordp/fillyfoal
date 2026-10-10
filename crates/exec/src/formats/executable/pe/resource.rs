@@ -10,7 +10,7 @@
 //! handed to format detection, which also finds Delphi forms (`TPF0`) in
 //! `RT_RCDATA`.
 
-use crate::bytes::{to_u64, u16_le, u32_le};
+use crate::bytes::{align_up, to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
@@ -39,6 +39,16 @@ pub const RT_GROUP_CURSOR: u32 = 12;
 pub const RT_GROUP_ICON: u32 = 14;
 pub const RT_VERSION: u32 = 16;
 
+/// Which Windows a resource was compiled for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Layout {
+    /// 32-bit Windows (PE images, `.res` files): UTF-16 strings.
+    Win32,
+    /// 16-bit Windows 3.x (NE images): ANSI strings, and older layouts for
+    /// version blocks, string tables, menus, dialogs and accelerators.
+    Win16,
+}
+
 /// A node for the data of one resource of type `kind` (an `RT_*` ordinal,
 /// `None` for a named type) and ordinal name `name`, found at `span` in
 /// `input`. Reads at most a few bytes, for the summary.
@@ -49,7 +59,32 @@ pub async fn content(
     kind: Option<u32>,
     name: Option<u32>,
 ) -> Node {
-    match node(cx, input, span, kind, name).await {
+    content_for(cx, input, span, kind, name, Layout::Win32).await
+}
+
+/// [`content`] for a resource of a 16-bit (NE) image. Icons, cursors,
+/// bitmaps and their groups have the 32-bit layout; version resources
+/// their 16-bit form. String tables, menus, dialogs and accelerators,
+/// whose 16-bit layouts differ, are handed to format detection.
+pub async fn content16(
+    cx: &Cx,
+    input: Input,
+    span: Span,
+    kind: Option<u32>,
+    name: Option<u32>,
+) -> Node {
+    content_for(cx, input, span, kind, name, Layout::Win16).await
+}
+
+async fn content_for(
+    cx: &Cx,
+    input: Input,
+    span: Span,
+    kind: Option<u32>,
+    name: Option<u32>,
+    layout: Layout,
+) -> Node {
+    match node(cx, input, span, kind, name, layout).await {
         Ok(node) => node,
         Err(e) => embedded("Content", input.nested(span))
             .summary(format!("{:#x} bytes", span.len))
@@ -63,7 +98,9 @@ async fn node(
     span: Span,
     kind: Option<u32>,
     name: Option<u32>,
+    layout: Layout,
 ) -> Result<Node> {
+    let win32 = layout == Layout::Win32;
     Ok(match kind {
         Some(RT_ICON) => image_node(cx, input, span, false).await?,
         Some(RT_CURSOR) => image_node(cx, input, span, true).await?,
@@ -93,13 +130,13 @@ async fn node(
         Some(RT_VERSION) => {
             let node = Node::new("Version Info")
                 .span(span)
-                .lazy(version::block, span);
-            match version::summary(cx, span).await {
+                .lazy(version::block, (span, layout));
+            match version::summary(cx, span, layout).await {
                 Ok(summary) => node.summary(summary),
                 Err(e) => node.diag(e),
             }
         }
-        Some(RT_STRING) => {
+        Some(RT_STRING) if win32 => {
             let mut node = Node::new("String table")
                 .span(span)
                 .lazy(strings, (span, name));
@@ -109,11 +146,11 @@ async fn node(
             }
             node
         }
-        Some(RT_ACCELERATOR) => Node::new("Accelerator table")
+        Some(RT_ACCELERATOR) if win32 => Node::new("Accelerator table")
             .span(span)
             .summary(format!("{} entries", span.len / 8))
             .lazy(accelerators, span),
-        Some(RT_MESSAGETABLE) => {
+        Some(RT_MESSAGETABLE) if win32 => {
             let head = cx.read_avail(span.sub(0, 4)).await?;
             let blocks = u32_le(&head, 0).unwrap_or(0);
             Node::new("Message table")
@@ -121,7 +158,7 @@ async fn node(
                 .summary(format!("{blocks} blocks"))
                 .lazy(messages, span)
         }
-        Some(RT_DIALOG) => {
+        Some(RT_DIALOG) if win32 => {
             let head = cx.read_avail(span.sub(0, 18)).await?;
             let ex = u16_le(&head, 2) == Some(0xffff);
             let count = if ex {
@@ -139,7 +176,7 @@ async fn node(
             .summary(format!("{count} controls"))
             .lazy(dialog, (span, ex))
         }
-        Some(RT_MENU) => {
+        Some(RT_MENU) if win32 => {
             let head = cx.read_avail(span.sub(0, 4)).await?;
             if u16_le(&head, 0) == Some(0) {
                 Node::new("Menu template").span(span).lazy(menu, span)
@@ -561,11 +598,6 @@ fn sz_or_ord(f: &mut Fields<'_>, name: &'static str, class: bool) -> Result<Stri
     }
 }
 
-fn align4(f: &mut Fields<'_>) {
-    let aligned = f.pos().next_multiple_of(4);
-    f.seek(aligned);
-}
-
 /// `DLGTEMPLATE` / `DLGTEMPLATEEX` header fields; returns the control count.
 fn dialog_header(f: &mut Fields<'_>, ex: bool) -> Result<u16> {
     let style = if ex {
@@ -631,7 +663,7 @@ async fn dialog(cx: Cx, (span, ex): (Span, bool)) -> Result<()> {
     let block = cx.block(span).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
     let count = dialog_header(&mut f, ex)?;
-    align4(&mut f);
+    f.seek(align_up(f.pos(), 4));
     let mut at = f.pos();
     for index in 0..count {
         let mut g = Fields::new(&block, LE);
@@ -645,7 +677,7 @@ async fn dialog(cx: Cx, (span, ex): (Span, bool)) -> Result<()> {
                 .lazy(dialog_control, (item, ex)),
         )
         .await;
-        align4(&mut g);
+        g.seek(align_up(g.pos(), 4));
         at = g.pos();
     }
     Ok(())

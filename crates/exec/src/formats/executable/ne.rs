@@ -4,12 +4,18 @@
 //!
 //! Reached from the PE dissector, which recognises the `NE` signature.
 
+use std::sync::Arc;
+
+use super::pe::resource::content16;
+use super::pe::tables::RESOURCE_TYPE;
+use super::push_nodes;
 use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::util::binutil::{ellipsize, name_or};
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::name_or;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -72,23 +78,6 @@ const SEGMENT_FLAGS: FlagTable = &[
     flag(0x1000, "DISCARDABLE"),
 ];
 
-const RESOURCE_TYPE: EnumTable = &[
-    (1, "CURSOR"),
-    (2, "BITMAP"),
-    (3, "ICON"),
-    (4, "MENU"),
-    (5, "DIALOG"),
-    (6, "STRING"),
-    (7, "FONTDIR"),
-    (8, "FONT"),
-    (9, "ACCELERATOR"),
-    (10, "RCDATA"),
-    (11, "MESSAGETABLE"),
-    (12, "GROUP_CURSOR"),
-    (14, "GROUP_ICON"),
-    (16, "VERSION"),
-];
-
 record! {
     struct NeHeader {
         magic: ascii[2] "ne_magic",
@@ -133,8 +122,9 @@ record! {
     }
 }
 
-/// A length-prefixed string at `at`.
-fn pascal(data: &[u8], at: usize) -> Option<(String, usize)> {
+/// A length-prefixed string at `at`, and the bytes it takes (NE and LX
+/// name tables).
+pub(super) fn pascal(data: &[u8], at: usize) -> Option<(String, usize)> {
     let n = usize::from(*data.get(at)?);
     let s = data.get(at.checked_add(1)?..at.checked_add(1)?.checked_add(n)?)?;
     Some((String::from_utf8_lossy(s).into_owned(), n.checked_add(1)?))
@@ -196,7 +186,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if description.is_empty() {
             String::new()
         } else {
-            format!(", {:?}", ellipsize(&description, 80))
+            format!(", {:?}", clip(&description, 80))
         },
         h.cseg
     ));
@@ -218,7 +208,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Resource Table")
                 .span(span)
-                .lazy(resources, (input, span)),
+                .lazy(resources, (input, span, h.expver >= 0x300)),
         );
     }
     // Names.
@@ -253,8 +243,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Module References")
             .span(modtab)
-            .summary(ellipsize(&names_list.join(", "), 120))
-            .lazy(emit_all, modules),
+            .summary(clip(&names_list.join(", "), 120))
+            .lazy(push_nodes, Arc::new(modules)),
     );
     // Entry points.
     let enttab = ne.sub(h.enttab.into(), h.cbenttab.into());
@@ -283,15 +273,7 @@ fn name_list(
     Node::new(label)
         .span(span)
         .summary(format!("{} names", nodes.len()))
-        .lazy(emit_all, nodes)
-}
-
-async fn emit_all(cx: Cx, nodes: Vec<Node>) -> Result<()> {
-    cx.set_count(Count::Exact(to_u64(nodes.len())));
-    for n in nodes {
-        cx.push(n).await;
-    }
-    Ok(())
+        .lazy(push_nodes, Arc::new(nodes))
 }
 
 async fn segments(cx: Cx, (file, table, shift): (Span, Span, u32)) -> Result<()> {
@@ -317,14 +299,16 @@ async fn segments(cx: Cx, (file, table, shift): (Span, Span, u32)) -> Result<()>
     Ok(())
 }
 
-async fn resources(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
+/// The resource table. With `typed` (Windows 3.0 and later), resources of
+/// the standard types are decoded as their type says.
+async fn resources(cx: Cx, (input, span, typed): (Input, Span, bool)) -> Result<()> {
     let data = cx.read_avail(span).await?;
     let shift = u32::from(u16_le(&data, 0).unwrap_or(0).min(16));
     let file = input.span;
     cx.emit(
         Node::new("rscAlignShift")
             .span(span.sub(0, 2))
-            .value(crate::formats::util::binutil::dec(shift.into(), 16)),
+            .value(crate::formats::util::val::uint(shift, 16)),
     );
     let mut at = 2usize;
     while let Some(kind) = u16_le(&data, at) {
@@ -332,8 +316,9 @@ async fn resources(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             break;
         }
         let count = usize::from(u16_le(&data, at.saturating_add(2)).unwrap_or(0));
-        let type_name = if kind & 0x8000 != 0 {
-            name_or(RESOURCE_TYPE, (kind & 0x7fff).into(), "type")
+        let ordinal_type = (kind & 0x8000 != 0).then_some(u32::from(kind & 0x7fff));
+        let type_name = if let Some(t) = ordinal_type {
+            name_or(RESOURCE_TYPE, t.into(), "type")
         } else {
             pascal(&data, kind.into()).map_or_else(|| format!("#{kind}"), |(s, _)| s)
         };
@@ -344,6 +329,7 @@ async fn resources(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             let offset = u64::from(w(0)).checked_shl(shift).unwrap_or(0);
             let len = u64::from(w(2)).checked_shl(shift).unwrap_or(0);
             let id = w(6);
+            let ordinal = (id & 0x8000 != 0).then_some(u32::from(id & 0x7fff));
             let name = if id & 0x8000 != 0 {
                 format!("#{}", id & 0x7fff)
             } else {
@@ -353,7 +339,10 @@ async fn resources(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             items.push(
                 Node::new(name)
                     .span(content)
-                    .lazy(crate::formats::dissect_or_data, input.nested(content))
+                    .lazy(
+                        resource,
+                        (input, content, ordinal_type.filter(|_| typed), ordinal),
+                    )
                     .summary(format!("{len:#x} bytes at {offset:#x}"))
                     .target(span.sub(to_u64(e), 12)),
             );
@@ -365,7 +354,7 @@ async fn resources(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             Node::new(type_name)
                 .span(span.sub(to_u64(at), to_u64(end.saturating_sub(at))))
                 .summary(format!("{count} resources"))
-                .lazy(emit_all, items),
+                .lazy(push_nodes, Arc::new(items)),
         )
         .await;
         if end <= at {
@@ -373,6 +362,15 @@ async fn resources(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         }
         at = end;
     }
+    Ok(())
+}
+
+/// One resource's data, decoded by its type.
+async fn resource(
+    cx: Cx,
+    (input, span, kind, name): (Input, Span, Option<u32>, Option<u32>),
+) -> Result<()> {
+    cx.emit(content16(&cx, input, span, kind, name).await);
     Ok(())
 }
 

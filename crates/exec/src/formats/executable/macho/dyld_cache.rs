@@ -4,13 +4,15 @@
 //! The header has grown over the years; its real size is `mappingOffset`,
 //! and fields beyond it are absent.
 
-use super::tables::{PLATFORM, uuid, version};
+use super::tables::{PLATFORM, version};
 use crate::bytes::u32_le;
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::util::binutil::{get_at, hex, name_or, perms, text};
+use crate::formats::util::binutil::{get_at, perms};
+use crate::formats::util::fmt::uuid;
+use crate::formats::util::val::{hex, name_or, text};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -141,7 +143,9 @@ fn header(f: &mut Fields<'_>, limit: &u64) -> Result<()> {
                 f.u64(name).hex().emit()?;
             }
             Kind::Uuid => {
-                f.bytes(name, 16).with(|v, n| n.summary(uuid(v))).emit()?;
+                f.bytes(name, 16)
+                    .with(|v, n| n.summary(uuid(v).to_uppercase()))
+                    .emit()?;
             }
             Kind::Platform => {
                 f.u32(name).enumeration(PLATFORM).emit()?;
@@ -316,7 +320,7 @@ async fn subcaches(cx: Cx, (span, v2): (Span, bool)) -> Result<()> {
     for i in 0..count {
         let at = span.sub(i.saturating_mul(size), size);
         let data = cx.read(at).await?;
-        let id = uuid(data.get(..16).unwrap_or_default());
+        let id = uuid(data.get(..16).unwrap_or_default()).to_uppercase();
         let offset = get_at::<u64>(&data, 16, LE).unwrap_or(0);
         let suffix = if v2 {
             crate::text::until_nul(data.get(24..56).unwrap_or_default())

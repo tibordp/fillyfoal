@@ -6,10 +6,14 @@
 //! parameters, code size) are decoded for 5.1 to 5.4.
 
 use crate::bytes::to_u64;
+use crate::formats::util::val::{text, uint};
+use std::sync::Arc;
+
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::binutil::{Reader, dec, text};
+use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::binutil::Reader;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -275,7 +279,7 @@ fn function(data: &[u8], span: Span, version: u8, s: Sizes) -> Main {
             } else {
                 int(&mut r, s.int)?
             };
-            push!(name, start, dec(v, 32));
+            push!(name, start, uint(v, 32));
         }
         let names: &[&str] = if version == 0x51 {
             &["nups", "numparams", "is_vararg", "maxstacksize"]
@@ -285,7 +289,7 @@ fn function(data: &[u8], span: Span, version: u8, s: Sizes) -> Main {
         for name in names {
             let start = r.pos();
             let v = r.u8()?;
-            push!(*name, start, dec(v.into(), 8));
+            push!(*name, start, uint(v, 8));
         }
         let start = r.pos();
         let n = if version == 0x54 {
@@ -299,7 +303,7 @@ fn function(data: &[u8], span: Span, version: u8, s: Sizes) -> Main {
         main.nodes.push(
             Node::new("code")
                 .span(at(start, end))
-                .value(dec(n, 32))
+                .value(uint(n, 32))
                 .summary(format!("{n} instructions")),
         );
         main.instructions = Some(n);
@@ -355,18 +359,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Main function")
                 .span(body)
-                .lazy(emit_nodes, main.nodes),
+                .lazy(emit_nodes, Arc::new(main.nodes)),
         );
     } else {
         cx.emit(Node::new("Main function").span(body));
     }
     cx.annotate(summary);
-    Ok(())
-}
-
-async fn emit_nodes(cx: Cx, nodes: Vec<Node>) -> Result<()> {
-    for node in nodes {
-        cx.emit(node);
-    }
     Ok(())
 }

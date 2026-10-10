@@ -6,15 +6,19 @@
 
 use std::sync::Arc;
 
+use super::tables::grouped_count;
+
 use crate::bytes::{to_u64, to_usize, u32_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::arcutil::human_size;
-use crate::formats::util::binutil::{Tree, dec, hex, hex_string, name_or, text};
+use crate::formats::util::binutil::Tree;
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{hex, name_or, text, uint};
 use crate::formats::{Input, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::Span;
+use crate::text::hex_lower;
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 
 const BE: Endian = Endian::Big;
@@ -279,7 +283,7 @@ pub async fn superblob_in(cx: Cx, input: Input) -> Result<()> {
     }
     cx.emit(
         super::group("Index", table, entries)
-            .summary(super::tables::count(count.into(), "blob", "blobs"))
+            .summary(grouped_count(count, "blob", "blobs"))
             .desc("Blob types and their offsets"),
     );
     let mut end = table.end().saturating_sub(span.offset);
@@ -297,7 +301,7 @@ pub async fn superblob_in(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new(if zeros { "Padding" } else { "Trailing Data" })
                 .span(rest)
-                .summary(human_size(rest.len))
+                .summary(size(rest.len))
                 .desc("Space reserved for the signature beyond the SuperBlob"),
         );
     }
@@ -315,8 +319,8 @@ async fn blob_node(cx: &Cx, label: String, blob: Span, input: Input) -> Node {
             node.summary(summary).lazy(code_directory, blob)
         }
         CSMAGIC_REQUIREMENTS => node
-            .summary(super::tables::count(
-                u32_be(&head, 8).unwrap_or(0).into(),
+            .summary(grouped_count(
+                u32_be(&head, 8).unwrap_or(0),
                 "requirement",
                 "requirements",
             ))
@@ -331,17 +335,17 @@ async fn blob_node(cx: &Cx, label: String, blob: Span, input: Input) -> Node {
         CSMAGIC_EMBEDDED_ENTITLEMENTS => node
             .summary(format!(
                 "XML property list, {}",
-                human_size(blob.len.saturating_sub(8))
+                size(blob.len.saturating_sub(8))
             ))
             .lazy(wrapper, (blob, input)),
         CSMAGIC_EMBEDDED_DER_ENTITLEMENTS | CSMAGIC_EMBEDDED_LAUNCH_CONSTRAINT => node
-            .summary(format!("DER, {}", human_size(blob.len.saturating_sub(8))))
+            .summary(format!("DER, {}", size(blob.len.saturating_sub(8))))
             .lazy(wrapper, (blob, input)),
         CSMAGIC_BLOBWRAPPER => {
             let summary = if blob.len <= 8 {
                 "empty (ad-hoc signature)".to_owned()
             } else {
-                format!("CMS SignedData, {}", human_size(blob.len.saturating_sub(8)))
+                format!("CMS SignedData, {}", size(blob.len.saturating_sub(8)))
             };
             node.summary(summary).lazy(wrapper, (blob, input))
         }
@@ -374,9 +378,7 @@ async fn wrapper(cx: Cx, (blob, input): (Span, Input)) -> Result<()> {
         CSMAGIC_EMBEDDED_LAUNCH_CONSTRAINT => {
             embedded_as("Launch Constraint", inner, &crate::formats::asn1::DER)
         }
-        _ => Node::new("Data")
-            .span(payload)
-            .summary(human_size(payload.len)),
+        _ => Node::new("Data").span(payload).summary(size(payload.len)),
     });
     Ok(())
 }
@@ -554,7 +556,7 @@ async fn special_slots(cx: Cx, (span, count, size): (Span, u32, u8)) -> Result<(
             .get(to_usize(slot.into()).saturating_sub(1))
             .map_or_else(|| format!("Slot -{slot}"), |s| format!("-{slot} {s}"));
         let empty = hash.iter().all(|&b| b == 0);
-        let mut node = Node::new(label).span(at).value(text(hex_string(&hash)));
+        let mut node = Node::new(label).span(at).value(text(hex_lower(&hash)));
         if empty {
             node = node.summary("not present");
         }
@@ -580,7 +582,7 @@ async fn code_slots(cx: Cx, (span, cd): (Span, CodeDirectory)) -> Result<()> {
         cx.push(
             Node::new(format!("Page {i}"))
                 .span(at)
-                .value(text(hex_string(&hash)))
+                .value(text(hex_lower(&hash)))
                 .summary(format!("file {start:#x}..{end:#x}")),
         )
         .await;
@@ -688,7 +690,7 @@ impl<'a> ReqParser<'a> {
 
     fn hash(&mut self, parent: usize, name: &'static str) -> Result<String> {
         let (b, span) = self.bytes()?;
-        let s = hex_string(b);
+        let s = hex_lower(b);
         self.tree.add(
             Some(parent),
             Node::new(name).span(span).value(text(s.clone())),
@@ -863,7 +865,7 @@ impl<'a> ReqParser<'a> {
                     Some(index),
                     Node::new("platform")
                         .span(self.at(start))
-                        .value(dec(platform.into(), 32)),
+                        .value(uint(platform, 32)),
                 );
                 format!("platform = {platform}")
             }

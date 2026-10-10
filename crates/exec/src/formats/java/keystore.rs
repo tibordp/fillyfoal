@@ -9,7 +9,9 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::util::binutil::{ellipsize, mutf8, name_or, text};
+use crate::formats::util::binutil::mutf8;
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::{name_or, text};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -184,7 +186,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .collect();
     cx.annotate(format!(
         "Java KeyStore ({kind} v{version}), {count} entries: {}",
-        ellipsize(&aliases.join(", "), 100)
+        clip(&aliases.join(", "), 100)
     ));
     let table = file.sub(12, offset.saturating_sub(12));
     cx.emit(
@@ -201,7 +203,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Digest")
             .span(digest)
-            .value(text(crate::formats::util::binutil::hex_string(&bytes)))
+            .value(text(crate::text::hex_lower(&bytes)))
             .desc("SHA-1 over the password (UTF-16), \"Mighty Aphrodite\" and the keystore"),
     );
     if offset.saturating_add(20) < file.len {

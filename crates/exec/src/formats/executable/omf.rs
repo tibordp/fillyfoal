@@ -8,7 +8,9 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::binutil::{NodeExt, ellipsize, name_or};
+use crate::formats::util::binutil::NodeExt;
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::name_or;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -176,7 +178,7 @@ fn describe(kind: u8, data: &[u8]) -> String {
             format!(
                 "{}: {}",
                 name_or(COMMENT_CLASS, class.into(), "class"),
-                ellipsize(textual.trim_end_matches('\0'), 80)
+                clip(textual.trim_end_matches('\0'), 80)
             )
         }
         0x98 | 0x99 => {
@@ -295,8 +297,8 @@ async fn record_fields(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("checksum")
             .span(checksum)
-            .value(crate::formats::util::binutil::hex(
-                byte.first().copied().unwrap_or(0).into(),
+            .value(crate::formats::util::val::hex(
+                byte.first().copied().unwrap_or(0),
                 8,
             )),
     );

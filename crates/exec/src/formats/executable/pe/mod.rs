@@ -41,6 +41,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields, parse, struct_node};
 use crate::formats::util::binutil::RangeIndex;
+use crate::formats::util::fmt::count;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -163,11 +164,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     {
         let node = Node::new("Version Information")
             .span(span)
-            .lazy(version::block, span);
-        cx.emit(match version::summary(&cx, span).await {
-            Ok(summary) => node.summary(summary),
-            Err(e) => node.diag(e),
-        });
+            .lazy(version::block, (span, resource::Layout::Win32));
+        cx.emit(
+            match version::summary(&cx, span, resource::Layout::Win32).await {
+                Ok(summary) => node.summary(summary),
+                Err(e) => node.diag(e),
+            },
+        );
     }
 
     // Inno Setup's loader keeps the offsets of the installer data in
@@ -331,10 +334,6 @@ async fn overview(cx: &Cx, pe: &Pe) -> Overview {
     out
 }
 
-fn plural(n: u64, one: &str, many: &str) -> String {
-    format!("{n} {}", if n == 1 { one } else { many })
-}
-
 fn summary(pe: &PeInfo, o: &Overview) -> String {
     let format = if pe.wide { "PE32+" } else { "PE32" };
     let machine = lookup(MACHINE_SHORT, pe.machine.into())
@@ -360,18 +359,18 @@ fn summary(pe: &PeInfo, o: &Overview) -> String {
     if o.import_dlls > 0 {
         out.push_str(&format!(
             ", {} from {}",
-            plural(o.imports, "import", "imports"),
-            plural(o.import_dlls, "DLL", "DLLs")
+            count(o.imports, "import", "imports"),
+            count(o.import_dlls, "DLL", "DLLs")
         ));
     }
     if o.delay_dlls > 0 {
         out.push_str(&format!(
             ", {} delay-loaded",
-            plural(o.delay_dlls, "DLL", "DLLs")
+            count(o.delay_dlls, "DLL", "DLLs")
         ));
     }
     if o.exports > 0 {
-        out.push_str(&format!(", {}", plural(o.exports, "export", "exports")));
+        out.push_str(&format!(", {}", count(o.exports, "export", "exports")));
     }
     if pe.directory(DIR_SECURITY).1 > 0 {
         out.push_str(", signed");
@@ -468,6 +467,11 @@ impl Section {
 impl PeInfo {
     fn file(&self) -> Span {
         self.input.span
+    }
+
+    /// A pointer-sized value (32 or 64 bits), in hex.
+    fn word_value(&self, value: u64) -> Value {
+        crate::formats::util::val::hex(value, if self.wide { 64 } else { 32 })
     }
 
     /// `(VirtualAddress, Size)` of data directory `index`.

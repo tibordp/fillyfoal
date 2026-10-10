@@ -10,7 +10,8 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse};
-use crate::formats::util::binutil::{data_node, name_or};
+use crate::formats::util::binutil::data_node;
+use crate::formats::util::val::name_or;
 use crate::formats::{Format, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
@@ -114,7 +115,7 @@ async fn checksums(cx: Cx, span: Span) -> Result<()> {
         cx.push(
             Node::new(format!("DEX {i}"))
                 .span(span.sub(i.saturating_mul(4), 4))
-                .value(crate::formats::util::binutil::hex(v.into(), 32)),
+                .value(crate::formats::util::val::hex(v, 32)),
         )
         .await;
     }

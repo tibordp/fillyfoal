@@ -7,7 +7,8 @@ use super::{MachInfo, Macho, SectionInfo, Symtab, group};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::util::binutil::{dec, get_at, hex, name_or, string_at, text};
+use crate::formats::util::binutil::{get_at, string_at};
+use crate::formats::util::val::{hex, name_or, text, uint};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, Value};
@@ -19,7 +20,7 @@ pub(super) fn symtab_node(m: &Macho, st: Symtab) -> Node {
     );
     let mut node = Node::new("Symbol Table")
         .span(span)
-        .summary(count(st.nsyms.into(), "symbol", "symbols"))
+        .summary(grouped_count(st.nsyms, "symbol", "symbols"))
         .lazy(symbols, (m.clone(), 0u32, st.nsyms));
     if span.len < u64::from(st.nsyms).saturating_mul(m.nlist_size()) {
         node = node.diag(Diagnostic::truncated(
@@ -38,7 +39,7 @@ pub(super) fn symtab_node(m: &Macho, st: Symtab) -> Node {
 pub(super) fn symbol_range_node(m: &Macho, name: &'static str, first: u32, n: u32) -> Node {
     let mut node = Node::new(name).summary(format!(
         "{}, from index {first}",
-        count(n.into(), "symbol", "symbols")
+        grouped_count(n, "symbol", "symbols")
     ));
     if let Some(st) = m.symtab {
         let size = m.nlist_size();
@@ -447,10 +448,10 @@ pub(super) async fn toc(cx: Cx, (m, span): (Macho, Span)) -> Result<()> {
                 vec![
                     Node::new("symbol_index")
                         .span(at.sub(0, 4))
-                        .value(dec(symbol.into(), 32)),
+                        .value(uint(symbol, 32)),
                     Node::new("module_index")
                         .span(at.sub(4, 4))
-                        .value(dec(module.into(), 32)),
+                        .value(uint(module, 32)),
                 ],
             )
             .summary(format!("module {module}")),
@@ -574,7 +575,7 @@ pub(super) async fn hints(cx: Cx, (m, span): (Macho, Span)) -> Result<()> {
         cx.push(
             Node::new(format!("[{i}]"))
                 .span(at)
-                .value(hex(raw.into(), 32))
+                .value(hex(raw, 32))
                 .summary(format!("sub-image {image}, table of contents entry {toc}")),
         )
         .await;
@@ -621,7 +622,7 @@ pub(super) async fn relocations(cx: Cx, (m, span, section): (Macho, Span, usize)
                 vec![
                     field("r_scattered", word0, Value::Bool(true)),
                     field("r_pcrel", word0, Value::Bool(pcrel != 0)),
-                    field("r_length", word0, dec(length.into(), 2))
+                    field("r_length", word0, uint(length, 2))
                         .summary(format!("{} bytes", 1u32 << length)),
                     field(
                         "r_type",
@@ -632,12 +633,11 @@ pub(super) async fn relocations(cx: Cx, (m, span, section): (Macho, Span, usize)
                             name: crate::value::lookup(types, kind.into()),
                         },
                     ),
-                    field("r_address", word0, hex(address.into(), 24)),
-                    field("r_value", word1, hex(second.into(), 32))
-                        .desc("Address of the relocated item"),
+                    field("r_address", word0, hex(address, 24)),
+                    field("r_value", word1, hex(second, 32)).desc("Address of the relocated item"),
                 ],
             )
-            .value(hex(address.into(), 32))
+            .value(hex(address, 32))
             .summary(format!("scattered, {target} ({flags})"));
             match applies_to {
                 Some(s) if s.offset != 0 && kind != 1 => node.target(m.file().sub(
@@ -691,15 +691,15 @@ pub(super) async fn relocations(cx: Cx, (m, span, section): (Macho, Span, usize)
                 name_or(types, kind.into(), "type"),
                 at,
                 vec![
-                    field("r_address", word0, hex(first.into(), 32))
+                    field("r_address", word0, hex(first, 32))
                         .desc("Offset of the relocated item from the start of the section"),
-                    field("r_symbolnum", word1, dec(symbol.into(), 24)).desc(if external != 0 {
+                    field("r_symbolnum", word1, uint(symbol, 24)).desc(if external != 0 {
                         "Symbol table index"
                     } else {
                         "Section number (1-based), or 0 for absolute"
                     }),
                     field("r_pcrel", word1, Value::Bool(pcrel != 0)),
-                    field("r_length", word1, dec(length.into(), 2))
+                    field("r_length", word1, uint(length, 2))
                         .summary(format!("{} bytes", 1u32 << length)),
                     field("r_extern", word1, Value::Bool(external != 0)),
                     field(
@@ -713,7 +713,7 @@ pub(super) async fn relocations(cx: Cx, (m, span, section): (Macho, Span, usize)
                     ),
                 ],
             )
-            .value(hex(first.into(), 32))
+            .value(hex(first, 32))
             .summary(format!("{target} ({flags})"));
             if let Some(s) = applies_to
                 && s.offset != 0

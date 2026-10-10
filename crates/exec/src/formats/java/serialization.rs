@@ -10,7 +10,9 @@ use std::sync::Arc;
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::util::binutil::{Reader, Tree, ellipsize, hex, mutf8, text};
+use crate::formats::util::binutil::{Reader, Tree, mutf8};
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::{hex, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -192,7 +194,7 @@ impl Parser<'_> {
         match self.handle(handle) {
             Some(Handle::Class(c)) => format!("class {}", c.name),
             Some(Handle::Object(name)) => format!("{name} object"),
-            Some(Handle::Text(s)) => format!("{:?}", ellipsize(s, 60)),
+            Some(Handle::Text(s)) => format!("{:?}", clip(s, 60)),
             None => "unknown handle".to_owned(),
         }
     }
@@ -358,7 +360,7 @@ impl Parser<'_> {
                     self.tree.update(node, |n| {
                         n.span(span)
                             .value(text("proxy"))
-                            .summary(ellipsize(&names.join(", "), 120))
+                            .summary(clip(&names.join(", "), 120))
                     });
                     Ok(Some(handle))
                 }
@@ -615,13 +617,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
     let root = p.tree.add(None, Node::new("stream"));
     p.r.int::<u16>(BE);
-    p.leaf(root, "magic", 0, hex(0xaced, 16));
+    p.leaf(root, "magic", 0, hex(0xaced_u16, 16));
     let version = p.r.int::<u16>(BE).unwrap_or(0);
     p.leaf(
         root,
         "version",
         2,
-        crate::formats::util::binutil::dec(version.into(), 16),
+        crate::formats::util::val::uint(version, 16),
     );
     let mut items = 0u32;
     while !p.r.at_end() {
@@ -637,7 +639,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let mut summary = format!("Java serialization stream, {items} items");
     if !p.top.is_empty() {
-        summary.push_str(&format!(": {}", ellipsize(&p.top.join(", "), 120)));
+        summary.push_str(&format!(": {}", clip(&p.top.join(", "), 120)));
     }
     cx.annotate(summary);
     let tree = Arc::new(p.tree);

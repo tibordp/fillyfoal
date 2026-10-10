@@ -12,8 +12,9 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
-use crate::formats::util::arcutil::human_size;
-use crate::formats::util::binutil::{NodeExt, Reader, cstrings, dec, get_at, hex, name_or, text};
+use crate::formats::util::binutil::{NodeExt, Reader, cstrings, get_at};
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{hex, name_or, text, uint};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -32,7 +33,7 @@ async fn trailing(cx: &Cx, span: Span) -> Result<Option<Node>> {
     Ok(Some(
         Node::new(if zeros { "Padding" } else { "Trailing Data" })
             .span(span)
-            .summary(human_size(span.len)),
+            .summary(size(span.len)),
     ))
 }
 
@@ -69,7 +70,7 @@ pub(super) async fn function_starts(cx: Cx, (m, span): (Macho, Span)) -> Result<
         cx.push(node.desc("The terminating zero and alignment padding"))
             .await;
     }
-    cx.annotate(count(index, "function", "functions"));
+    cx.annotate(grouped_count(index, "function", "functions"));
     Ok(())
 }
 
@@ -475,7 +476,7 @@ async fn fixup_pointer(cx: &Cx, m: &MachInfo, c: &Chains, fixup: Fixup) -> Point
                 Some((name, library)) => {
                     (text(name), format!("bind import {ordinal} from {library}"))
                 }
-                None => (dec(ordinal.into(), 32), format!("bind import {ordinal}")),
+                None => (uint(ordinal, 32), format!("bind import {ordinal}")),
             };
             if addend != 0 {
                 summary.push_str(&format!(", addend {addend:#x}"));
@@ -515,7 +516,7 @@ pub(super) async fn chained_fixups(cx: Cx, (m, span): (Macho, Span)) -> Result<(
     cx.emit(FixupsHeader::node("Header", header, endian).summary(format!("version {}", h.version)));
     cx.annotate(format!(
         "{}, {}",
-        count(h.imports_count.into(), "import", "imports"),
+        grouped_count(h.imports_count, "import", "imports"),
         name_or(CHAINED_IMPORT_FORMAT, h.imports_format.into(), "format")
     ));
     // The parts in file order: starts, imports, symbol names.
@@ -551,8 +552,8 @@ pub(super) async fn chained_fixups(cx: Cx, (m, span): (Macho, Span)) -> Result<(
         u64::from(h.imports_count).saturating_mul(width),
     );
     let symbols = span.tail(h.symbols_offset.into());
-    let node = Node::new("Imports").span(imports).summary(count(
-        h.imports_count.into(),
+    let node = Node::new("Imports").span(imports).summary(grouped_count(
+        h.imports_count,
         "import",
         "imports",
     ));
@@ -564,7 +565,7 @@ pub(super) async fn chained_fixups(cx: Cx, (m, span): (Macho, Span)) -> Result<(
         cx.emit(
             Node::new("Symbol Names")
                 .span(symbols)
-                .summary(human_size(symbols.len))
+                .summary(size(symbols.len))
                 .lazy(cstrings, symbols),
         );
     } else {
@@ -618,7 +619,7 @@ async fn chained_imports(
         let mut fields = vec![
             Node::new("lib_ordinal")
                 .span(word)
-                .value(dec(ordinal, 16))
+                .value(uint(ordinal, 16))
                 .summary(m.dylib(ordinal)),
             Node::new("weak_import").span(word).value(Value::Bool(weak)),
             Node::new("name_offset")
@@ -663,7 +664,7 @@ async fn starts_in_image(cx: Cx, (m, span): (Macho, Span)) -> Result<()> {
             .map_or_else(|| format!("segment {i}"), |s| s.label());
         let mut field = Node::new(format!("seg_info_offset[{i}]"))
             .span(entry)
-            .value(hex(offset.into(), 32))
+            .value(hex(offset, 32))
             .summary(seg_name.clone());
         if offset == 0 {
             cx.emit(field.summary(format!("{seg_name}: no fixups")));
@@ -684,7 +685,7 @@ async fn starts_in_image(cx: Cx, (m, span): (Macho, Span)) -> Result<()> {
                 .summary(format!(
                     "{}, {}",
                     name_or(CHAINED_POINTER_FORMAT, format.into(), "format"),
-                    count(pages.into(), "page", "pages")
+                    grouped_count(pages, "page", "pages")
                 ))
                 .lazy(starts_in_segment, (m.clone(), seg, to_usize(i))),
         );
@@ -719,7 +720,7 @@ async fn starts_in_segment(cx: Cx, (m, span, segment): (Macho, Span, usize)) -> 
     cx.emit(
         Node::new("page_start")
             .span(starts)
-            .summary(count(pages.into(), "page", "pages"))
+            .summary(grouped_count(pages, "page", "pages"))
             .desc("Offset of the first fixup in each page (0xffff: none)")
             .lazy(page_starts, (m.clone(), starts, pages)),
     );
@@ -755,9 +756,9 @@ async fn page_starts(cx: Cx, (m, span, pages): (Macho, Span, u16)) -> Result<()>
         cx.push(match v {
             0xffff => node.value(text("none")),
             v if v & 0x8000 != 0 => node
-                .value(hex(v.into(), 16))
+                .value(hex(v, 16))
                 .summary("several chains: index into the overflow entries"),
-            v => node.value(hex(v.into(), 16)),
+            v => node.value(hex(v, 16)),
         })
         .await;
     }
@@ -846,7 +847,7 @@ async fn fixups(
     }
     cx.annotate(format!(
         "{}, {}",
-        count(total, "fixup", "fixups"),
+        grouped_count(total, "fixup", "fixups"),
         name_or(CHAINED_POINTER_FORMAT, format.into(), "format")
     ));
     Ok(())
@@ -911,7 +912,7 @@ pub(super) async fn exports_trie(cx: Cx, (m, span): (Macho, Span)) -> Result<()>
         let mut fields = vec![
             Node::new("terminal_size")
                 .span(at(offset, info_start))
-                .value(dec(terminal, 64))
+                .value(uint(terminal, 64))
                 .desc("Size of the export information (0: not an export)"),
         ];
         let mut value = None;
@@ -933,7 +934,7 @@ pub(super) async fn exports_trie(cx: Cx, (m, span): (Macho, Span)) -> Result<()>
                 fields.push(
                     Node::new("ordinal")
                         .span(at(s, r.pos()))
-                        .value(dec(ordinal, 64))
+                        .value(uint(ordinal, 64))
                         .summary(m.dylib(ordinal)),
                 );
                 let s = r.pos();
@@ -998,7 +999,7 @@ pub(super) async fn exports_trie(cx: Cx, (m, span): (Macho, Span)) -> Result<()>
         fields.push(
             Node::new("child_count")
                 .span(at(children, r.pos()))
-                .value(dec(n.into(), 8)),
+                .value(uint(n, 8)),
         );
         let mut next = Vec::new();
         for _ in 0..n {
@@ -1033,7 +1034,7 @@ pub(super) async fn exports_trie(cx: Cx, (m, span): (Macho, Span)) -> Result<()>
             node = node.value(hex(v, 64));
         }
         if terminal == 0 {
-            summary.push(count(n.into(), "child", "children"));
+            summary.push(grouped_count(n, "child", "children"));
         }
         cx.push(node.maybe_summary(summary.join(", "))).await;
         // Depth-first, children in order.
@@ -1044,8 +1045,8 @@ pub(super) async fn exports_trie(cx: Cx, (m, span): (Macho, Span)) -> Result<()>
     }
     cx.annotate(format!(
         "{} in {}",
-        count(exports, "export", "exports"),
-        count(nodes, "trie node", "trie nodes")
+        grouped_count(exports, "export", "exports"),
+        grouped_count(nodes, "trie node", "trie nodes")
     ));
     Ok(())
 }
@@ -1116,16 +1117,16 @@ pub(super) async fn rebase_opcodes(cx: Cx, (m, span): (Macho, Span)) -> Result<(
             0x40 => {
                 let delta = u64::from(imm).saturating_mul(pointer);
                 offset = offset.wrapping_add(delta);
-                value = Some(dec(imm.into(), 4));
+                value = Some(uint(imm, 4));
                 summary = format!("+{delta:#x}, now {}", place(&m, segment, offset).1);
             }
             0x50 => {
-                value = Some(dec(imm.into(), 4));
+                value = Some(uint(imm, 4));
                 action = Some((imm.into(), 0));
             }
             0x60 => {
                 let n = r.uleb().ok_or_else(bad)?;
-                value = Some(dec(n, 64));
+                value = Some(uint(n, 64));
                 action = Some((n, 0));
             }
             0x70 => {
@@ -1172,7 +1173,7 @@ pub(super) async fn rebase_opcodes(cx: Cx, (m, span): (Macho, Span)) -> Result<(
     if let Some(node) = trailing(&cx, span.tail(to_u64(r.pos()))).await? {
         cx.push(node).await;
     }
-    cx.annotate(count(total, "rebase", "rebases"));
+    cx.annotate(grouped_count(total, "rebase", "rebases"));
     Ok(())
 }
 
@@ -1221,13 +1222,13 @@ pub(super) async fn bind_opcodes(cx: Cx, (m, span): (Macho, Span)) -> Result<()>
             }
             0x10 => {
                 ordinal = imm.into();
-                value = Some(dec(imm.into(), 4));
+                value = Some(uint(imm, 4));
                 summary = library(ordinal);
             }
             0x20 => {
                 let v = r.uleb().ok_or_else(bad)?;
                 ordinal = i64::try_from(v).unwrap_or(i64::MAX);
-                value = Some(dec(v, 64));
+                value = Some(uint(v, 64));
                 summary = library(ordinal);
             }
             0x30 => {
@@ -1286,7 +1287,7 @@ pub(super) async fn bind_opcodes(cx: Cx, (m, span): (Macho, Span)) -> Result<()>
                 action = Some((1, skip));
             }
             0xb0 => {
-                value = Some(dec(imm.into(), 4));
+                value = Some(uint(imm, 4));
                 action = Some((1, u64::from(imm).saturating_mul(pointer)));
             }
             0xc0 => {
@@ -1299,7 +1300,7 @@ pub(super) async fn bind_opcodes(cx: Cx, (m, span): (Macho, Span)) -> Result<()>
                 0 => {
                     name = "BIND_SUBOPCODE_THREADED_SET_BIND_ORDINAL_TABLE_SIZE_ULEB";
                     let n = r.uleb().ok_or_else(bad)?;
-                    value = Some(dec(n, 64));
+                    value = Some(uint(n, 64));
                 }
                 1 => {
                     name = "BIND_SUBOPCODE_THREADED_APPLY";
@@ -1351,7 +1352,7 @@ pub(super) async fn bind_opcodes(cx: Cx, (m, span): (Macho, Span)) -> Result<()>
     if let Some(node) = trailing(&cx, span.tail(to_u64(r.pos()))).await? {
         cx.push(node).await;
     }
-    cx.annotate(count(total, "bind", "binds"));
+    cx.annotate(grouped_count(total, "bind", "binds"));
     Ok(())
 }
 
@@ -1399,6 +1400,6 @@ pub(super) async fn optimization_hints(cx: Cx, (_m, span): (Macho, Span)) -> Res
     if let Some(node) = trailing(&cx, span.tail(to_u64(r.pos()))).await? {
         cx.push(node).await;
     }
-    cx.annotate(count(n, "hint", "hints"));
+    cx.annotate(grouped_count(n, "hint", "hints"));
     Ok(())
 }

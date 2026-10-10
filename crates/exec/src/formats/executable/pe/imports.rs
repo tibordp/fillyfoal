@@ -39,14 +39,6 @@ fn thunk_value(pe: &PeInfo, data: &[u8]) -> u64 {
     .unwrap_or(0)
 }
 
-fn word_value(pe: &PeInfo, value: u64) -> Value {
-    Value::UInt {
-        value,
-        bits: if pe.wide { 64 } else { 32 },
-        radix: Radix::Hex,
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Counting, for the image summary
 
@@ -273,7 +265,7 @@ async fn walk_thunks(
         if thunk == 0 {
             let node = Node::new("End of table")
                 .span(span)
-                .value(word_value(pe, 0))
+                .value(pe.word_value(0))
                 .desc("A zero entry ends the lookup table");
             cx.push(match iat {
                 Some(iat) => node.lazy(terminator, (pe.clone(), span, iat)),
@@ -303,7 +295,7 @@ async fn walk_thunks(
                 Err(e) => (Node::new("<unreadable>").diag(e), None),
             }
         };
-        let node = node.span(span).value(word_value(pe, thunk)).lazy(
+        let node = node.span(span).value(pe.word_value(thunk)).lazy(
             function_parts,
             FunctionParts {
                 pe: pe.clone(),
@@ -361,7 +353,7 @@ async fn function_parts(cx: Cx, p: FunctionParts) -> Result<()> {
     cx.emit(
         Node::new("Lookup Entry")
             .span(p.lookup)
-            .value(word_value(&p.pe, thunk))
+            .value(p.pe.word_value(thunk))
             .summary(meaning),
     );
     if let Some(iat) = p.iat {
@@ -369,7 +361,7 @@ async fn function_parts(cx: Cx, p: FunctionParts) -> Result<()> {
         cx.emit(
             Node::new("Address Entry")
                 .span(iat)
-                .value(word_value(&p.pe, slot))
+                .value(p.pe.word_value(slot))
                 .summary(if p.delay {
                     "address of the delay-load thunk, replaced on first call"
                 } else if slot == thunk {
@@ -408,13 +400,13 @@ async fn terminator(cx: Cx, (pe, lookup, iat): (Pe, Span, Span)) -> Result<()> {
     cx.emit(
         Node::new("Lookup Entry")
             .span(lookup)
-            .value(word_value(&pe, 0)),
+            .value(pe.word_value(0)),
     );
     let slot = thunk_value(&pe, &cx.read(iat).await?);
     cx.emit(
         Node::new("Address Entry")
             .span(iat)
-            .value(word_value(&pe, slot)),
+            .value(pe.word_value(slot)),
     );
     Ok(())
 }
@@ -450,7 +442,7 @@ pub(super) async fn iat(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
         cx.push(
             Node::new(format!("#{i}"))
                 .span(span)
-                .value(word_value(&pe, value))
+                .value(pe.word_value(value))
                 .summary(summary),
         )
         .await;
@@ -594,7 +586,7 @@ async fn delay_module(cx: Cx, (pe, descriptor): (Pe, Span)) -> Result<()> {
         cx.emit(
             Node::new("Module Handle")
                 .span(span)
-                .value(word_value(&pe, value))
+                .value(pe.word_value(value))
                 .desc("Filled in with the DLL's HMODULE when it is loaded"),
         );
     }
@@ -645,7 +637,7 @@ async fn address_list(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
         cx.push(
             Node::new(format!("#{i}"))
                 .span(slot)
-                .value(word_value(&pe, value)),
+                .value(pe.word_value(value)),
         )
         .await;
     }

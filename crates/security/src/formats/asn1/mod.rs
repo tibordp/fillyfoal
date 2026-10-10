@@ -21,6 +21,8 @@ use schema::{Matcher, Schema};
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::civil::date;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -686,7 +688,7 @@ fn certificate_summary(cert: &[u8]) -> Option<String> {
         out = format!("{out}, issued by {}", der::name(issuer));
     }
     if let (Some(from), Some(until)) = (from, until) {
-        out = format!("{out}, valid {} to {}", der::date(from), der::date(until));
+        out = format!("{out}, valid {} to {}", date(from), date(until));
     }
     if let Some(alg) = algorithm(signature) {
         out = format!("{out}, {alg}");
@@ -705,7 +707,7 @@ fn crl_summary(list: &[u8]) -> Option<String> {
     let (t, this_update) = fields.next()?;
     let mut out = format!("issued by {}", der::name(issuer));
     if let Some(time) = der::time(t.tag, this_update) {
-        out = format!("{out}, updated {}", der::date(time));
+        out = format!("{out}, updated {}", date(time));
     }
     let revoked = fields
         .find(|(t, _)| t.id == 0x30)
@@ -752,9 +754,9 @@ fn pkcs7_summary(info: &[u8]) -> Option<String> {
         out = format!("{out} ({content})");
     }
     Some(format!(
-        "{out}, {certificates} certificate{}, {signers} signer{}",
-        plural(certificates),
-        plural(signers)
+        "{out}, {}, {}",
+        plural(to_u64(certificates), "certificate"),
+        plural(to_u64(signers), "signer")
     ))
 }
 
@@ -793,8 +795,4 @@ fn pkcs12_summary(pfx: &[u8]) -> Option<String> {
         out = format!("{out}, MAC {name}");
     }
     Some(out)
-}
-
-fn plural(n: usize) -> &'static str {
-    if n == 1 { "" } else { "s" }
 }

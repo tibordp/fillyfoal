@@ -8,9 +8,11 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::binutil::{NodeExt, data_node, get_at, hex, hex_string, name_or, text};
+use crate::formats::util::binutil::{NodeExt, data_node, get_at};
+use crate::formats::util::val::{hex, name_or, text};
 use crate::node::{Count, Node};
 use crate::span::Span;
+use crate::text::hex_lower;
 use crate::value::{EnumTable, decode_flags, lookup};
 
 /// Bytes of a note description read to summarise it.
@@ -46,10 +48,6 @@ pub(super) struct Note {
     pub desc: Span,
 }
 
-fn align_up(value: u64, align: u64) -> Option<u64> {
-    value.checked_next_multiple_of(align)
-}
-
 /// Decodes the note at `offset`, returning it and the offset of the next.
 async fn read_note(cx: &Cx, region: &Region, offset: u64) -> Result<(Note, u64)> {
     let header = region.span.sub(offset, 12);
@@ -61,13 +59,15 @@ async fn read_note(cx: &Cx, region: &Region, offset: u64) -> Result<(Note, u64)>
     let overflow = || Diagnostic::malformed("note size overflows").at(header);
     let name_span = region.span.sub_exact(offset.saturating_add(12), namesz)?;
     let name = crate::text::until_nul(&cx.read(name_span.sub(0, 256)).await?);
-    let desc_offset = align_up(12u64.saturating_add(namesz), region.align)
+    let desc_offset = 12u64
+        .saturating_add(namesz)
+        .checked_next_multiple_of(region.align)
         .and_then(|o| o.checked_add(offset))
         .ok_or_else(overflow)?;
     let desc = region.span.sub_exact(desc_offset, descsz)?;
     let next = desc_offset
         .checked_add(descsz)
-        .and_then(|end| align_up(end, region.align))
+        .and_then(|end| end.checked_next_multiple_of(region.align))
         .ok_or_else(overflow)?;
     let span = region.span.sub(offset, next.saturating_sub(offset));
     Ok((
@@ -160,7 +160,7 @@ async fn summarise(cx: &Cx, region: &Region, note: &Note) -> String {
     let word = |at: u64| super::word(&desc, at, region.class);
     match (note.name.as_str(), note.kind) {
         ("GNU", 1) => abi_tag(&desc, e).unwrap_or_default(),
-        ("GNU", 3) => hex_string(&desc),
+        ("GNU", 3) => hex_lower(&desc),
         ("GNU", 4) | ("Go", 4) => crate::text::until_nul(&desc),
         ("GNU", 5) => properties(&desc, region)
             .iter()
@@ -243,7 +243,7 @@ async fn detail(
             cx.emit(
                 Node::new("Build ID")
                     .span(desc)
-                    .value(text(hex_string(&bytes))),
+                    .value(text(hex_lower(&bytes))),
             );
         }
         ("GNU", 4) | ("Go", 4) | ("FDO", 0xcafe_1a7e) => {
@@ -378,7 +378,7 @@ fn properties(desc: &[u8], region: &Region) -> Vec<Property> {
             }
             _ if size == 4 => (
                 format!("{}: {value:#x}", short_property(&name)),
-                Some(hex(value.into(), 32)),
+                Some(hex(value, 32)),
             ),
             _ => (short_property(&name).to_owned(), None),
         };

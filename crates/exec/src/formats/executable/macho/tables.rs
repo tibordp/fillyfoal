@@ -2,6 +2,10 @@
 
 use crate::value::{EnumTable, FlagTable, field, flag};
 
+// Mach-O summaries group counts by thousands; UUIDs are shown uppercase, as
+// Apple's tools (`dwarfdump --uuid`, `uuidgen`) print them.
+pub(super) use crate::formats::util::fmt::{grouped, grouped_count, uuid};
+
 pub const CPU_TYPE_X86: u32 = 7;
 pub const CPU_TYPE_X86_64: u32 = 0x0100_0007;
 pub const CPU_TYPE_ARM: u32 = 12;
@@ -654,20 +658,6 @@ pub fn source_version(v: u64) -> String {
     )
 }
 
-/// A UUID in the conventional 8-4-4-4-12 layout.
-pub fn uuid(b: &[u8]) -> String {
-    let h = crate::formats::util::binutil::hex_string(b).to_ascii_uppercase();
-    let part = |r: std::ops::Range<usize>| h.get(r).unwrap_or_default().to_owned();
-    format!(
-        "{}-{}-{}-{}-{}",
-        part(0..8),
-        part(8..12),
-        part(12..16),
-        part(16..20),
-        part(20..32)
-    )
-}
-
 /// What well-known sections hold, by section name (and segment where the
 /// name alone is ambiguous).
 pub fn section_description(segment: &str, section: &str) -> Option<&'static str> {
@@ -837,22 +827,3 @@ pub const DYLIB_KIND: EnumTable = &[
     (0x20, "lazy"),
     (0x8000_0023, "upward"),
 ];
-
-/// A count with thousands separators: `2,345`.
-pub fn grouped(n: u64) -> String {
-    let digits = n.to_string();
-    let mut out = String::with_capacity(digits.len().saturating_add(digits.len() / 3));
-    let len = digits.len();
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (len.saturating_sub(i)).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
-}
-
-/// A count with a noun, singular or plural: `1 symbol`, `2,345 symbols`.
-pub fn count(n: u64, one: &str, many: &str) -> String {
-    format!("{} {}", grouped(n), if n == 1 { one } else { many })
-}

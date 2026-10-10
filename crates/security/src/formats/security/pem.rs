@@ -7,7 +7,7 @@
 
 use std::ops::Range;
 
-use crate::bytes::to_u64;
+use crate::bytes::{find, to_u64};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::{Format, Head, Input, Probe};
@@ -63,13 +63,6 @@ fn find_begin(text: &[u8], from: usize) -> Option<usize> {
         }
         at = i.saturating_add(1);
     }
-}
-
-fn find(data: &[u8], needle: &[u8], from: usize) -> Option<usize> {
-    data.get(from..)?
-        .windows(needle.len())
-        .position(|w| w == needle)
-        .and_then(|i| i.checked_add(from))
 }
 
 /// One armored block, as ranges of the text.
@@ -181,33 +174,6 @@ fn next_block(text: &[u8], from: usize) -> Option<Block> {
         checksum,
         complete: end.is_some(),
     })
-}
-
-/// Decodes base64, ignoring whitespace and stopping at padding. Returns the
-/// offset of the first invalid character on error.
-pub fn base64(text: &[u8]) -> std::result::Result<Vec<u8>, usize> {
-    let mut out = Vec::with_capacity((text.len() / 4).saturating_mul(3));
-    let mut acc = 0u32;
-    let mut bits = 0u32;
-    for (i, &c) in text.iter().enumerate() {
-        let v = match c {
-            b'A'..=b'Z' => c.saturating_sub(b'A'),
-            b'a'..=b'z' => c.saturating_sub(b'a').saturating_add(26),
-            b'0'..=b'9' => c.saturating_sub(b'0').saturating_add(52),
-            b'+' | b'-' => 62,
-            b'/' | b'_' => 63,
-            b'=' => break,
-            _ if c.is_ascii_whitespace() => continue,
-            _ => return Err(i),
-        };
-        acc = (acc << 6 | u32::from(v)) & 0x00ff_ffff;
-        bits = bits.saturating_add(6);
-        if bits >= 8 {
-            bits = bits.saturating_sub(8);
-            out.push((acc >> bits & 0xff) as u8);
-        }
-    }
-    Ok(out)
 }
 
 /// Decodes a block's body into a derived source.
@@ -329,10 +295,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn base64_and_blocks() {
-        assert_eq!(base64(b"aGVs\nbG8=").unwrap(), b"hello");
-        assert_eq!(base64(b"aGVsbA").unwrap(), b"hell");
-        assert_eq!(base64(b"a*").unwrap_err(), 1);
+    fn blocks() {
         let text = b"junk\n-----BEGIN A B-----\nK: v\n\nAAAA\n=abcd\n-----END A B-----\n";
         let b: Vec<Block> = next_block(text, 0).into_iter().collect();
         assert_eq!(b.len(), 1);

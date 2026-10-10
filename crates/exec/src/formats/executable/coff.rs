@@ -16,7 +16,9 @@ use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::executable::pe::tables::{
     FILE_CHARACTERISTICS, MACHINE, SECTION_CHARACTERISTICS,
 };
-use crate::formats::util::binutil::{cstrings, data_node, ellipsize, hex, name_or, text};
+use crate::formats::util::binutil::{cstrings, data_node};
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::{hex, name_or, text};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -478,7 +480,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let span = file.sub(s.raw_ptr.into(), s.raw_size.into());
         let bytes = cx.read_avail(span.sub(0, 0x10000)).await?;
         let t = String::from_utf8_lossy(&bytes).trim().to_owned();
-        summary.push_str(&format!(", directives: {}", ellipsize(&t, 80)));
+        summary.push_str(&format!(", directives: {}", clip(&t, 80)));
         directive_text = Some((t, span));
     }
     cx.annotate(summary);
@@ -589,7 +591,7 @@ async fn relocations(cx: Cx, (c, span): (Coff, Span)) -> Result<()> {
         cx.push(
             Node::new(name_or(types, kind.into(), "type"))
                 .span(at)
-                .value(hex(address.into(), 32))
+                .value(hex(address, 32))
                 .summary(target),
         )
         .await;
@@ -675,7 +677,7 @@ async fn symbol_list(cx: Cx, c: Coff) -> Result<()> {
         cx.push(
             Node::new(name)
                 .span(whole)
-                .value(hex(sym.value.into(), 32))
+                .value(hex(sym.value, 32))
                 .summary(summary)
                 .lazy(symbol_node, (c.clone(), index, sym, aux)),
         )

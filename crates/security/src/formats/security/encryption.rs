@@ -8,23 +8,12 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::text::decode::base64;
 use crate::formats::text::scan::head_lines;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Input, Probe};
 use crate::node::Node;
-use crate::value::{EnumTable, Radix, Value};
+use crate::value::{EnumTable, Value};
 
 const LE: Endian = Endian::Little;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Encrypted files: Password Safe, OpenSSL enc, AES Crypt, AxCrypt
@@ -96,7 +85,7 @@ async fn aescrypt(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(file.sub(3, 1))
-            .value(uint(version.into(), 8)),
+            .value(uint(version, 8)),
     );
     let mut pos = 5u64;
     let mut created_by = String::new();

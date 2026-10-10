@@ -32,6 +32,7 @@ use crate::declare_format;
 use crate::dsl::{Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::{fourcc, uuid};
 use crate::formats::{Input, Probe, embedded_as};
 use crate::node::Node;
 use crate::record;
@@ -294,20 +295,6 @@ fn attribute(
     })
 }
 
-/// A big-endian UUID in its usual text form.
-fn uuid(b: &[u8]) -> String {
-    let hex: String = b.iter().map(|x| format!("{x:02x}")).collect();
-    let part = |r: std::ops::Range<usize>| hex.get(r).unwrap_or_default().to_owned();
-    format!(
-        "{}-{}-{}-{}-{}",
-        part(0..8),
-        part(8..12),
-        part(12..16),
-        part(16..20),
-        part(20..32)
-    )
-}
-
 /// Text without its terminating NUL, if it is all printable.
 fn printable(b: &[u8]) -> Option<String> {
     let b = b.strip_suffix(b"\0").unwrap_or(b);
@@ -315,11 +302,12 @@ fn printable(b: &[u8]) -> Option<String> {
     (!s.is_empty() && s.chars().all(|c| !c.is_control())).then(|| s.to_owned())
 }
 
+/// `v` as a four-character code, if all four bytes are printable.
 fn four_cc(v: u32) -> Option<String> {
     let b = v.to_be_bytes();
     b.iter()
         .all(|c| c.is_ascii_graphic() || *c == b' ')
-        .then(|| String::from_utf8_lossy(&b).into_owned())
+        .then(|| fourcc(&b))
 }
 
 async fn schema(cx: &Cx, file: Span, h: &Header) -> Result<Arc<Schema>> {

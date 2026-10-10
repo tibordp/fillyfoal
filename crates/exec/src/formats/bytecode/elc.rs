@@ -4,7 +4,8 @@
 
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::formats::util::binutil::{dec, ellipsize, text};
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 
@@ -25,7 +26,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("version")
             .span(file.sub(4, 1))
-            .value(dec(version.into(), 8))
+            .value(uint(version, 8))
             .desc("Bytecode format version (usually the Emacs major version)"),
     );
     cx.emit(Node::new("padding").span(file.sub(5, 3)));
@@ -57,7 +58,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Byte-code forms")
             .span(code)
-            .value(text(ellipsize(&String::from_utf8_lossy(&preview), 400))),
+            .value(text(clip(&String::from_utf8_lossy(&preview), 400))),
     );
     cx.annotate(match compiler {
         Some(v) => format!("Emacs Lisp bytecode (format {version}), compiled by Emacs {v}"),

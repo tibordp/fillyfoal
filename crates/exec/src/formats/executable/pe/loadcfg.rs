@@ -19,14 +19,6 @@ use crate::value::{EnumTable, FlagTable, Radix, Value, decode_flags, field, flag
 /// Tables longer than this are cut off.
 const MAX_ENTRIES: u64 = 1 << 20;
 
-fn word_value(pe: &PeInfo, value: u64) -> Value {
-    Value::UInt {
-        value,
-        bits: if pe.wide { 64 } else { 32 },
-        radix: Radix::Hex,
-    }
-}
-
 fn read_word(pe: &PeInfo, data: &[u8], at: usize) -> Option<u64> {
     if pe.wide {
         u64_le(data, at)
@@ -169,7 +161,7 @@ async fn va_list(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
             format!("#{i}")
         })
         .span(span.sub(at, width))
-        .value(word_value(&pe, va));
+        .value(pe.word_value(va));
         if let Some(rva) = pe.va_rva(va).filter(|_| va != 0) {
             node = node.summary(pe.describe_rva(rva));
             if let Ok(t) = pe.rva_span(rva, 0) {

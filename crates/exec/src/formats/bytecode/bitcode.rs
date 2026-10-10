@@ -14,7 +14,9 @@ use crate::bytes::{to_u64, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::binutil::{NodeExt, ellipsize, name_or, text};
+use crate::formats::util::binutil::NodeExt;
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::{name_or, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -655,7 +657,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         summary.push_str(&format!(", target {t}"));
     }
     if let Some(s) = source {
-        summary.push_str(&format!(", from {}", ellipsize(&s, 60)));
+        summary.push_str(&format!(", from {}", clip(&s, 60)));
     }
     cx.annotate(summary);
     walk(&cx, &top, true, &mut |_, _| {}).await

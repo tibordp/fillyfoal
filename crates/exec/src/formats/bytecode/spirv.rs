@@ -7,7 +7,9 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::binutil::{NodeExt, ellipsize, get_at, name_or};
+use crate::formats::util::binutil::{NodeExt, get_at};
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::name_or;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -305,17 +307,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if !entries.is_empty() {
         summary.push_str(&format!(
             ", entry points {}",
-            ellipsize(&entries.join(", "), 120)
+            clip(&entries.join(", "), 120)
         ));
     }
     if let Some(s) = source {
         summary.push_str(&format!(", from {s}"));
     }
     if !caps.is_empty() {
-        summary.push_str(&format!(
-            ", capabilities {}",
-            ellipsize(&caps.join(" "), 80)
-        ));
+        summary.push_str(&format!(", capabilities {}", clip(&caps.join(" "), 80)));
     }
     cx.annotate(summary);
 

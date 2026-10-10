@@ -3,9 +3,13 @@
 //! each with its header counts and line information.
 
 use crate::bytes::to_u64;
+use crate::formats::util::val::{text, uint};
+use std::sync::Arc;
+
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::util::binutil::{Reader, dec, text};
+use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::binutil::Reader;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::value::{FlagTable, Value, flag};
@@ -54,7 +58,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("version")
             .span(file.sub(3, 1))
-            .value(dec(version.into(), 8)),
+            .value(uint(version, 8)),
     );
     let start = r.pos();
     let flags = r
@@ -141,7 +145,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     unknown,
                 }
             } else {
-                dec(v, 32)
+                uint(v, 32)
             };
             fields.push(Node::new(label).span(span).value(value));
             Some(v)
@@ -180,15 +184,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
             None => node.diag(Diagnostic::malformed("truncated prototype header")),
         };
-        cx.push(node.lazy(emit_all, fields)).await;
+        cx.push(node.lazy(emit_nodes, Arc::new(fields))).await;
         count = count.saturating_add(1);
-    }
-    Ok(())
-}
-
-async fn emit_all(cx: Cx, nodes: Vec<Node>) -> Result<()> {
-    for n in nodes {
-        cx.emit(n);
     }
     Ok(())
 }

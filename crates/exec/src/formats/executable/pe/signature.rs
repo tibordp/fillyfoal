@@ -407,7 +407,7 @@ pub(super) fn constant_value(ty: u8, data: &[u8]) -> String {
         0x12 => Some("null".to_owned()),
         _ => None,
     };
-    text.unwrap_or_else(|| crate::formats::util::binutil::hex_string(data))
+    text.unwrap_or_else(|| crate::text::hex_lower(data))
 }
 
 /// A `SerString`: 0xff (null) or a compressed length and UTF-8.
