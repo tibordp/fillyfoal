@@ -129,6 +129,18 @@ impl Inflate {
         self.bit.div_ceil(8)
     }
 
+    /// Heap bytes the decoder owns (its Huffman tables).
+    pub fn heap_size(&self) -> usize {
+        match &self.state {
+            State::Codes { lit, dist } => lit
+                .symbols
+                .capacity()
+                .saturating_add(dist.symbols.capacity())
+                .saturating_mul(2),
+            _ => 0,
+        }
+    }
+
     /// Whole input bytes already read (a partly read byte is kept).
     pub fn releasable_input(&self) -> usize {
         self.bit / 8

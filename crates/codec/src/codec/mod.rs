@@ -772,6 +772,10 @@ impl Decode for inflate::Inflate {
         // Back-references reach at most 32 KiB.
         out_len.saturating_sub(inflate::WINDOW)
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(inflate::Inflate::heap_size(self))
+    }
 }
 
 /// zlib: a 2-byte header, DEFLATE, and a big-endian Adler-32 trailer.
@@ -864,6 +868,10 @@ impl Decode for Zlib {
 
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len.saturating_sub(inflate::WINDOW)
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(self.inflate.heap_size())
     }
 }
 

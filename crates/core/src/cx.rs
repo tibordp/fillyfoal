@@ -128,10 +128,36 @@ impl SourceEntry {
     fn held(&self) -> u64 {
         match (&self.data, &self.lazy) {
             (Some(d), _) => to_u64(d.len()),
+            (None, Some(l)) => l.held(),
+            _ => 0,
+        }
+    }
+
+    /// Bytes eviction can reclaim and decode again: decoded bytes, or a lazy
+    /// stream's buffers (its checkpoints are kept: they make decoding it
+    /// again cheap).
+    fn reclaimable(&self) -> u64 {
+        match (&self.data, &self.lazy) {
+            (Some(d), _) => to_u64(d.len()),
             (None, Some(l)) => to_u64(l.out.len().saturating_add(l.input.len())),
             _ => 0,
         }
     }
+}
+
+/// A point a lazily decoded stream can resume from without decoding what
+/// comes before (see "Checkpoints" in `codec::pipeline`).
+struct Checkpoint {
+    /// Output position decoding resumes at.
+    out_pos: u64,
+    /// Offset in the parent span of the decoder's first unread input byte.
+    in_pos: u64,
+    /// The output before `out_pos` that the decoder's history reaches.
+    window: Vec<u8>,
+    /// The decoder, released down to `window` and to input at `in_pos`.
+    decoder: Box<dyn crate::codec::pipeline::Decoder>,
+    /// Bytes held: the window and the decoder's state.
+    cost: u64,
 }
 
 /// State of a lazily decoded source: encoded input read so far, the
@@ -154,6 +180,13 @@ pub(crate) struct LazyDecode {
     /// The decoder asked for more input than is buffered.
     starved: bool,
     done: bool,
+    /// Resume points, by output position.
+    checkpoints: Vec<Checkpoint>,
+    /// Bytes the checkpoints hold.
+    checkpoint_bytes: u64,
+    /// Multiplier of the spacing between checkpoints; doubles each time
+    /// they are thinned, so new ones stay as sparse as the kept ones.
+    spread: u64,
 }
 
 impl LazyDecode {
@@ -171,7 +204,117 @@ impl LazyDecode {
             recipe: recipe.clone(),
             starved: false,
             done: false,
+            checkpoints: Vec::new(),
+            checkpoint_bytes: 0,
+            spread: 1,
         })
+    }
+
+    fn held(&self) -> u64 {
+        to_u64(self.out.len().saturating_add(self.input.len()))
+            .saturating_add(self.checkpoint_bytes)
+    }
+
+    /// Decodes again from the last checkpoint at or before output position
+    /// `pos`, or from the start; checkpoints are kept.
+    fn rewind(&mut self, pos: u64) {
+        let resume = self
+            .checkpoints
+            .iter()
+            .rev()
+            .filter(|c| c.out_pos <= pos)
+            .find_map(|c| Some((c, c.decoder.checkpoint()?)));
+        let (decoder, in_base, out, out_base) = match resume {
+            Some((c, decoder)) => (
+                decoder,
+                c.in_pos,
+                c.window.clone(),
+                c.out_pos.saturating_sub(to_u64(c.window.len())),
+            ),
+            None => {
+                let Some(decoder) = self.recipe.decoder() else {
+                    return;
+                };
+                (decoder, 0, Vec::new(), 0)
+            }
+        };
+        self.decoder = decoder;
+        self.input = Vec::new();
+        self.in_base = in_base;
+        self.input_eof = false;
+        self.out = out;
+        self.out_base = out_base;
+        self.starved = false;
+        self.done = false;
+    }
+
+    /// Keeps a checkpoint at the decoding front if it is due: past the last
+    /// one by at least [`CHECKPOINT_RATIO`] times its cost (so checkpoints
+    /// never hold more than a fraction of the output they spare decoding)
+    /// and [`MIN_CHECKPOINT_SPACING`]. Past `max_bytes`, every other one is
+    /// dropped.
+    fn checkpoint(&mut self, max_bytes: u64) {
+        let front = self.out_base.saturating_add(to_u64(self.out.len()));
+        let last = self.checkpoints.last().map_or(0, |c| c.out_pos);
+        // Behind the furthest checkpoint (decoding again after a rewind),
+        // the ones taken the first time serve.
+        if self.done || front <= last {
+            return;
+        }
+        let keep_from = self
+            .decoder
+            .releasable_output(self.out.len())
+            .min(self.out.len());
+        let window = self.out.len().saturating_sub(keep_from);
+        let cost = to_u64(window.saturating_add(self.decoder.state_size()));
+        let spacing = cost
+            .saturating_mul(CHECKPOINT_RATIO)
+            .max(MIN_CHECKPOINT_SPACING)
+            .saturating_mul(self.spread);
+        if front.saturating_sub(last) < spacing {
+            return;
+        }
+        let Some(mut decoder) = self.decoder.checkpoint() else {
+            return;
+        };
+        let unread_from = decoder.releasable_input().min(self.input.len());
+        decoder.release_input(unread_from);
+        decoder.release_output(keep_from);
+        self.checkpoints.push(Checkpoint {
+            out_pos: front,
+            in_pos: self.in_base.saturating_add(to_u64(unread_from)),
+            window: self.out.get(keep_from..).unwrap_or_default().to_vec(),
+            decoder,
+            cost,
+        });
+        self.checkpoint_bytes = self.checkpoint_bytes.saturating_add(cost);
+        while self.checkpoint_bytes > max_bytes && self.checkpoints.len() > 1 {
+            self.thin();
+        }
+    }
+
+    /// Drops every other checkpoint (keeping the first), and spaces new ones
+    /// as far apart.
+    fn thin(&mut self) {
+        let mut keep = false;
+        self.checkpoints.retain(|_| {
+            keep = !keep;
+            keep
+        });
+        self.checkpoint_bytes = self
+            .checkpoints
+            .iter()
+            .map(|c| c.cost)
+            .fold(0, u64::saturating_add);
+        self.spread = self.spread.saturating_mul(2);
+    }
+
+    /// Frees the buffers, keeping the checkpoints; decoding starts again
+    /// from one of them (or the start) on the next read.
+    fn evict(&mut self) {
+        self.rewind(0);
+        self.out = Vec::new();
+        self.input = Vec::new();
     }
 
     /// Drops what the decoder no longer needs: consumed input, and output
@@ -214,6 +357,12 @@ const RELEASE_INPUT: usize = 1024 * 1024;
 const LOOKAHEAD: usize = 64 * 1024;
 /// Output produced per decoder step.
 const LAZY_STEP: usize = 16 * 1024;
+/// Checkpoints are spaced at least this many times their cost apart, so
+/// they hold at most this fraction of the output they spare decoding.
+const CHECKPOINT_RATIO: u64 = 8;
+/// Output between checkpoints, at least (a stream of tiny frames would
+/// otherwise get one per frame).
+const MIN_CHECKPOINT_SPACING: u64 = 256 * 1024;
 /// Derived memory a lazy read may use even when the limit is reached:
 /// failing the stream instead would truncate it for good over a passing
 /// shortage (other sources may be evicted or collapsed later).
@@ -277,39 +426,66 @@ impl Shared {
             chain.push(parent);
             cursor = parent;
         }
+        let protected = |i: usize| {
+            chain
+                .iter()
+                .any(|c| crate::bytes::to_usize(c.0.into()) == i)
+        };
+        // Decoded bytes and lazy buffers first, least recently read first.
+        while self.derived_bytes.saturating_add(need) > max {
+            let victim = self
+                .sources
+                .iter()
+                .enumerate()
+                .filter(|(i, e)| e.recipe.is_some() && e.reclaimable() > 0 && !protected(*i))
+                .min_by_key(|(_, e)| e.used)
+                .map(|(i, _)| i);
+            let Some(entry) = victim.and_then(|i| self.sources.get_mut(i)) else {
+                break;
+            };
+            let before = entry.held();
+            if let Some(lazy) = entry.lazy.as_mut() {
+                lazy.evict();
+            } else {
+                let Some(origin) = entry.origin else {
+                    entry.recipe = None;
+                    continue;
+                };
+                let Some(fresh) = LazyDecode::new(
+                    origin.parent,
+                    entry.recipe.as_ref().unwrap_or(&Codec::Stored),
+                ) else {
+                    // Not decodable again after all: keep the bytes.
+                    entry.recipe = None;
+                    continue;
+                };
+                entry.data = None;
+                entry.lazy = Some(Box::new(fresh));
+            }
+            let freed = before.saturating_sub(entry.held());
+            self.derived_bytes = self.derived_bytes.saturating_sub(freed);
+        }
+        // Then checkpoints.
         while self.derived_bytes.saturating_add(need) > max {
             let victim = self
                 .sources
                 .iter()
                 .enumerate()
                 .filter(|(i, e)| {
-                    e.recipe.is_some()
-                        && e.held() > 0
-                        && !chain
-                            .iter()
-                            .any(|c| crate::bytes::to_usize(c.0.into()) == *i)
+                    e.lazy.as_ref().is_some_and(|l| l.checkpoint_bytes > 0) && !protected(*i)
                 })
                 .min_by_key(|(_, e)| e.used)
                 .map(|(i, _)| i);
-            let Some(entry) = victim.and_then(|i| self.sources.get_mut(i)) else {
+            let Some(lazy) = victim
+                .and_then(|i| self.sources.get_mut(i))
+                .and_then(|e| e.lazy.as_mut())
+            else {
                 return false;
             };
-            let Some(origin) = entry.origin else {
-                entry.recipe = None;
-                continue;
-            };
-            let held = entry.held();
-            let Some(fresh) = LazyDecode::new(
-                origin.parent,
-                entry.recipe.as_ref().unwrap_or(&Codec::Stored),
-            ) else {
-                // Not decodable again after all: keep the bytes.
-                entry.recipe = None;
-                continue;
-            };
-            entry.data = None;
-            entry.lazy = Some(Box::new(fresh));
-            self.derived_bytes = self.derived_bytes.saturating_sub(held);
+            let freed = lazy.checkpoint_bytes;
+            lazy.checkpoints.clear();
+            lazy.checkpoint_bytes = 0;
+            self.derived_bytes = self.derived_bytes.saturating_sub(freed);
         }
         true
     }
@@ -428,13 +604,20 @@ impl Shared {
         let Some(mut st) = self.sources.get_mut(index).and_then(|e| e.lazy.take()) else {
             return Ok(Vec::new());
         };
-        let before = st.out.len().saturating_add(st.input.len());
-        // Released output is decoded again, from the start.
+        let before = st.held();
+        // Released output is decoded again, from the nearest checkpoint (or
+        // the start); a checkpoint between the front and the read skips
+        // decoding up to it.
+        let front = st.out_base.saturating_add(to_u64(st.out.len()));
         if start < st.out_base
-            && let Some(fresh) = LazyDecode::new(st.parent, &st.recipe)
+            || st
+                .checkpoints
+                .iter()
+                .any(|c| c.out_pos > front && c.out_pos <= start)
         {
-            *st = fresh;
+            st.rewind(start);
         }
+        let max_checkpoint_bytes = self.limits.max_derived / 8;
         // Room for the output still to come, and for the encoded input it
         // takes (kept alongside; rarely more than the output it produces).
         let keep = LAZY_KEEP.min(crate::bytes::to_usize(self.limits.max_derived / 4));
@@ -521,7 +704,7 @@ impl Shared {
             let status = decoder.decode(input, *input_eof, out, LAZY_STEP, cap);
             let produced = out.len().saturating_sub(produced_before);
             match status {
-                Ok(crate::codec::pipeline::Status::More) => {}
+                Ok(crate::codec::pipeline::Status::More) => st.checkpoint(max_checkpoint_bytes),
                 Ok(crate::codec::pipeline::Status::NeedInput) if !*input_eof => *starved = true,
                 Ok(crate::codec::pipeline::Status::NeedInput) => {
                     *done = true;
@@ -544,11 +727,11 @@ impl Shared {
         if st.done && failure.is_none() {
             failure = st.decoder.warning(&st.out);
         }
-        let after = st.out.len().saturating_add(st.input.len());
+        let after = st.held();
         self.derived_bytes = self
             .derived_bytes
-            .saturating_add(to_u64(after))
-            .saturating_sub(to_u64(before));
+            .saturating_add(after)
+            .saturating_sub(before);
         if let Some(entry) = self.sources.get_mut(index) {
             let declared = entry.len;
             entry.consumed = st.in_base.saturating_add(to_u64(st.decoder.consumed()));

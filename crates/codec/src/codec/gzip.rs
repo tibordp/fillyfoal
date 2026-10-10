@@ -211,7 +211,17 @@ impl Decode for Gzip {
     }
 
     fn releasable_output(&self, out_len: usize) -> usize {
-        out_len.saturating_sub(inflate::WINDOW)
+        match self.phase {
+            Phase::Deflate => out_len.saturating_sub(inflate::WINDOW),
+            // Between members the history resets: a checkpoint here needs
+            // no window.
+            Phase::Between | Phase::Done => out_len,
+        }
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        let warning = self.warning.as_ref().map_or(0, |w| w.message.capacity());
+        Some(self.inflate.heap_size().saturating_add(warning))
     }
 }
 

@@ -332,3 +332,153 @@ fn exploring_twice_gives_the_same_tree() {
     let second = explore(&mut session, root);
     assert_eq!(first, second);
 }
+
+// ---------------------------------------------------------------------------
+// Checkpoints in lazily decoded streams
+
+/// Bytes that differ along the stream, so a read from the wrong place shows.
+fn pattern(len: usize) -> Vec<u8> {
+    (0..len)
+        .map(|i| (i as u32).wrapping_mul(2_654_435_761).to_le_bytes()[1])
+        .collect()
+}
+
+async fn lazy_source(cx: Cx, (span, codec, len): (Span, Codec, u64)) -> Result<()> {
+    let decoded = cx.decode_lazy(span, &codec, len)?;
+    cx.emit(Node::new("decoded").span(decoded));
+    Ok(())
+}
+
+/// A session over `encoded` with one lazily decoded source; returns the
+/// session and the decoded span.
+fn lazy_session(encoded: &[u8], codec: Codec, len: u64, limits: Limits) -> (Session, Span) {
+    let mut session = Session::new(limits);
+    let source = session.add_source(encoded.len() as u64);
+    let span = Span::new(source, 0, encoded.len() as u64);
+    let root = session.add_root(Node::new("lazy").lazy(lazy_source, (span, codec, len)));
+    session.expand(root, 10);
+    run(&mut session, encoded, 1_000_000, 100);
+    let child = session.children(root).unwrap().ids[0];
+    let decoded = session.node(child).unwrap().span.unwrap();
+    (session, decoded)
+}
+
+/// Reads `span` in steps of `budget` work units, supplying host bytes;
+/// returns the data and the number of steps.
+fn read_in_steps(session: &mut Session, data: &[u8], span: Span, budget: u64) -> (Vec<u8>, u64) {
+    let mut steps = 0;
+    loop {
+        steps += 1;
+        assert!(steps < 1_000_000, "read did not finish");
+        match session.read_step(span, budget) {
+            fillyfoal::ReadProgress::Done(bytes) => return (bytes, steps),
+            fillyfoal::ReadProgress::Yielded => {}
+            fillyfoal::ReadProgress::NeedBytes(requests) => {
+                steps -= 1;
+                for r in requests {
+                    let end = ((r.offset + r.len) as usize).min(data.len());
+                    session.supply(r.source, r.offset, &data[r.offset as usize..end]);
+                }
+            }
+        }
+    }
+}
+
+fn checkpoint_limits() -> Limits {
+    // A quarter of this is kept behind the decoding front: 4 MiB.
+    Limits {
+        max_derived: 16 << 20,
+        ..Limits::default()
+    }
+}
+
+#[test]
+fn reading_behind_a_lazy_stream_resumes_from_a_checkpoint() {
+    let content = pattern(24 << 20);
+    let encoded = deflate_stored(&content);
+    let (mut session, decoded) = lazy_session(
+        &encoded,
+        Codec::Deflate,
+        content.len() as u64,
+        checkpoint_limits(),
+    );
+    // Decode it all: the front is now far past 12 MiB.
+    let (tail, _) = read_in_steps(
+        &mut session,
+        &encoded,
+        decoded.sub(decoded.len - 16, 16),
+        1 << 20,
+    );
+    assert_eq!(tail, content[content.len() - 16..]);
+    // Reading back at 12 MiB decodes from a checkpoint nearby, not from the
+    // start (about 6,000 units).
+    let at = 12 << 20;
+    let (bytes, steps) = read_in_steps(&mut session, &encoded, decoded.sub(at, 4096), 50);
+    assert_eq!(bytes, content[at as usize..at as usize + 4096]);
+    assert!(steps <= 10, "{steps} steps of 50 units");
+    // And everywhere else, byte for byte.
+    for at in [0u64, 1 << 20, 5_000_000, 23 << 20] {
+        let (bytes, _) = read_in_steps(&mut session, &encoded, decoded.sub(at, 1000), 1 << 20);
+        assert_eq!(bytes, content[at as usize..at as usize + 1000], "at {at}");
+    }
+}
+
+async fn crowd_out(cx: Cx, (span, n): (Span, u64)) -> Result<()> {
+    cx.add_derived(
+        Origin {
+            parent: span,
+            transform: "crowd",
+        },
+        vec![0; n as usize],
+        0,
+        None,
+    )?;
+    Ok(())
+}
+
+#[test]
+fn evicting_a_lazy_stream_keeps_its_checkpoints() {
+    let content = pattern(24 << 20);
+    let encoded = deflate_stored(&content);
+    let limits = checkpoint_limits();
+    let (mut session, decoded) =
+        lazy_session(&encoded, Codec::Deflate, content.len() as u64, limits);
+    read_in_steps(
+        &mut session,
+        &encoded,
+        decoded.sub(decoded.len - 16, 16),
+        1 << 20,
+    );
+    // Something else needs nearly all derived memory: the stream's buffers
+    // go, its checkpoints (about 2 MiB) stay.
+    let filler = Span::new(fillyfoal::SourceId::default_host(), 0, 1);
+    let root = session
+        .add_root(Node::new("crowd").lazy(crowd_out, (filler, limits.max_derived - (3 << 20))));
+    session.expand(root, 1);
+    run(&mut session, &encoded, 1_000_000, 100);
+    assert!(session.children(root).unwrap().error.is_none());
+    let at = 20 << 20;
+    let (bytes, steps) = read_in_steps(&mut session, &encoded, decoded.sub(at, 4096), 50);
+    assert_eq!(bytes, content[at as usize..at as usize + 4096]);
+    assert!(steps <= 10, "{steps} steps of 50 units");
+}
+
+#[test]
+fn chains_checkpoint_when_little_is_in_flight() {
+    // DEFLATE inside DEFLATE: stage one's output is stage two's input.
+    let content = pattern(12 << 20);
+    let encoded = deflate_stored(&deflate_stored(&content));
+    let codec = Codec::chain("test", "test (lazy)", vec![Codec::Deflate, Codec::Deflate]);
+    let (mut session, decoded) =
+        lazy_session(&encoded, codec, content.len() as u64, checkpoint_limits());
+    read_in_steps(
+        &mut session,
+        &encoded,
+        decoded.sub(decoded.len - 16, 16),
+        1 << 20,
+    );
+    let at = 2 << 20;
+    let (bytes, steps) = read_in_steps(&mut session, &encoded, decoded.sub(at, 4096), 50);
+    assert_eq!(bytes, content[at as usize..at as usize + 4096]);
+    assert!(steps <= 10, "{steps} steps of 50 units");
+}

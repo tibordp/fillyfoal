@@ -23,6 +23,23 @@
 //! every position are relative to the buffers as they are now. A decoder
 //! that releases output must not checksum `out` in [`Decode::warning`]:
 //! it keeps running checksums instead. The defaults release nothing.
+//!
+//! # Checkpoints
+//!
+//! A lazily decoded stream is decoded forwards; reading behind what it
+//! still holds would mean decoding again from the start. A decoder that can
+//! be cloned cheaply lets the caller keep checkpoints instead: a clone of
+//! the decoder, released down to its window (the output its history still
+//! reaches) and to its unread input, plus the window bytes. Resuming from
+//! one decodes onwards from there. A checkpoint costs its window plus the
+//! decoder's own state, so it is nearly free where the history resets (a
+//! new gzip member or zstd frame: everything before is releasable) and as
+//! large as the dictionary elsewhere; the caller spaces checkpoints by that
+//! cost.
+//!
+//! A codec opts in with [`Decode::heap_size`]: the heap bytes a clone of it
+//! copies, which must be honest (a decoder that keeps its window inside
+//! itself, rather than in the caller's `out`, must count it).
 
 use crate::error::{Diagnostic, Result};
 
@@ -85,6 +102,13 @@ pub trait Decode: Clone + Send + 'static {
     /// first `n` (at most [`releasable_output`](Self::releasable_output))
     /// bytes of its output.
     fn release_output(&mut self, _n: usize) {}
+
+    /// Heap bytes a clone of this decoder copies (tables, buffers it owns),
+    /// or `None` if it must not be checkpointed (the default). See
+    /// "Checkpoints" in the module docs.
+    fn heap_size(&self) -> Option<usize> {
+        None
+    }
 }
 
 /// Status of a [`Decoder`] step.
@@ -134,6 +158,18 @@ pub trait Decoder: Send {
     /// first `n` (at most [`releasable_output`](Self::releasable_output))
     /// bytes of its output.
     fn release_output(&mut self, _n: usize) {}
+
+    /// A copy of this decoder to resume from later, or `None` if it cannot
+    /// be checkpointed. See "Checkpoints" in the module docs.
+    fn checkpoint(&self) -> Option<Box<dyn Decoder>> {
+        None
+    }
+
+    /// Bytes a [`checkpoint`](Self::checkpoint) holds besides the window
+    /// the caller keeps with it.
+    fn state_size(&self) -> usize {
+        0
+    }
 }
 
 /// Adapts a [`Decode`] into a [`Decoder`] by rolling back steps that ran out
@@ -189,7 +225,22 @@ impl<D: Decode> Decoder for Streaming<D> {
     fn release_output(&mut self, n: usize) {
         self.0.release_output(n);
     }
+
+    fn checkpoint(&self) -> Option<Box<dyn Decoder>> {
+        self.0.heap_size()?;
+        Some(Box::new(self.clone()))
+    }
+
+    fn state_size(&self) -> usize {
+        std::mem::size_of::<D>().saturating_add(self.0.heap_size().unwrap_or(0))
+    }
 }
+
+/// Bytes in flight between two stages of a [`Chain`] (produced by one, not
+/// yet read by the next) that a checkpoint may copy. A chain holding more
+/// (a stage that waits for all of its input) is not checkpointed: resuming
+/// it would mean waiting for all of that input again anyway.
+const MAX_IN_FLIGHT: usize = 64 * 1024;
 
 /// Decoders applied in sequence: each stage's output is the next one's input.
 pub struct Chain {
@@ -329,6 +380,34 @@ impl Decoder for Chain {
         if let Some(s) = self.stages.last_mut() {
             s.decoder.release_output(n);
         }
+    }
+
+    /// Every stage checkpointed, with the intermediate buffers: each holds
+    /// its stage's window, and at most [`MAX_IN_FLIGHT`] bytes the next
+    /// stage has yet to read.
+    fn checkpoint(&self) -> Option<Box<dyn Decoder>> {
+        for pair in self.stages.windows(2) {
+            let [prev, next] = pair else { continue };
+            if prev.out.len().saturating_sub(next.decoder.consumed()) > MAX_IN_FLIGHT {
+                return None;
+            }
+        }
+        let mut stages = Vec::with_capacity(self.stages.len());
+        for stage in &self.stages {
+            stages.push(Stage {
+                decoder: stage.decoder.checkpoint()?,
+                out: stage.out.clone(),
+                done: stage.done,
+            });
+        }
+        Some(Box::new(Chain { stages }))
+    }
+
+    fn state_size(&self) -> usize {
+        self.stages
+            .iter()
+            .map(|s| s.decoder.state_size().saturating_add(s.out.len()))
+            .fold(0, usize::saturating_add)
     }
 }
 
