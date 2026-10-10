@@ -7,8 +7,9 @@
 //! file, and an LZMA2 chunk can hold 2 MiB, so it decodes symbol by symbol
 //! as [`Lzma2`] does), a block's check, an index with the stream footer, or
 //! stream padding. Each unit starts only once all the input it can need has
-//! arrived, so nothing is ever rolled back and the decoder is never
-//! cloned. Block checks (CRC-32, CRC-64, SHA-256) are
+//! arrived, so nothing is ever rolled back and the decoder is cloned only
+//! for checkpoints (nearly free between blocks, where decoding pauses).
+//! Block checks (CRC-32, CRC-64, SHA-256) are
 //! computed as the output appears and compared at the end of each block.
 //!
 //! A block without BCJ or Delta filters decodes straight into `out`, which
@@ -117,6 +118,7 @@ impl Check {
 }
 
 /// The unfiltered side of a block with BCJ or Delta filters.
+#[derive(Clone)]
 struct Filtered {
     /// The latest unfiltered output: the LZMA2 dictionary.
     window: Vec<u8>,
@@ -141,6 +143,15 @@ impl Filtered {
         data
     }
 
+    /// Heap bytes a clone copies: the window (up to twice the dictionary
+    /// size) and the bytes the filters hold back.
+    fn heap_size(&self) -> usize {
+        self.stages
+            .iter()
+            .map(|(_, pending)| size_of::<(PostState, Vec<u8>)>().saturating_add(pending.len()))
+            .fold(self.window.len(), usize::saturating_add)
+    }
+
     fn compact(&mut self) {
         if self.window.len() > self.keep.saturating_add(self.keep.max(1 << 15)) {
             let cut = self.window.len().saturating_sub(self.keep);
@@ -151,6 +162,7 @@ impl Filtered {
 }
 
 /// A block being decoded.
+#[derive(Clone)]
 struct Block {
     /// Where its compressed data starts in the input.
     data_start: usize,
@@ -168,6 +180,8 @@ struct Block {
 
 enum Unit {
     Progress,
+    /// A block and its check ended.
+    BlockEnd,
     NeedInput,
     Done,
 }
@@ -251,7 +265,7 @@ impl Block {
 
 /// An `.xz` file (one or more streams, with stream padding between them) as
 /// a [`Decoder`].
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct XzStream {
     /// Input consumed (up to the current block's data).
     pos: usize,
@@ -291,7 +305,7 @@ impl XzStream {
                     BlockStep::End(end) => {
                         self.pos = end;
                         self.block = None;
-                        Unit::Progress
+                        Unit::BlockEnd
                     }
                 },
             );
@@ -457,6 +471,10 @@ impl Decoder for XzStream {
             }
             match self.unit(input, eof, out, target, limit)? {
                 Unit::Progress => {}
+                // Pause between blocks, where a checkpoint is nearly free
+                // (each block starts a new dictionary).
+                Unit::BlockEnd if out.len() > mark => return Ok(Status::More),
+                Unit::BlockEnd => {}
                 Unit::NeedInput if out.len() > mark => return Ok(Status::More),
                 Unit::NeedInput => return Ok(Status::NeedInput),
                 Unit::Done => return Ok(Status::Done),
@@ -513,6 +531,27 @@ impl Decoder for XzStream {
             b.view.dropped = b.view.dropped.saturating_add(n);
         }
     }
+
+    /// A clone. Between blocks it holds next to nothing (each block starts
+    /// a new dictionary, and checks are computed as output appears); inside
+    /// a block, the LZMA2 state, and for a block with BCJ or Delta filters
+    /// its private window too.
+    fn checkpoint(&self) -> Option<Box<dyn Decoder>> {
+        Some(Box::new(self.clone()))
+    }
+
+    fn state_size(&self) -> usize {
+        let block = self.block.as_deref().map_or(0, |b| {
+            let filtered = b
+                .filtered
+                .as_deref()
+                .map_or(0, |f| size_of::<Filtered>().saturating_add(f.heap_size()));
+            size_of::<Block>()
+                .saturating_add(b.lzma2.heap_size())
+                .saturating_add(filtered)
+        });
+        size_of::<Self>().saturating_add(block)
+    }
 }
 
 /// A whole `.xz` file in memory (for containers that hold small ones).
@@ -526,12 +565,69 @@ impl Filter for Xz {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
 
     #[test]
     fn crc64_check_value() {
         assert_eq!(crc64(b"123456789"), 0x995d_c9bb_df19_39fa);
+    }
+
+    use crate::codec::pipeline::{decode_all, verify_checkpoints};
+
+    const WORDS: &[u8] = include_bytes!("testdata/words.txt");
+
+    #[test]
+    fn checkpoints_between_and_inside_blocks() {
+        // xz --check=crc64 --block-size=16KiB --lzma2=dict=64KiB words.txt
+        // (XZ Utils 5.8): eight blocks.
+        let data = include_bytes!("testdata/words-blocks.xz");
+        let out = decode_all(&mut XzStream::default(), data, 1 << 20).unwrap();
+        assert_eq!(out, WORDS);
+        let (checked, largest) =
+            verify_checkpoints(|| Box::new(XzStream::default()), data, 3000, 1).unwrap();
+        assert!(checked > 30, "{checked}");
+        // The LZMA2 state (lc = 3); the window is in the output.
+        assert!((12 << 10..20 << 10).contains(&largest), "{largest}");
+        // Decoding pauses at every block boundary, where a checkpoint
+        // holds nothing but positions.
+        let mut d = XzStream::default();
+        let mut out = Vec::new();
+        let mut boundaries = 0;
+        while d.decode(data, true, &mut out, 5000, 1 << 20).unwrap() == Status::More {
+            if out.len().is_multiple_of(16384) {
+                assert_eq!(d.releasable_output(out.len()), out.len());
+                assert_eq!(d.state_size(), size_of::<XzStream>());
+                boundaries += 1;
+            }
+        }
+        assert_eq!(boundaries, 7);
+    }
+
+    #[test]
+    fn checkpoints_in_filtered_blocks() {
+        // lzma.compress(code, format=FORMAT_XZ, check=CHECK_CRC32,
+        // filters=[{"id": FILTER_X86}, {"id": FILTER_LZMA2, "dict_size":
+        // 1 << 16}]), `code` 40-byte runs of words.txt each followed by E8
+        // and a random 32-bit offset (checked by the CRC-32); and
+        // lzma.compress(words[:40000], format=FORMAT_XZ, check=CHECK_SHA256,
+        // filters=[{"id": FILTER_DELTA, "dist": 2}, {"id": FILTER_LZMA2,
+        // "dict_size": 1 << 16}]).
+        let x86 = include_bytes!("testdata/code-x86.xz");
+        let out = decode_all(&mut XzStream::default(), x86, 1 << 20).unwrap();
+        assert_eq!(out.len(), 45000);
+        assert_eq!(&out[45..85], &WORDS[40..80]);
+        let delta = include_bytes!("testdata/words-delta.xz");
+        let out = decode_all(&mut XzStream::default(), delta, 1 << 20).unwrap();
+        assert_eq!(out, &WORDS[..40000]);
+        for (data, len) in [(&x86[..], 45000), (&delta[..], 40000)] {
+            let (checked, largest) =
+                verify_checkpoints(|| Box::new(XzStream::default()), data, 1500, 1).unwrap();
+            assert!(checked > 20, "{checked}");
+            // The private window (all of the block, under the 64 KiB
+            // dictionary) is part of the state.
+            assert!(largest > len && largest < len + (20 << 10), "{largest}");
+        }
     }
 }
