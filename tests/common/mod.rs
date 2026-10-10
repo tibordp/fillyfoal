@@ -7,6 +7,61 @@ use fillyfoal::{
 };
 
 // ---------------------------------------------------------------------------
+// Fixture files
+
+/// Fixtures larger than this (whole disk images stored as `.raw.zst`) get
+/// bounded treatment from the whole-fixture sweeps: see `robustness` and
+/// `tests/unsized.rs`.
+pub const LARGE_FIXTURE: usize = 4 << 20;
+
+/// Whether a fixture is stored compressed only for size: a whole disk image
+/// kept as `<name>.raw.zst` (`zstd -19`), or, outside `fixtures/gzip/`, as
+/// `<name>.gz` (`gzip -n`). Other `.zst`/`.gz` fixtures are genuine tests of
+/// those formats.
+pub fn stored_compressed(path: &std::path::Path) -> Option<&'static str> {
+    let name = path.file_name()?.to_str()?;
+    if name.ends_with(".raw.zst") {
+        return Some(".raw.zst");
+    }
+    let in_gzip_dir = path
+        .parent()
+        .and_then(|p| p.file_name())
+        .is_some_and(|n| n == "gzip");
+    (name.ends_with(".gz") && !in_gzip_dir).then_some(".gz")
+}
+
+/// The bytes a fixture stands for: its content, decompressed if it is
+/// stored compressed only for size (see [`stored_compressed`]).
+pub fn fixture_bytes(path: &std::path::Path) -> Vec<u8> {
+    let data = std::fs::read(path).unwrap();
+    match stored_compressed(path) {
+        Some(".raw.zst") => {
+            zstd::decode_all(data.as_slice()).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+        }
+        Some(_) => {
+            assert_eq!(
+                data[3] & 0x1e,
+                0,
+                "{}: write fixtures with `gzip -n`",
+                path.display()
+            );
+            fillyfoal::codec::inflate::inflate(&data[10..], 64 << 20).unwrap()
+        }
+        None => data,
+    }
+}
+
+/// The name a fixture is dissected under: without the suffix of its
+/// storage compression.
+pub fn fixture_name(path: &std::path::Path) -> String {
+    let name = path.file_name().unwrap().to_string_lossy().into_owned();
+    match stored_compressed(path) {
+        Some(suffix) => name.strip_suffix(suffix).unwrap_or(&name).to_owned(),
+        None => name,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Byte-level image writer
 
 pub struct Image(Vec<u8>);
@@ -457,17 +512,27 @@ pub fn robustness_as(name: &str, data: &[u8], format: Option<&'static formats::F
             );
         }
     };
+    // Large images (whole disk images stored compressed) put their
+    // metadata up front: truncate mostly within the first few MiB and
+    // sample the rest, and mutate fewer copies of them.
+    const LARGE: usize = LARGE_FIXTURE;
     let lengths: Vec<usize> = if data.len() <= 600 {
         (0..data.len()).collect()
-    } else {
+    } else if data.len() <= LARGE {
         (0..300).map(|i| i * data.len() / 300).collect()
+    } else {
+        (0..200)
+            .map(|i| i * LARGE / 200)
+            .chain((0..40).map(|i| LARGE + i * (data.len() - LARGE) / 40))
+            .collect()
     };
     for len in lengths {
         settle(data[..len].to_vec(), &format!("truncation to {len}"));
     }
     let mut rng = Rng(0x5eed ^ data.len() as u64);
     const INTERESTING: [u8; 6] = [0x00, 0xff, 0x7f, 0x80, 0x01, 0x10];
-    for round in 0..300 {
+    let rounds = if data.len() <= LARGE { 300 } else { 100 };
+    for round in 0..rounds {
         let mut mutated = data.to_vec();
         if mutated.is_empty() {
             break;

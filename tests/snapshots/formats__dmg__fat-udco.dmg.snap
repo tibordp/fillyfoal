@@ -49,17 +49,22 @@ expression: "common::explore(&display_name(&path), &data)"
               Volume serial number: 0x65b70811  [#2:0x27+0x4]
               Volume label: "T          "  [#2:0x2b+0xb]
               Filesystem type: "FAT16   "  [#2:0x36+0x8]
+            Boot code — 448 bytes  [#2:0x3e+0x1c0]
+            Boot signature: 0xaa55  [#2:0x1fe+0x2]
           ▾ FAT 1 — FAT16 entries  [#2:0x200+0x5000]
-              Cluster 2 — → 3 → #2:0xe200+0x400
-              Cluster 3 — → 4 → #2:0xe600+0x400
-              Cluster 4 — → 5 → #2:0xea00+0x400
-              Cluster 5 — end of chain → #2:0xee00+0x400
-              Cluster 6 — → 7 → #2:0xf200+0x400
-              Cluster 7 — → 8 → #2:0xf600+0x400
-              Cluster 8 — → 9 → #2:0xfa00+0x400
-              Cluster 9 — end of chain → #2:0xfe00+0x400
-              Cluster 10 — end of chain → #2:0x10200+0x400
-              Clusters 11–10197 — free
+              Entry 0: 0xfff0 — the media descriptor, padded with ones  [#2:0x200+0x2]
+              Entry 1: 0xffff — end of chain marker; cleanly unmounted, no I/O errors  [#2:0x202+0x2]
+              Cluster 2: 0x3 — → 3  [#2:0x204+0x2] → #2:0xe200+0x400
+              Cluster 3: 0x4 — → 4  [#2:0x206+0x2] → #2:0xe600+0x400
+              Cluster 4: 0x5 — → 5  [#2:0x208+0x2] → #2:0xea00+0x400
+              Cluster 5: 0xffff — end of chain  [#2:0x20a+0x2] → #2:0xee00+0x400
+              Cluster 6: 0x7 — → 7  [#2:0x20c+0x2] → #2:0xf200+0x400
+              Cluster 7: 0x8 — → 8  [#2:0x20e+0x2] → #2:0xf600+0x400
+              Cluster 8: 0x9 — → 9  [#2:0x210+0x2] → #2:0xfa00+0x400
+              Cluster 9: 0xffff — end of chain  [#2:0x212+0x2] → #2:0xfe00+0x400
+              Cluster 10: 0xffff — end of chain  [#2:0x214+0x2] → #2:0x10200+0x400
+              Clusters 11–10197: 0 — free  [#2:0x216+0x4f96]
+              Unused — entries beyond the last cluster  [#2:0x51ac+0x54]
             FAT 2 — copy  [#2:0x5200+0x5000]
           ▾ Root directory  [#2:0xa200+0x4000]
               Volume label: "T"  [#2:0xa200+0x20]
@@ -199,7 +204,9 @@ expression: "common::explore(&display_name(&path), &data)"
                   Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
                 ▾ Lines — 1 line  [#2:0x10200+0xa]
                     Line 1: "hello dmg"  [#2:0x10200+0x9]
+              Unused entries — 503 free slots (end of directory)  [#2:0xa320+0x3ee0]
             Data region — 9 KiB  [#2:0xe200+0x2400]
+          ▾ Free clusters — from the FAT
       ▾ Chunk 1 — ignore, sectors 131..+20375 (9.9 MiB)  [#1:0xf4+0x28]
           Type: ignore (0x2)  [#1:0xf4+0x4]
           Comment: 0x0  [#1:0xf8+0x4]

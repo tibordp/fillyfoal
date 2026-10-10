@@ -60,37 +60,15 @@ fn fixtures() -> Vec<PathBuf> {
     out
 }
 
-/// Fixture bytes. Large, mostly-empty images (disk images identified by
-/// their exact size) are stored gzip-compressed as `*.gz` outside
-/// `fixtures/gzip/`; they are decompressed with our own inflate.
+/// Fixture bytes. Large, mostly-empty disk images are stored compressed
+/// (`*.raw.zst`, or `*.gz` outside `fixtures/gzip/`) and decompressed here;
+/// see `common::fixture_bytes`. Their snapshots keep the stored file name.
 fn load(path: &Path) -> Vec<u8> {
-    let data = std::fs::read(path).unwrap();
-    let in_gzip_dir = path
-        .parent()
-        .and_then(|p| p.file_name())
-        .is_some_and(|n| n == "gzip");
-    if path.extension().is_some_and(|e| e == "gz") && !in_gzip_dir {
-        assert_eq!(
-            data[3] & 0x1e,
-            0,
-            "{}: write fixtures with `gzip -n`",
-            path.display()
-        );
-        return fillyfoal::codec::inflate::inflate(&data[10..], 64 << 20).unwrap();
-    }
-    data
+    common::fixture_bytes(path)
 }
 
 fn display_name(path: &Path) -> String {
-    let name = path.file_name().unwrap().to_string_lossy().into_owned();
-    let in_gzip_dir = path
-        .parent()
-        .and_then(|p| p.file_name())
-        .is_some_and(|n| n == "gzip");
-    match name.strip_suffix(".gz") {
-        Some(stem) if !in_gzip_dir => stem.to_owned(),
-        _ => name,
-    }
+    common::fixture_name(path)
 }
 
 /// `<format>__<file>`: the tree a fixture lives in is not part of its name,

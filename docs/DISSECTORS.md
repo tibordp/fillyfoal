@@ -410,7 +410,13 @@ cargo run --example inspect -- file --depth 3                # look at it
 
 Formats identified by an exact image size (e.g. D64, ADF) need full-size
 fixtures; store those as `name.ext.gz` (`gzip -9 -n`) and the harness
-decompresses them first. Each fixture's `<format>` directory names the format
+decompresses them first. Whole filesystem images whose smallest size is
+megabytes (XFS, F2FS, ...) are stored as `name.ext.raw.zst` (`zstd -19`):
+the harness (`common::fixture_bytes`) decompresses them, so the dissector
+sees the raw image, and their snapshots keep the stored file name. Other
+`.zst` and `.gz` fixtures (and everything in `gzip/`) are genuine tests of
+those formats. Robustness sweeps over images larger than 4 MiB truncate
+mostly within the first 4 MiB and run fewer mutation rounds. Each fixture's `<format>` directory names the format
 it must be identified as (`fixtures_are_identified_correctly`).
 
 Review the snapshot by eye: it is the best check that values and spans are

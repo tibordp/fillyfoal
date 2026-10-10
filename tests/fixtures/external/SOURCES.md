@@ -16,7 +16,8 @@ Policy:
   byte-for-byte"). The evidence is recorded below.
 - Minor edits are allowed and must be listed (scrubbed identifiers,
   truncation to a prefix, re-fixed checksums). Wrapping a disk image in
-  `gzip -n` for storage (the harness inflates it) is not an edit.
+  `gzip -n`, or in `zstd -19` as `<name>.raw.zst`, for storage (the harness
+  decompresses it) is not an edit.
 - Anything our scripts assembled around real codec output (a hand-made
   container holding an encoder's frames, a real stream with a hand-made tag
   appended), or whose provenance is unclear, is synthetic and lives in
@@ -90,6 +91,37 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `iso9660/udf-bridge.iso.gz` | macOS hdiutil (DiscRecording 9.0.3d5) | same script: `hdiutil makehybrid -iso -udf` (ISO 9660 with Rock Ridge plus a UDF 1.50 bridge); not byte-reproducible |
 | `iso9660/pycdlib-udf.iso.gz` | pycdlib 1.21.0 | same script: `uv run --with pycdlib==1.21.0 python tests/data/udf/pycdlib_udf.py` (`udf="2.60"`, though the descriptors it writes say UDF 1.02 and NSR02; includes a UDF symlink); not byte-reproducible (timestamps) |
 | `swap/mkswap.img` | util-linux mkswap | commit 3dc63ea4 ("a real mkswap fixture"); label `realswap`, UUID chosen with `-U` |
+
+## Disk images (Linux filesystem tools)
+
+Made in a Debian trixie container (`tests/data/linux-fs/Dockerfile`, built as
+`fillyfoal-fs-tools`) by the scripts next to it, which list the exact
+commands; run each as its header says, with `--hostname fillyfoal` and the
+output in `/tmp/fixtures/fs-*`. The populated tree is
+`tests/data/linux-fs/tree.sh` (plus a few extended attributes). Images whose
+smallest size is megabytes of zeros are stored as `<name>.raw.zst`
+(`zstd -19`; the harness decompresses them). "Mounted" images were filled
+through the kernel driver on a loop mount (`--privileged`), so their inode
+change times and logs carry the time of the run and they are not
+byte-reproducible; the others are (the scripts fix UUIDs, labels and times).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `xfs/v4.xfs.raw.zst` | xfsprogs 6.13 mkfs.xfs | `make-xfs.sh`: `mkfs.xfs -m crc=0,uuid=… -b size=4096 -d agcount=2 -i size=256 -p proto` (a prototype file, no mount; `TEST_DIR`/`TEST_DEV`/`QA_CHECK_FS` allow a 32 MiB image) |
+| `xfs/v5.xfs.raw.zst` | xfsprogs 6.13 mkfs.xfs, Linux 7.0 xfs | `make-xfs.sh`: `mkfs.xfs -m uuid=… -b size=1024 -d agcount=2 -i size=512`, then mounted and filled (short-form, block and leaf directories, a B+tree extent map, unwritten and reflinked extents, short-form/leaf/node attributes with a remote value, a POSIX ACL, bigtime timestamps before 1970 and after 2038) |
+| `erofs/` | erofs-utils 1.8.6 mkfs.erofs | `make-erofs.sh`: reproducible (`-T`, `-U`, `--all-root`, `--workers=1`); uncompressed with chunk-based files (block map and index forms), compact and extended inodes, shared and inline xattrs, a long xattr prefix; LZ4HC (big clusters, compact 2-byte index, fragments, dedupe), MicroLZMA (full index), DEFLATE (tail packing) and Zstandard. `plain` and `chunk-indexes` are stored as `.raw.zst` |
+| `ext/mke2fs-ext2.img.raw.zst` | e2fsprogs 1.47.2 mke2fs | `make-ext.sh`: `mke2fs -t ext2 -b 1024 -d tree` (block maps with double indirect blocks), then `e2fsck -fyD` (which stamps the run's time) |
+| `ext/mke2fs-ext3.img.raw.zst` | e2fsprogs 1.47.2 mke2fs | `make-ext.sh`: `mke2fs -t ext3 -J size=1 -d tree`, `e2fsck -fyD` (an htree directory, a journal) |
+| `ext/mke2fs-ext4.img.raw.zst` | e2fsprogs 1.47.2 mke2fs | `make-ext.sh`: `mke2fs -t ext4 -O inline_data,^resize_inode -J size=1 -d tree`, `e2fsck -fyD` (extents, flex_bg, metadata_csum, inline data, an htree directory, attribute blocks, an orphan file, a journal) |
+| `squashfs/` | squashfs-tools 4.6.1 mksquashfs | `make-squashfs.sh`: reproducible; `-b 16K -xattrs` with gzip, LZMA, LZO, xz, LZ4 and zstd, and `-no-compression -no-fragments -no-exports` for `mksquashfs-plain.sqfs` |
+| `btrfs/` | btrfs-progs 6.14 mkfs.btrfs | `make-btrfs.sh`: `mkfs.btrfs -r tree --shrink` (and `--compress zstd`); the chunk tree UUID is random, so not byte-reproducible |
+| `f2fs/sload.f2fs.raw.zst` | f2fs-tools 1.16 mkfs.f2fs, sload.f2fs | `make-f2fs.sh`: `mkfs.f2fs -T … -U … -O extra_attr,inode_checksum,sb_checksum,inode_crtime`, `sload.f2fs -f tree`; the script bind-mounts a neutral `/proc/version` (`Linux version 6.12.0 (fillyfoal@fillyfoal)`), which the superblock records |
+| `jfs/mkfs.jfs.raw.zst` | jfsutils 1.1.15 mkfs.jfs | `make-small.sh`: an empty 16 MiB aggregate (no tool fills JFS without a mount, and the kernel used has no JFS); random UUID |
+| `cramfs/mkcramfs.cramfs` | util-linux 2.41 mkfs.cramfs | `make-small.sh`: `mkfs.cramfs -N little -n fillyfoal tree` |
+| `minix/` | util-linux 2.41 mkfs.minix | `make-small.sh`: empty 64 KiB filesystems of versions 1, 2 and 3 (`mkfs.minix -1/-2/-3`; no tool fills them without a mount) |
+| `fat/` | dosfstools 4.2 mkfs.fat, mtools 4.0 | `make-fat.sh`: `mkfs.fat -F 12/16/32 -i … -n FILLYFOAL`, filled with `mcopy -s -m` (long names, subdirectories) under `SOURCE_DATE_EPOCH` |
+| `exfat/linux-exfat.img.raw.zst` | exfatprogs mkfs.exfat, Linux 7.0 exfat | `make-fat.sh`: `mkfs.exfat -L fillyfoal -c 4K -b 4K`, mounted and filled; random volume serial |
+| `ntfs/mkntfs.img.raw.zst` | ntfs-3g 2022.10 mkntfs, Linux 7.0 ntfs3 | `make-fat.sh`: `mkntfs -T -F -L fillyfoal` (1100 KiB), mounted with ntfs3 and filled. 128 KiB compressed: the 128 KiB `$UpCase` table does not compress |
 
 ## Compilers, linkers and toolchains
 

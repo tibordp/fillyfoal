@@ -58,12 +58,17 @@ expression: "common::explore(&display_name(&path), &data)"
             Volume serial number: 0x1234abcd  [#1:0x227+0x4]
             Volume label: "VIRTUAL    "  [#1:0x22b+0xb]
             Filesystem type: "FAT12   "  [#1:0x236+0x8]
+          Boot code — 448 bytes  [#1:0x23e+0x1c0]
+          Boot signature: 0xaa55  [#1:0x3fe+0x2]
         ▾ FAT 1 — FAT12 entries  [#1:0x400+0x200]
-            Cluster 2 — end of chain → #1:0xa00+0x200
-            Clusters 3–29 — free
-            Cluster 30 — → 31 → #1:0x4200+0x200
-            Cluster 31 — end of chain → #1:0x4400+0x200
-            Clusters 32–45 — free
+            Entry 0: 0xff8 — the media descriptor, padded with ones  [#1:0x400+0x2]
+            Entry 1: 0xfff — end of chain marker  [#1:0x401+0x2]
+            Cluster 2: 0xfff — end of chain  [#1:0x403+0x2] → #1:0xa00+0x200
+            Clusters 3–29: 0 — free  [#1:0x404+0x29]
+            Cluster 30: 0x1f — → 31  [#1:0x42d+0x2] → #1:0x4200+0x200
+            Cluster 31: 0xfff — end of chain  [#1:0x42e+0x2] → #1:0x4400+0x200
+            Clusters 32–45: 0 — free  [#1:0x430+0x15]
+            Unused — entries beyond the last cluster  [#1:0x445+0x1bb]
           FAT 2 — copy  [#1:0x600+0x200]
         ▾ Root directory  [#1:0x800+0x200]
             Volume label: "VIRTUAL"  [#1:0x800+0x20]
@@ -124,5 +129,9 @@ expression: "common::explore(&display_name(&path), &data)"
                   Line 18: "stored near the end of the volume"  [#1:0x4442+0x21]
                   Line 19: "stored near the end of the volume"  [#1:0x4464+0x21]
                   Line 20: "stored near the end of the volume"  [#1:0x4486+0x21]
+            Unused entries — 13 free slots (end of directory)  [#1:0x860+0x1a0]
           Data region — 22 KiB  [#1:0xa00+0x5800]
+        ▾ Free clusters — from the FAT
+            Clusters 3–29 — free, 13.5 KiB  [#1:0xc00+0x3600]
+            Clusters 32–45 — free, 7 KiB  [#1:0x4600+0x1c00]
       Boot signature: 0xaa55  [#1:0x1fe+0x2]

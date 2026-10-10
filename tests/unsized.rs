@@ -2,6 +2,14 @@
 //! stream that records no size, decoded on demand with a provisional
 //! length) must give the same tree as dissecting it with its length known:
 //! nothing may identify, count or estimate from the provisional length.
+//!
+//! Fixtures over `common::LARGE_FIXTURE` (whole disk images, tens of MiB
+//! decompressed) are skipped: the unsized stream can only be decoded
+//! forwards, so every read near the end of a large image re-decodes
+//! everything before it in 64-byte chunks, and a filesystem's scattered
+//! metadata reads make that take tens of minutes per image. The property
+//! being tested does not depend on size; the small fixtures of the same
+//! formats cover it. Set `UNSIZED_LARGE=1` to include them anyway.
 
 #![allow(
     clippy::unwrap_used,
@@ -106,8 +114,19 @@ fn unknown_length_does_not_change_the_tree() {
     let all = fixtures();
     std::panic::set_hook(Box::new(|_| {}));
     for path in &all {
-        let data = std::fs::read(path).unwrap();
-        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        // Disk images stored as `.raw.zst` are tested decompressed. Other
+        // fixtures, `.gz` ones included, are tested as stored: several
+        // formats kept gzipped are recognized by their exact size, which an
+        // unsized stream cannot know.
+        let (data, name) = if common::stored_compressed(path) == Some(".raw.zst") {
+            (common::fixture_bytes(path), common::fixture_name(path))
+        } else {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            (std::fs::read(path).unwrap(), name)
+        };
+        if data.len() > common::LARGE_FIXTURE && std::env::var_os("UNSIZED_LARGE").is_none() {
+            continue;
+        }
 
         let mut plain = Host::named(&name, data.clone(), limits());
         plain.explore(plain.root, 24, 1000);

@@ -32,6 +32,9 @@ expression: "common::explore(&display_name(&path), &data)"
       Volume serial number: 0x1234abcd  [0x43+0x4]
       Volume label: "FAT32 TINY "  [0x47+0xb]
       Filesystem type: "FAT32   "  [0x52+0x8]
+    Boot code — 420 bytes  [0x5a+0x1a4]
+    Boot signature: 0xaa55  [0x1fe+0x2]
+    Reserved sectors — 31 sectors after the boot sector  [0x200+0x3e00]
   ▾ FSInfo sector — free cluster count unknown  [0x200+0x200]
       Lead signature: 0x41615252  [0x200+0x4]
       Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x204+0x1e0]
@@ -40,16 +43,41 @@ expression: "common::explore(&display_name(&path), &data)"
       Next free cluster hint: 4294967295  [0x3ec+0x4]
       Reserved: 00 00 00 00 00 00 00 00 00 00 00 00  |............|  [0x3f0+0xc]
       Trail signature: 0xaa550000  [0x3fc+0x4]
-    Backup boot sector  [0xc00+0x200]
+  ▾ Backup boot sector  [0xc00+0x200]
+      Jump instruction: eb 58 90  |.X.|  [0xc00+0x3]
+      OEM name: "MSWIN4.1"  [0xc03+0x8]
+      Bytes per sector: 512  [0xc0b+0x2]
+      Sectors per cluster: 1  [0xc0d+0x1]
+      Reserved sectors: 32  [0xc0e+0x2]
+      Number of FATs: 2  [0xc10+0x1]
+      Root directory entries: 0  [0xc11+0x2]
+      Total sectors (16-bit): 96  [0xc13+0x2]
+      Media descriptor: fixed disk (0xf8)  [0xc15+0x1]
+      Sectors per FAT (FAT12/16): 0  [0xc16+0x2]
+      Sectors per track: 32  [0xc18+0x2]
+      Heads: 2  [0xc1a+0x2]
+      Hidden sectors: 0  [0xc1c+0x4]
+      Total sectors (32-bit): 0  [0xc20+0x4]
+  ▾ FSInfo sector (backup)  [0xe00+0x200]
+      Lead signature: 0x0  [0xe00+0x4]
+      Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0xe04+0x1e0]
+      Structure signature: 0x0  [0xfe4+0x4]
+      Free cluster count: 0  [0xfe8+0x4]
+      Next free cluster hint: 0  [0xfec+0x4]
+      Reserved: 00 00 00 00 00 00 00 00 00 00 00 00  |............|  [0xff0+0xc]
+      Trail signature: 0x0  [0xffc+0x4]
   ▾ FAT 1 — FAT32 entries  [0x4000+0x200]
-      Cluster 2 — end of chain → 0x4400+0x200
-      Cluster 3 — → 7 → 0x4600+0x200
-      Clusters 4–5 — free
-      Cluster 6 — end of chain → 0x4c00+0x200
-      Cluster 7 — → 10 → 0x4e00+0x200
-      Clusters 8–9 — free
-      Cluster 10 — end of chain → 0x5400+0x200
-      Clusters 11–63 — free
+      Entry 0: 0xffffff8 — the media descriptor, padded with ones  [0x4000+0x4]
+      Entry 1: 0xfffffff — end of chain marker; cleanly unmounted, no I/O errors  [0x4004+0x4]
+      Cluster 2: 0xfffffff — end of chain  [0x4008+0x4] → 0x4400+0x200
+      Cluster 3: 0x7 — → 7  [0x400c+0x4] → 0x4600+0x200
+      Clusters 4–5: 0 — free  [0x4010+0x8]
+      Cluster 6: 0xfffffff — end of chain  [0x4018+0x4] → 0x4c00+0x200
+      Cluster 7: 0xa — → 10  [0x401c+0x4] → 0x4e00+0x200
+      Clusters 8–9: 0 — free  [0x4020+0x8]
+      Cluster 10: 0xfffffff — end of chain  [0x4028+0x4] → 0x5400+0x200
+      Clusters 11–63: 0 — free  [0x402c+0xd4]
+      Unused — entries beyond the last cluster  [0x4100+0x100]
     FAT 2 — copy  [0x4200+0x200]
   ▾ Root directory — cluster 2
     ▾ Clusters — contiguous, 512 bytes
@@ -120,4 +148,9 @@ expression: "common::explore(&display_name(&path), &data)"
           Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
         ▾ Lines — 1 line  [0x4c00+0xc]
             Line 1: "key = value"  [0x4c00+0xb]
+      Unused entries — 10 free slots (end of directory)  [0x44c0+0x140]
     Data region — 31 KiB  [0x4400+0x7c00]
+  ▾ Free clusters — from the FAT
+      Clusters 4–5 — free, 1 KiB  [0x4800+0x400]
+      Clusters 8–9 — free, 1 KiB  [0x5000+0x400]
+      Clusters 11–63 — free, 26.5 KiB  [0x5600+0x6a00]

@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ gzip.sqfs — SquashFS 4.0, gzip, 3 inodes, 128.0 KiB blocks, 219 bytes  [0x0+0x1000]
   ▾ Superblock — version 4.0  [0x0+0x60]
@@ -30,13 +30,34 @@ expression: "common::explore(&name, &data)"
       Strategies: 0x0  [0x68+0x2]
     Data and fragment blocks — 31 bytes, gzip  [0x6a+0x1f]
   ▾ Inode table — 41 bytes  [0x89+0x29]
-    ▾ Metadata block 0: 0x27 — 39 bytes, gzip  [0x89+0x29]
-      ▾ Data — 0x60 bytes decompressed  [0x8b+0x27]
-          Data  [#1:0x0+0x60]
-  ▾ Directory table — 33 bytes  [0xb2+0x21]
+    ▾ Metadata blocks — gzip
+      ▾ Metadata block 0: 0x27 — 39 bytes, gzip  [0x89+0x29]
+        ▾ Data — 0x60 bytes decompressed  [0x8b+0x27]
+            Data  [#1:0x0+0x60]
+    ▾ Inodes — 3 inodes
+        ! malformed: inode type 0 [#1:0x24+0x2]
+      ▾ Inode 1 — ?rw-r--r--, regular file, 80 bytes  [#1:0x0+0x24]
+          Type: regular file (0x2)  [#1:0x0+0x2]
+          Mode: 0x1a4 — ?rw-r--r--  [#1:0x2+0x2]
+          Owner (ID index): 0  [#1:0x4+0x2]
+          Group (ID index): 0  [#1:0x6+0x2]
+          Modified: 2024-01-02 03:04:00 UTC  [#1:0x8+0x4]
+          Inode number: 1  [#1:0xc+0x4]
+          First block: 0x60  [#1:0x10+0x4]
+          Fragment: 4294967295 — none  [#1:0x14+0x4]
+          Offset in fragment: 0  [#1:0x18+0x4]
+          Size: 80 — 80 bytes  [#1:0x1c+0x4]
+        ▾ Block sizes — 1 block  [#1:0x20+0x4]
+            Block 0: 0x1a40002 — 10.3 MiB, uncompressed  [#1:0x20+0x4]
+  ▾ Directory table — 27 bytes  [0xb2+0x1b]
     ▾ Metadata block 0: 0x8019 — 25 bytes, uncompressed  [0xb2+0x1b]
-        Data  [0xb4+0x19]
-    ▾ Metadata block 1: 0x8004 — 4 bytes, uncompressed  [0xcd+0x6]
-        Data  [0xcf+0x4]
-    ID table — 8 bytes  [0xd3+0x8]
-    Padding  [0xdb+0xf25]
+        Data — stored  [0xb4+0x19]
+  ▾ ID table — 1 entries  [0xd3+0x8]
+    ▾ Index 0: 0xcd — metadata block at 0xcd  [0xd3+0x8]
+      ▾ Metadata block — 4 bytes  [0xcd+0x6]
+          Data  [0xcf+0x4]
+    ▾ Entries — 1 entries  [0xcf+0x4]
+        ID 0: 0  [0xcf+0x4]
+  ▾ Root directory
+      ! malformed: not a directory
+    Padding — to the device block size  [0xdb+0xf25]
