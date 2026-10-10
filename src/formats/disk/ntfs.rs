@@ -515,6 +515,70 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             ancestors: Arc::new(Vec::new()),
         },
     ));
+    let clusters = b
+        .total_sectors
+        .saturating_mul(sector)
+        .checked_div(cluster)
+        .unwrap_or(0);
+    cx.emit(
+        Node::new("Free clusters")
+            .summary("from $Bitmap")
+            .lazy(free_clusters, (fs.clone(), clusters)),
+    );
+    Ok(())
+}
+
+/// Runs of clear bits in the cluster bitmap ($Bitmap, record 6).
+async fn free_clusters(cx: Cx, (fs, clusters): (Vol, u64)) -> Result<()> {
+    let span = fs
+        .record_span(6)
+        .ok_or_else(|| Diagnostic::malformed("no $Bitmap record"))?;
+    let rec = fixed_up(&cx, span, b"FILE").await?;
+    let attrs = attributes(&cx, rec).await?;
+    let a = attrs
+        .iter()
+        .find(|a| a.kind == 0x80 && a.name.is_empty())
+        .ok_or_else(|| Diagnostic::malformed("$Bitmap has no data"))?;
+    let data = if let Some(value) = a.resident {
+        value
+    } else {
+        let raw = cx.read_avail(a.runs.unwrap_or(a.span.sub(0, 0))).await?;
+        let (runs, _) = parse_runs(&raw);
+        let list = fs.runs_list(&cx, a.span, &runs, a.data_size)?;
+        list.finish(&cx, "ntfs-runs").await?
+    };
+    let bitmap = cx
+        .read_avail(data.sub(0, clusters.div_ceil(8).min(1 << 24)))
+        .await?;
+    let clusters = clusters.min(crate::bytes::to_u64(bitmap.len()).saturating_mul(8));
+    let mut from: Option<u64> = None;
+    for i in 0..=clusters {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        let used = i == clusters
+            || bitmap.get(crate::bytes::to_usize(i / 8)).is_none_or(|b| {
+                b.checked_shr(u32::try_from(i % 8).unwrap_or(0))
+                    .is_some_and(|v| v & 1 != 0)
+            });
+        match (used, from) {
+            (false, None) => from = Some(i),
+            (true, Some(f)) => {
+                from = None;
+                let n = i.saturating_sub(f);
+                cx.push(
+                    Node::new(format!("Clusters {f}–{}", i.saturating_sub(1)))
+                        .span(
+                            fs.vol
+                                .sub(f.saturating_mul(fs.cluster), n.saturating_mul(fs.cluster)),
+                        )
+                        .summary(format!("free, {}", size(n.saturating_mul(fs.cluster)))),
+                )
+                .await;
+            }
+            _ => {}
+        }
+    }
     Ok(())
 }
 
@@ -578,7 +642,24 @@ async fn record_node(cx: Cx, (fs, n): (Vol, u64)) -> Result<()> {
         cx.emit(attribute_node(&fs, a));
     }
     if let Some(data) = attrs.iter().find(|a| a.kind == 0x80 && a.name.is_empty()) {
-        cx.emit(stream_content(&cx, &fs, data).await?);
+        let node = stream_content(&cx, &fs, data).await?;
+        // The MFT and $Boot are the volume's own structures, already shown
+        // at the top level: dissecting them again would recurse into the
+        // volume (and $Boot alone is not a whole volume).
+        let own = match n {
+            0 => Some("the MFT itself (its records are listed above)"),
+            7 => Some("the volume's boot sector and loader (shown at the top level)"),
+            _ => None,
+        };
+        if let Some(what) = own {
+            let mut leaf = Node::new("Content").summary(what);
+            if let Some(s) = node.span {
+                leaf = leaf.span(s);
+            }
+            cx.emit(leaf);
+        } else {
+            cx.emit(node);
+        }
     }
     Ok(())
 }

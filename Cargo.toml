@@ -27,6 +27,9 @@ include = [
 
 [dev-dependencies]
 insta = "1"
+# Test harness only: inflates whole disk images stored as `*.raw.zst`
+# fixtures. The library itself stays free of dependencies.
+zstd = { version = "0.13", default-features = false }
 
 [lints.rust]
 unsafe_code = "forbid"

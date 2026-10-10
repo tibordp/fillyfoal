@@ -75,9 +75,14 @@ expression: "common::explore(&display_name(&path), &data)"
           Volume serial number: 0x1234abcd  [0x8027+0x4]
           Volume label: "MACFAT     "  [0x802b+0xb]
           Filesystem type: "FAT12   "  [0x8036+0x8]
+        Boot code — 448 bytes  [0x803e+0x1c0]
+        Boot signature: 0xaa55  [0x81fe+0x2]
       ▾ FAT 1 — FAT12 entries  [0x8200+0x200]
-          Cluster 2 — end of chain → 0x8800+0x200
-          Clusters 3–45 — free
+          Entry 0: 0xff8 — the media descriptor, padded with ones  [0x8200+0x2]
+          Entry 1: 0xfff — end of chain marker  [0x8201+0x2]
+          Cluster 2: 0xfff — end of chain  [0x8203+0x2] → 0x8800+0x200
+          Clusters 3–45: 0 — free  [0x8204+0x41]
+          Unused — entries beyond the last cluster  [0x8245+0x1bb]
         FAT 2 — copy  [0x8400+0x200]
       ▾ Root directory  [0x8600+0x200]
           Volume label: "MACFAT"  [0x8600+0x20]
@@ -100,7 +105,10 @@ expression: "common::explore(&display_name(&path), &data)"
               Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
             ▾ Lines — 1 line  [0x8800+0xe]
                 Line 1: "partition one"  [0x8800+0xd]
+          Unused entries — 14 free slots (end of directory)  [0x8640+0x1c0]
         Data region — 22 KiB  [0x8800+0x5800]
+      ▾ Free clusters — from the FAT
+          Clusters 3–45 — free, 21.5 KiB  [0x8a00+0x5600]
   ▾ Partition 3: Extra — Apple_Free, 8 KiB at block 112  [0x600+0x88]
     ▾ Entry  [0x600+0x88]
         Signature: "PM"  [0x600+0x2]

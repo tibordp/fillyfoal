@@ -1035,7 +1035,8 @@ impl Piece {
         let skip = u64::from(from.saturating_sub(self.cp));
         let n = u64::from(to.saturating_sub(from));
         wd.sub(
-            self.start().saturating_add(skip.saturating_mul(self.width())),
+            self.start()
+                .saturating_add(skip.saturating_mul(self.width())),
             n.saturating_mul(self.width()),
         )
     }

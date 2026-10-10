@@ -238,6 +238,16 @@ impl Fat {
         )
     }
 
+    /// The bytes of cluster `c`'s FAT entry (FAT12 entries share a byte).
+    fn entry_span(&self, c: u32) -> Span {
+        let c = u64::from(c);
+        match self.kind {
+            Kind::Fat12 => self.fat.sub(c.saturating_add(c / 2), 2),
+            Kind::Fat16 => self.fat.sub(c.saturating_mul(2), 2),
+            Kind::Fat32 => self.fat.sub(c.saturating_mul(4), 4),
+        }
+    }
+
     /// The FAT entry of cluster `c`: the next cluster in its chain.
     async fn next(&self, cx: &Cx, c: u32) -> Result<u32> {
         let c64 = u64::from(c);
@@ -382,6 +392,55 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             ext.label
         }
     };
+    let ext_end = Bpb::SIZE.saturating_add(if kind == Kind::Fat32 {
+        Ebpb32::SIZE
+    } else {
+        Ebpb16::SIZE
+    });
+    if sector >= 512 {
+        cx.emit(
+            Node::new("Boot code")
+                .span(vol.sub(ext_end, 510u64.saturating_sub(ext_end)))
+                .summary(size(510u64.saturating_sub(ext_end))),
+        );
+        let sig = cx.read_avail(vol.sub(510, 2)).await?;
+        let sig_value = u16_le(&sig, 0).unwrap_or(0);
+        let mut sig_node = Node::new("Boot signature")
+            .span(vol.sub(510, 2))
+            .value(Value::UInt {
+                value: sig_value.into(),
+                bits: 16,
+                radix: crate::value::Radix::Hex,
+            });
+        if sig_value != 0xaa55 {
+            sig_node = sig_node.diag(Diagnostic::warning("expected 0xaa55"));
+        }
+        cx.emit(sig_node);
+        if sector > 512 {
+            cx.emit(
+                Node::new("Unused")
+                    .span(vol.sub(512, sector.saturating_sub(512)))
+                    .summary("rest of the boot sector"),
+            );
+        }
+    }
+    if u64::from(bpb.reserved) > 1 {
+        cx.emit(
+            Node::new("Reserved sectors")
+                .span(
+                    vol.sub(
+                        sector,
+                        u64::from(bpb.reserved)
+                            .saturating_sub(1)
+                            .saturating_mul(sector),
+                    ),
+                )
+                .summary(format!(
+                    "{} sectors after the boot sector",
+                    bpb.reserved.saturating_sub(1)
+                )),
+        );
+    }
     let label = label.trim_end().to_owned();
     cx.annotate(format!(
         "{} filesystem{}, {}, {} clusters of {}",
@@ -417,10 +476,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.emit(node);
         }
         if ext.backup_boot != 0 && ext.backup_boot != 0xffff {
-            cx.emit(
-                Node::new("Backup boot sector")
-                    .span(vol.sub(u64::from(ext.backup_boot).saturating_mul(sector), sector)),
-            );
+            let at = u64::from(ext.backup_boot).saturating_mul(sector);
+            cx.emit(Bpb::node("Backup boot sector", vol.sub(at, sector), LE));
+            if ext.fsinfo != 0 && ext.fsinfo != 0xffff {
+                let copy = vol.sub(
+                    at.saturating_add(u64::from(ext.fsinfo).saturating_mul(sector)),
+                    FsInfo::SIZE,
+                );
+                cx.emit(FsInfo::node("FSInfo sector (backup)", copy, LE));
+            }
         }
     }
 
@@ -473,12 +537,96 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .span(fs.data)
             .summary(size(fs.data.len)),
     );
+    cx.emit(
+        Node::new("Free clusters")
+            .summary("from the FAT")
+            .lazy(free_clusters, fs.clone()),
+    );
     Ok(())
+}
+
+/// Lists runs of free clusters (FAT entry 0) with their data.
+async fn free_clusters(cx: Cx, fs: Vol) -> Result<()> {
+    let end = fs.clusters.saturating_add(2);
+    let mut from: Option<u32> = None;
+    for c in 2..=end {
+        if c.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        let free = c < end && fs.next(&cx, c).await? == 0;
+        match (free, from) {
+            (true, None) => from = Some(c),
+            (false, Some(f)) => {
+                from = None;
+                let (Some(a), Some(b)) = (fs.cluster_span(f), fs.cluster_span(c.saturating_sub(1)))
+                else {
+                    continue;
+                };
+                let span = Span::new(a.source, a.offset, b.end().saturating_sub(a.offset));
+                if span.len == 0 {
+                    continue;
+                }
+                cx.push(
+                    Node::new(if f == c.saturating_sub(1) {
+                        format!("Cluster {f}")
+                    } else {
+                        format!("Clusters {f}–{}", c.saturating_sub(1))
+                    })
+                    .span(span)
+                    .summary(format!("free, {}", size(span.len))),
+                )
+                .await;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// Entry 1 holds an end-of-chain marker; on FAT16 and FAT32 its top two
+/// bits are the clean-shutdown and no-I/O-error flags (set means clean).
+fn entry1_summary(kind: Kind, value: u32) -> String {
+    let (clean, healthy) = match kind {
+        Kind::Fat12 => return "end of chain marker".to_owned(),
+        Kind::Fat16 => (value & 0x8000 != 0, value & 0x4000 != 0),
+        Kind::Fat32 => (value & 0x0800_0000 != 0, value & 0x0400_0000 != 0),
+    };
+    format!(
+        "end of chain marker; {}, {}",
+        if clean {
+            "cleanly unmounted"
+        } else {
+            "dirty (not cleanly unmounted)"
+        },
+        if healthy {
+            "no I/O errors"
+        } else {
+            "I/O errors were seen"
+        }
+    )
 }
 
 /// Lists FAT entries; runs of free clusters are shown as one node.
 async fn fat_entries(cx: Cx, fs: Vol) -> Result<()> {
     let end = fs.clusters.saturating_add(2);
+    for c in 0..2u32 {
+        let value = fs.next(&cx, c).await?;
+        cx.push(
+            Node::new(if c == 0 { "Entry 0" } else { "Entry 1" })
+                .span(fs.entry_span(c))
+                .value(Value::UInt {
+                    value: value.into(),
+                    bits: 32,
+                    radix: crate::value::Radix::Hex,
+                })
+                .summary(if c == 0 {
+                    "the media descriptor, padded with ones".to_owned()
+                } else {
+                    entry1_summary(fs.kind, value)
+                }),
+        )
+        .await;
+    }
     let mut free_from: Option<u32> = None;
     let flush = |from: u32, to: u32| {
         let name = if from == to {
@@ -486,7 +634,20 @@ async fn fat_entries(cx: Cx, fs: Vol) -> Result<()> {
         } else {
             format!("Clusters {from}–{to}")
         };
-        Node::new(name).summary("free")
+        let a = fs.entry_span(from);
+        let b = fs.entry_span(to);
+        Node::new(name)
+            .span(Span::new(
+                a.source,
+                a.offset,
+                b.end().saturating_sub(a.offset),
+            ))
+            .value(Value::UInt {
+                value: 0,
+                bits: 32,
+                radix: crate::value::Radix::Dec,
+            })
+            .summary("free")
     };
     for c in 2..end {
         cx.progress(c.into(), end.into());
@@ -505,7 +666,14 @@ async fn fat_entries(cx: Cx, fs: Vol) -> Result<()> {
         } else {
             format!("→ {next}")
         };
-        let mut node = Node::new(format!("Cluster {c}")).summary(summary);
+        let mut node = Node::new(format!("Cluster {c}"))
+            .span(fs.entry_span(c))
+            .value(Value::UInt {
+                value: next.into(),
+                bits: 32,
+                radix: crate::value::Radix::Hex,
+            })
+            .summary(summary);
         if let Some(span) = fs.cluster_span(c) {
             node = node.target(span);
         }
@@ -513,6 +681,17 @@ async fn fat_entries(cx: Cx, fs: Vol) -> Result<()> {
     }
     if let Some(from) = free_from {
         cx.push(flush(from, end.saturating_sub(1))).await;
+    }
+    let used = fs
+        .entry_span(end.saturating_sub(1))
+        .end()
+        .saturating_sub(fs.fat.offset);
+    if fs.fat.len > used {
+        cx.emit(
+            Node::new("Unused")
+                .span(fs.fat.tail(used))
+                .summary("entries beyond the last cluster"),
+        );
     }
     Ok(())
 }
@@ -631,6 +810,12 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
             let first = raw.first().copied().unwrap_or(0);
             let attr = raw.get(11).copied().unwrap_or(0);
             if first == 0 {
+                let rest = piece.tail(to_u64(i).saturating_mul(ENTRY));
+                cx.push(Node::new("Unused entries").span(rest).summary(format!(
+                    "{} free slots (end of directory)",
+                    rest.len / ENTRY
+                )))
+                .await;
                 return Ok(());
             }
             if attr & 0x3f == 0x0f {

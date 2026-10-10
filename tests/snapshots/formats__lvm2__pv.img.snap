@@ -49,9 +49,14 @@ expression: "common::explore(&display_name(&path), &data)"
         Volume serial number: 0x1234abcd  [#1:0x27+0x4]
         Volume label: "LVMDATA    "  [#1:0x2b+0xb]
         Filesystem type: "FAT12   "  [#1:0x36+0x8]
+      Boot code — 448 bytes  [#1:0x3e+0x1c0]
+      Boot signature: 0xaa55  [#1:0x1fe+0x2]
     ▾ FAT 1 — FAT12 entries  [#1:0x200+0x200]
-        Cluster 2 — end of chain → #1:0x800+0x200
-        Clusters 3–45 — free
+        Entry 0: 0xff8 — the media descriptor, padded with ones  [#1:0x200+0x2]
+        Entry 1: 0xfff — end of chain marker  [#1:0x201+0x2]
+        Cluster 2: 0xfff — end of chain  [#1:0x203+0x2] → #1:0x800+0x200
+        Clusters 3–45: 0 — free  [#1:0x204+0x41]
+        Unused — entries beyond the last cluster  [#1:0x245+0x1bb]
       FAT 2 — copy  [#1:0x400+0x200]
     ▾ Root directory  [#1:0x600+0x200]
         Volume label: "LVMDATA"  [#1:0x600+0x20]
@@ -74,4 +79,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
           ▾ Lines — 1 line  [#1:0x800+0xe]
               Line 1: "partition one"  [#1:0x800+0xd]
+        Unused entries — 14 free slots (end of directory)  [#1:0x640+0x1c0]
       Data region — 22 KiB  [#1:0x800+0x5800]
+    ▾ Free clusters — from the FAT
+        Clusters 3–45 — free, 21.5 KiB  [#1:0xa00+0x5600]

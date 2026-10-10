@@ -2,6 +2,9 @@
 //!
 //!   DEPTH_AUDIT=report.csv cargo test --test depth_audit -- --ignored
 //!
+//! With `DEPTH_GAPS=1`, the gap and container-only runs of each fixture are
+//! also written next to the report (`<report>.<tree>.<dir>.<file>.gaps`).
+//!
 //! Every fixture is explored completely and each byte of the file is
 //! classified by the most specific node covering it: a decoded field (a
 //! node with a value), a payload explained by what it decodes to (a
@@ -76,12 +79,12 @@ fn depth_audit() {
         "tree,dir,file,format,size,nodes,field_pct,decoded_pct,opaque_pct,container_pct,gap_pct,largest_opaque_pct\n",
     );
     for (tree, path) in fixtures() {
-        let data = std::fs::read(&path).unwrap();
+        let data = common::fixture_bytes(&path);
         let size = data.len();
         if size == 0 {
             continue;
         }
-        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        let name = common::fixture_name(&path);
         let dir = path
             .parent()
             .unwrap()
@@ -152,6 +155,24 @@ fn depth_audit() {
             writeln!(csv, "{tree},{dir},{name},PANIC,{size},0,0,0,0,0,100,0").unwrap();
             continue;
         };
+        if std::env::var_os("DEPTH_GAPS").is_some() {
+            // Gap and container-only runs of 16 bytes or more, for finding
+            // what a dissector leaves unexplained.
+            let mut runs = String::new();
+            let mut at = 0usize;
+            while at < size {
+                let kind = class[at];
+                let start = at;
+                while at < size && class[at] == kind {
+                    at += 1;
+                }
+                if (kind == GAP || kind == CONTAINER) && at - start >= 16 {
+                    let what = if kind == GAP { "gap" } else { "container" };
+                    writeln!(runs, "{what},{start:#x},{:#x}", at - start).unwrap();
+                }
+            }
+            std::fs::write(format!("{report}.{tree}.{dir}.{name}.gaps"), runs).unwrap();
+        }
         let pct = |k: u8| 100.0 * class.iter().filter(|&&c| c == k).count() as f64 / size as f64;
         writeln!(
             csv,

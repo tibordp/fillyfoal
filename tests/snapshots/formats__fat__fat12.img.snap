@@ -25,21 +25,26 @@ expression: "common::explore(&display_name(&path), &data)"
       Volume serial number: 0x1234abcd  [0x27+0x4]
       Volume label: "FIXTURE    "  [0x2b+0xb]
       Filesystem type: "FAT12   "  [0x36+0x8]
+    Boot code — 448 bytes  [0x3e+0x1c0]
+    Boot signature: 0xaa55  [0x1fe+0x2]
   ▾ FAT 1 — FAT12 entries  [0x200+0x200]
-      Cluster 2 — end of chain → 0xe00+0x200
-      Cluster 3 — end of chain → 0x1000+0x200
-      Cluster 4 — end of chain → 0x1200+0x200
-      Cluster 5 — end of chain → 0x1400+0x200
-      Cluster 6 — end of chain → 0x1600+0x200
-      Cluster 7 — end of chain → 0x1800+0x200
-      Clusters 8–9 — free
-      Cluster 10 — → 13 → 0x1e00+0x200
-      Clusters 11–12 — free
-      Cluster 13 — end of chain → 0x2400+0x200
-      Clusters 14–15 — free
-      Cluster 16 — → 17 → 0x2a00+0x200
-      Cluster 17 — → 10 → 0x2c00+0x200
-      Clusters 18–122 — free
+      Entry 0: 0xff8 — the media descriptor, padded with ones  [0x200+0x2]
+      Entry 1: 0xfff — end of chain marker  [0x201+0x2]
+      Cluster 2: 0xfff — end of chain  [0x203+0x2] → 0xe00+0x200
+      Cluster 3: 0xfff — end of chain  [0x204+0x2] → 0x1000+0x200
+      Cluster 4: 0xfff — end of chain  [0x206+0x2] → 0x1200+0x200
+      Cluster 5: 0xfff — end of chain  [0x207+0x2] → 0x1400+0x200
+      Cluster 6: 0xfff — end of chain  [0x209+0x2] → 0x1600+0x200
+      Cluster 7: 0xfff — end of chain  [0x20a+0x2] → 0x1800+0x200
+      Clusters 8–9: 0 — free  [0x20c+0x3]
+      Cluster 10: 0xd — → 13  [0x20f+0x2] → 0x1e00+0x200
+      Clusters 11–12: 0 — free  [0x210+0x4]
+      Cluster 13: 0xfff — end of chain  [0x213+0x2] → 0x2400+0x200
+      Clusters 14–15: 0 — free  [0x215+0x3]
+      Cluster 16: 0x11 — → 17  [0x218+0x2] → 0x2a00+0x200
+      Cluster 17: 0xa — → 10  [0x219+0x2] → 0x2c00+0x200
+      Clusters 18–122: 0 — free  [0x21b+0x9e]
+      Unused — entries beyond the last cluster  [0x2b9+0x147]
     FAT 2 — copy  [0x400+0x200]
   ▾ Root directory  [0x600+0x800]
       Volume label: "FIXTURE"  [0x600+0x20]
@@ -214,6 +219,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
           ▾ Lines — 1 line  [0x1800+0xb]
               Line 1: "*markdown*"  [0x1800+0xa]
+        Unused entries — 10 free slots (end of directory)  [0x14c0+0x140]
     ▾ FRAG.GZ — 1.8 KiB, modified 2024-05-17 13:37:42  [0x720+0x20]
       ▾ Directory entry  [0x720+0x20]
           Short name: "FRAG.GZ"  [0x720+0xb]
@@ -255,4 +261,10 @@ expression: "common::explore(&display_name(&path), &data)"
         Modified: 2024-05-17 13:37:42 UTC  [0x756+0x4]
         First cluster (low word): 0  [0x75a+0x2]
         File size: 0 — 0 bytes  [0x75c+0x4]
+      Unused entries — 53 free slots (end of directory)  [0x760+0x6a0]
     Data region — 60.5 KiB  [0xe00+0xf200]
+  ▾ Free clusters — from the FAT
+      Clusters 8–9 — free, 1 KiB  [0x1a00+0x400]
+      Clusters 11–12 — free, 1 KiB  [0x2000+0x400]
+      Clusters 14–15 — free, 1 KiB  [0x2600+0x400]
+      Clusters 18–122 — free, 52.5 KiB  [0x2e00+0xd200]

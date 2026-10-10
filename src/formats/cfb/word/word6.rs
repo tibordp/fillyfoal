@@ -149,7 +149,10 @@ fn font_list(data: &[u8]) -> Vec<Font> {
 /// "Cyr", ... variants of the system fonts on such systems).
 fn codepage(chse: u16, fonts: &[Font]) -> (u16, String) {
     if chse == 256 {
-        return (10000, "the FIB says the text is in the Macintosh character set".into());
+        return (
+            10000,
+            "the FIB says the text is in the Macintosh character set".into(),
+        );
     }
     for font in fonts {
         if let Some(&(chs, cp)) = CHARSET_CODEPAGES.iter().find(|(c, _)| *c == font.chs) {
@@ -178,8 +181,15 @@ pub(super) async fn word6(cx: &Cx, wd: Span, head: &[u8]) -> Result<()> {
         u32_le(head, 0x1c),
         u16_le(head, at(FIB_END).saturating_sub(2)),
     ) else {
-        cx.emit(Fib6::node("File Information Block", wd.sub(0, Fib6::SIZE), LE));
-        return Err(Diagnostic::truncated(wd.sub(0, FIB_END), to_u64(head.len())));
+        cx.emit(Fib6::node(
+            "File Information Block",
+            wd.sub(0, Fib6::SIZE),
+            LE,
+        ));
+        return Err(Diagnostic::truncated(
+            wd.sub(0, FIB_END),
+            to_u64(head.len()),
+        ));
     };
     let lw_at = |i: u64| u32_le(head, at(0x34u64.saturating_add(i.saturating_mul(4)))).unwrap_or(0);
     // Word 97's FibRgLw order, so the stories are found the same way.
@@ -242,7 +252,9 @@ pub(super) async fn word6(cx: &Cx, wd: Span, head: &[u8]) -> Result<()> {
             .lazy(fib_node, doc.clone()),
     );
     let main = fib.lw(3);
-    cx.annotate(format!("Word 6.0/95 document, {main} characters of main text"));
+    cx.annotate(format!(
+        "Word 6.0/95 document, {main} characters of main text"
+    ));
     if flags & 0x0100 != 0 {
         cx.emit(Node::new("Encryption").diag(Diagnostic::unsupported(
             "the document is encrypted: its text is not readable",
@@ -389,7 +401,9 @@ async fn font_table(cx: Cx, span: Span) -> Result<()> {
 async fn ffn_node(cx: Cx, span: Span) -> Result<()> {
     let block = cx.block(span).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
-    f.u8("cbFfnM1").desc("Size of the FFN in bytes, minus 1").emit()?;
+    f.u8("cbFfnM1")
+        .desc("Size of the FFN in bytes, minus 1")
+        .emit()?;
     f.u8("Flags")
         .hex()
         .with(|&v, n| {
@@ -487,7 +501,9 @@ fn dttm(v: u32) -> String {
         (v >> 11) & 0x1f,
         (v >> 6) & 0x1f,
         v & 0x3f,
-        WEEKDAYS.get(to_usize(((v >> 29) & 7).into())).unwrap_or(&"?")
+        WEEKDAYS
+            .get(to_usize(((v >> 29) & 7).into()))
+            .unwrap_or(&"?")
     )
 }
 
@@ -520,7 +536,9 @@ async fn dop(cx: Cx, span: Span) -> Result<()> {
             .desc(desc)
             .emit()?;
     }
-    f.u16("nRevision").desc("Number of times the document was saved").emit()?;
+    f.u16("nRevision")
+        .desc("Number of times the document was saved")
+        .emit()?;
     f.u32("tmEdited")
         .desc("Minutes spent editing the document")
         .emit()?;

@@ -81,9 +81,14 @@ expression: "common::explore(&display_name(&path), &data)"
             Volume serial number: 0x1234abcd  [0x1027+0x4]
             Volume label: "EFI        "  [0x102b+0xb]
             Filesystem type: "FAT12   "  [0x1036+0x8]
+          Boot code — 448 bytes  [0x103e+0x1c0]
+          Boot signature: 0xaa55  [0x11fe+0x2]
         ▾ FAT 1 — FAT12 entries  [0x1200+0x200]
-            Cluster 2 — end of chain → 0x1800+0x200
-            Clusters 3–45 — free
+            Entry 0: 0xff8 — the media descriptor, padded with ones  [0x1200+0x2]
+            Entry 1: 0xfff — end of chain marker  [0x1201+0x2]
+            Cluster 2: 0xfff — end of chain  [0x1203+0x2] → 0x1800+0x200
+            Clusters 3–45: 0 — free  [0x1204+0x41]
+            Unused — entries beyond the last cluster  [0x1245+0x1bb]
           FAT 2 — copy  [0x1400+0x200]
         ▾ Root directory  [0x1600+0x200]
             Volume label: "EFI"  [0x1600+0x20]
@@ -106,7 +111,10 @@ expression: "common::explore(&display_name(&path), &data)"
                 Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
               ▾ Lines — 1 line  [0x1800+0xe]
                   Line 1: "partition one"  [0x1800+0xd]
+            Unused entries — 14 free slots (end of directory)  [0x1640+0x1c0]
           Data region — 22 KiB  [0x1800+0x5800]
+        ▾ Free clusters — from the FAT
+            Clusters 3–45 — free, 21.5 KiB  [0x1a00+0x5600]
     ▾ Partition 2: swap — Linux swap, 12 KiB at LBA 56  [0x480+0x80]
       ▾ Entry  [0x480+0x80]
           Partition type GUID: {0657fd6d-a4ab-43c4-84e5-0933c84b4f4f} — Linux swap  [0x480+0x10]

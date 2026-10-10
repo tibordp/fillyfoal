@@ -272,7 +272,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(vol.sub(SUPER, 32)).await?;
     let (version, name_len) =
         version(&head).ok_or_else(|| Diagnostic::malformed("no Minix magic"))?;
-    let (imap, zmap, log_zone, block, inodes, zones) = if version == 3 {
+    let (imap, zmap, log_zone, block, inodes, zones, first_zone) = if version == 3 {
         let sb = parse(
             &cx,
             vol.sub(SUPER, Superblock3::SIZE),
@@ -293,6 +293,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             u64::from(sb.block_size),
             u64::from(sb.inodes),
             u64::from(sb.zones),
+            u64::from(sb.first_data_zone),
         )
     } else {
         let sb = parse(
@@ -320,6 +321,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             1024,
             u64::from(sb.inodes),
             zones,
+            u64::from(sb.first_data_zone),
         )
     };
     if !matches!(block, 1024 | 2048 | 4096 | 8192) || log_zone > 8 {
@@ -344,23 +346,158 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         "Minix v{version} filesystem, {}, {inodes} inodes, {name_len}-character names",
         size(zones.saturating_mul(fs.zone()))
     ));
-    cx.emit(Node::new("Inode bitmap").span(vol.sub(
+    cx.emit(
+        Node::new("Boot block")
+            .span(vol.sub(0, 1024))
+            .summary("left for a boot loader"),
+    );
+    let sb_len = if version == 3 {
+        Superblock3::SIZE
+    } else {
+        Superblock12::SIZE
+    };
+    let sb_block_end = 2048u64.max(block.saturating_mul(2));
+    cx.emit(
+        Node::new("Unused")
+            .span(vol.sub(
+                SUPER.saturating_add(sb_len),
+                sb_block_end.saturating_sub(SUPER).saturating_sub(sb_len),
+            ))
+            .summary("rest of the superblock's block"),
+    );
+    let imap_span = vol.sub(
         2u64.saturating_mul(block),
         u64::from(imap).saturating_mul(block),
-    )));
-    cx.emit(Node::new("Zone bitmap").span(vol.sub(
+    );
+    let zmap_span = vol.sub(
         2u64.saturating_add(imap.into()).saturating_mul(block),
         u64::from(zmap).saturating_mul(block),
+    );
+    let imap_raw = cx.read_avail(imap_span).await?;
+    let zmap_raw = cx.read_avail(zmap_span).await?;
+    // Set bits 1..=n (bit 0 is reserved).
+    let used = |raw: &[u8], n: u64| -> u64 {
+        let bytes = crate::bytes::to_usize(n.saturating_add(1) / 8);
+        let full: u64 = raw
+            .get(..bytes)
+            .unwrap_or(raw)
+            .iter()
+            .map(|b| u64::from(b.count_ones()))
+            .sum();
+        let rest = n.saturating_add(1) % 8;
+        let partial = raw.get(bytes).map_or(0, |b| {
+            u64::from(
+                (b & 0xffu8
+                    .checked_shr(u32::try_from(8u64.saturating_sub(rest)).unwrap_or(8))
+                    .unwrap_or(0))
+                .count_ones(),
+            )
+        });
+        full.saturating_add(partial)
+            .saturating_sub(u64::from(raw.first().is_some_and(|b| b & 1 != 0)))
+    };
+    let data_zones = zones.saturating_sub(first_zone);
+    cx.emit(Node::new("Inode bitmap").span(imap_span).summary(format!(
+        "{} of {inodes} inodes in use (bit 0 is reserved)",
+        used(&imap_raw, inodes.min(1 << 20))
+    )));
+    cx.emit(Node::new("Zone bitmap").span(zmap_span).summary(format!(
+        "{} of {data_zones} data zones in use (bit 0 is reserved)",
+        used(&zmap_raw, data_zones.min(1 << 20))
     )));
     cx.emit(
         Node::new("Inode table")
             .span(fs.inodes)
-            .summary(format!("{inodes} inodes of {inode_size} bytes")),
+            .summary(format!("{inodes} inodes of {inode_size} bytes"))
+            .lazy(inode_table, (fs.clone(), imap_span, inodes)),
+    );
+    cx.emit(
+        Node::new("Free zones")
+            .summary("from the zone bitmap")
+            .lazy(free_zones, (fs.clone(), zmap_span, first_zone, data_zones)),
     );
     cx.emit(Node::new("Root directory").summary("inode 1").lazy(
         crate::expander!(self::directory: (FsRef, u32, Arc<Vec<u32>>)),
         (fs.clone(), ROOT, Arc::new(Vec::new())),
     ));
+    Ok(())
+}
+
+/// Whether bit `i` of a bitmap is set.
+fn bit(raw: &[u8], i: u64) -> bool {
+    raw.get(crate::bytes::to_usize(i / 8)).is_some_and(|b| {
+        b.checked_shr(u32::try_from(i % 8).unwrap_or(0))
+            .is_some_and(|v| v & 1 != 0)
+    })
+}
+
+/// The inode table: in-use inodes as records, unused runs as one node.
+async fn inode_table(cx: Cx, (fs, imap, count): (FsRef, Span, u64)) -> Result<()> {
+    let raw = cx.read_avail(imap).await?;
+    let count = count.min(to_u64(raw.len()).saturating_mul(8));
+    let mut free: Option<u64> = None;
+    for i in 1..=count.saturating_add(1) {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
+        let used = i <= count && bit(&raw, i);
+        if !used && i <= count {
+            free.get_or_insert(i);
+            continue;
+        }
+        if let Some(from) = free.take() {
+            let a = fs.inode_span(u32::try_from(from).unwrap_or(u32::MAX));
+            let n = i.saturating_sub(from);
+            cx.push(
+                Node::new(format!("Inodes {from}–{}", i.saturating_sub(1)))
+                    .span(Span::new(
+                        a.source,
+                        a.offset,
+                        n.saturating_mul(fs.inode_size),
+                    ))
+                    .summary(format!("{n} unused")),
+            )
+            .await;
+        }
+        if used {
+            let ino = u32::try_from(i).unwrap_or(u32::MAX);
+            cx.push(inode_node(&fs, format!("Inode {ino}"), fs.inode_span(ino)))
+                .await;
+        }
+    }
+    Ok(())
+}
+
+/// Runs of free data zones from the zone bitmap.
+async fn free_zones(cx: Cx, (fs, zmap, first, count): (FsRef, Span, u64, u64)) -> Result<()> {
+    let raw = cx.read_avail(zmap).await?;
+    let count = count.min(to_u64(raw.len()).saturating_mul(8));
+    let zone = fs.zone();
+    let mut from: Option<u64> = None;
+    for i in 1..=count.saturating_add(1) {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        let used = i > count || bit(&raw, i);
+        match (used, from) {
+            (false, None) => from = Some(i),
+            (true, Some(f)) => {
+                from = None;
+                let z = first.saturating_add(f).saturating_sub(1);
+                let n = i.saturating_sub(f);
+                cx.push(
+                    Node::new(format!(
+                        "Zones {z}–{}",
+                        z.saturating_add(n).saturating_sub(1)
+                    ))
+                    .span(fs.vol.sub(z.saturating_mul(zone), n.saturating_mul(zone)))
+                    .summary(format!("free, {}", size(n.saturating_mul(zone)))),
+                )
+                .await;
+            }
+            _ => {}
+        }
+    }
     Ok(())
 }
 
