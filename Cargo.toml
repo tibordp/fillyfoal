@@ -1,20 +1,58 @@
-[package]
-name = "fillyfoal"
+[workspace]
+members = ["crates/*"]
+# Plain `cargo test`/`clippy` at the root cover every crate.
+default-members = [".", "crates/*"]
+# web/wasm is its own workspace (see its manifest).
+exclude = ["web"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
-description = "Lazy, sans-I/O structural dissection of files"
 license = "GPL-3.0-or-later"
-readme = "README.md"
 publish = false
+
+[workspace.dependencies]
+fillyfoal-codec = { path = "crates/codec" }
+fillyfoal-core = { path = "crates/core" }
+fillyfoal-text = { path = "crates/text" }
+fillyfoal-archive = { path = "crates/archive" }
+fillyfoal-data = { path = "crates/data" }
+fillyfoal-image = { path = "crates/image" }
+fillyfoal-av = { path = "crates/av" }
+fillyfoal-security = { path = "crates/security" }
+fillyfoal-exec = { path = "crates/exec" }
+fillyfoal-docs = { path = "crates/docs" }
+fillyfoal-system = { path = "crates/system" }
+fillyfoal-science = { path = "crates/science" }
+fillyfoal-games = { path = "crates/games" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+arithmetic_side_effects = "deny"
+indexing_slicing = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+[package]
+name = "fillyfoal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Lazy, sans-I/O structural dissection of files"
+license.workspace = true
+readme = "README.md"
+publish.workspace = true
 keywords = ["file-format", "dissector", "parser", "binary", "forensics"]
 categories = ["parser-implementations", "compression", "filesystem", "encoding"]
 
-# Tests, fixtures and snapshots (~20 MB) stay in the repository; unit-test
-# data under src/ is only read by `cargo test` from a checkout.
+# Tests, fixtures and snapshots stay in the repository; the crates' unit
+# tests read them from a checkout.
 include = [
     "/src/**/*.rs",
-    "/src/codec/brotli_dictionary.bin",
     "/examples/",
     "/docs/",
     "/DESIGN.md",
@@ -23,7 +61,33 @@ include = [
     "/COPYING",
 ]
 
+[features]
+default = ["text", "archive", "data", "image", "av", "security", "exec", "docs", "system", "science", "games"]
+text = ["dep:fillyfoal-text"]
+archive = ["dep:fillyfoal-archive", "text"]
+data = ["dep:fillyfoal-data", "text"]
+image = ["dep:fillyfoal-image", "data", "text"]
+av = ["dep:fillyfoal-av", "image", "text"]
+security = ["dep:fillyfoal-security", "text"]
+exec = ["dep:fillyfoal-exec", "archive", "image", "security", "text"]
+docs = ["dep:fillyfoal-docs", "av", "data", "image", "security", "text"]
+system = ["dep:fillyfoal-system", "archive", "data", "exec", "text"]
+science = ["dep:fillyfoal-science", "archive", "image", "text"]
+games = ["dep:fillyfoal-games", "system", "text"]
+
 [dependencies]
+fillyfoal-core.workspace = true
+fillyfoal-text = { workspace = true, optional = true }
+fillyfoal-archive = { workspace = true, optional = true }
+fillyfoal-data = { workspace = true, optional = true }
+fillyfoal-image = { workspace = true, optional = true }
+fillyfoal-av = { workspace = true, optional = true }
+fillyfoal-security = { workspace = true, optional = true }
+fillyfoal-exec = { workspace = true, optional = true }
+fillyfoal-docs = { workspace = true, optional = true }
+fillyfoal-system = { workspace = true, optional = true }
+fillyfoal-science = { workspace = true, optional = true }
+fillyfoal-games = { workspace = true, optional = true }
 
 [dev-dependencies]
 insta = "1"
@@ -31,15 +95,8 @@ insta = "1"
 # fixtures. The library itself stays free of dependencies.
 zstd = { version = "0.13", default-features = false }
 
-[lints.rust]
-unsafe_code = "forbid"
-
-[lints.clippy]
-arithmetic_side_effects = "deny"
-indexing_slicing = "deny"
-unwrap_used = "deny"
-expect_used = "deny"
-panic = "deny"
+[lints]
+workspace = true
 
 [profile.dev]
 # The robustness sweep runs every dissector hundreds of times per fixture;

@@ -4,7 +4,7 @@ No StuffIt producer (or independent decoder) runs here: StuffIt itself is
 a classic Mac OS / Windows application, and The Unarchiver's `unar` is not
 installed. So this script carries its own encoders for the fork methods,
 written from the same (unverified) understanding of the formats as
-`src/codec/stuffit.rs`: RLE90 (1), Huffman (3), LZAH (5, Okumura's
+`crates/codec/src/codec/stuffit.rs`: RLE90 (1), Huffman (3), LZAH (5, Okumura's
 LZHUF), the dynamic variant of method 13, and Arsenic (15). Method 2
 (LZW) comes from the system's `compress -b 14` with its 3-byte header
 removed, a real implementation of that algorithm.

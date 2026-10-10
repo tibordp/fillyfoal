@@ -2,7 +2,7 @@
 """Generates the synthetic Delphi compiled unit fixtures.
 
 No Delphi compiler is available, so these files are written from our own
-reading of the format (see src/formats/executable/dcu.rs): they share any
+reading of the format (see crates/exec/src/formats/executable/dcu.rs): they share any
 misunderstanding the dissector has and only lock its behaviour in.
 
 - d7.dcu: a Delphi 7 style unit. 18-byte header, unit flags (0x96), a

@@ -16,6 +16,11 @@ read or decoded until you do.
 ## What's in the box
 
 About 400 kLOC of Rust. It takes a while to compile. You've been warned.
+The workspace splits it into a core (`crates/core`, with the codecs in
+`crates/codec`) and one crate per category of formats (`crates/av`,
+`crates/exec`, ...). The `fillyfoal` crate at the root pulls them together;
+each category is a feature, all on by default, so it's still the only
+dependency you need, from a path or straight from git.
 
 About 1,500 formats so far: executables, archives, disk images and
 filesystems, audio and video, images, documents, databases, game assets,

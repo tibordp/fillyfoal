@@ -63,8 +63,133 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 name = "fillyfoal"
 version = "0.1.0"
 dependencies = [
+ "fillyfoal-archive",
+ "fillyfoal-av",
+ "fillyfoal-core",
+ "fillyfoal-data",
+ "fillyfoal-docs",
+ "fillyfoal-exec",
+ "fillyfoal-games",
+ "fillyfoal-image",
+ "fillyfoal-science",
+ "fillyfoal-security",
+ "fillyfoal-system",
+ "fillyfoal-text",
  "insta",
  "zstd",
+]
+
+[[package]]
+name = "fillyfoal-archive"
+version = "0.1.0"
+dependencies = [
+ "fillyfoal-core",
+ "fillyfoal-text",
+]
+
+[[package]]
+name = "fillyfoal-av"
+version = "0.1.0"
+dependencies = [
+ "fillyfoal-core",
+ "fillyfoal-image",
+ "fillyfoal-text",
+]
+
+[[package]]
+name = "fillyfoal-codec"
+version = "0.1.0"
+
+[[package]]
+name = "fillyfoal-core"
+version = "0.1.0"
+dependencies = [
+ "fillyfoal-codec",
+]
+
+[[package]]
+name = "fillyfoal-data"
+version = "0.1.0"
+dependencies = [
+ "fillyfoal-core",
+ "fillyfoal-text",
+]
+
+[[package]]
+name = "fillyfoal-docs"
+version = "0.1.0"
+dependencies = [
+ "fillyfoal-av",
+ "fillyfoal-core",
+ "fillyfoal-data",
+ "fillyfoal-image",
+ "fillyfoal-security",
+ "fillyfoal-text",
+]
+
+[[package]]
+name = "fillyfoal-exec"
+version = "0.1.0"
+dependencies = [
+ "fillyfoal-archive",
+ "fillyfoal-core",
+ "fillyfoal-image",
+ "fillyfoal-security",
+ "fillyfoal-text",
+]
+
+[[package]]
+name = "fillyfoal-games"
+version = "0.1.0"
+dependencies = [
+ "fillyfoal-core",
+ "fillyfoal-system",
+ "fillyfoal-text",
+]
+
+[[package]]
+name = "fillyfoal-image"
+version = "0.1.0"
+dependencies = [
+ "fillyfoal-core",
+ "fillyfoal-data",
+ "fillyfoal-text",
+]
+
+[[package]]
+name = "fillyfoal-science"
+version = "0.1.0"
+dependencies = [
+ "fillyfoal-archive",
+ "fillyfoal-core",
+ "fillyfoal-image",
+ "fillyfoal-text",
+]
+
+[[package]]
+name = "fillyfoal-security"
+version = "0.1.0"
+dependencies = [
+ "fillyfoal-core",
+ "fillyfoal-text",
+]
+
+[[package]]
+name = "fillyfoal-system"
+version = "0.1.0"
+dependencies = [
+ "fillyfoal-archive",
+ "fillyfoal-core",
+ "fillyfoal-data",
+ "fillyfoal-exec",
+ "fillyfoal-text",
+]
+
+[[package]]
+name = "fillyfoal-text"
+version = "0.1.0"
+dependencies = [
+ "fillyfoal-core",
 ]
 
 [[package]]

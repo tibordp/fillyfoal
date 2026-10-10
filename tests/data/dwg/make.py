@@ -168,7 +168,7 @@ def modular_short(v):
 
 
 # ---------------------------------------------------------------------------
-# The DWG LZ77 variant (greedy encoder; the inverse of src/codec/dwg.rs)
+# The DWG LZ77 variant (greedy encoder; the inverse of crates/codec/src/codec/dwg.rs)
 
 
 def literal_length(out, n):

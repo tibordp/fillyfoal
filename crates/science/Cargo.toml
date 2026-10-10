@@ -1,0 +1,17 @@
+[package]
+name = "fillyfoal-science"
+description = "fillyfoal's dissectors for engineering, CAD, geospatial and scientific data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+fillyfoal-core.workspace = true
+fillyfoal-archive.workspace = true
+fillyfoal-image.workspace = true
+fillyfoal-text.workspace = true
+
+[lints]
+workspace = true

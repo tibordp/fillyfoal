@@ -15,10 +15,10 @@ the result, and code that followed an incompatible source was rewritten.
 
 ## Brotli static dictionary and decoder parts
 
-`src/codec/brotli_dictionary.bin` is the static dictionary of RFC 7932
+`crates/codec/src/codec/brotli_dictionary.bin` is the static dictionary of RFC 7932
 (Appendix A), as distributed with the reference implementation
 (<https://github.com/google/brotli>) under the MIT license; the
-code-length prefix lookup in `src/codec/brotli.rs` also follows its
+code-length prefix lookup in `crates/codec/src/codec/brotli.rs` also follows its
 `decode.c`:
 
 ```text
@@ -45,10 +45,10 @@ THE SOFTWARE.
 
 ## DEFLATE and DCL implode — puff and blast
 
-`src/codec/inflate.rs` (Huffman table construction and decoding) is an
+`crates/codec/src/codec/inflate.rs` (Huffman table construction and decoding) is an
 altered Rust version of Mark Adler's `puff`, and the DCL implode decoder and
-its packed code tables in `src/codec/implode.rs` an altered Rust version of
-his `blast`; `src/codec/brotli.rs` uses the same decoding technique. Both
+its packed code tables in `crates/codec/src/codec/implode.rs` an altered Rust version of
+his `blast`; `crates/codec/src/codec/brotli.rs` uses the same decoding technique. Both
 are in zlib's `contrib/` (<https://github.com/madler/zlib>):
 
 ```text
@@ -96,7 +96,7 @@ freely, subject to the following restrictions:
 ## LZFSE — Apple's reference implementation
 
 The FSE decoding-table construction and the frequency and L/M/D code tables
-in `src/codec/lzfse.rs` follow Apple's reference implementation
+in `crates/codec/src/codec/lzfse.rs` follow Apple's reference implementation
 (<https://github.com/lzfse/lzfse>):
 
 ```text
@@ -123,7 +123,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 ## bcrypt_pbkdf and Blowfish — OpenBSD
 
 `bcrypt_hash`, the key interleave and the Blowfish key schedule in
-`src/codec/crypto/bcrypt.rs` follow OpenBSD's `bcrypt_pbkdf.c` and
+`crates/codec/src/codec/crypto/bcrypt.rs` follow OpenBSD's `bcrypt_pbkdf.c` and
 `blowfish.c` (as in <https://github.com/openssh/openssh-portable>):
 
 ```text
@@ -173,7 +173,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## ACE decompression — acefile
 
-`src/codec/ace.rs` follows the structure of acefile, a Python
+`crates/codec/src/codec/ace.rs` follows the structure of acefile, a Python
 implementation of ACE decompression:
 
 ```text
@@ -208,7 +208,7 @@ Marcel Lemke.
 
 ## StuffIt methods 13 and 15 (Arsenic) — XADMaster
 
-Parts of `src/codec/stuffit.rs` (the method 13 decoder and the Arsenic
+Parts of `crates/codec/src/codec/stuffit.rs` (the method 13 decoder and the Arsenic
 decoder) are derived from XADMaster (The Unarchiver), Copyright (c)
 2017-present MacPaw Way Ltd (and its earlier authors), licensed under the GNU
 Lesser General Public License version 2.1 or later, used here under the GNU
@@ -217,14 +217,14 @@ GPL version 3 as LGPL-2.1 section 3 permits.
 ## StuffIt method 5 (LZAH) and LHA `-lh1-` — LZHUF
 
 The adaptive-Huffman LZ decoders for StuffIt method 5 in
-`src/codec/stuffit.rs` and LHA's `-lh1-` in `src/codec/lzh.rs` follow
+`crates/codec/src/codec/stuffit.rs` and LHA's `-lh1-` in `crates/codec/src/codec/lzh.rs` follow
 Haruhiko Okumura's `LZHUF.C` (1988), distributed by its author for free use,
 distribution and modification.
 
 ## Quantum and parts of LZX — libmspack
 
-`src/codec/quantum.rs` (the arithmetic coder and model) and parts of
-`src/codec/lzx.rs` follow libmspack, (C) 2003-2023 Stuart Caie, licensed
+`crates/codec/src/codec/quantum.rs` (the arithmetic coder and model) and parts of
+`crates/codec/src/codec/lzx.rs` follow libmspack, (C) 2003-2023 Stuart Caie, licensed
 under the GNU Lesser General Public License version 2.1, used here under the
 GNU GPL version 3 as LGPL-2.1 section 3 permits. libmspack's Quantum
 decompressor is in turn based on an implementation by Matthew Russotto; the
@@ -232,20 +232,20 @@ Quantum method was created by David Stafford.
 
 ## DjVu BZZ — DjVuLibre
 
-`src/codec/bzz.rs` (the ZP-coder decoder, its adaptation table, and the BZZ
+`crates/codec/src/codec/bzz.rs` (the ZP-coder decoder, its adaptation table, and the BZZ
 block decoding) follows DjVuLibre, Copyright (c) 2002 Leon Bottou and Yann Le
 Cun, Copyright (c) 2001 AT&T, licensed under the GNU General Public License
 version 2 or (at your option) any later version.
 
 ## PPMd variant H
 
-The PPMd model in `src/codec/rar/ppmd.rs` implements Dmitry Shkarin's PPMd
+The PPMd model in `crates/codec/src/codec/rar/ppmd.rs` implements Dmitry Shkarin's PPMd
 variant H (public domain), organised after Igor Pavlov's `Ppmd7` in 7-Zip /
 the LZMA SDK (public domain).
 
 ## RAR decompression — libarchive
 
-The RAR 2.9/3.x and RAR 5.0 decoders in `src/codec/rar/` (`bits.rs`,
+The RAR 2.9/3.x and RAR 5.0 decoders in `crates/codec/src/codec/rar/` (`bits.rs`,
 `huffman.rs`, `v3.rs`, `v5.rs`, `filters.rs`) were written from libarchive's
 RAR readers, `libarchive/archive_read_support_format_rar.c` and
 `libarchive/archive_read_support_format_rar5.c`
@@ -253,7 +253,7 @@ RAR readers, `libarchive/archive_read_support_format_rar.c` and
 constant tables and limits; the test encoder `tests/data/rar/rarenc.py` is
 written against the same readers. They replace an earlier version that had
 been transliterated from unRAR (see the module documentation of
-`src/codec/rar/mod.rs`). libarchive's notice:
+`crates/codec/src/codec/rar/mod.rs`). libarchive's notice:
 
 ```text
 Copyright (c) 2003-2007 Tim Kientzle
@@ -288,14 +288,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## Guitar Pro field names — PyGuitarPro
 
-Flag and enumeration labels in `src/formats/audio/guitar_pro/` follow
+Flag and enumeration labels in `crates/av/src/formats/audio/guitar_pro/` follow
 PyGuitarPro (licensed under the GNU Lesser General Public License version 3),
 whose source was also consulted for the GP3-GP5 layout.
 
 ## Delphi DCU — DCU32INT
 
 The DCU packed-index encoding and version magics in
-`src/formats/executable/dcu.rs` follow DCU32INT by Alexei Hmelnov
+`crates/exec/src/formats/executable/dcu.rs` follow DCU32INT by Alexei Hmelnov
 (<http://hmelnov.icc.ru/DCU/>), whose license reads:
 
 ```text
@@ -315,7 +315,7 @@ freely, subject to the following restrictions:
 
 ## MeatPack — OctoPrint-MeatPack
 
-The MeatPack decoder in `src/codec/meatpack.rs` is derived as the inverse of
+The MeatPack decoder in `crates/codec/src/codec/meatpack.rs` is derived as the inverse of
 the packer in Scott Mudge's OctoPrint-MeatPack
 (<https://github.com/scottmudge/OctoPrint-MeatPack>, `meatpack.py`) and the
 format description in its README, licensed as follows:
@@ -370,21 +370,21 @@ SOFTWARE.
 No notice is required for the following, but parts of fillyfoal follow them
 closely enough to credit:
 
-- LZO1X decoding (`src/codec/lzo.rs`): the LZO format by Markus F.X.J.
+- LZO1X decoding (`crates/codec/src/codec/lzo.rs`): the LZO format by Markus F.X.J.
   Oberhumer (LZO is GPL-2.0-or-later).
-- LZMA, LZMA2 and the BCJ filters (`src/codec/lzma.rs`, `src/codec/xz.rs`):
+- LZMA, LZMA2 and the BCJ filters (`crates/codec/src/codec/lzma.rs`, `crates/codec/src/codec/xz.rs`):
   Igor Pavlov's LZMA SDK and XZ Utils (public domain / 0BSD).
-- Poly1305 (`src/codec/crypto/poly1305.rs`): Andrew Moon's poly1305-donna
+- Poly1305 (`crates/codec/src/codec/crypto/poly1305.rs`): Andrew Moon's poly1305-donna
   (public domain / MIT).
-- The static-Huffman LHA/ARJ layout (`src/codec/lzh.rs`): Haruhiko Okumura's
+- The static-Huffman LHA/ARJ layout (`crates/codec/src/codec/lzh.rs`): Haruhiko Okumura's
   ar002 (free).
-- MBR and GPT partition-type names (`src/formats/disk/ptypes.rs`): util-linux
+- MBR and GPT partition-type names (`crates/archive/src/formats/disk/ptypes.rs`): util-linux
   `include/pt-mbr-partnames.h` and `pt-gpt-partnames.h` (public domain).
-- macOS keychain field naming (`src/formats/security/keychain.rs`):
+- macOS keychain field naming (`crates/security/src/formats/security/keychain.rs`):
   chainbreaker (GPL-2.0-or-later).
-- SAS and SPSS decompression (`src/codec/statdata.rs`): ReadStat (MIT) and
+- SAS and SPSS decompression (`crates/codec/src/codec/statdata.rs`): ReadStat (MIT) and
   pandas' SAS reader (BSD-3-Clause).
-- Camera maker-note tag names (`src/formats/image/tiff/maker.rs`): Phil
+- Camera maker-note tag names (`crates/image/src/formats/image/tiff/maker.rs`): Phil
   Harvey's ExifTool tag documentation (Perl's licence: GPL or Artistic).
-- Installer layouts (`src/formats/archive/installer/`): NSIS (zlib),
+- Installer layouts (`crates/archive/src/formats/archive/installer/`): NSIS (zlib),
   innoextract (zlib), unshield (MIT) and 7-Zip's NSIS handler (LGPL-2.1+).

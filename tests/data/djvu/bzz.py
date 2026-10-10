@@ -1,11 +1,11 @@
 """A reference BZZ encoder (DjVuLibre's BSByteStream: Burrows-Wheeler
 transform, a frequency-ranked move-to-front and the ZP adaptive binary
 arithmetic coder), used to build the synthetic DjVu fixtures and the BZZ
-test vectors of `src/codec/bzz.rs`.
+test vectors of `crates/codec/src/codec/bzz.rs`.
 
 Written from memory of DjVuLibre's ZPCodec.cpp and BSEncodeByteStream.cpp
 (not fetched, and not checked against DjVuLibre output: no DjVuLibre tools
-were available). The decoder in `src/codec/bzz.rs` mirrors the same
+were available). The decoder in `crates/codec/src/codec/bzz.rs` mirrors the same
 recollection, so the round trip only shows the two agree with each other.
 
 Usage: python3 bzz.py IN OUT   (or import `encode`)

@@ -1,0 +1,19 @@
+[package]
+name = "fillyfoal-docs"
+description = "fillyfoal's dissectors for office documents, PDF, e-books and desktop publishing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+fillyfoal-core.workspace = true
+fillyfoal-av.workspace = true
+fillyfoal-data.workspace = true
+fillyfoal-image.workspace = true
+fillyfoal-security.workspace = true
+fillyfoal-text.workspace = true
+
+[lints]
+workspace = true

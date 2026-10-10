@@ -1,0 +1,16 @@
+[package]
+name = "fillyfoal-image"
+description = "fillyfoal's dissectors for raster and vector images, image metadata and fonts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+fillyfoal-core.workspace = true
+fillyfoal-data.workspace = true
+fillyfoal-text.workspace = true
+
+[lints]
+workspace = true

@@ -65,7 +65,7 @@ exploration pays for additional work only as needed.
 - No external codec is a default feature (including `iluvatar`). The default
   build is fully hermetic; content in a codec we lack becomes an
   `Unsupported` leaf that names the codec and keeps its span.
-- In practice every codec so far is in-house (`src/codec/`, no features
+- In practice every codec so far is in-house (`crates/codec/src/codec/`, no features
   needed):
   - general-purpose: DEFLATE/zlib, bzip2 (and NSIS's variant), LZMA/LZMA2/xz
     (+ BCJ x86/ARM/ARM64, Delta), Zstandard, Brotli, LZ4, Snappy,

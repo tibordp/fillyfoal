@@ -1,5 +1,5 @@
 """Writes tests/fixtures/synthetic/etl/sample.etl: a small Event Trace Log
-built from the structure layouts documented in `src/formats/forensics/etl.rs`
+built from the structure layouts documented in `crates/system/src/formats/forensics/etl.rs`
 (Microsoft's public `evntrace.h`/`evntcons.h` structs, and WMI_BUFFER_HEADER
 and the in-buffer header layouts from memory). There is no ETL writer on
 macOS, so this is our own encoder; the fixture is synthetic.

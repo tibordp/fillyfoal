@@ -1,10 +1,10 @@
 """Writes PPMd variant H streams with 7-Zip's encoder (via pyppmd, which
 wraps 7-Zip's Ppmd7 C code and its 7z range coder) for the model tests in
-`src/codec/rar/tests.rs`:
+`crates/codec/src/codec/rar/tests.rs`:
 
     uv run --with pyppmd==1.3.1 python tests/data/rar/ppmd.py
 
-Each `ppmd7-<order>-<mem>.bin` encodes `src/codec/testdata/words.txt`. The
+Each `ppmd7-<order>-<mem>.bin` encodes `crates/codec/src/codec/testdata/words.txt`. The
 small memory sizes run the model out of memory, so its allocator (glueing
 free blocks, restarts) is exercised too.
 """

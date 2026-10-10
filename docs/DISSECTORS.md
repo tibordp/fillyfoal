@@ -5,22 +5,35 @@ why; this is the how. Good examples to copy from:
 
 | Pattern | Example |
 |---|---|
-| Fixed header + chunk stream (big-endian, CRCs) | `src/formats/image/png.rs` |
-| Header + compressed payload dissected in place | `src/formats/compression/gzip.rs` |
-| Directory at the end, paged entries, variants by probe | `src/formats/archive/zip.rs` |
-| Pointers/RVAs, many lazy sub-structures, recursion | `src/formats/executable/pe/` |
-| Recursive variable-length blocks | `src/formats/executable/pe/version.rs` |
-| Text: windowed lines/tokens, encodings, base64 into derived sources | `src/formats/text/` (`scan`, `piece`, `encoding`, `decode`) |
+| Fixed header + chunk stream (big-endian, CRCs) | `crates/image/src/formats/image/png.rs` |
+| Header + compressed payload dissected in place | `crates/archive/src/formats/compression/gzip.rs` |
+| Directory at the end, paged entries, variants by probe | `crates/archive/src/formats/archive/zip.rs` |
+| Pointers/RVAs, many lazy sub-structures, recursion | `crates/exec/src/formats/executable/pe/` |
+| Recursive variable-length blocks | `crates/exec/src/formats/executable/pe/version.rs` |
+| Text: windowed lines/tokens, encodings, base64 into derived sources | `crates/text/src/formats/text/` (`scan`, `piece`, `encoding`, `decode`) |
 
 ## 1. Register the format
 
-Create `src/formats/<family>/<name>.rs` in the family the format belongs to
-(`archive`, `audio`, `image`, `data`, `forensics`, ...; each family's
-`mod.rs` summarises what it holds), or a subdirectory for a big format. Add
-it in two places: the `pub mod` list of the family's `mod.rs`, and the
-`FORMATS` array in `src/formats/mod.rs`, inside the right section. Order in
-`FORMATS` matters: probes run top to bottom, so specific formats go before
-generic ones. Shared helpers live in `src/formats/util/`.
+Create `<name>.rs` in the family the format belongs to (`archive`,
+`audio`, `image`, `data`, `forensics`, ...; each family's `mod.rs`
+summarises what it holds), or a subdirectory for a big format. Families are
+grouped into one crate per category: `crates/<category>/src/formats/<family>/`
+(`crates/av/src/formats/audio/`, `crates/exec/src/formats/executable/`; the
+category crates are listed in the root `Cargo.toml`). Add the format in two
+places: the `pub mod` list of the family's `mod.rs`, and the `FORMATS` array
+in `src/formats.rs`, inside the right section, behind the `cfg` of its
+category's feature. Order in `FORMATS` matters: probes run top to bottom, so
+specific formats go before generic ones. Shared helpers live in
+`crates/core/src/formats/util/`.
+
+Dissectors name things by their paths in one tree (`crate::cx::Cx`,
+`crate::formats::Input`, `crate::formats::text::scan`): each category
+crate's `lib.rs` imports the core at its root and re-exports the families of
+the categories it depends on into its `formats`. A dissector may use another
+family directly only if that family's crate is among its crate's
+dependencies; the dependency graph has no cycles. To embed a format from a
+crate that depends on yours, name it instead:
+`embedded_named("Runtime", input, "elf")`.
 
 ```rust
 pub static FORMAT: Format = Format {

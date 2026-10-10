@@ -11,36 +11,15 @@
 //! runs out, or the requested page of children is full. No executor is
 //! involved: the session polls the futures directly.
 //!
+//! This crate gathers the workspace's crates: the core (`fillyfoal-core`,
+//! with the codecs of `fillyfoal-codec`) and one crate per category of
+//! formats, each behind a feature of its name (all on by default).
+//!
 //! See `DESIGN.md` for goals, non-goals and the reasoning behind them.
 
-pub mod bytes;
-mod cache;
-pub mod codec;
-pub mod cx;
-pub mod dsl;
-pub mod error;
-pub mod fields;
-pub mod formats;
-pub mod node;
-pub mod render;
-pub mod secret;
-pub mod session;
-pub mod span;
-pub mod sync;
-pub mod text;
-pub mod value;
+pub use fillyfoal_core::*;
 
-pub use cx::{Block, Cx};
-pub use dsl::{Chunk, ChunkLayout, Cursor, Path, Record};
-pub use error::{DiagKind, Diagnostic, Error, Result};
-pub use fields::{Endian, Field, Fields};
-pub use node::{Count, Node};
-pub use secret::{Secret, SecretKind, SecretRequest};
-pub use session::{
-    Address, ByteRequest, ChildState, Children, Interpretation, Limits, NodeId, Progress,
-    ReadProgress, Wait,
-};
-/// A session over every registered format.
-pub type Session = session::Session<formats::All>;
-pub use span::{Origin, SourceId, Span};
-pub use value::{Guid, Radix, Value};
+pub mod formats;
+
+/// A session over every format this build registers.
+pub type Session = fillyfoal_core::session::Session<formats::All>;
