@@ -516,4 +516,38 @@ impl Decode for Lzfse {
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len.saturating_sub(WINDOW)
     }
+
+    /// No heap between blocks (a block's tables live only while it is
+    /// decoded, and steps end between blocks). Blocks are not independent:
+    /// matches reach back [`WINDOW`] bytes into earlier blocks' output.
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::arithmetic_side_effects)]
+mod tests {
+    use super::*;
+    use crate::codec::pipeline::{Streaming, verify_checkpoints};
+
+    #[test]
+    fn checkpoints_resume_between_blocks() {
+        // 320 KB in four `bvx2` blocks, by Apple's encoder
+        // (`testdata/words8.py`).
+        let data = include_bytes!("testdata/words8.lzfse");
+        let (checked, largest) =
+            verify_checkpoints(|| Box::new(Streaming(Lzfse::default())), data, 1, 1).unwrap();
+        assert_eq!(checked, 4);
+        assert!(largest <= 64, "{largest}");
+        let mut d = Lzfse::default();
+        let mut out = Vec::new();
+        let mut keeps = Vec::new();
+        while d.step(data, true, &mut out, 1, 1 << 30).unwrap() == Step::More {
+            keeps.push(out.len() - d.releasable_output(out.len()));
+        }
+        assert_eq!(out.len(), 320_000);
+        assert!(keeps.iter().all(|&k| k <= WINDOW));
+        assert_eq!(keeps.last(), Some(&WINDOW));
+    }
 }

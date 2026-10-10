@@ -1151,12 +1151,94 @@ impl Decode for Zstd {
             frame.start = frame.start.saturating_sub(n);
         }
     }
+
+    /// The frame's tables (the Huffman tree and the three FSE tables kept
+    /// for treeless literals and repeat modes); the window is the caller's
+    /// output, and nothing at all is kept between frames.
+    fn heap_size(&self) -> Option<usize> {
+        let Some(frame) = &self.frame else {
+            return Some(0);
+        };
+        let st = &frame.st;
+        let fse = |t: &Option<Fse>| {
+            t.as_ref().map_or(0, |t| {
+                t.cells
+                    .capacity()
+                    .saturating_mul(std::mem::size_of::<Cell>())
+            })
+        };
+        let huffman = st.huffman.as_ref().map_or(0, |h| {
+            h.table
+                .capacity()
+                .saturating_mul(std::mem::size_of::<(u8, u8)>())
+        });
+        Some(
+            huffman
+                .saturating_add(fse(&st.ll))
+                .saturating_add(fse(&st.of))
+                .saturating_add(fse(&st.ml)),
+        )
+    }
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::arithmetic_side_effects)]
 mod tests {
     use super::*;
+    use crate::codec::pipeline::{Streaming, verify_checkpoints};
+
+    /// `words8.zst` (see `testdata/words8.py`): a 320 KB frame with a
+    /// 128 KiB window and a content checksum, a skippable frame, a small
+    /// frame with a raw block, and a frame with a 4 KiB window and no
+    /// content size.
+    const WORDS8: &[u8] = include_bytes!("testdata/words8.zst");
+
+    #[test]
+    fn checkpoints_resume_inside_and_between_frames() {
+        for (step, at_least) in [(4096, 8), (50_000, 2)] {
+            let (checked, largest) =
+                verify_checkpoints(|| Box::new(Streaming(Zstd::new())), WORDS8, step, 1).unwrap();
+            assert!(checked >= at_least, "{checked}");
+            // Tables only: the window is the caller's output.
+            assert!(largest < 16 * 1024, "{largest}");
+        }
+        let (checked, _) = verify_checkpoints(
+            || Box::new(Streaming(Zstd::single_frame())),
+            WORDS8,
+            4096,
+            1,
+        )
+        .unwrap();
+        assert!(checked >= 2, "{checked}");
+    }
+
+    #[test]
+    fn windows_are_released_mid_frame_and_whole_between_frames() {
+        let mut d = Zstd::new();
+        let mut out = Vec::new();
+        let mut seen_mid = false;
+        let mut seen_between = false;
+        loop {
+            let step = d.step(WORDS8, true, &mut out, 4096, 1 << 30).unwrap();
+            let keep = out.len() - d.releasable_output(out.len());
+            match &d.frame {
+                Some(frame) if frame.window == 1 << 17 && out.len() > 1 << 17 => {
+                    assert_eq!(keep, 1 << 17);
+                    seen_mid = true;
+                }
+                Some(frame) => assert!(keep <= frame.window),
+                None => {
+                    assert_eq!(keep, 0);
+                    seen_between = true;
+                }
+            }
+            if step == Step::Done {
+                break;
+            }
+        }
+        assert!(seen_mid && seen_between);
+        assert_eq!(out.len(), 320_000 + 1000 + 8192 + 30_000);
+    }
 
     #[test]
     fn xxh64_vectors() {
