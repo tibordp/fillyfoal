@@ -332,4 +332,5 @@ expression: "common::explore(&display_name(&path), &data)"
               size: "565"  [#1:0x8d8+0x10]
               offset: "413"  [#1:0x8ed+0x14]
               length: "105"  [#1:0x906+0x14]
-    Heap — 518 bytes  [0x297+0x206]
+  ▾ Heap — 518 bytes  [0x297+0x206]
+      TOC checksum: "sha1" — sha1, 20 bytes  [0x297+0x14]

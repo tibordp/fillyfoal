@@ -6,25 +6,16 @@ use crate::bytes::{align_up, to_u64, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
+use crate::formats::disk::acl::{self, NAME_INDEXES};
 use crate::formats::disk::size;
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::{Value, lookup};
 
 use super::inode::Inode;
 use super::{FsRef, LE, csum32};
 
 const MAGIC: u32 = 0xea02_0000;
-
-const INDEXES: EnumTable = &[
-    (1, "user."),
-    (2, "system.posix_acl_access"),
-    (3, "system.posix_acl_default"),
-    (4, "trusted."),
-    (6, "security."),
-    (7, "system."),
-    (8, "system.richacl"),
-];
 
 struct Entry {
     /// Offset of the entry in the area.
@@ -81,7 +72,7 @@ fn entries(data: &[u8], start: usize) -> (Vec<Entry>, usize, Option<Diagnostic>)
 fn full_name(index: u8, name: &[u8]) -> String {
     format!(
         "{}{}",
-        lookup(INDEXES, index.into()).unwrap_or("[unknown index]."),
+        lookup(NAME_INDEXES, index.into()).unwrap_or("[unknown index]."),
         String::from_utf8_lossy(name)
     )
 }
@@ -96,22 +87,14 @@ fn acl_text(value: &[u8]) -> Option<String> {
     while at < value.len() {
         let tag = u16_le(value, at)?;
         let perm = u16_le(value, at.checked_add(2)?)?;
-        let (who, len) = match tag {
-            0x01 => ("user::".to_owned(), 4),
-            0x02 => (format!("user:{}:", u32_le(value, at.checked_add(4)?)?), 8),
-            0x04 => ("group::".to_owned(), 4),
-            0x08 => (format!("group:{}:", u32_le(value, at.checked_add(4)?)?), 8),
-            0x10 => ("mask::".to_owned(), 4),
-            0x20 => ("other::".to_owned(), 4),
+        let tag = u32::from(tag);
+        // Short entries (no id) for the owner, owning group, mask and other.
+        let (id, len) = match tag {
+            0x02 | 0x08 => (u32_le(value, at.checked_add(4)?)?, 8),
+            0x01 | 0x04 | 0x10 | 0x20 => (0, 4),
             _ => return None,
         };
-        let bit = |b: u16, c: char| if perm & b != 0 { c } else { '-' };
-        out.push(format!(
-            "{who}{}{}{}",
-            bit(4, 'r'),
-            bit(2, 'w'),
-            bit(1, 'x')
-        ));
+        out.push(acl::entry(tag, id, perm));
         at = at.checked_add(len)?;
     }
     Some(out.join(", "))
@@ -136,7 +119,7 @@ fn value_node(name: String, span: Span, index: u8, value: &[u8]) -> Node {
 
 fn entry_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     let name_len = f.u8("Name length").emit()?;
-    f.u8("Name index").enumeration(INDEXES).emit()?;
+    f.u8("Name index").enumeration(NAME_INDEXES).emit()?;
     f.u16("Value offset").emit()?;
     f.u32("Value inode")
         .desc("With EA_INODE, the inode holding a large value; 0 when the value is here")

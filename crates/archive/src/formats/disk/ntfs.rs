@@ -159,7 +159,8 @@ record! {
     }
 }
 
-const NAMESPACES: EnumTable = &[(0, "POSIX"), (1, "Win32"), (2, "DOS"), (3, "Win32 and DOS")];
+/// `$FILE_NAME` namespaces.
+pub const NAMESPACES: EnumTable = &[(0, "POSIX"), (1, "Win32"), (2, "DOS"), (3, "Win32 and DOS")];
 
 record! {
     pub struct FileName {
@@ -321,9 +322,15 @@ impl Volume {
     }
 }
 
-/// A multi-sector protected structure (MFT or index record) as a piecewise
-/// source with the update sequence applied.
-async fn fixed_up(cx: &Cx, span: Span, magic: &[u8]) -> Result<Span> {
+/// A multi-sector protected structure (an NTFS `FILE` or `INDX` record, or
+/// any record with the same header: `magic`, then the update sequence
+/// array's offset and entry count at 4 and 6) as a piecewise source with
+/// the update sequence applied: the last two bytes of each 512-byte sector
+/// are replaced by their saved copies from the array. A sector whose last
+/// two bytes are not the update sequence number (a torn write) gets a
+/// warning on `span`; a wrong magic or an array that does not fit the
+/// record is an error. Read the result with `cx.read`/`cx.block`.
+pub async fn fixed_up(cx: &Cx, span: Span, magic: &[u8]) -> Result<Span> {
     let head = cx.read(span.sub(0, 8)).await?;
     if head.get(..4) != Some(magic) {
         return Err(Diagnostic::malformed(format!(

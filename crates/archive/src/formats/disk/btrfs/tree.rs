@@ -5,7 +5,7 @@ use crate::cx::Cx;
 use crate::dsl::{Path, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
-use crate::formats::disk::name_field;
+use crate::formats::disk::{acl, name_field};
 use crate::formats::disk::{crc32c, size, unix_mode, uuid_value};
 use crate::node::Node;
 use crate::record;
@@ -312,11 +312,15 @@ pub(super) fn item_layout(f: &mut Fields<'_>, ty: &u8) -> Result<()> {
                 let data = f.u16("Data length").emit()?;
                 let name = f.u16("Name length").emit()?;
                 f.u8("Type").enumeration(DIR_TYPES).emit()?;
-                name_field(f, name.into())?;
+                let name = name_field(f, name.into())?;
+                let acl = *ty == XATTR_ITEM && acl::is_acl_name(&name);
                 if data > 0 {
                     f.bytes("Data", data.into())
                         .with(|b, n| {
-                            if crate::text::looks_like_text(b) {
+                            if acl && let Some(text) = acl::xattr_v2(b) {
+                                n.value(Value::Bytes(b.clone()))
+                                    .summary(format!("POSIX ACL: {text}"))
+                            } else if crate::text::looks_like_text(b) {
                                 n.value(Value::Text(String::from_utf8_lossy(b).into_owned()))
                             } else {
                                 n

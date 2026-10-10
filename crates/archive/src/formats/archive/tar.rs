@@ -587,6 +587,19 @@ async fn pax_header(cx: Cx, span: Span) -> Result<()> {
                     .map(crate::formats::util::fmt::size)
                     .unwrap_or_default(),
             ),
+            // libarchive's xattrs: a URL-encoded name, a base64 value; ACLs
+            // are in the kernel's posix_acl_xattr form.
+            key if key
+                .strip_prefix("LIBARCHIVE.xattr.")
+                .is_some_and(|name| crate::formats::disk::acl::is_acl_name(name.as_bytes())) =>
+            {
+                match crate::formats::disk::acl::xattr_v2(
+                    &crate::formats::text::decode::base64(r.value.as_bytes()).bytes,
+                ) {
+                    Some(acl) => node.summary(format!("POSIX ACL: {acl}")),
+                    None => node,
+                }
+            }
             _ => node,
         };
         cx.push(node).await;

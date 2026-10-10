@@ -9,6 +9,7 @@
 //!
 //! Also here: Apple disk images (`dmg`), ISO 9660 and SquashFS/CramFS.
 
+pub mod acl;
 pub mod apfs;
 pub mod apm;
 pub mod bfs;

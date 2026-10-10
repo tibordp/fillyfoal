@@ -8,20 +8,12 @@ use crate::bytes::{align_up, to_u64, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Fields, struct_node};
+use crate::formats::disk::acl::{NAME_INDEXES, xattr_v2};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::{Radix, Value, lookup};
 
 use super::{Fs, FsRef, Ino, LE};
-
-const INDEXES: EnumTable = &[
-    (1, "user."),
-    (2, "system.posix_acl_access"),
-    (3, "system.posix_acl_default"),
-    (4, "trusted."),
-    (5, "lustre."),
-    (6, "security."),
-];
 
 /// The prefix a name index stands for (a long prefix if bit 7 is set).
 fn prefix(fs: &Fs, index: u8) -> String {
@@ -29,49 +21,19 @@ fn prefix(fs: &Fs, index: u8) -> String {
         return match fs.prefixes.get(usize::from(index & 0x7f)) {
             Some((base, infix)) => format!(
                 "{}{}",
-                lookup(INDEXES, (*base).into()).unwrap_or(""),
+                lookup(NAME_INDEXES, (*base).into()).unwrap_or(""),
                 String::from_utf8_lossy(infix)
             ),
             None => format!("[long prefix {}]", index & 0x7f),
         };
     }
-    lookup(INDEXES, index.into()).map_or_else(|| format!("[index {index}]"), str::to_owned)
-}
-
-/// A POSIX ACL value (`posix_acl_xattr_header`), `getfacl` short form.
-fn acl_text(value: &[u8]) -> Option<String> {
-    if u32_le(value, 0)? != 2 {
-        return None;
-    }
-    let mut out = Vec::new();
-    for e in value.get(4..)?.as_chunks::<8>().0 {
-        let tag = u16_le(e, 0)?;
-        let perm = u16_le(e, 2)?;
-        let id = u32_le(e, 4)?;
-        let who = match tag {
-            0x01 => "user::".to_owned(),
-            0x02 => format!("user:{id}:"),
-            0x04 => "group::".to_owned(),
-            0x08 => format!("group:{id}:"),
-            0x10 => "mask::".to_owned(),
-            0x20 => "other::".to_owned(),
-            _ => format!("tag {tag:#x}:"),
-        };
-        let bit = |b: u16, c: char| if perm & b != 0 { c } else { '-' };
-        out.push(format!(
-            "{who}{}{}{}",
-            bit(4, 'r'),
-            bit(2, 'w'),
-            bit(1, 'x')
-        ));
-    }
-    Some(out.join(", "))
+    lookup(NAME_INDEXES, index.into()).map_or_else(|| format!("[index {index}]"), str::to_owned)
 }
 
 /// A short description of an xattr value.
 fn value_summary(index: u8, value: &[u8]) -> String {
     if matches!(index, 2 | 3)
-        && let Some(acl) = acl_text(value)
+        && let Some(acl) = xattr_v2(value)
     {
         return format!("POSIX ACL: {acl}");
     }
@@ -233,7 +195,7 @@ async fn shared_entry(cx: Cx, (fs, span): (FsRef, Span)) -> Result<()> {
 
 fn prefix_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u16("Length").emit()?;
-    f.u8("Base name index").enumeration(INDEXES).emit()?;
+    f.u8("Base name index").enumeration(NAME_INDEXES).emit()?;
     let rest = f.remaining();
     f.bytes("Infix", rest)
         .with(|b, n| n.value(Value::Text(String::from_utf8_lossy(b).into_owned())))
@@ -250,7 +212,7 @@ pub(super) async fn prefix_table(cx: Cx, (fs, spans): (FsRef, Arc<Vec<Span>>)) -
             .map(|(base, infix)| {
                 format!(
                     "{}{}",
-                    lookup(INDEXES, (*base).into()).unwrap_or(""),
+                    lookup(NAME_INDEXES, (*base).into()).unwrap_or(""),
                     String::from_utf8_lossy(infix)
                 )
             })

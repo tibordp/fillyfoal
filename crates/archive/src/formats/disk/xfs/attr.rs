@@ -5,6 +5,7 @@ use crate::bytes::{to_u64, to_usize, u16_be, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
+use crate::formats::disk::acl;
 use crate::formats::disk::name_field;
 use crate::formats::disk::{PieceList, size, uuid_value};
 use crate::node::Node;
@@ -51,22 +52,7 @@ fn acl_text(value: &[u8]) -> Option<String> {
         let tag = u32_be(e, 0)?;
         let id = u32_be(e, 4)?;
         let perm = u16_be(e, 8)?;
-        let who = match tag {
-            0x01 => "user::".to_owned(),
-            0x02 => format!("user:{id}:"),
-            0x04 => "group::".to_owned(),
-            0x08 => format!("group:{id}:"),
-            0x10 => "mask::".to_owned(),
-            0x20 => "other::".to_owned(),
-            _ => format!("tag {tag:#x}:"),
-        };
-        let bit = |b: u16, c: char| if perm & b != 0 { c } else { '-' };
-        out.push(format!(
-            "{who}{}{}{}",
-            bit(4, 'r'),
-            bit(2, 'w'),
-            bit(1, 'x')
-        ));
+        out.push(acl::entry(tag, id, perm));
     }
     Some(out.join(", "))
 }

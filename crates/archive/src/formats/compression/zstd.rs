@@ -181,12 +181,7 @@ async fn walk_frame(cx: &Cx, cur: &mut Cursor<'_>) -> Result<FrameInfo> {
     let mut blocks = 0u64;
     loop {
         let bh = cur.bytes(3).await?;
-        let h = u32::from_le_bytes([
-            bh.first().copied().unwrap_or(0),
-            bh.get(1).copied().unwrap_or(0),
-            bh.get(2).copied().unwrap_or(0),
-            0,
-        ]);
+        let h = crate::bytes::u24_le(&bh, 0).unwrap_or(0);
         let kind = (h >> 1) & 3;
         if kind == 3 {
             return Err(Diagnostic::malformed("reserved block type").at(cur.since(start)));
@@ -405,12 +400,7 @@ async fn blocks(cx: Cx, span: Span) -> Result<()> {
     while !cur.at_end() {
         let start = cur.pos();
         let bh = cur.bytes(3).await?;
-        let h = u32::from_le_bytes([
-            bh.first().copied().unwrap_or(0),
-            bh.get(1).copied().unwrap_or(0),
-            bh.get(2).copied().unwrap_or(0),
-            0,
-        ]);
+        let h = crate::bytes::u24_le(&bh, 0).unwrap_or(0);
         let last = h & 1 != 0;
         let kind = (h >> 1) & 3;
         let size = u64::from(h >> 3);
@@ -442,12 +432,7 @@ async fn blocks(cx: Cx, span: Span) -> Result<()> {
 
 async fn block(cx: Cx, span: Span) -> Result<()> {
     let bh = cx.read(span.sub(0, 3)).await?;
-    let h = u32::from_le_bytes([
-        bh.first().copied().unwrap_or(0),
-        bh.get(1).copied().unwrap_or(0),
-        bh.get(2).copied().unwrap_or(0),
-        0,
-    ]);
+    let h = crate::bytes::u24_le(&bh, 0).unwrap_or(0);
     let header = span.sub(0, 3);
     cx.emit(
         Node::new("Last block")

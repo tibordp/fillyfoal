@@ -8,7 +8,8 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{guid_le, size};
-use crate::formats::{Format, Input, Probe, embedded};
+use crate::formats::util::fmt::capitalize;
+use crate::formats::{Format, Input, Probe, embedded, embedded_named};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -190,7 +191,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         files_at = u64::from(h.ext_header).saturating_add(ext_len);
     }
     if kind.starts_with("FFS") {
-        let files = volume.tail(files_at.next_multiple_of(8));
+        let files = volume.tail(align_up(files_at, 8));
         let erase = if h.attributes & 0x800 != 0 {
             0xff
         } else {
@@ -286,19 +287,16 @@ async fn sections(cx: Cx, (input, area, depth): (Input, Span, u32)) -> Result<()
         }
         let span = area.sub(at, len);
         let body = span.tail(header);
-        let name = lookup(SECTION_TYPES, kind.into()).map_or_else(
-            || format!("Section {kind:#04x}"),
-            |n| {
-                let mut s = n.to_owned();
-                if let Some(f) = s.get_mut(..1) {
-                    f.make_ascii_uppercase();
-                }
-                s
-            },
-        );
+        let name = lookup(SECTION_TYPES, kind.into())
+            .map_or_else(|| format!("Section {kind:#04x}"), capitalize);
         let node = Node::new(name).span(span);
         let node = match kind {
             0x10 => embedded("PE32 image", input.nested(body)).summary(size(body.len)),
+            0x11 => embedded("PIC image", input.nested(body)).summary(size(body.len)),
+            0x12 => {
+                embedded_named("TE image", input.nested(body), "efi-te").summary(size(body.len))
+            }
+            0x19 => embedded("Raw data", input.nested(body)).summary(size(body.len)),
             0x17 => embedded("Firmware volume", input.nested(body)).summary(size(body.len)),
             0x15 => {
                 let text = crate::text::utf16z(&cx.read_avail(body).await?, LE).0;

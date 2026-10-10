@@ -30,8 +30,10 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::arcutil::{ByteReader, crc16_arc, emit_nodes, unsupported};
+use crate::formats::util::finder::FINDER_FLAGS;
 use crate::formats::util::fmt;
 use crate::formats::util::fmt::count;
+use crate::formats::util::fmt::fourcc_value;
 use crate::formats::util::val::hex;
 use crate::formats::{Format, Head, Input, Probe, content, embedded};
 use crate::node::Node;
@@ -47,6 +49,17 @@ const MAX_ENTRIES: u64 = 1 << 20;
 const MAX_DEPTH: usize = 256;
 /// The longest StuffIt 5 folder path that children are named under.
 const MAX_PATH: usize = 4096;
+
+/// A Finder flags word as a flag set.
+fn finder_flags(v: u16) -> Value {
+    let (set, unknown) = crate::value::decode_flags(FINDER_FLAGS, v.into());
+    Value::Flags {
+        raw: v.into(),
+        bits: 16,
+        set,
+        unknown,
+    }
+}
 
 pub static FORMAT: Format = Format {
     name: "stuffit",
@@ -294,12 +307,11 @@ async fn classic_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     r.bytes("Name", 63).ok_or_else(bad)?;
     r.with(|n| n.value(Value::Text(name)));
     for name in ["File type", "Creator"] {
-        let v = r.bytes(name, 4).ok_or_else(bad)?;
-        let t = String::from_utf8_lossy(v).into_owned();
-        r.with(|n| n.value(Value::Text(t)));
+        let v = fourcc_value(r.bytes(name, 4).ok_or_else(bad)?);
+        r.with(|n| n.value(v));
     }
     let flags = r.u16("Finder flags", BE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(flags, 64)));
+    r.with(|n| n.value(finder_flags(flags)));
     for name in ["Creation time", "Modification time"] {
         let t = r.u32(name, BE).ok_or_else(bad)?;
         r.with(|n| {
@@ -666,12 +678,11 @@ async fn sit5_entry(cx: Cx, (input, e): (Input, Arc<Sit5Entry>)) -> Result<()> {
     });
     r.u16("Unknown", BE).ok_or_else(bad)?;
     for name in ["File type", "Creator"] {
-        let v = r.bytes(name, 4).ok_or_else(bad)?;
-        let t = String::from_utf8_lossy(v).into_owned();
-        r.with(|n| n.value(Value::Text(t)));
+        let v = fourcc_value(r.bytes(name, 4).ok_or_else(bad)?);
+        r.with(|n| n.value(v));
     }
     let finder = r.u16("Finder flags", BE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(finder, 64)));
+    r.with(|n| n.value(finder_flags(finder)));
     r.bytes("Unknown", if e.version == 1 { 22 } else { 18 })
         .ok_or_else(bad)?;
     if e.rsrc.is_some() {

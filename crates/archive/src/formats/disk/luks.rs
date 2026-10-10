@@ -18,6 +18,7 @@ use crate::formats::disk::qcow::Regions;
 use crate::formats::disk::size;
 use crate::formats::util::datakit::digest_paced;
 use crate::formats::util::fmt::plural;
+use crate::formats::util::json::Json;
 use crate::formats::{Format, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
@@ -31,8 +32,6 @@ const MAGIC2: &[u8] = b"SKUL\xba\xbe";
 const MAX_JSON: u64 = 4 << 20;
 /// Largest JSON text parsed for the keyslot and segment summaries.
 const MAX_PARSE: usize = 256 << 10;
-/// Nesting of JSON values parsed at most.
-const MAX_JSON_DEPTH: usize = 32;
 const LUKS1_SLOT_ACTIVE: u32 = 0x00ac_71f3;
 
 pub static FORMAT: Format = Format {
@@ -319,7 +318,9 @@ async fn luks2(cx: &Cx, input: Input) -> Result<()> {
     }
     cx.checkpoint().await;
     let json = if text.len() <= MAX_PARSE {
-        Json::parse(&text)
+        crate::formats::util::json::parse(cx, text.as_bytes())
+            .await
+            .ok()
     } else {
         None
     };
@@ -332,11 +333,11 @@ async fn luks2(cx: &Cx, input: Input) -> Result<()> {
         cx.annotate(format!("LUKS2 encrypted volume{label}, UUID {}", h.uuid));
         return Ok(());
     };
-    let keyslots = json.get("keyslots").map(Json::members).unwrap_or_default();
-    let tokens = json.get("tokens").map(Json::members).unwrap_or_default();
+    let keyslots = json.get("keyslots").map(members).unwrap_or_default();
+    let tokens = json.get("tokens").map(members).unwrap_or_default();
     let segment = json
         .get("segments")
-        .and_then(|s| s.members().into_iter().next())
+        .and_then(|s| members(s).first())
         .map(|(_, v)| v);
     let cipher = segment
         .and_then(|s| s.get("encryption"))
@@ -357,26 +358,20 @@ async fn luks2(cx: &Cx, input: Input) -> Result<()> {
     let area_size = json
         .get("config")
         .and_then(|c| c.get("keyslots_size"))
-        .and_then(Json::as_u64)
+        .and_then(num)
         .unwrap_or(0);
     let area_start = hdr_size.saturating_mul(2);
     let mut slots = Vec::new();
-    for (id, k) in &keyslots {
+    for (id, k) in keyslots {
         let area = k.get("area");
         let offset = area
             .and_then(|a| a.get("offset"))
-            .and_then(Json::as_u64)
+            .and_then(num)
             .unwrap_or(0);
-        let len = area
-            .and_then(|a| a.get("size"))
-            .and_then(Json::as_u64)
-            .unwrap_or(0);
-        let key_size = k.get("key_size").and_then(Json::as_u64).unwrap_or(0);
+        let len = area.and_then(|a| a.get("size")).and_then(num).unwrap_or(0);
+        let key_size = k.get("key_size").and_then(num).unwrap_or(0);
         let af = k.get("af");
-        let stripes = af
-            .and_then(|a| a.get("stripes"))
-            .and_then(Json::as_u64)
-            .unwrap_or(0);
+        let stripes = af.and_then(|a| a.get("stripes")).and_then(num).unwrap_or(0);
         let kdf = k
             .get("kdf")
             .and_then(|d| d.get("type"))
@@ -388,7 +383,7 @@ async fn luks2(cx: &Cx, input: Input) -> Result<()> {
             .and_then(Json::as_str)
             .unwrap_or("?")
             .to_owned();
-        let priority = match k.get("priority").and_then(Json::as_u64) {
+        let priority = match k.get("priority").and_then(num) {
             Some(0) => ", ignored",
             Some(2) => ", preferred",
             _ => "",
@@ -398,7 +393,7 @@ async fn luks2(cx: &Cx, input: Input) -> Result<()> {
             area: disk.sub(offset, len),
             material: disk.sub(
                 offset,
-                key_size.saturating_mul(stripes).next_multiple_of(512),
+                crate::bytes::align_up(key_size.saturating_mul(stripes), 512),
             ),
             summary: format!(
                 "{}-bit key, {kdf}, AF {stripes} stripes, area encrypted with {enc}{priority}",
@@ -417,12 +412,12 @@ async fn luks2(cx: &Cx, input: Input) -> Result<()> {
         );
     }
     if let Some(s) = segment {
-        let offset = s.get("offset").and_then(Json::as_u64).unwrap_or(0);
+        let offset = s.get("offset").and_then(num).unwrap_or(0);
         let len = match s.get("size").and_then(Json::as_str) {
             Some("dynamic") | None => disk.len.saturating_sub(offset),
             Some(n) => n.parse().unwrap_or(0),
         };
-        let sector = s.get("sector_size").and_then(Json::as_u64).unwrap_or(512);
+        let sector = s.get("sector_size").and_then(num).unwrap_or(512);
         let payload = disk.sub(offset, len);
         let gap_start = area_start.saturating_add(area_size);
         if area_size > 0 && offset > gap_start {
@@ -500,177 +495,15 @@ async fn slot_node(cx: Cx, (area, material, rest): (Span, Span, u64)) -> Result<
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// A small JSON reader, for the few values the summaries need. The JSON
-// itself is shown by the JSON dissector.
-
-#[derive(Debug, Clone)]
-enum Json {
-    Null,
-    Bool,
-    Num(String),
-    Str(String),
-    Arr,
-    Obj(Vec<(String, Json)>),
-}
-
-impl Json {
-    fn parse(text: &str) -> Option<Json> {
-        let mut p = Parser {
-            b: text.as_bytes(),
-            at: 0,
-        };
-        p.value(0)
-    }
-
-    fn get(&self, key: &str) -> Option<&Json> {
-        match self {
-            Json::Obj(m) => m.iter().find(|(k, _)| k == key).map(|(_, v)| v),
-            _ => None,
-        }
-    }
-
-    /// An object's members (in order).
-    fn members(&self) -> Vec<(String, &Json)> {
-        match self {
-            Json::Obj(m) => m.iter().map(|(k, v)| (k.clone(), v)).collect(),
-            _ => Vec::new(),
-        }
-    }
-
-    fn as_str(&self) -> Option<&str> {
-        match self {
-            Json::Str(s) => Some(s),
-            _ => None,
-        }
-    }
-
-    /// A number, or a string holding one (LUKS2 writes 64-bit values as
-    /// strings).
-    fn as_u64(&self) -> Option<u64> {
-        match self {
-            Json::Num(s) | Json::Str(s) => s.parse().ok(),
-            _ => None,
-        }
+/// The members of a JSON object (none for other values).
+fn members(j: &Json) -> &[(String, Json)] {
+    match j {
+        Json::Obj(m) => m,
+        _ => &[],
     }
 }
 
-struct Parser<'a> {
-    b: &'a [u8],
-    at: usize,
-}
-
-impl Parser<'_> {
-    fn space(&mut self) {
-        while self.b.get(self.at).is_some_and(u8::is_ascii_whitespace) {
-            self.at = self.at.saturating_add(1);
-        }
-    }
-
-    fn eat(&mut self, c: u8) -> bool {
-        self.space();
-        if self.b.get(self.at) == Some(&c) {
-            self.at = self.at.saturating_add(1);
-            true
-        } else {
-            false
-        }
-    }
-
-    fn value(&mut self, depth: usize) -> Option<Json> {
-        if depth > MAX_JSON_DEPTH {
-            return None;
-        }
-        self.space();
-        match *self.b.get(self.at)? {
-            b'{' => {
-                self.at = self.at.saturating_add(1);
-                let mut m = Vec::new();
-                if self.eat(b'}') {
-                    return Some(Json::Obj(m));
-                }
-                loop {
-                    self.space();
-                    let k = self.string()?;
-                    if !self.eat(b':') {
-                        return None;
-                    }
-                    m.push((k, self.value(depth.saturating_add(1))?));
-                    if self.eat(b'}') {
-                        return Some(Json::Obj(m));
-                    }
-                    if !self.eat(b',') {
-                        return None;
-                    }
-                }
-            }
-            b'[' => {
-                self.at = self.at.saturating_add(1);
-                // Arrays are only skipped: no summary needs their elements.
-                if self.eat(b']') {
-                    return Some(Json::Arr);
-                }
-                loop {
-                    self.value(depth.saturating_add(1))?;
-                    if self.eat(b']') {
-                        return Some(Json::Arr);
-                    }
-                    if !self.eat(b',') {
-                        return None;
-                    }
-                }
-            }
-            b'"' => self.string().map(Json::Str),
-            b't' => self.word("true", Json::Bool),
-            b'f' => self.word("false", Json::Bool),
-            b'n' => self.word("null", Json::Null),
-            _ => {
-                let start = self.at;
-                while self.b.get(self.at).is_some_and(|c| {
-                    c.is_ascii_digit() || matches!(c, b'-' | b'+' | b'.' | b'e' | b'E')
-                }) {
-                    self.at = self.at.saturating_add(1);
-                }
-                (self.at > start).then(|| {
-                    Json::Num(
-                        String::from_utf8_lossy(self.b.get(start..self.at).unwrap_or_default())
-                            .into_owned(),
-                    )
-                })
-            }
-        }
-    }
-
-    fn word(&mut self, w: &str, v: Json) -> Option<Json> {
-        let end = self.at.saturating_add(w.len());
-        (self.b.get(self.at..end) == Some(w.as_bytes())).then(|| {
-            self.at = end;
-            v
-        })
-    }
-
-    /// A string (escapes other than `\"` and `\\` are kept as written).
-    fn string(&mut self) -> Option<String> {
-        if self.b.get(self.at) != Some(&b'"') {
-            return None;
-        }
-        self.at = self.at.saturating_add(1);
-        let mut out = Vec::new();
-        loop {
-            let c = *self.b.get(self.at)?;
-            self.at = self.at.saturating_add(1);
-            match c {
-                b'"' => return Some(String::from_utf8_lossy(&out).into_owned()),
-                b'\\' => {
-                    let e = *self.b.get(self.at)?;
-                    self.at = self.at.saturating_add(1);
-                    if !matches!(e, b'"' | b'\\' | b'/') {
-                        out.push(b'\\');
-                    }
-                    out.push(e);
-                }
-                _ => out.push(c),
-            }
-        }
-    }
+/// A number, which LUKS2 writes as a string when it may exceed 2^53.
+fn num(j: &Json) -> Option<u64> {
+    j.as_u64().or_else(|| j.as_str()?.parse().ok())
 }

@@ -18,7 +18,7 @@ use crate::formats::util::arcutil::{emit_nodes, unsupported};
 use crate::formats::util::fmt;
 use crate::formats::util::fmt::count;
 use crate::formats::util::val::{hex, uint};
-use crate::formats::{Format, Input, Probe, content, embedded};
+use crate::formats::{Format, Input, Probe, content, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -240,7 +240,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .span(data)
                 .summary(count(r.size / LOOKUP_ENTRY, "entry", "entries"))
                 .lazy(lookup_table, (input, data, codec, scheme)),
-            ("XML data", false) => Node::new("XML").span(data).lazy(xml_text, data),
+            // UTF-16LE, usually with a byte order mark; the XML dissector
+            // transcodes it.
+            ("XML data", false) => embedded_as(
+                "XML",
+                input.nested(data),
+                &crate::formats::text::xml::FORMAT,
+            ),
             _ => embedded("Data", input.nested(data)),
         };
         children.push(payload);
@@ -317,14 +323,5 @@ async fn lookup_table(
         )
         .await;
     }
-    Ok(())
-}
-
-/// The image description: UTF-16LE XML, usually with a byte order mark.
-async fn xml_text(cx: Cx, span: Span) -> Result<()> {
-    let data = cx.read(span.sub(0, 1 << 20)).await?;
-    let body = data.strip_prefix(b"\xff\xfe".as_slice()).unwrap_or(&data);
-    let text = crate::text::utf16(body, LE);
-    cx.emit(Node::new("Text").span(span).value(Value::Text(text)));
     Ok(())
 }

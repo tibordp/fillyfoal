@@ -193,6 +193,10 @@ expression: "common::explore(&display_name(&path), &data)"
                   Attributes: 0x0 []  [0x2af+0x1]
                   Size: 38 00 00  |8..| — 56 bytes  [0x2b0+0x3]
                   State: 0xf8  [0x2b3+0x1]
-                Raw — 25 bytes  [0x2b4+0x1d]
+              ▾ Raw data — UTF-8 text, 1 line  [0x2b8+0x19]
+                  Encoding: "UTF-8"
+                  Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+                ▾ Lines — 1 line  [0x2b8+0x19]
+                    Line 1: "inner raw section payload"  [0x2b8+0x19]
               Free space — 384 bytes  [0x2d4+0x180]
       Free space — 2.9 KiB  [0x458+0xba8]

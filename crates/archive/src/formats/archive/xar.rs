@@ -8,20 +8,23 @@
 
 use std::sync::Arc;
 
-use crate::bytes::to_u64;
+use crate::bytes::{to_u64, to_usize};
 use crate::codec::inflate_span;
 use crate::cx::Cx;
 use crate::dsl::Record;
-use crate::error::Result;
+use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::text::decode::base64;
+use crate::formats::text::scan::Owned;
+use crate::formats::text::xml::{self, Kind, Lexer, Mode, Tok};
 use crate::formats::util::arcutil::{emit_nodes, unsupported};
 use crate::formats::util::fmt;
 use crate::formats::util::fmt::count;
 use crate::formats::util::val::{text, uint};
-use crate::formats::{Codec, Format, Input, Probe, content, embedded};
+use crate::formats::{Codec, Format, Input, Probe, content, embedded, embedded_named};
 use crate::node::{Count, Node};
 use crate::record;
-use crate::span::Span;
+use crate::span::{Origin, Span};
 use crate::value::EnumTable;
 
 const BE: Endian = Endian::Big;
@@ -78,7 +81,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         )
         .summary(format!("XML, {} compressed", fmt::size(toc.len))),
     );
-    cx.emit(Node::new("Heap").span(heap).summary(fmt::size(heap.len)));
+    cx.emit(
+        Node::new("Heap")
+            .span(heap)
+            .summary(fmt::size(heap.len))
+            .lazy(heap_regions, (input, toc, h.toc_uncompressed, heap)),
+    );
     cx.annotate(format!(
         "xar archive, TOC {} ({} compressed)",
         fmt::size(h.toc_uncompressed),
@@ -101,99 +109,134 @@ struct Entry {
     mtime: String,
 }
 
-fn unescape(s: &str) -> String {
-    s.replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&apos;", "'")
-        .replace("&amp;", "&")
+/// A heap region the TOC describes outside the files: the TOC checksum or
+/// a signature (`<checksum>`, `<signature>`, `<x-signature>`).
+#[derive(Debug, Default)]
+struct Region {
+    /// The element: `checksum`, `signature` or `x-signature`.
+    element: String,
+    style: String,
+    offset: Option<u64>,
+    size: Option<u64>,
+    /// Base64 `<X509Certificate>` texts of a signature's `<KeyInfo>`.
+    certs: Vec<Owned>,
 }
 
-/// The value of attribute `name` in a start tag's text.
-fn attribute(tag: &str, name: &str) -> Option<String> {
-    let key = format!("{name}=\"");
-    let start = tag.find(&key)?.checked_add(key.len())?;
-    let rest = tag.get(start..)?;
-    let end = rest.find('"')?;
-    Some(unescape(rest.get(..end)?))
+/// What the TOC says: files, and the TOC checksum and signatures.
+#[derive(Debug, Default)]
+struct Toc {
+    entries: Vec<Entry>,
+    regions: Vec<Region>,
 }
 
-/// A minimal scan of the TOC: elements, their nesting and leaf text. The
-/// TOC is input-sized: yields once per tag.
-async fn scan(cx: &Cx, xml: &str) -> Vec<Entry> {
-    let mut entries: Vec<Entry> = Vec::new();
+/// The value of attribute `name` of start tag `t`, entities decoded.
+async fn attribute(lex: &mut Lexer<'_>, t: &Tok, name: &[u8]) -> Result<Option<String>> {
+    let tag = lex.owned(t, 4096).await?;
+    Ok(xml::attributes(tag.piece())
+        .into_iter()
+        .find(|a| a.name.bytes() == name)
+        .and_then(|a| a.value)
+        .map(|v| xml::decode_entities(&v.text(), false)))
+}
+
+/// Walks the decompressed TOC (`xml`): `<file>` elements, their nesting and
+/// leaf values, and the checksum and signature regions.
+async fn parse_toc(cx: &Cx, xml: Span) -> Result<Toc> {
+    let mut lex = Lexer::new(cx, xml, Mode::Xml);
+    let mut toc = Toc::default();
     let mut open: Vec<usize> = Vec::new(); // indices of open <file> elements
-    let mut path: Vec<String> = Vec::new(); // element names
-    let mut rest = xml;
-    let mut text_start: Option<&str> = None;
-    while let Some(lt) = rest.find('<') {
-        cx.checkpoint().await;
-        let before = rest.get(..lt).unwrap_or_default();
-        let Some(gt) = rest.get(lt..).and_then(|r| r.find('>')) else {
-            break;
-        };
-        let tag = rest
-            .get(lt.saturating_add(1)..lt.saturating_add(gt))
-            .unwrap_or_default();
-        rest = rest
-            .get(lt.saturating_add(gt).saturating_add(1)..)
-            .unwrap_or_default();
-        if tag.starts_with('?') || tag.starts_with('!') {
-            continue;
-        }
-        if let Some(end) = tag.strip_prefix('/') {
-            let name = end.trim();
-            let value = text_start.take().map(|_| unescape(before.trim()));
-            if let (Some(v), Some(&i)) = (value, open.last()) {
-                let in_data = path.iter().rev().nth(1).is_some_and(|p| p == "data");
-                let parent_is_file = path.iter().rev().nth(1).is_some_and(|p| p == "file");
-                if let Some(e) = entries.get_mut(i) {
-                    match name {
-                        "name" if parent_is_file => e.name = v,
-                        "type" if parent_is_file => e.kind = v,
-                        "mode" if parent_is_file => e.mode = v,
-                        "mtime" if parent_is_file => e.mtime = v,
-                        "offset" if in_data => e.offset = v.parse().ok(),
-                        "length" if in_data => e.length = v.parse().ok(),
-                        "size" if in_data => e.size = v.parse().ok(),
+    let mut path: Vec<Vec<u8>> = Vec::new(); // element names
+    let mut region: Option<Region> = None;
+    let mut value = String::new();
+    let mut cert: Option<Owned> = None;
+    loop {
+        let t = lex.next().await?;
+        match t.kind {
+            Kind::Eof => break,
+            Kind::Start => {
+                let name = lex.name(&t).await?;
+                let parent = path.last().map(Vec::as_slice);
+                if name == b"encoding"
+                    && parent == Some(b"data")
+                    && let Some(&i) = open.last()
+                    && let Some(style) = attribute(&mut lex, &t, b"style").await?
+                    && let Some(e) = toc.entries.get_mut(i)
+                {
+                    e.encoding = style;
+                }
+                let starts_region = parent == Some(b"toc")
+                    && matches!(name.as_slice(), b"checksum" | b"signature" | b"x-signature");
+                if starts_region {
+                    region = Some(Region {
+                        element: String::from_utf8_lossy(&name).into_owned(),
+                        style: attribute(&mut lex, &t, b"style").await?.unwrap_or_default(),
+                        ..Region::default()
+                    });
+                }
+                if t.empty {
+                    if starts_region {
+                        toc.regions.extend(region.take());
+                    }
+                    continue;
+                }
+                if name == b"file" {
+                    toc.entries.push(Entry {
+                        parent: open.last().copied(),
+                        ..Entry::default()
+                    });
+                    open.push(toc.entries.len().saturating_sub(1));
+                }
+                path.push(name);
+                value.clear();
+                cert = None;
+            }
+            Kind::Text | Kind::Cdata => {
+                if path.last().is_some_and(|n| n == b"X509Certificate") {
+                    let len = to_usize(t.end.saturating_sub(t.start));
+                    cert = Some(lex.owned(&t, len).await?);
+                } else {
+                    value.push_str(&xml::token_text(&mut lex, &t).await?);
+                }
+            }
+            Kind::End => {
+                let Some(name) = path.pop() else {
+                    continue;
+                };
+                let parent = path.last().map(Vec::as_slice);
+                let v = value.trim();
+                if let Some(r) = region.as_mut() {
+                    match name.as_slice() {
+                        b"offset" if parent == Some(r.element.as_bytes()) => {
+                            r.offset = v.parse().ok()
+                        }
+                        b"size" if parent == Some(r.element.as_bytes()) => r.size = v.parse().ok(),
+                        b"X509Certificate" => r.certs.extend(cert.take()),
+                        _ => {}
+                    }
+                    if parent == Some(b"toc") && name == r.element.as_bytes() {
+                        toc.regions.extend(region.take());
+                    }
+                } else if let Some(e) = open.last().and_then(|&i| toc.entries.get_mut(i)) {
+                    match (name.as_slice(), parent) {
+                        (b"name", Some(b"file")) => e.name = v.to_owned(),
+                        (b"type", Some(b"file")) => e.kind = v.to_owned(),
+                        (b"mode", Some(b"file")) => e.mode = v.to_owned(),
+                        (b"mtime", Some(b"file")) => e.mtime = v.to_owned(),
+                        (b"offset", Some(b"data")) => e.offset = v.parse().ok(),
+                        (b"length", Some(b"data")) => e.length = v.parse().ok(),
+                        (b"size", Some(b"data")) => e.size = v.parse().ok(),
                         _ => {}
                     }
                 }
+                if name == b"file" {
+                    open.pop();
+                }
+                value.clear();
             }
-            if name == "file" {
-                open.pop();
-            }
-            path.pop();
-            continue;
+            _ => {}
         }
-        let self_closing = tag.ends_with('/');
-        let name = tag
-            .trim_end_matches('/')
-            .split_whitespace()
-            .next()
-            .unwrap_or_default()
-            .to_owned();
-        if name == "encoding"
-            && path.last().is_some_and(|p| p == "data")
-            && let (Some(style), Some(&i)) = (attribute(tag, "style"), open.last())
-            && let Some(e) = entries.get_mut(i)
-        {
-            e.encoding = style;
-        }
-        if self_closing {
-            continue;
-        }
-        if name == "file" {
-            entries.push(Entry {
-                parent: open.last().copied(),
-                ..Entry::default()
-            });
-            open.push(entries.len().saturating_sub(1));
-        }
-        path.push(name);
-        text_start = Some(rest);
     }
-    entries
+    Ok(toc)
 }
 
 fn full_path(entries: &[Entry], i: usize) -> String {
@@ -213,14 +256,74 @@ fn full_path(entries: &[Entry], i: usize) -> String {
     parts.join("/")
 }
 
-async fn files(cx: Cx, (input, toc, expected, heap): (Input, Span, u64, Span)) -> Result<()> {
-    let decoded = inflate_span(&cx, toc, true, Some(expected)).await?;
+/// Decompresses and walks the TOC.
+async fn read_toc(cx: &Cx, toc: Span, expected: u64) -> Result<Toc> {
+    let decoded = inflate_span(cx, toc, true, Some(expected)).await?;
     if let Some(e) = decoded.error {
         cx.diag(e);
     }
-    let xml = cx.read(decoded.span).await?;
-    let xml = String::from_utf8_lossy(&xml);
-    let entries = scan(&cx, &xml).await;
+    parse_toc(cx, decoded.span).await
+}
+
+/// Expander for the heap: the TOC checksum and the signatures the TOC
+/// places there, with the signing certificates from its `<KeyInfo>`.
+async fn heap_regions(
+    cx: Cx,
+    (input, toc, expected, heap): (Input, Span, u64, Span),
+) -> Result<()> {
+    let toc = read_toc(&cx, toc, expected).await?;
+    for r in toc.regions {
+        let title = match r.element.as_str() {
+            "checksum" => "TOC checksum",
+            "x-signature" => "Extra signature",
+            _ => "Signature",
+        };
+        let mut node = Node::new(title).value(text(r.style.clone()));
+        let mut cms = false;
+        if let (Some(offset), Some(size)) = (r.offset, r.size) {
+            let data = heap.sub(offset, size);
+            // A CMS signature is a PKCS #7 SignedData; an RSA one is a bare
+            // signature value.
+            cms = r.style.eq_ignore_ascii_case("CMS");
+            if cms {
+                node = embedded_named(title, input.nested(data), "pkcs7");
+            }
+            node = node
+                .span(data)
+                .summary(format!("{}, {}", r.style, fmt::size(size)));
+        }
+        let mut certs = Vec::new();
+        for (i, c) in r.certs.iter().enumerate() {
+            let decoded = base64(&c.bytes);
+            let name = format!("Certificate {i}");
+            let origin = Origin {
+                parent: c.span,
+                transform: "base64",
+            };
+            let mut cert = match decoded.error {
+                None => {
+                    let der = cx.add_derived(origin, decoded.bytes, c.span.len, None)?;
+                    embedded_named(name, input.nested(der.span), "x509")
+                }
+                Some(e) => Node::new(name).span(c.span).diag(Diagnostic::malformed(e)),
+            };
+            cert = cert.desc("X509Certificate from the TOC's KeyInfo (base64)");
+            certs.push(cert);
+        }
+        if cms || certs.is_empty() {
+            cx.push(node).await;
+            for cert in certs {
+                cx.push(cert).await;
+            }
+        } else {
+            cx.push(node.lazy(emit_nodes, Arc::new(certs))).await;
+        }
+    }
+    Ok(())
+}
+
+async fn files(cx: Cx, (input, toc, expected, heap): (Input, Span, u64, Span)) -> Result<()> {
+    let entries = read_toc(&cx, toc, expected).await?.entries;
     cx.set_count(Count::Exact(to_u64(entries.len())));
     cx.annotate(count(to_u64(entries.len()), "entry", "entries"));
     for (i, e) in entries.iter().enumerate() {

@@ -16,7 +16,8 @@ use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
-use crate::fields::{Endian, parse};
+use crate::fields::{Endian, Fields, parse, struct_node};
+use crate::formats::disk::fat::{Bpb, Ebpb32};
 use crate::formats::disk::qcow::Regions;
 use crate::formats::disk::{guid_le, size};
 use crate::formats::util::arcutil::ByteReader;
@@ -45,36 +46,22 @@ pub static FORMAT: Format = Format {
     dissect: crate::expander!(dissect: Input),
 };
 
+/// The volume header: a FAT32-shaped boot sector (FAT's BPB and FAT32
+/// extended BPB, with `-FVE-FS-` as the OEM name), then BitLocker's fields.
+const BOOT_SECTOR: u64 = 512;
+
+/// What the volume header says: bytes per sector, and where the three FVE
+/// metadata blocks are.
+fn boot_layout(f: &mut Fields<'_>, _: &()) -> Result<(u16, [u64; 3])> {
+    let bpb = Bpb::read(f)?;
+    Ebpb32::read(f)?;
+    let tail = BootTail::read(f)?;
+    Ok((bpb.bytes_per_sector, [tail.fve1, tail.fve2, tail.fve3]))
+}
+
 record! {
-    /// The volume header: a FAT32-shaped boot sector.
-    pub struct BootSector {
-        jump: bytes[3] "Jump instruction",
-        oem: ascii[8] "Signature",
-        bytes_per_sector: u16 "Bytes per sector",
-        sectors_per_cluster: u8 "Sectors per cluster",
-        reserved: u16 "Reserved sectors",
-        fats: u8 "Number of FATs",
-        root_entries: u16 "Root directory entries",
-        total16: u16 "Total sectors (16-bit)",
-        media: u8 "Media descriptor" .hex(),
-        fat16: u16 "Sectors per FAT (16-bit)",
-        per_track: u16 "Sectors per track",
-        heads: u16 "Heads",
-        hidden: u32 "Hidden sectors" .desc("Sectors before the volume (its partition's start)"),
-        total32: u32 "Total sectors (32-bit)",
-        fat32: u32 "Sectors per FAT (32-bit)",
-        ext_flags: u16 "Extended flags" .hex(),
-        fs_version: u16 "File system version",
-        root_cluster: u32 "Root directory cluster",
-        fsinfo: u16 "FSInfo sector",
-        backup: u16 "Backup boot sector",
-        _reserved: bytes[12] "Reserved",
-        drive: u8 "Drive number" .hex(),
-        _reserved2: u8 "Reserved",
-        ext_sig: u8 "Extended boot signature" .hex(),
-        serial: u32 "Volume serial number" .hex(),
-        label: ascii[11] "Volume label",
-        fs_type: ascii[8] "File system type",
+    /// The rest of the volume header, after a FAT32 BPB and extended BPB.
+    pub struct BootTail {
         code: bytes[70] "Boot code",
         volume_guid: guid "BitLocker identifier",
         fve1: u64 "FVE metadata block 1 offset" .hex(),
@@ -183,18 +170,18 @@ struct Block {
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let vol = input.span;
-    let boot_span = vol.sub(0, BootSector::SIZE);
-    let boot = parse(&cx, boot_span, LE, &(), BootSector::layout).await?;
+    let boot_span = vol.sub(0, BOOT_SECTOR);
+    let (bytes_per_sector, fve) = parse(&cx, boot_span, LE, &(), boot_layout).await?;
+    let [fve1, fve2, fve3] = fve;
     cx.emit(
-        BootSector::node("Volume header", boot_span, LE).summary(format!(
-            "{}-byte sectors, metadata at {:#x}, {:#x}, {:#x}",
-            boot.bytes_per_sector, boot.fve1, boot.fve2, boot.fve3
+        struct_node("Volume header", boot_span, LE, (), boot_layout).summary(format!(
+            "{bytes_per_sector}-byte sectors, metadata at {fve1:#x}, {fve2:#x}, {fve3:#x}"
         )),
     );
     let mut method = None;
     let mut blocks = Vec::new();
     let mut description = None;
-    for (i, offset) in [boot.fve1, boot.fve2, boot.fve3].into_iter().enumerate() {
+    for (i, offset) in fve.into_iter().enumerate() {
         let name = format!("FVE metadata block {}", i.saturating_add(1));
         let span = vol.sub(offset, 64);
         let sig = cx.read_avail(span.sub(0, 8)).await?;
@@ -231,7 +218,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     vol.sub(
                         b.volume_header,
                         u64::from(b.header_sectors)
-                            .saturating_mul(boot.bytes_per_sector.max(512).into()),
+                            .saturating_mul(bytes_per_sector.max(512).into()),
                     )
                 })
             }),

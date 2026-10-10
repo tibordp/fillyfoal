@@ -235,4 +235,5 @@ expression: "common::explore(&display_name(&path), &data)"
             inode: "45172553"  [#1:0x1197+0x17]
             type: "file"  [#1:0x11b2+0x11]
             name: "hello.txt"  [#1:0x11c7+0x16]
-    Heap — 188 bytes  [0x3f2+0xbc]
+  ▾ Heap — 188 bytes  [0x3f2+0xbc]
+      TOC checksum: "sha1" — sha1, 20 bytes  [0x3f2+0x14]

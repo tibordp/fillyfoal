@@ -795,8 +795,11 @@ async fn file_content(
         match cx.derived(origin) {
             Some(d) => d.span,
             None => {
-                let (bytes, error) = inflate_chunks(&cx, data, len).await?;
-                cx.add_derived(origin, bytes, data.len, error)?.span
+                let (pieces, error) = inflate_chunks(&cx, data, len).await?;
+                if let Some(e) = error {
+                    cx.diag(e);
+                }
+                cx.add_pieces_stepped(origin, &pieces).await?
             }
         }
     } else {
@@ -821,10 +824,12 @@ async fn file_content(
 }
 
 /// Inflates the chunks of a compressed file: each a 16-bit length and a
-/// raw DEFLATE stream (flushed, possibly without a final block).
-async fn inflate_chunks(cx: &Cx, data: Span, len: u64) -> Result<(Vec<u8>, Option<Diagnostic>)> {
-    let limit = cx.limits().max_derived;
+/// raw DEFLATE stream (flushed, possibly without a final block). Returns
+/// the decoded chunks, in order, to be joined into one piecewise source.
+async fn inflate_chunks(cx: &Cx, data: Span, len: u64) -> Result<(Vec<Span>, Option<Diagnostic>)> {
+    let limit = len.saturating_add(1 << 16);
     let mut out = Vec::new();
+    let mut total = 0u64;
     let mut pos = 0u64;
     while pos < data.len {
         let n = cx.read(data.sub(pos, 2)).await?;
@@ -840,8 +845,9 @@ async fn inflate_chunks(cx: &Cx, data: Span, len: u64) -> Result<(Vec<u8>, Optio
         if d.span.len == 0 {
             return Ok((out, d.error));
         }
-        out.extend(read_all(cx, d.span).await?);
-        if to_u64(out.len()) > limit.min(len.saturating_add(1 << 16)) {
+        total = total.saturating_add(d.span.len);
+        out.push(d.span);
+        if total > limit {
             return Ok((
                 out,
                 Some(Diagnostic::limit("decoded more than the file's size")),

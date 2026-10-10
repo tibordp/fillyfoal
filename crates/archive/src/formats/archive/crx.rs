@@ -12,8 +12,9 @@ use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::fmt::{hex_lower, size};
+use crate::formats::util::val::{hex, uint};
 use crate::formats::util::wire::protobuf as pb;
-use crate::formats::{Format, Input, Probe, archive::zip, embedded_as};
+use crate::formats::{Format, Input, Probe, archive::zip, embedded_as, embedded_named};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -59,16 +60,9 @@ pub async fn crx(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Crx2Header::node("Header", span, LE));
         let key = file.sub(Crx2Header::SIZE, h.key_len.into());
         let sig = file.sub(key.end().saturating_sub(file.offset), h.sig_len.into());
-        cx.emit(
-            Node::new("Public key (DER)")
-                .span(key)
-                .summary(format!("{} bytes", key.len)),
-        );
-        cx.emit(
-            Node::new("Signature")
-                .span(sig)
-                .summary(format!("{} bytes", sig.len)),
-        );
+        // A SubjectPublicKeyInfo; the signature is a bare RSA value.
+        cx.emit(embedded_named("Public key", input.nested(key), "der").summary(size(key.len)));
+        cx.emit(Node::new("Signature").span(sig).summary(size(sig.len)));
         sig.end().saturating_sub(file.offset)
     } else {
         let header_len = u64::from(u32_le(&head, 8).unwrap_or(0));
@@ -88,8 +82,8 @@ pub async fn crx(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("CrxFileHeader")
                 .span(proto)
-                .summary(format!("{} bytes (protocol buffer)", proto.len))
-                .lazy(message, (proto, Kind::FileHeader, 0u32)),
+                .summary(format!("{} (protocol buffer)", size(proto.len)))
+                .lazy(message, (input, proto, Kind::FileHeader, 0u32)),
         );
         12u64.saturating_add(header_len)
     };
@@ -106,26 +100,27 @@ pub async fn crx(cx: Cx, input: Input) -> Result<()> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind {
     FileHeader,
-    KeyProof,
+    RsaProof,
+    EcdsaProof,
     SignedData,
     Unknown,
 }
 
 fn field_name(kind: Kind, number: u64) -> (&'static str, Kind) {
     match (kind, number) {
-        (Kind::FileHeader, 2) => ("sha256_with_rsa", Kind::KeyProof),
-        (Kind::FileHeader, 3) => ("sha256_with_ecdsa", Kind::KeyProof),
+        (Kind::FileHeader, 2) => ("sha256_with_rsa", Kind::RsaProof),
+        (Kind::FileHeader, 3) => ("sha256_with_ecdsa", Kind::EcdsaProof),
         (Kind::FileHeader, 4) => ("verified_contents", Kind::Unknown),
         (Kind::FileHeader, 10000) => ("signed_header_data", Kind::SignedData),
-        (Kind::KeyProof, 1) => ("public_key", Kind::Unknown),
-        (Kind::KeyProof, 2) => ("signature", Kind::Unknown),
+        (Kind::RsaProof | Kind::EcdsaProof, 1) => ("public_key", Kind::Unknown),
+        (Kind::RsaProof | Kind::EcdsaProof, 2) => ("signature", Kind::Unknown),
         (Kind::SignedData, 1) => ("crx_id", Kind::Unknown),
         _ => ("field", Kind::Unknown),
     }
 }
 
 /// Walks one protocol buffer message.
-async fn message(cx: Cx, (span, kind, depth): (Span, Kind, u32)) -> Result<()> {
+async fn message(cx: Cx, (input, span, kind, depth): (Input, Span, Kind, u32)) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, LE);
     while !cur.at_end() {
         let start = cur.pos();
@@ -137,20 +132,27 @@ async fn message(cx: Cx, (span, kind, depth): (Span, Kind, u32)) -> Result<()> {
             name.to_owned()
         };
         let node = match payload {
-            pb::Payload::Varint(v) => Node::new(label).value(Value::UInt {
-                value: v,
-                bits: 64,
-                radix: crate::value::Radix::Dec,
-            }),
-            pb::Payload::I64(v) => Node::new(label).value(crate::formats::util::val::hex(v, 64)),
-            pb::Payload::I32(v) => Node::new(label).value(crate::formats::util::val::hex(v, 32)),
+            pb::Payload::Varint(v) => Node::new(label).value(uint(v, 64)),
+            pb::Payload::I64(v) => Node::new(label).value(hex(v, 64)),
+            pb::Payload::I32(v) => Node::new(label).value(hex(v, 32)),
             pb::Payload::Len(body) => {
                 let bytes = cx.read_avail(body.sub(0, 32)).await?;
-                let mut node = Node::new(label).summary(format!("{} bytes", body.len));
-                if sub != Kind::Unknown && depth < MAX_DEPTH {
+                let mut node = Node::new(label.clone()).summary(size(body.len));
+                // The key is a SubjectPublicKeyInfo; an ECDSA signature is a DER
+                // Ecdsa-Sig-Value, an RSA one a bare value. Both DER forms are a
+                // SEQUENCE.
+                let der = bytes.first() == Some(&0x30)
+                    && match (kind, name) {
+                        (Kind::RsaProof | Kind::EcdsaProof, "public_key") => true,
+                        (Kind::EcdsaProof, "signature") => true,
+                        _ => false,
+                    };
+                if der {
+                    node = embedded_named(label, input.nested(body), "der").summary(size(body.len));
+                } else if sub != Kind::Unknown && depth < MAX_DEPTH {
                     node = node.lazy(
-                        crate::expander!(self::message: (Span, Kind, u32)),
-                        (body, sub, depth.saturating_add(1)),
+                        crate::expander!(self::message: (Input, Span, Kind, u32)),
+                        (input, body, sub, depth.saturating_add(1)),
                     );
                 } else if name == "crx_id" {
                     node = node.value(Value::Text(crx_id(&bytes)));
