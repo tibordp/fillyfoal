@@ -720,6 +720,7 @@ async fn btree_page(cx: Cx, (pst, bref, parent_level): (Pst, Bref, u8)) -> Resul
     cx.emit(
         Node::new("Page trailer")
             .span(page.trailer)
+            .lazy(super::heapview::page_trailer, (page.trailer, pst.wide()))
             .summary(format!(
                 "{} page, BID {:#x}",
                 if page.ptype == ndb::PTYPE_NBT {
@@ -730,13 +731,18 @@ async fn btree_page(cx: Cx, (pst, bref, parent_level): (Pst, Bref, u8)) -> Resul
                 bref.bid
             )),
     );
-    cx.emit(Node::new("Page metadata").span(page.meta).summary(format!(
-        "{} of {} entries of {} bytes, level {}",
-        page.entries.len(),
-        page.max,
-        page.cb_ent,
-        page.level
-    )));
+    cx.emit(
+        Node::new("Page metadata")
+            .span(page.meta)
+            .summary(format!(
+                "{} of {} entries of {} bytes, level {}",
+                page.entries.len(),
+                page.max,
+                page.cb_ent,
+                page.level
+            ))
+            .lazy(super::heapview::page_meta, page.meta),
+    );
     for (entry, span) in &page.entries {
         let node = match *entry {
             Entry::Branch { key, child } => Node::new(format!("Key {key:#x}"))
@@ -803,6 +809,11 @@ async fn node_view(cx: Cx, (pst, node, path): (Pst, NodeRef, Path)) -> Result<()
         // Interpret it as LTP data when it starts with a heap header.
         let head = cx.read_avail(stream.sub(0, 4)).await?;
         if head.get(2) == Some(&ltp::SIG_HN) {
+            cx.emit(
+                Node::new("Heap")
+                    .summary("heap-on-node allocations, block by block")
+                    .lazy(super::heapview::heap_view, (pst, node)),
+            );
             match head.get(3).copied() {
                 Some(ltp::SIG_PC) => {
                     data = data.summary("property context");
@@ -878,9 +889,12 @@ async fn block_view(cx: Cx, (pst, bid): (Pst, u64)) -> Result<()> {
     };
     let raw = cx.read(b.raw).await?;
     let computed = ndb::PST_CRC.checksum(&raw) as u32;
-    let mut tn = Node::new("Block trailer").span(trailer).summary(format!(
-        "cb {cb}, signature {sig:#06x}, CRC {crc:#010x}, BID {tbid:#x}"
-    ));
+    let mut tn = Node::new("Block trailer")
+        .span(trailer)
+        .summary(format!(
+            "cb {cb}, signature {sig:#06x}, CRC {crc:#010x}, BID {tbid:#x}"
+        ))
+        .lazy(super::heapview::block_trailer, (trailer, pst.wide()));
     if crc != computed {
         tn = tn.diag(Diagnostic::warning(format!(
             "CRC {crc:#010x} does not match the computed {computed:#010x}"
@@ -920,7 +934,12 @@ async fn block_view(cx: Cx, (pst, bid): (Pst, u64)) -> Result<()> {
                 u32_le(&raw, 4).unwrap_or(0)
             ));
         }
-        cx.emit(Node::new("Data").span(b.raw).summary(s));
+        cx.emit(
+            Node::new("Data")
+                .span(b.raw)
+                .summary(s)
+                .lazy(super::heapview::internal_block, (b.raw, pst.wide())),
+        );
     } else {
         let plain = ndb::plain(&cx, &pst, &b).await?;
         if plain != b.raw {
