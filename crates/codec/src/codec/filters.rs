@@ -99,6 +99,12 @@ pub trait ByteFilter: Clone + Send + 'static {
     fn warning(&self) -> Option<Diagnostic> {
         None
     }
+
+    /// Heap bytes a clone of the filter copies, or `None` if it must not be
+    /// checkpointed (the default); see [`Decode::heap_size`].
+    fn heap_size(&self) -> Option<usize> {
+        None
+    }
 }
 
 /// Adapts a [`ByteFilter`] into a [`Decode`]: each step decodes about
@@ -202,6 +208,10 @@ impl<F: ByteFilter> Decode for Bytes<F> {
     fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
         self.filter.warning()
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        self.filter.heap_size()
+    }
 }
 
 /// ASCIIHexDecode: hex digit pairs, whitespace ignored, `>` ends the data
@@ -234,6 +244,10 @@ impl ByteFilter for AsciiHex {
             out.push(h << 4);
         }
         Ok(())
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
     }
 }
 
@@ -346,6 +360,10 @@ impl ByteFilter for Ascii85 {
         }
         Ok(())
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 /// State of a RunLength or PackBits decoder.
@@ -406,6 +424,10 @@ impl ByteFilter for RunLength {
     fn finish(&mut self, _out: &mut Vec<u8>) -> Result<()> {
         run_finish(self.0)
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 /// PackBits (TIFF, Mac): like RunLength, but 128 is a no-op.
@@ -419,6 +441,10 @@ impl ByteFilter for PackBits {
 
     fn finish(&mut self, _out: &mut Vec<u8>) -> Result<()> {
         run_finish(self.0)
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
     }
 }
 
@@ -557,6 +583,14 @@ impl ByteFilter for Lzw {
         }
         Ok(true)
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(
+            self.table
+                .capacity()
+                .saturating_mul(std::mem::size_of::<(u16, u8)>()),
+        )
+    }
 }
 
 /// PNG row predictors (PDF `/Predictor` 10–15): every row starts with its
@@ -640,6 +674,11 @@ impl ByteFilter for PngPredictor {
         self.row_start = self.row_start.map(|s| s.saturating_sub(n));
         self.prev_start = self.prev_start.map(|s| s.saturating_sub(n));
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // The previous row is in `out`.
+        Some(0)
+    }
 }
 
 fn paeth(a: u8, b: u8, c: u8) -> u8 {
@@ -701,6 +740,10 @@ impl ByteFilter for TiffPredictor {
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len.saturating_sub(self.col.min(self.bpp))
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 /// Adobe Type 1 `eexec` decryption (key 55665), from binary or hex text;
@@ -756,6 +799,10 @@ impl ByteFilter for Eexec {
         }
         Ok(true)
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 /// The value of a base64 digit in the standard (`+/`) or URL-safe (`-_`)
@@ -807,6 +854,10 @@ impl ByteFilter for Base64 {
             out.push((self.acc >> self.bits).to_le_bytes()[0]);
         }
         Ok(true)
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
     }
 }
 
@@ -871,6 +922,10 @@ impl ByteFilter for QuotedPrintable {
                 }
             }
         }
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
     }
 }
 
@@ -1023,6 +1078,10 @@ impl ByteFilter for UuLines {
         self.short
             .then(|| Diagnostic::malformed("line shorter than its length character says"))
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 /// yEnc 1.3 data: each byte is its value plus 42, and critical bytes are
@@ -1046,6 +1105,10 @@ impl ByteFilter for YEnc {
             }
         }
         Ok(true)
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
     }
 }
 
@@ -1075,6 +1138,10 @@ impl ByteFilter for Xor {
         }
         out.push(b ^ k);
         Ok(true)
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(self.key.capacity())
     }
 }
 
@@ -1121,6 +1188,10 @@ impl ByteFilter for ByteSwap {
         out.extend_from_slice(self.group.get(..self.n).unwrap_or_default());
         self.n = 0;
         Ok(())
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
     }
 }
 
@@ -1480,5 +1551,298 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    /// Text and binary bytes for the checkpoint tests.
+    #[allow(clippy::arithmetic_side_effects, clippy::indexing_slicing)]
+    fn sample() -> Vec<u8> {
+        let words = &include_bytes!("testdata/words.txt")[..20_000];
+        let mut x = 7u32;
+        let noise = (0..3000).map(|_| {
+            x = x.wrapping_mul(1_103_515_245).wrapping_add(12345);
+            if x >> 30 == 0 { 0 } else { (x >> 16) as u8 }
+        });
+        let runs = (0..60u8).flat_map(|i| std::iter::repeat_n(i, usize::from(i) * 3));
+        words
+            .iter()
+            .copied()
+            .chain(noise)
+            .chain(runs)
+            .chain(words[..5000].iter().copied())
+            .collect()
+    }
+
+    /// Encoders written from the filters' descriptions, for these tests.
+    #[allow(clippy::arithmetic_side_effects, clippy::indexing_slicing)]
+    mod encode {
+        pub fn hex(data: &[u8]) -> Vec<u8> {
+            let mut s = String::new();
+            for (i, b) in data.iter().enumerate() {
+                s.push_str(&format!("{b:02x}{}", if i % 32 == 31 { "\n" } else { "" }));
+            }
+            s.push('>');
+            s.into_bytes()
+        }
+
+        pub fn ascii85(data: &[u8]) -> Vec<u8> {
+            let mut out = b"<~".to_vec();
+            for (i, group) in data.chunks(4).enumerate() {
+                let mut padded = [0u8; 4];
+                padded[..group.len()].copy_from_slice(group);
+                let v = u32::from_be_bytes(padded);
+                if v == 0 && group.len() == 4 {
+                    out.push(b'z');
+                } else {
+                    let mut digits = [0u8; 5];
+                    let mut v = u64::from(v);
+                    for d in digits.iter_mut().rev() {
+                        *d = (v % 85) as u8 + b'!';
+                        v /= 85;
+                    }
+                    out.extend_from_slice(&digits[..group.len() + 1]);
+                }
+                if i % 16 == 15 {
+                    out.push(b'\n');
+                }
+            }
+            out.extend_from_slice(b"~>");
+            out
+        }
+
+        /// RunLength (with its end marker) or PackBits (with no-ops).
+        pub fn runs(data: &[u8], end: bool) -> Vec<u8> {
+            let mut out = Vec::new();
+            let mut i = 0;
+            while i < data.len() {
+                let run = data[i..]
+                    .iter()
+                    .take(128)
+                    .take_while(|&&b| b == data[i])
+                    .count();
+                if run >= 3 {
+                    out.extend_from_slice(&[(257 - run) as u8, data[i]]);
+                    i += run;
+                } else {
+                    let n = (data.len() - i).min(100);
+                    out.push((n - 1) as u8);
+                    out.extend_from_slice(&data[i..i + n]);
+                    i += n;
+                }
+                if !end && i % 7 == 0 {
+                    out.push(128);
+                }
+            }
+            if end {
+                out.push(128);
+            }
+            out
+        }
+
+        /// LZW, MSB first, with early change, clearing the table every 3000
+        /// codes.
+        pub fn lzw(data: &[u8]) -> Vec<u8> {
+            let (mut bits, mut n) = (Vec::new(), 0usize);
+            // The width of the `n`th code since a clear: after it the
+            // decoder holds 258 + n - 1 entries, plus one for early change.
+            let mut put = |code: u16, n: usize| {
+                let width = match 258 + n {
+                    _ if n == 0 => 9,
+                    s if s >= 2048 => 12,
+                    s if s >= 1024 => 11,
+                    s if s >= 512 => 10,
+                    _ => 9,
+                };
+                bits.extend((0..width).rev().map(|i| code >> i & 1 == 1));
+            };
+            let mut dict = std::collections::HashMap::<Vec<u8>, u16>::new();
+            let code_of = |dict: &std::collections::HashMap<Vec<u8>, u16>, s: &[u8]| {
+                if s.len() == 1 {
+                    u16::from(s[0])
+                } else {
+                    dict[s]
+                }
+            };
+            put(256, 0);
+            let mut w: Vec<u8> = Vec::new();
+            for &c in data {
+                let mut wc = w.clone();
+                wc.push(c);
+                if w.is_empty() || wc.len() == 1 || dict.contains_key(&wc) {
+                    w = wc;
+                    continue;
+                }
+                put(code_of(&dict, &w), n);
+                dict.insert(wc, 258 + n as u16);
+                n += 1;
+                w = vec![c];
+                if n == 3000 {
+                    put(code_of(&dict, &w), n);
+                    put(256, n + 1);
+                    (n, w) = (0, Vec::new());
+                    dict.clear();
+                }
+            }
+            if !w.is_empty() {
+                put(code_of(&dict, &w), n);
+                n += 1;
+            }
+            put(257, n);
+            bits.chunks(8)
+                .map(|c| {
+                    c.iter()
+                        .enumerate()
+                        .fold(0u8, |b, (i, &x)| b | u8::from(x) << (7 - i))
+                })
+                .collect()
+        }
+
+        pub fn base64(data: &[u8]) -> Vec<u8> {
+            const ABC: &[u8; 64] =
+                b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            let mut out = Vec::new();
+            for (i, g) in data.chunks(3).enumerate() {
+                let v = g
+                    .iter()
+                    .enumerate()
+                    .fold(0u32, |v, (j, &b)| v | u32::from(b) << (16 - 8 * j));
+                for j in 0..=g.len() {
+                    out.push(ABC[(v >> (18 - 6 * j) & 63) as usize]);
+                }
+                if i % 19 == 18 {
+                    out.extend_from_slice(b"\r\n");
+                }
+            }
+            out.push(b'=');
+            out
+        }
+
+        pub fn quoted_printable(data: &[u8]) -> Vec<u8> {
+            let mut out = Vec::new();
+            for (i, &b) in data.iter().enumerate() {
+                if (33..127).contains(&b) && b != b'=' {
+                    out.push(b);
+                } else {
+                    out.extend_from_slice(format!("={b:02X}").as_bytes());
+                }
+                if i % 60 == 59 {
+                    out.extend_from_slice(b"=\r\n");
+                }
+            }
+            out
+        }
+
+        /// uuencoding (`xx`: xxencoding) in lines of 45 bytes.
+        pub fn uu(data: &[u8], xx: bool) -> Vec<u8> {
+            let char = |v: u8| {
+                if xx {
+                    super::super::XX_ALPHABET[usize::from(v)]
+                } else if v == 0 {
+                    b'`'
+                } else {
+                    v + 0x20
+                }
+            };
+            let mut out = Vec::new();
+            for line in data.chunks(45) {
+                out.push(char(line.len() as u8));
+                for g in line.chunks(3) {
+                    let mut p = [0u8; 3];
+                    p[..g.len()].copy_from_slice(g);
+                    let v = u32::from(p[0]) << 16 | u32::from(p[1]) << 8 | u32::from(p[2]);
+                    for j in 0..4 {
+                        out.push(char((v >> (18 - 6 * j) & 63) as u8));
+                    }
+                }
+                out.push(b'\n');
+            }
+            out.extend_from_slice(if xx { b"+\n" } else { b"`\n" });
+            out
+        }
+
+        pub fn yenc(data: &[u8]) -> Vec<u8> {
+            let mut out = Vec::new();
+            for (i, &b) in data.iter().enumerate() {
+                let v = b.wrapping_add(42);
+                if matches!(v, 0 | b'\n' | b'\r' | b'=') {
+                    out.extend_from_slice(&[b'=', v.wrapping_add(64)]);
+                } else {
+                    out.push(v);
+                }
+                if i % 128 == 127 {
+                    out.extend_from_slice(b"\r\n");
+                }
+            }
+            out
+        }
+    }
+
+    #[test]
+    #[allow(clippy::arithmetic_side_effects)]
+    fn checkpoints_resume_mid_stream() {
+        let data = sample();
+        let mut png = Vec::new();
+        for (i, row) in data.chunks(30).enumerate() {
+            png.push((i % 5) as u8);
+            png.extend_from_slice(row);
+        }
+        let cases = [
+            (Codec::AsciiHex, encode::hex(&data)),
+            (Codec::Ascii85, encode::ascii85(&data)),
+            (Codec::RunLength, encode::runs(&data, true)),
+            (Codec::PackBits, encode::runs(&data, false)),
+            (Codec::Lzw { early_change: true }, encode::lzw(&data)),
+            (Codec::PngPredictor { bpp: 3, row: 30 }, png),
+            (Codec::TiffPredictor { bpp: 3, row: 30 }, data.clone()),
+            (Codec::Eexec { hex: false }, data.clone()),
+            (Codec::Eexec { hex: true }, encode::hex(&data)),
+            (Codec::Base64, encode::base64(&data)),
+            (Codec::QuotedPrintable, encode::quoted_printable(&data)),
+            (Codec::Uu, encode::uu(&data, false)),
+            (Codec::Xx, encode::uu(&data, true)),
+            (Codec::YEnc, encode::yenc(&data)),
+            (
+                Codec::Xor {
+                    key: b"secret".to_vec(),
+                },
+                data.clone(),
+            ),
+            (Codec::ByteSwap { width: 4 }, data.clone()),
+        ];
+        for (codec, input) in cases {
+            let decoded = crate::codec::pipeline::decode_all(
+                codec.decoder().unwrap().as_mut(),
+                &input,
+                1 << 24,
+            )
+            .unwrap();
+            match codec {
+                // The first four bytes are dropped.
+                Codec::Eexec { .. } => assert_eq!(decoded.len(), data.len() - 4),
+                Codec::PngPredictor { .. }
+                | Codec::TiffPredictor { .. }
+                | Codec::Xor { .. }
+                | Codec::ByteSwap { .. } => assert_eq!(decoded.len(), data.len(), "{codec:?}"),
+                _ => assert!(decoded == data, "{codec:?}"),
+            }
+            let (checked, largest) = crate::codec::pipeline::verify_checkpoints(
+                || codec.decoder().unwrap(),
+                &input,
+                1000,
+                3,
+            )
+            .unwrap();
+            assert!(checked > 5, "{codec:?}: {checked}");
+            // Small fixed state; the LZW table is at most 3838 entries.
+            assert!(largest < 16 * 1024, "{codec:?}: {largest}");
+        }
+        // Unshuffle holds all of its input until the end: no checkpoints.
+        let (checked, _) = crate::codec::pipeline::verify_checkpoints(
+            || Codec::Unshuffle { width: 4 }.decoder().unwrap(),
+            &data,
+            1000,
+            1,
+        )
+        .unwrap();
+        assert_eq!(checked, 0);
     }
 }

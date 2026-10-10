@@ -131,7 +131,16 @@ impl Decode for ZipCrypto {
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // Three 32-bit keys.
+        Some(0)
+    }
 }
+
+/// Heap bytes of an AES key schedule, at most: 15 round keys of 16 bytes
+/// (AES-256).
+const AES_ROUND_KEYS: usize = 15 * 16;
 
 /// AES in CTR mode with a little-endian block counter starting at 1
 /// (WinZip AE-1/AE-2).
@@ -212,6 +221,10 @@ impl Decode for AesCtrLe {
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(AES_ROUND_KEYS)
+    }
 }
 
 /// RC4 as a streaming stage.
@@ -276,6 +289,11 @@ impl Decode for Rc4 {
 
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        // The 256-byte permutation is inline.
+        Some(0)
     }
 }
 
@@ -360,6 +378,10 @@ impl crate::codec::filters::ByteFilter for AesCbcIvPrefixed {
         out.extend_from_slice(body);
         Ok(())
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(self.aes.as_ref().map_or(0, |_| AES_ROUND_KEYS))
+    }
 }
 
 /// Decrypts `data` (IV, then AES-CBC ciphertext with PKCS#7 padding).
@@ -374,4 +396,68 @@ pub fn aes_cbc_iv_prefixed(key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
     }
     let plain = super::cipher::cbc_decrypt(&aes, iv, body);
     super::cipher::unpad_pkcs7(&plain, 16).map(<[u8]>::to_vec)
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
+mod tests {
+    use super::*;
+    use crate::codec::Codec;
+    use crate::codec::pipeline::verify_checkpoints;
+
+    /// Every cipher resumes from a checkpoint anywhere: the stream ciphers
+    /// on any input (decrypting is a bijection), CBC on data encrypted here.
+    #[test]
+    fn checkpoints_resume_anywhere() {
+        let data: Vec<u8> = (0..50_000u32)
+            .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
+            .collect();
+        let key = Key::new(b"0123456789abcdef0123456789abcdef".to_vec());
+        let mut iv = [7u8; 16];
+        let mut cbc = iv.to_vec();
+        let aes = Aes::new(key.expose()).unwrap();
+        let pad = 16 - data.len() % 16;
+        let padded = [data.clone(), vec![pad as u8; pad]].concat();
+        for block in padded.chunks(16) {
+            let mut b: [u8; 16] = block.try_into().unwrap();
+            for (x, v) in b.iter_mut().zip(&iv) {
+                *x ^= v;
+            }
+            aes.encrypt_block(&mut b);
+            cbc.extend_from_slice(&b);
+            iv = b;
+        }
+        let cases = [
+            (Codec::ZipCrypto(key.clone()), data.clone(), 0),
+            (Codec::AesCtrLe(key.clone()), data.clone(), AES_ROUND_KEYS),
+            (Codec::Rc4(key.clone()), data.clone(), 0),
+            (Codec::AesCbc(key.clone()), cbc, AES_ROUND_KEYS),
+        ];
+        for (codec, input, heap) in cases {
+            let decoded = crate::codec::pipeline::decode_all(
+                codec.decoder().unwrap().as_mut(),
+                &input,
+                1 << 20,
+            )
+            .unwrap();
+            match codec {
+                Codec::AesCbc(_) => assert!(decoded == data),
+                Codec::ZipCrypto(_) => assert_eq!(decoded.len(), data.len() - 12),
+                _ => assert_eq!(decoded.len(), data.len()),
+            }
+            // Steps of a block and a half: checkpoints mid-block too.
+            let (checked, largest) =
+                verify_checkpoints(|| codec.decoder().unwrap(), &input, 24, 97).unwrap();
+            assert!(checked > 15, "{checked}");
+            assert!(
+                (heap..heap + 512).contains(&largest),
+                "{}: {largest}",
+                codec.name()
+            );
+        }
+    }
 }

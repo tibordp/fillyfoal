@@ -260,6 +260,11 @@ impl Decode for Xpress {
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len.saturating_sub(PLAIN_WINDOW)
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // The 8 KiB window is in `out`.
+        Some(0)
+    }
 }
 
 /// LZ77+Huffman offsets reach 64 KiB back.
@@ -567,10 +572,23 @@ impl Decode for XpressHuffman {
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len.saturating_sub(HUFFMAN_WINDOW)
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // The 64 KiB window is in `out`. The current block's code is shared
+        // with the decoder rather than copied, but a checkpoint keeps it
+        // alive once the decoder has moved on, so it counts.
+        Some(self.block.as_ref().map_or(0, |b| {
+            std::mem::size_of::<Code>().saturating_add(b.code.table.capacity().saturating_mul(2))
+        }))
+    }
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
 mod tests {
     use super::*;
     use crate::codec::pipeline::{Streaming, decode_all};
@@ -655,5 +673,238 @@ mod tests {
         let mut broken = abc.clone();
         broken[0x30] = 0x31;
         assert!(huffman(300, &broken, 1 << 20).is_err());
+    }
+
+    enum Token {
+        Literal(u8),
+        Match { offset: usize, len: usize },
+    }
+
+    /// Greedy matches (offsets up to `window`, lengths up to `max_len`, none
+    /// crossing a multiple of `split` bytes of output) for the test
+    /// encoders below.
+    fn parse(data: &[u8], window: usize, max_len: usize, split: usize) -> Vec<Token> {
+        let mut last = std::collections::HashMap::new();
+        let (mut tokens, mut i) = (Vec::new(), 0);
+        while i < data.len() {
+            let room = (split - i % split).min(data.len() - i).min(max_len);
+            let (mut offset, mut len) = (0, 0);
+            if i + 3 <= data.len() {
+                let candidates = [last.get(&data[i..i + 3]).copied(), i.checked_sub(1)];
+                for c in candidates.into_iter().flatten() {
+                    if i - c > window {
+                        continue;
+                    }
+                    let n = (0..room)
+                        .take_while(|&n| data[c + n] == data[i + n])
+                        .count();
+                    if n > len {
+                        (offset, len) = (i - c, n);
+                    }
+                }
+            }
+            let n = if len >= 3 {
+                tokens.push(Token::Match { offset, len });
+                len
+            } else {
+                tokens.push(Token::Literal(data[i]));
+                1
+            };
+            for j in i..(i + n).min(data.len().saturating_sub(2)) {
+                last.insert(&data[j..j + 3], j);
+            }
+            i += n;
+        }
+        tokens
+    }
+
+    /// A plain LZ77 encoder written from [MS-XCA] section 2.3 (for these
+    /// tests only).
+    fn encode_plain(data: &[u8]) -> Vec<u8> {
+        let mut out = Vec::new();
+        let (mut flags_at, mut flags, mut used) = (0, 0u32, 32);
+        let mut half: Option<usize> = None;
+        for token in parse(data, PLAIN_WINDOW, 70_000, usize::MAX) {
+            if used == 32 {
+                if let Some(slot) = out.get_mut(flags_at..flags_at + 4) {
+                    slot.copy_from_slice(&flags.to_le_bytes());
+                }
+                (flags_at, flags, used) = (out.len(), 0, 0);
+                out.extend([0; 4]);
+            }
+            used += 1;
+            let (offset, len) = match token {
+                Token::Literal(b) => {
+                    out.push(b);
+                    continue;
+                }
+                Token::Match { offset, len } => (offset, len),
+            };
+            flags |= 1 << (32 - used);
+            let word = ((offset - 1) << 3) as u16;
+            let l = len - 3;
+            if l < 7 {
+                out.extend_from_slice(&(word | l as u16).to_le_bytes());
+                continue;
+            }
+            out.extend_from_slice(&(word | 7).to_le_bytes());
+            let nibble = (l - 7).min(15) as u8;
+            match half.take() {
+                None => {
+                    half = Some(out.len());
+                    out.push(nibble);
+                }
+                Some(at) => out[at] |= nibble << 4,
+            }
+            if l - 7 < 15 {
+                continue;
+            }
+            if l - 22 < 255 {
+                out.push((l - 22) as u8);
+            } else if let Ok(v) = u16::try_from(l) {
+                out.push(255);
+                out.extend_from_slice(&v.to_le_bytes());
+            } else {
+                out.extend_from_slice(&[255, 0, 0]);
+                out.extend_from_slice(&(l as u32).to_le_bytes());
+            }
+        }
+        if used > 0 {
+            out[flags_at..flags_at + 4].copy_from_slice(&flags.to_le_bytes());
+        }
+        out
+    }
+
+    /// The bit stream of an LZ77+Huffman block: 16-bit words, each placed
+    /// where the decoder loads it, extra length bytes between them.
+    struct Words<'a> {
+        out: &'a mut Vec<u8>,
+        at: Vec<usize>,
+        bits: Vec<bool>,
+    }
+
+    impl Words<'_> {
+        fn reserve(&mut self) {
+            self.at.push(self.out.len());
+            self.out.extend([0, 0]);
+        }
+
+        fn bits(&mut self, v: usize, n: u32) {
+            self.bits.extend((0..n).rev().map(|i| v >> i & 1 == 1));
+            // The decoder loads a word each time more than 16 bits past
+            // the two it starts with have been consumed.
+            let loads = self.bits.len().saturating_sub(16).div_ceil(16);
+            while self.at.len() < 2 + loads {
+                self.reserve();
+            }
+        }
+
+        fn finish(self) {
+            for (k, &at) in self.at.iter().enumerate() {
+                let word = (0..16)
+                    .filter(|i| self.bits.get(16 * k + i) == Some(&true))
+                    .fold(0u16, |w, i| w | 1 << (15 - i));
+                self.out[at..at + 2].copy_from_slice(&word.to_le_bytes());
+            }
+        }
+    }
+
+    /// An LZ77+Huffman encoder written from [MS-XCA] section 2.1 (for these
+    /// tests only), with every symbol coded in 9 bits.
+    fn encode_huffman(data: &[u8]) -> Vec<u8> {
+        let mut tokens = parse(data, HUFFMAN_WINDOW - 1, 70_000, 1 << 16).into_iter();
+        let (mut out, mut produced) = (Vec::new(), 0);
+        while produced < data.len() {
+            let end = (produced + (1 << 16)).min(data.len());
+            out.extend([0x99; 256]);
+            let mut w = Words {
+                out: &mut out,
+                at: Vec::new(),
+                bits: Vec::new(),
+            };
+            w.reserve();
+            w.reserve();
+            while produced < end {
+                match tokens.next().unwrap() {
+                    Token::Literal(b) => {
+                        w.bits(usize::from(b), 9);
+                        produced += 1;
+                    }
+                    Token::Match { offset, len } => {
+                        let ob = offset.ilog2();
+                        let l = len - 3;
+                        w.bits(256 + ((ob as usize) << 4) + l.min(15), 9);
+                        if l >= 15 {
+                            if l - 15 < 255 {
+                                w.out.push((l - 15) as u8);
+                            } else {
+                                w.out.push(255);
+                                w.out.extend_from_slice(&(l as u16).to_le_bytes());
+                            }
+                        }
+                        w.bits(offset - (1 << ob), ob);
+                        produced += len;
+                    }
+                }
+            }
+            w.finish();
+        }
+        out
+    }
+
+    /// Text, runs and noise, longer than either window.
+    fn sample() -> Vec<u8> {
+        let words = include_bytes!("testdata/words.txt");
+        let mut x = 12345u32;
+        let noise: Vec<u8> = (0..9000)
+            .map(|_| {
+                x = x.wrapping_mul(1_103_515_245).wrapping_add(12345);
+                (x >> 16) as u8
+            })
+            .collect();
+        [
+            &words[..],
+            &[b'a'; 70_000],
+            &noise,
+            &words[..30_000],
+            &[b'z'; 5000],
+        ]
+        .concat()
+    }
+
+    #[test]
+    fn checkpoints_resume_mid_stream() {
+        let data = sample();
+        let size = data.len() as u64;
+        let plain_data = encode_plain(&data);
+        assert!(plain(Some(size), &plain_data, 1 << 24).unwrap() == data);
+        for every in [1, 5] {
+            let (checked, largest) = crate::codec::pipeline::verify_checkpoints(
+                || Box::new(Streaming(Xpress::new(Some(size)))),
+                &plain_data,
+                4096,
+                every,
+            )
+            .unwrap();
+            assert!(checked > data.len() / 4096 / every / 2, "{checked}");
+            assert_eq!(largest, std::mem::size_of::<Xpress>());
+        }
+        let huffman_data = encode_huffman(&data);
+        assert!(huffman(size, &huffman_data, 1 << 24).unwrap() == data);
+        for every in [1, 5] {
+            let (checked, largest) = crate::codec::pipeline::verify_checkpoints(
+                || Box::new(Streaming(XpressHuffman::new(size))),
+                &huffman_data,
+                4096,
+                every,
+            )
+            .unwrap();
+            assert!(checked > data.len() / 4096 / every / 2, "{checked}");
+            // The block's code; the window is in `out`.
+            assert_eq!(
+                largest,
+                std::mem::size_of::<XpressHuffman>() + std::mem::size_of::<Code>() + (2 << 15)
+            );
+        }
     }
 }

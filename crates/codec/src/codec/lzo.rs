@@ -347,6 +347,11 @@ impl Decode for Lzo1x {
     fn release_output(&mut self, n: usize) {
         self.base = self.base.saturating_sub(n);
     }
+
+    fn heap_size(&self) -> Option<usize> {
+        // The 48 KiB window is in `out`.
+        Some(0)
+    }
 }
 
 pub const LZOP_MAGIC: &[u8; 9] = b"\x89LZO\0\r\n\x1a\n";
@@ -779,5 +784,53 @@ impl Decode for Lzop {
         if let Some(d) = self.block.as_mut().and_then(|b| b.lzo.as_mut()) {
             d.release_output(n);
         }
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        // A block's window is in `out` (none between blocks), its checks
+        // running sums.
+        Some(0)
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
+mod tests {
+    use super::*;
+    use crate::codec::pipeline::{Streaming, verify_checkpoints};
+
+    fn read(name: &str) -> Vec<u8> {
+        std::fs::read(format!(
+            "{}/../../tests/data/lzo/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    }
+
+    /// liblzo output (`tests/data/lzo`): raw LZO1X streams, and lzop files
+    /// of several blocks with checks, one after another.
+    #[test]
+    fn checkpoints_resume_mid_block_and_between_blocks() {
+        for name in ["text.lzo1x_1", "text.lzo1x_999", "mixed.lzo1x_1_15"] {
+            let (checked, largest) = verify_checkpoints(
+                || Box::new(Streaming(Lzo1x::default())),
+                &read(name),
+                2048,
+                3,
+            )
+            .unwrap();
+            assert!(checked > 5, "{name}: {checked}");
+            assert_eq!(largest, std::mem::size_of::<Lzo1x>());
+        }
+        let (text, mixed) = (read("text.lzo"), read("mixed.lzo"));
+        let input = [&text[..], &mixed, &text].concat();
+        let (checked, largest) =
+            verify_checkpoints(|| Box::new(Streaming(Lzop::default())), &input, 2048, 3).unwrap();
+        assert!(checked > 20, "{checked}");
+        assert_eq!(largest, std::mem::size_of::<Lzop>());
     }
 }
