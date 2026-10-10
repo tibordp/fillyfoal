@@ -18,10 +18,10 @@ use crate::codec::Codec;
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
-use crate::fields::{Endian, parse};
+use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::disk::{PieceList, content_node, fragments_node, size};
-use crate::formats::util::val::name_or;
-use crate::formats::{Format, Input, Probe};
+use crate::formats::util::val::{name_or, text, uint};
+use crate::formats::{Format, Input, Probe, embedded_named};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
@@ -189,6 +189,10 @@ struct Volume {
     vol: Span,
     cluster: u64,
     record: u64,
+    /// Index record size.
+    index: u64,
+    /// Clusters in the volume.
+    clusters: u64,
     /// The $MFT's own data runs (record → location).
     mft: Vec<Span>,
     /// The MFT offset where each of `mft` ends, for binary search.
@@ -332,22 +336,57 @@ impl Volume {
 /// warning on `span`; a wrong magic or an array that does not fit the
 /// record is an error. Read the result with `cx.read`/`cx.block`.
 pub async fn fixed_up(cx: &Cx, span: Span, magic: &[u8]) -> Result<Span> {
+    match fixup(cx, span, magic).await? {
+        Fixup::Applied(fixed, problem) => {
+            if let Some(d) = problem {
+                cx.diag(d);
+            }
+            Ok(fixed)
+        }
+        Fixup::Rejected(d) => Err(d),
+    }
+}
+
+/// Like [`fixed_up`], but never fails on the record's contents: returns
+/// the fixed-up span and the torn-sector warning (located at `span`), if
+/// any, without emitting it; a wrong magic or an unusable update sequence
+/// array returns `span` itself, unchanged, with the error as the
+/// diagnostic. Only a failed read is an `Err`.
+pub async fn try_fixed_up(cx: &Cx, span: Span, magic: &[u8]) -> Result<(Span, Option<Diagnostic>)> {
+    Ok(match fixup(cx, span, magic).await? {
+        Fixup::Applied(fixed, problem) => (fixed, problem),
+        Fixup::Rejected(d) => (span, Some(d)),
+    })
+}
+
+enum Fixup {
+    /// The fixed-up source, and a torn-sector warning.
+    Applied(Span, Option<Diagnostic>),
+    /// Not a record of this kind, or a bad update sequence array.
+    Rejected(Diagnostic),
+}
+
+async fn fixup(cx: &Cx, span: Span, magic: &[u8]) -> Result<Fixup> {
     let head = cx.read(span.sub(0, 8)).await?;
     if head.get(..4) != Some(magic) {
-        return Err(Diagnostic::malformed(format!(
-            "expected {:?} record",
-            String::from_utf8_lossy(magic)
-        ))
-        .at(span.sub(0, 4)));
+        return Ok(Fixup::Rejected(
+            Diagnostic::malformed(format!(
+                "expected {:?} record",
+                String::from_utf8_lossy(magic)
+            ))
+            .at(span.sub(0, 4)),
+        ));
     }
     let usa = u64::from(u16_le(&head, 4).unwrap_or(0));
     let count = u64::from(u16_le(&head, 6).unwrap_or(0));
     let sectors = span.len / 512;
     if count != sectors.saturating_add(1) || usa.saturating_add(count.saturating_mul(2)) > 512 {
-        return Err(Diagnostic::malformed(format!(
-            "update sequence of {count} entries for {sectors} sectors"
-        ))
-        .at(span));
+        return Ok(Fixup::Rejected(
+            Diagnostic::malformed(format!(
+                "update sequence of {count} entries for {sectors} sectors"
+            ))
+            .at(span),
+        ));
     }
     let array = cx.read(span.sub(usa, count.saturating_mul(2))).await?;
     let mut pieces = Vec::new();
@@ -363,16 +402,14 @@ pub async fn fixed_up(cx: &Cx, span: Span, magic: &[u8]) -> Result<Span> {
         pieces.push(sector.sub(0, 510));
         pieces.push(span.sub(usa.saturating_add(s.saturating_add(1).saturating_mul(2)), 2));
     }
-    if let Some(d) = problem {
-        cx.diag(d.at(span));
-    }
-    cx.add_pieces(
+    let fixed = cx.add_pieces(
         Origin {
             parent: span,
             transform: "ntfs-fixup",
         },
         pieces,
-    )
+    )?;
+    Ok(Fixup::Applied(fixed, problem.map(|d| d.at(span))))
 }
 
 /// Parses the attributes of a (fixed-up) record.
@@ -493,6 +530,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         vol,
         cluster,
         record,
+        index: unit(b.index_size),
+        clusters: b
+            .total_sectors
+            .saturating_mul(sector)
+            .checked_div(cluster)
+            .unwrap_or(0),
         mft,
         mft_ends,
     });
@@ -536,16 +579,27 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             ancestors: Arc::new(Vec::new()),
         },
     ));
-    let clusters = b
-        .total_sectors
-        .saturating_mul(sector)
-        .checked_div(cluster)
-        .unwrap_or(0);
+    let clusters = fs.clusters;
     cx.emit(
         Node::new("Free clusters")
             .summary("from $Bitmap")
             .lazy(free_clusters, (fs.clone(), clusters)),
     );
+    // The backup boot sector is the last sector, past the sectors the
+    // boot sector counts; any part of a cluster before it is unused.
+    let end = b.total_sectors.saturating_mul(sector);
+    let tail = clusters.saturating_mul(cluster);
+    if end > tail {
+        cx.emit(
+            Node::new("Unused")
+                .span(vol.sub(tail, end.saturating_sub(tail)))
+                .summary("past the last whole cluster"),
+        );
+    }
+    let backup = vol.sub(end, sector);
+    if backup.len == sector && cx.read_avail(backup.sub(3, 8)).await? == b"NTFS    " {
+        cx.emit(BootSector::node("Backup boot sector", backup, LE));
+    }
     Ok(())
 }
 
@@ -660,7 +714,7 @@ async fn record_node(cx: Cx, (fs, n): (Vol, u64)) -> Result<()> {
     ));
     let attrs = attributes(&cx, rec).await?;
     for a in &attrs {
-        cx.emit(attribute_node(&fs, a));
+        cx.emit(attribute_node(&fs, a, n));
     }
     if let Some(data) = attrs.iter().find(|a| a.kind == 0x80 && a.name.is_empty()) {
         let node = stream_content(&cx, &fs, data).await?;
@@ -678,6 +732,8 @@ async fn record_node(cx: Cx, (fs, n): (Vol, u64)) -> Result<()> {
                 leaf = leaf.span(s);
             }
             cx.emit(leaf);
+        } else if let Some(span) = node.span {
+            cx.emit(system_content(&cx, &fs, n, span, node).await?);
         } else {
             cx.emit(node);
         }
@@ -685,7 +741,32 @@ async fn record_node(cx: Cx, (fs, n): (Vol, u64)) -> Result<()> {
     Ok(())
 }
 
-fn attribute_node(fs: &Vol, a: &Attr) -> Node {
+/// The content of a system file's unnamed $DATA stream, dissected by what
+/// the record number says it is; `node` for any other record.
+async fn system_content(cx: &Cx, fs: &Vol, n: u64, span: Span, node: Node) -> Result<Node> {
+    let content = Node::new("Content").span(span);
+    Ok(match n {
+        2 => {
+            let head = cx.read_avail(span.sub(0, 4)).await?;
+            if matches!(head.as_slice(), b"RSTR" | b"CHKD") {
+                embedded_named("Content", fs.input.nested(span), "ntfs-logfile")
+            } else {
+                content
+                    .summary("transaction log, not initialised")
+                    .lazy(log_pages, span)
+            }
+        }
+        4 => content.summary("attribute definitions").lazy(attrdef, span),
+        6 => {
+            let clusters = fs.clusters;
+            bitmap_node("Content", span, clusters, "clusters")
+        }
+        10 => content.summary("upper-case table").lazy(upcase, span),
+        _ => node,
+    })
+}
+
+fn attribute_node(fs: &Vol, a: &Attr, record: u64) -> Node {
     let kind = name_or(ATTR_TYPES, a.kind.into(), "Attribute");
     let name = if a.name.is_empty() {
         kind
@@ -699,10 +780,10 @@ fn attribute_node(fs: &Vol, a: &Attr) -> Node {
         format!("non-resident, {}", size(a.data_size))
     };
     node.summary(summary)
-        .lazy(attribute_fields, (fs.clone(), Arc::new(a.clone())))
+        .lazy(attribute_fields, (fs.clone(), Arc::new(a.clone()), record))
 }
 
-async fn attribute_fields(cx: Cx, (fs, a): (Vol, Arc<Attr>)) -> Result<()> {
+async fn attribute_fields(cx: Cx, (fs, a, record): (Vol, Arc<Attr>, u64)) -> Result<()> {
     if let Some(value) = a.resident {
         match a.kind {
             0x10 => cx.emit(StandardInformation::node(
@@ -726,49 +807,116 @@ async fn attribute_fields(cx: Cx, (fs, a): (Vol, Arc<Attr>)) -> Result<()> {
                         .value(Value::Text(text)),
                 );
             }
-            0x70 => {
-                let raw = cx.read_avail(value).await?;
-                cx.emit(
-                    Node::new("NTFS version")
-                        .span(value.sub(8, 2))
-                        .value(Value::Text(format!(
-                            "{}.{}",
-                            raw.get(8).copied().unwrap_or(0),
-                            raw.get(9).copied().unwrap_or(0)
-                        ))),
-                );
-                cx.emit(
-                    Node::new("Flags")
-                        .span(value.sub(10, 2))
-                        .value(Value::UInt {
-                            value: u16_le(&raw, 10).unwrap_or(0).into(),
-                            bits: 16,
-                            radix: crate::value::Radix::Hex,
-                        }),
-                );
-            }
+            0x70 => cx.emit(VolumeInformation::node(
+                "Value",
+                value.sub(0, VolumeInformation::SIZE),
+                LE,
+            )),
+            0x40 => cx.emit(struct_node("Value", value, LE, (), object_id_layout)),
+            0x50 => cx.emit(struct_node("Value", value, LE, (), sd_layout)),
+            0x90 => index_root(&cx, value).await?,
+            0xb0 => cx.emit(bitmap_node(
+                "Value",
+                value,
+                value.len.saturating_mul(8),
+                "bits",
+            )),
+            0x80 if record == 10 && a.name == "$Info" => cx.emit(UpcaseInfo::node(
+                "Value",
+                value.sub(0, UpcaseInfo::SIZE),
+                LE,
+            )),
+            0x80 if !a.name.is_empty() => cx.emit(content_node(&fs.input, value)),
             _ => cx.emit(Node::new("Value").span(value).summary(size(value.len))),
         }
         return Ok(());
     }
-    if let Some(runs) = a.runs {
-        let raw = cx.read_avail(runs).await?;
-        let (list, problem) = parse_runs(&raw);
-        if let Some(d) = problem {
-            cx.diag(d);
+    let Some(runs) = a.runs else { return Ok(()) };
+    let raw = cx.read_avail(runs).await?;
+    let (list, problem) = parse_runs(&raw);
+    if let Some(d) = problem {
+        cx.diag(d);
+    }
+    let mut vcn = 0u64;
+    for (i, &(count, lcn)) in list.iter().enumerate() {
+        let node = Node::new(format!("Run {i}"));
+        let node = match lcn {
+            Some(l) => node
+                .summary(format!("VCN {vcn}: {count} clusters at LCN {l}"))
+                .target(fs.cluster_span(l, count)),
+            None => node.summary(format!("VCN {vcn}: {count} sparse clusters")),
+        };
+        cx.push(node).await;
+        vcn = vcn.saturating_add(count);
+    }
+    // Allocated bytes past the end of the data, in the last run.
+    if a.compression_unit == 0
+        && let Some(&(count, Some(lcn))) = list.last()
+    {
+        let start = vcn.saturating_sub(count).saturating_mul(fs.cluster);
+        let run = fs.cluster_span(lcn, count);
+        let slack = run.tail(a.data_size.saturating_sub(start));
+        if a.data_size >= start && !slack.is_empty() {
+            cx.emit(
+                Node::new("Slack")
+                    .span(slack)
+                    .summary("allocated past the end of the data"),
+            );
         }
-        let mut vcn = 0u64;
-        for (i, &(count, lcn)) in list.iter().enumerate() {
-            let node = Node::new(format!("Run {i}"));
-            let node = match lcn {
-                Some(l) => node
-                    .summary(format!("VCN {vcn}: {count} clusters at LCN {l}"))
-                    .target(fs.cluster_span(l, count)),
-                None => node.summary(format!("VCN {vcn}: {count} sparse clusters")),
-            };
-            cx.push(node).await;
-            vcn = vcn.saturating_add(count);
+    }
+    // The unnamed $DATA stream is shown with its record; the content of
+    // the other non-resident attributes is shown here.
+    match a.kind {
+        0x80 if a.name.is_empty() => {}
+        0x80 => {
+            let node = stream_content(&cx, &fs, &a).await?;
+            match (record, a.name.as_str(), node.span) {
+                (9, "$SDS", Some(span)) => cx.emit(
+                    Node::new("Content")
+                        .span(span)
+                        .summary("security descriptor stream")
+                        .lazy(sds, span),
+                ),
+                _ => cx.emit(node),
+            }
         }
+        0x50 => {
+            let span = fs
+                .runs_list(&cx, a.span, &list, a.data_size.min(MAX_INDEX_BYTES))?
+                .finish(&cx, "ntfs-runs")
+                .await?;
+            cx.emit(struct_node("Content", span, LE, (), sd_layout));
+        }
+        0xa0 | 0xb0 => {
+            let span = fs
+                .runs_list(&cx, a.span, &list, a.data_size.min(MAX_INDEX_BYTES))?
+                .finish(&cx, "ntfs-runs")
+                .await?;
+            if a.kind == 0xb0 {
+                let bits = if record == 0 {
+                    // The MFT's bitmap: one bit per record.
+                    fs.mft
+                        .iter()
+                        .map(|p| p.len)
+                        .fold(0u64, u64::saturating_add)
+                        .checked_div(fs.record)
+                        .unwrap_or(0)
+                } else {
+                    span.len.saturating_mul(8)
+                };
+                cx.emit(bitmap_node("Content", span, bits, "entries"));
+            } else if fs.index == 4096 && span.len.is_multiple_of(4096) {
+                // INDX records, dissected by the standalone index format.
+                cx.emit(embedded_named(
+                    "Index records",
+                    fs.input.nested(span),
+                    "ntfs-index",
+                ));
+            } else {
+                cx.emit(content_node(&fs.input, span));
+            }
+        }
+        _ => {}
     }
     Ok(())
 }
@@ -1086,4 +1234,477 @@ fn index_block_size(attrs: &[Attr]) -> Option<Span> {
         .find(|a| a.kind == 0x90 && a.name == "$I30")
         .and_then(|a| a.resident)
         .map(|v| v.sub(0, 16))
+}
+
+// ---------------------------------------------------------------------------
+// System files and attribute values
+
+const VOLUME_FLAGS: FlagTable = &[
+    flag(0x1, "DIRTY"),
+    flag(0x2, "RESIZE_LOG_FILE"),
+    flag(0x4, "UPGRADE_ON_MOUNT"),
+    flag(0x8, "MOUNTED_ON_NT4"),
+    flag(0x10, "DELETE_USN_UNDERWAY"),
+    flag(0x20, "REPAIR_OBJECT_ID"),
+    flag(0x4000, "CHKDSK_UNDERWAY"),
+    flag(0x8000, "MODIFIED_BY_CHKDSK"),
+];
+
+record! {
+    /// `$VOLUME_INFORMATION`.
+    pub struct VolumeInformation {
+        _reserved: u64 "Reserved",
+        major: u8 "Major version",
+        minor: u8 "Minor version",
+        flags: u16 "Flags" .hex() .flags(VOLUME_FLAGS),
+    }
+}
+
+record! {
+    /// `$UpCase:$Info` (Windows 8 and later): how the table was made.
+    pub struct UpcaseInfo {
+        length: u32 "Length",
+        _filler: u32 "Reserved",
+        crc: u64 "CRC-64 of the table" .hex(),
+        os_major: u32 "OS major version",
+        os_minor: u32 "OS minor version",
+        build: u32 "OS build",
+        sp_major: u16 "Service pack major",
+        sp_minor: u16 "Service pack minor",
+    }
+}
+
+/// Collation rules (`$AttrDef`, `$INDEX_ROOT`).
+const COLLATIONS: EnumTable = &[
+    (0, "binary"),
+    (1, "file name"),
+    (2, "Unicode string"),
+    (0x10, "ULONG"),
+    (0x11, "SID"),
+    (0x12, "security hash"),
+    (0x13, "ULONGs"),
+];
+
+const ATTRDEF_FLAGS: FlagTable = &[
+    flag(0x02, "INDEXABLE"),
+    flag(0x04, "MULTIPLE"),
+    flag(0x08, "NOT_ZERO"),
+    flag(0x10, "INDEXED_UNIQUE"),
+    flag(0x20, "NAMED_UNIQUE"),
+    flag(0x40, "RESIDENT"),
+    flag(0x80, "ALWAYS_LOG"),
+];
+
+/// Bytes of one `$AttrDef` entry.
+const ATTRDEF: u64 = 160;
+
+fn attrdef_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.bytes("Name", 128)
+        .with(|b, n| n.value(text(crate::text::utf16_trimmed(b, LE))))
+        .emit()?;
+    f.u32("Type").hex().enumeration(ATTR_TYPES).emit()?;
+    f.u32("Display rule").emit()?;
+    f.u32("Collation rule").enumeration(COLLATIONS).emit()?;
+    f.u32("Flags").hex().flags(ATTRDEF_FLAGS).emit()?;
+    f.u64("Minimum size").emit()?;
+    f.u64("Maximum size").hex().emit()?;
+    Ok(())
+}
+
+/// The attribute definition table ($AttrDef, record 4).
+async fn attrdef(cx: Cx, span: Span) -> Result<()> {
+    let mut at = 0u64;
+    while at.saturating_add(ATTRDEF) <= span.len {
+        let entry = span.sub(at, ATTRDEF);
+        let raw = cx.read(entry).await?;
+        if u32_le(&raw, 128).unwrap_or(0) == 0 {
+            break;
+        }
+        let name = crate::text::utf16_trimmed(raw.get(..128).unwrap_or_default(), LE);
+        cx.push(struct_node(name, entry, LE, (), attrdef_layout))
+            .await;
+        at = at.saturating_add(ATTRDEF);
+    }
+    if at < span.len {
+        cx.push(
+            Node::new("End of table")
+                .span(span.tail(at))
+                .summary("zeros after the last definition"),
+        )
+        .await;
+    }
+    Ok(())
+}
+
+/// Bits set among the first `bits` of a bitmap (least significant bit
+/// first), counted a chunk at a time.
+async fn bitmap(cx: Cx, (span, bits): (Span, u64)) -> Result<()> {
+    const CHUNK: u64 = 1 << 16;
+    let used = span.sub(0, bits.div_ceil(8));
+    let mut set = 0u64;
+    let mut at = 0u64;
+    while at < used.len {
+        let chunk = cx.read(used.sub(at, CHUNK)).await?;
+        let first = at.saturating_mul(8);
+        for (i, &b) in chunk.iter().enumerate() {
+            let bit = first.saturating_add(crate::bytes::to_u64(i).saturating_mul(8));
+            let keep = bits.saturating_sub(bit).min(8);
+            let mask = if keep >= 8 {
+                0xff
+            } else {
+                1u8.checked_shl(u32::try_from(keep).unwrap_or(0))
+                    .unwrap_or(0)
+                    .wrapping_sub(1)
+            };
+            set = set.saturating_add(u64::from((b & mask).count_ones()));
+        }
+        at = at.saturating_add(CHUNK);
+    }
+    cx.emit(
+        Node::new("Bits set")
+            .span(used)
+            .value(uint(set, 64))
+            .summary(format!("of {bits}")),
+    );
+    if used.len < span.len {
+        cx.emit(
+            Node::new("Padding")
+                .span(span.tail(used.len))
+                .summary("past the last bit"),
+        );
+    }
+    Ok(())
+}
+
+fn bitmap_node(name: &'static str, span: Span, bits: u64, what: &str) -> Node {
+    Node::new(name)
+        .span(span)
+        .summary(format!("bitmap of {bits} {what}"))
+        .lazy(bitmap, (span, bits))
+}
+
+/// The upper-case table ($UpCase, record 10): one UTF-16 unit per code
+/// unit, summarised per block of 256, identity blocks merged.
+async fn upcase(cx: Cx, span: Span) -> Result<()> {
+    const BLOCK: u64 = 512;
+    let blocks = span.len / BLOCK;
+    let mut identity: Option<u64> = None;
+    let flush = |from: u64, to: u64| {
+        Node::new(format!(
+            "U+{:04X}–U+{:04X}",
+            from.saturating_mul(256),
+            to.saturating_mul(256).saturating_sub(1)
+        ))
+        .span(span.sub(
+            from.saturating_mul(BLOCK),
+            to.saturating_sub(from).saturating_mul(BLOCK),
+        ))
+        .value(uint(0u64, 64))
+        .summary("identity: no case mappings")
+    };
+    for k in 0..blocks {
+        let raw = cx.read(span.sub(k.saturating_mul(BLOCK), BLOCK)).await?;
+        let base = k.saturating_mul(256);
+        let mut mapped = 0u64;
+        for (i, c) in raw.as_chunks::<2>().0.iter().enumerate() {
+            if u64::from(u16::from_le_bytes(*c)) != base.saturating_add(crate::bytes::to_u64(i)) {
+                mapped = mapped.saturating_add(1);
+            }
+        }
+        if mapped == 0 {
+            identity.get_or_insert(k);
+            continue;
+        }
+        if let Some(from) = identity.take() {
+            cx.push(flush(from, k)).await;
+        }
+        cx.push(
+            Node::new(format!("U+{base:04X}–U+{:04X}", base.saturating_add(255)))
+                .span(span.sub(k.saturating_mul(BLOCK), BLOCK))
+                .value(uint(mapped, 64))
+                .summary("characters mapped to another"),
+        )
+        .await;
+    }
+    if let Some(from) = identity {
+        cx.push(flush(from, blocks)).await;
+    }
+    Ok(())
+}
+
+/// What a 4 KiB page of an uninitialised $LogFile holds.
+fn log_page_class(b: &[u8]) -> &'static str {
+    if b.iter().all(|&x| x == 0xff) {
+        "unused, filled with 0xff"
+    } else if b.iter().all(|&x| x == 0) {
+        "unused, zeros"
+    } else {
+        match b.get(..4) {
+            Some(b"RSTR") => "restart page",
+            Some(b"RCRD") => "record page",
+            Some(b"BAAD") => "bad page",
+            _ => "unrecognised page",
+        }
+    }
+}
+
+/// A $LogFile that is not initialised as a log (no restart page): its
+/// pages, runs of the same kind merged.
+async fn log_pages(cx: Cx, span: Span) -> Result<()> {
+    const PAGE: u64 = 4096;
+    let pages = span.len / PAGE;
+    let flush = |from: u64, to: u64, what: &str| {
+        let name = if to.saturating_sub(from) == 1 {
+            format!("Page {from}")
+        } else {
+            format!("Pages {from}–{}", to.saturating_sub(1))
+        };
+        Node::new(name)
+            .span(span.sub(
+                from.saturating_mul(PAGE),
+                to.saturating_sub(from).saturating_mul(PAGE),
+            ))
+            .value(text(what))
+    };
+    let mut run: Option<(u64, &'static str)> = None;
+    for p in 0..pages {
+        let raw = cx.read(span.sub(p.saturating_mul(PAGE), PAGE)).await?;
+        let what = log_page_class(&raw);
+        match run {
+            Some((_, prev)) if prev == what => {}
+            Some((from, prev)) => {
+                cx.push(flush(from, p, prev)).await;
+                run = Some((p, what));
+            }
+            None => run = Some((p, what)),
+        }
+    }
+    if let Some((from, what)) = run {
+        cx.push(flush(from, pages, what)).await;
+    }
+    Ok(())
+}
+
+/// Block size of the security descriptor stream's mirrored halves.
+const SDS_BLOCK: u64 = 0x40000;
+
+/// The security descriptor stream ($Secure:$SDS): 256 KiB blocks, each
+/// followed by a mirror copy of itself.
+async fn sds(cx: Cx, span: Span) -> Result<()> {
+    let blocks = span.len.div_ceil(SDS_BLOCK);
+    for k in 0..blocks {
+        let block = span.sub(k.saturating_mul(SDS_BLOCK), SDS_BLOCK);
+        let name = if k % 2 == 1 {
+            format!("Block {k} (mirror of block {})", k.saturating_sub(1))
+        } else {
+            format!("Block {k}")
+        };
+        cx.push(
+            Node::new(name)
+                .span(block)
+                .summary(size(block.len))
+                .lazy(sds_block, block),
+        )
+        .await;
+    }
+    Ok(())
+}
+
+const SDS_HEADER: u64 = 20;
+
+/// An $SDS entry: its header, then the self-relative security descriptor
+/// (header fields; the SIDs and ACLs it points to are left as bytes).
+fn sds_entry_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.u32("Hash").hex().emit()?;
+    f.u32("Security id").emit()?;
+    f.u64("Offset in stream").hex().emit()?;
+    let len = f.u32("Length").emit()?;
+    security_descriptor(f, u64::from(len).saturating_sub(SDS_HEADER))
+}
+
+/// A `$SECURITY_DESCRIPTOR` attribute value.
+fn sd_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    let len = f.remaining();
+    security_descriptor(f, len)
+}
+
+/// A self-relative security descriptor of `sd` bytes: its header; the SIDs
+/// and ACLs it points to are left as bytes.
+fn security_descriptor(f: &mut Fields<'_>, sd: u64) -> Result<()> {
+    if sd >= 20 {
+        f.u8("Revision").emit()?;
+        f.u8("Reserved").emit()?;
+        f.u16("Control").hex().emit()?;
+        f.u32("Owner offset").hex().emit()?;
+        f.u32("Group offset").hex().emit()?;
+        f.u32("SACL offset").hex().emit()?;
+        f.u32("DACL offset").hex().emit()?;
+        if sd > 20 {
+            f.bytes("SIDs and ACLs", sd.saturating_sub(20)).emit()?;
+        }
+    } else if sd > 0 {
+        f.bytes("Security descriptor", sd).emit()?;
+    }
+    Ok(())
+}
+
+async fn sds_block(cx: Cx, block: Span) -> Result<()> {
+    let mut at = 0u64;
+    while at.saturating_add(SDS_HEADER) <= block.len {
+        let head = cx.read(block.sub(at, SDS_HEADER)).await?;
+        let id = u32_le(&head, 4).unwrap_or(0);
+        let len = u64::from(u32_le(&head, 16).unwrap_or(0));
+        if len < SDS_HEADER || at.saturating_add(len) > block.len {
+            break;
+        }
+        cx.push(
+            struct_node(
+                format!("Security id {id}"),
+                block.sub(at, len),
+                LE,
+                (),
+                sds_entry_layout,
+            )
+            .summary(format!("hash {:#010x}", u32_le(&head, 0).unwrap_or(0))),
+        )
+        .await;
+        at = at.saturating_add(len).next_multiple_of(16);
+    }
+    if at < block.len {
+        cx.push(
+            Node::new("Free space")
+                .span(block.tail(at))
+                .summary("after the last descriptor"),
+        )
+        .await;
+    }
+    Ok(())
+}
+
+const INDEX_FLAGS: FlagTable = &[flag(1, "HAS_SUBNODE"), flag(2, "LAST_ENTRY")];
+const INDEX_ROOT_FLAGS: FlagTable = &[flag(1, "LARGE_INDEX")];
+
+fn index_root_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.u32("Indexed attribute")
+        .hex()
+        .enumeration(ATTR_TYPES)
+        .emit()?;
+    f.u32("Collation rule").enumeration(COLLATIONS).emit()?;
+    f.u32("Index record size").emit()?;
+    f.u8("Clusters per index record").emit()?;
+    f.bytes("Padding", 3).emit()?;
+    f.u32("Entries offset").hex().emit()?;
+    f.u32("Index length").emit()?;
+    f.u32("Allocated length").emit()?;
+    f.u8("Flags").hex().flags(INDEX_ROOT_FLAGS).emit()?;
+    f.bytes("Padding", 3).emit()?;
+    Ok(())
+}
+
+/// An index entry: a file name entry of a directory (`$I30`), or a view
+/// index entry (`$SDH`, `$SII`, `$O`, `$Q`, `$R`) with its own key and data.
+fn index_entry_layout(f: &mut Fields<'_>, view: &bool) -> Result<()> {
+    let len;
+    let flags;
+    if *view {
+        let data_off = f.u16("Data offset").hex().emit()?;
+        let data_len = f.u16("Data length").emit()?;
+        f.u32("Reserved").emit()?;
+        len = f.u16("Entry length").emit()?;
+        let key = f.u16("Key length").emit()?;
+        flags = f.u16("Flags").hex().flags(INDEX_FLAGS).emit()?;
+        f.u16("Reserved").emit()?;
+        if key > 0 {
+            f.bytes("Key", key.into()).emit()?;
+        }
+        if data_len > 0 {
+            f.seek(data_off.into());
+            f.bytes("Data", data_len.into()).emit()?;
+        }
+    } else {
+        f.u64("File reference")
+            .with(|&r, n| n.summary(reference(r)))
+            .emit()?;
+        len = f.u16("Entry length").emit()?;
+        let key = f.u16("Key length").emit()?;
+        flags = f.u16("Flags").hex().flags(INDEX_FLAGS).emit()?;
+        f.u16("Reserved").emit()?;
+        if u64::from(key) >= FileName::SIZE {
+            let name = FileName::layout(f, &())?;
+            f.utf16("Name", name.name_length.into()).emit()?;
+        } else if key > 0 {
+            f.bytes("Key", key.into()).emit()?;
+        }
+    }
+    if flags & 1 != 0 {
+        f.seek(u64::from(len).saturating_sub(8));
+        f.u64("Subnode VCN").emit()?;
+    }
+    Ok(())
+}
+
+/// The value of an `$INDEX_ROOT`: header, then the root node's entries.
+async fn index_root(cx: &Cx, value: Span) -> Result<()> {
+    cx.emit(struct_node(
+        "Index header",
+        value.sub(0, 32),
+        LE,
+        (),
+        index_root_header,
+    ));
+    let head = cx.read(value.sub(0, 32)).await?;
+    let view = u32_le(&head, 0) != Some(0x30);
+    let node = value.tail(16);
+    let first = u64::from(u32_le(&head, 16).unwrap_or(0));
+    let total = u64::from(u32_le(&head, 20).unwrap_or(0)).min(node.len);
+    let mut at = first;
+    let mut i = 0u32;
+    while at.saturating_add(16) <= total && i < 1024 {
+        let e = cx.read(node.sub(at, 16)).await?;
+        let len = u64::from(u16_le(&e, 8).unwrap_or(0));
+        let key = u64::from(u16_le(&e, 10).unwrap_or(0));
+        let flags = u16_le(&e, 12).unwrap_or(0);
+        if len < 16 {
+            break;
+        }
+        let span = node.sub(at, len);
+        let summary = if flags & 2 != 0 {
+            "end of node".to_owned()
+        } else if !view && key >= FileName::SIZE {
+            let raw = cx.read_avail(span).await?;
+            let n = usize::from(raw.get(80).copied().unwrap_or(0));
+            crate::text::utf16(
+                raw.get(82..82usize.saturating_add(n.saturating_mul(2)))
+                    .unwrap_or_default(),
+                LE,
+            )
+        } else {
+            format!("{key} key bytes")
+        };
+        cx.emit(
+            struct_node(format!("Entry {i}"), span, LE, view, index_entry_layout).summary(summary),
+        );
+        if flags & 2 != 0 {
+            break;
+        }
+        at = at.saturating_add(len);
+        i = i.saturating_add(1);
+        cx.checkpoint().await;
+    }
+    Ok(())
+}
+
+fn object_id_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    for name in [
+        "Object id",
+        "Birth volume id",
+        "Birth object id",
+        "Domain id",
+    ] {
+        if f.remaining() < 16 {
+            break;
+        }
+        f.guid(name).emit()?;
+    }
+    Ok(())
 }
