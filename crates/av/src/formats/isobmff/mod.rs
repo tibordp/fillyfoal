@@ -4,7 +4,9 @@
 //! Everything is a box: `size, type[, largesize][, usertype], body`. One
 //! generic walker lists boxes (paged) and recurses into containers; decoders
 //! for individual box types live in the submodules. Large sample tables are
-//! listed in pages and never read whole.
+//! listed in pages and never read whole. Chunk and fragment data offsets
+//! point into the media data, and each `stbl` gets a "Samples" view that
+//! locates every sample in the file (`samples`).
 
 mod boxes;
 mod canon;
@@ -13,6 +15,7 @@ mod heif;
 mod jp2;
 mod meta;
 mod sample;
+mod samples;
 mod summary;
 mod tables;
 
@@ -565,7 +568,13 @@ async fn decode(cx: &Cx, st: &BoxState) -> Result<()> {
             b"moof" => child.fragment = st.span,
             _ => {}
         }
-        return children(cx, st.input, body, child).await;
+        children(cx, st.input, body, child).await?;
+        if &h.kind == b"stbl"
+            && let Some(node) = samples::node(cx, st.input, body).await?
+        {
+            cx.emit(node);
+        }
+        return Ok(());
     }
     if boxes::decode(cx, st).await? {
         return Ok(());

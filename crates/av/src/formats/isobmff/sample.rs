@@ -499,7 +499,7 @@ impl CodecInfo {
 }
 
 /// The child boxes of an in-memory region: (type, body).
-fn child_boxes(d: &[u8], start: usize) -> Vec<([u8; 4], &[u8])> {
+pub(super) fn child_boxes(d: &[u8], start: usize) -> Vec<([u8; 4], &[u8])> {
     let mut out = Vec::new();
     let mut at = start;
     while out.len() < 64 {

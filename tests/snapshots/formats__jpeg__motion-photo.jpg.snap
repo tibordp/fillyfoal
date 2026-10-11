@@ -581,7 +581,9 @@ expression: "common::explore(&display_name(&path), &data)"
                   Flags: 0x0  [0x8ff+0x3]
                   Entry count: 1  [0x902+0x4]
                 ▾ Chunk offsets — 1 entry  [0x906+0x4]
-                    Chunk 1: 0x31e  [0x906+0x4]
+                    Chunk 1: 0x31e  [0x906+0x4] → 0x957+0x0
+              ▾ Samples — 1 sample in 1 chunk
+                  Sample 1 — 207 bytes, chunk 1  [0x957+0xcf]
       ▾ udta  [0x90a+0x3d]
           Size: 61  [0x90a+0x4]
           Type: "udta"  [0x90e+0x4]

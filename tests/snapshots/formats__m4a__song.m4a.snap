@@ -274,6 +274,10 @@ expression: "common::explore(&display_name(&path), &data)"
                 ▾ #1 — 3 samples → group 1  [0x4eb+0x8]
                     Sample count: 3  [0x4eb+0x4]
                     Group description index: 1  [0x4ef+0x4]
+            ▾ Samples — 3 samples in 1 chunk
+                Sample 1 — 239 bytes, chunk 1  [0x2c+0xef]
+                Sample 2 — 214 bytes, chunk 1  [0x11b+0xd6]
+                Sample 3 — 93 bytes, chunk 1  [0x1f1+0x5d]
     ▾ udta  [0x4f3+0xba]
         Size: 186  [0x4f3+0x4]
         Type: "udta"  [0x4f7+0x4]

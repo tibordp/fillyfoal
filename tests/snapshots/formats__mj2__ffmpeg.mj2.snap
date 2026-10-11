@@ -235,6 +235,10 @@ expression: "common::explore(&display_name(&path), &data)"
                 Entry count: 1  [0x1074+0x4]
               ▾ Chunk offsets — 1 entry  [0x1078+0x4]
                   Chunk 1: 0x28  [0x1078+0x4] → 0x28+0x0
+            ▾ Samples — 3 samples in 1 chunk
+                Sample 1 — 1165 bytes, chunk 1  [0x28+0x48d]
+                Sample 2 — 1163 bytes, chunk 1  [0x4b5+0x48b]
+                Sample 3 — 1167 bytes, chunk 1  [0x940+0x48f]
     ▾ udta  [0x107c+0x21]
         Size: 33  [0x107c+0x4]
         Type: "udta"  [0x1080+0x4]
