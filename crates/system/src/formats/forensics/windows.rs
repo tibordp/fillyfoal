@@ -283,8 +283,59 @@ fn usn_valid(data: &[u8]) -> bool {
         && u64::from(fixed).saturating_add(name_len.map_or(0, u64::from)) <= len
 }
 
+/// The USN a record carries (its offset in the journal stream).
+fn usn_of(data: &[u8]) -> Option<u64> {
+    match u16_le(data, 4)? {
+        2 => u64_le(data, 24),
+        3 => u64_le(data, 40),
+        _ => None,
+    }
+}
+
 fn usn_probe(h: &Head<'_>) -> bool {
-    usn_valid(h.data)
+    usn_valid(h.data) || usn_sparse_head(h)
+}
+
+/// A journal extracted with its sparse head (icat, FTK): the head reads as
+/// zeros, often for gigabytes, so look at the tail instead. The journal stream ends at its last
+/// record, and every record's USN is its offset in the stream, so a chain of
+/// valid records whose USNs match their offsets must run from an aligned
+/// position in the tail to the end of the file (or into zero padding).
+fn usn_sparse_head(h: &Head<'_>) -> bool {
+    // At least one cluster of zeros: a sparse head is far longer.
+    let zeros = h.data.get(..0x1000).unwrap_or_default();
+    if !h.len_known || zeros.len() < 0x1000 || zeros.iter().any(|&b| b != 0) {
+        return false;
+    }
+    // Everything from `data_end` on is zeros.
+    let Some(data_end) = h.tail.iter().rposition(|&b| b != 0) else {
+        return false;
+    };
+    let tail_at = h.len.saturating_sub(to_u64(h.tail.len()));
+    let first = to_usize(tail_at.wrapping_neg() & 7);
+    // At most 128 starts, each a chain of at most 128 steps.
+    (first..=data_end).step_by(8).any(|start| {
+        let mut p = start;
+        let mut records = 0u32;
+        loop {
+            if p > data_end {
+                return records > 0;
+            }
+            let rest = h.tail.get(p..).unwrap_or_default();
+            let len = u32_le(rest, 0).map_or(0, |l| to_usize(l.into()));
+            if len == 0 {
+                // Records do not span pages; the rest of a page is zeros.
+                p = p.saturating_add(8);
+                continue;
+            }
+            let at = tail_at.saturating_add(to_u64(p));
+            if len > rest.len() || !usn_valid(rest) || usn_of(rest) != Some(at) {
+                return false;
+            }
+            records = records.saturating_add(1);
+            p = p.saturating_add(len);
+        }
+    })
 }
 
 declare_format!(pub USN = "usn-journal", "NTFS change journal ($UsnJrnl:$J)", [], "application/x-ntfs-usn",
@@ -1162,7 +1213,7 @@ async fn log_page(cx: Cx, (span, restart): (Span, bool)) -> Result<()> {
     if restart {
         restart_layout(&mut f, &())?;
     } else {
-        let next = u16_le(&block.data, 0x14).unwrap_or(0);
+        let next = u16_le(&block.data, 0x18).unwrap_or(0);
         record_page_layout(&mut f, &())?;
         cx.emit(
             Node::new("Log records").span(span.sub(0x40, u64::from(next).saturating_sub(0x40))),

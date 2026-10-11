@@ -2,10 +2,11 @@
 //!
 //! A 48-byte header is followed by `EVENTLOGRECORD`s, each framed by its
 //! length at both ends and tagged `LfLe`. The log is a ring buffer; records
-//! are listed from the start of the file up to the end-of-file record.
+//! are listed from the oldest (StartOffset), wrapping from the end of the
+//! file back to the header, up to the end-of-file record.
 
 use crate::cx::Cx;
-use crate::dsl::{Cursor, Record};
+use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::forensics::winsec::sid_node;
@@ -13,7 +14,7 @@ use crate::formats::util::datakit::clip;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
-use crate::span::Span;
+use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
@@ -105,31 +106,80 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(summary);
 
-    let mut cur = Cursor::new(&cx, file, LE);
-    cur.seek(Header::SIZE);
-    while cur.remaining() >= 8 {
-        let start = cur.pos();
-        cx.progress_in(file, file.offset.saturating_add(start));
-        let head = cur.peek(0x38).await?;
+    // The records form a ring buffer over the rest of the file: the oldest
+    // is at StartOffset, and a record that reaches the end of the file
+    // continues right after the header. Walk from the oldest record, wrap
+    // once, and stop at the end-of-file record or after a full circle.
+    let ring = Ring {
+        file,
+        start: u64::from(header.start),
+    };
+    let ring = if ring.start >= Header::SIZE && ring.start < file.len {
+        ring
+    } else {
+        Ring {
+            file,
+            start: Header::SIZE,
+        }
+    };
+    let mut pos = ring.start;
+    let mut wrapped = false;
+    loop {
+        let to_end = file.len.saturating_sub(pos);
+        // Space at the end too small for a record header is padding.
+        if to_end == 0
+            || (to_end < 0x38
+                && ring.can_wrap(wrapped)
+                && is_padding(&cx.read_avail(file.sub(pos, to_end)).await?))
+        {
+            if ring.can_wrap(wrapped) {
+                wrapped = true;
+                pos = Header::SIZE;
+                continue;
+            }
+            break;
+        }
+        if wrapped && pos >= ring.start {
+            break;
+        }
+        cx.progress_in(file, file.offset.saturating_add(pos));
+        let head = ring.read(&cx, pos, 0x38, wrapped).await?;
+        if head.len() < 8 {
+            break;
+        }
         let length = crate::bytes::u32_le(&head, 0).unwrap_or(0);
         if head.get(4..20) == Some(EOF_MAGIC.as_slice()) {
-            let span = file.sub(start, length.into());
+            let span = ring.span(&cx, pos, length.into(), wrapped)?;
             cx.emit(
                 Node::new("End-of-file record")
                     .span(span)
                     .lazy(eof_record, span),
             );
+            // What lies between the end-of-file record and the oldest
+            // record is slack: older records, partly overwritten.
+            let (end, wraps) = ring.advance(pos, length.into());
+            for slack in ring.slack(end, wrapped || wraps) {
+                cx.emit(Node::new("Unused space").span(slack));
+            }
             break;
         }
         if head.get(4..8) != Some(b"LfLe".as_slice()) || length < 0x38 || !length.is_multiple_of(4)
         {
             // Slack space of the ring buffer.
-            let rest = file.tail(start);
-            cx.emit(Node::new("Unused space").span(rest));
+            for rest in ring.slack(pos, wrapped) {
+                cx.emit(Node::new("Unused space").span(rest));
+            }
             break;
         }
-        cur.seek(start.saturating_add(length.into()));
-        let span = file.sub(start, length.into());
+        let span = ring.span(&cx, pos, length.into(), wrapped)?;
+        let (next, wraps) = ring.advance(pos, length.into());
+        if wraps {
+            if !ring.can_wrap(wrapped) {
+                break;
+            }
+            wrapped = true;
+        }
+        pos = next;
         let rec = crate::fields::parse(
             &cx,
             span.sub(0, EventRecord::SIZE),
@@ -159,6 +209,90 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     Ok(())
+}
+
+/// The ring buffer of records: from the end of the header to the end of
+/// the file, the oldest record at `start`.
+#[derive(Clone, Copy)]
+struct Ring {
+    file: Span,
+    start: u64,
+}
+
+impl Ring {
+    /// Whether the walk may still go from the end of the file back to the
+    /// header: once, and only if the oldest record is not the first.
+    fn can_wrap(&self, wrapped: bool) -> bool {
+        !wrapped && self.start > Header::SIZE
+    }
+
+    /// The position `len` bytes after `pos`, and whether it wrapped.
+    fn advance(&self, pos: u64, len: u64) -> (u64, bool) {
+        let end = pos.saturating_add(len);
+        match end.checked_sub(self.file.len) {
+            Some(over) if over > 0 => (Header::SIZE.saturating_add(over), true),
+            _ => (end, false),
+        }
+    }
+
+    /// The unused part of the ring from `pos` (where the walk stopped) up
+    /// to the oldest record: just before it if the walk has wrapped, else
+    /// to the end of the file and from the header to the oldest record.
+    fn slack(&self, pos: u64, wrapped: bool) -> Vec<Span> {
+        let file = self.file;
+        let pieces = if wrapped {
+            vec![file.sub(pos, self.start.saturating_sub(pos))]
+        } else {
+            vec![
+                file.tail(pos),
+                file.sub(Header::SIZE, self.start.saturating_sub(Header::SIZE)),
+            ]
+        };
+        pieces.into_iter().filter(|s| s.len > 0).collect()
+    }
+
+    /// The two pieces of `len` bytes at `pos`, if they wrap.
+    fn pieces(&self, pos: u64, len: u64, wrapped: bool) -> Option<(Span, Span)> {
+        let to_end = self.file.len.saturating_sub(pos);
+        (len > to_end && self.can_wrap(wrapped)).then(|| {
+            (
+                self.file.sub(pos, to_end),
+                self.file.sub(Header::SIZE, len.saturating_sub(to_end)),
+            )
+        })
+    }
+
+    async fn read(&self, cx: &Cx, pos: u64, len: u64, wrapped: bool) -> Result<Vec<u8>> {
+        match self.pieces(pos, len, wrapped) {
+            Some((a, b)) => {
+                let mut data = cx.read_avail(a).await?;
+                data.extend(cx.read_avail(b).await?);
+                Ok(data)
+            }
+            None => cx.read_avail(self.file.sub(pos, len)).await,
+        }
+    }
+
+    /// The span of `len` bytes at `pos`: a joined source for a record split
+    /// across the end of the file.
+    fn span(&self, cx: &Cx, pos: u64, len: u64, wrapped: bool) -> Result<Span> {
+        match self.pieces(pos, len, wrapped) {
+            Some((a, b)) => cx.add_pieces(
+                Origin {
+                    parent: a,
+                    transform: "evt-ring",
+                },
+                vec![a, b],
+            ),
+            None => Ok(self.file.sub(pos, len)),
+        }
+    }
+}
+
+/// Unused space at the end of the file: `0x00000027` words or zeros.
+fn is_padding(data: &[u8]) -> bool {
+    data.chunks(4)
+        .all(|w| [0x27, 0, 0, 0].starts_with(w) || w.iter().all(|&b| b == 0))
 }
 
 async fn source_name(cx: &Cx, span: Span) -> Result<String> {

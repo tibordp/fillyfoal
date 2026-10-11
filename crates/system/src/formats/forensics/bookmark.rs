@@ -29,11 +29,30 @@ pub static FORMAT: Format = Format {
     dissect: crate::expander!(dissect: Input),
 };
 
-/// `book`, the total length, and a sane header size.
+/// `book`, the total length, and a sane header size; or the header of an
+/// alias file (`URL.writeBookmarkData`), which wraps the same data.
 fn probe(h: &Head<'_>) -> bool {
-    h.starts_with(b"book")
+    (h.starts_with(b"book")
         && u32_le(h.data, 4).is_some_and(|n| u64::from(n) == h.len)
-        && u32_le(h.data, 12).is_some_and(|n| (16..=0x100).contains(&n))
+        && u32_le(h.data, 12).is_some_and(|n| (16..=0x100).contains(&n)))
+        || alias_probe(h)
+}
+
+/// Alias files written by `URL.writeBookmarkData` (and Finder): `book`, 0,
+/// `mark`, 0, the header size, the offset and length of the bookmark data
+/// (which runs to the end of the file), and its version.
+const ALIAS_MAGIC: &[u8; 16] = b"book\0\0\0\0mark\0\0\0\0";
+
+fn alias_probe(h: &Head<'_>) -> bool {
+    let (Some(header), Some(offset), Some(len)) =
+        (u32_le(h.data, 16), u32_le(h.data, 20), u32_le(h.data, 24))
+    else {
+        return false;
+    };
+    h.starts_with(ALIAS_MAGIC)
+        && (0x20..=0x100).contains(&header)
+        && offset >= header
+        && u64::from(offset).saturating_add(len.into()) == h.len
 }
 
 const KEYS: EnumTable = &[
@@ -99,15 +118,32 @@ struct Book {
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let head = cx.block(file.sub(0, 16)).await?;
-    let header_size = {
-        let mut f = Fields::emitting(&cx, &head, LE);
+    let head = cx.block(file.sub(0, 0x30)).await?;
+    let mut f = Fields::emitting(&cx, &head, LE);
+    let data = if head.data.starts_with(ALIAS_MAGIC) {
+        f.ascii("Magic", 4).emit()?;
+        f.u32("Reserved").emit()?;
+        f.ascii("Alias magic", 4).emit()?;
+        f.u32("Reserved").emit()?;
+        let header_size = f.u32("Header size").hex().emit()?;
+        let offset = f.u32("Bookmark offset").hex().emit()?;
+        let len = f.u32("Bookmark length").emit()?;
+        f.u32("Version").hex().emit()?;
+        if header_size >= 0x30 {
+            f.bytes("Reserved", 8).emit()?;
+            f.f64("Date")
+                .with(|&v, n| n.value(cf_time(v)))
+                .desc("When the alias file was written")
+                .emit()?;
+        }
+        file.sub(offset.into(), len.into())
+    } else {
         f.ascii("Magic", 4).emit()?;
         f.u32("Total length").emit()?;
         f.u32("Version").hex().emit()?;
-        f.u32("Header size").hex().emit()?
+        let header_size = f.u32("Header size").hex().emit()?;
+        file.tail(header_size.into())
     };
-    let data = file.tail(header_size.into());
     let book = Book { data };
     let first = cx.read(data.sub_exact(0, 4)?).await?;
     let mut toc = u32_le(&first, 0).unwrap_or(0);

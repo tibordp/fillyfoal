@@ -132,10 +132,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let chunks = file.tail(block.min(file.len));
     let count = chunks.len.div_ceil(CHUNK);
     // Records held: from the first chunk's first to the last chunk's last.
+    // The chunks form a ring: the oldest is the header's first chunk, not
+    // necessarily chunk 0.
     let mut range = None;
+    let first_chunk = header.first_chunk.min(count.saturating_sub(1));
     let last_chunk = header.last_chunk.min(count.saturating_sub(1));
     if let (Ok(first), Ok(last)) = (
-        cx.read_avail(chunks.sub(0, 0x30)).await,
+        cx.read_avail(chunks.sub(first_chunk.saturating_mul(CHUNK), 0x30))
+            .await,
         cx.read_avail(chunks.sub(last_chunk.saturating_mul(CHUNK), 0x30))
             .await,
     ) && first.starts_with(b"ElfChnk\0")

@@ -1348,6 +1348,8 @@ async fn mbdx(cx: Cx, input: Input) -> Result<()> {
 // Linux lastlog (/var/log/lastlog: one 292-byte record per UID)
 
 const LASTLOG_RECORD: u64 = 292;
+/// Records read at once while walking (about 292 KiB).
+const LASTLOG_WINDOW: u64 = 1024;
 
 fn lastlog_record_ok(r: &[u8]) -> bool {
     let t = u32_le(r, 0).unwrap_or(0);
@@ -1379,31 +1381,53 @@ fn lastlog_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
 async fn lastlog(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let count = file.len / LASTLOG_RECORD;
-    let mut logins = 0u64;
-    for uid in 0..count {
-        let span = file.sub(uid.saturating_mul(LASTLOG_RECORD), LASTLOG_RECORD);
-        let r = cx.read_avail(span).await?;
-        if r.iter().all(|&b| b == 0) {
-            if uid.is_multiple_of(64) {
-                cx.checkpoint().await;
+    // The file is indexed by UID, so a system with high UIDs has a huge,
+    // mostly sparse lastlog. Read whole windows of records and skip the
+    // empty ones in memory, rather than one read per UID.
+    let (mut uid, mut logins) = cx.resume::<(u64, u64)>().unwrap_or((0, 0));
+    while uid < count {
+        let n = LASTLOG_WINDOW.min(count.saturating_sub(uid));
+        let at = uid.saturating_mul(LASTLOG_RECORD);
+        cx.progress_in(file, file.offset.saturating_add(at));
+        let window = cx
+            .read_avail(file.sub(at, n.saturating_mul(LASTLOG_RECORD)))
+            .await?;
+        let whole = to_u64(window.len()) / LASTLOG_RECORD;
+        if window.iter().all(|&b| b == 0) {
+            if whole < n {
+                break;
             }
+            uid = uid.saturating_add(n);
             continue;
         }
-        logins = logins.saturating_add(1);
-        let t = u32_le(&r, 0).unwrap_or(0);
-        let line = crate::text::until_nul(r.get(4..36).unwrap_or_default());
-        let host = crate::text::until_nul(r.get(36..292).unwrap_or_default());
-        let summary = if host.is_empty() {
-            line
-        } else {
-            format!("{line} from {host}")
-        };
-        cx.push(
-            struct_node(format!("UID {uid}"), span, LE, (), lastlog_layout)
-                .value(unix_time(t.into()))
-                .summary(summary),
-        )
-        .await;
+        for (i, r) in window.chunks_exact(to_usize(LASTLOG_RECORD)).enumerate() {
+            if r.iter().all(|&b| b == 0) {
+                continue;
+            }
+            let this = uid.saturating_add(to_u64(i));
+            let mark = (this, logins);
+            cx.mark(move || mark);
+            logins = logins.saturating_add(1);
+            let span = file.sub(this.saturating_mul(LASTLOG_RECORD), LASTLOG_RECORD);
+            let t = u32_le(r, 0).unwrap_or(0);
+            let line = crate::text::until_nul(r.get(4..36).unwrap_or_default());
+            let host = crate::text::until_nul(r.get(36..292).unwrap_or_default());
+            let summary = if host.is_empty() {
+                line
+            } else {
+                format!("{line} from {host}")
+            };
+            cx.push(
+                struct_node(format!("UID {this}"), span, LE, (), lastlog_layout)
+                    .value(unix_time(t.into()))
+                    .summary(summary),
+            )
+            .await;
+        }
+        if whole < n {
+            break;
+        }
+        uid = uid.saturating_add(n);
     }
     cx.annotate(format!(
         "lastlog, {logins} users with logins (UIDs 0–{})",
