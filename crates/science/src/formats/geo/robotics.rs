@@ -1269,9 +1269,7 @@ async fn mcap_records(cx: Cx, (region, path): (Span, Path)) -> Result<()> {
             p = 28;
             let comp = mcap_str(&b, &mut p).unwrap_or_default();
             let records_len = u64_le(&b, p).unwrap_or(0);
-            let records = body
-                .tail(to_u64(p).saturating_add(8))
-                .sub(0, records_len);
+            let records = body.tail(to_u64(p).saturating_add(8)).sub(0, records_len);
             let size = u64_le(&b, 16).unwrap_or(0);
             let codec = match comp.as_str() {
                 "" => Some(Codec::Stored),
