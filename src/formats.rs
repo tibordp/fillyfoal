@@ -98,6 +98,8 @@ pub static DEEP: &[&DeepProbe] = &[
     &disk::mdraid::DEEP,
     #[cfg(feature = "docs")]
     &publishing::adobe::ACT_DEEP,
+    #[cfg(feature = "system")]
+    &forensics::windows::USN_DEEP,
 ];
 
 /// Every format.

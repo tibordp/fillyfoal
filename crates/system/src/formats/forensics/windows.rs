@@ -14,7 +14,7 @@ use crate::formats::disk::ntfs::{self, FILE_ATTRIBUTES};
 use crate::formats::image::bmp::CLIPBOARD_FORMATS;
 use crate::formats::util::datakit::{clip, hex, size, text, uint};
 use crate::formats::util::mapi;
-use crate::formats::{Head, Input, Probe, embedded, embedded_as};
+use crate::formats::{Deep, DeepProbe, Head, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -302,9 +302,7 @@ fn usn_probe(h: &Head<'_>) -> bool {
 /// valid records whose USNs match their offsets must run from an aligned
 /// position in the tail to the end of the file (or into zero padding).
 fn usn_sparse_head(h: &Head<'_>) -> bool {
-    // At least one cluster of zeros: a sparse head is far longer.
-    let zeros = h.data.get(..0x1000).unwrap_or_default();
-    if !h.len_known || zeros.len() < 0x1000 || zeros.iter().any(|&b| b != 0) {
+    if !usn_zero_head(h) {
         return false;
     }
     // Everything from `data_end` on is zeros.
@@ -314,29 +312,89 @@ fn usn_sparse_head(h: &Head<'_>) -> bool {
     let tail_at = h.len.saturating_sub(to_u64(h.tail.len()));
     let first = to_usize(tail_at.wrapping_neg() & 7);
     // At most 128 starts, each a chain of at most 128 steps.
-    (first..=data_end).step_by(8).any(|start| {
-        let mut p = start;
-        let mut records = 0u32;
-        loop {
-            if p > data_end {
-                return records > 0;
-            }
-            let rest = h.tail.get(p..).unwrap_or_default();
-            let len = u32_le(rest, 0).map_or(0, |l| to_usize(l.into()));
-            if len == 0 {
-                // Records do not span pages; the rest of a page is zeros.
-                p = p.saturating_add(8);
-                continue;
-            }
-            let at = tail_at.saturating_add(to_u64(p));
-            if len > rest.len() || !usn_valid(rest) || usn_of(rest) != Some(at) {
-                return false;
-            }
-            records = records.saturating_add(1);
-            p = p.saturating_add(len);
-        }
-    })
+    (first..=data_end)
+        .step_by(8)
+        .any(|start| usn_chain(h.tail, tail_at, start, data_end))
 }
+
+/// At least one cluster of zeros at the start: a sparse head is far longer.
+fn usn_zero_head(h: &Head<'_>) -> bool {
+    let zeros = h.data.get(..0x1000).unwrap_or_default();
+    h.len_known && zeros.len() == 0x1000 && zeros.iter().all(|&b| b == 0)
+}
+
+/// Whether valid records whose USNs match their stream offsets follow one
+/// another from `start` in `buf` (which sits at stream offset `buf_at`) to
+/// `data_end`, the last non-zero byte. At most `buf.len() / 8` steps.
+fn usn_chain(buf: &[u8], buf_at: u64, start: usize, data_end: usize) -> bool {
+    let mut p = start;
+    let mut records = 0u32;
+    loop {
+        if p > data_end {
+            return records > 0;
+        }
+        let rest = buf.get(p..).unwrap_or_default();
+        let len = u32_le(rest, 0).map_or(0, |l| to_usize(l.into()));
+        if len == 0 {
+            // Records do not span pages; the rest of a page is zeros.
+            p = p.saturating_add(8);
+            continue;
+        }
+        let at = buf_at.saturating_add(to_u64(p));
+        if len > rest.len() || !usn_valid(rest) || usn_of(rest) != Some(at) {
+            return false;
+        }
+        records = records.saturating_add(1);
+        p = p.saturating_add(len);
+    }
+}
+
+/// The second phase: a journal with a sparse head whose records end more
+/// than the 1 KiB tail the first phase sees before the end of the file
+/// (an export padded to its allocation with zeros). The records must still
+/// chain to the last non-zero byte of the 128 KiB deep tail, and the node
+/// must be named like the stream (`$J`, `$UsnJrnl:$J`, `...$J`).
+fn usn_deep_probe(d: &Deep<'_>) -> bool {
+    let named = d.name.is_some_and(|n| {
+        let base = n.rsplit(['/', '\\']).next().unwrap_or(n);
+        let lower = base.to_ascii_lowercase();
+        lower.ends_with("$j") || lower.contains("usnjrnl")
+    });
+    if !named || !usn_zero_head(d.head) {
+        return false;
+    }
+    let tail = d.tail;
+    let Some(data_end) = tail.iter().rposition(|&b| b != 0) else {
+        return false;
+    };
+    let tail_at = d.head.len.saturating_sub(to_u64(tail.len()));
+    let first = to_usize(tail_at.wrapping_neg() & 7);
+    // A record whose USN is its own offset anchors a chain; such 8-byte
+    // coincidences are rare, so a few failed anchors mean it is not a
+    // journal. At most 16k cheap checks and 16 chains of at most 16k steps.
+    let mut chains = 0u32;
+    for start in (first..=data_end).step_by(8) {
+        let rest = tail.get(start..).unwrap_or_default();
+        if usn_of(rest) != Some(tail_at.saturating_add(to_u64(start))) {
+            continue;
+        }
+        if usn_chain(tail, tail_at, start, data_end) {
+            return true;
+        }
+        chains = chains.saturating_add(1);
+        if chains >= 16 {
+            return false;
+        }
+    }
+    false
+}
+
+pub static USN_DEEP: DeepProbe = DeepProbe {
+    format: &USN,
+    tail: true,
+    over: &[],
+    probe: usn_deep_probe,
+};
 
 declare_format!(pub USN = "usn-journal", "NTFS change journal ($UsnJrnl:$J)", [], "application/x-ntfs-usn",
     Probe::Custom(usn_probe), usn_journal);
