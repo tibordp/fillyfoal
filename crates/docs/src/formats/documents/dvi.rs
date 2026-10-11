@@ -14,8 +14,18 @@ const BE: Endian = Endian::Big;
 // ---------------------------------------------------------------------------
 // TeX DVI
 
-declare_format!(pub DVI = "dvi", "TeX device-independent output", ["dvi"], "application/x-dvi",
-    Probe::Magic(&[(0, b"\xf7\x02"), (0, b"\xf7\x05")]), dvi);
+// Identification bytes: 2 for TeX, 3 for pTeX with direction commands,
+// 5, 6 and 7 for XeTeX's extended DVI (`.xdv`; 7 since XeTeX 0.99996, the
+// current TeX Live). Only the preamble and postamble are read, so the XDV
+// opcodes need no handling here.
+declare_format!(pub DVI = "dvi", "TeX device-independent output", ["dvi", "xdv"], "application/x-dvi",
+    Probe::Magic(&[
+        (0, b"\xf7\x02"),
+        (0, b"\xf7\x03"),
+        (0, b"\xf7\x05"),
+        (0, b"\xf7\x06"),
+        (0, b"\xf7\x07"),
+    ]), dvi);
 
 async fn dvi(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -38,13 +48,16 @@ async fn dvi(cx: Cx, input: Input) -> Result<()> {
     let tail = cx.read(file.sub(file.len.saturating_sub(64), 64)).await?;
     let end = tail.iter().rposition(|&b| b != 223).unwrap_or(0);
     let mut pages = None;
+    let mut pages_end = file.len;
     if end >= 5 && tail.get(end.saturating_sub(5)) == Some(&249) {
         let post = u64::from(u32_be(&tail, end.saturating_sub(4)).unwrap_or(0));
         let p = cx.read_avail(file.sub(post, 29)).await?;
         pages = crate::bytes::u16_be(&p, 27);
+        pages_end = post.min(file.len);
         cx.emit(Node::new("Postamble").span(file.sub(post, file.len.saturating_sub(post))));
     }
-    cx.emit(Node::new("Pages").span(file.sub(15u64.saturating_add(k.into()), file.len)));
+    let pages_at = 15u64.saturating_add(k.into());
+    cx.emit(Node::new("Pages").span(file.sub(pages_at, pages_end.saturating_sub(pages_at))));
     cx.annotate(format!(
         "DVI (id {id}), {}{}, magnification {mag}",
         comment.trim(),

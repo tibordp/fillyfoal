@@ -11,4 +11,4 @@ expression: "common::explore(&display_name(&path), &data)"
     Comment length: 27  [0xe+0x1]
     Comment: "TeX output 2026.10.06:0100"  [0xf+0x1b]
     Postamble  [0x58+0x27]
-    Pages  [0x2a+0x55]
+    Pages  [0x2a+0x2e]
