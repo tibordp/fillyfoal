@@ -76,4 +76,4 @@ expression: "common::explore(&display_name(&path), &data)"
       Next record offset: 0x98  [0x2018+0x2]
       Padding: 00 00 00 00 00 00  |......|  [0x201a+0x6]
       Last end LSN: 20352  [0x2020+0x8]
-      Log records  [0x2040+0x0]
+      Log records  [0x2040+0x58]
