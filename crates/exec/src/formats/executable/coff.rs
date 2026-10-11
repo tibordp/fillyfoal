@@ -2,6 +2,11 @@
 //! and `/bigobj` layouts, and the short import records that make up import
 //! libraries (`.lib` members starting `00 00 FF FF`).
 //!
+//! Objects compiled with MSVC's `/GL` (link-time code generation) start
+//! with the same anonymous object header, with their own ClassID, followed
+//! by the compiler's intermediate language, which is undocumented: only the
+//! header is decoded.
+//!
 //! The file header gives the section table and the symbol table; the string
 //! table follows the symbols. Expanding the file reads the headers and the
 //! string table (for long names); sections, relocations and symbols are
@@ -29,6 +34,12 @@ const LE: Endian = Endian::Little;
 pub(super) const MAX_STRINGS: u64 = 4 << 20;
 const BIGOBJ_CLASS_ID: [u8; 16] = [
     0xc7, 0xa1, 0xba, 0xd1, 0xee, 0xba, 0xa9, 0x4b, 0xaf, 0x20, 0xfa, 0xf6, 0x6a, 0xa4, 0xdc, 0xb8,
+];
+
+/// ClassID of `cl.exe /GL` objects (LLVM `COFF::ClGlObjMagic`; lld-link
+/// rejects them as "not a native COFF file").
+const LTCG_CLASS_ID: [u8; 16] = [
+    0x38, 0xfe, 0xb3, 0x0c, 0xa5, 0xd9, 0xab, 0x4d, 0xac, 0x9b, 0xd6, 0xb6, 0x22, 0x26, 0x53, 0xc2,
 ];
 
 pub static FORMAT: Format = Format {
@@ -80,8 +91,9 @@ fn known_machine(m: u16) -> bool {
 
 fn probe(h: &Head<'_>) -> bool {
     if h.starts_with(b"\0\0\xff\xff") {
-        return u16_le(h.data, 4).is_some_and(|v| v >= 2)
-            && h.at(12, &BIGOBJ_CLASS_ID)
+        let version = u16_le(h.data, 4).unwrap_or(0);
+        return ((version >= 2 && h.at(12, &BIGOBJ_CLASS_ID))
+            || (version >= 1 && h.at(12, &LTCG_CLASS_ID)))
             && u16_le(h.data, 6).is_some_and(known_machine);
     }
     let (Some(machine), Some(sections), Some(symptr), Some(nsyms), Some(optional)) = (
@@ -490,13 +502,66 @@ fn bigobj_header(f: &mut Fields<'_>, _: &()) -> Result<Header> {
     })
 }
 
+/// `ANON_OBJECT_HEADER` (Version 1) or `ANON_OBJECT_HEADER_V2` of a `/GL`
+/// object: `(machine, SizeOfData)`.
+fn ltcg_header(f: &mut Fields<'_>, _: &()) -> Result<(u16, u32)> {
+    f.u16("Sig1").hex().emit()?;
+    f.u16("Sig2").hex().emit()?;
+    let version = f.u16("Version").emit()?;
+    let machine = f.u16("Machine").enumeration(MACHINE).emit()?;
+    f.u32("TimeDateStamp").timestamp().emit()?;
+    f.guid("ClassID")
+        .desc("{0cb3fe38-d9a5-4dab-ac9b-d6b6222653c2} for objects compiled with /GL")
+        .emit()?;
+    let size = f
+        .u32("SizeOfData")
+        .desc("Size of the data after the header")
+        .emit()?;
+    if version >= 2 {
+        f.u32("Flags").hex().emit()?;
+        f.u32("MetaDataSize").emit()?;
+        f.u32("MetaDataOffset").hex().emit()?;
+    }
+    Ok((machine, size))
+}
+
+/// A `cl.exe /GL` object: the header, then opaque compiler IL.
+async fn ltcg(cx: Cx, file: Span, version: u16) -> Result<()> {
+    let header = file.sub(0, if version >= 2 { 44 } else { 32 });
+    cx.emit(struct_node(
+        "Anonymous Object Header",
+        header,
+        LE,
+        (),
+        ltcg_header,
+    ));
+    let (machine, size) = parse(&cx, header, LE, &(), ltcg_header).await?;
+    cx.annotate(format!(
+        "MSVC LTCG (/GL) object, {}, {size} bytes of compiler IL",
+        lookup(MACHINE, machine.into()).unwrap_or("unknown machine")
+    ));
+    let data = file.sub(header.len, size.into());
+    cx.emit(
+        data_node("Compiler IL", data, size.into())
+            .desc("Intermediate language for link-time code generation (undocumented)"),
+    );
+    let rest = header.len.saturating_add(size.into());
+    if file.len > rest {
+        cx.emit(Node::new("Trailing Data").span(file.tail(rest)));
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let head = cx.read_avail(file.sub(0, 4)).await?;
+    let head = cx.read_avail(file.sub(0, 28)).await?;
     let big = head.starts_with(b"\0\0\xff\xff");
+    if big && head.get(12..28) == Some(&LTCG_CLASS_ID[..]) {
+        return ltcg(cx, file, u16_le(&head, 4).unwrap_or(0)).await;
+    }
     let layout: crate::fields::Layout<(), Header> = if big { bigobj_header } else { file_header };
     let header_span = file.sub(0, if big { 56 } else { 20 });
     cx.emit(struct_node(
@@ -592,9 +657,48 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
+/// `IMAGE_SCN_LNK_NRELOC_OVFL`: the section has more than 65,535
+/// relocations; NumberOfRelocations is 0xffff and the first relocation's
+/// VirtualAddress holds the real count, that record included.
+const SCN_LNK_NRELOC_OVFL: u32 = 0x0100_0000;
+
+/// A section's relocation table.
+#[derive(Clone, Copy, Debug)]
+struct Relocs {
+    span: Span,
+    /// Relocations, not counting the count record.
+    count: u64,
+    /// The first record holds the count (`SCN_LNK_NRELOC_OVFL`).
+    overflow: bool,
+}
+
+/// Where a section's relocations are and how many there are, reading the
+/// extended count when NumberOfRelocations overflowed.
+async fn relocs(cx: &Cx, c: &CoffInfo, s: &Section) -> Result<Relocs> {
+    let at = u64::from(s.reloc_pointer);
+    if s.nreloc == 0xffff && s.characteristics & SCN_LNK_NRELOC_OVFL != 0 {
+        let first = cx.read(c.file.sub_exact(at, 10)?).await?;
+        let total = u64::from(u32_le(&first, 0).unwrap_or(0));
+        return Ok(Relocs {
+            span: c.file.sub(at, total.saturating_mul(10)),
+            count: total.saturating_sub(1),
+            overflow: true,
+        });
+    }
+    Ok(Relocs {
+        span: c.file.sub(at, u64::from(s.nreloc).saturating_mul(10)),
+        count: s.nreloc.into(),
+        overflow: false,
+    })
+}
+
 async fn section_list(cx: Cx, c: Coff) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(c.sections.len())));
     for (i, s) in c.sections.iter().enumerate() {
+        let nreloc = match relocs(&cx, &c, s).await {
+            Ok(r) => r.count,
+            Err(_) => s.nreloc.into(),
+        };
         let flag = |bit: u32, ch: char| {
             if s.characteristics & bit != 0 {
                 ch
@@ -609,7 +713,7 @@ async fn section_list(cx: Cx, c: Coff) -> Result<()> {
             flag(0x2000_0000, 'x'),
             s.raw_size,
             s.raw_pointer,
-            s.nreloc
+            nreloc
         );
         cx.push(
             Node::new(s.name.clone())
@@ -633,16 +737,15 @@ async fn section_node(cx: Cx, (c, index): (Coff, usize)) -> Result<()> {
         cx.emit(data_node("Raw Data", data, s.raw_size.into()));
     }
     if s.nreloc > 0 {
-        let span = c.file.sub(
-            s.reloc_pointer.into(),
-            u64::from(s.nreloc).saturating_mul(10),
-        );
-        cx.emit(
-            Node::new("Relocations")
-                .span(span)
-                .summary(format!("{} entries", s.nreloc))
-                .lazy(relocations, (c.clone(), span)),
-        );
+        match relocs(&cx, &c, s).await {
+            Ok(r) => cx.emit(
+                Node::new("Relocations")
+                    .span(r.span)
+                    .summary(format!("{} entries", r.count))
+                    .lazy(relocations, (c.clone(), r)),
+            ),
+            Err(e) => cx.diag(e),
+        }
     }
     Ok(())
 }
@@ -657,11 +760,25 @@ async fn symbol_name_at(cx: &Cx, c: &CoffInfo, index: u32) -> Result<String> {
     Ok(c.symbol_name(&data))
 }
 
-async fn relocations(cx: Cx, (c, span): (Coff, Span)) -> Result<()> {
+async fn relocations(cx: Cx, (c, r): (Coff, Relocs)) -> Result<()> {
+    let span = r.span;
     let count = span.len / 10;
     let types = relocation_types(c.machine);
     cx.set_count(Count::Exact(count));
-    for i in 0..count {
+    let mut first = 0;
+    if r.overflow {
+        let at = span.sub(0, 10);
+        let data = cx.read(at).await?;
+        cx.push(
+            Node::new("Relocation Count")
+                .span(at)
+                .value(crate::formats::util::val::uint(u32_le(&data, 0).unwrap_or(0), 32))
+                .desc("NumberOfRelocations overflowed (IMAGE_SCN_LNK_NRELOC_OVFL): this record's VirtualAddress is the number of relocations, itself included"),
+        )
+        .await;
+        first = 1;
+    }
+    for i in first..count {
         let at = span.sub(i.saturating_mul(10), 10);
         let data = cx.read(at).await?;
         let address = u32_le(&data, 0).unwrap_or(0);
