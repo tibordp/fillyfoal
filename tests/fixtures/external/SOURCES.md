@@ -299,6 +299,10 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `tiff/geotiff-bigtiff.tif` | tifffile 2026.9.20 (numpy 2.5.3; ICC profile by Pillow 12.3's LittleCMS) | `uv run --with tifffile==2026.9.20 --with numpy==2.5.3 --with pillow==12.3.0 python tests/data/tiff/geotiff_tifffile.py tests/fixtures/external/tiff/geotiff-bigtiff.tif` reproduces it except for the embedded profile's creation time; the GeoTIFF key values are ours |
 | `fits/astropy-tables.fits` | astropy 7.1.1 (numpy 2.3.4) | reproduced byte-for-byte: `uv run --with astropy==7.1.1 --with numpy==2.3.4 python tests/data/fits/astropy_fits.py tests/fixtures/external/fits/astropy-tables.fits`; an unsigned 16-bit image, a binary table with a variable-length array column (heap) and an ASCII table; values are ours |
 | `icc/lcms-srgb.icc` | LittleCMS 2 via Pillow 12.3 (`ImageCms.createProfile("sRGB")`) | `uv run --with pillow==12.3.0 python -c "from PIL import ImageCms; open('lcms-srgb.icc','wb').write(ImageCms.ImageCmsProfile(ImageCms.createProfile('sRGB')).tobytes())"` reproduces it except for the creation time in the header |
+| `dicom/implicit-nested.dcm` | pydicom 3.0.2 | reproduced byte-for-byte: `uv run --with pydicom==3.0.2 --with numpy==2.3.4 python tests/data/dicom/make_pydicom.py OUTDIR`; Implicit VR Little Endian, an undefined-length sequence of undefined-length items with a nested undefined-length sequence, and a private undefined-length sequence; patient data is neutral (`FILLYFOAL^TEST`) and all UIDs are fixed |
+| `dicom/implicit-defined-items.dcm` | pydicom 3.0.2 | same script, byte for byte: Implicit VR Little Endian, defined-length items in an undefined-length sequence |
+| `dicom/explicit-undefined-items.dcm` | pydicom 3.0.2 | same script, byte for byte: Explicit VR Little Endian, the nested undefined-length sequences and items of `implicit-nested.dcm` |
+| `dicom/rle-encapsulated.dcm` | pydicom 3.0.2 (numpy 2.3.4) | same script, byte for byte: `explicit-undefined-items.dcm` compressed by pydicom's own RLE Lossless encoder, so Pixel Data is encapsulated (Basic Offset Table, one fragment, Sequence Delimitation Item) |
 
 ## Binary value encodings
 

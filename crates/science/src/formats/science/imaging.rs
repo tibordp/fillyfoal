@@ -43,6 +43,10 @@ const DICOM_TAGS: &[(u16, u16, &str, &str)] = &[
     (0x0008, 0x0070, "LO", "Manufacturer"),
     (0x0008, 0x0080, "LO", "Institution Name"),
     (0x0008, 0x0090, "PN", "Referring Physician's Name"),
+    (0x0008, 0x0100, "SH", "Code Value"),
+    (0x0008, 0x0102, "SH", "Coding Scheme Designator"),
+    (0x0008, 0x0104, "LO", "Code Meaning"),
+    (0x0008, 0x1032, "SQ", "Procedure Code Sequence"),
     (0x0008, 0x1030, "LO", "Study Description"),
     (0x0008, 0x103e, "LO", "Series Description"),
     (0x0008, 0x1090, "LO", "Manufacturer's Model Name"),
@@ -81,6 +85,7 @@ const DICOM_TAGS: &[(u16, u16, &str, &str)] = &[
     (0x0028, 0x1051, "DS", "Window Width"),
     (0x0028, 0x1052, "DS", "Rescale Intercept"),
     (0x0028, 0x1053, "DS", "Rescale Slope"),
+    (0x0040, 0xa043, "SQ", "Concept Name Code Sequence"),
     (0x7fe0, 0x0010, "OW", "Pixel Data"),
     (0xfffe, 0xe000, "", "Item"),
     (0xfffe, 0xe00d, "", "Item Delimitation Item"),
@@ -286,59 +291,54 @@ async fn dicom_elements(cx: Cx, (span, enc, depth): (Span, Encoding, u32)) -> Re
         let label = format!("{name} [{vr}]");
         let value_start = cur.pos();
         if group == 0xfffe && element != 0xe000 {
+            // Delimiters (and stray items of other kinds) carry no value.
+            // A delimiter is the last thing in its sequence or item body,
+            // which ends right after it, so there is nothing to stop here.
             cx.push(Node::new(label).span(cur.since(start))).await;
-            if element == 0xe0dd {
-                break;
-            }
             continue;
         }
         let undefined = len == UNDEFINED;
-        let body = if undefined {
-            cur.region().tail(value_start)
-        } else {
-            cur.span(len.into())
-        };
+        let item = group == 0xfffe && element == 0xe000;
         let mut node = Node::new(label);
-        if vr == "SQ" || (group == 0xfffe && element == 0xe000) || (undefined && group != 0x7fe0) {
-            // Nested data sets: an item's body holds elements; a sequence's
-            // body holds items. Undefined lengths end at a delimiter.
-            node = node.lazy(
-                crate::expander!(self::dicom_elements: (Span, Encoding, u32)),
-                (body, enc, depth.saturating_add(1)),
-            );
-            if undefined {
-                let end = find_delimiter(
-                    &cx,
-                    body,
-                    enc.endian,
-                    if vr == "SQ" { 0xe0dd } else { 0xe00d },
-                )
-                .await?;
-                cur.seek(value_start.saturating_add(end));
-                node = node.span(cur.since(start));
-            } else {
-                cur.skip(len.into());
-                node = node.span(cur.since(start));
-            }
-        } else if undefined {
+        if group == 0x7fe0 && undefined {
             // Encapsulated pixel data: fragments until a sequence delimiter.
-            let end = find_delimiter(&cx, body, enc.endian, 0xe0dd).await?;
-            node = node
-                .span(span.sub(start, value_start.saturating_add(end).saturating_sub(start)))
-                .summary("encapsulated")
-                .lazy(
-                    crate::expander!(self::dicom_elements: (Span, Encoding, u32)),
-                    (
-                        body.sub(0, end),
-                        Encoding {
-                            explicit: false,
-                            endian: enc.endian,
-                        },
-                        depth.saturating_add(1),
-                    ),
-                );
-            cur.seek(value_start.saturating_add(end));
+            let end = find_end(&cx, cur.region().tail(value_start), enc, Nest::Sequence).await?;
+            let body = cur.span(end);
+            cur.skip(end);
+            node = node.span(cur.since(start)).summary("encapsulated").lazy(
+                crate::expander!(self::dicom_fragments: (Span, Endian)),
+                (body, enc.endian),
+            );
+        } else if vr == "SQ" || item || undefined {
+            // Nested data sets: an item's body holds elements; a sequence's
+            // body holds items. An undefined length outside Pixel Data
+            // means a sequence (whatever VR an implicit-VR reader guessed),
+            // which ends at its Sequence Delimitation Item; an item of
+            // undefined length ends at its Item Delimitation Item. An
+            // explicit-VR UN of undefined length holds implicit VR little
+            // endian (PS3.5 6.2.2).
+            let inner = if undefined && enc.explicit && vr == "UN" {
+                Encoding {
+                    explicit: false,
+                    endian: LE,
+                }
+            } else {
+                enc
+            };
+            let body_len = if undefined {
+                let nest = if item { Nest::Item } else { Nest::Sequence };
+                find_end(&cx, cur.region().tail(value_start), inner, nest).await?
+            } else {
+                u64::from(len)
+            };
+            let body = cur.span(body_len);
+            cur.skip(body_len);
+            node = node.span(cur.since(start)).lazy(
+                crate::expander!(self::dicom_elements: (Span, Encoding, u32)),
+                (body, inner, depth.saturating_add(1)),
+            );
         } else {
+            let body = cur.span(len.into());
             cur.skip(len.into());
             node = node.span(cur.since(start));
             if let Some(value) = dicom_value(&cx, &vr, body, enc.endian).await? {
@@ -352,45 +352,128 @@ async fn dicom_elements(cx: Cx, (span, enc, depth): (Span, Encoding, u32)) -> Re
     Ok(())
 }
 
-/// Finds the end (just past) of a delimiter item with `element` in `span`,
-/// skipping over nested items with defined lengths.
-async fn find_delimiter(cx: &Cx, span: Span, endian: Endian, element: u16) -> Result<u64> {
-    let mut cur = Cursor::new(cx, span, endian);
-    let mut depth = 0u32;
+/// The items of encapsulated Pixel Data: the Basic Offset Table, then one
+/// or more fragments of compressed frames (PS3.5 A.4), then the Sequence
+/// Delimitation Item. Item bodies are opaque bytes, not data sets.
+async fn dicom_fragments(cx: Cx, (span, endian): (Span, Endian)) -> Result<()> {
+    let mut cur = Cursor::new(&cx, span, endian);
+    let mut index = 0u64;
     while cur.remaining() >= 8 {
+        cx.progress_in(span, span.offset.saturating_add(cur.pos()));
+        let start = cur.pos();
         let group = cur.u16().await?;
-        let e = cur.u16().await?;
+        let element = cur.u16().await?;
+        let len = cur.u32().await?;
+        let (name, done) = match (group, element) {
+            (0xfffe, 0xe000) if index == 0 => ("Basic Offset Table".to_owned(), false),
+            (0xfffe, 0xe000) => (format!("Fragment {index}"), false),
+            (0xfffe, 0xe0dd) => ("Sequence Delimitation Item".to_owned(), true),
+            _ => (format!("({group:04x},{element:04x})"), false),
+        };
+        if len != UNDEFINED {
+            cur.skip(len.into());
+        }
+        let mut node = Node::new(name).span(cur.since(start));
+        if !done {
+            node = node.summary(format!("{len} bytes"));
+        }
+        cx.push(node).await;
+        if done || len == UNDEFINED {
+            break;
+        }
+        index = index.saturating_add(1);
+    }
+    Ok(())
+}
+
+/// A container of undefined length, and the delimiter that closes it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Nest {
+    /// Closed by (FFFE,E0DD) Sequence Delimitation Item.
+    Sequence,
+    /// Closed by (FFFE,E00D) Item Delimitation Item.
+    Item,
+}
+
+/// Undefined-length containers nested deeper than this are not followed.
+const MAX_NEST: usize = 64;
+
+/// Finds the end (just past the closing delimiter) of the body of a `nest`
+/// of undefined length that starts at `span`, walking the elements in
+/// `enc` and keeping a stack of the undefined-length sequences and items
+/// opened on the way, so that each delimiter closes only its own
+/// container. Defined lengths are skipped without reading. Without a
+/// closing delimiter the body runs to the end of `span`.
+async fn find_end(cx: &Cx, span: Span, enc: Encoding, nest: Nest) -> Result<u64> {
+    let mut cur = Cursor::new(cx, span, enc.endian);
+    let mut stack = vec![(nest, enc)];
+    while cur.remaining() >= 8 {
+        let Some(&(top, here)) = stack.last() else {
+            break;
+        };
+        let tag_start = cur.pos();
+        let group = cur.u16().await?;
+        let element = cur.u16().await?;
         if group == 0xfffe {
             let len = cur.u32().await?;
-            match e {
-                0xe000 if len != UNDEFINED => cur.skip(len.into()),
-                0xe000 => depth = depth.saturating_add(1),
-                0xe00d if depth > 0 && element != 0xe00d => depth = depth.saturating_sub(1),
-                _ if e == element && depth == 0 => return Ok(cur.pos()),
-                0xe0dd if depth > 0 => {}
+            match element {
+                0xe000 if len == UNDEFINED => stack.push((Nest::Item, here)),
+                0xe00d if top == Nest::Item => {
+                    stack.pop();
+                }
+                0xe0dd => {
+                    // Closes the innermost open sequence; open items inside
+                    // it lacked their delimiters and end here too.
+                    let Some(at) = stack.iter().rposition(|(n, _)| *n == Nest::Sequence) else {
+                        // A stray sequence delimiter in an item: the item
+                        // (which lacked its own delimiter) ends before it.
+                        if stack.len() == 1 {
+                            return Ok(tag_start);
+                        }
+                        cx.checkpoint().await;
+                        continue;
+                    };
+                    if at == 0 && nest == Nest::Item {
+                        return Ok(tag_start);
+                    }
+                    stack.truncate(at);
+                }
+                // Stray item delimiters and items of defined length.
+                _ if len != UNDEFINED => cur.skip(len.into()),
                 _ => {}
             }
         } else {
-            // Inside an item with undefined length: an element. Skip it
-            // using explicit-VR heuristics (best effort).
-            let vr = cur.peek(2).await?;
-            if vr.iter().all(u8::is_ascii_uppercase) {
-                cur.skip(2);
+            let (vr, len) = if here.explicit {
+                let vr = cur.bytes(2).await?;
                 let len = if long_vr(&vr) {
                     cur.skip(2);
                     cur.u32().await?
                 } else {
                     u32::from(cur.u16().await?)
                 };
-                if len != UNDEFINED {
-                    cur.skip(len.into());
-                }
+                (vr, len)
             } else {
-                let len = cur.u32().await?;
-                if len != UNDEFINED {
-                    cur.skip(len.into());
-                }
+                (Vec::new(), cur.u32().await?)
+            };
+            if len == UNDEFINED {
+                let inner = if here.explicit && vr == b"UN" {
+                    Encoding {
+                        explicit: false,
+                        endian: LE,
+                    }
+                } else {
+                    here
+                };
+                stack.push((Nest::Sequence, inner));
+            } else {
+                cur.skip(len.into());
             }
+        }
+        if stack.is_empty() {
+            return Ok(cur.pos().min(span.len));
+        }
+        if stack.len() > MAX_NEST {
+            return Err(Diagnostic::limit("DICOM sequences nested too deeply"));
         }
         cx.checkpoint().await;
     }
