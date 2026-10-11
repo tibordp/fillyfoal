@@ -494,40 +494,71 @@ async fn kss(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub AY = "ay", "ZX Spectrum AY music (ZXAYEMUL)", ["ay"], "audio/x-ay",
     Probe::Magic(&[(0, b"ZXAYEMUL")]), ay);
 
-/// AY files use big-endian, self-relative 16-bit pointers.
-async fn relative_string(cx: &Cx, file: Span, at: u64) -> Result<(String, Span)> {
+/// AY files use big-endian, signed, self-relative 16-bit pointers: the
+/// target of the pointer stored at `at`.
+async fn relative_target(cx: &Cx, file: Span, at: u64) -> Result<u64> {
     let raw = cx.read(file.sub(at, 2)).await?;
     let delta = i64::from(u16_be(&raw, 0).unwrap_or(0) as i16);
     let target = i64::try_from(at).unwrap_or(0).saturating_add(delta);
-    let target =
-        u64::try_from(target).map_err(|_| Diagnostic::malformed("pointer before start of file"))?;
+    u64::try_from(target).map_err(|_| Diagnostic::malformed("pointer before start of file"))
+}
+
+async fn relative_string(cx: &Cx, file: Span, at: u64) -> Result<(String, Span)> {
+    let target = relative_target(cx, file, at).await?;
     cx.cstr(file.sub(target, 256)).await
 }
 
+/// The ZXAYEMUL header (Ay_Emu's `header_t`): versions are single bytes,
+/// then the special-player, author and misc pointers, the last and first
+/// song indices and the pointer to the song structures.
 async fn ay(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let header = cx.block(file.sub(0, 20)).await?;
     let mut f = Fields::emitting(&cx, &header, BE);
     f.ascii("Magic", 8).emit()?;
-    f.u16("File version").emit()?;
-    f.u16("Player version").emit()?;
+    f.u8("File version").emit()?;
+    f.u8("Player version").emit()?;
     f.u16("Special player pointer").hex().emit()?;
     f.u16("Author pointer").hex().emit()?;
     f.u16("Misc pointer").hex().emit()?;
-    let songs = f.u8("Last song index").emit()?;
+    let last = f.u8("Last song index").emit()?;
     f.u8("First song index").emit()?;
-    let (author, author_span) = relative_string(&cx, file, 0x0e).await?;
+    f.u16("Song structures pointer").hex().emit()?;
+    let (author, author_span) = relative_string(&cx, file, 0x0c).await?;
     cx.emit(
         Node::new("Author")
             .span(author_span)
             .value(text(author.clone())),
     );
-    let (misc, misc_span) = relative_string(&cx, file, 0x10).await?;
+    let (misc, misc_span) = relative_string(&cx, file, 0x0e).await?;
     cx.emit(Node::new("Misc").span(misc_span).value(text(misc)));
-    cx.annotate(format!(
-        "by {author:?}, {} songs",
-        u16::from(songs).saturating_add(1)
-    ));
+    let count = u64::from(last).saturating_add(1);
+    let songs = relative_target(&cx, file, 0x12).await?;
+    cx.emit(
+        Node::new("Songs")
+            .span(file.sub(songs, count.saturating_mul(4)))
+            .summary(format!("{count}"))
+            .lazy(ay_songs, (file, songs, count)),
+    );
+    cx.annotate(format!("by {author:?}, {count} songs"));
+    Ok(())
+}
+
+/// The song structures: a name pointer and a data pointer per song.
+async fn ay_songs(cx: Cx, (file, at, count): (Span, u64, u64)) -> Result<()> {
+    cx.set_count(crate::node::Count::Exact(count));
+    for i in 0..count {
+        let entry = at.saturating_add(i.saturating_mul(4));
+        let (name, _) = relative_string(&cx, file, entry).await?;
+        let data = relative_target(&cx, file, entry.saturating_add(2)).await?;
+        cx.push(
+            Node::new(format!("Song {}", i.saturating_add(1)))
+                .span(file.sub(entry, 4))
+                .value(text(name))
+                .summary(format!("data at {data:#x}")),
+        )
+        .await;
+    }
     Ok(())
 }
 
