@@ -240,6 +240,20 @@ pub const KEY_RIGHTS: FlagTable = standard_rights![
 /// Access rights without object-specific names.
 pub const GENERIC_RIGHTS: FlagTable = standard_rights![];
 
+/// Access rights of files and directories (`winnt.h`; the low bits name
+/// the directory right where it differs, e.g. `FILE_LIST_DIRECTORY`).
+pub const FILE_RIGHTS: FlagTable = standard_rights![
+    flag(0x0001, "FILE_READ_DATA"),
+    flag(0x0002, "FILE_WRITE_DATA"),
+    flag(0x0004, "FILE_APPEND_DATA"),
+    flag(0x0008, "FILE_READ_EA"),
+    flag(0x0010, "FILE_WRITE_EA"),
+    flag(0x0020, "FILE_EXECUTE"),
+    flag(0x0040, "FILE_DELETE_CHILD"),
+    flag(0x0080, "FILE_READ_ATTRIBUTES"),
+    flag(0x0100, "FILE_WRITE_ATTRIBUTES"),
+];
+
 /// Mandatory label policy bits (in the mask of a mandatory label ACE).
 const LABEL_POLICY: FlagTable = &[
     flag(0x1, "NO_WRITE_UP"),

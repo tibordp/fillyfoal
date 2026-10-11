@@ -10,7 +10,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Path, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::disk::ntfs::{ATTR_TYPES, FILE_ATTRIBUTES};
+use crate::formats::disk::ntfs::{self, FILE_ATTRIBUTES};
 use crate::formats::image::bmp::CLIPBOARD_FORMATS;
 use crate::formats::util::datakit::{clip, hex, size, text, uint};
 use crate::formats::util::mapi;
@@ -483,155 +483,33 @@ fn mft_probe(h: &Head<'_>) -> bool {
 declare_format!(pub MFT = "ntfs-mft", "NTFS master file table ($MFT)", [], "application/x-ntfs-mft",
     Probe::Custom(mft_probe), mft);
 
-const MFT_FLAGS: FlagTable = &[
-    flag(1, "IN_USE"),
-    flag(2, "DIRECTORY"),
-    flag(4, "EXTENSION"),
-    flag(8, "SPECIAL_INDEX"),
-];
-
-const ATTRIBUTE_FLAGS: FlagTable = &[
-    flag(1, "COMPRESSED"),
-    flag(0x4000, "ENCRYPTED"),
-    flag(0x8000, "SPARSE"),
-];
-const NAMESPACES: EnumTable = &[(0, "POSIX"), (1, "Win32"), (2, "DOS"), (3, "Win32 & DOS")];
-
-/// Reads one MFT record and undoes the update sequence fixups (the last two
-/// bytes of every 512-byte sector are stored in the update sequence array).
-async fn mft_record(cx: &Cx, span: Span) -> Result<(Block, Option<Diagnostic>)> {
-    let mut block = cx.block(span).await?;
-    let data = &mut block.data;
-    let usa = to_usize(u16_le(data, 4).unwrap_or(0).into());
-    let count = usize::from(u16_le(data, 6).unwrap_or(0));
-    let usn = u16_le(data, usa);
-    let mut problem = None;
-    for i in 1..count {
-        let end = i.saturating_mul(512);
-        let Some(fix) = data
-            .get(
-                usa.saturating_add(i.saturating_mul(2))
-                    ..usa.saturating_add(i.saturating_mul(2)).saturating_add(2),
-            )
-            .map(<[u8]>::to_vec)
-        else {
-            break;
-        };
-        let Some(slot) = data.get_mut(end.saturating_sub(2)..end) else {
-            break;
-        };
-        if usn.is_some_and(|u| u.to_le_bytes() != *slot) {
-            problem = Some(Diagnostic::warning(format!(
-                "sector {i} does not end with the update sequence number (torn write)"
-            )));
-        }
-        slot.copy_from_slice(&fix);
-    }
-    Ok((block, problem))
+/// A multi-sector protected record (`FILE`, `INDX`, `RSTR`, `RCRD`) with
+/// its update sequence applied by the NTFS volume dissector
+/// ([`ntfs::try_fixed_up`]), and the problem with it, if any.
+async fn fixed_block(cx: &Cx, span: Span) -> Result<(Block, Option<Diagnostic>)> {
+    let magic = cx.read(span.sub(0, 4)).await?;
+    let (fixed, problem) = ntfs::try_fixed_up(cx, span, &magic).await?;
+    Ok((cx.block(fixed).await?, problem))
 }
 
-fn mft_header_layout(f: &mut Fields<'_>, _: &()) -> Result<(u16, u16)> {
-    f.ascii("Signature", 4).emit()?;
-    f.u16("Update sequence offset").hex().emit()?;
-    f.u16("Update sequence size (words)").emit()?;
-    f.u64("$LogFile sequence number").emit()?;
-    f.u16("Sequence number").emit()?;
-    f.u16("Hard link count").emit()?;
-    let first = f.u16("First attribute offset").hex().emit()?;
-    let flags = f.u16("Flags").flags(MFT_FLAGS).emit()?;
-    f.u32("Used size").emit()?;
-    f.u32("Allocated size").emit()?;
-    f.u64("Base record")
-        .hex()
-        .with(|&v, n| if v == 0 { n } else { file_reference(v, n) })
-        .emit()?;
-    f.u16("Next attribute ID").emit()?;
-    Ok((first, flags))
-}
-
-/// One attribute's location and identity, found by walking a record.
-#[derive(Clone, Debug)]
-struct MftAttr {
-    offset: u64,
-    len: u64,
-    kind: u32,
-    name: String,
-    resident: bool,
-}
-
-fn mft_attributes(data: &[u8], first: u16) -> Vec<MftAttr> {
-    let mut out = Vec::new();
-    let mut at = usize::from(first);
-    while out.len() < 256 {
-        let kind = u32_le(data, at).unwrap_or(u32::MAX);
-        let len = u32_le(data, at.saturating_add(4)).map_or(0, |l| to_usize(l.into()));
-        if kind == u32::MAX || len < 16 || at.saturating_add(len) > data.len() {
-            break;
-        }
-        let name_len = usize::from(data.get(at.saturating_add(9)).copied().unwrap_or(0));
-        let name_off = usize::from(u16_le(data, at.saturating_add(10)).unwrap_or(0));
-        let start = at.saturating_add(name_off);
-        let raw = data
-            .get(start..start.saturating_add(name_len.saturating_mul(2)))
-            .unwrap_or_default();
-        out.push(MftAttr {
-            offset: to_u64(at),
-            len: to_u64(len),
-            kind,
-            name: crate::text::utf16(raw, LE),
-            resident: data.get(at.saturating_add(8)) == Some(&0),
-        });
-        at = at.saturating_add(len);
-    }
-    out
-}
-
-/// The preferred file name ($FILE_NAME, Win32 over DOS) and $SI modified time.
-fn mft_summary(data: &[u8], attrs: &[MftAttr]) -> (Option<String>, Option<u64>) {
-    let mut name: Option<(u8, String)> = None;
-    let mut modified = None;
-    for a in attrs.iter().filter(|a| a.resident) {
-        let value = to_usize(a.offset).saturating_add(usize::from(
-            u16_le(data, to_usize(a.offset).saturating_add(20)).unwrap_or(0),
-        ));
-        match a.kind {
-            0x10 => modified = u64_le(data, value.saturating_add(8)),
-            0x30 => {
-                let chars = usize::from(data.get(value.saturating_add(64)).copied().unwrap_or(0));
-                let space = data.get(value.saturating_add(65)).copied().unwrap_or(0);
-                let start = value.saturating_add(66);
-                let raw = data
-                    .get(start..start.saturating_add(chars.saturating_mul(2)))
-                    .unwrap_or_default();
-                let rank = if space == 2 { 0 } else { 1 };
-                if name.as_ref().is_none_or(|(r, _)| rank > *r) {
-                    name = Some((rank, crate::text::utf16(raw, LE)));
-                }
-            }
-            _ => {}
-        }
-    }
-    (name.map(|(_, n)| n), modified)
-}
-
+/// Lists the records; each record's header and attributes are decoded by
+/// the NTFS volume dissector's code ([`ntfs::standalone_record`]).
 async fn mft(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 32)).await?;
     let record = u64::from(u32_le(&head, 28).unwrap_or(1024)).max(1024);
     let count = file.len.checked_div(record).unwrap_or(0);
     cx.set_count(Count::Exact(count));
-    let (mut used, mut dirs) = (0u64, 0u64);
-    for i in 0..count {
+    let (first, mut used, mut dirs) = cx.resume::<(u64, u64, u64)>().unwrap_or((0, 0, 0));
+    for i in first..count {
+        let at = (i, used, dirs);
+        cx.mark(move || at);
         let span = file.sub(i.saturating_mul(record), record);
-        let (block, problem) = mft_record(&cx, span).await?;
-        let data = &block.data;
+        let head = cx.read(span.sub(0, 24)).await?;
         let mut node = Node::new(format!("Record {i}")).span(span);
-        match data.get(..4) {
+        match head.get(..4) {
             Some(b"FILE") => {
-                let first = u16_le(data, 20).unwrap_or(0);
-                let flags = u16_le(data, 22).unwrap_or(0);
-                let attrs = mft_attributes(data, first);
-                let (name, modified) = mft_summary(data, &attrs);
+                let flags = u16_le(&head, 22).unwrap_or(0);
                 if flags & 1 != 0 {
                     used = used.saturating_add(1);
                 }
@@ -644,12 +522,14 @@ async fn mft(cx: Cx, input: Input) -> Result<()> {
                     (false, true) => "deleted directory",
                     (false, false) => "deleted/unused",
                 };
+                let (rec, problem) = ntfs::try_fixed_up(&cx, span, b"FILE").await?;
+                let (name, modified) = ntfs::record_summary(&cx, rec).await.unwrap_or_default();
                 node = node
                     .summary(format!(
                         "{}{state}",
                         name.map(|n| format!("{n} — ")).unwrap_or_default()
                     ))
-                    .lazy(mft_entry, (input, span));
+                    .lazy(mft_entry, (input, span, i));
                 if let Some(m) = modified {
                     node = node.value(filetime(m));
                 }
@@ -672,246 +552,16 @@ async fn mft(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn mft_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
-    let (block, _) = mft_record(&cx, span).await?;
-    let (first, _) = mft_header_layout(&mut Fields::new(&block, LE), &())?;
-    cx.emit(
-        Node::new("Header")
-            .span(span.sub(0, first.into()))
-            .lazy(mft_header, span),
-    );
-    for (i, a) in mft_attributes(&block.data, first).into_iter().enumerate() {
-        let type_name = lookup(ATTR_TYPES, a.kind.into())
-            .map_or_else(|| format!("Attribute {:#x}", a.kind), str::to_owned);
-        let name = if a.name.is_empty() {
-            type_name
-        } else {
-            format!("{type_name}:{}", a.name)
-        };
-        let attr_span = span.sub(a.offset, a.len);
-        cx.push(
-            Node::new(name)
-                .span(attr_span)
-                .summary(if a.resident {
-                    "resident"
-                } else {
-                    "non-resident"
-                })
-                .desc(format!("Attribute {i}"))
-                .lazy(mft_attribute, (input, span, a)),
-        )
-        .await;
-    }
-    Ok(())
-}
-
-async fn mft_header(cx: Cx, span: Span) -> Result<()> {
-    let (block, _) = mft_record(&cx, span).await?;
-    let mut f = Fields::emitting(&cx, &block, LE);
-    let (_, _) = mft_header_layout(&mut f, &())?;
-    let usa = u16_le(&block.data, 4).unwrap_or(0);
-    let words = u16_le(&block.data, 6).unwrap_or(0);
-    if usa >= 0x30 {
-        f.seek(0x2c);
-        f.u32("MFT record number").emit()?;
-    }
-    f.seek(usa.into());
-    f.u16("Update sequence number").hex().emit()?;
-    f.bytes(
-        "Update sequence array",
-        u64::from(words.saturating_sub(1)).saturating_mul(2),
-    )
-    .emit()?;
-    Ok(())
-}
-
-async fn mft_attribute(cx: Cx, (input, span, a): (Input, Span, MftAttr)) -> Result<()> {
-    let (record, _) = mft_record(&cx, span).await?;
-    let data = record
-        .data
-        .get(to_usize(a.offset)..to_usize(a.offset.saturating_add(a.len)))
-        .unwrap_or_default()
-        .to_vec();
-    let block = Block {
-        span: span.sub(a.offset, a.len),
-        data,
-    };
-    let mut f = Fields::emitting(&cx, &block, LE);
-    f.u32("Type").enumeration(ATTR_TYPES).emit()?;
-    f.u32("Length").emit()?;
-    let non_resident = f.u8("Non-resident").emit()?;
-    let name_len = f.u8("Name length").emit()?;
-    let name_off = f.u16("Name offset").hex().emit()?;
-    f.u16("Flags").flags(ATTRIBUTE_FLAGS).emit()?;
-    f.u16("Attribute ID").emit()?;
-    if non_resident == 0 {
-        let len = f.u32("Value length").emit()?;
-        let off = f.u16("Value offset").hex().emit()?;
-        f.u8("Indexed").emit()?;
-        if name_len > 0 {
-            f.seek(name_off.into());
-            f.utf16("Name", name_len.into()).emit()?;
-        }
-        f.seek(off.into());
-        let value = block.span.sub(off.into(), len.into());
-        match a.kind {
-            0x10 => {
-                f.u64("Created").filetime().emit()?;
-                f.u64("Modified").filetime().emit()?;
-                f.u64("MFT entry modified").filetime().emit()?;
-                f.u64("Accessed").filetime().emit()?;
-                f.u32("File attributes").flags(FILE_ATTRIBUTES).emit()?;
-                if len >= 72 {
-                    f.u32("Maximum versions").emit()?;
-                    f.u32("Version").emit()?;
-                    f.u32("Class ID").emit()?;
-                    f.u32("Owner ID").emit()?;
-                    f.u32("Security ID").emit()?;
-                    f.u64("Quota charged").emit()?;
-                    f.u64("Update sequence number").hex().emit()?;
-                }
-            }
-            0x30 => {
-                file_name_fields(&mut f)?;
-            }
-            0x60 => {
-                f.utf16("Volume name", u64::from(len) / 2).emit()?;
-            }
-            0x80 => cx.emit(text_or_embedded(&cx, input, value).await?),
-            _ => cx.emit(Node::new("Value").span(value)),
-        }
-    } else {
-        f.u64("Starting VCN").emit()?;
-        f.u64("Last VCN").emit()?;
-        let runs = f.u16("Data runs offset").hex().emit()?;
-        f.u16("Compression unit").emit()?;
-        f.u32("Padding").emit()?;
-        let allocated = f.u64("Allocated size").emit()?;
-        let real = f.u64("Real size").with(|&v, n| n.summary(size(v))).emit()?;
-        f.u64("Initialized size").emit()?;
-        if name_len > 0 {
-            f.seek(name_off.into());
-            f.utf16("Name", name_len.into()).emit()?;
-        }
-        let run_span = block.span.tail(runs.into());
-        let list = block.data.get(usize::from(runs)..).unwrap_or_default();
-        let decoded = data_runs(list);
-        cx.emit(
-            Node::new("Data runs")
-                .span(run_span)
-                .summary(format!(
-                    "{} runs, {} allocated",
-                    decoded.len(),
-                    size(allocated)
-                ))
-                .lazy(mft_runs, (run_span, decoded)),
-        );
-        let _ = real;
-    }
-    Ok(())
-}
-
-/// One data run: (offset in the list, length in bytes, cluster count,
-/// starting LCN or None for a sparse run).
-type DataRun = (u64, u64, u64, Option<i64>);
-
-/// Decoded data runs: (offset in the list, length in bytes, cluster count,
-/// starting LCN or None for a sparse run).
-fn data_runs(list: &[u8]) -> Vec<DataRun> {
-    let mut out = Vec::new();
-    let mut at = 0usize;
-    let mut lcn = 0i64;
-    while let Some(&head) = list.get(at) {
-        if head == 0 || out.len() >= 4096 {
-            break;
-        }
-        let len_bytes = usize::from(head & 0xf);
-        let off_bytes = usize::from(head >> 4);
-        let len_start = at.saturating_add(1);
-        let off_start = len_start.saturating_add(len_bytes);
-        let end = off_start.saturating_add(off_bytes);
-        let (Some(len_raw), Some(off_raw)) =
-            (list.get(len_start..off_start), list.get(off_start..end))
-        else {
-            break;
-        };
-        if len_bytes > 8 || off_bytes > 8 {
-            break;
-        }
-        let clusters = len_raw
-            .iter()
-            .rev()
-            .fold(0u64, |a, &b| (a << 8) | u64::from(b));
-        let start = if off_bytes == 0 {
-            None
-        } else {
-            let mut delta = off_raw
-                .iter()
-                .rev()
-                .fold(0i64, |a, &b| (a << 8) | i64::from(b));
-            let shift =
-                64u32.saturating_sub(u32::try_from(off_bytes.saturating_mul(8)).unwrap_or(64));
-            delta = delta.checked_shl(shift).map_or(delta, |d| d >> shift);
-            lcn = lcn.saturating_add(delta);
-            Some(lcn)
-        };
-        out.push((to_u64(at), to_u64(end.saturating_sub(at)), clusters, start));
-        at = end;
-    }
-    out
-}
-
-async fn mft_runs(cx: Cx, (span, runs): (Span, Vec<DataRun>)) -> Result<()> {
-    for (i, (at, len, clusters, lcn)) in runs.into_iter().enumerate() {
-        let summary = match lcn {
-            Some(l) => format!("{clusters} clusters at LCN {l}"),
-            None => format!("{clusters} clusters, sparse"),
-        };
-        cx.push(
-            Node::new(format!("Run {i}"))
-                .span(span.sub(at, len))
-                .summary(summary),
-        )
-        .await;
-    }
-    Ok(())
-}
-
-/// The fields of a $FILE_NAME value (MFT attribute or index key); returns
-/// the name and the modification time.
-fn file_name_fields(f: &mut Fields<'_>) -> Result<(String, u64)> {
-    f.u64("Parent directory")
-        .hex()
-        .with(|&v, n| file_reference(v, n))
-        .emit()?;
-    f.u64("Created").filetime().emit()?;
-    let modified = f.u64("Modified").filetime().emit()?;
-    f.u64("MFT entry modified").filetime().emit()?;
-    f.u64("Accessed").filetime().emit()?;
-    f.u64("Allocated size").emit()?;
-    f.u64("Real size").with(|&v, n| n.summary(size(v))).emit()?;
-    f.u32("Flags").flags(FILE_ATTRIBUTES).emit()?;
-    f.u32("Reparse value").hex().emit()?;
-    let chars = f.u8("Name length").emit()?;
-    f.u8("Namespace").enumeration(NAMESPACES).emit()?;
-    let name = f.utf16("Name", chars.into()).emit()?;
-    Ok((name, modified))
+async fn mft_entry(cx: Cx, (input, span, n): (Input, Span, u64)) -> Result<()> {
+    let (rec, _) = ntfs::try_fixed_up(&cx, span, b"FILE").await?;
+    ntfs::standalone_record(&cx, input, rec, n).await
 }
 
 /// A part of a fixed-up multi-sector record, for decoding with [`Fields`].
 async fn fixed_part(cx: &Cx, record: Span, offset: u64, len: u64) -> Result<Block> {
-    let (block, _) = mft_record(cx, record).await?;
-    let start = to_usize(offset);
-    let data = block
-        .data
-        .get(start..start.saturating_add(to_usize(len)))
-        .or_else(|| block.data.get(start..))
-        .unwrap_or_default()
-        .to_vec();
-    Ok(Block {
-        span: record.sub(offset, len),
-        data,
-    })
+    let magic = cx.read(record.sub(0, 4)).await?;
+    let (fixed, _) = ntfs::try_fixed_up(cx, record, &magic).await?;
+    cx.block(fixed.sub(offset, len)).await
 }
 
 // ---------------------------------------------------------------------------
@@ -927,7 +577,6 @@ fn indx_probe(h: &Head<'_>) -> bool {
 declare_format!(pub INDX = "ntfs-index", "NTFS directory index ($I30 INDX records)", [], "application/x-ntfs-index",
     Probe::Custom(indx_probe), indx);
 
-const INDEX_ENTRY_FLAGS: FlagTable = &[flag(1, "HAS_SUBNODE"), flag(2, "LAST_ENTRY")];
 const INDX_FLAGS: FlagTable = &[flag(1, "HAS_CHILDREN")];
 const RESTART_FLAGS: FlagTable = &[flag(2, "CLEAN_DISMOUNT")];
 const RCRD_FLAGS: FlagTable = &[flag(1, "RECORD_END")];
@@ -957,7 +606,7 @@ async fn indx(cx: Cx, input: Input) -> Result<()> {
     let mut entries = 0u64;
     for i in 0..count {
         let span = file.sub(i.saturating_mul(4096), 4096);
-        let (block, problem) = mft_record(&cx, span).await?;
+        let (block, problem) = fixed_block(&cx, span).await?;
         let data = &block.data;
         if data.get(..4) != Some(b"INDX") {
             cx.push(
@@ -1046,9 +695,9 @@ async fn indx_buffer(cx: Cx, (span, list): (Span, Vec<(u64, u64, bool)>)) -> Res
         let key_len = u16_le(&block.data, 10).unwrap_or(0);
         let mut node = Node::new("Entry").span(block.span);
         if key_len >= 66 {
-            let mut f = Fields::new(&block, LE);
-            f.seek(16);
-            if let Ok((name, modified)) = file_name_fields(&mut f) {
+            if let Some((name, _, modified)) =
+                ntfs::file_name_of(block.data.get(16..).unwrap_or_default())
+            {
                 node = Node::new(name).span(block.span).value(filetime(modified));
             }
         } else {
@@ -1072,22 +721,7 @@ async fn indx_header_node(cx: Cx, span: Span) -> Result<()> {
 
 async fn indx_entry(cx: Cx, (span, at, len): (Span, u64, u64)) -> Result<()> {
     let block = fixed_part(&cx, span, at, len).await?;
-    let mut f = Fields::emitting(&cx, &block, LE);
-    f.u64("File reference")
-        .hex()
-        .with(|&v, n| file_reference(v, n))
-        .emit()?;
-    f.u16("Entry length").emit()?;
-    let key = f.u16("Key length").emit()?;
-    let flags = f.u32("Flags").flags(INDEX_ENTRY_FLAGS).emit()?;
-    if key >= 66 {
-        file_name_fields(&mut f)?;
-    }
-    if flags & 1 != 0 {
-        f.seek(len.saturating_sub(8));
-        f.u64("Subnode VCN").emit()?;
-    }
-    Ok(())
+    ntfs::index_entry_layout(&mut Fields::emitting(&cx, &block, LE), &false)
 }
 
 // ---------------------------------------------------------------------------
@@ -1168,7 +802,7 @@ async fn logfile(cx: Cx, input: Input) -> Result<()> {
         let node = match sig.as_slice() {
             b"RSTR" | b"CHKD" => {
                 restart = restart.saturating_add(1);
-                let (block, _) = mft_record(&cx, span).await?;
+                let (block, _) = fixed_block(&cx, span).await?;
                 let current = restart_layout(&mut Fields::new(&block, LE), &()).unwrap_or(0);
                 lsn = lsn.max(current);
                 Node::new(format!("Restart page {i}"))
@@ -1179,7 +813,7 @@ async fn logfile(cx: Cx, input: Input) -> Result<()> {
             }
             b"RCRD" => {
                 records = records.saturating_add(1);
-                let (block, _) = mft_record(&cx, span).await?;
+                let (block, _) = fixed_block(&cx, span).await?;
                 let end = record_page_layout(&mut Fields::new(&block, LE), &()).unwrap_or(0);
                 Node::new(format!("Record page {i}"))
                     .span(span)
@@ -1205,7 +839,7 @@ async fn logfile(cx: Cx, input: Input) -> Result<()> {
 }
 
 async fn log_page(cx: Cx, (span, restart): (Span, bool)) -> Result<()> {
-    let (block, problem) = mft_record(&cx, span).await?;
+    let (block, problem) = fixed_block(&cx, span).await?;
     if let Some(p) = problem {
         cx.diag(p);
     }
