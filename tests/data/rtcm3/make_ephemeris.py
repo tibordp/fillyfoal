@@ -1,6 +1,6 @@
 """An RTCM 3 stream that starts with ephemeris messages.
 
-    uv run --with pyrtcm==1.1.4 python tests/data/rtcm3/make_ephemeris.py OUT.rtcm3
+    uv run --with pyrtcm==1.2.0 python tests/data/rtcm3/make_ephemeris.py OUT.rtcm3
 
 Frames (RTCM 10403.3): 1019 GPS ephemeris for satellite 5 (DF009), 1045
 Galileo F/NAV ephemeris for satellite 11 (DF252), 1020 GLONASS ephemeris
