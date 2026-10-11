@@ -4,8 +4,10 @@
 //! A codec author implements [`Decode`]: decode from *all input seen so far*
 //! into *all output so far*, a bounded step at a time, treating a shortage
 //! of input as an error. [`Streaming`] turns that into a resumable
-//! [`Decoder`]: it snapshots the decoder before each step and, when input
-//! ran out before the end of the stream, rolls back and asks for more. So
+//! [`Decoder`]: it snapshots the decoder before each step and, when a step
+//! fails in a way that may mean input ran out (truncated or malformed data)
+//! before the end of the stream, rolls back and asks for more; other errors
+//! (a limit, an unsupported feature) pass straight through. So
 //! decoders are written as if the whole input were in memory, and still run
 //! lazily, as far as reads reach.
 //!
@@ -41,7 +43,7 @@
 //! copies, which must be honest (a decoder that keeps its window inside
 //! itself, rather than in the caller's `out`, must count it).
 
-use crate::error::{Diagnostic, Result};
+use crate::error::{DiagKind, Diagnostic, Result};
 
 /// Progress of a decoding step.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -58,7 +60,9 @@ pub trait Decode: Clone + Send + 'static {
     /// come) into `out` (everything produced so far) until at least `step`
     /// more bytes have been produced or the stream ends. Producing more
     /// than `limit` bytes in total is an error. Running out of input is an
-    /// error too: the caller rolls back and retries with more.
+    /// error too (a truncated or malformed one): the caller rolls back and
+    /// retries with more. Other kinds of error (a limit, an unsupported
+    /// feature) are final even before the end of the input.
     fn step(
         &mut self,
         input: &[u8],
@@ -186,6 +190,17 @@ pub trait Decoder: Send {
     }
 }
 
+/// Whether a step's error may only mean that the input ran out: codecs
+/// report that as truncated or malformed data. A limit (output that would
+/// exceed it), an unsupported feature or an internal error does not depend
+/// on input not yet seen, so it is final at once.
+fn may_be_shortage(e: &Diagnostic) -> bool {
+    !matches!(
+        e.kind,
+        DiagKind::Limit | DiagKind::Unsupported | DiagKind::Internal
+    )
+}
+
 /// Adapts a [`Decode`] into a [`Decoder`] by rolling back steps that ran out
 /// of input.
 #[derive(Clone)]
@@ -205,9 +220,10 @@ impl<D: Decode> Decoder for Streaming<D> {
         match self.0.step(input, eof, out, step, limit) {
             Ok(Step::More) => Ok(Status::More),
             Ok(Step::Done) => Ok(Status::Done),
-            Err(_) if !eof => {
-                // Most likely a shortage of input; retry once more arrives.
-                // A genuine error recurs at the end of the input.
+            Err(e) if !eof && may_be_shortage(&e) => {
+                // Possibly a shortage of input; retry once more arrives. A
+                // genuine error recurs at the end of the input (or once the
+                // caller gives up waiting for input that does not help).
                 self.0 = saved;
                 out.truncate(mark);
                 Ok(Status::NeedInput)
@@ -539,5 +555,49 @@ impl Decode for Failing {
 
     fn consumed(&self) -> usize {
         0
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    /// Fails with `kind` until the input ends.
+    #[derive(Clone)]
+    struct FailsWith(DiagKind);
+
+    impl Decode for FailsWith {
+        fn step(
+            &mut self,
+            _: &[u8],
+            eof: bool,
+            _: &mut Vec<u8>,
+            _: usize,
+            _: usize,
+        ) -> Result<Step> {
+            if eof {
+                return Ok(Step::Done);
+            }
+            Err(Diagnostic::new(self.0, "failed"))
+        }
+
+        fn consumed(&self) -> usize {
+            0
+        }
+    }
+
+    fn status(kind: DiagKind) -> Result<Status> {
+        Streaming(FailsWith(kind)).decode(b"x", false, &mut Vec::new(), 1, 1)
+    }
+
+    /// Only errors that may mean the input ran out wait for more input.
+    #[test]
+    fn only_possible_shortages_wait_for_input() {
+        assert_eq!(status(DiagKind::Truncated), Ok(Status::NeedInput));
+        assert_eq!(status(DiagKind::Malformed), Ok(Status::NeedInput));
+        for kind in [DiagKind::Limit, DiagKind::Unsupported, DiagKind::Internal] {
+            assert_eq!(status(kind).unwrap_err().kind, kind);
+        }
     }
 }
