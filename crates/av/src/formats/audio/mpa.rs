@@ -16,12 +16,13 @@ use crate::bytes::{to_u64, to_usize, u16_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, Layout, parse, struct_node};
+use crate::formats::audio::{adts, ape, flac, musepack, tta, wavpack};
 use crate::formats::util::arcutil::human_size;
 use crate::formats::util::sound::{
     Bits, CRC16_MPEG, FrameSyntax, bits_node, duration, junk_node, leaf, resync, tail_node,
 };
 use crate::formats::util::val::{hex, text, uint};
-use crate::formats::{Format, Head, Input, Probe, audio::id3};
+use crate::formats::{Format, HEAD_LEN, Head, Input, Probe, audio::id3};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
@@ -48,7 +49,7 @@ fn probe(h: &Head<'_>) -> bool {
         // pair of bytes (e.g. a UTF-16LE BOM) is too weak.
         None => {
             let Some(f) = Header::parse(h.data) else {
-                return false;
+                return after_padding(h.data);
             };
             let Some(len) = f.frame_len().or_else(|| free_stream(h.data)) else {
                 return false;
@@ -61,6 +62,40 @@ fn probe(h: &Head<'_>) -> bool {
         }
     }
 }
+
+/// Zero padding up to [`MAX_PADDING`] bytes long (left by taggers that
+/// stripped a tag, and by some rippers), then [`PADDED_FRAMES`] frames in
+/// a row. Only zeros count: other leading bytes are the header of some
+/// container whose payload may well be MPEG audio (MP4, MPEG-PS), and it
+/// should be identified as that.
+fn after_padding(data: &[u8]) -> bool {
+    let zeros = data.iter().take_while(|&&b| b == 0).count();
+    if zeros == 0 || zeros > MAX_PADDING {
+        return false;
+    }
+    let Some(first) = data.get(zeros..).and_then(Header::parse) else {
+        return false;
+    };
+    let mut at = zeros;
+    for _ in 0..PADDED_FRAMES {
+        let Some(h) = data.get(at..).and_then(Header::parse) else {
+            return false;
+        };
+        let Some(len) = h.frame_len() else {
+            return false;
+        };
+        if !h.same_stream(&first) {
+            return false;
+        }
+        at = at.saturating_add(to_usize(len));
+    }
+    true
+}
+
+/// How much zero padding the probe skips before the first frame.
+const MAX_PADDING: usize = 4096;
+/// How many consecutive frames must follow padding.
+const PADDED_FRAMES: usize = 4;
 
 /// A valid frame header at `at`, followed by another one (if it is in
 /// `data`).
@@ -1242,8 +1277,46 @@ fn window_stats(window: &[u8], skip_first: bool, free: u64, stream_len: u64) -> 
     s
 }
 
+/// Formats that dissect a leading ID3v2 tag themselves.
+const TAGGED: [&Format; 6] = [
+    &flac::FORMAT,
+    &adts::FORMAT,
+    &ape::FORMAT,
+    &wavpack::FORMAT,
+    &musepack::FORMAT,
+    &tta::FORMAT,
+];
+
+/// The format of what follows a leading ID3v2 tag too long for the probes
+/// to see past (cover art often makes it so), when it is one that handles
+/// the tag itself: the probe above had to claim such files blind. Other
+/// formats are left alone, lest a probe ahead of ours that a frame happens
+/// to satisfy take a real MP3 away.
+async fn behind_long_tag(cx: &Cx, file: Span) -> Result<Option<&'static Format>> {
+    let head = cx.read_avail(file.sub(0, 10)).await?;
+    let Some(len) = id3::v2_len(&head) else {
+        return Ok(None);
+    };
+    if len.saturating_add(4) <= HEAD_LEN || len >= file.len {
+        return Ok(None);
+    }
+    let rest = file.tail(len);
+    let (data, tail) = crate::formats::head(cx, rest).await?;
+    let found = cx.registry().identify(&Head {
+        data: &data,
+        tail: &tail,
+        len: rest.len,
+        len_known: cx.len_known(rest.source),
+    });
+    Ok(found.filter(|f| TAGGED.iter().any(|t| std::ptr::eq(*t, *f))))
+}
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
+    if let Some(format) = behind_long_tag(&cx, file).await? {
+        // It dissects the file as it would with a short tag.
+        return (format.dissect)(cx, input).await;
+    }
     let mut start = 0u64;
     let mut titles = Vec::new();
     // Leading ID3v2 tags (some taggers leave an old one behind a new one).

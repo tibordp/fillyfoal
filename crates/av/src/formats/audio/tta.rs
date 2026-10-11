@@ -9,10 +9,11 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::audio::ape::trailing_tags;
+use crate::formats::util::datakit::crc32_paced;
 use crate::formats::util::sound::{channels, duration_of, leaf, table};
 use crate::formats::util::val::hex;
 use crate::formats::util::vidutil::khz;
-use crate::formats::{Format, Input, Probe};
+use crate::formats::{Format, Input, Probe, audio::id3};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -25,7 +26,7 @@ pub static FORMAT: Format = Format {
     title: "True Audio",
     extensions: &["tta"],
     mime: "audio/x-tta",
-    probe: Probe::Magic(&[(0, b"TTA1")]),
+    probe: Probe::Custom(|h| id3::past_tag(h.data).starts_with(b"TTA1")),
     dissect: crate::expander!(dissect: Input),
 };
 
@@ -50,10 +51,11 @@ record! {
 }
 
 /// CRCs are checked over at most this many bytes (larger tables and frames
-/// are left unchecked rather than hashed in one step).
+/// are left unchecked rather than read whole); the hash itself is paced.
 const MAX_CHECKED: u64 = 1 << 20;
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
+    let input = id3::leading_tag(&cx, input).await?;
     let file = input.span;
     let (end, tags) = trailing_tags(&cx, input).await?;
     let hspan = file.sub(0, Header::SIZE);
@@ -99,7 +101,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut crc_node = leaf("Seek table CRC", crc_span, hex(stored.unwrap_or(0), 32));
     if seek.len <= MAX_CHECKED && stored.is_some() {
         let table = cx.read_avail(seek).await?;
-        crc_node = if Some(crc32(&table)) == stored {
+        crc_node = if Some(crc32_paced(&cx, &table).await) == stored {
             crc_node.summary("valid")
         } else {
             crc_node.diag(Diagnostic::warning("seek table CRC mismatch"))
@@ -187,7 +189,7 @@ async fn frame(cx: Cx, span: Span) -> Result<()> {
     let mut node = leaf("CRC", crc_span, hex(stored.unwrap_or(0), 32));
     if body.len <= MAX_CHECKED && stored.is_some() {
         let data = cx.read_avail(body).await?;
-        node = if Some(crc32(&data)) == stored {
+        node = if Some(crc32_paced(&cx, &data).await) == stored {
             node.summary("valid")
         } else {
             node.diag(Diagnostic::warning("frame CRC mismatch"))

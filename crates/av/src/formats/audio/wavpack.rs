@@ -9,7 +9,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::audio::ape::trailing_tags;
 use crate::formats::util::sound::{duration_of, leaf};
-use crate::formats::{Format, Input, Probe, embedded};
+use crate::formats::{Format, Input, Probe, audio::id3, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -23,8 +23,9 @@ pub static FORMAT: Format = Format {
     extensions: &["wv", "wvc"],
     mime: "audio/x-wavpack",
     probe: Probe::Custom(|h| {
-        h.starts_with(b"wvpk")
-            && crate::bytes::u16_le(h.data, 8).is_some_and(|v| (0x402..=0x410).contains(&v))
+        let data = id3::past_tag(h.data);
+        data.starts_with(b"wvpk")
+            && crate::bytes::u16_le(data, 8).is_some_and(|v| (0x402..=0x410).contains(&v))
     }),
     dissect: crate::expander!(dissect: Input),
 };
@@ -232,6 +233,7 @@ fn channel_info(b: &[u8]) -> Option<(u32, u32)> {
 const PEEK_BLOCK: u64 = 4096;
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
+    let input = id3::leading_tag(&cx, input).await?;
     let file = input.span;
     let (end, tags) = trailing_tags(&cx, input).await?;
     let first = parse(

@@ -72,6 +72,30 @@ fn syncsafe(b: &[u8]) -> Option<u32> {
     )
 }
 
+/// What a probe sees after a leading ID3v2 tag: all of `data` without one,
+/// nothing if the tag runs past the end of `data`.
+pub fn past_tag(data: &[u8]) -> &[u8] {
+    match v2_len(data) {
+        Some(len) => data.get(to_usize(len)..).unwrap_or_default(),
+        None => data,
+    }
+}
+
+/// For formats that some taggers prefix with an ID3v2 tag although their
+/// own tags are APEv2 at the end (APE, WavPack, TTA, Musepack): emits the
+/// tag at the start of `input`, if any, and returns the input after it.
+pub async fn leading_tag(cx: &Cx, input: Input) -> Result<Input> {
+    let head = cx.read_avail(input.span.sub(0, 10)).await?;
+    let Some(len) = v2_len(&head) else {
+        return Ok(input);
+    };
+    cx.emit(tag_node(cx, input, input.span.sub(0, len)).await);
+    Ok(Input {
+        span: input.span.tail(len),
+        ..input
+    })
+}
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(input.span.sub(0, 10)).await?;
     let len = v2_len(&head).ok_or_else(|| Diagnostic::malformed("not an ID3v2 tag"))?;

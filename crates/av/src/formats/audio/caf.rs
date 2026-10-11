@@ -1115,10 +1115,10 @@ async fn region(cx: Cx, span: Span) -> Result<()> {
 record! {
     pub struct Instrument {
         base_note: f32 "Base note" .desc("MIDI note number, fractional for detuning"),
-        high_note: u8 "MIDI high note",
         low_note: u8 "MIDI low note",
-        high_velocity: u8 "MIDI high velocity",
+        high_note: u8 "MIDI high note",
         low_velocity: u8 "MIDI low velocity",
+        high_velocity: u8 "MIDI high velocity",
         gain: f32 "Gain (dB)",
         start_region: u32 "Start region ID",
         sustain_region: u32 "Sustain region ID",

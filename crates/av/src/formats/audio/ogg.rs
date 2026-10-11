@@ -10,6 +10,11 @@
 //! their TOC, FLAC packets their frame header, Theora packets their frame
 //! type. Durations come from the granule position of each stream's last
 //! page.
+//!
+//! A chained file (Ogg files concatenated, as streaming radio records them)
+//! is a sequence of links, each with its own beginning-of-stream pages and
+//! serial numbers. Links are found by bisecting on serial numbers, as
+//! libvorbisfile does, so a long file costs a few page reads per link.
 
 use std::sync::Arc;
 
@@ -260,10 +265,12 @@ struct Stream {
     /// Opus pre-skip; Theora granule shift.
     skip: u64,
     describe: String,
+    /// The link (of a chained file) holding the stream.
+    link: Span,
 }
 
 impl Stream {
-    fn from_header(serial: u32, p: &[u8]) -> Stream {
+    fn from_header(serial: u32, p: &[u8], link: Span) -> Stream {
         let codec = Codec::of(p);
         let mut s = Stream {
             serial,
@@ -272,6 +279,7 @@ impl Stream {
             channels: 0,
             skip: 0,
             describe: codec.name().to_owned(),
+            link,
         };
         match codec {
             Codec::Vorbis => {
@@ -352,51 +360,92 @@ type Streams = Arc<Vec<Stream>>;
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    // Beginning-of-stream pages come first, one per logical stream.
-    let mut streams = Vec::new();
-    let mut pos = 0u64;
-    while streams.len() < 32 {
-        let Ok(page) = read_page(&cx, file, pos).await else {
-            break;
-        };
-        if page.header.flags & 0x2 == 0 {
-            break;
-        }
-        let first = cx.read_avail(page.data.sub(0, 64)).await?;
-        streams.push(Stream::from_header(page.header.serial, &first));
-        pos = pos.saturating_add(page.span.len.max(1));
-    }
+    let mut links = Vec::new();
+    let (mut streams, bos_end) = bos_run(&cx, file, 0).await?;
     let title = comment_title(
         &cx,
         file,
-        pos,
+        bos_end,
         streams.iter().find(|s| s.is_audio()).or(streams.first()),
     )
     .await;
-    let streams: Streams = Arc::new(streams);
-    let last = last_granules(&cx, file).await?;
-    cx.annotate(describe(&streams, &last, title, file.len));
-
-    for s in streams.iter() {
-        let mut summary = format!("serial {:#010x}, {}", s.serial, s.describe);
-        if let Some((_, g)) = last.iter().find(|(serial, _)| *serial == s.serial)
-            && let Some(seconds) = s.seconds(*g)
+    // Each link ends where a page of another serial number begins; the
+    // next link's BOS pages follow.
+    // A link that holds the last page of the file runs to its end (the
+    // pages of a link are contiguous): the common, unchained case costs a
+    // look at the last 64 KiB.
+    let tail = cx
+        .read_avail(file.tail(file.len.saturating_sub(0x10000)))
+        .await?;
+    let last = last_serial(&tail);
+    cx.checkpoint().await;
+    let mut start = 0u64;
+    let mut from = bos_end;
+    let mut first = 0usize;
+    loop {
+        let serials: Vec<u32> = streams.iter().skip(first).map(|s| s.serial).collect();
+        let end = if links.len().saturating_add(1) >= MAX_LINKS
+            || last.is_none_or(|s| serials.contains(&s))
         {
-            summary.push_str(&format!(", {}", duration(seconds)));
+            file.len
+        } else {
+            link_end(&cx, file, from, &serials).await?
+        };
+        let (next, next_bos_end) = if end < file.len {
+            bos_run(&cx, file, end).await?
+        } else {
+            (Vec::new(), end)
+        };
+        // Whatever follows a link that is not another link stays with it.
+        let end = if next.is_empty() { file.len } else { end };
+        let link = file.sub(start, end.saturating_sub(start));
+        for s in streams.iter_mut().skip(first) {
+            s.link = link;
         }
-        cx.emit(
-            Node::new(format!("{} stream", s.codec.name()))
-                .summary(summary)
-                .desc("The stream's packets, reassembled across pages")
-                .lazy(
-                    list_packets,
-                    StreamState {
-                        input,
-                        serial: s.serial,
-                        streams: streams.clone(),
-                    },
-                ),
-        );
+        links.push(Link {
+            span: link,
+            first,
+            last: last_granules(&cx, link).await?,
+        });
+        if next.is_empty() {
+            break;
+        }
+        first = streams.len();
+        streams.extend(next);
+        start = end;
+        from = next_bos_end;
+    }
+    let streams: Streams = Arc::new(streams);
+    cx.annotate(describe(&streams, &links, title, file.len));
+
+    for (n, link) in links.iter().enumerate() {
+        for s in link_streams(&streams, &links, n) {
+            let mut summary = format!("serial {:#010x}, {}", s.serial, s.describe);
+            if links.len() > 1 {
+                summary = format!("link {}, {summary}", n.saturating_add(1));
+            }
+            if let Some((_, g)) = link.last.iter().find(|(serial, _)| *serial == s.serial)
+                && let Some(seconds) = s.seconds(*g)
+            {
+                summary.push_str(&format!(", {}", duration(seconds)));
+            }
+            let mut node = Node::new(format!("{} stream", s.codec.name()));
+            if links.len() > 1 {
+                node = node.span(link.span);
+            }
+            cx.emit(
+                node.summary(summary)
+                    .desc("The stream's packets, reassembled across pages")
+                    .lazy(
+                        list_packets,
+                        StreamState {
+                            input,
+                            serial: s.serial,
+                            streams: streams.clone(),
+                        },
+                    ),
+            );
+        }
     }
     cx.emit(
         Node::new("Pages")
@@ -411,7 +460,193 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-fn describe(streams: &[Stream], last: &[(u32, u64)], title: Option<String>, bytes: u64) -> String {
+/// Links of a chained file looked for; the last one found runs to the end.
+const MAX_LINKS: usize = 256;
+
+/// One link of a (possibly chained) file.
+struct Link {
+    span: Span,
+    /// Index of its first stream.
+    first: usize,
+    /// The last granule position of each of its streams.
+    last: Vec<(u32, u64)>,
+}
+
+/// The streams of link `n`.
+fn link_streams<'a>(streams: &'a [Stream], links: &[Link], n: usize) -> &'a [Stream] {
+    let first = links.get(n).map_or(0, |l| l.first);
+    let end = links
+        .get(n.saturating_add(1))
+        .map_or(streams.len(), |l| l.first);
+    streams.get(first..end).unwrap_or_default()
+}
+
+/// The streams whose beginning-of-stream pages come first at `pos` (one
+/// page per logical stream), and where the run of BOS pages ends.
+async fn bos_run(cx: &Cx, file: Span, pos: u64) -> Result<(Vec<Stream>, u64)> {
+    let mut streams = Vec::new();
+    let mut pos = pos;
+    while streams.len() < 32 {
+        let Ok(page) = read_page(cx, file, pos).await else {
+            break;
+        };
+        if page.header.flags & 0x2 == 0 {
+            break;
+        }
+        let first = cx.read_avail(page.data.sub(0, 64)).await?;
+        streams.push(Stream::from_header(page.header.serial, &first, file));
+        pos = pos.saturating_add(page.span.len.max(1));
+    }
+    Ok((streams, pos))
+}
+
+/// The first real page at or after `at` and before `before` (version 0, a
+/// matching CRC): its offset, serial number and length.
+async fn valid_page(cx: &Cx, file: Span, at: u64, before: u64) -> Result<Option<(u64, u32, u64)>> {
+    let mut at = at;
+    for _ in 0..16 {
+        let Some(pos) = find_page(cx, file, at).await? else {
+            return Ok(None);
+        };
+        if pos >= before {
+            return Ok(None);
+        }
+        if let Ok(page) = read_page(cx, file, pos).await
+            && page.header.version == 0
+        {
+            let bytes = cx.read_avail(page.span).await?;
+            cx.checkpoint().await;
+            if crc32(&bytes) == page.header.crc {
+                return Ok(Some((pos, page.header.serial, page.span.len.max(1))));
+            }
+        }
+        at = pos.saturating_add(1);
+    }
+    Ok(None)
+}
+
+/// The serial number of the last whole page in `tail` (version 0, a
+/// matching CRC), among the last few capture patterns.
+fn last_serial(tail: &[u8]) -> Option<u32> {
+    let mut end = tail.len();
+    let mut checked = 0u8;
+    for _ in 0..32 {
+        let p = tail.get(..end)?.windows(4).rposition(|w| w == b"OggS")?;
+        end = p.saturating_add(3);
+        let page = tail.get(p..)?;
+        let segments = usize::from(*page.get(26)?);
+        let Some(lacing) = page.get(27..27usize.saturating_add(segments)) else {
+            continue;
+        };
+        let len = lacing
+            .iter()
+            .fold(27usize.saturating_add(segments), |n, &l| {
+                n.saturating_add(usize::from(l))
+            });
+        let Some(bytes) = page.get(..len).filter(|_| page.get(4) == Some(&0)) else {
+            continue;
+        };
+        if crc32(bytes) == u32_le(bytes, 22)? {
+            return u32_le(bytes, 14);
+        }
+        // Hashing is bounded: a few whole pages at most.
+        checked = checked.saturating_add(1);
+        if checked == 4 {
+            return None;
+        }
+    }
+    None
+}
+
+/// Where the link whose streams are `serials` ends: the first page, at or
+/// after `from` (a page of the link), of another stream. Bisects while the
+/// range is large, then walks the pages.
+async fn link_end(cx: &Cx, file: Span, from: u64, serials: &[u32]) -> Result<u64> {
+    let (mut lo, mut hi) = (from, file.len);
+    while hi.saturating_sub(lo) > 0x10000 {
+        let mid = lo.saturating_add(hi.saturating_sub(lo) / 2);
+        match valid_page(cx, file, mid, hi).await? {
+            Some((pos, serial, len)) if serials.contains(&serial) => {
+                lo = pos.saturating_add(len);
+            }
+            Some((pos, _, _)) => hi = pos,
+            None => hi = mid,
+        }
+    }
+    let mut pos = lo;
+    while pos < hi {
+        let page = match read_page(cx, file, pos).await {
+            Ok(page) => page,
+            Err(_) => match valid_page(cx, file, pos.saturating_add(1), hi).await? {
+                Some((next, _, _)) => {
+                    pos = next;
+                    continue;
+                }
+                None => break,
+            },
+        };
+        if !serials.contains(&page.header.serial) {
+            return Ok(pos);
+        }
+        pos = pos.saturating_add(page.span.len.max(1));
+        cx.checkpoint().await;
+    }
+    Ok(hi)
+}
+
+fn describe(streams: &[Stream], links: &[Link], title: Option<String>, bytes: u64) -> String {
+    let mut line = match links {
+        [] | [_] => describe_link(streams, links.first().map_or(&[][..], |l| &l.last), bytes),
+        _ => {
+            let mut line = format!(
+                "Ogg, {} chained links: {}",
+                links.len(),
+                (0..links.len().min(3))
+                    .map(|n| {
+                        link_streams(streams, links, n)
+                            .iter()
+                            .filter(|s| s.codec != Codec::Skeleton)
+                            .map(|s| s.describe.clone())
+                            .collect::<Vec<_>>()
+                            .join(" + ")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            );
+            if links.len() > 3 {
+                line.push_str("; …");
+            }
+            // The main stream of each link: its first audio stream, else
+            // its first stream.
+            let total = links
+                .iter()
+                .enumerate()
+                .map(|(n, link)| {
+                    let own = link_streams(streams, links, n);
+                    let main = own.iter().find(|s| s.is_audio()).or_else(|| own.first())?;
+                    let (_, g) = link.last.iter().find(|(s, _)| *s == main.serial)?;
+                    main.seconds(*g)
+                })
+                .sum::<Option<f64>>();
+            if let Some(total) = total {
+                line.push_str(&format!(", {}", duration(total)));
+                if streams.len() == links.len() && total > 0.0 {
+                    line.push_str(&format!(
+                        ", {:.0} kbps",
+                        bytes as f64 * 8.0 / total / 1000.0
+                    ));
+                }
+            }
+            line
+        }
+    };
+    if let Some(t) = title {
+        line.push_str(&format!(" — {t}"));
+    }
+    line
+}
+
+fn describe_link(streams: &[Stream], last: &[(u32, u64)], bytes: u64) -> String {
     let main = streams
         .iter()
         .find(|s| s.is_audio())
@@ -441,9 +676,6 @@ fn describe(streams: &[Stream], last: &[(u32, u64)], title: Option<String>, byte
             ));
         }
     }
-    if let Some(t) = title {
-        line.push_str(&format!(" — {t}"));
-    }
     line
 }
 
@@ -470,11 +702,11 @@ async fn comment_title(cx: &Cx, file: Span, pos: u64, stream: Option<&Stream>) -
     None
 }
 
-/// The last granule position of each stream, from the pages in the last
-/// 64 KiB.
-async fn last_granules(cx: &Cx, file: Span) -> Result<Vec<(u32, u64)>> {
-    let start = file.len.saturating_sub(0x10000);
-    let tail = cx.read_avail(file.tail(start)).await?;
+/// The last granule position of each stream of `link`, from the pages in
+/// its last 64 KiB.
+async fn last_granules(cx: &Cx, link: Span) -> Result<Vec<(u32, u64)>> {
+    let start = link.len.saturating_sub(0x10000);
+    let tail = cx.read_avail(link.tail(start)).await?;
     let mut out: Vec<(u32, u64)> = Vec::new();
     let mut i = 0usize;
     while let Some(at) = tail
@@ -482,10 +714,12 @@ async fn last_granules(cx: &Cx, file: Span) -> Result<Vec<(u32, u64)>> {
         .and_then(|t| t.windows(4).position(|w| w == b"OggS"))
     {
         let p = i.saturating_add(at);
-        if let (Some(g), Some(serial)) = (
-            u64_le(&tail, p.saturating_add(6)),
-            u32_le(&tail, p.saturating_add(14)),
-        ) && g != u64::MAX
+        if tail.get(p.saturating_add(4)) == Some(&0)
+            && let (Some(g), Some(serial)) = (
+                u64_le(&tail, p.saturating_add(6)),
+                u32_le(&tail, p.saturating_add(14)),
+            )
+            && g != u64::MAX
         {
             match out.iter_mut().find(|(s, _)| *s == serial) {
                 Some(entry) => entry.1 = g,
@@ -732,8 +966,14 @@ async fn list_packets(cx: Cx, st: StreamState) -> Result<()> {
     let file = st.input.span;
     let stream = st.streams.iter().find(|s| s.serial == st.serial).cloned();
     let codec = stream.as_ref().map_or(Codec::Other, |s| s.codec);
-    let (mut pos, mut index, mut pending) = cx.resume::<PacketWalk>().unwrap_or((0, 0, Vec::new()));
-    while pos < file.len {
+    // The stream's pages lie in its link.
+    let (begin, end) = stream.as_ref().map_or((0, file.len), |s| {
+        let begin = s.link.offset.saturating_sub(file.offset);
+        (begin, begin.saturating_add(s.link.len))
+    });
+    let (mut pos, mut index, mut pending) =
+        cx.resume::<PacketWalk>().unwrap_or((begin, 0, Vec::new()));
+    while pos < end {
         let page = match read_page(&cx, file, pos).await {
             Ok(p) => p,
             Err(_) => match find_page(&cx, file, pos.saturating_add(1)).await? {
