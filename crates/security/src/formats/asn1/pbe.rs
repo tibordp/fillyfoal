@@ -349,14 +349,13 @@ async fn jce_pbe_md5_3des(
     let mut derived = Vec::with_capacity(32);
     for half in salt.chunks(4) {
         let mut state = half.to_vec();
-        for i in 0..iterations {
+        for _ in 0..iterations {
             let mut h = crypto::Md5::new();
             h.update(&state);
             h.update(&pw);
             state = h.finish();
-            if i.is_multiple_of(1024) {
-                cx.checkpoint().await;
-            }
+            // One unit per MD5 iteration, as `crypto::run` charges.
+            cx.checkpoint().await;
         }
         derived.extend(state);
     }

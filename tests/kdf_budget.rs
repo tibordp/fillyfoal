@@ -158,3 +158,20 @@ fn pkcs8_with_ten_million_iterations_yields_while_deriving() {
         ChildState::Running(_)
     ));
 }
+
+#[test]
+fn jceks_key_derivation_is_charged_per_iteration() {
+    // keytool protects JCEKS keys with PBEWithMD5AndTripleDES at 200,000
+    // iterations for each half of the key: 400,000 MD5 rounds per key, each
+    // a unit of work (it was one unit per 1024 rounds, so a 2000-unit poll
+    // could run two million MD5 rounds).
+    let data = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/external/jks/keytool.jceks"
+    ))
+    .unwrap();
+    let mut host = Host::named("keytool.jceks", data, Limits::default());
+    host.explore_all();
+    let work = host.session.work_done();
+    assert!(work >= 400_000, "{work} units");
+}

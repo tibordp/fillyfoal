@@ -474,7 +474,15 @@ the harness (`common::fixture_bytes`) decompresses them, so the dissector
 sees the raw image, and their snapshots keep the stored file name. Other
 `.zst` and `.gz` fixtures (and everything in `gzip/`) are genuine tests of
 those formats. Robustness sweeps over images larger than 4 MiB truncate
-mostly within the first 4 MiB and run fewer mutation rounds. Each fixture's `<format>` directory names the format
+mostly within the first 4 MiB and run fewer mutation rounds. A fixture
+whose one exploration costs more than `common::HEAVY_WORK` units
+(measured with `Session::work_done`, so the same on every machine; today
+two key derivations a tool fixes) gets truncations and mutations in
+inverse proportion to its work, at least 30 of each; fixtures whose time
+is not charged in units are listed with a reason in `common::SLOW_SWEEPS`
+until it is. `SWEEP_TIMES=20 cargo test --test formats --
+fixtures_are_robust --nocapture` prints the slowest sweeps and every
+scaled-down one. Each fixture's `<format>` directory names the format
 it must be identified as (`fixtures_are_identified_correctly`).
 
 Review the snapshot by eye: it is the best check that values and spans are

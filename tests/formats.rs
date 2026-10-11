@@ -113,6 +113,7 @@ fn fixtures_are_robust() {
     let paths = fixtures();
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
     let next = std::sync::atomic::AtomicUsize::new(0);
+    let times = std::sync::Mutex::new(Vec::new());
     std::thread::scope(|scope| {
         for _ in 0..threads {
             scope.spawn(|| {
@@ -120,11 +121,36 @@ fn fixtures_are_robust() {
                     let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     let Some(path) = paths.get(i) else { break };
                     let data = load(path);
-                    common::robustness_as(&snapshot_name(path), &data, chosen_format(path));
+                    let start = std::time::Instant::now();
+                    let (work, plan) =
+                        common::robustness_as(&snapshot_name(path), &data, chosen_format(path));
+                    times
+                        .lock()
+                        .unwrap()
+                        .push((start.elapsed(), snapshot_name(path), work, plan));
                 }
             });
         }
     });
+    // `SWEEP_TIMES=n` prints the n slowest sweeps and every scaled-down one
+    // (see `common::sweep_plan`); run with `--nocapture`.
+    if let Some(n) = std::env::var("SWEEP_TIMES")
+        .ok()
+        .and_then(|n| n.parse().ok())
+    {
+        let mut times = times.into_inner().unwrap();
+        times.sort_by_key(|a| std::cmp::Reverse(a.0));
+        let total: std::time::Duration = times.iter().map(|t| t.0).sum();
+        eprintln!("sweep: {} fixtures, {total:.1?} in all", times.len());
+        for (i, (time, name, work, (truncations, mutations))) in times.iter().enumerate() {
+            let listed = common::SLOW_SWEEPS.iter().any(|(s, _)| s == name);
+            if i < n || *work > common::HEAVY_WORK || listed {
+                eprintln!(
+                    "{time:>10.2?}  {name}  ({work} units; {truncations} truncations, {mutations} mutations)"
+                );
+            }
+        }
+    }
 }
 
 /// Tiny chunks, tiny budgets, short pages and little derived memory change
