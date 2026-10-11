@@ -40,9 +40,13 @@ async fn wordperfect(cx: Cx, input: Input) -> Result<()> {
     f.u16("Encryption").hex().emit()?;
     cx.emit(Node::new("Prefix packets").span(file.sub(16, u64::from(doc).saturating_sub(16))));
     cx.emit(Node::new("Document area").span(file.tail(doc.into())));
-    let version = match major {
-        1 => "5.x",
-        2 => "6.x or later",
+    // Major 0 is WordPerfect 5 (minor 0: 5.0, 1: 5.1), 2 is 6.0 and later
+    // (libwpd's `WPXHeader::constructHeader`).
+    let version = match (major, minor) {
+        (0, 0) => "5.0",
+        (0, 1) => "5.1",
+        (0, _) => "5.x",
+        (2, _) => "6.x or later",
         _ => "unknown version",
     };
     cx.annotate(format!(
