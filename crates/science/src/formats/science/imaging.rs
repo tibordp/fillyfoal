@@ -205,13 +205,13 @@ async fn dicom(cx: Cx, input: Input) -> Result<()> {
     };
     let dataset = file.tail(132u64.saturating_add(meta_len));
     if syntax.ends_with(".99") {
-        cx.emit(crate::formats::content(
-            "Data Set (deflated)",
-            input,
-            dataset,
-            crate::formats::Codec::Deflate,
-            None,
-        ));
+        // Deflated Explicit VR Little Endian: the data set is one raw
+        // DEFLATE stream (PS3.5 A.5) whose decoded size nothing records.
+        cx.emit(
+            Node::new("Data Set (deflated)")
+                .span(dataset)
+                .lazy(dicom_deflated, (dataset, encoding)),
+        );
     } else {
         cx.emit(
             Node::new("Data Set")
@@ -226,6 +226,15 @@ async fn dicom(cx: Cx, input: Input) -> Result<()> {
         .map_or(sop.as_str(), |(_, n)| n);
     cx.annotate(format!("{sop_name}, {syntax_name}"));
     Ok(())
+}
+
+/// The elements of a deflated data set, decoded on demand. Its length is
+/// only known once the stream has been decoded to its end, which the walk
+/// needs to know where the last element stops.
+async fn dicom_deflated(cx: Cx, (span, enc): (Span, Encoding)) -> Result<()> {
+    let decoded = cx.decode_lazy_unsized(span, &crate::formats::Codec::Deflate)?;
+    let decoded = cx.known(decoded).await;
+    dicom_elements(cx, (decoded, enc, 0)).await
 }
 
 /// Finds a UI value in the (explicit LE) meta group by element number.

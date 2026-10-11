@@ -16,6 +16,10 @@ Writes, in OUTDIR:
   and its items of undefined length, nested as in implicit-nested.dcm.
 - rle-encapsulated.dcm: explicit-undefined-items.dcm compressed with
   pydicom's RLE Lossless encoder (needs numpy): encapsulated Pixel Data.
+- explicit-big-endian.dcm: the data of explicit-undefined-items.dcm in
+  Explicit VR Big Endian (retired, but still read).
+- deflated.dcm: the same in Deflated Explicit VR Little Endian (the data
+  set after the meta group is one raw DEFLATE stream).
 All UIDs are fixed, so the files are reproducible byte for byte.
 """
 
@@ -23,7 +27,13 @@ import sys
 
 from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.sequence import Sequence
-from pydicom.uid import ExplicitVRLittleEndian, ImplicitVRLittleEndian, RLELossless
+from pydicom.uid import (
+    DeflatedExplicitVRLittleEndian,
+    ExplicitVRBigEndian,
+    ExplicitVRLittleEndian,
+    ImplicitVRLittleEndian,
+    RLELossless,
+)
 
 SC = "1.2.840.10008.5.1.4.1.1.7"  # Secondary Capture Image Storage
 
@@ -87,3 +97,5 @@ make(f"{out}/implicit-nested.dcm", ImplicitVRLittleEndian, True, True)
 make(f"{out}/implicit-defined-items.dcm", ImplicitVRLittleEndian, False, False)
 make(f"{out}/explicit-undefined-items.dcm", ExplicitVRLittleEndian, True, True)
 make(f"{out}/rle-encapsulated.dcm", ExplicitVRLittleEndian, True, True, rle=True)
+make(f"{out}/explicit-big-endian.dcm", ExplicitVRBigEndian, True, True)
+make(f"{out}/deflated.dcm", DeflatedExplicitVRLittleEndian, True, True)
