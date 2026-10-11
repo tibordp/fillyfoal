@@ -1313,8 +1313,11 @@ async fn behind_long_tag(cx: &Cx, file: Span) -> Result<Option<&'static Format>>
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    if let Some(format) = behind_long_tag(&cx, file).await? {
-        // It dissects the file as it would with a short tag.
+    if let Some(format) = behind_long_tag(&cx, file).await?
+        && cx.hand_off(&input, format)
+    {
+        // It dissects the file as it would with a short tag, and the host
+        // sees the file as that format.
         return (format.dissect)(cx, input).await;
     }
     let mut start = 0u64;

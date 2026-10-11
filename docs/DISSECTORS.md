@@ -299,6 +299,20 @@ an input a thousand times larger than the fixture.
   (`Session::reinterpret`) takes effect. The first detection step an
   expansion reaches is the node's own; later ones are content nested inside
   it and are identified as usual.
+- **Handing off.** A dissector that finds the content it was given is
+  really another format (the MP3 probe claims files whose long ID3v2 tag
+  hides FLAC or WavPack from the probes) hands it over instead of
+  dissecting it as itself:
+  `if cx.hand_off(&input, format) { return (format.dissect)(cx, input).await; }`.
+  When `input` is what the node's own detection step settled, the node's
+  interpretation becomes `format`, so the host shows (and "inspect as"
+  starts from) the real format. `hand_off` returns `false` when the host
+  forced the node's format with `Session::reinterpret`; the dissector then
+  carries on as itself. Hand off only to a format that will not hand back,
+  and only content you were given; content found inside is embedded. (A
+  family sharing one dissector, like ZIP's, needs no hand-off: the probes
+  already picked the member, and `zip.rs` only refines its label when it
+  was asked for plain ZIP.)
 - **Writing a codec:** implement `codec::pipeline::Decode` (decode from all
   input so far into all output so far, a bounded step at a time; running
   out of input is just an error) and add a `Codec` variant. `Streaming`

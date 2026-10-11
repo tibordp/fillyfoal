@@ -360,7 +360,7 @@ async fn settle(
     given: Option<&'static Format>,
 ) -> Result<(Option<&'static Format>, bool)> {
     check_nesting(cx, input)?;
-    let claim = cx.claim_detection();
+    let claim = cx.claim_detection(input.span);
     if let Some(Some(format)) = claim {
         cx.interpreted(Interpretation {
             format: Some(format),
