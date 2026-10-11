@@ -679,6 +679,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "docs")]
     &cfb::FORMAT,
     #[cfg(feature = "docs")]
+    &cfb::propstore::FORMAT,
+    #[cfg(feature = "docs")]
     &pdf::FORMAT,
     #[cfg(feature = "security")]
     &asn1::X509,

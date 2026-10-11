@@ -11,11 +11,11 @@ use crate::dsl::{Cursor, Record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::datakit::{clip, name_or};
-use crate::formats::{Format, Input, Probe};
+use crate::formats::{Format, Input, Probe, embedded_named};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Guid, Value, flag};
+use crate::value::{EnumTable, FlagTable, Guid, Value, field, flag};
 
 const LE: Endian = Endian::Little;
 const MAX_STRING: u64 = 0x10000;
@@ -248,7 +248,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         } else {
             crate::text::latin1(&bytes)
         };
-        strings.push((bit, text.clone()));
+        // Strings are counted, not terminated; some writers count a NUL.
+        strings.push((bit, text.trim_end_matches('\0').to_owned()));
         cx.emit(
             Node::new(name)
                 .span(cur.since(start))
@@ -258,7 +259,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let extra = file.tail(cur.pos());
     if !extra.is_empty() {
-        cx.emit(Node::new("ExtraData").span(extra).lazy(extra_data, extra));
+        cx.emit(
+            Node::new("ExtraData")
+                .span(extra)
+                .lazy(extra_data, (input, extra)),
+        );
     }
 
     let mut summary = String::from("shell link");
@@ -665,7 +670,7 @@ fn network_link(f: &mut Fields<'_>, _: &()) -> Result<()> {
     Ok(())
 }
 
-async fn extra_data(cx: Cx, span: Span) -> Result<()> {
+async fn extra_data(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, LE);
     while cur.remaining() >= 4 {
         let start = cur.pos();
@@ -680,6 +685,7 @@ async fn extra_data(cx: Cx, span: Span) -> Result<()> {
         let name = name_or(EXTRA_BLOCKS, signature.into(), "Block");
         let layout: Option<crate::fields::Layout<(), ()>> = match signature {
             0xa000_0001 | 0xa000_0006 | 0xa000_0007 => Some(env_block),
+            0xa000_0002 => Some(console_block),
             0xa000_0003 => Some(tracker_block),
             0xa000_0004 => Some(console_fe_block),
             0xa000_0005 => Some(special_folder_block),
@@ -694,6 +700,10 @@ async fn extra_data(cx: Cx, span: Span) -> Result<()> {
                 .span(block)
                 .summary(summary)
                 .lazy(vista_id_list, block),
+            (0xa000_0009, None) => Node::new(name)
+                .span(block)
+                .summary(summary)
+                .lazy(property_store_block, (input, block)),
             _ => Node::new(name).span(block).summary(summary),
         };
         cx.push(node).await;
@@ -711,6 +721,118 @@ fn env_block(f: &mut Fields<'_>, _: &()) -> Result<()> {
     block_header(f)?;
     f.ascii("TargetAnsi", 260).emit()?;
     f.utf16("TargetUnicode", 260).emit()?;
+    Ok(())
+}
+
+/// Console text and background colours (`FOREGROUND_*`, `BACKGROUND_*`).
+const CONSOLE_COLORS: FlagTable = &[
+    flag(0x01, "FOREGROUND_BLUE"),
+    flag(0x02, "FOREGROUND_GREEN"),
+    flag(0x04, "FOREGROUND_RED"),
+    flag(0x08, "FOREGROUND_INTENSITY"),
+    flag(0x10, "BACKGROUND_BLUE"),
+    flag(0x20, "BACKGROUND_GREEN"),
+    flag(0x40, "BACKGROUND_RED"),
+    flag(0x80, "BACKGROUND_INTENSITY"),
+];
+
+/// Font family (`FF_*`, high nibble) and pitch (`TMPF_*`, low nibble).
+const FONT_FAMILIES: FlagTable = &[
+    flag(0x01, "TMPF_FIXED_PITCH"),
+    flag(0x02, "TMPF_VECTOR"),
+    flag(0x04, "TMPF_TRUETYPE"),
+    flag(0x08, "TMPF_DEVICE"),
+    field(0xf0, 0x00, "FF_DONTCARE"),
+    field(0xf0, 0x10, "FF_ROMAN"),
+    field(0xf0, 0x20, "FF_SWISS"),
+    field(0xf0, 0x30, "FF_MODERN"),
+    field(0xf0, 0x40, "FF_SCRIPT"),
+    field(0xf0, 0x50, "FF_DECORATIVE"),
+];
+
+/// ConsoleDataBlock (MS-SHLLINK 2.5.1): the console window's settings, a
+/// fixed 0xCC bytes.
+fn console_block(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    block_header(f)?;
+    f.u16("FillAttributes").hex().flags(CONSOLE_COLORS).emit()?;
+    f.u16("PopupFillAttributes")
+        .hex()
+        .flags(CONSOLE_COLORS)
+        .emit()?;
+    for name in [
+        "ScreenBufferSizeX",
+        "ScreenBufferSizeY",
+        "WindowSizeX",
+        "WindowSizeY",
+        "WindowOriginX",
+        "WindowOriginY",
+    ] {
+        f.int::<i16>(name).emit()?;
+    }
+    f.u32("Unused1").emit()?;
+    f.u32("Unused2").emit()?;
+    f.u32("FontSize")
+        .hex()
+        .with(|&v, n| n.summary(format!("{}×{}", v & 0xffff, v >> 16)))
+        .desc("Width in the low word (raster fonts), height in the high word")
+        .emit()?;
+    f.u32("FontFamily").hex().flags(FONT_FAMILIES).emit()?;
+    f.u32("FontWeight").emit()?;
+    f.utf16("FaceName", 32).emit()?;
+    f.u32("CursorSize")
+        .desc("Percent of a character cell (up to 25 small, 50 medium, 100 large)")
+        .emit()?;
+    f.u32("FullScreen").emit()?;
+    f.u32("QuickEdit").emit()?;
+    f.u32("InsertMode").emit()?;
+    f.u32("AutoPosition").emit()?;
+    f.u32("HistoryBufferSize").emit()?;
+    f.u32("NumberOfHistoryBuffers").emit()?;
+    f.u32("HistoryNoDup").emit()?;
+    for name in [
+        "ColorTable 0",
+        "ColorTable 1",
+        "ColorTable 2",
+        "ColorTable 3",
+        "ColorTable 4",
+        "ColorTable 5",
+        "ColorTable 6",
+        "ColorTable 7",
+        "ColorTable 8",
+        "ColorTable 9",
+        "ColorTable 10",
+        "ColorTable 11",
+        "ColorTable 12",
+        "ColorTable 13",
+        "ColorTable 14",
+        "ColorTable 15",
+    ] {
+        f.u32(name)
+            .hex()
+            .with(|&v, n| {
+                n.summary(format!(
+                    "#{:02x}{:02x}{:02x}",
+                    v & 0xff,
+                    (v >> 8) & 0xff,
+                    (v >> 16) & 0xff
+                ))
+            })
+            .emit()?;
+    }
+    Ok(())
+}
+
+/// PropertyStoreDataBlock (MS-SHLLINK 2.5.7): the target's properties, a
+/// serialized property store (MS-PROPSTORE), dissected by the
+/// `ms-propstore` format.
+async fn property_store_block(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
+    let block = cx.block(span.sub(0, 8)).await?;
+    block_header(&mut Fields::emitting(&cx, &block, LE))?;
+    cx.emit(embedded_named(
+        "PropertyStore",
+        input.nested(span.tail(8)),
+        "ms-propstore",
+    ));
     Ok(())
 }
 

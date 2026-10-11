@@ -624,45 +624,58 @@ async fn properties(
             .await;
             continue;
         }
-        let vt = u16_le(&data, 0).unwrap_or(0);
-        let type_name = lookup(TYPES, (vt & 0x0fff).into())
-            .map_or_else(|| format!("type {vt:#06x}"), str::to_owned);
-        let type_name = if vt & 0x1000 != 0 {
-            format!("VT_VECTOR | {type_name}")
-        } else {
-            type_name
-        };
-        let mut node = Node::new(name.clone());
-        match decode(vt, &data, 4, parsed.codepage, &name, 0) {
-            Some(d) => {
-                let span = at.sub(0, to_u64(d.len.saturating_add(4)));
-                node = node.span(span);
-                if let Some(v) = d.value.clone() {
-                    node = node.value(v);
-                }
-                node = node.summary(match &d.summary {
-                    Some(s) => format!("{type_name}, {s}"),
-                    None => type_name.clone(),
-                });
-                if id == 1 {
-                    node = node.desc("Code page of the set's 8-bit strings");
-                }
-                node = if vt == 0x0047 {
-                    node.lazy(clipboard_value, (input, span))
-                } else {
-                    node.lazy(value_node, (span, vt, Arc::new(d.children)))
-                };
-            }
-            None => {
-                node = node
-                    .span(at.sub(0, 4))
-                    .summary(type_name)
-                    .diag(Diagnostic::malformed("the value could not be decoded"));
-            }
+        let mut node = typed_value(input, name, at, &data, parsed.codepage);
+        if id == 1 {
+            node = node.desc("Code page of the set's 8-bit strings");
         }
         cx.push(node).await;
     }
     Ok(())
+}
+
+/// A node named `name` for the `TypedPropertyValue` at `at` (its type
+/// field first), whose bytes from there are `data`: its value or summary,
+/// and its fields on expansion. Shared by property sets and serialized
+/// property stores (MS-PROPSTORE); `codepage` is that of 8-bit strings.
+pub(super) fn typed_value(
+    input: Input,
+    name: impl Into<String>,
+    at: Span,
+    data: &[u8],
+    codepage: u16,
+) -> Node {
+    let name = name.into();
+    let vt = u16_le(data, 0).unwrap_or(0);
+    let type_name = lookup(TYPES, (vt & 0x0fff).into())
+        .map_or_else(|| format!("type {vt:#06x}"), str::to_owned);
+    let type_name = if vt & 0x1000 != 0 {
+        format!("VT_VECTOR | {type_name}")
+    } else {
+        type_name
+    };
+    let node = Node::new(name.clone());
+    match decode(vt, data, 4, codepage, &name, 0) {
+        Some(d) => {
+            let span = at.sub(0, to_u64(d.len.saturating_add(4)));
+            let mut node = node.span(span);
+            if let Some(v) = d.value.clone() {
+                node = node.value(v);
+            }
+            node = node.summary(match &d.summary {
+                Some(s) => format!("{type_name}, {s}"),
+                None => type_name.clone(),
+            });
+            if vt == 0x0047 {
+                node.lazy(clipboard_value, (input, span))
+            } else {
+                node.lazy(value_node, (span, vt, Arc::new(d.children)))
+            }
+        }
+        None => node
+            .span(at.sub(0, 4))
+            .summary(type_name)
+            .diag(Diagnostic::malformed("the value could not be decoded")),
+    }
 }
 
 async fn id_table(
@@ -835,4 +848,22 @@ pub async fn title(cx: &Cx, span: Span) -> Option<String> {
         Some(Value::Text(t)) => Some(t),
         _ => None,
     }
+}
+
+/// The name of property `id` of the SummaryInformation or
+/// DocumentSummaryInformation set `fmtid` (they also key properties in
+/// serialized property stores: System.Title is SummaryInformation 2).
+pub(super) fn known_name(fmtid: &Guid, id: u32) -> Option<&'static str> {
+    let table = match set_kind(fmtid) {
+        SetKind::Summary => SUMMARY_NAMES,
+        SetKind::DocSummary => DOC_SUMMARY_NAMES,
+        _ => return None,
+    };
+    table.iter().find(|(i, _)| *i == id).map(|(_, n)| *n)
+}
+
+/// `D5CDD505-2E9C-101B-9397-08002B2CF9AE`: in a serialized property store,
+/// the storage whose properties are keyed by name.
+pub(super) fn is_user_defined(fmtid: &Guid) -> bool {
+    *fmtid == USER_DEFINED
 }
