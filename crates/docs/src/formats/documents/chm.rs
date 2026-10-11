@@ -249,9 +249,18 @@ const CONTENT: &str = "Content";
 const RESET_TABLE: &str =
     "Transform/{7FC28940-9D31-11D0-9B27-00A0C91E9C7C}/InstanceData/ResetTable";
 
-/// The decoded LZX section (section 1), decoded on demand.
-async fn section1(cx: &Cx, chm: &Chm) -> Result<Span> {
-    let mut found: [Option<(u64, u64)>; 3] = [None; 3];
+/// Where the section-0 files `ControlData`, `Content` and `ResetTable` of
+/// the LZX section lie (offset and length, each if found).
+type Storage = [Option<(u64, u64)>; 3];
+
+/// Finds the [`Storage`] files: one walk of the listing chain per file,
+/// shared by every section-1 node through the cache.
+async fn storage(cx: &Cx, chm: &Chm) -> Result<Storage> {
+    const KIND: &str = "chm-mscompressed-storage";
+    if let Some(found) = cx.cached::<Storage>(chm.dir, KIND) {
+        return Ok(*found);
+    }
+    let mut found: Storage = [None; 3];
     let mut chain = Chain::new(chm);
     while let Some((_, entries)) = chain.next(cx, chm).await? {
         for (i, e) in entries.into_iter().enumerate() {
@@ -271,6 +280,13 @@ async fn section1(cx: &Cx, chm: &Chm) -> Result<Span> {
             }
         }
     }
+    cx.cache(chm.dir, KIND, std::sync::Arc::new(found));
+    Ok(found)
+}
+
+/// The decoded LZX section (section 1), decoded on demand.
+async fn section1(cx: &Cx, chm: &Chm) -> Result<Span> {
+    let found = storage(cx, chm).await?;
     let file = chm.input.span;
     let at = |(offset, length): (u64, u64)| file.sub(chm.content.saturating_add(offset), length);
     let [Some(control), Some(content), Some(reset)] = found else {

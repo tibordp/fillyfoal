@@ -1234,6 +1234,82 @@ fn cab_and_chm_show_compressed_files() {
     }
 }
 
+/// `lzx.chm` with `extra` more listing chunks of empty section-0 entries
+/// chained after its own.
+fn chm_with_long_directory(extra: u32) -> Vec<u8> {
+    let chm = std::fs::read(format!(
+        "{}/tests/data/cab/lzx.chm",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    let u64le = |o: usize| u64::from_le_bytes(chm[o..o + 8].try_into().unwrap());
+    let (dir, dir_header, chunk) = (u64le(0x48) as usize, 0x54, 0x1000);
+    assert_eq!(
+        u64le(0x50) as usize,
+        dir_header + chunk,
+        "one listing chunk"
+    );
+    let content = u64le(0x58) as usize;
+    let mut out = chm[..dir + dir_header + chunk].to_vec();
+    out[dir + dir_header + 16..][..4].copy_from_slice(&1u32.to_le_bytes());
+    for i in 1..=extra {
+        let mut entries = Vec::new();
+        for j in 0.. {
+            let name = format!("/pad/{i:05}/{j:04}");
+            if 20 + entries.len() + name.len() + 4 > chunk {
+                break;
+            }
+            entries.push(name.len() as u8);
+            entries.extend(name.as_bytes());
+            entries.extend([0, 0, 0]);
+        }
+        let next = if i == extra { u32::MAX } else { i + 1 };
+        let mut c = b"PMGL".to_vec();
+        for v in [(chunk - 20 - entries.len()) as u32, 0, i - 1, next] {
+            c.extend(v.to_le_bytes());
+        }
+        c.extend(entries);
+        c.resize(chunk, 0);
+        out.extend(c);
+    }
+    let new_content = out.len() as u64;
+    out.extend(&chm[content..]);
+    let dir_len = (dir_header + (extra as usize + 1) * chunk) as u64;
+    out[0x50..0x58].copy_from_slice(&dir_len.to_le_bytes());
+    out[0x58..0x60].copy_from_slice(&new_content.to_le_bytes());
+    out[dir + 0x24..][..4].copy_from_slice(&extra.to_le_bytes());
+    out[dir + 0x2c..][..4].copy_from_slice(&(extra + 1).to_le_bytes());
+    out
+}
+
+/// Opening a file in a CHM's LZX section walks the directory to find the
+/// section's control data, content and reset table once per CHM, not once
+/// per file opened.
+#[test]
+fn chm_finds_its_compressed_section_once() {
+    let data = chm_with_long_directory(1000);
+    let mut host = Host::named("long.chm", data, Limits::default());
+    host.budget = 16;
+    host.session.expand(host.root, 10);
+    host.run();
+    let files = host.child(host.root, "Files").unwrap();
+    host.session.expand(files, 10);
+    host.run();
+    let mut polls = Vec::new();
+    for name in ["/text.txt", "/code.bin", "/small.html"] {
+        let id = host.child(files, name).unwrap();
+        host.polls = 0;
+        host.session.expand(id, 1);
+        host.run();
+        assert!(!host.session.children(id).unwrap().ids.is_empty(), "{name}");
+        polls.push(host.polls);
+    }
+    // The first walks 1001 chunks (4 MiB); the others find it cached.
+    assert!(polls[0] > 100, "{polls:?}");
+    assert!(polls[1] * 10 < polls[0], "{polls:?}");
+    assert!(polls[2] * 10 < polls[0], "{polls:?}");
+}
+
 /// Corrupted and truncated folders fail (or decode to something) without
 /// panicking or looping.
 #[test]
