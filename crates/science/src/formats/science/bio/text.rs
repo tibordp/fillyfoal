@@ -734,16 +734,78 @@ fn wig_probe(h: &Head<'_>) -> bool {
             })
 }
 
+/// A chromosome-like name in the first BED column: what genome assemblies
+/// call their sequences (`chr1`, `1`, `X`, `MT`, `scaffold_12`, ...).
+fn bed_chrom(c: &[u8]) -> bool {
+    const PREFIXES: [&[u8]; 8] = [
+        b"chr",
+        b"Chr",
+        b"scaffold",
+        b"contig",
+        b"Contig",
+        b"NC_",
+        b"NW_",
+        b"NT_",
+    ];
+    let named = PREFIXES.iter().any(|p| c.starts_with(p));
+    let bare =
+        c.iter().all(u8::is_ascii_digit) || matches!(c, b"X" | b"Y" | b"M" | b"MT" | b"W" | b"Z");
+    !c.is_empty() && c.len() <= 64 && !c.contains(&b' ') && (named || bare)
+}
+
+/// A headerless BED feature line: a chromosome-like name, start <= end,
+/// and (with six or more columns) a strand. Returns the column count.
+fn bed_feature(l: &[u8]) -> Option<usize> {
+    let f: Vec<&[u8]> = l.split(|&b| b == b'\t').collect();
+    let num = |i: usize| -> Option<u64> {
+        let x = f.get(i)?;
+        if x.is_empty() || x.len() > 12 || !x.iter().all(u8::is_ascii_digit) {
+            return None;
+        }
+        std::str::from_utf8(x).ok()?.parse().ok()
+    };
+    let ok = (3..=12).contains(&f.len())
+        && f.first().is_some_and(|c| bed_chrom(c))
+        && num(1)? <= num(2)?
+        && (f.len() < 6 || f.get(5).is_some_and(|s| matches!(*s, b"+" | b"-" | b".")));
+    ok.then_some(f.len())
+}
+
 fn bed_probe(h: &Head<'_>) -> bool {
     let lines = head_lines(h, 16);
-    is_text(h)
-        && lines
-            .first()
-            .is_some_and(|l| l.starts_with(b"track ") || l.starts_with(b"browser "))
-        && lines
+    if !is_text(h) {
+        return false;
+    }
+    if lines
+        .first()
+        .is_some_and(|l| l.starts_with(b"track ") || l.starts_with(b"browser "))
+    {
+        return lines
             .iter()
             .find(|l| !is_track_line(l))
-            .is_some_and(|l| bed_data_line(l))
+            .is_some_and(|l| bed_data_line(l));
+    }
+    // Without a track line (bedtools and most pipelines write none): at
+    // least three feature lines, every data line in the head one, all with
+    // the same column count. The last line may be cut off by the head.
+    let data: Vec<&[u8]> = lines
+        .iter()
+        .copied()
+        .filter(|l| !l.is_empty() && !l.starts_with(b"#"))
+        .collect();
+    let complete = if to_u64(h.data.len()) < h.len {
+        data.len().saturating_sub(1)
+    } else {
+        data.len()
+    };
+    let Some(first) = data.first().and_then(|l| bed_feature(l)) else {
+        return false;
+    };
+    complete >= 3
+        && data
+            .iter()
+            .take(complete)
+            .all(|l| bed_feature(l) == Some(first))
 }
 
 declare_format!(pub WIG = "wig", "UCSC wiggle track", ["wig"], "text/x-wiggle",
@@ -1510,16 +1572,55 @@ const PDB_RECORDS: &[&str] = &[
     "CRYST1", "ORIGX1", "SCALE1", "MODEL ", "ATOM  ", "HETATM",
 ];
 
+fn pdb_record(l: &[u8]) -> bool {
+    PDB_RECORDS.iter().any(|r| l.starts_with(r.as_bytes()))
+}
+
+/// An ATOM/HETATM record in the fixed columns of the PDB format: serial
+/// number in columns 7-11 and X, Y, Z in 31-38, 39-46, 47-54 (each `%8.3f`,
+/// so the decimal point is in columns 35, 43 and 51).
+fn pdb_atom_line(l: &[u8]) -> bool {
+    let coord = |from: usize| {
+        l.get(from..from.saturating_add(8)).is_some_and(|c| {
+            c.get(4) == Some(&b'.')
+                && c.iter()
+                    .all(|&b| b.is_ascii_digit() || matches!(b, b' ' | b'-' | b'.'))
+        })
+    };
+    (l.starts_with(b"ATOM  ") || l.starts_with(b"HETATM"))
+        && l.get(6..11).is_some_and(|s| {
+            s.iter().any(u8::is_ascii_digit)
+                && s.iter().all(|&b| b.is_ascii_alphanumeric() || b == b' ')
+        })
+        && coord(30)
+        && coord(38)
+        && coord(46)
+}
+
 fn pdb_probe(h: &Head<'_>) -> bool {
+    if !is_text(h) {
+        return false;
+    }
     let lines = head_lines(h, 3);
-    is_text(h)
-        && lines
-            .first()
-            .is_some_and(|l| l.starts_with(b"HEADER    ") || l.starts_with(b"CRYST1 "))
+    let classic = lines
+        .first()
+        .is_some_and(|l| l.starts_with(b"HEADER    ") || l.starts_with(b"CRYST1 "))
         && lines.iter().all(|l| l.len() <= 80)
-        && lines
-            .get(1)
-            .is_some_and(|l| PDB_RECORDS.iter().any(|r| l.starts_with(r.as_bytes())))
+        && lines.get(1).is_some_and(|l| pdb_record(l));
+    // Files from Open Babel, RDKit, PyMOL and others start with REMARK,
+    // COMPND, AUTHOR, MODEL or the atoms themselves: any PDB record first,
+    // only 80-column records, and a well-formed atom record early on.
+    let lines = head_lines(h, 64);
+    let complete = if to_u64(h.data.len()) < h.len {
+        lines.len().saturating_sub(1)
+    } else {
+        lines.len()
+    };
+    let early = lines.get(..complete).unwrap_or_default();
+    classic
+        || (early.first().is_some_and(|l| pdb_record(l))
+            && early.iter().all(|l| l.len() <= 80)
+            && early.iter().any(|l| pdb_atom_line(l)))
 }
 
 declare_format!(pub PDB_STRUCTURE = "pdb-structure", "Protein Data Bank structure", ["pdb", "ent"], "chemical/x-pdb",

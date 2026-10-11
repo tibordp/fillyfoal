@@ -307,6 +307,9 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `dbf/db3.dbf` | `dbf` 0.99.11 (Python, Ethan Furman) | same script, same date caveat: dBase III table (code page 0x01) with C, N, L and D fields, two records |
 | `segy/big.sgy` | segyio 1.9.13 (numpy 2.3.4) | reproduced byte-for-byte: `uv run --with segyio==1.9.13 --with numpy==2.3.4 python tests/data/segy/make_segyio.py OUTDIR`; big-endian SEG-Y, four traces of ten IEEE float32 samples, our own EBCDIC textual header |
 | `segy/little.sgy` | segyio 1.9.13 (numpy 2.3.4) | same script, byte for byte: the same data with `spec.endian = "little"` (segyio writes no byte-order constant) |
+| `bed/random.bed` | bedtools 2.30.0 (Debian bookworm) | reproduced byte-for-byte by `tests/data/bed/make_bedtools.sh` in `debian:bookworm-slim` (command in the script): `bedtools random -seed 42` piped to `bedtools sort`, six-column BED with no track line, on a two-chromosome genome of ours |
+| `bed/windows.bed` | bedtools 2.30.0 (Debian bookworm) | same script, byte for byte: `bedtools makewindows -w 1000`, three-column BED with no track line |
+| `pdb-structure/ethanol.pdb` | Open Babel 3.1.1 (Debian bookworm) | reproduced byte-for-byte by `tests/data/pdb-structure/make_obabel.sh` in `debian:bookworm-slim`: `obabel -ixyz -opdb` of our XYZ coordinates of ethanol; starts with COMPND and AUTHOR records (no HEADER), HETATM and CONECT records |
 
 ## Binary value encodings
 
