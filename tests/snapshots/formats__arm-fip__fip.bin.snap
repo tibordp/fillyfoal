@@ -2,12 +2,28 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ fip.bin — FIP, 1 images  [0x0+0x70]
+▾ fip.bin — FIP, 4 images  [0x0+0x1d0]
     Name: 0xaa640001  [0x0+0x4]
     Serial number: 305419896  [0x4+0x4]
     Flags: 0x0  [0x8+0x8]
-  ▾ BL31 (EL3 runtime firmware) — UTF-8 text, 1 line  [0x60+0x10] → 0x10+0x28
+  ▾ Trusted Boot Firmware BL2 — UTF-8 text, LF line endings, 1 line  [0xe0+0x33] → 0x10+0x28
       Encoding: "UTF-8"
-      Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-    ▾ Lines — 1 line  [0x60+0x10]
-        Line 1: "BL31 IMAGE DATA!"  [0x60+0x10]
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0xe0+0x33]
+        Line 1: "BL2 trusted boot firmware (fillyfoal test payload)"  [0xe0+0x32]
+  ▾ EL3 Runtime Firmware BL31 — UTF-8 text, LF line endings, 1 line  [0x120+0x33] → 0x38+0x28
+      Encoding: "UTF-8"
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x120+0x33]
+        Line 1: "BL31 EL3 runtime firmware (fillyfoal test payload)"  [0x120+0x32]
+  ▾ Secure Payload BL32 (Trusted OS) — UTF-8 text, LF line endings, 1 line  [0x160+0x2d] → 0x60+0x28
+      Encoding: "UTF-8"
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x160+0x2d]
+        Line 1: "BL32 secure payload (fillyfoal test payload)"  [0x160+0x2c]
+  ▾ Non-Trusted Firmware BL33 — UTF-8 text, LF line endings, 1 line  [0x190+0x33] → 0x88+0x28
+      Encoding: "UTF-8"
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x190+0x33]
+        Line 1: "BL33 non-trusted firmware (fillyfoal test payload)"  [0x190+0x32]
+    ToC end marker — data ends at 0x1d0  [0xb0+0x28]

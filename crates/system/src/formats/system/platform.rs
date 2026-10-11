@@ -5,7 +5,7 @@ use crate::bytes::{u16_be, u32_be, u32_le, u64_be};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
-use crate::error::Result;
+use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::val::text;
 use crate::formats::{Head, Input, Probe, embedded};
@@ -463,34 +463,133 @@ async fn cbfs(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub ARM_FIP = "arm-fip", "Arm Trusted Firmware image package (FIP)", ["fip", "bin"], "application/x-arm-fip",
     Probe::Magic(&[(0, b"\x01\x00\x64\xaa")]), arm_fip);
 
+/// ToC entry UUIDs in byte order, as fiptool (TF-A 2.12) writes them, with
+/// fiptool's names. Read back from a FIP made with every `fiptool create`
+/// image option (`tests/data/arm-fip/fip.sh`).
 const FIP_UUIDS: &[(&str, &str)] = &[
     (
-        "5ff9ec0b-4d22-3e4d-a544-c39d81c73f0a",
-        "BL2 (trusted boot firmware)",
+        "65922703-2f74-e644-8dff-579ac1ff0610",
+        "SCP Firmware Updater Configuration FWU SCP_BL2U",
     ),
-    ("9766fd3d-89be-e849-ae5d-78a140608213", "SCP firmware BL2"),
+    (
+        "60b3eb37-c1e5-ea41-9df3-19eda11f6801",
+        "AP Firmware Updater Configuration BL2U",
+    ),
+    (
+        "4f511d11-2be5-4e49-b4c5-83c2f715840a",
+        "Firmware Updater NS_BL2U",
+    ),
+    (
+        "71408ab2-18d6-874c-8b2e-c6dccd50f096",
+        "Non-Trusted Firmware Updater certificate",
+    ),
+    (
+        "5ff9ec0b-4d22-3e4d-a544-c39d81c73f0a",
+        "Trusted Boot Firmware BL2",
+    ),
+    (
+        "9766fd3d-89be-e849-ae5d-78a140608213",
+        "SCP Firmware SCP_BL2",
+    ),
     (
         "47d4086d-4cfe-9846-9b95-2950cbbd5a00",
-        "BL31 (EL3 runtime firmware)",
+        "EL3 Runtime Firmware BL31",
     ),
     (
         "05d0e189-53dc-1347-8d2b-500a4b7a3e38",
-        "BL32 (secure payload)",
+        "Secure Payload BL32 (Trusted OS)",
     ),
     (
-        "d6d0eea7-fcea-d54b-97829934f234b6e4",
-        "BL33 (non-trusted firmware)",
+        "0b70c29b-2a5a-7840-9f65-0a5682738288",
+        "Secure Payload BL32 Extra1 (Trusted OS Extra1)",
+    ),
+    (
+        "8ea87bb1-cfa2-3f4d-85fd-e7bba50220d9",
+        "Secure Payload BL32 Extra2 (Trusted OS Extra2)",
     ),
     (
         "d6d0eea7-fcea-d54b-9782-9934f234b6e4",
-        "BL33 (non-trusted firmware)",
+        "Non-Trusted Firmware BL33",
     ),
     (
-        "8ea87bb1-cfa2-3f4d-85fd-e04bba6bc40c",
-        "Trusted boot firmware certificate",
+        "6c0762a6-12f2-4b56-92cb-ba8f633606d9",
+        "Realm Monitor Management Firmware",
+    ),
+    ("5807e16a-8459-47be-8ed5-648e8dddab0e", "FW_CONFIG"),
+    ("08b8f1d9-c9cf-9349-a962-6fbc6b7265cc", "HW_CONFIG"),
+    ("6c0458ff-af6b-7d4f-82ed-aa27bc69bfd2", "TB_FW_CONFIG"),
+    ("9979814b-0376-fb46-8c8e-8d267f7859e0", "SOC_FW_CONFIG"),
+    ("26257c1a-dbc6-7f47-8d96-c4c4b0248021", "TOS_FW_CONFIG"),
+    ("28da9815-93e8-7e44-ac66-1aaf801550f9", "NT_FW_CONFIG"),
+    (
+        "862d1d72-f860-e411-920b-8be762160f24",
+        "Root Of Trust key certificate",
+    ),
+    (
+        "827ee890-f860-e411-a1b4-777a21b4f94c",
+        "Trusted key certificate",
+    ),
+    (
+        "024221a1-f860-e411-8d9b-f33c0e15a014",
+        "SCP Firmware key certificate",
+    ),
+    (
+        "8ab8becc-f960-e411-9ad0-eb4822d8dcf8",
+        "SoC Firmware key certificate",
+    ),
+    (
+        "9477d603-fb60-e411-85dd-b7105b8cee04",
+        "Trusted OS Firmware key certificate",
+    ),
+    (
+        "8ad5832a-fb60-e411-8aaf-df30bbc49859",
+        "Non-Trusted Firmware key certificate",
+    ),
+    (
+        "d6e269ea-5d63-e411-8d8c-9fbabe9956a5",
+        "Trusted Boot Firmware BL2 certificate",
+    ),
+    (
+        "44be6f04-5e63-e411-b28b-73d8eaae9656",
+        "SCP Firmware content certificate",
+    ),
+    (
+        "e2b20c20-5e63-e411-9ce8-abccf92bb666",
+        "SoC Firmware content certificate",
+    ),
+    (
+        "a49f4411-5e63-e411-8728-3f05722af33d",
+        "Trusted OS Firmware content certificate",
+    ),
+    (
+        "8ec4c1f3-5d63-e411-a7a9-87ee40b23fa7",
+        "Non-Trusted Firmware content certificate",
+    ),
+    (
+        "776dfd44-8697-4c3b-91eb-c13e025a2a6f",
+        "SiP owned Secure Partition content certificate",
+    ),
+    (
+        "ddcbbf4a-cad6-11ea-87d0-0242ac130003",
+        "Platform owned Secure Partition content certificate",
+    ),
+    (
+        "36d83d85-761d-4daf-96f1-cd99d6569b00",
+        "CCA Content Certificate",
+    ),
+    (
+        "52222d31-820f-494d-8bbc-ea6825d3c35a",
+        "Core Secure World Key Certificate",
+    ),
+    (
+        "d43cd902-5b9f-412e-8ac6-92b6d18be60d",
+        "Platform Key Certificate",
     ),
 ];
 
+/// The ToC: a 16-byte header, then 40-byte entries (UUID, offset, size,
+/// flags) up to a terminator whose UUID is all zeros (fiptool gives it the
+/// end-of-data offset and size 0).
 async fn arm_fip(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.block(file.sub(0, 16)).await?;
@@ -503,25 +602,41 @@ async fn arm_fip(cx: Cx, input: Input) -> Result<()> {
     let mut images = 0u32;
     while cur.remaining() >= 40 {
         let start = cur.pos();
-        let block = cx.block(cur.span(16)).await?;
-        let uuid = Fields::new(&block, LE).guid("UUID").get()?;
-        cur.skip(16);
+        let uuid = cur.bytes(16).await?;
         let offset = cur.u64().await?;
         let size = cur.u64().await?;
         let _flags = cur.u64().await?;
-        if offset == 0 && size == 0 {
-            break; // end marker
+        if uuid.iter().all(|&b| b == 0) {
+            cx.emit(
+                Node::new("ToC end marker")
+                    .span(cur.since(start))
+                    .summary(format!("data ends at {offset:#x}")),
+            );
+            break;
         }
-        images = images.saturating_add(1);
-        let id = uuid.to_string().trim_matches(['{', '}']).to_owned();
+        let entry = cur.since(start);
+        let id = crate::formats::util::fmt::uuid(&uuid);
         let name = FIP_UUIDS
             .iter()
             .find(|(u, _)| *u == id)
             .map_or_else(|| id.clone(), |(_, n)| (*n).to_owned());
+        if offset.checked_add(size).is_none_or(|end| end > file.len) {
+            cx.push(
+                Node::new(name)
+                    .span(entry)
+                    .summary(format!("{size} bytes at {offset:#x}"))
+                    .diag(
+                        Diagnostic::malformed("image extends past the end of the file").at(entry),
+                    ),
+            )
+            .await;
+            break;
+        }
+        images = images.saturating_add(1);
         cx.push(
             embedded(name, input.nested(file.sub(offset, size)))
                 .summary(format!("{size} bytes"))
-                .target(cur.since(start)),
+                .target(entry),
         )
         .await;
     }
