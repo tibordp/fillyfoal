@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ armeb.o — ELF 32-bit MSB relocatable, ARM, not stripped  [0x0+0x5cc]
   ▾ ELF Header — ET_REL (relocatable), ARM  [0x0+0x34]
@@ -99,7 +99,7 @@ expression: "common::explore(&name, &data)"
             r_info: 0xa03 — symbol 10, type R_ARM_REL32  [0x25c+0x4]
         ▾ type 0x60: 0x40 — external_counter  [0x260+0x8]
             r_offset: 0x40  [0x260+0x4]
-            r_info: 0xb60 — symbol 11, type  0x60  [0x264+0x4]
+            r_info: 0xb60 — symbol 11, type 0x60  [0x264+0x4]
         ▾ R_ARM_REL32: 0x44 — calls  [0x268+0x8]
             r_offset: 0x44  [0x268+0x4]
             r_info: 0x503 — symbol 5, type R_ARM_REL32  [0x26c+0x4]

@@ -249,20 +249,71 @@ struct RelCtx {
 #[derive(Clone, Copy, Debug)]
 struct Relocation {
     offset: u64,
-    sym: u64,
-    kind: u64,
+    info: Info,
     addend: Option<i64>,
 }
 
-fn split_info(elf: &Elf, info: u64) -> (u64, u64) {
+/// `r_info`, split.
+#[derive(Clone, Copy, Debug)]
+struct Info {
+    sym: u64,
+    kind: u64,
+    /// MIPS64 (`Elf64_Mips_Rel`): `r_type2`, `r_type3` and `r_ssym`.
+    mips: Option<[u8; 3]>,
+}
+
+/// MIPS64 `r_info` is not one word but the fields `r_sym` (u32), `r_ssym`,
+/// `r_type3`, `r_type2` and `r_type` (a byte each), each in the file's byte
+/// order (binutils `elf64-mips.c`, LLVM `Elf_Rel_Impl::getType` for
+/// `isMips64EL`, and `llvm-readelf`, which shows the three types).
+fn split_info(elf: &Elf, info: u64) -> Info {
+    let byte = |shift: u32| u8::try_from((info >> shift) & 0xff).unwrap_or(0);
     if !elf.class.wide {
-        (info >> 8, info & 0xff)
-    } else if elf.header.machine == EM_MIPS && elf.class.endian == crate::fields::Endian::Little {
-        // MIPS64 little-endian stores r_sym first, then four type bytes.
-        (info & 0xffff_ffff, info >> 56)
+        Info {
+            sym: info >> 8,
+            kind: info & 0xff,
+            mips: None,
+        }
+    } else if elf.header.machine == EM_MIPS {
+        if elf.class.endian == crate::fields::Endian::Little {
+            // Read as a little-endian word, r_sym is the low half.
+            Info {
+                sym: info & 0xffff_ffff,
+                kind: info >> 56,
+                mips: Some([byte(48), byte(40), byte(32)]),
+            }
+        } else {
+            Info {
+                sym: info >> 32,
+                kind: info & 0xff,
+                mips: Some([byte(8), byte(16), byte(24)]),
+            }
+        }
     } else {
-        (info >> 32, info & 0xffff_ffff)
+        Info {
+            sym: info >> 32,
+            kind: info & 0xffff_ffff,
+            mips: None,
+        }
     }
+}
+
+/// The relocation type's name; MIPS64's composed types as
+/// `type/type2/type3` (trailing `R_MIPS_NONE`s left out).
+fn type_label(elf: &Elf, info: &Info, prefix: &str) -> String {
+    let types = elf.relocation_types();
+    let mut out = name_or(types, info.kind, prefix);
+    if let Some([t2, t3, _]) = info.mips {
+        if t2 != 0 || t3 != 0 {
+            out.push('/');
+            out.push_str(&name_or(types, t2.into(), prefix));
+        }
+        if t3 != 0 {
+            out.push('/');
+            out.push_str(&name_or(types, t3.into(), prefix));
+        }
+    }
+    out
 }
 
 fn relocation(f: &mut Fields<'_>, c: &RelCtx) -> Result<Relocation> {
@@ -277,11 +328,18 @@ fn relocation(f: &mut Fields<'_>, c: &RelCtx) -> Result<Relocation> {
         .uword("r_info", wide)
         .hex()
         .with(|&v, n| {
-            let (sym, kind) = split_info(elf, v);
-            n.summary(format!(
-                "symbol {sym}, type {}",
-                name_or(elf.relocation_types(), kind, "")
-            ))
+            let info = split_info(elf, v);
+            let mut summary = format!(
+                "symbol {}, type {}",
+                info.sym,
+                type_label(elf, &info, "").trim_start()
+            );
+            if let Some([_, _, ssym]) = info.mips
+                && ssym != 0
+            {
+                summary.push_str(&format!(", special symbol {ssym}"));
+            }
+            n.summary(summary)
         })
         .desc("Symbol index and relocation type")
         .emit()?;
@@ -294,11 +352,9 @@ fn relocation(f: &mut Fields<'_>, c: &RelCtx) -> Result<Relocation> {
     } else {
         None
     };
-    let (sym, kind) = split_info(elf, info);
     Ok(Relocation {
         offset,
-        sym,
-        kind,
+        info: split_info(elf, info),
         addend,
     })
 }
@@ -331,13 +387,13 @@ async fn relocations(cx: Cx, (elf, index): (Elf, u32)) -> Result<()> {
         let r = parse(&cx, span, elf.endian(), &ctx, relocation).await?;
         let mut target = String::new();
         let mut node_diag = None;
-        if r.sym != 0
+        if r.info.sym != 0
             && let Some(symtab) = symtab
         {
             let st = table(&elf, symtab, elf.class.sym_size());
             let at = st
                 .span
-                .sub(r.sym.saturating_mul(st.entsize), elf.class.sym_size());
+                .sub(r.info.sym.saturating_mul(st.entsize), elf.class.sym_size());
             match parse(&cx, at, elf.endian(), &elf, symbol).await {
                 Ok(sym) => match symbol_name(&cx, &elf, &sym, strtab).await {
                     Ok(name) => target = name,
@@ -351,7 +407,7 @@ async fn relocations(cx: Cx, (elf, index): (Elf, u32)) -> Result<()> {
             Some(a) => format!(" + {a:#x}"),
             None => String::new(),
         };
-        let label = name_or(elf.relocation_types(), r.kind, "type");
+        let label = type_label(&elf, &r.info, "type");
         let mut node = struct_node(label, span, elf.endian(), ctx.clone(), relocation)
             .value(hex(r.offset, elf.class.bits()))
             .maybe_summary(if target.is_empty() && r.addend.is_none() {

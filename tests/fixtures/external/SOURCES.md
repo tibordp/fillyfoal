@@ -169,6 +169,8 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `elf/armeb.o` | Apple clang 21.0.0 | `.comment`; big-endian ARM target |
 | `elf/i386-static` | Homebrew clang + LLD 20.1.8 | `.comment` names both; the Go build-id and SystemTap notes come from inline assembly in the source |
 | `elf/ppc64.o` | Homebrew clang 20.1.8 | `.comment` |
+| `elf/mips64.o` | Debian clang 19.1.7 (Docker, Debian trixie `clang llvm` packages) | reproduced byte-for-byte by `sh tests/data/elf/make-mips64.sh` from `tests/data/elf/obj.c` (`clang --target=mips64-linux-gnuabi64 -O2 -fPIC -fno-ident -c`, no debug info); big-endian N64 relocations composing three types per `r_info`, checked against `llvm-readelf -r` |
+| `elf/mips64el.o` | Debian clang 19.1.7 (Docker, Debian trixie `clang llvm` packages) | same script, `--target=mips64el-linux-gnuabi64`: the little-endian layout of the same relocations, checked against `llvm-readelf -r` |
 | `elf/x86_64-pie` | Homebrew clang + LLD 20.1.8 | `.comment` names both |
 | `macho/hello-arm64.o` | clang (Apple) | LLVM integrated-assembler output (`ltmp` symbols, `__compact_unwind`) |
 | `macho/hello-x86_64` | clang + ld64 + codesign (Apple) | linked executable with stubs, dyld info and an entitlements code signature |
