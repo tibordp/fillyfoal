@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="sampleColor" format="color|reference" />
+    <attr name="mode">
+        <enum name="fast" value="1" />
+        <enum name="slow" value="2" />
+    </attr>
+</resources>
