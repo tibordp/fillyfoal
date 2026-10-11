@@ -32,10 +32,38 @@ fn petscii(bytes: &[u8]) -> String {
 // ---------------------------------------------------------------------------
 // Commodore 1541 disk image (D64)
 
-const D64_SIZES: [u64; 4] = [174_848, 175_531, 196_608, 197_376];
+/// 35, 40 and 42 tracks, each without and with the error-info block (one
+/// byte per sector) appended.
+const D64_SIZES: [(u64, u64); 6] = [
+    (174_848, 0),
+    (175_531, 683),
+    (196_608, 0),
+    (197_376, 768),
+    (205_312, 0),
+    (206_114, 802),
+];
 
+/// Only the size identifies a D64 (the BAM at track 18 is beyond the
+/// probe's view; `d64` checks it), so this runs after everything with
+/// magic, leaves textual files to the text formats, and requires the
+/// error-info block, when present, to hold small error codes.
 fn d64_probe(h: &Head<'_>) -> bool {
-    D64_SIZES.contains(&h.len)
+    let Some(&(_, errors)) = D64_SIZES.iter().find(|(len, _)| *len == h.len) else {
+        return false;
+    };
+    if crate::text::looks_like_text(h.data.get(..4096).unwrap_or(h.data)) {
+        return false;
+    }
+    let errors = crate::bytes::to_usize(errors);
+    match h
+        .tail
+        .len()
+        .checked_sub(errors)
+        .and_then(|at| h.tail.get(at..))
+    {
+        Some(block) if !h.tail.is_empty() => block.iter().all(|&b| b < 0x20),
+        _ => true,
+    }
 }
 
 declare_format!(pub D64 = "d64", "Commodore 1541 disk image", ["d64"],
@@ -43,7 +71,7 @@ declare_format!(pub D64 = "d64", "Commodore 1541 disk image", ["d64"],
 
 /// Byte offset of a track/sector on a 1541 disk.
 fn d64_offset(track: u8, sector: u8) -> Option<u64> {
-    if track == 0 || track > 40 {
+    if track == 0 || track > 42 {
         return None;
     }
     let sectors = |t: u8| -> u64 {
@@ -68,10 +96,27 @@ async fn d64(cx: Cx, input: Input) -> Result<()> {
     let bam_at = d64_offset(18, 0).unwrap_or(0);
     let bam = file.sub(bam_at, 256);
     let data = cx.read(bam).await?;
+    // The BAM links to the first directory sector (track 18) and carries
+    // DOS version 'A' and DOS type "2A". Copy-protected disks may alter one
+    // of them; a file with none of them is not a 1541 disk.
+    let links_to_18 = data.first() == Some(&18);
+    let version_a = data.get(2) == Some(&0x41);
+    let type_2a = data.get(0xa5..0xa7) == Some(b"2A");
+    if [links_to_18, version_a, type_2a]
+        .iter()
+        .filter(|&&b| b)
+        .count()
+        < 2
+    {
+        return Err(Diagnostic::malformed(
+            "no 1541 BAM at track 18 sector 0 (directory link, DOS version and type)",
+        )
+        .at(bam));
+    }
     let name = petscii(data.get(0x90..0xa0).unwrap_or_default());
     let id = petscii(data.get(0xa2..0xa4).unwrap_or_default());
     let mut node = Node::new("BAM and disk header").span(bam);
-    if data.get(2) != Some(&0x41) {
+    if !version_a {
         node = node.diag(Diagnostic::warning("DOS version byte is not 'A'"));
     }
     cx.emit(node);
