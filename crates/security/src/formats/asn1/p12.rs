@@ -10,11 +10,13 @@ use crate::formats::{Input, embedded, embedded_as};
 use crate::node::Node;
 use crate::secret::{MAX_ATTEMPTS, SecretRequest};
 use crate::span::{Origin, Span};
+use std::borrow::Cow;
 
 const DATA: &str = "1.2.840.113549.1.7.1";
 const ENCRYPTED_DATA: &str = "1.2.840.113549.1.7.6";
 
-/// A DER element: its header and where its content lies in `data`.
+/// A BER element: its header and where its content lies in `data` (for
+/// the indefinite form, the content before the end-of-contents octets).
 #[derive(Clone, Copy)]
 struct El<'a> {
     tlv: Tlv,
@@ -24,7 +26,8 @@ struct El<'a> {
 
 /// The elements of a buffer, read one at a time (so taking the first few
 /// of a long list costs nothing for the rest). Offsets are relative to
-/// `base`.
+/// `base`. Indefinite lengths (NSS writes them throughout) are resolved by
+/// walking to the matching end-of-contents.
 struct Children<'a> {
     data: &'a [u8],
     pos: usize,
@@ -47,16 +50,60 @@ impl<'a> Children<'a> {
     fn element(&mut self) -> Option<El<'a>> {
         let rest = self.data.get(self.pos..).filter(|r| !r.is_empty())?;
         let tlv = der::header(rest)?;
-        let len = tlv.len.map(to_usize)?;
-        let at = self.pos.saturating_add(to_usize(tlv.header));
+        if tlv.id == 0 {
+            return None; // end-of-contents
+        }
+        let header = to_usize(tlv.header);
+        let (len, eoc) = match tlv.len {
+            Some(len) => (to_usize(len), 0),
+            None => (indefinite_len(rest.get(header..)?)?, 2),
+        };
+        let at = self.pos.saturating_add(header);
         let content = self.data.get(at..at.saturating_add(len))?;
-        self.pos = at.saturating_add(len);
+        self.pos = at.saturating_add(len).saturating_add(eoc);
         Some(El {
             tlv,
             at: self.base.saturating_add(at),
             content,
         })
     }
+}
+
+/// Element headers walked to find where an indefinite-length content
+/// ends. Real stores have a handful of nested indefinite levels; the cap
+/// keeps a crafted one from making one step walk without bound.
+const MAX_WALK: usize = 1 << 16;
+/// Deepest nesting of indefinite lengths followed.
+const MAX_INDEFINITE_DEPTH: u32 = 32;
+
+/// Length of an indefinite-length content (starting at `data`), up to its
+/// end-of-contents octets.
+fn indefinite_len(data: &[u8]) -> Option<usize> {
+    let mut pos = 0usize;
+    let mut depth = 0u32;
+    for _ in 0..MAX_WALK {
+        let rest = data.get(pos..)?;
+        if rest.starts_with(&[0, 0]) {
+            if depth == 0 {
+                return Some(pos);
+            }
+            depth = depth.saturating_sub(1);
+            pos = pos.saturating_add(2);
+            continue;
+        }
+        let tlv = der::header(rest)?;
+        pos = pos.saturating_add(to_usize(tlv.header));
+        match tlv.len {
+            Some(len) => pos = pos.checked_add(to_usize(len))?,
+            None => {
+                depth = depth.saturating_add(1);
+                if depth > MAX_INDEFINITE_DEPTH {
+                    return None;
+                }
+            }
+        }
+    }
+    None
 }
 
 /// The elements of `data` (relative offsets of their contents).
@@ -91,11 +138,87 @@ fn content_info<'a>(el: &El<'a>) -> Option<(String, El<'a>)> {
     Some((kind, inner))
 }
 
-/// An encrypted part: algorithm content and ciphertext, with its offset.
+/// The value of an OCTET STRING (or an implicitly tagged one): its bytes,
+/// and the source and offset they lie at. A constructed (BER) string's
+/// segments are joined into a derived source.
+struct Octets<'a> {
+    base: Span,
+    data: Cow<'a, [u8]>,
+    at: usize,
+}
+
+impl Octets<'_> {
+    fn children(&self) -> Children<'_> {
+        Children {
+            data: &self.data,
+            pos: 0,
+            base: self.at,
+        }
+    }
+
+    fn span(&self) -> Span {
+        self.base.sub(to_u64(self.at), to_u64(self.data.len()))
+    }
+}
+
+/// Deepest nesting of constructed string segments followed.
+const MAX_SEGMENT_DEPTH: usize = 8;
+
+/// `el`'s value as an OCTET STRING, `el` lying in `base`; `None` if a
+/// constructed string holds anything but OCTET STRING segments.
+async fn octets<'a>(cx: &Cx, base: Span, el: &El<'a>) -> Result<Option<Octets<'a>>> {
+    if !el.tlv.constructed {
+        return Ok(Some(Octets {
+            base,
+            data: Cow::Borrowed(el.content),
+            at: el.at,
+        }));
+    }
+    let mut joined = Vec::new();
+    let mut stack = vec![sub_el(el)];
+    let mut steps = 0u32;
+    while let Some(top) = stack.last_mut() {
+        let Some(seg) = top.next() else {
+            stack.pop();
+            continue;
+        };
+        steps = steps.wrapping_add(1);
+        if steps.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+        if !seg.tlv.is_universal(der::OCTET_STRING) {
+            return Ok(None);
+        }
+        if seg.tlv.constructed {
+            if stack.len() >= MAX_SEGMENT_DEPTH {
+                return Ok(None);
+            }
+            stack.push(sub_el(&seg));
+        } else {
+            joined.extend_from_slice(seg.content);
+        }
+    }
+    let span = base.sub(to_u64(el.at), to_u64(el.content.len()));
+    let decoded = cx.add_derived(
+        Origin {
+            parent: span,
+            transform: "ber-octets",
+        },
+        joined.clone(),
+        span.len,
+        None,
+    )?;
+    Ok(Some(Octets {
+        base: decoded.span,
+        data: Cow::Owned(joined),
+        at: 0,
+    }))
+}
+
+/// An encrypted part: algorithm content and the encryptedContent element.
 struct Encrypted<'a> {
     alg: &'a [u8],
-    data: &'a [u8],
-    at: usize,
+    body: El<'a>,
 }
 
 /// EncryptedData's EncryptedContentInfo.
@@ -103,14 +226,12 @@ fn encrypted_data<'a>(el: &El<'a>) -> Option<Encrypted<'a>> {
     let info = sub_el(el).nth(1)?;
     let parts: Vec<El<'_>> = sub_el(&info).take(3).collect();
     let alg = parts.get(1)?;
-    let body = parts.get(2)?;
-    if body.tlv.class != 2 || body.tlv.constructed {
-        return None; // constructed (BER) encryptedContent is not handled
-    }
+    let body = parts
+        .get(2)
+        .filter(|b| b.tlv.class == 2 && b.tlv.tag == 0)?;
     Some(Encrypted {
         alg: alg.content,
-        data: body.content,
-        at: body.at,
+        body: *body,
     })
 }
 
@@ -179,30 +300,33 @@ async fn contents(cx: Cx, input: Input) -> Result<()> {
     let auth = fields
         .get(1)
         .ok_or_else(|| Diagnostic::malformed("PFX without authSafe").at(file))?;
-    let (kind, octets) =
+    let (kind, octets_el) =
         content_info(auth).ok_or_else(|| Diagnostic::malformed("malformed authSafe").at(file))?;
     if kind != DATA {
         return Err(
             Diagnostic::unsupported("public-key integrity mode (signed authSafe)").at(file),
         );
     }
+    // The MAC covers the authSafe's octets, joined if BER-segmented.
+    let auth_octets = octets(&cx, file, &octets_el)
+        .await?
+        .ok_or_else(|| Diagnostic::malformed("malformed authSafe").at(file))?;
     let mac = fields.get(2).map(|m| m.content);
-    let safe_list = children(octets.content).next().map(|seq| El {
-        at: octets.at.saturating_add(seq.at),
-        ..seq
-    });
+    let safe_list = auth_octets.children().next();
     let safes = || safe_list.as_ref().map(sub_el).into_iter().flatten();
+    let auth_base = auth_octets.base;
 
     // The first encrypted thing, for checking passwords without a MAC.
-    let mut probe: Option<Encrypted<'_>> = None;
+    let mut probe: Option<(&[u8], Octets<'_>)> = None;
     if mac.is_none() {
         for ci in safes() {
             cx.checkpoint().await;
             if let Some((kind, inner)) = content_info(&ci)
                 && kind == ENCRYPTED_DATA
                 && let Some(e) = encrypted_data(&inner)
+                && let Some(data) = octets(&cx, auth_base, &e.body).await?
             {
-                probe = Some(e);
+                probe = Some((e.alg, data));
                 break;
             }
         }
@@ -210,11 +334,11 @@ async fn contents(cx: Cx, input: Input) -> Result<()> {
     let check = match (mac, &probe) {
         (Some(mac), _) => Check::Mac {
             mac,
-            data: octets.content,
+            data: &auth_octets.data,
         },
-        (None, Some(e)) => Check::Decrypt {
-            alg: e.alg,
-            data: e.data,
+        (None, Some((alg, data))) => Check::Decrypt {
+            alg,
+            data: &data.data,
         },
         (None, None) => Check::Nothing,
     };
@@ -232,19 +356,20 @@ async fn contents(cx: Cx, input: Input) -> Result<()> {
             continue;
         };
         if kind == DATA {
-            let seq = children(inner.content).next();
-            if let Some(seq) = seq {
-                let seq = El {
-                    at: inner.at.saturating_add(seq.at),
-                    ..seq
-                };
-                bags(&cx, input, file, sub_el(&seq), pw).await?;
+            let Some(safe) = octets(&cx, auth_base, &inner).await? else {
+                continue;
+            };
+            if let Some(seq) = safe.children().next() {
+                bags(&cx, input, safe.base, sub_el(&seq), pw, 0).await?;
             }
         } else if kind == ENCRYPTED_DATA {
             let Some(enc) = encrypted_data(&inner) else {
                 continue;
             };
-            let span = file.sub(to_u64(enc.at), to_u64(enc.data.len()));
+            let Some(data) = octets(&cx, auth_base, &enc.body).await? else {
+                continue;
+            };
+            let span = data.span();
             let label = format!("Encrypted safe ({})", pbe::describe(enc.alg));
             let Some(p) = pw else {
                 cx.emit(Node::new(label).span(span).diag(Diagnostic::unsupported(
@@ -252,7 +377,7 @@ async fn contents(cx: Cx, input: Input) -> Result<()> {
                 )));
                 continue;
             };
-            match pbe::decrypt(&cx, enc.alg, p, enc.data).await {
+            match pbe::decrypt(&cx, enc.alg, p, &data.data).await {
                 Ok(plain) => {
                     let decoded = cx.add_derived(
                         Origin {
@@ -265,7 +390,7 @@ async fn contents(cx: Cx, input: Input) -> Result<()> {
                     )?;
                     let data = crate::codec::read_all(&cx, decoded.span).await?;
                     if let Some(seq) = children(&data).next() {
-                        bags(&cx, input, decoded.span, sub_el(&seq), pw).await?;
+                        bags(&cx, input, decoded.span, sub_el(&seq), pw, 0).await?;
                     }
                 }
                 Err(Failure::Unsupported(why)) => cx.emit(
@@ -282,7 +407,7 @@ async fn contents(cx: Cx, input: Input) -> Result<()> {
         } else {
             cx.emit(
                 Node::new(format!("Content {kind}"))
-                    .span(file.sub(to_u64(ci.at), to_u64(ci.content.len()))),
+                    .span(auth_base.sub(to_u64(ci.at), to_u64(ci.content.len()))),
             );
         }
     }
@@ -350,13 +475,19 @@ async fn utf16_be_paced(cx: &Cx, data: &[u8]) -> String {
     out
 }
 
-/// Lists SafeBags (whose contents lie in `base`).
+/// Deepest nesting of safeContentsBags followed. Real stores do not nest
+/// them at all; the cap keeps a crafted chain from exhausting the stack.
+const MAX_BAG_DEPTH: u32 = 8;
+
+/// Lists SafeBags (whose contents lie in `base`), `depth` safeContentsBags
+/// deep.
 async fn bags(
     cx: &Cx,
     input: Input,
     base: Span,
     list: Children<'_>,
     pw: Option<Password<'_>>,
+    depth: u32,
 ) -> Result<()> {
     for bag in list {
         cx.checkpoint().await;
@@ -374,18 +505,23 @@ async fn bags(
         };
         let whole = base.sub(
             to_u64(value.at.saturating_sub(to_usize(value.tlv.header))),
-            to_u64(value.content.len()).saturating_add(value.tlv.header),
+            to_u64(value.content.len())
+                .saturating_add(value.tlv.header)
+                .saturating_add(if value.tlv.len.is_none() { 2 } else { 0 }),
         );
         match kind.as_str() {
             "1.2.840.113549.1.12.10.1.3" => {
                 // CertBag: certId, [0] { OCTET STRING cert }.
                 let inner: Vec<El<'_>> = sub_el(&value).take(2).collect();
-                let cert = inner.get(1).and_then(|e| sub_el(e).next());
+                let cert = match inner.get(1).and_then(|e| sub_el(e).next()) {
+                    Some(el) => octets(cx, base, &el).await?,
+                    None => None,
+                };
                 match cert {
                     Some(cert) => {
                         cx.push(embedded_as(
                             titled("Certificate"),
-                            input.nested(base.sub(to_u64(cert.at), to_u64(cert.content.len()))),
+                            input.nested(cert.span()),
                             &super::X509,
                         ))
                         .await
@@ -403,10 +539,13 @@ async fn bags(
                 let (Some(alg), Some(data)) = (inner.first(), inner.get(1)) else {
                     continue;
                 };
-                let span = base.sub(to_u64(data.at), to_u64(data.content.len()));
+                let Some(data) = octets(cx, base, data).await? else {
+                    continue;
+                };
+                let span = data.span();
                 let label = titled("Private key");
                 let decrypted = match pw {
-                    Some(p) => Some(pbe::decrypt(cx, alg.content, p, data.content).await),
+                    Some(p) => Some(pbe::decrypt(cx, alg.content, p, &data.data).await),
                     None => None,
                 };
                 match decrypted {
@@ -451,8 +590,17 @@ async fn bags(
                 }
             }
             "1.2.840.113549.1.12.10.1.6" => {
+                if depth >= MAX_BAG_DEPTH {
+                    cx.push(Node::new(titled("Safe contents")).span(whole).diag(
+                        Diagnostic::limit(format!(
+                            "safe contents nested deeper than {MAX_BAG_DEPTH}"
+                        )),
+                    ))
+                    .await;
+                    continue;
+                }
                 let nested = sub_el(&value);
-                bags_boxed(cx, input, base, nested, pw).await?;
+                bags_boxed(cx, input, base, nested, pw, depth.saturating_add(1)).await?;
             }
             other => {
                 let what = match other {
@@ -475,8 +623,9 @@ fn bags_boxed<'a>(
     base: Span,
     list: Children<'a>,
     pw: Option<Password<'a>>,
+    depth: u32,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
-    Box::pin(bags(cx, input, base, list, pw))
+    Box::pin(bags(cx, input, base, list, pw, depth))
 }
 
 /// The "Decrypted key" node of a standalone EncryptedPrivateKeyInfo.

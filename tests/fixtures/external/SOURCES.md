@@ -360,6 +360,11 @@ and reproduce every file byte for byte.
 | `dsa-private-key/` | OpenSSL 3.6.3 (`openssl dsa -outform DER`) | the same script: DSA private key (OpenSSL's traditional encoding) |
 | `der/generic.der` | OpenSSL 3.6.3 (`openssl asn1parse -genconf`) | the same script: one SEQUENCE of assorted universal types (BOOLEAN, INTEGERs, NULL, OID, strings, times, BIT/OCTET STRING, ENUMERATED, SET, implicit and explicit tags) |
 | `pem/chain.pem` | OpenSSL 3 (openssl CLI) | leaf + CA chain; `openssl verify` accepts it |
+| `pkcs12/large-plain.p12` | OpenSSL 3.6.3 (`openssl pkcs12 -export -keypbe NONE -certpbe NONE -nomac`) | `sh tests/data/pkcs12/make-large.sh`: a password-less store larger than the probe window, its size from a certificate with a 40,000-byte private extension (1.3.6.1.4.1.55555.9); checked against `openssl pkcs12 -info` |
+| `pkcs12/nss-pk12util.p12` | NSS 3.105 `pk12util -o` (Alpine 3.20 nss-tools) | `sh tests/data/pkcs12/make-nss.sh` (Docker, fresh NSS database): an EC P-256 key and certificate made by the host's openssl, imported and exported again; BER throughout (indefinite lengths, segmented OCTET STRINGs), PBES2 with 600,000 iterations, SHA-256 MAC; password `fillyfoal`; checked against `openssl pkcs12 -info` |
+| `crl/large.crl` | OpenSSL 3.6.3 (`openssl ca -gencrl`) | `sh tests/data/crl/make-large.sh`: 1000 revoked 20-byte serials from a CA database written by the script (about 39 KB, more than the probe window); checked against `openssl crl -text` |
+| `pkcs7/signed-stream.p7m` | OpenSSL 3.6.3 (`openssl cms -sign -stream -outform DER`) | `sh tests/data/pkcs7/make-stream.sh`: BER-streamed SignedData (indefinite lengths, segmented eContent), content attached, no certificates; checked against `openssl asn1parse` |
+| `pkcs7/enveloped-stream.p7m` | OpenSSL 3.6.3 (`openssl cms -encrypt -stream -outform DER`) | the same script: BER-streamed EnvelopedData, AES-256-CBC, RSA key-transport recipient |
 
 ## Keyrings, Kerberos and age (Docker)
 

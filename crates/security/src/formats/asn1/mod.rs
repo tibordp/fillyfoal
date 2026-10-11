@@ -329,15 +329,34 @@ fn outer<'a>(h: &Head<'a>) -> Option<&'a [u8]> {
     h.data.get(to_usize(tlv.header)..)
 }
 
+/// Like [`outer`], but also accepting a (BER) indefinite-length outer
+/// SEQUENCE, as streaming writers (`openssl cms -stream`, NSS) produce.
+fn outer_ber<'a>(h: &Head<'a>) -> Option<&'a [u8]> {
+    if let Some(outer) = outer(h) {
+        return Some(outer);
+    }
+    let tlv = der::header(h.data)?;
+    if tlv.id != 0x30 || tlv.len.is_some() {
+        return None;
+    }
+    h.data.get(to_usize(tlv.header)..)
+}
+
+/// Identifier octets of the first elements of `data` whose headers are
+/// visible (the last may be cut off by the probe window).
 fn ids(data: &[u8]) -> Vec<u8> {
-    der::elements(data).map(|(t, _)| t.id).take(12).collect()
+    der::partial_elements(data)
+        .map(|(t, _, _)| t.id)
+        .take(12)
+        .collect()
 }
 
 /// The children of the first element of the outer SEQUENCE, if it is a
-/// SEQUENCE (a TBS structure).
+/// SEQUENCE (a TBS structure). Only headers are needed: a CRL with many
+/// entries or a certificate with large extensions extends past the window.
 fn tbs_ids(h: &Head<'_>) -> Option<Vec<u8>> {
     let outer = outer(h)?;
-    let (tlv, tbs) = der::first(outer)?;
+    let (tlv, tbs, _) = der::first_partial(outer)?;
     (tlv.id == 0x30).then(|| ids(tbs))
 }
 
@@ -364,16 +383,7 @@ fn probe_csr(h: &Head<'_>) -> bool {
 /// The content of a ContentInfo, definite or (BER) indefinite length, and
 /// its content type: the start of a PKCS#7 / CMS message.
 fn content_info<'a>(h: &Head<'a>) -> Option<(String, &'a [u8])> {
-    let outer = match outer(h) {
-        Some(outer) => outer,
-        None => {
-            let tlv = der::header(h.data)?;
-            if tlv.id != 0x30 || tlv.len.is_some() {
-                return None;
-            }
-            h.data.get(to_usize(tlv.header)..)?
-        }
-    };
+    let outer = outer_ber(h)?;
     let (t, oid) = der::first(outer)?;
     // The content may extend beyond the probe window: check its header only.
     let rest = outer.get(first_len(outer)..).unwrap_or_default();
@@ -410,19 +420,25 @@ fn first_len(data: &[u8]) -> usize {
         .map_or(0, to_usize)
 }
 
+/// PFX: SEQUENCE { INTEGER 3, ContentInfo authSafe, MacData OPTIONAL }.
+/// The authSafe usually extends beyond the probe window (a store with many
+/// certificates), so only its header and content type are checked.
 fn probe_pkcs12(h: &Head<'_>) -> bool {
-    let Some(outer) = outer(h) else {
+    let Some(outer) = outer_ber(h) else {
         return false;
     };
-    let mut kids = der::elements(outer);
-    let version = kids
-        .next()
-        .is_some_and(|(t, v)| t.id == 0x02 && der::integer(v) == Some(3));
-    let auth_safe = kids.next().is_some_and(|(t, c)| {
+    let version =
+        der::first(outer).is_some_and(|(t, v)| t.id == 0x02 && der::integer(v) == Some(3));
+    let rest = outer.get(first_len(outer)..).unwrap_or_default();
+    let auth_safe = der::header(rest).is_some_and(|t| {
         t.id == 0x30
-            && der::first(c).is_some_and(|(t, oid)| {
-                t.id == 0x06 && der::oid(oid).is_some_and(|o| o.starts_with("1.2.840.113549.1.7."))
-            })
+            && rest
+                .get(to_usize(t.header)..)
+                .and_then(der::first)
+                .is_some_and(|(t, oid)| {
+                    t.id == 0x06
+                        && der::oid(oid).is_some_and(|o| o.starts_with("1.2.840.113549.1.7."))
+                })
     });
     version && auth_safe
 }
