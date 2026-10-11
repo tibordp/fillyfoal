@@ -274,6 +274,7 @@ pub const SHT_FINI_ARRAY: u32 = 15;
 pub const SHT_PREINIT_ARRAY: u32 = 16;
 pub const SHT_GROUP: u32 = 17;
 pub const SHT_RELR: u32 = 19;
+pub const SHT_GNU_HASH: u32 = 0x6fff_fff6;
 pub const SHT_GNU_VERDEF: u32 = 0x6fff_fffd;
 pub const SHT_GNU_VERNEED: u32 = 0x6fff_fffe;
 pub const SHT_GNU_VERSYM: u32 = 0x6fff_ffff;

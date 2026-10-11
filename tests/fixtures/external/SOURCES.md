@@ -175,6 +175,7 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `elf/mips64.o` | Debian clang 19.1.7 (Docker, Debian trixie `clang llvm` packages) | reproduced byte-for-byte by `sh tests/data/elf/make-mips64.sh` from `tests/data/elf/obj.c` (`clang --target=mips64-linux-gnuabi64 -O2 -fPIC -fno-ident -c`, no debug info); big-endian N64 relocations composing three types per `r_info`, checked against `llvm-readelf -r` |
 | `elf/mips64el.o` | Debian clang 19.1.7 (Docker, Debian trixie `clang llvm` packages) | same script, `--target=mips64el-linux-gnuabi64`: the little-endian layout of the same relocations, checked against `llvm-readelf -r` |
 | `elf/x86_64-pie` | Homebrew clang + LLD 20.1.8 | `.comment` names both |
+| `elf/x86_64-relr.so` | Debian clang 19.1.7 + LLD (Docker, Debian trixie `clang lld llvm` packages) | reproduced byte-for-byte by `sh tests/data/elf/make-relr.sh` from `tests/data/elf/relr.c` (`-shared -nostdlib -fuse-ld=lld -z pack-relative-relocs --hash-style=both`, no `.comment`): `.relr.dyn` with an address entry and two bitmaps, `.hash` and `.gnu.hash`, `.eh_frame` and `.eh_frame_hdr`; checked against `llvm-readelf -r` and `llvm-dwarfdump --eh-frame` |
 | `macho/hello-arm64.o` | clang (Apple) | LLVM integrated-assembler output (`ltmp` symbols, `__compact_unwind`) |
 | `macho/hello-x86_64` | clang + ld64 + codesign (Apple) | linked executable with stubs, dyld info and an entitlements code signature |
 | `macho-fat/libfilly-fat.dylib` | clang + lipo (Apple) | two linked dylib slices |

@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ i386-static — ELF 32-bit LSB executable, Intel 80386, statically linked, BuildID[md5/uuid]=02cfcc2e44cf69327d232991473a8fea, Go BuildID=fillyfoal/gobuild, stripped  [0x0+0x3d8]
   ▾ ELF Header — ET_EXEC (executable), Intel 80386  [0x0+0x34]
@@ -160,7 +160,15 @@ expression: "common::explore(&name, &data)"
         sh_info: 0  [0x304+0x4]
         sh_addralign: 0x4  [0x308+0x4]
         sh_entsize: 0x0  [0x30c+0x4]
-        Contents  [0x138+0x14]
+      ▾ Frame Index  [0x138+0x14]
+          version: 1  [0x138+0x1]
+          eh_frame_ptr_enc: 0x1b — DW_EH_PE_sdata4 | pcrel  [0x139+0x1]
+          fde_count_enc: 0x3 — DW_EH_PE_udata4  [0x13a+0x1]
+          table_enc: 0x3b — DW_EH_PE_sdata4 | datarel  [0x13b+0x1]
+          eh_frame_ptr: 0x1014c — 0x1014c (.eh_frame)  [0x13c+0x4] → 0x14c+0x0
+          fde_count: 1  [0x140+0x4]
+        ▾ Table — 1 entries  [0x144+0x8]
+            [0]: 0x10164 — 0x11184 (.text) → FDE  [0x144+0x8] → 0x164+0x0
     ▾ .eh_frame — PROGBITS, r--, 0x38 bytes at 0x1014c  [0x310+0x28]
         sh_name: 0x33 — ".eh_frame"  [0x310+0x4]
         sh_type: PROGBITS (0x1)  [0x314+0x4]
@@ -172,7 +180,26 @@ expression: "common::explore(&name, &data)"
         sh_info: 0  [0x32c+0x4]
         sh_addralign: 0x4  [0x330+0x4]
         sh_entsize: 0x0  [0x334+0x4]
-        Contents  [0x14c+0x38]
+      ▾ Call Frame Information  [0x14c+0x38]
+        ▾ CIE — version 1, augmentation "zR", data alignment -4  [0x14c+0x18]
+            length: 0x14  [0x14c+0x4]
+            CIE_id: 0x0  [0x150+0x4]
+            version: 1  [0x154+0x1]
+            augmentation: "zR"  [0x155+0x3]
+            code_alignment_factor: 1  [0x158+0x1]
+            data_alignment_factor: -4  [0x159+0x1]
+            return_address_register: 8  [0x15a+0x1]
+            augmentation_length: 1  [0x15b+0x1]
+            fde_encoding: 0x1b — DW_EH_PE_sdata4 | pcrel  [0x15c+0x1]
+            Call Frame Instructions — 7 bytes  [0x15d+0x7]
+        ▾ FDE — 0x11184 (.text)..0x11195  [0x164+0x1c]
+            length: 0x18  [0x164+0x4]
+            CIE_pointer: 0x1c — CIE at 0x0  [0x168+0x4] → 0x14c+0x0
+            pc_begin: 0x11184 — 0x11184 (.text)  [0x16c+0x4] → 0x184+0x0
+            pc_range: 0x11  [0x170+0x4]
+            augmentation_length: 0  [0x174+0x1]
+            Call Frame Instructions — 11 bytes  [0x175+0xb]
+          Terminator: 0x0  [0x180+0x4]
     ▾ .text — PROGBITS, r-x, 0x11 bytes at 0x11184  [0x338+0x28]
         sh_name: 0x3d — ".text"  [0x338+0x4]
         sh_type: PROGBITS (0x1)  [0x33c+0x4]
