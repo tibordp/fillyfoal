@@ -245,6 +245,57 @@ impl<'a> Scanner<'a> {
             next,
         }))
     }
+
+    /// The line starting at `pos` together with (at most `cap` bytes of)
+    /// its content, collected in the same pass as the search for its end,
+    /// so a line longer than the window is not read twice.
+    pub async fn line_with(&mut self, pos: u64, cap: usize) -> Result<Option<(Line, Vec<u8>)>> {
+        if self.byte(pos).await?.is_none() {
+            return Ok(None);
+        }
+        let mut content = Vec::new();
+        let mut at = pos;
+        let eol = loop {
+            if self.cached(at).is_none() && !self.load(at).await? {
+                break None;
+            }
+            let rel = to_usize(at.saturating_sub(self.start));
+            let rest = self.buf.get(rel..).unwrap_or_default();
+            let found = rest.iter().position(|&b| b == b'\n' || b == b'\r');
+            let take = found.unwrap_or(rest.len());
+            let room = cap.saturating_sub(content.len());
+            content.extend_from_slice(rest.get(..take.min(room)).unwrap_or_default());
+            if let Some(i) = found {
+                break Some(at.saturating_add(to_u64(i)));
+            }
+            let next = self.start.saturating_add(to_u64(self.buf.len()));
+            if next <= at {
+                break None;
+            }
+            at = next;
+        };
+        let Some(eol) = eol else {
+            let end = self.end.max(pos);
+            let line = Line {
+                start: pos,
+                end,
+                next: end,
+            };
+            return Ok(Some((line, content)));
+        };
+        let next = match self.byte(eol).await? {
+            Some(b'\r') if self.byte(eol.saturating_add(1)).await? == Some(b'\n') => {
+                eol.saturating_add(2)
+            }
+            _ => eol.saturating_add(1),
+        };
+        let line = Line {
+            start: pos,
+            end: eol,
+            next,
+        };
+        Ok(Some((line, content)))
+    }
 }
 
 /// Owned bytes together with the span they were read from.
@@ -296,8 +347,10 @@ impl LineBuf {
         to_u64(self.bytes.len()) < self.span.len
     }
 
+    /// Whether the line is empty or whitespace (as far as its content is
+    /// known: a line whose kept bytes are a cut-off prefix is not blank).
     pub fn is_blank(&self) -> bool {
-        self.bytes.iter().all(u8::is_ascii_whitespace)
+        !self.truncated() && self.bytes.iter().all(u8::is_ascii_whitespace)
     }
 
     pub fn text(&self) -> String {
@@ -310,6 +363,9 @@ pub struct Lines<'a> {
     scan: Scanner<'a>,
     pos: u64,
     number: u64,
+    /// The line [`Lines::peek`] read, handed out by the next
+    /// [`Lines::next`] instead of being read again.
+    peeked: Option<LineBuf>,
 }
 
 impl<'a> Lines<'a> {
@@ -318,6 +374,7 @@ impl<'a> Lines<'a> {
             scan: Scanner::new(cx, region),
             pos: 0,
             number: 0,
+            peeked: None,
         }
     }
 
@@ -356,9 +413,29 @@ impl<'a> Lines<'a> {
         self.scan.span(start, self.pos)
     }
 
+    /// Whether `line` is the one the walk would read next.
+    fn is_next(&self, line: &LineBuf) -> bool {
+        line.start == self.pos && line.number == self.number.saturating_add(1)
+    }
+
+    /// The line [`Lines::peek`] read at the current position, consumed.
+    fn take_peeked(&mut self) -> Option<LineBuf> {
+        let line = self.peeked.take().filter(|l| self.is_next(l))?;
+        self.pos = line.next.max(self.pos.saturating_add(1));
+        self.number = line.number;
+        Some(line)
+    }
+
     /// The next line, without its content (cheap for long lines).
     pub async fn next_bounds(&mut self) -> Result<Option<Line>> {
         self.scan.tick().await;
+        if let Some(l) = self.take_peeked() {
+            return Ok(Some(Line {
+                start: l.start,
+                end: l.start.saturating_add(l.span.len),
+                next: l.next,
+            }));
+        }
         let Some(line) = self.scan.line(self.pos).await? else {
             return Ok(None);
         };
@@ -369,10 +446,15 @@ impl<'a> Lines<'a> {
 
     /// The next line and (a prefix of) its content.
     pub async fn next(&mut self) -> Result<Option<LineBuf>> {
-        let Some(line) = self.next_bounds().await? else {
+        self.scan.tick().await;
+        if let Some(line) = self.take_peeked() {
+            return Ok(Some(line));
+        }
+        let Some((line, bytes)) = self.scan.line_with(self.pos, LINE_CAP).await? else {
             return Ok(None);
         };
-        let bytes = self.scan.bytes(line.start, line.end, LINE_CAP).await?;
+        self.pos = line.next.max(self.pos.saturating_add(1));
+        self.number = self.number.saturating_add(1);
         Ok(Some(LineBuf {
             number: self.number,
             bytes,
@@ -385,9 +467,13 @@ impl<'a> Lines<'a> {
 
     /// The next line without consuming it.
     pub async fn peek(&mut self) -> Result<Option<LineBuf>> {
+        if let Some(line) = self.peeked.as_ref().filter(|l| self.is_next(l)) {
+            return Ok(Some(line.clone()));
+        }
         let (pos, number) = (self.pos, self.number);
         let line = self.next().await?;
         self.seek(pos, number);
+        self.peeked.clone_from(&line);
         Ok(line)
     }
 }

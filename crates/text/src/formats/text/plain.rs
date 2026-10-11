@@ -232,23 +232,23 @@ pub async fn lines(cx: Cx, (span, encoding, first): (Span, Encoding, u64)) -> Re
         cx.set_count(Count::Exact(lines.number().saturating_sub(first)));
         return Ok(());
     }
-    // Wide encodings: find line breaks code unit by code unit.
+    // Wide encodings: find line breaks code unit by code unit, over the
+    // scanner's cached window (`Scanner::byte` charges the touches).
     let unit = encoding.unit();
     let mut scan = Scanner::new(&cx, span);
-    let mut pos = 0u64;
-    let mut number = first;
+    // Resume marks: (byte position, lines so far).
+    let (mut pos, mut number) = cx.resume::<(u64, u64)>().unwrap_or((0, first));
     while pos < scan.len() {
-        cx.checkpoint().await;
+        let at = (pos, number);
+        cx.mark(move || at);
         let start = pos;
         let (end, next) = loop {
-            let bytes = scan.bytes(pos, pos.saturating_add(unit), 4).await?;
-            match encoding.code_unit(&bytes) {
+            match wide_unit(&mut scan, encoding, pos).await? {
                 None => break (pos, scan.len()),
                 Some(0x0a) => break (pos, pos.saturating_add(unit)),
                 Some(0x0d) => {
                     let after = pos.saturating_add(unit);
-                    let more = scan.bytes(after, after.saturating_add(unit), 4).await?;
-                    let skip = if encoding.code_unit(&more) == Some(0x0a) {
+                    let skip = if wide_unit(&mut scan, encoding, after).await? == Some(0x0a) {
                         after.saturating_add(unit)
                     } else {
                         after
@@ -271,6 +271,19 @@ pub async fn lines(cx: Cx, (span, encoding, first): (Span, Encoding, u64)) -> Re
     }
     cx.set_count(Count::Exact(number.saturating_sub(first)));
     Ok(())
+}
+
+/// The code unit of a wide encoding at `pos`, or `None` past the end.
+async fn wide_unit(scan: &mut Scanner<'_>, encoding: Encoding, pos: u64) -> Result<Option<u32>> {
+    let mut bytes = [0u8; 4];
+    let unit = to_usize(encoding.unit()).min(bytes.len());
+    for (i, slot) in bytes.iter_mut().take(unit).enumerate() {
+        match scan.byte(pos.saturating_add(to_u64(i))).await? {
+            Some(b) => *slot = b,
+            None => return Ok(None),
+        }
+    }
+    Ok(encoding.code_unit(bytes.get(..unit).unwrap_or_default()))
 }
 
 fn line_node(number: u64, span: Span, text: &str) -> Node {

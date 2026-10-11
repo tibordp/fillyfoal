@@ -179,6 +179,9 @@ async fn section(cx: Cx, s: Section) -> Result<()> {
         }
     }
     let mut block: Vec<LineBuf> = Vec::new();
+    // Content bytes kept in `block`; past BLOCK_CAP only the spans of
+    // further lines are kept.
+    let mut kept = 0usize;
     let mut in_fence: Option<&'static [u8]> = None;
     // An open subsection: (start, level, title).
     let mut sub: Option<(u64, u8, String)> = None;
@@ -207,10 +210,9 @@ async fn section(cx: Cx, s: Section) -> Result<()> {
             && level > s.level
         {
             Line::Heading(level)
-        } else if let Some(next) = lines.peek().await?
-            && sub.is_some()
+        } else if sub.is_some()
+            && let Some(next) = lines.peek().await?
             && setext(&next.bytes).is_some()
-            && !line.is_blank()
         {
             Line::Heading(setext(&next.bytes).unwrap_or(2))
         } else {
@@ -244,9 +246,15 @@ async fn section(cx: Cx, s: Section) -> Result<()> {
             let fenced = block.first().is_some_and(|l| fence(&l.bytes).is_some());
             if !fenced {
                 flush(&cx, &mut block).await;
+                kept = 0;
                 continue;
             }
         }
+        let mut line = line;
+        if kept >= BLOCK_CAP && block.len() >= 2 {
+            line.bytes = Vec::new();
+        }
+        kept = kept.saturating_add(line.bytes.len());
         block.push(line);
         // A closed fence ends its block.
         if in_fence.is_none()
@@ -255,9 +263,11 @@ async fn section(cx: Cx, s: Section) -> Result<()> {
             && block.last().is_some_and(|l| fence(&l.bytes).is_some())
         {
             flush(&cx, &mut block).await;
+            kept = 0;
         }
         if block.len() > 10_000 {
             flush(&cx, &mut block).await;
+            kept = 0;
         }
     }
     flush(&cx, &mut block).await;
@@ -312,11 +322,15 @@ fn is_item(line: &[u8]) -> bool {
         && matches!(t.get(digits.saturating_add(1)), Some(b' ' | b'\t'))
 }
 
+/// Content bytes of a block kept for its text: well past what a value
+/// shows ([`super::VALUE_CAP`] characters), so the text is cut there and
+/// not here. Further lines keep only their spans.
+const BLOCK_CAP: usize = 64 * 1024;
+
 /// Pushes the node for a block of lines and clears it.
 async fn flush(cx: &Cx, block: &mut Vec<LineBuf>) {
-    while block.first().is_some_and(LineBuf::is_blank) {
-        block.remove(0);
-    }
+    let lead = block.iter().take_while(|l| l.is_blank()).count();
+    block.drain(..lead);
     while block.last().is_some_and(LineBuf::is_blank) {
         block.pop();
     }
