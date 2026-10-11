@@ -436,6 +436,7 @@ and reproduce every file byte for byte.
 | `gif/anim.gif` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=8x6:rate=25 -frames:v 3` (bitexact) |
 | `j2k/testsrc.j2k` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | `Lavc` comment marker in the codestream; not byte-reproduced |
 | `j2k/tiled-gray.j2k` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | `Lavc` comment marker in the codestream; not byte-reproduced |
+| `j2k/opj-tile-parts.j2k` | OpenJPEG 2.5.4 (`opj_compress`) | reproduced byte-for-byte: `sh tests/data/j2k/tile_parts.sh opj-tile-parts.j2k` (`opj_compress -t 32,32 -TP R -n 3` on a 64×64 greyscale gradient of ours); four tiles of three tile-parts each (TPsot 0..2, TNsot 3) |
 | `jp2/ffmpeg.jp2` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | commit b86c5c84 ("fixtures generated with ffmpeg"); `Lavc` marker |
 | `avif/svtav1.avif` | FFmpeg 8 with libsvtav1 | commit b86c5c84 ("fixtures generated with ffmpeg and sips") |
 | `jpeg/ffmpeg-420.jpg` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=32x24:rate=1 -frames:v 1 -pix_fmt yuvj420p` (`Lavc` comment) |
@@ -836,3 +837,17 @@ data descriptor (general purpose bit 3).
 | `dvi/latex.dvi` | pdfTeX 3.141592653-2.6-1.40.29 (TeX Live 2026, `latex`) | `tests/data/dvi/make.sh`: a two-page article (DVI id 2) with `SOURCE_DATE_EPOCH=1700000000`; reproduced byte-for-byte |
 | `dvi/xelatex.xdv` | XeTeX 3.141592653-2.6-0.999998 (TeX Live 2026, `xelatex -no-pdf`) | `tests/data/dvi/make.sh`: the same document as extended DVI (id 7); it names Latin Modern Roman by its standard TeX Live path; reproduced byte-for-byte |
 | `cff/variable.cff2` | fontTools 4.66.1 (`FontBuilder.setupCFF2`) | `uv run --with fonttools==4.66.1 python3 tests/data/cff/variable.py variable.cff2`: the CFF2 table of a one-axis (wght) variable font; Top DICT with FDArray, CharStrings and `vstore`, a one-region variation store, glyph "A" using `blend`; reproduced byte-for-byte |
+## Fonts (GNU FreeFont subsets)
+GNU FreeFont 20120503 (GPL-3.0-or-later with the GPL font exception; notice
+in THIRD-PARTY.md), taken from TeX Live 2026's `gnu-freefont` package, and
+subset with fontTools 4.66.1 (Brotli 1.2.0) by
+`uv run --with fonttools==4.66.1 --with brotli==1.2.0 python3 tests/data/sfnt/freefont_subsets.py FREEFONT_DIR OUTDIR`,
+which reproduces all five byte for byte. Each keeps the glyphs for
+"FreeFont fi fl 0123 ffi?!" plus layout closure (24 glyphs in FreeSerif),
+GSUB/GPOS/GDEF, hinting tables, and every name record.
+| `sfnt/freeserif-subset.ttf` | fontTools 4.66.1 `subset` of FreeSerif.ttf (FontForge-built, `FFTM` dropped) | reproduced byte-for-byte; TrueType outlines |
+| `sfnt/freeserif-subset.otf` | fontTools 4.66.1 `subset` of FreeSerif.otf | reproduced byte-for-byte; CFF outlines |
+| `woff/freeserif-subset.woff` | fontTools 4.66.1 (`flavor=woff`, zlib) | reproduced byte-for-byte; the TrueType subset |
+| `woff2/freeserif-subset.woff2` | fontTools 4.66.1 (`flavor=woff2`, Brotli 1.2.0) | reproduced byte-for-byte; the TrueType subset with fontTools' default glyf/loca transform |
+| `ttc/freefont-subset.ttc` | fontTools 4.66.1 `TTCollection` | reproduced byte-for-byte; FreeSans and FreeSerif TrueType subsets, identical tables shared |
+| `eot/freeserif-subset.eot` | mkeot (W3C eot-utils 1.1, Debian bookworm `eot-utils 1.1-1+b1`, Docker `debian:bookworm-slim`) | reproduced byte-for-byte: `sh tests/data/eot/mkeot.sh DIR` (`mkeot sfnt/freeserif-subset.ttf https://example.org/`); EOT version 0x00020002, uncompressed, one root string. mkeot copies the four names from the name table unswapped, so they are UTF-16BE where the format has UTF-16LE (its own `eotinfo` shows them byte-swapped too) |

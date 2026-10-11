@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ tiled-gray.j2k — 16×16, 1 components, 8-bit, 4 tiles  [0x0+0x247]
     SOC  [0x0+0x2]
@@ -43,7 +43,7 @@ expression: "common::explore(&name, &data)"
       Marker: 0xff64 — COM  [0x66+0x2]
       Length: 17  [0x68+0x2]
       Comment: "Lavc62.28.102" — Latin-1  [0x6c+0xd]
-  ▾ Tile-part 0 — tile 0, part 0, 0x75 bytes  [0x79+0x75]
+  ▾ Tile-part 0 — tile 0, part 0 of 1, 0x75 bytes  [0x79+0x75]
     ▾ SOT  [0x79+0xc]
         Marker: 0xff90 — SOT  [0x79+0x2]
         Length: 10  [0x7b+0x2]
@@ -54,7 +54,7 @@ expression: "common::explore(&name, &data)"
           TNsot: 1  [0x84+0x1]
       SOD  [0x85+0x2]
       Tile data — 0x67 bytes  [0x87+0x67]
-  ▾ Tile-part 1 — tile 1, part 0, 0x70 bytes  [0xee+0x70]
+  ▾ Tile-part 1 — tile 1, part 0 of 1, 0x70 bytes  [0xee+0x70]
     ▾ SOT  [0xee+0xc]
         Marker: 0xff90 — SOT  [0xee+0x2]
         Length: 10  [0xf0+0x2]
@@ -65,7 +65,7 @@ expression: "common::explore(&name, &data)"
           TNsot: 1  [0xf9+0x1]
       SOD  [0xfa+0x2]
       Tile data — 0x62 bytes  [0xfc+0x62]
-  ▾ Tile-part 2 — tile 2, part 0, 0x74 bytes  [0x15e+0x74]
+  ▾ Tile-part 2 — tile 2, part 0 of 1, 0x74 bytes  [0x15e+0x74]
     ▾ SOT  [0x15e+0xc]
         Marker: 0xff90 — SOT  [0x15e+0x2]
         Length: 10  [0x160+0x2]
@@ -76,7 +76,7 @@ expression: "common::explore(&name, &data)"
           TNsot: 1  [0x169+0x1]
       SOD  [0x16a+0x2]
       Tile data — 0x66 bytes  [0x16c+0x66]
-  ▾ Tile-part 3 — tile 3, part 0, 0x73 bytes  [0x1d2+0x73]
+  ▾ Tile-part 3 — tile 3, part 0 of 1, 0x73 bytes  [0x1d2+0x73]
     ▾ SOT  [0x1d2+0xc]
         Marker: 0xff90 — SOT  [0x1d2+0x2]
         Length: 10  [0x1d4+0x2]

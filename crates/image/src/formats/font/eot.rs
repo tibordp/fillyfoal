@@ -88,6 +88,19 @@ record! {
     }
 }
 
+/// Whether a name that should be UTF-16LE reads as big-endian text: every
+/// high byte (the first of each pair) zero and some low byte not, as when a
+/// writer copies the sfnt name table's UTF-16BE strings unswapped (mkeot
+/// from W3C eot-utils 1.1 does). Little-endian text of that shape would be
+/// all characters U+xx00.
+fn big_endian_text(bytes: &[u8]) -> bool {
+    let (pairs, rest) = bytes.as_chunks::<2>();
+    !pairs.is_empty()
+        && rest.is_empty()
+        && pairs.iter().all(|&[high, _]| high == 0)
+        && pairs.iter().any(|&[_, low]| low != 0)
+}
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut cur = Cursor::new(&cx, file, LE);
@@ -111,13 +124,18 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let start = cur.pos();
         let len = cur.u16().await?;
         let bytes = cur.bytes(len.into()).await?;
-        let text = crate::text::utf16(&bytes, LE);
+        let swapped = big_endian_text(&bytes);
+        let text = crate::text::utf16(&bytes, if swapped { Endian::Big } else { LE });
         names.push(text.clone());
-        cx.emit(
-            Node::new(*label)
-                .span(cur.since(start))
-                .value(Value::Text(text)),
-        );
+        let mut node = Node::new(*label)
+            .span(cur.since(start))
+            .value(Value::Text(text));
+        if swapped {
+            node = node.diag(Diagnostic::warning(
+                "UTF-16 big-endian, not little-endian (copied unswapped from the name table)",
+            ));
+        }
+        cx.emit(node);
     }
     if h.version == 0x0002_0002 {
         let start = cur.pos();

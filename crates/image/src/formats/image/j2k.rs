@@ -298,10 +298,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
         }
         if marker == 0xff90 {
-            let head = cx.read(payload.sub(0, 6)).await?;
+            // Isot (2), Psot (4), TPsot (1), TNsot (1; 0 = not given).
+            let head = cx.read(payload.sub(0, 8)).await?;
             let tile = u16_be(&head, 0).unwrap_or(0);
             let len = u64::from(u32_be(&head, 2).unwrap_or(0));
             let part = head.get(6).copied().unwrap_or(0);
+            let parts = match head.get(7).copied().unwrap_or(0) {
+                0 => String::new(),
+                n => format!(" of {n}"),
+            };
             let end = if len == 0 {
                 file.len.saturating_sub(2).max(cur.pos())
             } else {
@@ -311,7 +316,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.push(
                 Node::new(format!("Tile-part {tile_parts}"))
                     .span(span)
-                    .summary(format!("tile {tile}, part {part}, {:#x} bytes", span.len))
+                    .summary(format!(
+                        "tile {tile}, part {part}{parts}, {:#x} bytes",
+                        span.len
+                    ))
                     .lazy(tile_part, span),
             )
             .await;
