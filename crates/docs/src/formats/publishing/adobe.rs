@@ -771,10 +771,15 @@ async fn acb_colours(cx: Cx, (region, count, space): (Span, u16, u16)) -> Result
 }
 
 // ---------------------------------------------------------------------------
-// Colour tables (.act): weak, identified by size only
+// Colour tables (.act): weak, identified by size only. The classic file is
+// 768 bytes (256 RGB triples, no trailer); Photoshop CS2 and later append
+// a colour count and a transparent index (772 bytes). Only the longer form
+// has anything to check, so a bare 768-byte table is left to its extension
+// (or "inspect as").
 
 fn act_probe(h: &Head<'_>) -> bool {
-    h.len == 772
+    h.len_known
+        && h.len == 772
         && u16_be(h.data, 768).is_some_and(|n| (1..=256).contains(&n))
         && u16_be(h.data, 770).is_some_and(|t| t <= 255 || t == 0xffff)
         && !crate::text::looks_like_text(h.data)
@@ -785,6 +790,18 @@ declare_format!(pub ACT = "photoshop-color-table", "Adobe Photoshop colour table
 
 async fn act(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
+    file.sub_exact(0, 768)?;
+    if file.len < 772 {
+        let table = file.sub(0, 768);
+        cx.emit(
+            Node::new("Colours")
+                .span(table)
+                .summary("256 entries")
+                .lazy(act_colours, table),
+        );
+        cx.annotate("Photoshop colour table, 256 colours");
+        return Ok(());
+    }
     let tail = cx.read(file.sub_exact(768, 4)?).await?;
     let count = u16_be(&tail, 0).unwrap_or(256).min(256);
     let transparent = u16_be(&tail, 2).unwrap_or(0xffff);

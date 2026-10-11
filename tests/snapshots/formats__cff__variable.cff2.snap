@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ variable.cff2 — CFF2 font, 2 glyphs  [0x0+0x5e]
+    Version: "2.0"  [0x0+0x2]
+    Header size: 5  [0x2+0x1]
+  ▾ Top DICT  [0x5+0x7]
+      FDArray: 84  [0x5+0x3]
+      CharStrings: 48  [0x8+0x2]
+      vstore: 16  [0xa+0x2]
+    Global Subrs INDEX — 0 entries  [0xc+0x4]
+    CharStrings INDEX — 2 glyphs  [0x30+0x24]

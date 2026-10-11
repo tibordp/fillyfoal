@@ -820,3 +820,11 @@ data descriptor (general purpose bit 3).
 | `onnx/named.onnx` | onnx 1.19.1 | same script: producer, domain, model version, doc string, two opset imports and metadata; passes `onnx.checker` |
 | `protobuf/person.pb` | protoc (libprotoc 34.1) | reproduced byte for byte by `sh tests/data/protobuf/lookalike.sh` (`protoc --encode=demo.Person lookalike.proto`): a generic message that starts like an ONNX model (`08 03 12 05 alice`); negative for the ONNX probe |
 | `protobuf/client-config.pb` | protoc (libprotoc 34.1) | same script (`demo.ClientConfig`): `08 01 12 0b some-client 22 ...`; negative for the ONNX probe |
+## Printer languages, TeX output and fonts
+| `pcl/gs-cdj550.pcl` | Ghostscript 10.07.1 (`cdj550` device) | `tests/data/pcl/make.sh`: three small colour rectangles on a 2-inch page at 75 dpi; bare PCL 5 colour, starts with `ESC*rbC` (no reset), raster rows sent plane by plane (`ESC*b#V` / `#v` in combined sequences); reproduced byte-for-byte |
+| `pjl/gs-pjxl300.pcl` | Ghostscript 10.07.1 (`pjxl300` device) | `tests/data/pcl/make.sh`: the same page as PJL `ENTER LANGUAGE = PCL` around PCL 5 colour starting with `ESC*rbC`; reproduced byte-for-byte |
+| `pjl/gs-pxlmono.pxl` | Ghostscript 10.07.1 (`pxlmono` device) | `tests/data/pcl/make.sh`: the same page as PJL around a PCL XL 1.1 stream (rectangles, a path, clip, NewPath/PaintPath); reproduced byte-for-byte |
+| `pjl/gs-pxlcolor.pxl` | Ghostscript 10.07.1 (`pxlcolor` device) | `tests/data/pcl/make.sh`: as `gs-pxlmono.pxl` in RGB; reproduced byte-for-byte |
+| `dvi/latex.dvi` | pdfTeX 3.141592653-2.6-1.40.29 (TeX Live 2026, `latex`) | `tests/data/dvi/make.sh`: a two-page article (DVI id 2) with `SOURCE_DATE_EPOCH=1700000000`; reproduced byte-for-byte |
+| `dvi/xelatex.xdv` | XeTeX 3.141592653-2.6-0.999998 (TeX Live 2026, `xelatex -no-pdf`) | `tests/data/dvi/make.sh`: the same document as extended DVI (id 7); it names Latin Modern Roman by its standard TeX Live path; reproduced byte-for-byte |
+| `cff/variable.cff2` | fontTools 4.66.1 (`FontBuilder.setupCFF2`) | `uv run --with fonttools==4.66.1 python3 tests/data/cff/variable.py variable.cff2`: the CFF2 table of a one-axis (wght) variable font; Top DICT with FDArray, CharStrings and `vstore`, a one-region variation store, glyph "A" using `blend`; reproduced byte-for-byte |

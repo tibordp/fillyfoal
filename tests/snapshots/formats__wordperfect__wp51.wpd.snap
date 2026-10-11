@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ wp51.wpd — WordPerfect 5.1 document (format 0.1)  [0x0+0x1f]
+    Magic: ff 57 50 43  |.WPC|  [0x0+0x4]
+    Document area offset: 0x10  [0x4+0x4]
+    Product type: 1  [0x8+0x1]
+    File type: document (0xa)  [0x9+0x1]
+    Major version: 0  [0xa+0x1]
+    Minor version: 1  [0xb+0x1]
+    Encryption: 0x0  [0xc+0x2]
+    Prefix packets  [0x10+0x0]
+    Document area  [0x10+0xf]

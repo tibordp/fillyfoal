@@ -176,7 +176,12 @@ async fn dict_entries(cx: &Cx, data: &[u8]) -> Vec<(u16, Vec<f64>, usize, usize)
                 start = i;
                 continue;
             }
-            0..=21 => {
+            // 0-21 are CFF operators; CFF2 adds 22 vsindex, 23 blend,
+            // 24 vstore and 25 maxstack, and 26-27 are reserved one-byte
+            // operators in both. (Blend is shown as an entry of its own,
+            // holding its operands: splitting them needs the region
+            // counts of the variation store.)
+            0..=27 => {
                 out.push((
                     b0.into(),
                     std::mem::take(&mut ops),
