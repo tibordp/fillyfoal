@@ -45,6 +45,7 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `lzma/bottles.txt.lzma` | XZ Utils 5.8 | reproduced byte-for-byte: `xz --format=lzma -6` |
 | `zstd/bottles.txt.zst` | zstd 1.5.7 CLI | reproduced byte-for-byte: `zstd -13 FILE` (content size recorded) |
 | `zstd/large-member.tar.zst` | zstd 1.5.7 CLI | reproduced byte-for-byte: `zstd -19 FILE`; commit f0d9d8d1 |
+| `zstd-dict/words.zdict` | zstd 1.5.7 CLI | reproduced byte-for-byte by `crates/codec/src/codec/testdata/words-dict.sh` (`zstd --train` on 2000-byte pieces of the codec's `words.txt`, `--maxdict=4096 --dictID=4242`); the same file as that directory's `words.zdict` |
 | `lz4/bottles.txt.lz4` | lz4 1.10 CLI | reproduced byte-for-byte: `lz4 -9 -BX --content-size FILE` |
 | `lz4/uncompressed-block.lz4` | lz4 1.10 CLI | reproduced byte-for-byte: `lz4 -1 --no-frame-crc FILE` |
 | `lz4-legacy/legacy.lz4` | lz4 1.10 CLI | reproduced byte-for-byte: `lz4 -l -1` |
@@ -277,6 +278,8 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `rocksdb-sst/v5-crc32c.sst` | RocksDB via rocksdict 0.3.29 | same script: format version 5, CRC-32C, no compression, 512-byte blocks, index restart interval 4 (delta-encoded index values after shared keys) |
 | `rocksdb-sst/v6-xxhash.sst` | RocksDB via rocksdict 0.3.29 | same script: format version 6, xxHash32 checksums, no compression |
 | `rocksdb-sst/v4-xxhash64.sst` | RocksDB via rocksdict 0.3.29 | same script: format version 4, xxHash64 checksums, no compression |
+| `rocksdb-sst/zstd-dict.sst` | RocksDB via rocksdict 0.3.29 | same script: ZSTD with a 2 KiB compression dictionary of raw samples (`rocksdb.compression_dict`), 512-byte blocks; unedited |
+| `rocksdb-sst/zstd-trained.sst` | RocksDB via rocksdict 0.3.29 | same script: the same with `zstd_max_train_bytes` set, so the dictionary is a formatted one from zstd's trainer; 400 rows; unedited |
 | `bam/small.bam` | htslib (via pysam, inferred) | htslib BGZF block layout; `@PG ID:gen PN:python` in the header; indexed by bai/small.bam.bai |
 | `bam/many-blocks.bam` | samtools 1.16.1 (htslib, Debian bookworm) | `tests/data/bam/many-blocks.sh` in `debian:bookworm-slim`: `samtools view -b --no-PG` of 100 synthetic reads with 60000-byte array tags, 102 BGZF blocks (5.7 MiB of records, most spanning two blocks) ending in the EOF block; reproduced byte-for-byte |
 | `bai/small.bam.bai` | htslib (via pysam, inferred) | htslib index with metadata pseudo-bins (bin 37450) |

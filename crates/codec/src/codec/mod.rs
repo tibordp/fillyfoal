@@ -133,6 +133,9 @@ pub enum Codec {
     CabFolder(cab::Folder),
     /// Zstandard frames.
     Zstd,
+    /// Zstandard frames that may use this dictionary (see
+    /// [`zstd::Dictionary`]).
+    ZstdDict(zstd::Dict),
     /// The bit-level LZ77 of Guitar Pro 6 `BCFZ` files (after their 8-byte
     /// header), decoding to `size` bytes (see [`bcfz`]).
     Bcfz {
@@ -322,6 +325,7 @@ impl Codec {
             Codec::NsisBzip2 => "nsis-bzip2",
             Codec::Zstd => "zstd",
             Codec::ZstdFrame => "zstd-frame",
+            Codec::ZstdDict(_) => "zstd-dict",
             Codec::UnixCompress => "unix-compress",
             Codec::Lznt1 { .. } => "lznt1",
             Codec::Xpress { .. } => "xpress",
@@ -403,6 +407,7 @@ impl Codec {
             Codec::NsisBzip2 => "nsis-bzip2 (lazy)",
             Codec::Zstd => "zstd (lazy)",
             Codec::ZstdFrame => "zstd-frame (lazy)",
+            Codec::ZstdDict(_) => "zstd-dict (lazy)",
             Codec::UnixCompress => "unix-compress (lazy)",
             Codec::Lznt1 { .. } => "lznt1 (lazy)",
             Codec::Xpress { .. } => "xpress (lazy)",
@@ -483,6 +488,7 @@ impl Codec {
             | Codec::Xz
             | Codec::Zstd
             | Codec::ZstdFrame
+            | Codec::ZstdDict(_)
             | Codec::UnixCompress
             | Codec::Lznt1 { .. }
             | Codec::Xpress { .. }
@@ -571,7 +577,7 @@ impl Codec {
             // LZMA's longest match (273 bytes) costs a handful of bits.
             Codec::Xz | Codec::LzmaAlone | Codec::Lzma2 { .. } | Codec::LzmaRaw { .. } => 7_000,
             // RLE blocks can encode 128 KiB in four bytes.
-            Codec::Zstd | Codec::ZstdFrame => 32_768,
+            Codec::Zstd | Codec::ZstdFrame | Codec::ZstdDict(_) => 32_768,
             Codec::UnixCompress => 8_000,
             // A 32 KiB copy costs 35 bits.
             Codec::Bcfz { .. } => 8_000,
@@ -687,6 +693,7 @@ impl Codec {
             Codec::Rar(params) => Box::new(rar::Stream::new(params.clone())),
             Codec::Zstd => Box::new(Streaming(zstd::Zstd::new())),
             Codec::ZstdFrame => Box::new(Streaming(zstd::Zstd::single_frame())),
+            Codec::ZstdDict(d) => Box::new(Streaming(zstd::Zstd::with_dictionary(d.clone()))),
             Codec::Bzip2 => Box::new(Streaming(bzip2::Bzip2::default())),
             Codec::NsisBzip2 => Box::new(Streaming(bzip2::Bzip2::nsis())),
             Codec::Lz4Frame => Box::new(Streaming(lz::Lz4Frame::default())),

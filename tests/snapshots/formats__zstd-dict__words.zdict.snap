@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ words.zdict — zstd dictionary 4242, 1800 bytes of content  [0x0+0x78b]
+    Magic: 0xec30a437  [0x0+0x4]
+    Dictionary ID: 4242  [0x4+0x4]
+    Literals Huffman tree  [0x8+0x2f]
+    Offset code table  [0x37+0xd]
+    Match length table  [0x44+0x21]
+    Literal length table  [0x65+0x12]
+    Repeat offsets: "1, 4, 8"  [0x77+0xc]
+  ▾ Content — UTF-8 text, 1 line  [0x83+0x708]
+      Encoding: "UTF-8"
+      Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x83+0x708]
+        Line 1: "silon beta theta alpha beta epsilon epsilon zeta teta theta eta eta beta gamma alpha eta gamma eta bta alpha epsilon theta zeta epsilon epsilon beta blon beta epsilon delta alpha eta alpha gamma eta dbeta eta zeta delta eta delta theta epsilon zeta da zeta alpha theta epsilon zeta eta epsilon eta et alpha alpha zeta beta beta beta theta gamma eta a alpha gamma epsilon delta alpha delta alpha eta tma gamma alpha epsilon beta alpha zeta gamma eta geta eta beta zeta eta epsilon alpha epsilon beta aeta gamma gamma epsilon theta alpha epsilon zeta z eta delta theta gamma delta alpha eta gamma eta zta zeta zeta theta alpha eta delta eta alpha eta ata gamma theta gamma delta beta eta epsilon eta thbeta zeta gamma epsilon alpha gamma epsilon eta beamma delta delta zeta alpha eta eta epsilon beta gsilon beta zeta alpha eta beta epsilon gamma eta ea epsilon beta theta gamma theta theta alpha eta beta epsilon zeta epsilon alpha beta epsilon zeta bdelta beta alpha epsilon zeta alpha epsilon eta zesilon delta alpha delta theta eta zeta gamma eta tlon gamma delta epsilon alpha gamma epsilon beta zta gamma zeta alpha theta theta eta epsilon eta deta gamma theta zeta gamma delta eta gamma beta epsta epsilon eta epsilon eta gamma theta alpha epsila beta alpha theta delta epsilon beta eta beta then beta delta gamma theta alpha beta eta gamma eta a delta alpha eta gamma delta delta delta zeta epsa beta alpha delta theta beta gamma delta beta betalpha gamma zeta eta delta epsilon alpha theta theeta zeta delta eta theta gamma beta gamma zeta thesilon eta alpha eta zeta gamma theta epsilon beta psilon delta epsilon gamma epsilon epsilon theta t gamma gamma alpha beta zeta alpha alpha delta alpa zeta zeta beta eta alpha zeta eta eta beta deltaeta epsilon zeta gamma delta eta eta theta alpha z"  [0x83+0x708]
