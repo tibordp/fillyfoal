@@ -71,7 +71,8 @@ exploration pays for additional work only as needed.
     (+ BCJ x86/ARM/ARM64, Delta), Zstandard, Brotli, LZ4, Snappy,
     LZFSE/LZVN and Apple `pbz*`, Unix `.Z`, LZO1X/lzop, LZF;
   - archivers: RAR 2.9/3.x and 5/7 (LZ, PPMd var. H, standard filters),
-    MSZIP/LZX/Quantum (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1,
+    MSZIP/LZX/Quantum (CAB, CHM, WIM), LZMS (WIM/ESD, solid resources),
+    XPRESS (plain, Huffman) and LZNT1,
     PKWARE implode and DCL implode, the LHA/ARJ/ZOO/`COMPRESS.EXE` LZSS and
     LZH family (`-lh1-`, `-lh4-`..`-lh7-`, `-lzs-`, `-lz5-`, ARJ 1-4, ZOO LZW,
     SZDD, KWAJ), PSARC blocks, ACE 1.0/2.0 (acefile as oracle), the StuffIt

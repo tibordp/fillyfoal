@@ -449,6 +449,7 @@ mod lz {
             kind: wim::Kind::Lzx,
             chunk: 32768,
             original: expected.len() as u64,
+            solid: false,
         });
         (codec, input, expected)
     }

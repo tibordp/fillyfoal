@@ -30,6 +30,7 @@ pub mod lzfse;
 pub mod lzfu;
 pub mod lzh;
 pub mod lzma;
+pub mod lzms;
 pub mod lznt1;
 pub mod lzo;
 pub mod lzx;
@@ -107,7 +108,8 @@ pub enum Codec {
     Lzfse,
     /// Apple's chunked wrapper (`pbzx`/`pbze`/`pbz4`/`pbzz`).
     Pbz,
-    /// A compressed WIM resource (chunk table, XPRESS or LZX chunks).
+    /// A compressed WIM resource (chunk table, then XPRESS, LZX or LZMS
+    /// chunks; solid or not; see [`wim`]).
     WimResource(wim::Resource),
     /// Unix `compress` (`.Z`, LSB-first LZW with a header).
     UnixCompress,
@@ -605,6 +607,9 @@ impl Codec {
             Codec::CabFolder(_) => 32_768,
             Codec::Lzfse => 4_096,
             Codec::Pbz => 7_000,
+            // A 1 GiB LZMS match costs a few dozen bits, and a solid
+            // chunk can be that large.
+            Codec::WimResource(r) if r.solid || r.kind == wim::Kind::Lzms => u64::MAX,
             Codec::WimResource(_) => 32_768,
             // A copy of 16 MiB costs a few bits.
             Codec::Brotli => 1 << 20,
@@ -662,7 +667,7 @@ impl Codec {
             ))),
             Codec::Lzfse => Box::new(Streaming(lzfse::Lzfse::default())),
             Codec::Pbz => Box::new(pbz::Pbz::default()),
-            Codec::WimResource(r) => Box::new(Streaming(wim::Decoder::new(*r))),
+            Codec::WimResource(r) => Box::new(wim::WimDecoder::new(*r)),
             Codec::Brotli => Box::new(Streaming(brotli::Stream::default())),
             Codec::UnixCompress => Box::new(unixz::UnixCompress::default()),
             Codec::Lznt1 { size } => Box::new(Streaming(lznt1::Lznt1::new(*size))),
