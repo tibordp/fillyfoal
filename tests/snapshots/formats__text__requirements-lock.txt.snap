@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ requirements-lock.txt — UTF-8 text, LF line endings, 4 lines  [0x0+0x3c]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 4 LF, 0 CRLF, 0 CR
+  ▾ Lines — 4 lines  [0x0+0x3c]
+      Line 1: "requests==2.31.0"  [0x0+0x10]
+      Line 2: "urllib3==2.2.1"  [0x11+0xe]
+      Line 3: "idna==3.6"  [0x20+0x9]
+      Line 4: "certifi==2024.2.2"  [0x2a+0x11]

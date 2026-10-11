@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ app.properties — INI configuration  [0x0+0xc1]
+    app.name: "fillyfoal demo"  [0x40+0xe]
+    app.version: "1.2.0"  [0x5d+0x5]
+    server.port: "8080"  [0x6f+0x4]
+    server.url: "http://localhost:8080/"  [0x7f+0x16]
+    greeting: "Hello, world"  [0x9f+0x12]
+    log-level: "info"  [0xbc+0x4]
