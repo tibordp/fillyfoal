@@ -38,7 +38,9 @@ pub static FORMAT: Format = Format {
 };
 
 fn probe(h: &Head<'_>) -> bool {
-    h.at(512, SIGNATURE) || h.at(4096, SIGNATURE)
+    // Hybrid ISO images (xorriso's GPT) are better shown as ISO 9660, whose
+    // dissector shows the system area too.
+    (h.at(512, SIGNATURE) || h.at(4096, SIGNATURE)) && !h.at(0x8001, b"CD001")
 }
 
 const ATTRIBUTES: FlagTable = &[

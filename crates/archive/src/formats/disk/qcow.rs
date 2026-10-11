@@ -1874,14 +1874,12 @@ async fn virtual_disk(cx: Cx, image: Arc<Image>) -> Result<()> {
                     Ok(())
                 }
                 Mapping::Compressed(offset, len) => {
-                    let span = image.compressed_span(&cx, offset, len).await?;
-                    match crate::codec::decode_span(&cx, span, &image.codec, Some(cluster)).await {
-                        Ok(decoded) => {
-                            list.data(decoded.span.sub(0, want));
-                            Ok(())
-                        }
-                        Err(e) => Err(e),
-                    }
+                    // Decoded only when a read reaches it: the encoded
+                    // span may run past the stream (sector padding), but a
+                    // lazy decode stops at `want` bytes of output.
+                    let span = image.input.span.sub(offset, len);
+                    cx.decode_lazy(span, &image.codec, want)
+                        .map(|decoded| list.data(decoded))
                 }
                 mapping => {
                     // Extended L2: 32 subclusters, each allocated (data at

@@ -100,4 +100,4 @@ expression: "common::explore(&display_name(&path), &data)"
       Data — guest 0x0–0x3fff, 16 KiB  [0x14000+0x4000]
       Compressed data — 19 bytes  [0x18000+0x13]
   ▾ Virtual disk — 256 KiB
-      Data  [#2:0x0+0x40000]
+      Data  [#3:0x0+0x40000]

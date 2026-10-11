@@ -17,11 +17,13 @@ use crate::formats::disk::{assemble, coalesce_stepped, size};
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
-use crate::span::Span;
+use crate::span::{Origin, Span};
 use crate::value::Value;
 
 const LE: Endian = Endian::Little;
 const SECTOR: u64 = 512;
+/// The metadata area header's size; the circular text buffer follows it.
+const MDA_HEADER: u64 = 512;
 const MDA_MAGIC: &[u8] = b"\x20LVM2\x20x[5A%r0N*>";
 /// Largest metadata text we read.
 const MAX_TEXT: u64 = 1 << 20;
@@ -177,7 +179,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         let loc_span = area.sub(MdaHeader::SIZE, RawLocation::SIZE);
         let loc = parse(&cx, loc_span, LE, &(), RawLocation::layout).await?;
-        let text_span = area.sub(loc.offset, loc.len.min(MAX_TEXT));
+        let text_span = metadata_text(&cx, area, &mda, &loc, loc_span)?;
         let text = crate::text::until_nul(&cx.read_avail(text_span).await?);
         let config = Arc::new(parse_config(&cx, &text).await);
         let vg_name = config.first().map(|(k, _)| k.clone()).unwrap_or_default();
@@ -305,6 +307,39 @@ async fn logical_volume(
         Ok(span) => embedded(title, input.nested(span))
             .summary(format!("{}, {count} segments", size(span.len))),
         Err(e) => Node::new(title).diag(e),
+    }
+}
+
+/// Where the metadata text is. The area after its 512-byte header is a
+/// circular buffer (LVM2 `format_text.c`): text that runs past the area's
+/// size continues right after the header.
+fn metadata_text(
+    cx: &Cx,
+    area: Span,
+    mda: &MdaHeader,
+    loc: &RawLocation,
+    loc_span: Span,
+) -> Result<Span> {
+    let len = loc.len.min(MAX_TEXT);
+    let size = if mda.len == 0 { area.len } else { mda.len };
+    let end = loc.offset.saturating_add(len);
+    if end <= size || loc.offset >= size || loc.offset < MDA_HEADER {
+        return Ok(area.sub(loc.offset, len));
+    }
+    let wrap = end.saturating_sub(size);
+    match (
+        area.sub_exact(loc.offset, size.saturating_sub(loc.offset)),
+        area.sub_exact(MDA_HEADER, wrap),
+    ) {
+        (Ok(first), Ok(second)) => cx.add_pieces(
+            Origin {
+                parent: loc_span,
+                transform: "lvm-metadata-wrap",
+            },
+            vec![first, second],
+        ),
+        // A truncated area: the text as far as it goes.
+        _ => Ok(area.sub(loc.offset, len)),
     }
 }
 

@@ -742,14 +742,16 @@ async fn virtual_disk(cx: Cx, s: Arc<Sparse>) -> Result<()> {
                 0 | 1 => list.hole(&cx, want),
                 _ if s.compressed => {
                     // Grain marker: LBA (8), compressed size (4), zlib data.
-                    let (_, data) = s.compressed_grain(&cx, sector).await?;
-                    match crate::codec::inflate_span(&cx, data, true, Some(s.grain)).await {
-                        Ok(d) => {
-                            list.data(d.span.sub(0, want));
-                            Ok(())
-                        }
-                        Err(e) => Err(e),
-                    }
+                    // Decoded only when a read reaches it; reading the
+                    // marker for its size would be a read per grain, so
+                    // the stream (which ends itself) is given the most a
+                    // grain's zlib data can take.
+                    let data = file.sub(
+                        sector.saturating_mul(SECTOR).saturating_add(12),
+                        s.grain.saturating_add(s.grain / 16).saturating_add(64),
+                    );
+                    cx.decode_lazy(data, &Codec::Zlib, want)
+                        .map(|d| list.data(d))
                 }
                 _ => {
                     list.data(file.sub(sector.saturating_mul(SECTOR), want));

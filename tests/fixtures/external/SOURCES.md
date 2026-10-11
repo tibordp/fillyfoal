@@ -851,3 +851,14 @@ GSUB/GPOS/GDEF, hinting tables, and every name record.
 | `woff2/freeserif-subset.woff2` | fontTools 4.66.1 (`flavor=woff2`, Brotli 1.2.0) | reproduced byte-for-byte; the TrueType subset with fontTools' default glyf/loca transform |
 | `ttc/freefont-subset.ttc` | fontTools 4.66.1 `TTCollection` | reproduced byte-for-byte; FreeSans and FreeSerif TrueType subsets, identical tables shared |
 | `eot/freeserif-subset.eot` | mkeot (W3C eot-utils 1.1, Debian bookworm `eot-utils 1.1-1+b1`, Docker `debian:bookworm-slim`) | reproduced byte-for-byte: `sh tests/data/eot/mkeot.sh DIR` (`mkeot sfnt/freeserif-subset.ttf https://example.org/`); EOT version 0x00020002, uncompressed, one root string. mkeot copies the four names from the name table unswapped, so they are UTF-16BE where the format has UTF-16LE (its own `eotinfo` shows them byte-swapped too) |
+## Disk images with mounted or loop-device writes (Linux), and UDRO
+`ntfs`, `lvm2` and `iso9660` rows: made by `sh tests/data/disk/make-volumes.sh`
+in a privileged Debian trixie container (host name `fillyfoal`) running
+`tests/data/disk/volumes-inner.sh`, whose commands are the evidence; tool
+versions are those it prints. Timestamps are those of the run and NTFS
+serials and LVM UUIDs are random, so the images are not byte-reproducible.
+Stored whole as `.raw.zst` (zstd -19).
+| `ntfs/ntfs3g-attrlist.img.raw.zst` | ntfs-3g 2022.10.3 mkntfs and FUSE driver, Linux 7.0 ntfs3 | 8 MiB, 4 KiB clusters: `ads.txt` with 30 named streams and `linked.txt` with 12 hard links (attributes in extension records through an $ATTRIBUTE_LIST); `big/` with 300 files of which 270 deleted (freed index records with stale entries); `sparse.bin` written through ntfs3 (`-o sparse`), 300 blocks each followed by a hole, its $DATA runlist split over three records (the VCN 0 part in an extension record) |
+| `lvm2/lvm-wrapped.img.raw.zst` | lvm2 2.03.31 | 8 MiB PV, `pvcreate --dataalignment 64k --metadatasize 40k`, VG `vgw` with four 1 MiB LVs, then `lvchange --addtag` until a commit's metadata text wraps around the 60 KiB circular buffer 512 bytes before its end |
+| `iso9660/xorriso-gpt.iso.raw.zst` | xorriso 1.5.6 | `xorriso -as mkisofs -R -J -append_partition 2 0xef efi.img -appended_part_as_gpt` (a hybrid image: GPT at 0x200, ISO 9660 at 0x8000) |
+| `dmg/hfs-udro.dmg.raw.zst` | macOS 26.5 hdiutil | `hdiutil create -size 1m -fs HFS+ -volname fillyfoal -layout GPTSPUD rw.dmg`, then `hdiutil convert rw.dmg -format UDRO -o hfs-udro.dmg` (a GPT at 0x200 and a koly trailer) |

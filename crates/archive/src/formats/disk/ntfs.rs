@@ -11,6 +11,7 @@
 //! runlist (sparse runs become holes); compressed streams are decoded one
 //! LZNT1 compression unit at a time, on demand.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use crate::bytes::{u16_le, u32_le, u64_le};
@@ -35,6 +36,9 @@ const MAX_ATTRIBUTES: usize = 256;
 const MAX_RUNS: usize = 1 << 16;
 const MAX_DEPTH: usize = 64;
 const MAX_INDEX_BYTES: u64 = 64 << 20;
+/// Largest $ATTRIBUTE_LIST read, and extension records it may name.
+const MAX_LIST_BYTES: u64 = 256 << 10;
+const MAX_EXTENSIONS: usize = 4096;
 
 pub static FORMAT: Format = Format {
     name: "ntfs",
@@ -208,11 +212,36 @@ struct Attr {
     name: String,
     span: Span,
     resident: Option<Span>,
+    /// This instance's runlist (non-resident attributes).
     runs: Option<Span>,
     data_size: u64,
     /// Log2 of the compression unit in clusters, for a non-resident
     /// attribute flagged compressed (0 otherwise).
     compression_unit: u32,
+    /// The MFT record this instance is stored in.
+    holder: u64,
+    /// The first VCN this instance maps: above 0 for the later parts of a
+    /// non-resident attribute split over several records (through an
+    /// $ATTRIBUTE_LIST), whose sizes only the first part records.
+    lowest_vcn: u64,
+    /// The runlists of the whole attribute with their first VCNs, in VCN
+    /// order: this instance's, and on the first part those of the later
+    /// parts too.
+    extents: Vec<(u64, Span)>,
+}
+
+impl Attr {
+    /// Whether this is the later part of a split attribute.
+    fn continuation(&self) -> bool {
+        self.lowest_vcn > 0
+    }
+}
+
+/// The attribute of `kind` named `name` (its first part).
+fn find_attr<'a>(attrs: &'a [Attr], kind: u32, name: &str) -> Option<&'a Attr> {
+    attrs
+        .iter()
+        .find(|a| a.kind == kind && a.name == name && !a.continuation())
 }
 
 /// Decodes `n`-byte little-endian integers (signed if requested).
@@ -412,8 +441,9 @@ async fn fixup(cx: &Cx, span: Span, magic: &[u8]) -> Result<Fixup> {
     Ok(Fixup::Applied(fixed, problem.map(|d| d.at(span))))
 }
 
-/// Parses the attributes of a (fixed-up) record.
-async fn attributes(cx: &Cx, rec: Span) -> Result<Vec<Attr>> {
+/// Parses the attributes of a (fixed-up) record, record `holder` of the
+/// MFT; see [`all_attributes`] for those of a file.
+async fn attributes(cx: &Cx, rec: Span, holder: u64) -> Result<Vec<Attr>> {
     let head = cx.read(rec.sub(0, 28)).await?;
     let mut at = u64::from(u16_le(&head, 20).unwrap_or(0));
     let used = u64::from(u32_le(&head, 24).unwrap_or(0)).min(rec.len);
@@ -441,6 +471,9 @@ async fn attributes(cx: &Cx, rec: Span) -> Result<Vec<Attr>> {
             runs: None,
             data_size: 0,
             compression_unit: 0,
+            holder,
+            lowest_vcn: 0,
+            extents: Vec::new(),
         };
         if h.get(8) == Some(&0) {
             let vlen = u64::from(u32_le(&h, 16).unwrap_or(0));
@@ -449,7 +482,10 @@ async fn attributes(cx: &Cx, rec: Span) -> Result<Vec<Attr>> {
             attr.data_size = vlen;
         } else {
             let roff = u64::from(u16_le(&h, 32).unwrap_or(0));
-            attr.runs = Some(span.sub(roff, len.saturating_sub(roff)));
+            let runs = span.sub(roff, len.saturating_sub(roff));
+            attr.runs = Some(runs);
+            attr.lowest_vcn = u64_le(&h, 16).unwrap_or(0);
+            attr.extents = vec![(attr.lowest_vcn, runs)];
             attr.data_size = u64_le(&h, 48).unwrap_or(0);
             if u16_le(&h, 12).unwrap_or(0) & 0x00ff != 0 {
                 attr.compression_unit = u32::from(u16_le(&h, 34).unwrap_or(0));
@@ -459,6 +495,154 @@ async fn attributes(cx: &Cx, rec: Span) -> Result<Vec<Attr>> {
         at = at.saturating_add(len);
     }
     Ok(out)
+}
+
+/// The attributes of the file whose base record is `n` (fixed up as
+/// `rec`): those of the base record and, through its $ATTRIBUTE_LIST,
+/// those moved to extension records. A non-resident attribute split over
+/// several records gets the runlists of its later parts on its first part
+/// ([`Attr::extents`]); the later parts stay in the list (for display) but
+/// [`find_attr`] skips them.
+async fn all_attributes(cx: &Cx, fs: &Volume, n: u64, rec: Span) -> Result<Vec<Attr>> {
+    let mut attrs = attributes(cx, rec, n).await?;
+    let Some(list) = attrs.iter().find(|a| a.kind == 0x20).cloned() else {
+        return Ok(attrs);
+    };
+    let value = match list.resident {
+        Some(v) => v,
+        None => {
+            let runs = attr_runs(cx, &list).await?;
+            fs.runs_list(cx, list.span, &runs, list.data_size.min(MAX_LIST_BYTES))?
+                .finish(cx, "ntfs-runs")
+                .await?
+        }
+    };
+    let raw = cx.read_avail(value.sub(0, MAX_LIST_BYTES)).await?;
+    // Entries: type, length, name length and offset, lowest VCN, the
+    // record holding the attribute, attribute id, name.
+    let mut records = BTreeSet::new();
+    let mut at = 0usize;
+    while let Some(len) = u16_le(&raw, at.saturating_add(4)) {
+        let len = usize::from(len);
+        if len < 26 {
+            break;
+        }
+        if let Some(r) = u64_le(&raw, at.saturating_add(16)) {
+            let r = r & 0xffff_ffff_ffff;
+            if r != n {
+                records.insert(r);
+            }
+        }
+        at = at.saturating_add(len);
+    }
+    if records.len() > MAX_EXTENSIONS {
+        cx.diag(Diagnostic::limit(format!(
+            "$ATTRIBUTE_LIST names {} extension records; reading {MAX_EXTENSIONS}",
+            records.len()
+        )));
+    }
+    for m in records.into_iter().take(MAX_EXTENSIONS) {
+        cx.checkpoint().await;
+        let Some(span) = fs.record_span(m) else {
+            cx.diag(Diagnostic::malformed(format!(
+                "extension record {m} is outside the MFT"
+            )));
+            continue;
+        };
+        let fixed = match fixed_up(cx, span, b"FILE").await {
+            Ok(f) => f,
+            Err(e) => {
+                cx.diag(e);
+                continue;
+            }
+        };
+        let base = u64_le(&cx.read(fixed.sub(32, 8)).await?, 0).unwrap_or(0) & 0xffff_ffff_ffff;
+        if base != n {
+            cx.diag(
+                Diagnostic::malformed(format!(
+                    "extension record {m} belongs to record {base}, not {n}"
+                ))
+                .at(span),
+            );
+            continue;
+        }
+        attrs.extend(attributes(cx, fixed, m).await?);
+    }
+    // In attribute list order: by type, then first VCN; then the later
+    // parts of split attributes joined to their first part.
+    attrs.sort_by_key(|a| (a.kind, a.lowest_vcn));
+    let mut later: BTreeMap<(u32, String), Vec<(u64, Span)>> = BTreeMap::new();
+    for a in attrs.iter().filter(|a| a.continuation()) {
+        if let Some(runs) = a.runs {
+            later
+                .entry((a.kind, a.name.clone()))
+                .or_default()
+                .push((a.lowest_vcn, runs));
+        }
+    }
+    for a in attrs
+        .iter_mut()
+        .filter(|a| a.runs.is_some() && !a.continuation())
+    {
+        if let Some(parts) = later.remove(&(a.kind, a.name.clone())) {
+            a.extents.extend(parts);
+        }
+    }
+    Ok(attrs)
+}
+
+/// The runs of a non-resident attribute: those of each runlist in
+/// [`Attr::extents`] (each counts LCNs from 0 again), a gap between them
+/// as sparse clusters.
+async fn attr_runs(cx: &Cx, a: &Attr) -> Result<Vec<(u64, Option<u64>)>> {
+    let mut out: Vec<(u64, Option<u64>)> = Vec::new();
+    let mut vcn = 0u64;
+    for &(first, span) in &a.extents {
+        let raw = cx.read_avail(span).await?;
+        let (runs, problem) = parse_runs(&raw);
+        if let Some(d) = problem {
+            cx.diag(d);
+        }
+        if first > vcn {
+            out.push((first.saturating_sub(vcn), None));
+        } else if first < vcn {
+            cx.diag(Diagnostic::malformed(format!(
+                "attribute part from VCN {first} overlaps the one before (to VCN {vcn})"
+            )));
+        }
+        vcn = runs
+            .iter()
+            .map(|r| r.0)
+            .fold(first.max(vcn), u64::saturating_add);
+        out.extend(runs);
+        if out.len() >= MAX_RUNS {
+            out.truncate(MAX_RUNS);
+            cx.diag(Diagnostic::limit("too many runs"));
+            break;
+        }
+    }
+    Ok(out)
+}
+
+/// The $MFT's pieces from its runs, clipped to its data size.
+fn mft_pieces(vol: Span, cluster: u64, runs: &[(u64, Option<u64>)], size: u64) -> Vec<Span> {
+    let pieces: Vec<Span> = runs
+        .iter()
+        .filter_map(|&(count, lcn)| {
+            lcn.map(|l| vol.sub(l.saturating_mul(cluster), count.saturating_mul(cluster)))
+        })
+        .collect();
+    crate::formats::disk::coalesce(pieces, size)
+}
+
+fn piece_ends(pieces: &[Span]) -> Vec<u64> {
+    pieces
+        .iter()
+        .scan(0u64, |end, p| {
+            *end = end.saturating_add(p.len);
+            Some(*end)
+        })
+        .collect()
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
@@ -498,33 +682,31 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     // Record 0 ($MFT) describes where the MFT itself lives.
     let mft0 = vol.sub(b.mft_lcn.saturating_mul(cluster), record);
     let rec0 = fixed_up(&cx, mft0, b"FILE").await?;
-    let attrs0 = attributes(&cx, rec0).await?;
+    let attrs0 = attributes(&cx, rec0, 0).await?;
     let mut mft = vec![mft0];
-    if let Some(runs) = attrs0
-        .iter()
-        .find(|a| a.kind == 0x80 && a.name.is_empty())
-        .and_then(|a| a.runs.map(|r| (r, a.data_size)))
-    {
-        let raw = cx.read_avail(runs.0).await?;
-        let (list, problem) = parse_runs(&raw);
-        if let Some(d) = problem {
-            cx.diag(d);
-        }
-        mft = list
-            .iter()
-            .filter_map(|&(count, lcn)| {
-                lcn.map(|l| vol.sub(l.saturating_mul(cluster), count.saturating_mul(cluster)))
-            })
-            .collect();
-        mft = crate::formats::disk::coalesce(mft, runs.1);
+    if let Some(a) = find_attr(&attrs0, 0x80, "").filter(|a| a.runs.is_some()) {
+        mft = mft_pieces(vol, cluster, &attr_runs(&cx, a).await?, a.data_size);
     }
-    let mft_ends = mft
-        .iter()
-        .scan(0u64, |end, p| {
-            *end = end.saturating_add(p.len);
-            Some(*end)
-        })
-        .collect();
+    let mut mft_ends = piece_ends(&mft);
+    if attrs0.iter().any(|a| a.kind == 0x20) {
+        // A fragmented MFT continues its runlist in extension records,
+        // found through the part of the MFT the base record maps.
+        let partial = Volume {
+            input,
+            vol,
+            cluster,
+            record,
+            index: 0,
+            clusters: 0,
+            mft: mft.clone(),
+            mft_ends: mft_ends.clone(),
+        };
+        let all = all_attributes(&cx, &partial, 0, rec0).await?;
+        if let Some(a) = find_attr(&all, 0x80, "").filter(|a| a.runs.is_some()) {
+            mft = mft_pieces(vol, cluster, &attr_runs(&cx, a).await?, a.data_size);
+            mft_ends = piece_ends(&mft);
+        }
+    }
     let fs: Vol = Arc::new(Volume {
         input,
         vol,
@@ -549,7 +731,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     // The volume label, from $Volume (record 3).
     if let Some(span) = fs.record_span(3)
         && let Ok(rec) = fixed_up(&cx, span, b"FILE").await
-        && let Ok(attrs) = attributes(&cx, rec).await
+        && let Ok(attrs) = attributes(&cx, rec, 3).await
         && let Some(name) = attrs
             .iter()
             .find(|a| a.kind == 0x60)
@@ -609,16 +791,13 @@ async fn free_clusters(cx: Cx, (fs, clusters): (Vol, u64)) -> Result<()> {
         .record_span(6)
         .ok_or_else(|| Diagnostic::malformed("no $Bitmap record"))?;
     let rec = fixed_up(&cx, span, b"FILE").await?;
-    let attrs = attributes(&cx, rec).await?;
-    let a = attrs
-        .iter()
-        .find(|a| a.kind == 0x80 && a.name.is_empty())
-        .ok_or_else(|| Diagnostic::malformed("$Bitmap has no data"))?;
+    let attrs = all_attributes(&cx, &fs, 6, rec).await?;
+    let a =
+        find_attr(&attrs, 0x80, "").ok_or_else(|| Diagnostic::malformed("$Bitmap has no data"))?;
     let data = if let Some(value) = a.resident {
         value
     } else {
-        let raw = cx.read_avail(a.runs.unwrap_or(a.span.sub(0, 0))).await?;
-        let (runs, _) = parse_runs(&raw);
+        let runs = attr_runs(&cx, a).await?;
         let list = fs.runs_list(&cx, a.span, &runs, a.data_size)?;
         list.finish(&cx, "ntfs-runs").await?
     };
@@ -668,7 +847,17 @@ async fn mft_listing(cx: Cx, (fs, count): (Vol, u64)) -> Result<()> {
             continue;
         }
         let name = match fixed_up(&cx, span, b"FILE").await {
-            Ok(rec) => best_name(&cx, &attributes(&cx, rec).await.unwrap_or_default()).await?,
+            Ok(rec) => {
+                let attrs = attributes(&cx, rec, n).await.unwrap_or_default();
+                match best_name(&cx, &attrs).await? {
+                    // Many hard links move the names to extension records.
+                    None if attrs.iter().any(|a| a.kind == 0x20) => {
+                        let all = all_attributes(&cx, &fs, n, rec).await.unwrap_or_default();
+                        best_name(&cx, &all).await?
+                    }
+                    name => name,
+                }
+            }
             Err(_) => None,
         };
         cx.push(
@@ -712,11 +901,11 @@ async fn record_node(cx: Cx, (fs, n): (Vol, u64)) -> Result<()> {
         rec.sub(0, RecordHeader::SIZE),
         LE,
     ));
-    let attrs = attributes(&cx, rec).await?;
+    let attrs = all_attributes(&cx, &fs, n, rec).await?;
     for a in &attrs {
         cx.emit(attribute_node(&fs, a, n));
     }
-    if let Some(data) = attrs.iter().find(|a| a.kind == 0x80 && a.name.is_empty()) {
+    if let Some(data) = find_attr(&attrs, 0x80, "") {
         let node = stream_content(&cx, &fs, data).await?;
         // The MFT and $Boot are the volume's own structures, already shown
         // at the top level: dissecting them again would recurse into the
@@ -774,11 +963,19 @@ fn attribute_node(fs: &Vol, a: &Attr, record: u64) -> Node {
         format!("{kind}:{}", a.name)
     };
     let node = Node::new(name).span(a.span);
-    let summary = if a.resident.is_some() {
+    let mut summary = if a.resident.is_some() {
         format!("resident, {}", size(a.data_size))
+    } else if a.continuation() {
+        format!("non-resident, continued from VCN {}", a.lowest_vcn)
     } else {
         format!("non-resident, {}", size(a.data_size))
     };
+    if a.extents.len() > 1 {
+        summary = format!("{summary}, in {} parts", a.extents.len());
+    }
+    if a.holder != record {
+        summary = format!("{summary}, in extension record {}", a.holder);
+    }
     node.summary(summary)
         .lazy(attribute_fields, (fs.clone(), Arc::new(a.clone()), record))
 }
@@ -837,7 +1034,7 @@ async fn attribute_fields(cx: Cx, (fs, a, record): (Vol, Arc<Attr>, u64)) -> Res
     if let Some(d) = problem {
         cx.diag(d);
     }
-    let mut vcn = 0u64;
+    let mut vcn = a.lowest_vcn;
     for (i, &(count, lcn)) in list.iter().enumerate() {
         let node = Node::new(format!("Run {i}"));
         let node = match lcn {
@@ -849,8 +1046,16 @@ async fn attribute_fields(cx: Cx, (fs, a, record): (Vol, Arc<Attr>, u64)) -> Res
         cx.push(node).await;
         vcn = vcn.saturating_add(count);
     }
+    if a.continuation() {
+        cx.emit(Node::new("Content").summary(format!(
+            "the part from VCN {} of a split attribute: shown with its first part",
+            a.lowest_vcn
+        )));
+        return Ok(());
+    }
     // Allocated bytes past the end of the data, in the last run.
     if a.compression_unit == 0
+        && a.extents.len() <= 1
         && let Some(&(count, Some(lcn))) = list.last()
     {
         let start = vcn.saturating_sub(count).saturating_mul(fs.cluster);
@@ -865,7 +1070,12 @@ async fn attribute_fields(cx: Cx, (fs, a, record): (Vol, Arc<Attr>, u64)) -> Res
         }
     }
     // The unnamed $DATA stream is shown with its record; the content of
-    // the other non-resident attributes is shown here.
+    // the other non-resident attributes is shown here, from all its parts.
+    let list = if a.extents.len() > 1 {
+        attr_runs(&cx, &a).await?
+    } else {
+        list
+    };
     match a.kind {
         0x80 if a.name.is_empty() => {}
         0x80 => {
@@ -926,11 +1136,7 @@ async fn stream_content(cx: &Cx, fs: &Vol, a: &Attr) -> Result<Node> {
     if let Some(value) = a.resident {
         return Ok(content_node(&fs.input, value));
     }
-    let raw = cx.read_avail(a.runs.unwrap_or(a.span.sub(0, 0))).await?;
-    let (runs, problem) = parse_runs(&raw);
-    if let Some(d) = problem {
-        cx.diag(d);
-    }
+    let runs = attr_runs(cx, a).await?;
     if a.compression_unit != 0 {
         return compressed_content(cx, fs, a, &runs).await;
     }
@@ -1133,28 +1339,18 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
         Diagnostic::malformed(format!("record {} is outside the MFT", dir.record))
     })?;
     let rec = fixed_up(&cx, span, b"FILE").await?;
-    let attrs = attributes(&cx, rec).await?;
+    let attrs = all_attributes(&cx, &fs, dir.record, rec).await?;
     cx.emit(
         Node::new("MFT record")
             .span(span)
             .lazy(record_node, (fs.clone(), dir.record)),
     );
     let mut entries = Vec::new();
-    if let Some(root) = attrs
-        .iter()
-        .find(|a| a.kind == 0x90 && a.name == "$I30")
-        .and_then(|a| a.resident)
-    {
+    if let Some(root) = find_attr(&attrs, 0x90, "$I30").and_then(|a| a.resident) {
         index_entries(&cx, root.tail(16), &mut entries).await?;
     }
-    if let Some(alloc) = attrs.iter().find(|a| a.kind == 0xa0 && a.name == "$I30") {
-        let raw = cx
-            .read_avail(alloc.runs.unwrap_or(alloc.span.sub(0, 0)))
-            .await?;
-        let (runs, problem) = parse_runs(&raw);
-        if let Some(d) = problem {
-            cx.diag(d);
-        }
+    if let Some(alloc) = find_attr(&attrs, 0xa0, "$I30") {
+        let runs = attr_runs(&cx, alloc).await?;
         let stream = fs
             .runs_list(&cx, alloc.span, &runs, alloc.data_size.min(MAX_INDEX_BYTES))?
             .finish(&cx, "ntfs-runs")
@@ -1168,18 +1364,38 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
         } else {
             4096
         };
+        // Which index records are in use: a freed one keeps its stale
+        // entries (of deleted files) until it is reused.
+        let in_use = match find_attr(&attrs, 0xb0, "$I30") {
+            Some(a) => Some(index_bitmap(&cx, &fs, a, stream.len.div_ceil(block)).await?),
+            None => None,
+        };
         let mut at = 0u64;
+        let mut stale = 0u64;
         while at < stream.len {
             cx.progress(at, stream.len);
             let indx = stream.sub(at, block);
+            let i = at.checked_div(block).unwrap_or(0);
             at = at.saturating_add(block);
             if cx.read_avail(indx.sub(0, 4)).await? != b"INDX" {
+                continue;
+            }
+            if let Some(bits) = &in_use
+                && !bit_set(bits, i)
+            {
+                stale = stale.saturating_add(1);
                 continue;
             }
             match fixed_up(&cx, indx, b"INDX").await {
                 Ok(fixed) => index_entries(&cx, fixed.tail(24), &mut entries).await?,
                 Err(e) => cx.diag(e),
             }
+        }
+        if stale > 0 {
+            cx.diag(Diagnostic::note(format!(
+                "{} not in use ($BITMAP:$I30) skipped: their entries are stale",
+                crate::formats::util::fmt::count(stale, "index record", "index records")
+            )));
         }
     }
     let mut ancestors = (*dir.ancestors).clone();
@@ -1229,11 +1445,36 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
 
 /// The index record size from $INDEX_ROOT (offset 8 of its value).
 fn index_block_size(attrs: &[Attr]) -> Option<Span> {
-    attrs
-        .iter()
-        .find(|a| a.kind == 0x90 && a.name == "$I30")
+    find_attr(attrs, 0x90, "$I30")
         .and_then(|a| a.resident)
         .map(|v| v.sub(0, 16))
+}
+
+/// The bytes of an index's $BITMAP covering `records` index records.
+async fn index_bitmap(cx: &Cx, fs: &Volume, a: &Attr, records: u64) -> Result<Vec<u8>> {
+    let want = records.div_ceil(8);
+    let span = match a.resident {
+        Some(v) => v,
+        None => {
+            let runs = attr_runs(cx, a).await?;
+            fs.runs_list(cx, a.span, &runs, a.data_size.min(want))?
+                .finish(cx, "ntfs-runs")
+                .await?
+        }
+    };
+    cx.read_avail(span.sub(0, want)).await
+}
+
+/// Bit `i` of a bitmap (least significant bit first); bits past its end
+/// are clear.
+fn bit_set(bits: &[u8], i: u64) -> bool {
+    let byte = usize::try_from(i / 8).ok().and_then(|b| bits.get(b));
+    byte.is_some_and(|b| {
+        b.checked_shr(u32::try_from(i % 8).unwrap_or(0))
+            .unwrap_or(0)
+            & 1
+            != 0
+    })
 }
 
 // ---------------------------------------------------------------------------

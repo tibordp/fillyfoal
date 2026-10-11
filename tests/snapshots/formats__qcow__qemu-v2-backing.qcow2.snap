@@ -59,4 +59,4 @@ expression: "common::explore(&display_name(&path), &data)"
       Compressed data — 22 bytes  [0x7000+0x16]
   ▾ Virtual disk — 256 KiB
       ! note: unallocated clusters come from the backing file; shown as zeros
-      Data  [#2:0x0+0x40000]
+      Data  [#3:0x0+0x40000]
