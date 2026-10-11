@@ -69,27 +69,34 @@ const STATES: EnumTable = &[
     (8, "extend"),
     (0x10, "resize"),
 ];
+/// Aggregate flags (`jfs_filsys.h`).
 const FLAGS: FlagTable = &[
-    flag(0x1, "COMMIT"),
-    flag(0x2, "GROUPCOMMIT"),
-    flag(0x4, "LAZYCOMMIT"),
-    flag(0x100, "INLINELOG"),
-    flag(0x200, "INLINEMOVE"),
-    flag(0x400, "BAD_SAIT"),
-    flag(0x800, "SPARSE"),
-    flag(0x1000, "DASD_ENABLED"),
-    flag(0x2000, "DASD_PRIME"),
-    flag(0x4000_0000, "UNICODE"),
-    flag(0x8000_0000, "OS2"),
+    flag(0x1, "UNICODE"),
+    flag(0x100, "GROUPCOMMIT"),
+    flag(0x200, "LAZYCOMMIT"),
+    flag(0x400, "TMPFS"),
+    flag(0x800, "INLINELOG"),
+    flag(0x1000, "INLINEMOVE"),
+    flag(0x1_0000, "BAD_SAIT"),
+    flag(0x2_0000, "SPARSE"),
+    flag(0x4_0000, "DASD_ENABLED"),
+    flag(0x8_0000, "DASD_PRIME"),
+    flag(0x10_0000, "SWAP_BYTES"),
+    flag(0x20_0000, "DIR_INDEX"),
     flag(0x1000_0000, "LINUX"),
+    flag(0x2000_0000, "DFS"),
+    flag(0x4000_0000, "OS2"),
+    flag(0x8000_0000, "AIX"),
 ];
-/// B+tree page flags (`jfs_btree.h`).
+/// B+tree page flags (`jfs_btree.h`; 0x80 is `DXD_INDEX` in the roots kept
+/// in inodes, as `xtInitRoot` and `dtInitRoot` set it).
 const BT_FLAGS: FlagTable = &[
     flag(0x01, "ROOT"),
     flag(0x02, "LEAF"),
     flag(0x04, "INTERNAL"),
-    flag(0x80, "RIGHTMOST"),
-    flag(0x40, "LEFTMOST"),
+    flag(0x10, "RIGHTMOST"),
+    flag(0x20, "LEFTMOST"),
+    flag(0x80, "DXD_INDEX"),
 ];
 /// Log states (`jfs_logmgr.h`).
 const LOG_STATES: EnumTable = &[
