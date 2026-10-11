@@ -122,44 +122,6 @@ impl Entry for SampleSize16 {
 }
 
 record! {
-    pub struct ChunkOffset {
-        offset: u32 "Offset",
-    }
-}
-
-impl Entry for ChunkOffset {
-    fn label(index: u64) -> String {
-        format!("Chunk {}", index.saturating_add(1))
-    }
-    fn leaf(&self) -> Option<Value> {
-        Some(Value::UInt {
-            value: self.offset.into(),
-            bits: 32,
-            radix: Radix::Hex,
-        })
-    }
-}
-
-record! {
-    pub struct ChunkOffset64 {
-        offset: u64 "Offset",
-    }
-}
-
-impl Entry for ChunkOffset64 {
-    fn label(index: u64) -> String {
-        format!("Chunk {}", index.saturating_add(1))
-    }
-    fn leaf(&self) -> Option<Value> {
-        Some(Value::UInt {
-            value: self.offset,
-            bits: 64,
-            radix: Radix::Hex,
-        })
-    }
-}
-
-record! {
     pub struct AuxOffset {
         offset: u32 "Offset",
     }
@@ -355,8 +317,7 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
                 b"stts" => table::<TimeToSample>("Entries", entries, n, BE),
                 b"ctts" => table::<CompositionOffset>("Entries", entries, n, BE),
                 b"stsc" => table::<SampleToChunk>("Entries", entries, n, BE),
-                b"stco" => table::<ChunkOffset>("Chunk offsets", entries, n, BE),
-                b"co64" => table::<ChunkOffset64>("Chunk offsets", entries, n, BE),
+                b"stco" | b"co64" => chunk_offsets(entries, n, &kind == b"co64", st.input.span),
                 _ => table::<SampleNumber>("Sync samples", entries, n, BE),
             });
         }
@@ -482,12 +443,20 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
             ));
         }
         b"trun" => {
+            let file = st.input.span;
+            let base = base_data_offset(cx, st).await?;
             let (flags, count, at) = header(cx, body, |f| {
                 let (_, flags) = super::full_box_flags(f, TRUN_FLAGS)?;
                 let n = f.u32("Sample count").emit()?;
                 if flags & 0x1 != 0 {
                     f.i32("Data offset")
                         .desc("Relative to the base data offset (tfhd), usually the moof")
+                        .with(
+                            |&off, n| match base.and_then(|b| b.checked_add_signed(off.into())) {
+                                Some(at) if at <= file.len => n.target(file.sub(at, 0)),
+                                _ => n,
+                            },
+                        )
                         .emit()?;
                 }
                 if flags & 0x4 != 0 {
@@ -1424,6 +1393,118 @@ fn tfra_entry(f: &mut Fields<'_>, t: &Tfra) -> Result<()> {
         f.node(crate::formats::util::vidutil::uint(name, at, v, 32));
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Chunk offsets
+
+#[derive(Clone, Copy, Debug)]
+struct Offsets {
+    span: Span,
+    count: u64,
+    wide: bool,
+    /// The file the offsets point into.
+    file: Span,
+}
+
+/// `stco`/`co64` entries: absolute file offsets, each a target.
+fn chunk_offsets(span: Span, count: u64, wide: bool, file: Span) -> Node {
+    Node::new("Chunk offsets")
+        .span(span)
+        .summary(entries(count))
+        .lazy(
+            expand_offsets,
+            Offsets {
+                span,
+                count,
+                wide,
+                file,
+            },
+        )
+}
+
+async fn expand_offsets(cx: Cx, t: Offsets) -> Result<()> {
+    let stride: u64 = if t.wide { 8 } else { 4 };
+    let fits = t.span.len.checked_div(stride).unwrap_or(0);
+    let count = t.count.min(fits);
+    if t.count > fits {
+        cx.diag(
+            Diagnostic::truncated(
+                Span::new(t.span.source, t.span.offset, t.count.saturating_mul(stride)),
+                t.span.len,
+            )
+            .at(t.span),
+        );
+    }
+    cx.set_count(Count::Exact(count));
+    let mut index = 0u64;
+    while index < count {
+        let n = count.saturating_sub(index).min(PAGE);
+        let page = t
+            .span
+            .sub(index.saturating_mul(stride), n.saturating_mul(stride));
+        let d = cx.read(page).await?;
+        for j in 0..n {
+            let at = to_usize(j.saturating_mul(stride));
+            let offset = if t.wide {
+                u64_be(&d, at)
+            } else {
+                u32_be(&d, at).map(u64::from)
+            }
+            .unwrap_or(0);
+            let name = format!("Chunk {}", index.saturating_add(j).saturating_add(1));
+            let node = Node::new(name)
+                .span(page.sub(j.saturating_mul(stride), stride))
+                .value(Value::UInt {
+                    value: offset,
+                    bits: if t.wide { 64 } else { 32 },
+                    radix: Radix::Hex,
+                });
+            cx.push(if offset <= t.file.len {
+                node.target(t.file.sub(offset, 0))
+            } else {
+                node.diag(Diagnostic::malformed("points past the end of the file"))
+            })
+            .await;
+        }
+        index = index.saturating_add(n);
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Track fragment runs
+
+/// The base data offset of the track fragment a `trun` (`st`) is in,
+/// relative to the file: `tfhd`'s explicit one, else the start of the
+/// `moof` when `default-base-is-moof` is set or this is the fragment's
+/// first `traf` (ISO 14496-12 8.8.7.1). `None` when it depends on the data
+/// of a preceding track fragment.
+async fn base_data_offset(cx: &Cx, st: &BoxState) -> Result<Option<u64>> {
+    let ctx = st.ctx;
+    if &ctx.parent != b"traf" || ctx.fragment.is_empty() {
+        return Ok(None);
+    }
+    let Some((h, tfhd)) = super::find_child(cx, ctx.siblings, b"tfhd").await? else {
+        return Ok(None);
+    };
+    let d = cx.read_avail(tfhd.tail(h.header_len).sub(0, 16)).await?;
+    let flags = u32_be(&d, 0).unwrap_or(0) & 0x00ff_ffff;
+    if flags & 0x1 != 0 {
+        return Ok(u64_be(&d, 8));
+    }
+    let moof = ctx
+        .fragment
+        .offset
+        .checked_sub(st.input.span.offset)
+        .filter(|&m| m <= st.input.span.len);
+    if flags & 0x2_0000 != 0 {
+        return Ok(moof);
+    }
+    // Otherwise only the first 'traf' of the 'moof' starts at the moof.
+    let first = super::find_child(cx, ctx.outer, b"traf").await?;
+    let first = first.map(|(h, span)| span.tail(h.header_len));
+    Ok(moof.filter(|_| first.is_some_and(|b| b.offset == ctx.siblings.offset)))
 }
 
 // ---------------------------------------------------------------------------

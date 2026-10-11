@@ -252,7 +252,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Flags: 0x0  [0x4b2+0x3]
                 Entry count: 1  [0x4b5+0x4]
               ▾ Chunk offsets — 1 entry  [0x4b9+0x4]
-                  Chunk 1: 0x2c  [0x4b9+0x4]
+                  Chunk 1: 0x2c  [0x4b9+0x4] → 0x2c+0x0
             ▾ sgpd — roll (audio pre-roll / gradual refresh): 1 description  [0x4bd+0x1a]
                 Size: 26  [0x4bd+0x4]
                 Type: "sgpd"  [0x4c1+0x4]

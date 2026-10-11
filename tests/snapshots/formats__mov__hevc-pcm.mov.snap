@@ -492,7 +492,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Flags: 0x0  [0x14dc+0x3]
                 Entry count: 1  [0x14df+0x4]
               ▾ Chunk offsets — 1 entry  [0x14e3+0x4]
-                  Chunk 1: 0x51  [0x14e3+0x4]
+                  Chunk 1: 0x51  [0x14e3+0x4] → 0x51+0x0
     ▾ trak — Audio track 2: PCM 16-bit little-endian, mono, 8 kHz, 128 kb/s, 0:00.10  [0x14e7+0x209]
         Size: 521  [0x14e7+0x4]
         Type: "trak"  [0x14eb+0x4]
@@ -673,7 +673,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Flags: 0x0  [0x16e5+0x3]
                 Entry count: 1  [0x16e8+0x4]
               ▾ Chunk offsets — 1 entry  [0x16ec+0x4]
-                  Chunk 1: 0x211  [0x16ec+0x4]
+                  Chunk 1: 0x211  [0x16ec+0x4] → 0x211+0x0
     ▾ trak — Text track 3: QuickTime text, 4.1 kb/s, 0:00.08, eng, disabled  [0x16f0+0x23b]
         Size: 571  [0x16f0+0x4]
         Type: "trak"  [0x16f4+0x4]
@@ -871,7 +871,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Flags: 0x0  [0x1920+0x3]
                 Entry count: 1  [0x1923+0x4]
               ▾ Chunk offsets — 1 entry  [0x1927+0x4]
-                  Chunk 1: 0x24  [0x1927+0x4]
+                  Chunk 1: 0x24  [0x1927+0x4] → 0x24+0x0
     ▾ trak — Timecode track 4: timecode, 29.97 fps drop-frame, starts at 01:02:03;04, 239 b/s, 0:00.13, eng, disabled  [0x192b+0x24f]
         Size: 591  [0x192b+0x4]
         Type: "trak"  [0x192f+0x4]
@@ -1076,7 +1076,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Flags: 0x0  [0x1b6f+0x3]
                 Entry count: 1  [0x1b72+0x4]
               ▾ Chunk offsets — 1 entry  [0x1b76+0x4]
-                  Chunk 1: 0x4d  [0x1b76+0x4]
+                  Chunk 1: 0x4d  [0x1b76+0x4] → 0x4d+0x0
     ▾ udta  [0x1b7a+0x175]
         Size: 373  [0x1b7a+0x4]
         Type: "udta"  [0x1b7e+0x4]

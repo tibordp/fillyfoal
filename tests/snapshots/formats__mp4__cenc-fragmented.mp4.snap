@@ -599,7 +599,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Version: 0  [0x5db+0x1]
           Flags: 0xa05 [DATA_OFFSET | FIRST_SAMPLE_FLAGS | SAMPLE_SIZE | SAMPLE_COMPOSITION_TIME_OFFSET]  [0x5dc+0x3]
           Sample count: 2  [0x5df+0x4]
-          Data offset: 221  [0x5e3+0x4]
+          Data offset: 221  [0x5e3+0x4] → 0x660+0x0
           First sample flags: 0x2000000 — sync, independent  [0x5e7+0x4]
         ▾ Samples — 2 samples  [0x5eb+0x10]
           ▾ Sample 1 — 1087 bytes, cto +1024  [0x5eb+0x8]
@@ -685,7 +685,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Version: 0  [0xb0f+0x1]
           Flags: 0x301 [DATA_OFFSET | SAMPLE_DURATION | SAMPLE_SIZE]  [0xb10+0x3]
           Sample count: 3  [0xb13+0x4]
-          Data offset: 209  [0xb17+0x4]
+          Data offset: 209  [0xb17+0x4] → 0xb88+0x0
         ▾ Samples — 3 samples  [0xb1b+0x18]
           ▾ Sample 1 — duration 1600, 174 bytes  [0xb1b+0x8]
               Duration: 1600  [0xb1b+0x4]
@@ -769,7 +769,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Version: 0  [0xe06+0x1]
           Flags: 0xa05 [DATA_OFFSET | FIRST_SAMPLE_FLAGS | SAMPLE_SIZE | SAMPLE_COMPOSITION_TIME_OFFSET]  [0xe07+0x3]
           Sample count: 2  [0xe0a+0x4]
-          Data offset: 215  [0xe0e+0x4]
+          Data offset: 215  [0xe0e+0x4] → 0xe85+0x0
           First sample flags: 0x2000000 — sync, independent  [0xe12+0x4]
         ▾ Samples — 2 samples  [0xe16+0x10]
           ▾ Sample 1 — 413 bytes, cto +1024  [0xe16+0x8]
@@ -852,7 +852,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Version: 0  [0x1090+0x1]
           Flags: 0x301 [DATA_OFFSET | SAMPLE_DURATION | SAMPLE_SIZE]  [0x1091+0x3]
           Sample count: 5  [0x1094+0x4]
-          Data offset: 241  [0x1098+0x4]
+          Data offset: 241  [0x1098+0x4] → 0x1129+0x0
         ▾ Samples — 5 samples  [0x109c+0x28]
           ▾ Sample 1 — duration 1024, 133 bytes  [0x109c+0x8]
               Duration: 1024  [0x109c+0x4]

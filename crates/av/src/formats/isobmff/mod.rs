@@ -381,6 +381,9 @@ pub struct Ctx {
     pub movie_timescale: u32,
     /// Timescale of the enclosing track's media (`mdhd`); 0 if unknown.
     pub media_timescale: u32,
+    /// The enclosing movie fragment box (`moof`, header included); empty
+    /// outside fragments.
+    pub fragment: Span,
 }
 
 impl Ctx {
@@ -559,6 +562,7 @@ async fn decode(cx: &Cx, st: &BoxState) -> Result<()> {
                     child.media_timescale = ts;
                 }
             }
+            b"moof" => child.fragment = st.span,
             _ => {}
         }
         return children(cx, st.input, body, child).await;
@@ -647,6 +651,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         outer: input.span,
         movie_timescale: 0,
         media_timescale: 0,
+        fragment: input.span.sub(0, 0),
     };
     children(&cx, input, input.span, ctx).await
 }

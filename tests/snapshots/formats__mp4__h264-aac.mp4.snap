@@ -311,7 +311,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Flags: 0x0  [0x8c2+0x3]
                 Entry count: 1  [0x8c5+0x4]
               ▾ Chunk offsets — 1 entry  [0x8c9+0x4]
-                  Chunk 1: 0x11f  [0x8c9+0x4]
+                  Chunk 1: 0x11f  [0x8c9+0x4] → 0x11f+0x0
     ▾ trak — Audio track 2: AAC-LC, mono, 8 kHz [mp4a.40.2], 13.3 kb/s, 0:00.32  [0x8cd+0x255]
         Size: 597  [0x8cd+0x4]
         Type: "trak"  [0x8d1+0x4]
@@ -524,8 +524,8 @@ expression: "common::explore(&display_name(&path), &data)"
                 Flags: 0x0  [0xadd+0x3]
                 Entry count: 2  [0xae0+0x4]
               ▾ Chunk offsets — 2 entries  [0xae4+0x8]
-                  Chunk 1: 0x30  [0xae4+0x4]
-                  Chunk 2: 0x4e8  [0xae8+0x4]
+                  Chunk 1: 0x30  [0xae4+0x4] → 0x30+0x0
+                  Chunk 2: 0x4e8  [0xae8+0x4] → 0x4e8+0x0
             ▾ sgpd — roll (audio pre-roll / gradual refresh): 1 description  [0xaec+0x1a]
                 Size: 26  [0xaec+0x4]
                 Type: "sgpd"  [0xaf0+0x4]

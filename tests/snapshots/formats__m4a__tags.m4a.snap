@@ -260,7 +260,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Flags: 0x0  [0x4f9+0x3]
                 Entry count: 1  [0x4fc+0x4]
               ▾ Chunk offsets — 1 entry  [0x500+0x4]
-                  Chunk 1: 0x55  [0x500+0x4]
+                  Chunk 1: 0x55  [0x500+0x4] → 0x55+0x0
             ▾ sgpd — roll (audio pre-roll / gradual refresh): 1 description  [0x504+0x1a]
                 Size: 26  [0x504+0x4]
                 Type: "sgpd"  [0x508+0x4]
@@ -466,7 +466,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Flags: 0x0  [0x73e+0x3]
                 Entry count: 1  [0x741+0x4]
               ▾ Chunk offsets — 1 entry  [0x745+0x4]
-                  Chunk 1: 0x2c  [0x745+0x4]
+                  Chunk 1: 0x2c  [0x745+0x4] → 0x2c+0x0
     ▾ udta  [0x749+0x6eb]
         Size: 1771  [0x749+0x4]
         Type: "udta"  [0x74d+0x4]

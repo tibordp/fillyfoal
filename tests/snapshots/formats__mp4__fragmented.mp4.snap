@@ -545,7 +545,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Version: 0  [0x53f+0x1]
           Flags: 0x5 [DATA_OFFSET | FIRST_SAMPLE_FLAGS]  [0x540+0x3]
           Sample count: 1  [0x543+0x4]
-          Data offset: 212  [0x547+0x4]
+          Data offset: 212  [0x547+0x4] → 0x5bb+0x0
           First sample flags: 0x2000000 — sync, independent  [0x54b+0x4]
           Samples — 1 sample  [0x54f+0x0]
     ▾ traf  [0x54f+0x64]
@@ -572,7 +572,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Version: 0  [0x58f+0x1]
           Flags: 0x301 [DATA_OFFSET | SAMPLE_DURATION | SAMPLE_SIZE]  [0x590+0x3]
           Sample count: 3  [0x593+0x4]
-          Data offset: 1181  [0x597+0x4]
+          Data offset: 1181  [0x597+0x4] → 0x984+0x0
         ▾ Samples — 3 samples  [0x59b+0x18]
           ▾ Sample 1 — duration 1024, 239 bytes  [0x59b+0x8]
               Duration: 1024  [0x59b+0x4]
