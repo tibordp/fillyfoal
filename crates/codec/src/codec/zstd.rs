@@ -1182,7 +1182,11 @@ impl Decode for Zstd {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::arithmetic_side_effects)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing
+)]
 mod tests {
     use super::*;
     use crate::codec::pipeline::{Streaming, verify_checkpoints};
@@ -1238,6 +1242,21 @@ mod tests {
         }
         assert!(seen_mid && seen_between);
         assert_eq!(out.len(), 320_000 + 1000 + 8192 + 30_000);
+    }
+
+    #[test]
+    fn a_fresh_decoder_at_a_frame_start_decodes_the_rest() {
+        // Frames are independent: what a container's seek table needs.
+        use crate::codec::pipeline::{Decoder, decode_all};
+        let all = decode_all(&mut Streaming(Zstd::new()), WORDS8, 1 << 30).unwrap();
+        let mut first = Streaming(Zstd::single_frame());
+        let head = decode_all(&mut first, WORDS8, 1 << 30).unwrap();
+        let at = first.consumed();
+        assert_eq!(head.len(), 320_000);
+        let mut d = crate::codec::Codec::Zstd.decoder().unwrap();
+        let rest = decode_all(d.as_mut(), &WORDS8[at..], 1 << 30).unwrap();
+        assert_eq!(rest, &all[head.len()..]);
+        assert_eq!(rest.len(), 1000 + 8192 + 30_000);
     }
 
     #[test]

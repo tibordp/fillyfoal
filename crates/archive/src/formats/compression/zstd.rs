@@ -311,18 +311,30 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 /// every frame (frames do not record their encoded size), which for a large
 /// file is a read of all of it before the first decoded byte; so it is only
 /// done for small files, and a large stream decodes lazily with its size
-/// found at the end.
+/// found at the end, unless a seek table (the seekable format) records the
+/// frames. Frames are independent, so a large stream with its frames known
+/// decodes from the frame before a read.
 async fn decompressed(cx: Cx, input: Input) -> Result<()> {
     const WALK_LIMIT: u64 = 1024 * 1024;
     let file = input.span;
+    let codec = crate::codec::Codec::Zstd;
+    if let Some((total, frames)) = seek_table_frames(&cx, file).await
+        && crate::formats::decodes_lazily(file, &codec, total)
+    {
+        let seeds = frame_seeds(&codec, &frames, total);
+        return crate::formats::expand_content_seeded(cx, (input, file, codec, total), seeds).await;
+    }
     let mut cur = Cursor::new(&cx, file, LE);
     let mut total = (file.len <= WALK_LIMIT).then_some(0u64);
+    // Where each frame starts, in the file and in the content.
+    let mut frames = Vec::new();
     while !cur.at_end() && total.is_some() {
         let start = cur.pos();
         let Some(magic) = u32_le(&cur.peek(4).await?, 0) else {
             break;
         };
         if magic == FRAME_MAGIC {
+            frames.push((start, total.unwrap_or(0)));
             total = match walk_frame(&cx, &mut cur).await {
                 Ok(info) => total
                     .zip(info.header.content_size)
@@ -340,7 +352,92 @@ async fn decompressed(cx: Cx, input: Input) -> Result<()> {
             break;
         }
     }
-    crate::formats::expand_content(cx, (input, file, crate::codec::Codec::Zstd, total)).await
+    if let Some(total) = total
+        && crate::formats::decodes_lazily(file, &codec, total)
+    {
+        let seeds = frame_seeds(&codec, &frames, total);
+        return crate::formats::expand_content_seeded(cx, (input, file, codec, total), seeds).await;
+    }
+    crate::formats::expand_content(cx, (input, file, codec, total)).await
+}
+
+/// Frames seeded at most: each costs a few dozen bytes.
+const MAX_SEEDS: u64 = 4096;
+/// Seek tables with more entries than this are not used.
+const MAX_SEEK_ENTRIES: u64 = 1 << 20;
+
+/// Seeds at frame starts (input, output position): a fresh decoder decodes
+/// a frame and everything after it. At most [`MAX_SEEDS`], evenly spread.
+fn frame_seeds(
+    codec: &crate::codec::Codec,
+    frames: &[(u64, u64)],
+    total: u64,
+) -> Vec<crate::cx::Seed> {
+    let spacing = (total / MAX_SEEDS).max(1);
+    let mut last = 0u64;
+    let mut seeds = Vec::new();
+    for &(in_pos, out_pos) in frames {
+        if out_pos == 0 || out_pos.saturating_sub(last) < spacing {
+            continue;
+        }
+        let Some(decoder) = codec.decoder() else {
+            break;
+        };
+        last = out_pos;
+        seeds.push(crate::cx::Seed {
+            out_pos,
+            in_pos,
+            decoder,
+        });
+    }
+    seeds
+}
+
+/// The total decoded size and the frame starts (input, output position) a
+/// seek table at the end of `file` records, if it is one and its frames
+/// add up to the bytes before it (the frames start the file).
+async fn seek_table_frames(cx: &Cx, file: Span) -> Option<(u64, Vec<(u64, u64)>)> {
+    let footer_at = file.len.checked_sub(9)?;
+    let footer = cx.read(file.sub(footer_at, 9)).await.ok()?;
+    if u32_le(&footer, 5) != Some(SEEKABLE_MAGIC) {
+        return None;
+    }
+    let entries = u64::from(u32_le(&footer, 0)?);
+    let descriptor = footer.get(4).copied()?;
+    if descriptor & 0x7c != 0 || entries > MAX_SEEK_ENTRIES {
+        return None;
+    }
+    let entry = if descriptor & 0x80 != 0 { 12u64 } else { 8 };
+    let table_len = entries.saturating_mul(entry);
+    let start = footer_at.checked_sub(table_len)?.checked_sub(8)?;
+    let head = cx.read(file.sub(start, 8)).await.ok()?;
+    if u32_le(&head, 0) != Some(SEEK_TABLE_FRAME)
+        || u32_le(&head, 4).map(u64::from) != Some(table_len.saturating_add(9))
+    {
+        return None;
+    }
+    let magic = cx.read(file.sub(0, 4)).await.ok()?;
+    if u32_le(&magic, 0) != Some(FRAME_MAGIC) {
+        return None;
+    }
+    let table = cx
+        .read(file.sub(start.saturating_add(8), table_len))
+        .await
+        .ok()?;
+    let mut frames = Vec::new();
+    let (mut in_pos, mut out_pos) = (0u64, 0u64);
+    for (i, e) in table
+        .chunks_exact(crate::bytes::to_usize(entry))
+        .enumerate()
+    {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        frames.push((in_pos, out_pos));
+        in_pos = in_pos.saturating_add(u32_le(e, 0)?.into());
+        out_pos = out_pos.saturating_add(u32_le(e, 4)?.into());
+    }
+    (in_pos == start).then_some((out_pos, frames))
 }
 
 async fn is_seek_table(cx: &Cx, span: Span) -> bool {

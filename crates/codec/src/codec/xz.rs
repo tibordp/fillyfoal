@@ -282,7 +282,41 @@ pub struct XzStream {
     phase: usize,
 }
 
+/// The size of a block check of type `id` (the low four bits of the
+/// stream flags).
+fn check_len(id: u8) -> usize {
+    match id {
+        0 => 0,
+        1 => 4,
+        4 => 8,
+        10 => 32,
+        c => 4usize << ((usize::from(c).saturating_sub(1)) / 3),
+    }
+}
+
 impl XzStream {
+    /// A decoder whose input starts at a block of a stream (or at the
+    /// stream's index, if it has no more blocks) instead of at the start of
+    /// the file: that block, the stream's later blocks, its index and
+    /// footer, and any streams after it, decoded exactly as a decoder that
+    /// started at the start would once it got there. `flags` is the
+    /// stream's second stream flags byte (its check type), `stream` the
+    /// number of streams up to this one (at least 1), and `offset` where the
+    /// input starts in the file, which block padding aligns to. Each block
+    /// starts a new dictionary, so nothing before it is needed.
+    pub fn at_block(flags: u8, stream: u32, offset: u64) -> Self {
+        let check_id = flags & 0x0f;
+        XzStream {
+            streams: stream.max(1),
+            in_stream: true,
+            check_id,
+            check_len: check_len(check_id),
+            #[allow(clippy::cast_possible_truncation)]
+            phase: (offset & 3) as usize,
+            ..XzStream::default()
+        }
+    }
+
     fn unit(
         &mut self,
         input: &[u8],
@@ -414,13 +448,7 @@ impl XzStream {
             return Ok(Unit::NeedInput);
         }
         self.check_id = rest.get(7).copied().unwrap_or(0) & 0x0f;
-        self.check_len = match self.check_id {
-            0 => 0,
-            1 => 4,
-            4 => 8,
-            10 => 32,
-            c => 4usize << ((usize::from(c).saturating_sub(1)) / 3),
-        };
+        self.check_len = check_len(self.check_id);
         self.pos = self.pos.saturating_add(12);
         self.streams = self.streams.saturating_add(1);
         self.in_stream = true;
@@ -603,6 +631,50 @@ mod tests {
             }
         }
         assert_eq!(boundaries, 7);
+    }
+
+    #[test]
+    fn decoding_from_a_block_start() {
+        // Every block of words-blocks.xz (16 KiB each, CRC-64) decoded from
+        // its start gives the rest of the file, as from the start; and so
+        // does a stream that follows it.
+        let data = include_bytes!("testdata/words-blocks.xz");
+        let flags = data[7];
+        assert_eq!(flags, 4);
+        // Block starts (input, output), found by a decoder from the start,
+        // which pauses at each.
+        let mut starts = vec![(12, 0)];
+        let mut d = XzStream::default();
+        let mut out = Vec::new();
+        while d.decode(data, true, &mut out, 1 << 20, 1 << 21).unwrap() == Status::More {
+            if d.block.is_none() && d.in_stream && data[d.pos] != 0 {
+                starts.push((d.pos, out.len()));
+            }
+        }
+        assert_eq!(starts.len(), 8);
+        let mut two = data.to_vec();
+        two.extend_from_slice(&[0; 8]);
+        two.extend_from_slice(data);
+        for &(at, out_pos) in &starts {
+            let mut d = XzStream::at_block(flags, 1, at as u64);
+            let out = decode_all(&mut d, &data[at..], 1 << 21).unwrap();
+            assert_eq!(out, &WORDS[out_pos..], "block at {at}");
+            let mut d = XzStream::at_block(flags, 1, at as u64);
+            let out = decode_all(&mut d, &two[at..], 1 << 21).unwrap();
+            assert_eq!(out, [&WORDS[out_pos..], WORDS].concat(), "block at {at}");
+            assert_eq!(d.streams, 2);
+        }
+        // Block padding aligns to the file: the wrong offset misreads the
+        // check.
+        let at = starts[1].0;
+        assert!(
+            decode_all(
+                &mut XzStream::at_block(flags, 1, at as u64 + 1),
+                &data[at..],
+                1 << 21
+            )
+            .is_err()
+        );
     }
 
     #[test]

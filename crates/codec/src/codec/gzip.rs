@@ -56,6 +56,23 @@ impl Default for Gzip {
     }
 }
 
+impl Gzip {
+    /// A decoder whose input starts at a member's header (its magic)
+    /// instead of after the first member's header: that member and those
+    /// after it, decoded as a decoder that started at the start would once
+    /// it got there, a container that records where members start (BGZF)
+    /// can start one at any of them. `members` is how many members come
+    /// before (it numbers them in warnings); a mismatch in those is not
+    /// seen.
+    pub fn at_member(members: u64) -> Self {
+        Gzip {
+            phase: Phase::Between,
+            members,
+            ..Gzip::default()
+        }
+    }
+}
+
 fn truncated(what: &str) -> Diagnostic {
     Diagnostic::malformed(format!("truncated gzip {what}"))
 }
@@ -328,6 +345,31 @@ mod tests {
             );
             assert_eq!(consumed, file.len() - first);
             assert!(warning.is_none());
+        }
+    }
+
+    #[test]
+    fn decoding_from_a_member_header() {
+        let a: Vec<u8> = (0..100_000u32).map(|i| i as u8).collect();
+        let b = b"second member".to_vec();
+        let c: Vec<u8> = (0..70_000u32).map(|i| (i * 7) as u8).collect();
+        let mut file = member(&a, Some("a.txt"));
+        let second = file.len();
+        file.extend(member(&b, None));
+        let third = file.len();
+        file.extend(member(&c, Some("c")));
+        let n = file.len() - 4;
+        file[n] ^= 1;
+        for (at, before, want) in [(second, 1, [&b[..], &c].concat()), (third, 2, c.clone())] {
+            let mut d = Streaming(Gzip::at_member(before));
+            let out = crate::codec::pipeline::decode_all(&mut d, &file[at..], 1 << 30).unwrap();
+            assert_eq!(out, want);
+            assert_eq!(d.consumed(), file.len() - at);
+            // Members are numbered as from the start.
+            assert_eq!(
+                d.warning(&out).unwrap().message,
+                "gzip member 3: size mismatch"
+            );
         }
     }
 
