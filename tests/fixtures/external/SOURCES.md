@@ -74,6 +74,7 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `pbzx/pbz4.aar` | macOS aa (Apple Archive) | `aa archive` with LZ4 compression; entries carry `com.apple.provenance` xattrs |
 | `pbzx/pbze.aar` | macOS aa (Apple Archive) | `aa archive` with LZFSE compression; entries carry `com.apple.provenance` xattrs |
 | `pbzx/pbzz.aar` | macOS aa (Apple Archive) | `aa archive` with zlib compression |
+| `wim/` | wimlib-imagex 1.13.5 (Debian bookworm `wimtools`, Docker) | `tests/data/wim/make.sh`: `wimcapture` of the tree `make_tree.py` writes, image name `fillyfoal`: `lzms.wim` (`--compress=LZMS --chunk-size=32768`), `solid.esd` (`--solid --solid-chunk-size=32768`, solid LZMS), `solid-lzx.wim` (`--solid --solid-compress=LZX --solid-chunk-size=32768`, text file only). Not byte-reproducible (random GUID, creation times in the XML); every stream's SHA-1 in the lookup table checks against our decoding (`codec::wim` tests) |
 
 ## Disk images (macOS)
 
