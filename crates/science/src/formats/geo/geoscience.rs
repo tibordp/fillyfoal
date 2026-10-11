@@ -77,11 +77,36 @@ fn segy_sample_size(format: u16) -> u64 {
     }
 }
 
+/// A u16 of the given byte order.
+fn u16_in(b: &[u8], at: usize, endian: Endian) -> Option<u16> {
+    match endian {
+        Endian::Big => u16_be(b, at),
+        Endian::Little => u16_le(b, at),
+    }
+}
+
+/// The byte order of a SEG-Y file from its 400-byte binary header. Rev 2
+/// writes the constant 0x01020304 at 3297 (offset 96 here) in the file's
+/// byte order; without it, the order in which the sample format code
+/// (3225) is valid and the samples per trace (3221) is non-zero, big
+/// endian first (the standard order; segyio and others also write little
+/// endian).
+fn segy_endian(bin: &[u8]) -> Option<Endian> {
+    match bin.get(96..100) {
+        Some([1, 2, 3, 4]) => return Some(BE),
+        Some([4, 3, 2, 1]) => return Some(LE),
+        _ => {}
+    }
+    [BE, LE].into_iter().find(|&e| {
+        u16_in(bin, 24, e).is_some_and(|f| segy_sample_size(f) > 0)
+            && u16_in(bin, 20, e).is_some_and(|n| n > 0)
+    })
+}
+
 fn segy_probe(h: &Head<'_>) -> bool {
-    let format = u16_be(h.data, 3224).unwrap_or(0);
     let cards = (h.at(0, b"\xc3") && h.data.get(80) == Some(&0xc3))
         || (h.at(0, b"C") && h.data.get(80) == Some(&b'C'));
-    cards && segy_sample_size(format) > 0 && u16_be(h.data, 3220).is_some_and(|n| n > 0)
+    cards && h.data.get(3200..3600).and_then(segy_endian).is_some()
 }
 
 declare_format!(pub SEGY = "segy", "SEG-Y seismic data", ["segy", "sgy", "seg"], "application/x-segy",
@@ -124,14 +149,30 @@ record! {
     }
 }
 
-fn segy_sample(b: &[u8], format: u16) -> f64 {
+fn segy_sample(b: &[u8], format: u16, endian: Endian) -> f64 {
+    // Decode in big-endian order: reverse little-endian samples first.
+    let mut be = b.to_vec();
+    if endian == LE {
+        be.reverse();
+    }
+    let b = be.as_slice();
     match format {
         1 => ibm(&u32_be(b, 0).unwrap_or(0).to_be_bytes()).unwrap_or(0.0),
         2 => f64::from(crate::bytes::i32_be(b, 0).unwrap_or(0)),
         3 => f64::from(u16_be(b, 0).unwrap_or(0).cast_signed()),
         5 => f64::from(f32::from_bits(u32_be(b, 0).unwrap_or(0))),
         6 => f64::from_bits(crate::bytes::u64_be(b, 0).unwrap_or(0)),
+        7 => {
+            // Sign-extend the 24-bit value.
+            let v = crate::bytes::u24_be(b, 0).unwrap_or(0);
+            f64::from((v << 8).cast_signed() >> 8)
+        }
         8 => f64::from(b.first().copied().unwrap_or(0).cast_signed()),
+        #[allow(clippy::cast_precision_loss)] // a preview of the value
+        9 => crate::bytes::u64_be(b, 0).unwrap_or(0).cast_signed() as f64,
+        #[allow(clippy::cast_precision_loss)] // a preview of the value
+        12 => crate::bytes::u64_be(b, 0).unwrap_or(0) as f64,
+        15 => f64::from(crate::bytes::u24_be(b, 0).unwrap_or(0)),
         10 => f64::from(u32_be(b, 0).unwrap_or(0)),
         11 => f64::from(u16_be(b, 0).unwrap_or(0)),
         16 => f64::from(b.first().copied().unwrap_or(0)),
@@ -168,7 +209,9 @@ async fn segy(cx: Cx, input: Input) -> Result<()> {
             .lazy(segy_cards, (file.sub(0, 3200), decoded)),
     );
     let bspan = file.sub(3200, 400);
-    let b: SegyBinary = read_record(&cx, bspan.sub(0, SegyBinary::SIZE), BE).await?;
+    let bin = cx.read_avail(bspan).await?;
+    let endian = segy_endian(&bin).unwrap_or(BE);
+    let b: SegyBinary = read_record(&cx, bspan.sub(0, SegyBinary::SIZE), endian).await?;
     cx.emit(
         Node::new("Binary header")
             .span(bspan)
@@ -178,11 +221,10 @@ async fn segy(cx: Cx, input: Input) -> Result<()> {
                 b.interval,
                 lookup(SEGY_FORMATS, b.format.into()).unwrap_or("?")
             ))
-            .lazy(segy_binary, bspan),
+            .lazy(segy_binary, (bspan, endian)),
     );
-    let rev = cx.read_avail(bspan.sub(300, 6)).await?;
-    let revision = u16_be(&rev, 0).unwrap_or(0);
-    let extended = u16_be(&rev, 4).unwrap_or(0).cast_signed().max(0);
+    let revision = u16_in(&bin, 300, endian).unwrap_or(0);
+    let extended = u16_in(&bin, 304, endian).unwrap_or(0).cast_signed().max(0);
     let ext_span = file.sub(
         3600,
         u64::from(extended.unsigned_abs()).saturating_mul(3200),
@@ -202,12 +244,13 @@ async fn segy(cx: Cx, input: Input) -> Result<()> {
         Node::new("Traces")
             .span(traces)
             .value(uint(count))
-            .lazy(segy_traces, (traces, b.format, b.samples)),
+            .lazy(segy_traces, (traces, b.format, b.samples, endian)),
     );
     cx.annotate(format!(
-        "SEG-Y rev {}.{}, {count} trace(s) × {} samples at {} µs ({}){}",
+        "SEG-Y rev {}.{}{}, {count} trace(s) × {} samples at {} µs ({}){}",
         revision >> 8,
         revision & 0xff,
+        if endian == LE { " (little endian)" } else { "" },
         b.samples,
         b.interval,
         lookup(SEGY_FORMATS, b.format.into()).unwrap_or("?"),
@@ -236,10 +279,17 @@ async fn segy_cards(cx: Cx, (span, cards): (Span, Vec<String>)) -> Result<()> {
     Ok(())
 }
 
-async fn segy_binary(cx: Cx, span: Span) -> Result<()> {
+async fn segy_binary(cx: Cx, (span, endian): (Span, Endian)) -> Result<()> {
     let b = cx.block(span).await?;
-    let mut f = Fields::emitting(&cx, &b, BE);
+    let mut f = Fields::emitting(&cx, &b, endian);
     SegyBinary::read(&mut f)?;
+    if b.data
+        .get(96..100)
+        .is_some_and(|m| m.iter().any(|&x| x != 0))
+    {
+        f.seek(96);
+        f.u32("Byte order constant").hex().emit()?;
+    }
     f.seek(300);
     f.u16("SEG-Y revision").hex().emit()?;
     f.u16("Fixed length trace flag").emit()?;
@@ -278,7 +328,10 @@ record! {
     }
 }
 
-async fn segy_traces(cx: Cx, (span, format, samples): (Span, u16, u16)) -> Result<()> {
+async fn segy_traces(
+    cx: Cx,
+    (span, format, samples, endian): (Span, u16, u16, Endian),
+) -> Result<()> {
     let size = segy_sample_size(format);
     let mut at = 0u64;
     let mut i = 0u64;
@@ -286,20 +339,20 @@ async fn segy_traces(cx: Cx, (span, format, samples): (Span, u16, u16)) -> Resul
         cx.progress_in(span, span.offset.saturating_add(at));
         let head = cx.read(span.sub(at, 240)).await?;
         // Per-trace sample counts take precedence when set.
-        let n = match u16_be(&head, 114) {
+        let n = match u16_in(&head, 114, endian) {
             Some(n) if n > 0 => n,
             _ => samples,
         };
         let len = 240u64.saturating_add(u64::from(n).saturating_mul(size));
         let trace = span.sub(at, len);
-        let t: SegyTrace = read_record(&cx, trace.sub(0, SegyTrace::SIZE), BE).await?;
+        let t: SegyTrace = read_record(&cx, trace.sub(0, SegyTrace::SIZE), endian).await?;
         let data = cx
             .read_avail(trace.sub(240, size.saturating_mul(6)))
             .await?;
         let shown: Vec<String> = data
             .chunks(to_usize(size).max(1))
             .filter(|c| to_u64(c.len()) == size)
-            .map(|c| format!("{:.4}", segy_sample(c, format)))
+            .map(|c| format!("{:.4}", segy_sample(c, format, endian)))
             .collect();
         cx.push(
             Node::new(format!("Trace {i}"))
@@ -312,7 +365,7 @@ async fn segy_traces(cx: Cx, (span, format, samples): (Span, u16, u16)) -> Resul
                     shown.join(", "),
                     if n > 6 { ", …" } else { "" }
                 ))
-                .lazy(segy_trace, (trace, format)),
+                .lazy(segy_trace, (trace, format, endian)),
         )
         .await;
         at = at.saturating_add(len);
@@ -321,18 +374,18 @@ async fn segy_traces(cx: Cx, (span, format, samples): (Span, u16, u16)) -> Resul
     Ok(())
 }
 
-async fn segy_trace(cx: Cx, (trace, format): (Span, u16)) -> Result<()> {
-    cx.emit(SegyTrace::node("Trace header", trace.sub(0, 240), BE));
+async fn segy_trace(cx: Cx, (trace, format, endian): (Span, u16, Endian)) -> Result<()> {
+    cx.emit(SegyTrace::node("Trace header", trace.sub(0, 240), endian));
     let h = cx.read_avail(trace.sub(114, 4)).await?;
     cx.emit(
         Node::new("Samples in trace")
             .span(trace.sub(114, 2))
-            .value(uint(u16_be(&h, 0).unwrap_or(0).into())),
+            .value(uint(u16_in(&h, 0, endian).unwrap_or(0).into())),
     );
     cx.emit(
         Node::new("Sample interval (µs)")
             .span(trace.sub(116, 2))
-            .value(uint(u16_be(&h, 2).unwrap_or(0).into())),
+            .value(uint(u16_in(&h, 2, endian).unwrap_or(0).into())),
     );
     cx.emit(
         Node::new("Samples").span(trace.tail(240)).summary(

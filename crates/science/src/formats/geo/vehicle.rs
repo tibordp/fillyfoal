@@ -19,7 +19,7 @@ use crate::formats::text::scan::Lines;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
-use crate::span::Span;
+use crate::span::{Origin, Span};
 use crate::value::{EnumTable, Value, lookup};
 
 const LE: Endian = Endian::Little;
@@ -81,7 +81,140 @@ async fn blf(cx: Cx, input: Input) -> Result<()> {
         h.objects,
         systemtime(&h.start)
     ));
-    blf_objects(&cx, file.tail(h.header_size.into()), Path::new()).await
+    let body = file.tail(h.header_size.into());
+    cx.emit(
+        Node::new("Objects")
+            .span(body)
+            .summary(format!("{} objects", h.objects))
+            .lazy(blf_stream, body),
+    );
+    cx.emit(
+        Node::new("Log containers")
+            .span(body)
+            .lazy(blf_containers, body),
+    );
+    Ok(())
+}
+
+/// A top-level object: its span (with padding), and for a log container
+/// the compression method, uncompressed size and compressed data.
+struct BlfTop {
+    span: Span,
+    kind: u32,
+    container: Option<(u16, u64, Span)>,
+}
+
+/// The top-level objects of the file body, reading only their headers, and
+/// why the walk stopped early, if it did.
+async fn blf_top(cx: &Cx, body: Span) -> (Vec<BlfTop>, Option<Diagnostic>) {
+    let mut cur = Cursor::new(cx, body, LE);
+    let mut out = Vec::new();
+    while cur.remaining() >= 16 {
+        cx.progress_in(body, body.offset.saturating_add(cur.pos()));
+        let start = cur.pos();
+        let base = match cur.bytes(16).await {
+            Ok(b) => b,
+            Err(e) => return (out, Some(e)),
+        };
+        if base.get(..4) != Some(b"LOBJ") {
+            let e = Diagnostic::malformed("expected LOBJ").at(body.sub(start, 4));
+            return (out, Some(e));
+        }
+        let header_size = u64::from(u16_le(&base, 4).unwrap_or(0));
+        let size = u64::from(u32_le(&base, 8).unwrap_or(0));
+        let kind = u32_le(&base, 12).unwrap_or(0);
+        if size < header_size.max(16) {
+            let e = Diagnostic::malformed("object smaller than its header").at(body.sub(start, 16));
+            return (out, Some(e));
+        }
+        // Objects are padded by size % 4 bytes (as Vector's and
+        // python-can's writers do).
+        let span = body.sub(start, size.saturating_add(size % 4));
+        let container = if kind == 10 {
+            let head = match cx.read(span.sub(header_size, 16)).await {
+                Ok(b) => b,
+                Err(e) => return (out, Some(e)),
+            };
+            let method = u16_le(&head, 0).unwrap_or(0);
+            let unpacked = u64::from(u32_le(&head, 8).unwrap_or(0));
+            let data = span.sub(
+                header_size.saturating_add(16),
+                size.saturating_sub(header_size.saturating_add(16)),
+            );
+            Some((method, unpacked, data))
+        } else {
+            None
+        };
+        out.push(BlfTop {
+            span,
+            kind,
+            container,
+        });
+        cur.seek(start.saturating_add(size).saturating_add(size % 4));
+        cx.checkpoint().await;
+    }
+    (out, None)
+}
+
+/// All objects of the file in one walk. Log containers are cut at a fixed
+/// uncompressed size, so objects straddle them: the walk goes over one
+/// logical stream made of the container payloads (each decompressed on
+/// demand) and the objects that are not in a container, in file order.
+async fn blf_stream(cx: Cx, body: Span) -> Result<()> {
+    let (tops, mut stop) = blf_top(&cx, body).await;
+    let mut pieces = Vec::with_capacity(tops.len());
+    for top in &tops {
+        match top.container {
+            None => pieces.push(top.span),
+            Some((0, _, data)) => pieces.push(data),
+            Some((2, size, data)) if size <= MAX_CONTAINER => {
+                pieces.push(cx.inflate_lazy(data, true, size)?);
+            }
+            Some((2, _, data)) => {
+                stop = Some(Diagnostic::limit("container too large").at(data));
+                break;
+            }
+            Some((m, _, data)) => {
+                stop = Some(Diagnostic::unsupported(format!("compression method {m}")).at(data));
+                break;
+            }
+        }
+    }
+    let origin = Origin {
+        parent: body,
+        transform: "blf-objects",
+    };
+    let stream = cx.add_pieces_stepped(origin, &pieces).await?;
+    let walked = blf_objects(&cx, stream, Path::new()).await;
+    if let Some(e) = stop {
+        // Objects after this point are not in the stream.
+        cx.diag(e);
+    }
+    walked
+}
+
+/// The top-level objects: the log containers (and any objects stored
+/// outside them), without their contents (see "Objects").
+async fn blf_containers(cx: Cx, body: Span) -> Result<()> {
+    let (tops, stop) = blf_top(&cx, body).await;
+    for top in tops {
+        let name = lookup(BLF_OBJECTS, top.kind.into())
+            .map_or_else(|| format!("Object type {}", top.kind), str::to_owned);
+        let mut node = Node::new(name).span(top.span);
+        if let Some((method, size, data)) = top.container {
+            let how = match method {
+                0 => "stored".to_owned(),
+                2 => "zlib".to_owned(),
+                m => format!("method {m}"),
+            };
+            node = node.summary(format!("{size} bytes, {how}, {} stored", data.len));
+        }
+        cx.push(node).await;
+    }
+    if let Some(e) = stop {
+        cx.diag(e);
+    }
+    Ok(())
 }
 
 /// Walks the objects of a region (the file body or a container's data).

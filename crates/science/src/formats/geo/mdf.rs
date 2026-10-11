@@ -20,7 +20,7 @@ use crate::formats::{Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::Value;
+use crate::value::{FlagTable, Value, flag};
 
 const LE: Endian = Endian::Little;
 const MAX_DEPTH: usize = 24;
@@ -28,7 +28,23 @@ const MAX_DEPTH: usize = 24;
 const MAX_CHAIN: usize = 1 << 20;
 
 declare_format!(pub MDF = "mdf", "ASAM MDF measurement data", ["mf4", "mdf", "dat"], "application/x-asam-mdf",
-    Probe::Custom(|h| h.starts_with(b"MDF     ") && h.data.get(8).is_some_and(u8::is_ascii_digit)), mdf);
+    Probe::Custom(|h| (h.starts_with(b"MDF     ") || h.starts_with(b"UnFinMF "))
+        && h.data.get(8).is_some_and(u8::is_ascii_digit)), mdf);
+
+/// Standard unfinalized flags (MDF 4.1+, identification block offset 60):
+/// what a writer that did not finish left for a reader to repair.
+const UNFINALIZED: FlagTable = &[
+    flag(0x01, "update CG/CA cycle counters"),
+    flag(0x02, "update SR cycle counters"),
+    flag(0x04, "update length of last DT block"),
+    flag(0x08, "update length of last RD block"),
+    flag(0x10, "update last DL block in each chain"),
+    flag(
+        0x20,
+        "update cg_data_bytes and cg_inval_bytes in VLSD CG block",
+    ),
+    flag(0x40, "update offsets of VLSD channels"),
+];
 
 record! {
     pub struct IdBlock {
@@ -40,7 +56,7 @@ record! {
         version: u16 "Version number",
         code_page: u16 "Code page (MDF 3.30)",
         _reserved: bytes[28] "Reserved",
-        unfinalized: u16 "Standard unfinalized flags" .hex(),
+        unfinalized: u16 "Standard unfinalized flags" .flags(UNFINALIZED),
         custom: u16 "Custom unfinalized flags" .hex(),
     }
 }
@@ -284,9 +300,17 @@ async fn mdf(cx: Cx, input: Input) -> Result<()> {
     let node = block_node(&cx, m, 64, Path::new()).await;
     cx.emit(node);
     let program = id.program.trim().to_owned();
+    let unfinalized = id.file_id == "UnFinMF ";
+    if unfinalized {
+        cx.diag(Diagnostic::note(format!(
+            "unfinalized file (flags {:#06x}, custom {:#06x}): block lengths and counters may be stale",
+            id.unfinalized, id.custom
+        )));
+    }
     cx.annotate(format!(
-        "MDF {}{}",
+        "MDF {}{}{}",
         id.format_id.trim(),
+        if unfinalized { " (unfinalized)" } else { "" },
         if program.is_empty() {
             String::new()
         } else {

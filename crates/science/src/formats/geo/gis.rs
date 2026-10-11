@@ -14,7 +14,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::geo::survey::LasHeader;
+use crate::formats::geo::survey::{LasHeader, las_evlrs, las_extra, las_header};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -751,11 +751,14 @@ const LAZ_ITEMS: EnumTable = &[
 async fn laz(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: LasHeader = read_record(&cx, file.sub(0, LasHeader::SIZE), LE).await?;
-    cx.emit(LasHeader::node(
-        "Public header block",
-        file.sub(0, h.header_size.into()),
-        LE,
-    ));
+    let header = file.sub(0, h.header_size.into());
+    cx.emit(
+        Node::new("Public header block")
+            .span(header)
+            .lazy(las_header, (header, h.major, h.minor)),
+    );
+    let extra = las_extra(&cx, file, &h).await?;
+    let point_count = extra.points.unwrap_or(h.points.into());
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(h.header_size.into());
     let mut chunk_size = 0u32;
@@ -780,28 +783,55 @@ async fn laz(cx: Cx, input: Input) -> Result<()> {
     }
     let points = file.tail(h.points_offset.into());
     let table = cx.read(points.sub(0, 8)).await?;
-    let table_at = u64_le(&table, 0).unwrap_or(0);
-    cx.push(leaf(
-        "Chunk table offset",
-        points.sub(0, 8),
-        hex(table_at, 64),
-    ))
-    .await;
+    let mut table_at = u64_le(&table, 0).unwrap_or(0);
+    let mut offset_node = leaf("Chunk table offset", points.sub(0, 8), hex(table_at, 64));
+    let mut table_end = file.len;
+    if table_at == u64::MAX && file.len >= 8 {
+        // -1: the compressor wrote to a stream it could not seek back in,
+        // and put the chunk table's offset in the last 8 bytes of the file
+        // (LASzip, lasreadpoint.cpp, read_chunk_table).
+        let at = file.sub(file.len.saturating_sub(8), 8);
+        let b = cx.read(at).await?;
+        table_at = u64_le(&b, 0).unwrap_or(0);
+        table_end = at.offset;
+        offset_node = offset_node.summary("-1: stored at the end of the file");
+        cx.push(offset_node).await;
+        cx.push(leaf(
+            "Chunk table offset (end of file)",
+            at,
+            hex(table_at, 64),
+        ))
+        .await;
+    } else {
+        cx.push(offset_node).await;
+    }
+    // Without a usable chunk table (0, or past the end) the points run to
+    // the extended VLRs, or the end of the file.
+    let data_start = u64::from(h.points_offset).saturating_add(8);
+    let mut data_end = file.len;
+    if extra.evlrs > 0 && extra.evlr_start >= data_start {
+        data_end = data_end.min(extra.evlr_start);
+    }
+    if table_at >= data_start && table_at < data_end {
+        data_end = table_at;
+    } else {
+        table_at = 0;
+    }
     cx.push(
         Node::new("Compressed points")
-            .span(file.sub(
-                u64::from(h.points_offset).saturating_add(8),
-                table_at.saturating_sub(u64::from(h.points_offset).saturating_add(8)),
-            ))
-            .summary(format!("{} points, chunks of {chunk_size}", h.points)),
+            .span(file.sub(data_start, data_end.saturating_sub(data_start)))
+            .summary(format!("{point_count} points, chunks of {chunk_size}")),
     )
     .await;
+    if extra.evlrs > 0 && extra.evlr_start > table_at {
+        table_end = table_end.min(extra.evlr_start);
+    }
     let t = file.sub(table_at, 8);
     if table_at > 0 && t.len == 8 {
         let b = cx.read(t).await?;
         cx.push(
             Node::new("Chunk table")
-                .span(file.tail(table_at))
+                .span(file.sub(table_at, table_end.saturating_sub(table_at)))
                 .summary(format!(
                     "version {}, {} chunks",
                     u32_le(&b, 0).unwrap_or(0),
@@ -810,11 +840,11 @@ async fn laz(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
+    las_evlrs(&cx, file, extra).await?;
     cx.annotate(format!(
-        "LAZ (LAS {}.{}), {} points, by {}",
+        "LAZ (LAS {}.{}), {point_count} points, by {}",
         h.major,
         h.minor,
-        h.points,
         h.software.trim_end()
     ));
     Ok(())

@@ -352,6 +352,28 @@ const RTCM_MESSAGES: EnumTable = &[
     (1230, "GLONASS code-phase biases"),
 ];
 
+/// What the 12 bits after the message number hold.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RtcmId {
+    /// DF003 reference station ID (12 bits): observables, station and
+    /// antenna descriptions, system parameters, text, biases, MSM.
+    Station,
+    /// The satellite an ephemeris is for, and the width of its field:
+    /// DF009 (GPS, 6), DF038 (GLONASS, 6), DF488 (BeiDou, 6), DF429
+    /// (QZSS, 4), DF252 (Galileo, 6), DF516 (NavIC, 6).
+    Satellite(u32),
+    Unknown,
+}
+
+fn rtcm_id(number: u64) -> RtcmId {
+    match number {
+        1001..=1013 | 1029 | 1033 | 1230 | 1071..=1137 => RtcmId::Station,
+        1019 | 1020 | 1041 | 1042 | 1045 | 1046 => RtcmId::Satellite(6),
+        1044 => RtcmId::Satellite(4),
+        _ => RtcmId::Unknown,
+    }
+}
+
 async fn rtcm3(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut pos = 0u64;
@@ -372,9 +394,14 @@ async fn rtcm3(cx: Cx, input: Input) -> Result<()> {
         let payload = frame.get(3..total.saturating_sub(3)).unwrap_or_default();
         let mut bits = Bits::new(payload);
         let number = bits.bits(12).unwrap_or(0);
-        let id = bits.bits(12).unwrap_or(0);
-        if (1001..=1230).contains(&number) && station.is_none() {
-            station = Some(id);
+        let kind = rtcm_id(number);
+        let id = match kind {
+            RtcmId::Station => bits.bits(12),
+            RtcmId::Satellite(width) => bits.bits(width),
+            RtcmId::Unknown => None,
+        };
+        if kind == RtcmId::Station && station.is_none() {
+            station = id;
         }
         let span = file.sub(pos, to_u64(total));
         let name = format!(
@@ -384,7 +411,13 @@ async fn rtcm3(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(name)
                 .span(span)
-                .summary(format!("station {id}, {} bytes", payload.len()))
+                .summary(match (kind, id) {
+                    (RtcmId::Station, Some(id)) => format!("station {id}, {} bytes", payload.len()),
+                    (RtcmId::Satellite(_), Some(id)) => {
+                        format!("satellite {id}, {} bytes", payload.len())
+                    }
+                    _ => format!("{} bytes", payload.len()),
+                })
                 .lazy(rtcm_frame, span),
         )
         .await;
@@ -456,11 +489,19 @@ async fn rtcm_frame(cx: Cx, span: Span) -> Result<()> {
             z as f64 / 1e4
         )));
     } else {
-        cx.emit(leaf(
-            "Station ID",
-            pspan.sub(1, 2),
-            uint(bits.bits(12).unwrap_or(0), 12),
-        ));
+        match rtcm_id(number) {
+            RtcmId::Station => cx.emit(leaf(
+                "Station ID",
+                pspan.sub(1, 2),
+                uint(bits.bits(12).unwrap_or(0), 12),
+            )),
+            RtcmId::Satellite(width) => cx.emit(leaf(
+                "Satellite ID",
+                pspan.sub(1, 1),
+                uint(bits.bits(width).unwrap_or(0), 8),
+            )),
+            RtcmId::Unknown => {}
+        }
         cx.emit(Node::new("Payload").span(pspan));
     }
     cx.emit(

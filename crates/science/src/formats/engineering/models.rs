@@ -474,12 +474,23 @@ const CHUNKS_3DS: EnumTable = &[
     (0x4150, "Smoothing groups"),
     (0x4160, "Local axes"),
     (0x4600, "Light"),
+    (0x4610, "Spotlight"),
+    (0x4620, "Light off"),
+    (0x4625, "Light attenuation"),
+    (0x4659, "Light range start"),
+    (0x465a, "Light range end"),
+    (0x465b, "Light multiplier"),
     (0x4700, "Camera"),
+    (0x4720, "Camera ranges"),
     (0x4d4d, "Main"),
     (0xa000, "Material name"),
     (0xa010, "Ambient color"),
     (0xa020, "Diffuse color"),
     (0xa030, "Specular color"),
+    (0xa040, "Shininess"),
+    (0xa041, "Shininess strength"),
+    (0xa050, "Transparency"),
+    (0xa080, "Self illumination"),
     (0xa200, "Texture map"),
     (0xa300, "Map file name"),
     (0xafff, "Material"),
@@ -489,14 +500,42 @@ const CHUNKS_3DS: EnumTable = &[
     (0xb010, "Node header"),
 ];
 
-/// Chunks whose payload consists of sub-chunks (after a fixed prefix).
-fn container_3ds(id: u16) -> Option<bool> {
+/// What comes before the sub-chunks of a chunk that has them (lib3ds).
+#[derive(Clone, Copy)]
+enum Prefix3ds {
+    /// A fixed number of bytes.
+    Fixed(u64),
+    /// A NUL-terminated name (objects).
+    Name,
+    /// A u16 face count and 8 bytes per face (three vertex indices and
+    /// flags); material groups and smoothing groups follow.
+    Faces,
+}
+
+/// Chunks whose payload consists of sub-chunks, after a prefix.
+fn container_3ds(id: u16) -> Option<Prefix3ds> {
     match id {
-        0x4d4d | 0x3d3d | 0x4100 | 0xafff | 0xa200 | 0xb000 | 0xb002 | 0x4600 | 0xa010 | 0xa020
-        | 0xa030 => Some(false),
-        0x4000 => Some(true), // name first
+        0x4d4d | 0x3d3d | 0x4100 | 0xafff | 0xa200 | 0xb000 | 0xb002 | 0xa010 | 0xa020 | 0xa030 => {
+            Some(Prefix3ds::Fixed(0))
+        }
+        0x4000 => Some(Prefix3ds::Name),
+        // Light: position (3 floats); spotlight: target, hotspot, falloff.
+        0x4600 => Some(Prefix3ds::Fixed(12)),
+        0x4610 => Some(Prefix3ds::Fixed(20)),
+        // Camera: position, target, bank angle, lens.
+        0x4700 => Some(Prefix3ds::Fixed(32)),
+        0x4120 => Some(Prefix3ds::Faces),
         _ => None,
     }
+}
+
+/// Summary of three little-endian floats.
+fn xyz_3ds(b: &[u8], at: usize) -> String {
+    let f = |i: usize| {
+        u32_le(b, at.saturating_add(i.saturating_mul(4)))
+            .map_or(0.0, |v| f64::from(f32::from_bits(v)))
+    };
+    format!("({}, {}, {})", f(0), f(1), f(2))
 }
 
 async fn three_ds(cx: Cx, input: Input) -> Result<()> {
@@ -524,20 +563,42 @@ async fn chunks_3ds(cx: Cx, span: Span) -> Result<()> {
             radix: Radix::Hex,
         });
         match container_3ds(id) {
-            Some(named) => {
+            Some(prefix) => {
                 let mut body = chunk.tail(6);
-                if named {
-                    let (object, at) = cx.cstr(body.sub(0, 256)).await?;
-                    node = node.summary(object);
-                    body = body.tail(at.len);
+                match prefix {
+                    Prefix3ds::Name => {
+                        let (object, at) = cx.cstr(body.sub(0, 256)).await?;
+                        node = node.summary(object);
+                        body = body.tail(at.len);
+                    }
+                    Prefix3ds::Faces => {
+                        let n = cx.read_avail(body.sub(0, 2)).await?;
+                        let faces = u16_le(&n, 0).unwrap_or(0);
+                        node = node.summary(format!("{faces}"));
+                        body = body.tail(2u64.saturating_add(u64::from(faces).saturating_mul(8)));
+                    }
+                    Prefix3ds::Fixed(0) => {}
+                    Prefix3ds::Fixed(n) => {
+                        let b = cx.read_avail(body.sub(0, n)).await?;
+                        if matches!(id, 0x4600 | 0x4700) {
+                            node = node.summary(format!("at {}", xyz_3ds(&b, 0)));
+                        } else if id == 0x4610 {
+                            node = node.summary(format!("target {}", xyz_3ds(&b, 0)));
+                        }
+                        body = body.tail(n);
+                    }
                 }
-                node = node.lazy(crate::expander!(self::chunks_3ds: Span), body);
+                // Face arrays, lights and cameras often have no sub-chunks.
+                let fixed = matches!(prefix, Prefix3ds::Faces | Prefix3ds::Fixed(1..));
+                if body.len > 0 || !fixed {
+                    node = node.lazy(crate::expander!(self::chunks_3ds: Span), body);
+                }
             }
             None => {
-                if id == 0x4110 || id == 0x4120 {
+                if id == 0x4110 {
                     let n = cx.read_avail(chunk.sub(6, 2)).await?;
                     node = node.summary(format!("{}", u16_le(&n, 0).unwrap_or(0)));
-                } else if id == 0xa000 || id == 0xa300 {
+                } else if matches!(id, 0xa000 | 0xa300 | 0x4130) {
                     let (text, _) = cx.cstr(chunk.tail(6).sub(0, 256)).await?;
                     node = node.summary(text);
                 }
