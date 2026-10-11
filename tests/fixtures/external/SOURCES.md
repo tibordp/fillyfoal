@@ -743,3 +743,23 @@ time zone.
 | `ese/fillyfoal.edb` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | esent.dll database (format 0x620, update 300, 4 KiB pages, clean shutdown) with table `Fixtures` (400 rows; every column type: Bit, UnsignedByte, Short, Long autoincrement, Currency, IEEESingle, IEEEDouble, DateTime, Binary, Text in UTF-16 and Windows-1252, LongBinary and LongText (20 000-byte and 6 000-character separated long values every 50th row), UnsignedLong, LongLong, GUID, UnsignedShort, a tagged multi-valued Text column), a primary index and a two-column secondary index, and table `Small` (3 rows). Checked against dissect.esedb 3.18 (catalog, column types, every row value of both tables; dissect cannot reassemble one of the 20 000-byte long values) and our page checksums (ECC + XOR, every page valid) |
 | `minidump/ping-normal.dmp` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | `MiniDumpWriteDump(MiniDumpNormal)` of a running `PING.EXE` on ARM64: thread list (6 threads, ARM64 contexts), module list (12 modules with RSDS CodeView records), function table, memory list, system info, misc info (version 5), system memory info, process VM counters. The skelsec `minidump` package rejects ARM64 dumps, so the streams were checked with a short `struct` script against dbghelp's documented layouts |
 | `minidump/ping-info.dmp` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | the same process with `MiniDumpWithUnloadedModules \| MiniDumpWithFullMemoryInfo \| MiniDumpWithThreadInfo` (0x1820): adds the thread info list and the memory info list (240 regions); no module had been unloaded, so there is no unloaded-module stream |
+
+## ZIP-based office documents, JAR and gzip members
+
+The office files are made by `sh tests/data/docx/make-office.sh` with
+LibreOffice 25.2.3.2 (Debian trixie `libreoffice-*-nogui` in Docker) in a
+throwaway profile whose user name is "fillyfoal", from the flat ODF sources
+`tests/data/doc/letter.fodt` and `tests/data/xls/budget.fods`. LibreOffice
+stamps the conversion time into the metadata, so they are not reproducible
+byte for byte. Its OOXML and ODF writers stream every deflated entry with a
+data descriptor (general purpose bit 3).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `docx/letter.docx` | LibreOffice 25.2.3.2 ("Office Open XML Text") | `soffice --convert-to docx`; all 12 entries have bit 3 set |
+| `docx/letter-zipfile.docx` | CPython 3.12 `zipfile` (python:3.12-slim) | `tests/data/docx/rewrite.py letter.docx letter-zipfile.docx`: the LibreOffice package rewritten entry by entry into a seekable file (same names, order, times and methods), so no entry has bit 3 |
+| `xlsx/budget.xlsx` | LibreOffice 25.2.3.2 ("Calc MS Excel 2007 XML") | `soffice --convert-to xlsx`; all 15 entries have bit 3 set |
+| `odt/letter.odt` | LibreOffice 25.2.3.2 (writer8) | `soffice --convert-to odt`; stored `mimetype` first, the deflated entries with bit 3 |
+| `epub/letter.epub` | LibreOffice 25.2.3.2 (EPUB export) | `soffice --convert-to epub` |
+| `jar/hello.jar` | Eclipse Temurin 21 JDK `javac` + `jar` (Docker `eclipse-temurin:21-jdk`) | `sh tests/data/jar/make.sh`: `jar --create --date=2026-01-01T00:00:00Z --main-class fillyfoal.Hello` of `tests/data/jar/Hello.java` compiled with `javac --release 11`; directories stored, files deflated with data descriptors |
+| `gzip/two-members.gz` | Apple gzip 479 | `sh tests/data/gzip/make-members.sh`: `gzip -9 -n -c a.txt b.txt` writes one member per file (13 + 28 bytes) |
