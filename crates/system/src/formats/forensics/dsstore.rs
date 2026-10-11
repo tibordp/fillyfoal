@@ -44,32 +44,37 @@ record! {
     }
 }
 
+/// A property code from its four characters.
+const fn code(c: &[u8; 4]) -> u64 {
+    u32::from_be_bytes(*c) as u64
+}
+
 const PROPERTIES: EnumTable = &[
-    (0x426b_6764, "BKGD background"),
-    (0x4943_5650, "ICVO icon view options"),
-    (0x496c_6f63, "Iloc icon location"),
-    (0x4c53_5650, "LSVO list view options"),
-    (0x6277_7370, "bwsp browser window settings"),
-    (0x636d_6d74, "cmmt comment"),
-    (0x6463_6c73, "dscl disclosed in list view"),
-    (0x6673_7774, "fwsw sidebar width"),
-    (0x6677_6933, "fwi0 window info"),
-    (0x6677_7669, "fwvh window height"),
-    (0x6963_6770, "icgo"),
-    (0x6963_7370, "icsp"),
-    (0x6963_7670, "icvp icon view properties"),
-    (0x6c67_3153, "lg1S logical size"),
-    (0x6c73_7670, "lsvp list view properties"),
-    (0x6c73_7650, "lsvP list view properties"),
-    (0x6c73_7674, "lsvt list view text size"),
-    (0x6d6f_6444, "modD modification date"),
-    (0x6d6f_4444, "moDD modification date"),
-    (0x7068_3153, "ph1S physical size"),
-    (0x7074_6250, "ptbL trash put-back location"),
-    (0x7074_624e, "ptbN trash put-back name"),
-    (0x7653_726e, "vSrn"),
-    (0x7673_7472, "vstl view style"),
-    (0x6578_7465, "extn extension"),
+    (code(b"BKGD"), "BKGD background"),
+    (code(b"ICVO"), "ICVO icon view options"),
+    (code(b"Iloc"), "Iloc icon location"),
+    (code(b"LSVO"), "LSVO list view options"),
+    (code(b"bwsp"), "bwsp browser window settings"),
+    (code(b"cmmt"), "cmmt comment"),
+    (code(b"dscl"), "dscl disclosed in list view"),
+    (code(b"fwsw"), "fwsw sidebar width"),
+    (code(b"fwi0"), "fwi0 window info"),
+    (code(b"fwvh"), "fwvh window height"),
+    (code(b"icgo"), "icgo"),
+    (code(b"icsp"), "icsp"),
+    (code(b"icvp"), "icvp icon view properties"),
+    (code(b"lg1S"), "lg1S logical size"),
+    (code(b"lsvp"), "lsvp list view properties"),
+    (code(b"lsvP"), "lsvP list view properties"),
+    (code(b"lsvt"), "lsvt list view text size"),
+    (code(b"modD"), "modD modification date"),
+    (code(b"moDD"), "moDD modification date"),
+    (code(b"ph1S"), "ph1S physical size"),
+    (code(b"ptbL"), "ptbL trash put-back location"),
+    (code(b"ptbN"), "ptbN trash put-back name"),
+    (code(b"vSrn"), "vSrn"),
+    (code(b"vstl"), "vstl view style"),
+    (code(b"extn"), "extn extension"),
 ];
 
 struct Store {
@@ -330,7 +335,7 @@ async fn record(cx: &Cx, store: &Store, span: Span, at: u64) -> Result<(Node, u6
     let total = pos.saturating_add(len).saturating_sub(at);
     let mut summary = crate::value::lookup(PROPERTIES, property.into())
         .map_or_else(|| fourcc(&property.to_be_bytes()), str::to_owned);
-    if kind == b"blob" && property == 0x496c_6f63 {
+    if kind == b"blob" && u64::from(property) == code(b"Iloc") {
         // Iloc: x, y as 32-bit integers.
         let d = cx.read(span.sub(pos.saturating_add(4), 8)).await?;
         summary = format!(
@@ -351,5 +356,18 @@ fn record_name(name: &str) -> String {
         "(this folder)".to_owned()
     } else {
         clip(name, 200)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_property_label_starts_with_its_code() {
+        for &(value, label) in PROPERTIES {
+            let bytes = u32::try_from(value).unwrap_or(0).to_be_bytes();
+            assert!(label.as_bytes().starts_with(&bytes), "{label}");
+        }
     }
 }
