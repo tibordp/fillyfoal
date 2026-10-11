@@ -793,6 +793,120 @@ impl Decode for Lzop {
     }
 }
 
+/// btrfs's LZO framing (Linux `fs/btrfs/lzo.c`): a little-endian u32 total
+/// length (itself included), then segments of a u32 length and an LZO1X
+/// stream that decodes on its own to at most one sector (4 KiB). A
+/// segment header never straddles a sector boundary: fewer than four bytes
+/// left in a sector are padding. Decoded a segment at a time.
+#[derive(Clone, Default)]
+pub struct BtrfsLzo {
+    /// Input position, relative to the buffer as it is now.
+    pos: usize,
+    /// Input bytes released before `pos` (sector boundaries count from the
+    /// start of the stream).
+    released: u64,
+    /// The total length, once read.
+    total: Option<u64>,
+    done: bool,
+}
+
+/// btrfs's sector size, which segment headers do not cross.
+const BTRFS_SECTOR: u64 = 4096;
+
+impl BtrfsLzo {
+    fn abs(&self) -> u64 {
+        self.released.saturating_add(crate::bytes::to_u64(self.pos))
+    }
+}
+
+impl Decode for BtrfsLzo {
+    fn step(
+        &mut self,
+        input: &[u8],
+        _eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
+        let goal = out.len().saturating_add(step.max(1));
+        let le32 = |at: usize| {
+            crate::bytes::u32_le(input, at)
+                .map(u64::from)
+                .ok_or_else(|| bad("btrfs LZO data ends early"))
+        };
+        loop {
+            if self.done {
+                return Ok(Step::Done);
+            }
+            if out.len() >= goal {
+                return Ok(Step::More);
+            }
+            let Some(total) = self.total else {
+                let total = le32(self.pos)?;
+                if total < 4 {
+                    return Err(bad("btrfs LZO total length too small"));
+                }
+                self.total = Some(total);
+                self.pos = self.pos.saturating_add(4);
+                continue;
+            };
+            // A segment header does not cross a sector boundary.
+            let left = BTRFS_SECTOR.saturating_sub(self.abs() % BTRFS_SECTOR);
+            if left < 4 {
+                self.pos = self.pos.saturating_add(crate::bytes::to_usize(left));
+            }
+            if self.abs() >= total {
+                self.done = true;
+                continue;
+            }
+            let len = le32(self.pos)?;
+            let start = self.pos.saturating_add(4);
+            let end = start.saturating_add(crate::bytes::to_usize(len));
+            if self.released.saturating_add(crate::bytes::to_u64(end)) > total {
+                return Err(bad("btrfs LZO segment runs past the total length"));
+            }
+            let data = input
+                .get(start..end)
+                .ok_or_else(|| bad("btrfs LZO data ends early"))?;
+            let before = out.len();
+            let sector = crate::bytes::to_usize(BTRFS_SECTOR);
+            lzo1x(data, out, sector).map_err(|e| {
+                if out.len().saturating_sub(before) >= sector {
+                    bad("btrfs LZO segment decodes to more than a sector")
+                } else {
+                    e
+                }
+            })?;
+            if out.len() > limit {
+                return Err(Diagnostic::output_limit(limit));
+            }
+            self.pos = end;
+        }
+    }
+
+    fn consumed(&self) -> usize {
+        self.pos
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+        self.released = self.released.saturating_add(crate::bytes::to_u64(n));
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        // Segments are independent.
+        out_len
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
@@ -802,6 +916,58 @@ impl Decode for Lzop {
 mod tests {
     use super::*;
     use crate::codec::pipeline::{Streaming, verify_checkpoints};
+
+    /// A literal-only LZO1X stream of `n` (4..=238) bytes of `b`.
+    fn literal_stream(n: usize, b: u8) -> Vec<u8> {
+        let mut s = vec![17 + n as u8];
+        s.extend(std::iter::repeat_n(b, n));
+        s.extend_from_slice(&[0x11, 0, 0]);
+        s
+    }
+
+    /// btrfs framing with a segment header that would straddle the first
+    /// sector boundary (two bytes of padding before it).
+    #[test]
+    fn btrfs_segments_skip_sector_tails() {
+        let mut body = Vec::new();
+        let mut expected = Vec::new();
+        let mut sizes = vec![200; 19];
+        sizes.push(130);
+        for (i, &n) in sizes.iter().enumerate() {
+            let seg = literal_stream(n, b'a' + i as u8);
+            body.extend_from_slice(&(seg.len() as u32).to_le_bytes());
+            body.extend_from_slice(&seg);
+            expected.extend(std::iter::repeat_n(b'a' + i as u8, n));
+        }
+        assert_eq!(4 + body.len(), 4094);
+        body.extend_from_slice(&[0, 0]);
+        let seg = literal_stream(50, b'z');
+        body.extend_from_slice(&(seg.len() as u32).to_le_bytes());
+        body.extend_from_slice(&seg);
+        expected.extend(std::iter::repeat_n(b'z', 50));
+        let mut stream = ((4 + body.len()) as u32).to_le_bytes().to_vec();
+        stream.extend_from_slice(&body);
+        // Sector padding after the end is not part of the stream.
+        stream.resize(8192, 0);
+        let out = crate::codec::pipeline::decode_all(
+            &mut Streaming(BtrfsLzo::default()),
+            &stream,
+            1 << 20,
+        )
+        .unwrap();
+        assert_eq!(out, expected);
+        let (checked, _) =
+            verify_checkpoints(|| Box::new(Streaming(BtrfsLzo::default())), &stream, 100, 1)
+                .unwrap();
+        assert!(checked >= 10, "{checked}");
+        // A segment running past the total length is malformed.
+        let mut bad = stream.clone();
+        bad[..4].copy_from_slice(&100u32.to_le_bytes());
+        assert!(
+            crate::codec::pipeline::decode_all(&mut Streaming(BtrfsLzo::default()), &bad, 1 << 20)
+                .is_err()
+        );
+    }
 
     fn read(name: &str) -> Vec<u8> {
         std::fs::read(format!(

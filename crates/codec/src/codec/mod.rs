@@ -161,6 +161,9 @@ pub enum Codec {
     Lzo1x,
     /// The lzop (`.lzo`) container.
     Lzop,
+    /// btrfs's LZO extents: a total length, then LZO1X segments of up to
+    /// one sector each (see [`lzo::BtrfsLzo`]).
+    BtrfsLzo,
     /// Raw LZF (liblzf).
     Lzf,
     /// LZF in the `lzf` tool's `ZV` blocks.
@@ -330,6 +333,7 @@ impl Codec {
             Codec::ZstdFrame => "zstd-frame",
             Codec::ZstdDict(_) => "zstd-dict",
             Codec::PalmDoc(_) => "palmdoc",
+            Codec::BtrfsLzo => "btrfs-lzo",
             Codec::UnixCompress => "unix-compress",
             Codec::Lznt1 { .. } => "lznt1",
             Codec::Xpress { .. } => "xpress",
@@ -413,6 +417,7 @@ impl Codec {
             Codec::ZstdFrame => "zstd-frame (lazy)",
             Codec::ZstdDict(_) => "zstd-dict (lazy)",
             Codec::PalmDoc(_) => "palmdoc (lazy)",
+            Codec::BtrfsLzo => "btrfs-lzo (lazy)",
             Codec::UnixCompress => "unix-compress (lazy)",
             Codec::Lznt1 { .. } => "lznt1 (lazy)",
             Codec::Xpress { .. } => "xpress (lazy)",
@@ -495,6 +500,7 @@ impl Codec {
             | Codec::ZstdFrame
             | Codec::ZstdDict(_)
             | Codec::PalmDoc(_)
+            | Codec::BtrfsLzo
             | Codec::UnixCompress
             | Codec::Lznt1 { .. }
             | Codec::Xpress { .. }
@@ -602,7 +608,7 @@ impl Codec {
             Codec::XpressHuffman { .. } => 512,
             Codec::Xpress { .. } => 32_768,
             // Each zero length byte adds 255 bytes.
-            Codec::Lzo1x | Codec::Lzop => 512,
+            Codec::Lzo1x | Codec::Lzop | Codec::BtrfsLzo => 512,
             // At most 264 bytes per 3-byte back reference.
             Codec::Lzf | Codec::LzfFramed => 128,
             // At most 17 bytes per 2-byte reference (plus control bits).
@@ -703,6 +709,7 @@ impl Codec {
             Codec::ZstdFrame => Box::new(Streaming(zstd::Zstd::single_frame())),
             Codec::ZstdDict(d) => Box::new(Streaming(zstd::Zstd::with_dictionary(d.clone()))),
             Codec::PalmDoc(book) => Box::new(Streaming(palmdoc::Records::new(book.clone()))),
+            Codec::BtrfsLzo => Box::new(Streaming(lzo::BtrfsLzo::default())),
             Codec::Bzip2 => Box::new(Streaming(bzip2::Bzip2::default())),
             Codec::NsisBzip2 => Box::new(Streaming(bzip2::Bzip2::nsis())),
             Codec::Lz4Frame => Box::new(Streaming(lz::Lz4Frame::default())),
