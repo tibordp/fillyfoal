@@ -594,6 +594,7 @@ and reproduce every file byte for byte.
 | `y4m/420p10-tff.y4m` | FFmpeg 8 (libavformat 62.12.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); 10-bit 4:2:0, top field first, PAR 10:11, 30000/1001 fps |
 | `mpeg1video/pel-aspect-625.m1v` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); MPEG-1 pel aspect code 8 (CCIR 601, 625 lines) |
 | `wav/piped.wav` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); written to a pipe, so the RIFF and data sizes stay 0xffffffff |
+| `mkv/av1.mkv` | FFmpeg 8 with libsvtav1 | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); `V_AV1` with an `av1C` CodecPrivate, two frames as OBUs |
 
 ## Other image tools
 

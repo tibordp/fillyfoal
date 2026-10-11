@@ -260,7 +260,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Flags: 0x0  [0x4f9+0x3]
                 Entry count: 1  [0x4fc+0x4]
               ▾ Chunk offsets — 1 entry  [0x500+0x4]
-                  Chunk 1: 0x55  [0x500+0x4]
+                  Chunk 1: 0x55  [0x500+0x4] → 0x55+0x0
             ▾ sgpd — roll (audio pre-roll / gradual refresh): 1 description  [0x504+0x1a]
                 Size: 26  [0x504+0x4]
                 Type: "sgpd"  [0x508+0x4]
@@ -282,6 +282,11 @@ expression: "common::explore(&display_name(&path), &data)"
                 ▾ #1 — 4 samples → group 1  [0x532+0x8]
                     Sample count: 4  [0x532+0x4]
                     Group description index: 1  [0x536+0x4]
+            ▾ Samples — 4 samples in 1 chunk
+                Sample 1 — 202 bytes, chunk 1  [0x55+0xca]
+                Sample 2 — 194 bytes, chunk 1  [0x11f+0xc2]
+                Sample 3 — 151 bytes, chunk 1  [0x1e1+0x97]
+                Sample 4 — 5 bytes, chunk 1  [0x278+0x5]
     ▾ trak — Text track 3: QuickTime text, 4.1 kb/s, 0:00.08, eng, disabled  [0x53a+0x20f]
         Size: 527  [0x53a+0x4]
         Type: "trak"  [0x53e+0x4]
@@ -466,7 +471,10 @@ expression: "common::explore(&display_name(&path), &data)"
                 Flags: 0x0  [0x73e+0x3]
                 Entry count: 1  [0x741+0x4]
               ▾ Chunk offsets — 1 entry  [0x745+0x4]
-                  Chunk 1: 0x2c  [0x745+0x4]
+                  Chunk 1: 0x2c  [0x745+0x4] → 0x2c+0x0
+            ▾ Samples — 2 samples in 1 chunk
+                Sample 1 — 21 bytes, chunk 1  [0x2c+0x15]
+                Sample 2 — 20 bytes, chunk 1  [0x41+0x14]
     ▾ udta  [0x749+0x6eb]
         Size: 1771  [0x749+0x4]
         Type: "udta"  [0x74d+0x4]

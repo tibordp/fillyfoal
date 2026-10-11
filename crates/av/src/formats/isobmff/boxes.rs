@@ -7,6 +7,7 @@ use crate::error::Result;
 use crate::fields::{Fields, struct_node};
 use crate::formats::util::vidutil::{duration, fixed8, fixed16, fourcc, num, sfixed16, text, uuid};
 use crate::node::Node;
+use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag};
 
 use super::{BE, BoxState, Brand, children, emit_fields, full_box, full_box_flags, small};
@@ -464,7 +465,10 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
             })
             .await?;
         }
-        b"tfhd" => emit_fields(cx, body, tfhd).await?,
+        b"tfhd" => {
+            let file = st.input.span;
+            emit_fields(cx, body, |f| tfhd(f, file)).await?;
+        }
         b"tfdt" => {
             emit_fields(cx, body, |f| {
                 let (v, _) = full_box(f)?;
@@ -1096,7 +1100,7 @@ fn tcmi(f: &mut Fields<'_>) -> Result<()> {
     Ok(())
 }
 
-fn tfhd(f: &mut Fields<'_>) -> Result<()> {
+fn tfhd(f: &mut Fields<'_>, file: Span) -> Result<()> {
     f.u8("Version").emit()?;
     let field = f.bytes("Flags", 3);
     let span = field.span();
@@ -1113,7 +1117,16 @@ fn tfhd(f: &mut Fields<'_>) -> Result<()> {
     }));
     f.u32("Track ID").emit()?;
     if flags & 0x1 != 0 {
-        f.u64("Base data offset").hex().emit()?;
+        f.u64("Base data offset")
+            .hex()
+            .with(|&at, n| {
+                if at <= file.len {
+                    n.target(file.sub(at, 0))
+                } else {
+                    n
+                }
+            })
+            .emit()?;
     }
     if flags & 0x2 != 0 {
         f.u32("Sample description index").emit()?;

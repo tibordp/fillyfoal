@@ -11,8 +11,10 @@
 //! Codec private data is decoded per codec (AVC/HEVC/AV1/VP9 configuration
 //! records, Xiph-laced Vorbis/Theora headers, OpusHead, FLAC metadata,
 //! AAC AudioSpecificConfig, VfW/ACM structures, ALAC), blocks show their
-//! header, lacing (Xiph, EBML, fixed-size) and frames, and CRC-32 elements
-//! are checked against the data they cover.
+//! header, lacing (Xiph, EBML, fixed-size) and frames (AVC/HEVC frames
+//! split into NAL units with the CodecPrivate's length size and parameter
+//! sets, AV1 into OBUs, VP9 frame headers; see [`super::coded`]), and
+//! CRC-32 elements are checked against the data they cover.
 
 use std::sync::Arc;
 
@@ -26,6 +28,7 @@ use crate::formats::util::datakit::be_uint;
 use crate::formats::util::fmt::plural;
 use crate::formats::util::sound;
 use crate::formats::util::vidutil::{self, detached, khz, nal, seconds_f64, uint};
+use crate::formats::video::coded;
 use crate::formats::{Format, Head, Input, Probe, content, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -1433,6 +1436,8 @@ struct TrackBrief {
     stripped: Option<Vec<u8>>,
     /// Frames are zlib-compressed.
     zlib: bool,
+    /// How video frames are coded, from CodecPrivate.
+    coded: Arc<coded::Config>,
 }
 
 const MAX_TRACKS: usize = 128;
@@ -1490,6 +1495,17 @@ fn track_brief(d: &[u8]) -> TrackBrief {
             }
             _ => {}
         }
+    }
+    let kind = match t.codec {
+        Codec::Avc => coded::Kind::Avc,
+        Codec::Hevc => coded::Kind::Hevc,
+        Codec::Av1 => coded::Kind::Av1,
+        Codec::Vp9 => coded::Kind::Vp9,
+        _ => coded::Kind::Other,
+    };
+    if kind != coded::Kind::Other {
+        let private = child(d, CODEC_PRIVATE).unwrap_or_default();
+        t.coded = Arc::new(coded::Config::from_record(kind, private));
     }
     t
 }
@@ -2524,6 +2540,15 @@ async fn frame_node(
             } else {
                 node
             };
+        }
+        _ if b.coded.splits() && b.stripped.is_none() && !span.is_empty() => {
+            node = node.lazy(
+                coded::expand,
+                coded::Frame {
+                    span,
+                    config: b.coded.clone(),
+                },
+            );
         }
         _ => {}
     }

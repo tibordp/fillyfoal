@@ -361,7 +361,9 @@ expression: "common::explore(&display_name(&path), &data)"
                 Flags: 0x0  [0x453+0x3]
                 Entry count: 1  [0x456+0x4]
               ▾ Chunk offsets — 1 entry  [0x45a+0x4]
-                  Chunk 1: 0x5cf  [0x45a+0x4]
+                  Chunk 1: 0x5cf  [0x45a+0x4] → 0x5cf+0x0
+            ▾ Samples — 1 sample in 1 chunk
+                Sample 1 — 305 bytes, chunk 1  [0x5cf+0x131]
   ▾ uuid — Canon preview  [0x45e+0x169]
       Size: 361  [0x45e+0x4]
       Type: "uuid"  [0x462+0x4]

@@ -26,8 +26,9 @@ use crate::fields::{Endian, Fields};
 use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::fmt::plural;
 use crate::formats::util::vidutil::bitwalk::Walker;
-use crate::formats::util::vidutil::nal::{self, NalCodec, group};
-use crate::formats::util::vidutil::{self, ParamSets, enumerated, seconds_ms, text, uint, vp9};
+use crate::formats::util::vidutil::nal::{self, group};
+use crate::formats::util::vidutil::{self, enumerated, seconds_ms, text, uint};
+use crate::formats::video::coded;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -132,13 +133,7 @@ record! {
 }
 
 /// Decoder state carried from the configuration record to later frames.
-#[derive(Clone, Debug, Default)]
-struct Codec {
-    ps: Arc<ParamSets>,
-    hevc: bool,
-    length_size: u64,
-    seq: Option<vidutil::av1::SeqInfo>,
-}
+type Codec = coded::Config;
 
 #[derive(Clone, Debug)]
 struct Tag {
@@ -187,10 +182,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.emit(node);
             Walk {
                 pos: start.saturating_add(4),
-                codec: Arc::new(Codec {
-                    length_size: 4,
-                    ..Codec::default()
-                }),
+                codec: Arc::new(Codec::bare(coded::Kind::Other)),
             }
         }
     };
@@ -266,67 +258,15 @@ async fn update_codec(cx: &Cx, tag: &Tag, body: &[u8]) -> Result<Option<Codec>> 
     let mut next = (*tag.codec).clone();
     match kind.as_slice() {
         b"avc1" | b"hvc1" => {
-            let hevc = kind == b"hvc1";
-            let mut ps = ParamSets::default();
-            collect_param_sets(&d, hevc, &mut ps);
-            next.ps = Arc::new(ps);
-            next.hevc = hevc;
-            next.length_size = if hevc {
-                u64::from(d.get(21).copied().unwrap_or(3) & 3).saturating_add(1)
-            } else {
-                u64::from(d.get(4).copied().unwrap_or(3) & 3).saturating_add(1)
-            };
+            let fresh = Codec::from_record(coded::Kind::from_fourcc(&array4(&kind)), &d);
+            next.ps = fresh.ps;
+            next.kind = fresh.kind;
+            next.length_size = fresh.length_size;
         }
-        b"av01" => {
-            let mut w = Walker::new(d.get(4..).unwrap_or_default(), config, false, false);
-            let mut seq = None;
-            let _ = nal::obus(&mut w, &mut seq);
-            next.seq = seq;
-        }
+        b"av01" => next.seq = Codec::from_record(coded::Kind::Av1, &d).seq,
         _ => return Ok(None),
     }
     Ok(Some(next))
-}
-
-/// The SPS and PPS of an `avcC`/`hvcC` record.
-fn collect_param_sets(d: &[u8], hevc: bool, ps: &mut ParamSets) {
-    let codec = if hevc { NalCodec::Hevc } else { NalCodec::Avc };
-    let detached = Span::new(crate::span::SourceId::default_host(), 0, 0);
-    let mut units: Vec<&[u8]> = Vec::new();
-    if hevc {
-        let arrays = d.get(22).copied().unwrap_or(0);
-        let mut at = 23usize;
-        for _ in 0..arrays {
-            let n = u16_be(d, at.saturating_add(1)).unwrap_or(0);
-            at = at.saturating_add(3);
-            for _ in 0..n {
-                let len = usize::from(u16_be(d, at).unwrap_or(0));
-                let start = at.saturating_add(2);
-                if let Some(u) = d.get(start..start.saturating_add(len)) {
-                    units.push(u);
-                }
-                at = start.saturating_add(len);
-            }
-        }
-    } else {
-        let mut at = 5usize;
-        for count_mask in [0x1fu8, 0xff] {
-            let n = d.get(at).copied().unwrap_or(0) & count_mask;
-            at = at.saturating_add(1);
-            for _ in 0..n {
-                let len = usize::from(u16_be(d, at).unwrap_or(0));
-                let start = at.saturating_add(2);
-                if let Some(u) = d.get(start..start.saturating_add(len)) {
-                    units.push(u);
-                }
-                at = start.saturating_add(len);
-            }
-        }
-    }
-    for u in units {
-        let (info, _) = nal::parse_nal(codec, u, detached, ps, false);
-        ps.update(info.sps.as_ref(), info.pps.as_ref());
-    }
 }
 
 fn capitalise(s: &str) -> String {
@@ -787,58 +727,16 @@ async fn config_node(cx: &Cx, fourcc: &[u8; 4], span: Span) -> Result<Node> {
 
 /// The coded data of a video frame: NAL units, OBUs or a VP9 frame.
 async fn frames(cx: &Cx, fourcc: &[u8; 4], payload: Span, codec: &Codec) -> Result<()> {
-    match fourcc {
-        b"avc1" | b"hvc1" => {
-            let nal_codec = if fourcc == b"hvc1" {
-                NalCodec::Hevc
-            } else {
-                NalCodec::Avc
-            };
-            let size = codec.length_size.clamp(1, 4);
-            let mut pos = 0u64;
-            let mut ps = (*codec.ps).clone();
-            while pos < payload.len {
-                let head = cx.read_avail(payload.sub(pos, size)).await?;
-                let len = head.iter().fold(0u64, |a, &b| (a << 8) | u64::from(b));
-                let span = payload.sub(pos, size.saturating_add(len));
-                let unit = span.tail(size);
-                let d = vidutil::read_small(cx, unit, 0x1000).await?;
-                let (node, info) = nal::nal_node(nal_codec, &d, unit, &ps);
-                ps.update(info.sps.as_ref(), info.pps.as_ref());
-                let mut node = node.span(span);
-                if unit.len < len {
-                    node = node.diag(Diagnostic::truncated(
-                        Span::new(unit.source, unit.offset, len),
-                        unit.len,
-                    ));
-                }
-                cx.push(node).await;
-                pos = pos.saturating_add(size).saturating_add(len);
-            }
-        }
-        b"av01" => {
-            let d = vidutil::read_small(cx, payload, 0x10000).await?;
-            let mut w = Walker::new(&d, payload, false, true);
-            let mut seq = codec.seq;
-            let ok = nal::obus(&mut w, &mut seq).is_some();
-            for node in w.finish(ok) {
-                cx.emit(node);
-            }
-        }
-        b"vp09" => {
-            let d = cx.read_avail(payload.sub(0, 64)).await?;
-            let mut w = Walker::new(&d, payload, false, true);
-            let r = vp9::vp9_header(&mut w);
-            let mut node = group("VP9 frame header", payload, w.finish(r.is_some()));
-            if let Some(f) = r {
-                node = node.summary(f.describe());
-            }
-            cx.emit(node);
-            cx.emit(bytes_node("Frame data", payload));
-        }
-        _ => cx.emit(bytes_node("Video data", payload)),
-    }
-    Ok(())
+    let config = Codec {
+        kind: coded::Kind::from_fourcc(fourcc),
+        ..codec.clone()
+    };
+    coded::frames(cx, payload, &config).await
+}
+
+/// The first four bytes of `v` (zero-padded).
+fn array4(v: &[u8]) -> [u8; 4] {
+    crate::bytes::array(v, 0).unwrap_or_default()
 }
 
 /// The Sorenson H.263 picture header.

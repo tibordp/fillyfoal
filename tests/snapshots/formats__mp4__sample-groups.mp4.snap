@@ -169,7 +169,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Flags: 0x0  [0x1f2+0x3]
                 Entry count: 1  [0x1f5+0x4]
               ▾ Chunk offsets — 1 entry  [0x1f9+0x4]
-                  Chunk 1: 0x2b7  [0x1f9+0x4]
+                  Chunk 1: 0x2b7  [0x1f9+0x4] → 0x2b7+0x0
             ▾ sgpd — roll (audio pre-roll / gradual refresh): 1 description  [0x1fd+0x16]
                 Size: 22  [0x1fd+0x4]
                 Type: "sgpd"  [0x201+0x4]
@@ -243,6 +243,10 @@ expression: "common::explore(&display_name(&path), &data)"
                 ▾ #2 — 2 samples → group 2  [0x2a7+0x8]
                     Sample count: 2  [0x2a7+0x4]
                     Group description index: 2  [0x2ab+0x4]
+            ▾ Samples — 3 samples in 1 chunk
+                Sample 1 — 4 bytes, chunk 1  [0x2b7+0x4]
+                Sample 2 — 4 bytes, chunk 1  [0x2bb+0x4]
+                Sample 3 — 4 bytes, chunk 1  [0x2bf+0x4]
   ▾ mdat — 12 bytes  [0x2af+0x14]
       Size: 20  [0x2af+0x4]
       Type: "mdat"  [0x2b3+0x4]
