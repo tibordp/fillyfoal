@@ -196,6 +196,8 @@ pub enum Codec {
     Lz4Frame,
     /// One raw LZ4 block.
     Lz4Block,
+    /// The HDF5 LZ4 filter's blocks (see [`lz::Hdf5Lz4`]).
+    Hdf5Lz4,
     /// Raw Snappy.
     Snappy,
     /// The Snappy framing format.
@@ -366,6 +368,7 @@ impl Codec {
             Codec::LzmaRaw { .. } => "lzma-raw",
             Codec::Lz4Frame => "lz4",
             Codec::Lz4Block => "lz4-block",
+            Codec::Hdf5Lz4 => "hdf5-lz4",
             Codec::Snappy => "snappy",
             Codec::SnappyFramed => "snappy-framed",
             Codec::CapnpPacked => "capnp-packed",
@@ -455,6 +458,7 @@ impl Codec {
             Codec::LzmaRaw { .. } => "lzma-raw (lazy)",
             Codec::Lz4Frame => "lz4 (lazy)",
             Codec::Lz4Block => "lz4-block (lazy)",
+            Codec::Hdf5Lz4 => "hdf5-lz4 (lazy)",
             Codec::Snappy => "snappy (lazy)",
             Codec::SnappyFramed => "snappy-framed (lazy)",
             Codec::CapnpPacked => "capnp-packed (lazy)",
@@ -507,6 +511,7 @@ impl Codec {
             | Codec::PackBits
             | Codec::Lz4Frame
             | Codec::Lz4Block
+            | Codec::Hdf5Lz4
             | Codec::Snappy
             | Codec::SnappyFramed
             | Codec::Bzip2
@@ -588,7 +593,11 @@ impl Codec {
             | Codec::Xor { .. }
             | Codec::ByteSwap { .. } => 1,
             Codec::RunLength | Codec::PackBits => 128,
-            Codec::Lz4Frame | Codec::Lz4Block | Codec::Snappy | Codec::SnappyFramed => 256,
+            Codec::Lz4Frame
+            | Codec::Lz4Block
+            | Codec::Hdf5Lz4
+            | Codec::Snappy
+            | Codec::SnappyFramed => 256,
             // A zero tag and a count stand for 256 zero words.
             Codec::CapnpPacked => 1024,
             // One command byte per 8-byte value.
@@ -744,6 +753,7 @@ impl Codec {
                 Box::new(lzma::LzmaStream::raw(*props, *size, *dict))
             }
             Codec::Lz4Block => Box::new(Streaming(lz::Lz4Block::new())),
+            Codec::Hdf5Lz4 => Box::new(Streaming(lz::Hdf5Lz4::default())),
             Codec::Snappy => Box::new(Streaming(lz::Snappy::default())),
             Codec::SnappyFramed => Box::new(Streaming(lz::SnappyFramed::default())),
             Codec::CapnpPacked => Box::new(Streaming(capnp::Packed::default())),

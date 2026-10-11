@@ -143,7 +143,10 @@ pub async fn woff(cx: Cx, input: Input) -> Result<()> {
             Node::new(format!("'{tag}'"))
                 .span(span)
                 .summary(summary)
-                .lazy(woff_table, (entry, span, tag, comp < orig, orig, checksum)),
+                .lazy(
+                    woff_table,
+                    (input, entry, span, tag, comp < orig, orig, checksum),
+                ),
         )
         .await;
     }
@@ -152,7 +155,15 @@ pub async fn woff(cx: Cx, input: Input) -> Result<()> {
 
 async fn woff_table(
     cx: Cx,
-    (entry, span, tag, compressed, orig, checksum): (Span, Span, String, bool, u32, u32),
+    (input, entry, span, tag, compressed, orig, checksum): (
+        Input,
+        Span,
+        Span,
+        String,
+        bool,
+        u32,
+        u32,
+    ),
 ) -> Result<()> {
     cx.emit(crate::fields::struct_node(
         "Directory entry",
@@ -189,7 +200,7 @@ async fn woff_table(
             )))
         });
     }
-    tables::decode(&cx, &tag, table).await
+    tables::decode(&cx, input, &tag, table).await
 }
 
 /// Known tags, indexed by the low 6 bits of a WOFF2 table entry's flags.
@@ -289,7 +300,7 @@ pub async fn woff2(cx: Cx, input: Input) -> Result<()> {
                 "{} bytes → {total} bytes of table data",
                 stream.len
             ))
-            .lazy(woff2_tables, (stream, entries, total)),
+            .lazy(woff2_tables, (input, stream, entries, total)),
     );
     metadata_nodes(
         &cx,
@@ -313,7 +324,7 @@ type Woff2Entry = (Span, String, u8, u32, Option<u32>);
 /// order and without padding (each is its transformed length, if any).
 async fn woff2_tables(
     cx: Cx,
-    (stream, entries, total): (Span, Vec<Woff2Entry>, u64),
+    (input, stream, entries, total): (Input, Span, Vec<Woff2Entry>, u64),
 ) -> Result<()> {
     let decoded = crate::codec::decode_span(&cx, stream, &Codec::Brotli, Some(total)).await?;
     cx.annotate(format!("{:#x} bytes decompressed", decoded.span.len));
@@ -336,15 +347,15 @@ async fn woff2_tables(
                 "{summary}, transformed (version {}; not decoded)",
                 flags >> 6
             )),
-            None => node.summary(summary).lazy(woff2_table, (span, tag)),
+            None => node.summary(summary).lazy(woff2_table, (input, span, tag)),
         })
         .await;
     }
     Ok(())
 }
 
-async fn woff2_table(cx: Cx, (span, tag): (Span, String)) -> Result<()> {
-    tables::decode(&cx, &tag, span).await
+async fn woff2_table(cx: Cx, (input, span, tag): (Input, Span, String)) -> Result<()> {
+    tables::decode(&cx, input, &tag, span).await
 }
 
 async fn woff2_directory(cx: Cx, (entries,): (Vec<Woff2Entry>,)) -> Result<()> {

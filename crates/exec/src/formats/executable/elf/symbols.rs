@@ -1,6 +1,8 @@
 //! Tables that refer to other sections: symbols, relocations, the dynamic
 //! section, symbol versioning, and plain string tables.
 
+use std::collections::BTreeMap;
+
 use super::tables::*;
 use super::{Class, Elf, MAX_NAME, Section};
 use crate::bytes::to_u64;
@@ -760,6 +762,142 @@ async fn version_entry(
         } else {
             Verdaux::node(name, span, endian)
         });
+    }
+    Ok(())
+}
+
+/// Version indices (as used in `.gnu.version`) to names, from the image's
+/// version definition and requirement sections. Bounded like the walks
+/// over those sections.
+async fn version_names(cx: &Cx, elf: &Elf) -> Result<BTreeMap<u16, String>> {
+    let endian = elf.endian();
+    let mut names = BTreeMap::new();
+    for section in elf
+        .sections
+        .iter()
+        .filter(|s| matches!(s.kind, SHT_GNU_VERDEF | SHT_GNU_VERNEED))
+    {
+        let span = elf.data(section);
+        let strtab = linked_strings(elf, section);
+        let need = section.kind == SHT_GNU_VERNEED;
+        let mut offset = Some(0u64);
+        let mut seen = 0u32;
+        while let Some(at) = offset {
+            if seen >= MAX_VERSIONS.min(section.info.max(1)) {
+                break;
+            }
+            seen = seen.saturating_add(1);
+            if need {
+                let need = parse(
+                    cx,
+                    span.sub(at, Verneed::SIZE),
+                    endian,
+                    &(),
+                    Verneed::layout,
+                )
+                .await?;
+                let file = string_at(cx, strtab, need.file.into()).await.ok();
+                let mut aux = chain_step(at, need.aux, span);
+                for _ in 0..need.count.min(256) {
+                    let Some(a) = aux else { break };
+                    let v =
+                        parse(cx, span.sub(a, Vernaux::SIZE), endian, &(), Vernaux::layout).await?;
+                    let name = string_at(cx, strtab, v.name.into())
+                        .await
+                        .unwrap_or_else(|_| format!("#{}", v.other));
+                    let name = match &file {
+                        Some(f) => format!("{name} ({f})"),
+                        None => name,
+                    };
+                    names.insert(v.other & 0x7fff, name);
+                    aux = chain_step(a, v.next, span);
+                }
+                offset = chain_step(at, need.next, span);
+            } else {
+                let def =
+                    parse(cx, span.sub(at, Verdef::SIZE), endian, &(), Verdef::layout).await?;
+                if let Some(a) = chain_step(at, def.aux, span) {
+                    let v =
+                        parse(cx, span.sub(a, Verdaux::SIZE), endian, &(), Verdaux::layout).await?;
+                    if let Ok(name) = string_at(cx, strtab, v.name.into()).await {
+                        names.insert(def.index & 0x7fff, name);
+                    }
+                }
+                offset = chain_step(at, def.next, span);
+            }
+        }
+    }
+    Ok(names)
+}
+
+/// Most `.gnu.version` entries read at once.
+const VERSYM_BATCH: u64 = 4096;
+
+/// `.gnu.version`: one version index per dynamic symbol (the section
+/// linked by `sh_link`), named after the symbol and its version.
+pub(super) async fn versym(cx: Cx, (elf, index): (Elf, u32)) -> Result<()> {
+    let section = elf
+        .section(index)
+        .ok_or_else(|| Diagnostic::internal("section index out of range"))?;
+    let span = elf.data(section);
+    let n = span.len / 2;
+    let symbols = elf
+        .section(section.link)
+        .filter(|s| s.kind == SHT_DYNSYM && section.link != 0)
+        .map(|s| {
+            (
+                table(&elf, s, elf.class.sym_size()),
+                linked_strings(&elf, s),
+            )
+        });
+    let versions = version_names(&cx, &elf).await?;
+    cx.set_count(Count::Exact(n));
+    let mut i = 0u64;
+    while i < n {
+        let batch = n.saturating_sub(i).min(VERSYM_BATCH);
+        let at = i.saturating_mul(2);
+        let data = cx
+            .read(span.sub_exact(at, batch.saturating_mul(2))?)
+            .await?;
+        for k in 0..batch {
+            let idx = i.saturating_add(k);
+            let off = k.saturating_mul(2);
+            let v = get_at::<u16>(&data, off, elf.endian()).unwrap_or(0);
+            let mut label = format!("#{idx}");
+            if let Some((t, strtab)) = &symbols
+                && idx < t.count
+            {
+                let entry = t.span.sub(idx.saturating_mul(t.entsize), 4);
+                let raw = cx.read(entry).await?;
+                let name = get_at::<u32>(&raw, 0, elf.endian()).unwrap_or(0);
+                if name != 0
+                    && let Ok(s) = string_at(&cx, *strtab, name.into()).await
+                {
+                    label = s;
+                }
+            }
+            let version = match v & 0x7fff {
+                0 => "local".to_owned(),
+                1 => "global".to_owned(),
+                x => versions
+                    .get(&x)
+                    .cloned()
+                    .unwrap_or_else(|| format!("version {x}")),
+            };
+            let summary = if v & 0x8000 != 0 {
+                format!("{version}, hidden")
+            } else {
+                version
+            };
+            cx.push(
+                Node::new(label)
+                    .span(span.sub(at.saturating_add(off), 2))
+                    .value(hex(v, 16))
+                    .summary(summary),
+            )
+            .await;
+        }
+        i = i.saturating_add(batch);
     }
     Ok(())
 }

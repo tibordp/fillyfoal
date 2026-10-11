@@ -8,6 +8,7 @@ use std::sync::Arc;
 use super::emit_nodes;
 use super::{hex, leaf, text, uint};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_be, u64_le};
+use crate::codec::Codec;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Path};
@@ -1267,20 +1268,47 @@ async fn mcap_records(cx: Cx, (region, path): (Span, Path)) -> Result<()> {
         if op == 0x06 {
             p = 28;
             let comp = mcap_str(&b, &mut p).unwrap_or_default();
-            let records_at = to_u64(p).saturating_add(8);
-            let records = body.tail(records_at);
-            node = match (comp.as_str(), path.enter(span.offset, 2)) {
-                ("", Ok(child)) => node.lazy(
-                    crate::expander!(self::mcap_records: (Span, Path)),
-                    (records, child),
+            let records_len = u64_le(&b, p).unwrap_or(0);
+            let records = body.tail(to_u64(p).saturating_add(8)).sub(0, records_len);
+            let size = u64_le(&b, 16).unwrap_or(0);
+            let codec = match comp.as_str() {
+                "" => Some(Codec::Stored),
+                "zstd" => Some(Codec::Zstd),
+                "lz4" => Some(Codec::Lz4Frame),
+                _ => None,
+            };
+            node = match (codec, path.enter(span.offset, 2)) {
+                (Some(codec), Ok(child)) => node.lazy(
+                    crate::expander!(self::mcap_chunk: (Span, Codec, u64, Path)),
+                    (records, codec, size, child),
                 ),
-                ("", Err(e)) => node.diag(e),
-                (c, _) => node.diag(Diagnostic::unsupported(format!("{c} compression"))),
+                (Some(_), Err(e)) => node.diag(e),
+                (None, _) => node.diag(Diagnostic::unsupported(format!("{comp} compression"))),
             };
         }
         cx.push(node).await;
     }
     Ok(())
+}
+
+/// A chunk's records, decoded on demand: MCAP compresses them as one zstd
+/// frame or one LZ4 frame, and records their decoded size.
+async fn mcap_chunk(cx: Cx, (records, codec, size, path): (Span, Codec, u64, Path)) -> Result<()> {
+    let decoded = match codec {
+        Codec::Stored => records,
+        codec if size <= records.len.saturating_mul(codec.max_ratio()) => {
+            cx.decode_lazy(records, &codec, size)?
+        }
+        codec => {
+            return Err(Diagnostic::malformed(format!(
+                "uncompressed size {size} is implausible for {} bytes of {}",
+                records.len,
+                codec.name()
+            ))
+            .at(records));
+        }
+    };
+    mcap_records(cx, (decoded, path)).await
 }
 
 // ---------------------------------------------------------------------------

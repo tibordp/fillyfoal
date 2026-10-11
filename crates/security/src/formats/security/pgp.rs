@@ -9,6 +9,7 @@
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u16_be, u32_be};
+use crate::codec::Codec;
 use crate::codec::crypto::Hash;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
@@ -1329,12 +1330,19 @@ async fn compressed(cx: &Cx, state: &PacketState) -> Result<()> {
                 .span(content)
                 .lazy(crate::expander!(self::packets: Stream), next(content)),
         ),
-        1 | 2 => cx.emit(
-            Node::new("Packets")
-                .span(content)
-                .summary(format!("{} compressed bytes", content.len))
-                .lazy(inflate_packets, (next(content), algo == 2)),
-        ),
+        1..=3 => {
+            let codec = match algo {
+                1 => Codec::Deflate,
+                2 => Codec::Zlib,
+                _ => Codec::Bzip2,
+            };
+            cx.emit(
+                Node::new("Packets")
+                    .span(content)
+                    .summary(format!("{} compressed bytes", content.len))
+                    .lazy(decompress_packets, (next(content), codec)),
+            );
+        }
         _ => cx.emit(
             Node::new("Compressed data")
                 .span(content)
@@ -1347,8 +1355,10 @@ async fn compressed(cx: &Cx, state: &PacketState) -> Result<()> {
     Ok(())
 }
 
-async fn inflate_packets(cx: Cx, (stream, zlib): (Stream, bool)) -> Result<()> {
-    let decoded = crate::codec::inflate_span(&cx, stream.span, zlib, None).await?;
+/// The packets in a Compressed Data packet: RFC 9580 section 5.6 has raw
+/// DEFLATE (ZIP), zlib and bzip2 streams.
+async fn decompress_packets(cx: Cx, (stream, codec): (Stream, Codec)) -> Result<()> {
+    let decoded = crate::codec::decode_span(&cx, stream.span, &codec, None).await?;
     cx.annotate(format!("{:#x} bytes decompressed", decoded.span.len));
     if let Some(e) = decoded.error {
         cx.diag(e);

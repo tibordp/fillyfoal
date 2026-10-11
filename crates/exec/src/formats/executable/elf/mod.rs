@@ -7,6 +7,7 @@
 //! from these and decoded only when expanded. A few small notes are read
 //! eagerly for the summary (interpreter, build ID, ABI tag).
 
+mod hash;
 mod notes;
 mod symbols;
 mod tables;
@@ -194,6 +195,8 @@ pub(crate) struct ElfInfo {
     /// the loadable segments, or (in files without segments) the allocated
     /// sections with data, indexed by position in `segments`/`sections`.
     vaddr_index: RangeIndex,
+    /// The allocated sections' address ranges, by position in `sections`.
+    section_index: RangeIndex,
 }
 
 impl ElfInfo {
@@ -246,6 +249,23 @@ impl ElfInfo {
 
     fn vaddr_span(&self, vaddr: u64, len: u64) -> Option<Span> {
         self.vaddr_offset(vaddr).map(|o| self.file().sub(o, len))
+    }
+
+    /// A label for an address: the allocated section it falls in.
+    fn describe(&self, addr: u64) -> String {
+        match self
+            .section_index
+            .find(addr)
+            .and_then(|i| self.sections.get(i))
+        {
+            Some(s) if addr == s.addr => format!("{addr:#x} ({})", s.label()),
+            Some(s) => format!(
+                "{addr:#x} ({}+{:#x})",
+                s.label(),
+                addr.saturating_sub(s.addr)
+            ),
+            None => format!("{addr:#x}"),
+        }
     }
 
     fn relocation_types(&self) -> crate::value::EnumTable {
@@ -330,6 +350,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
         }))
     };
+    let section_index = RangeIndex::new(sections.iter().map(|s| {
+        if s.flags & 2 != 0 && s.addr != 0 {
+            (s.addr, s.size)
+        } else {
+            (0, 0)
+        }
+    }));
     let elf: Elf = Arc::new(ElfInfo {
         input,
         class,
@@ -338,6 +365,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         segments,
         shstrtab,
         vaddr_index,
+        section_index,
     });
 
     let facts = gather_facts(&cx, &elf).await;
@@ -1056,12 +1084,17 @@ async fn section_contents(cx: &Cx, elf: &Elf, section: &Section) -> Result<Optio
             lazy("Version Requirements").lazy(symbols::verneed, (elf.clone(), index))
         }
         SHT_GNU_VERDEF => lazy("Version Definitions").lazy(symbols::verdef, (elf.clone(), index)),
-        SHT_GNU_VERSYM => raw.summary(format!("{} symbol versions", section.size / 2)),
-        SHT_HASH => raw.summary("SysV symbol hash table"),
-        SHT_RELR => raw.summary(format!(
-            "{} packed relative relocation words",
-            section.size.checked_div(elf.class.word()).unwrap_or(0)
-        )),
+        SHT_GNU_VERSYM => lazy("Symbol Versions")
+            .summary(format!("{} entries", section.size / 2))
+            .lazy(symbols::versym, (elf.clone(), index)),
+        SHT_HASH => lazy("SysV Hash Table").lazy(hash::sysv, (elf.class, data, section.entsize)),
+        SHT_GNU_HASH => lazy("GNU Hash Table").lazy(hash::gnu, (elf.class, data)),
+        SHT_RELR => lazy("Relative Relocations")
+            .summary(format!(
+                "{} packed words",
+                section.size.checked_div(elf.class.word()).unwrap_or(0)
+            ))
+            .lazy(hash::relr, (elf.clone(), data)),
         _ => match section.name.as_str() {
             ".comment" | ".note.GNU-stack" => lazy("Strings").lazy(symbols::strings, data),
             ".interp" => {
@@ -1073,10 +1106,55 @@ async fn section_contents(cx: &Cx, elf: &Elf, section: &Section) -> Result<Optio
                 lazy("Debug Alt Link").lazy(symbols::debuglink, (elf.class, data))
             }
             ".nv_fatbin" | "__nv_relfatbin" => embedded("Fat Binary", elf.input.nested(data)),
+            ".eh_frame" => lazy("Call Frame Information").lazy(eh_frame, (elf.clone(), index)),
+            ".eh_frame_hdr" => lazy("Frame Index").lazy(eh_frame_hdr, (elf.clone(), index)),
             _ => raw,
         },
     };
     Ok(Some(node))
+}
+
+impl crate::formats::executable::eh_frame::Image for ElfInfo {
+    fn endian(&self) -> Endian {
+        self.class.endian
+    }
+
+    fn wide(&self) -> bool {
+        self.class.wide
+    }
+
+    fn describe(&self, addr: u64) -> String {
+        ElfInfo::describe(self, addr)
+    }
+
+    fn target(&self, addr: u64) -> Option<Span> {
+        // An object file's pointers are resolved by relocations.
+        if self.header.kind == ET_REL {
+            return None;
+        }
+        self.vaddr_span(addr, 0)
+    }
+}
+
+/// `.eh_frame`: CIEs and FDEs, walked as in Mach-O `__eh_frame`.
+async fn eh_frame(cx: Cx, (elf, index): (Elf, u32)) -> Result<()> {
+    let section = elf
+        .section(index)
+        .ok_or_else(|| Diagnostic::internal("section index out of range"))?;
+    let span = elf.data(section);
+    if elf.header.kind == ET_REL {
+        cx.annotate("addresses before relocation");
+    }
+    crate::formats::executable::eh_frame::walk(&cx, &*elf, span, section.addr).await
+}
+
+/// `.eh_frame_hdr`: the binary search table over `.eh_frame`'s FDEs.
+async fn eh_frame_hdr(cx: Cx, (elf, index): (Elf, u32)) -> Result<()> {
+    let section = elf
+        .section(index)
+        .ok_or_else(|| Diagnostic::internal("section index out of range"))?;
+    let (span, addr) = (elf.data(section), section.addr);
+    crate::formats::executable::eh_frame::header(&cx, elf.clone(), span, addr).await
 }
 
 async fn compressed(cx: &Cx, elf: &Elf, section: &Section, data: Span) -> Result<Node> {
