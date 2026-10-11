@@ -122,8 +122,6 @@ fn inode_fields(f: &mut Fields<'_>, _: &()) -> Result<()> {
 #[derive(Clone, Debug)]
 struct CramEntry {
     input: Input,
-    /// Where the filesystem starts (0, or 512 with a boot block).
-    base: u64,
     inode: Span,
     path: Arc<Vec<u64>>,
 }
@@ -133,7 +131,16 @@ pub async fn dissect_cramfs(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(file.sub(0, 4)).await?;
     let base = if head == b"\x45\x3d\xcd\x28" { 0 } else { 512 };
     if base > 0 {
-        cx.emit(embedded("Boot block", input.nested(file.sub(0, base))));
+        let boot = file.sub(0, base);
+        if cx.read_avail(boot).await?.iter().all(|&b| b == 0) {
+            cx.emit(
+                Node::new("Boot block")
+                    .span(boot)
+                    .summary("zeros (padding)"),
+            );
+        } else {
+            cx.emit(embedded("Boot block", input.nested(boot)));
+        }
     }
     let sb_span = file.sub(base, CramSuper::SIZE);
     let sb = crate::fields::parse(&cx, sb_span, LE, &(), CramSuper::layout).await?;
@@ -143,7 +150,6 @@ pub async fn dissect_cramfs(cx: Cx, input: Input) -> Result<()> {
     let root_inode = cram_inode(&root).ok_or_else(|| Diagnostic::truncated(root_span, 0))?;
     let state = CramEntry {
         input,
-        base,
         inode: root_span,
         path: Arc::new(Vec::new()),
     };
@@ -169,7 +175,9 @@ async fn cram_entry(cx: Cx, e: CramEntry) -> Result<()> {
     cx.emit(
         struct_node("Inode", e.inode, LE, (), inode_fields).summary(unix_mode(inode.mode.into())),
     );
-    let data_at = e.base.saturating_add(inode.offset);
+    // Offsets are from the start of the image, also when a 512-byte boot
+    // block (mkfs.cramfs -p) moves the superblock.
+    let data_at = inode.offset;
     match u64::from(inode.mode) & 0o170_000 {
         0o040_000 => {
             if e.path.contains(&inode.offset) || e.path.len() >= MAX_DEPTH {
@@ -203,7 +211,6 @@ async fn cram_entry(cx: Cx, e: CramEntry) -> Result<()> {
                     crate::expander!(self::cram_entry: CramEntry),
                     CramEntry {
                         input: e.input,
-                        base: e.base,
                         inode: dir.sub(to_u64(at), 12),
                         path: path.clone(),
                     },
@@ -228,8 +235,7 @@ async fn cram_entry(cx: Cx, e: CramEntry) -> Result<()> {
             let mut start = data_at.saturating_add(ptrs.len);
             let mut nodes = Vec::new();
             for i in 0..blocks {
-                let end = u64::from(u32_le(&raw, to_usize(i.saturating_mul(4))).unwrap_or(0))
-                    .saturating_add(e.base);
+                let end = u64::from(u32_le(&raw, to_usize(i.saturating_mul(4))).unwrap_or(0));
                 let span = file.sub(start, end.saturating_sub(start));
                 let expected = u64::from(inode.size)
                     .saturating_sub(i.saturating_mul(PAGE))

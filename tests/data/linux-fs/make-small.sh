@@ -18,6 +18,9 @@ sh /src/tree.sh /tmp/tree
 rm -f ./*.img ./*.cramfs ./*.zst
 mkfs.cramfs -N little -n fillyfoal /tmp/tree tree.cramfs
 fsck.cramfs -v tree.cramfs > tree.cramfs.txt
+# -p: a 512-byte (zero) boot block in front; offsets stay image-absolute.
+mkfs.cramfs -p -N little -n fillyfoal /tmp/tree padded.cramfs
+fsck.cramfs -v padded.cramfs > padded.cramfs.txt
 for v in 1 2 3; do
   truncate -s 64k minix$v.img
   mkfs.minix -$v minix$v.img > /dev/null
@@ -26,4 +29,4 @@ truncate -s 16m jfs.img
 mkfs.jfs -q -L fillyfoal jfs.img > /dev/null
 jfs_fsck -n jfs.img > /dev/null || true
 zstd -q -19 -f jfs.img -o jfs.img.raw.zst
-ls -l tree.cramfs minix*.img jfs.img.raw.zst
+ls -l tree.cramfs padded.cramfs minix*.img jfs.img.raw.zst

@@ -121,6 +121,7 @@ byte-reproducible; the others are (the scripts fix UUIDs, labels and times).
 | `f2fs/large-nat.f2fs.raw.zst` | f2fs-tools 1.16 mkfs.f2fs | `make-f2fs.sh`: `mkfs.f2fs -i -T … -U … -l fillyfoal` on 64 MiB (empty; LARGE_NAT_BITMAP, so the checkpoint checksum sits at offset 192), same neutral `/proc/version` |
 | `jfs/mkfs.jfs.raw.zst` | jfsutils 1.1.15 mkfs.jfs | `make-small.sh`: an empty 16 MiB aggregate (no tool fills JFS without a mount, and the kernel used has no JFS); random UUID |
 | `cramfs/mkcramfs.cramfs` | util-linux 2.41 mkfs.cramfs | `make-small.sh`: `mkfs.cramfs -N little -n fillyfoal tree` |
+| `cramfs/mkcramfs-padded.cramfs` | util-linux 2.41 mkfs.cramfs | `make-small.sh`: `mkfs.cramfs -p -N little -n fillyfoal tree` (a zero 512-byte boot block in front) |
 | `minix/` | util-linux 2.41 mkfs.minix | `make-small.sh`: empty 64 KiB filesystems of versions 1, 2 and 3 (`mkfs.minix -1/-2/-3`; no tool fills them without a mount) |
 | `fat/` | dosfstools 4.2 mkfs.fat, mtools 4.0 | `make-fat.sh`: `mkfs.fat -F 12/16/32 -i … -n FILLYFOAL`, filled with `mcopy -s -m` (long names, subdirectories) under `SOURCE_DATE_EPOCH` |
 | `exfat/linux-exfat.img.raw.zst` | exfatprogs mkfs.exfat, Linux 7.0 exfat | `make-fat.sh`: `mkfs.exfat -L fillyfoal -c 4K -b 4K`, mounted and filled; random volume serial |
