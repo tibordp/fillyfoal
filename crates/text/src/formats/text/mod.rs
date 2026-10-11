@@ -53,6 +53,7 @@ pub mod postscript;
 pub mod rtf;
 pub mod sln;
 pub mod ssh;
+pub mod stanza;
 pub mod subtitles;
 pub mod toml;
 pub mod uuencode;

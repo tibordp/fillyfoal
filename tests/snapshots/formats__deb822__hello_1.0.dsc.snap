@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ hello_1.0.dsc — Debian control data: source hello  [0x0+0x23d]
+  ▾ Format 3.0 (native) — Format: 3.0 (native)  [0x0+0x23d]
+      Format: "3.0 (native)"  [0x0+0x14]
+      Source: "hello"  [0x15+0xd]
+      Binary: "hello, hello-doc"  [0x23+0x18]
+      Architecture: "any all"  [0x3c+0x15]
+      Version: "1.0"  [0x52+0xc]
+      Maintainer: "fillyfoal <fillyfoal@example.com>"  [0x5f+0x2d]
+      Homepage: "https://example.com/hello"  [0x8d+0x23]
+      Standards-Version: "4.6.2"  [0xb1+0x18]
+      Build-Depends: "debhelper-compat (= 13)"  [0xca+0x26]
+      Package-List: "hello deb devel optional arch=any\nhello-doc deb doc optional arch=all"  [0xf1+0x55]
+      Checksums-Sha1: "12659c38aff17ce3c48af788047ac321d8437cbb 740 hello_1.0.tar.xz"  [0x147+0x4e]
+      Checksums-Sha256: "74ac6c6f765dfd4f1de7e75b513ac09ebb83702261552fb817439cd7d8984e26 740 hello_1.0.tar.xz"  [0x196+0x68]
+      Files: "598174c5c7368bc7ad2b609d32b2d118 740 hello_1.0.tar.xz"  [0x1ff+0x3d]

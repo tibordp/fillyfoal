@@ -1,0 +1,15 @@
+Source: hello
+Section: devel
+Priority: optional
+Maintainer: Example Person <a@example.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.0
+
+Package: hello
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: example package
+ This is a long description
+ spanning lines.
+ .
+ Another paragraph.

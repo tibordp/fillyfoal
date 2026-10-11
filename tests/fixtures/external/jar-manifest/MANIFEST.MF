@@ -1,0 +1,12 @@
+Manifest-Version: 1.0
+Class-Path: lib/fillyfoal-core-1.0.0.jar lib/fillyfoal-text-1.0.0.jar li
+ b/fillyfoal-archive-1.0.0.jar lib/fillyfoal-image-1.0.0.jar
+Implementation-Title: fillyfoal demo
+Implementation-Version: 1.0
+Created-By: 21.0.12.1 (Eclipse Adoptium)
+Main-Class: com.example.Main
+
+Name: com/example/
+Sealed: true
+Implementation-Vendor: fillyfoal
+

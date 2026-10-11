@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ MANIFEST.MF — JAR manifest 1.0, main class com.example.Main  [0x0+0x172]
+  ▾ Main attributes — Manifest-Version: 1.0  [0x0+0x12a]
+      Manifest-Version: "1.0"  [0x0+0x15]
+      Class-Path: "lib/fillyfoal-core-1.0.0.jar lib/fillyfoal-text-1.0.0.jar lib/fillyfoal-archive-1.0.0.jar lib/fillyfoal-image-1.0.0.jar"  [0x17+0x86]
+      Implementation-Title: "fillyfoal demo"  [0x9f+0x24]
+      Implementation-Version: "1.0"  [0xc5+0x1b]
+      Created-By: "21.0.12.1 (Eclipse Adoptium)"  [0xe2+0x28]
+      Main-Class: "com.example.Main"  [0x10c+0x1c]
+  ▾ com/example/ — Name: com/example/  [0x12c+0x44]
+      Name: "com/example/"  [0x12c+0x12]
+      Sealed: "true"  [0x140+0xc]
+      Implementation-Vendor: "fillyfoal"  [0x14e+0x20]

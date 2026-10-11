@@ -1,0 +1,21 @@
+Metadata-Version: 2.4
+Name: fillyfoal-demo
+Version: 1.2.3
+Summary: A sample package for metadata fixtures
+Author-email: fillyfoal <fillyfoal@example.com>
+License-Expression: MIT
+Project-URL: Homepage, https://example.com/fillyfoal-demo
+Keywords: sample,fixture
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: requests>=2.31
+Requires-Dist: click>=8; python_version >= "3.10"
+
+# fillyfoal demo
+
+A small package used to make a metadata sample.
+
+- one
+- two
