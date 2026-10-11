@@ -419,6 +419,7 @@ and reproduce every file byte for byte.
 | `gif/anim.gif` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=8x6:rate=25 -frames:v 3` (bitexact) |
 | `j2k/testsrc.j2k` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | `Lavc` comment marker in the codestream; not byte-reproduced |
 | `j2k/tiled-gray.j2k` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | `Lavc` comment marker in the codestream; not byte-reproduced |
+| `j2k/opj-tile-parts.j2k` | OpenJPEG 2.5.4 (`opj_compress`) | reproduced byte-for-byte: `sh tests/data/j2k/tile_parts.sh opj-tile-parts.j2k` (`opj_compress -t 32,32 -TP R -n 3` on a 64×64 greyscale gradient of ours); four tiles of three tile-parts each (TPsot 0..2, TNsot 3) |
 | `jp2/ffmpeg.jp2` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | commit b86c5c84 ("fixtures generated with ffmpeg"); `Lavc` marker |
 | `avif/svtav1.avif` | FFmpeg 8 with libsvtav1 | commit b86c5c84 ("fixtures generated with ffmpeg and sips") |
 | `jpeg/ffmpeg-420.jpg` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=32x24:rate=1 -frames:v 1 -pix_fmt yuvj420p` (`Lavc` comment) |
