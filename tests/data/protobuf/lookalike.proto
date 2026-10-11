@@ -1,0 +1,22 @@
+// Generic messages whose encodings start like an ONNX ModelProto
+// (`08 <ir_version> 12 <producer_name>`) but are not models: negatives
+// for the ONNX probe. See lookalike.sh.
+syntax = "proto3";
+package demo;
+
+message Person {
+  int32 id = 1;
+  string name = 2;
+  string email = 3;
+}
+
+message Limits {
+  int32 retries = 1;
+  int32 backoff = 2;
+}
+
+message ClientConfig {
+  int32 version = 1;
+  string client = 2;
+  Limits limits = 4;
+}

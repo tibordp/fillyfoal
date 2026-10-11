@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ client-config.pb — Protocol Buffers message (no schema), 3 top-level fields  [0x0+0x15]
+    field 1: 1 — VARINT, sint64 -1  [0x0+0x2]
+    field 2: "some-client" — LEN  [0x2+0xd]
+  ▾ field 4 — LEN, message, 2 fields  [0xf+0x6]
+      field 1: 1 — VARINT, sint64 -1  [0x11+0x2]
+      field 2: 2 — VARINT, sint64 1  [0x13+0x2]
