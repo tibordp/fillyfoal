@@ -241,3 +241,28 @@ fn bitcode_reads_a_long_record_in_steps() {
     // Reading 12 MiB costs about 3k units; the operands about 4k more.
     assert!(yields >= 3, "{yields} yields");
 }
+
+#[test]
+fn android_xml_attributes_are_bounded_by_the_chunk() {
+    // A 116-byte START_ELEMENT chunk declaring 65535 attributes (4 fit).
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/synthetic/android-xml/attr-count-overflow.xml");
+    let mut host = Host::named("main.xml", std::fs::read(path).unwrap(), Limits::default());
+    host.explore_all();
+    let mut nodes = 0usize;
+    let mut stack = vec![host.root];
+    while let Some(id) = stack.pop() {
+        nodes += 1;
+        let children = host.session.children(id).unwrap();
+        assert!(children.ids.len() < 100, "{} children", children.ids.len());
+        stack.extend(children.ids.iter().copied());
+    }
+    assert!(nodes < 200, "{nodes} nodes");
+    let diags = common::diagnostics(&host);
+    assert!(
+        diags
+            .iter()
+            .any(|d| d.message.contains("65535 attributes declared, 4 fit")),
+        "{diags:?}"
+    );
+}

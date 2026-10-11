@@ -7,6 +7,7 @@
 //! resource table holds a global string pool and packages of typed entries
 //! per configuration.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
@@ -548,7 +549,12 @@ struct XmlBuilder<'a> {
     /// Elements past `MAX_DEPTH` that were not pushed.
     overflow: usize,
     root_summary: Option<String>,
+    /// Namespace URI to prefix, from the START_NAMESPACE chunks seen so far.
+    prefixes: BTreeMap<String, String>,
 }
+
+/// The URI aapt binds to `android:`.
+const ANDROID_NS: &str = "http://schemas.android.com/apk/res/android";
 
 impl XmlBuilder<'_> {
     fn name(&self, index: u32) -> String {
@@ -574,12 +580,24 @@ impl XmlBuilder<'_> {
         let name = self.name(w(4));
         let attr_start = usize::from(u16_le(data, body.saturating_add(8)).unwrap_or(20));
         let attr_size = usize::from(u16_le(data, body.saturating_add(10)).unwrap_or(20)).max(20);
-        let count = usize::from(u16_le(data, body.saturating_add(12)).unwrap_or(0));
+        let declared = usize::from(u16_le(data, body.saturating_add(12)).unwrap_or(0));
+        // Only the attributes that fit in the chunk: the count is a u16
+        // and must not conjure records past the chunk's end.
+        let room = c
+            .size
+            .saturating_sub(c.header)
+            .saturating_sub(attr_start)
+            .checked_div(attr_size)
+            .unwrap_or(0);
+        let count = declared.min(room);
         let parent = self.parent();
-        let node = self.tree.add(
-            parent,
-            Node::new(format!("<{name}>")).span(self.doc.at(c.offset, c.size)),
-        );
+        let mut element = Node::new(format!("<{name}>")).span(self.doc.at(c.offset, c.size));
+        if declared > count {
+            element = element.diag(Diagnostic::malformed(format!(
+                "{declared} attributes declared, {count} fit in the chunk"
+            )));
+        }
+        let node = self.tree.add(parent, element);
         self.tree.add(
             Some(node),
             struct_node(
@@ -606,12 +624,15 @@ impl XmlBuilder<'_> {
             } else {
                 render_value(kind, aw(16), &self.pool)
             };
-            let prefix = match string(&self.pool, ns) {
-                Some(uri) if uri.contains("android") => "android:",
-                Some(_) => "ns:",
-                None => "",
+            let label = match string(&self.pool, ns) {
+                Some(uri) => match self.prefixes.get(uri) {
+                    Some(prefix) if !prefix.is_empty() => format!("{prefix}:{attr}"),
+                    Some(_) => attr,
+                    None if uri == ANDROID_NS => format!("android:{attr}"),
+                    None => format!("ns:{attr}"),
+                },
+                None => attr,
             };
-            let label = format!("{prefix}{attr}");
             if parts.len() < 4 {
                 parts.push(format!("{label}={value}"));
             }
@@ -704,12 +725,14 @@ pub async fn dissect_xml(cx: Cx, input: Input) -> Result<()> {
         stack: Vec::new(),
         overflow: 0,
         root_summary: None,
+        prefixes: BTreeMap::new(),
     };
     let top = b.tree.add(None, Node::new("Elements"));
     b.stack.push((top, 0));
     let mut events = None::<(usize, usize)>;
     for (i, c) in chunks.iter().enumerate() {
-        if i % 256 == 0 {
+        // Elements do work in proportion to their attributes.
+        if i % 256 == 0 || c.kind == 0x0102 {
             cx.checkpoint().await;
         }
         if (0x0100..=0x0104).contains(&c.kind) {
@@ -738,6 +761,7 @@ pub async fn dissect_xml(cx: Cx, input: Input) -> Result<()> {
                     .unwrap_or("")
                     .to_owned();
                 let label = if c.kind == 0x0100 {
+                    b.prefixes.insert(uri.clone(), prefix.clone());
                     format!("xmlns:{prefix}")
                 } else {
                     format!("End of xmlns:{prefix}")
