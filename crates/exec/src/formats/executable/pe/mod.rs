@@ -331,8 +331,7 @@ async fn load(cx: &Cx, input: Input, lfanew: u64) -> Result<Pe> {
 
 #[derive(Default)]
 struct Overview {
-    imports: u64,
-    import_dlls: u64,
+    imports: imports::ImportCount,
     delay_dlls: u64,
     exports: u64,
     dotnet: Option<String>,
@@ -341,9 +340,8 @@ struct Overview {
 /// Counts what the summary reports: a bounded number of small reads.
 async fn overview(cx: &Cx, pe: &Pe) -> Overview {
     let mut out = Overview::default();
-    if let Ok((dlls, functions)) = imports::count(cx, pe).await {
-        out.import_dlls = dlls;
-        out.imports = functions;
+    if let Ok(count) = imports::count(cx, pe).await {
+        out.imports = count;
     }
     out.delay_dlls = imports::count_delay(cx, pe).await.unwrap_or(0);
     out.exports = exports::count(cx, pe).await.unwrap_or(0);
@@ -372,11 +370,12 @@ fn summary(pe: &PeInfo, o: &Overview) -> String {
     {
         out.push_str(&format!(" ({ui})"));
     }
-    if o.import_dlls > 0 {
+    if o.imports.dlls > 0 {
+        let at_least = if o.imports.capped { "at least " } else { "" };
         out.push_str(&format!(
-            ", {} from {}",
-            count(o.imports, "import", "imports"),
-            count(o.import_dlls, "DLL", "DLLs")
+            ", {at_least}{} from {}",
+            count(o.imports.functions, "import", "imports"),
+            count(o.imports.dlls, "DLL", "DLLs")
         ));
     }
     if o.delay_dlls > 0 {

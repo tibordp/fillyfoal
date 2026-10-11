@@ -263,3 +263,63 @@ fn trim_bounds_memory_and_keeps_the_focus() {
     host.explore_all();
     assert_eq!(host.render(), full);
 }
+
+/// A PE32+ image whose `n` import descriptors all point at one region of
+/// `ff` bytes of 0xff: every thunk table runs to the end of the file.
+fn shared_thunk_region(n: usize, ff: usize) -> Vec<u8> {
+    let table = (n + 1) * 20;
+    let ff_rva = 0x1000 + ((table + 0xfff) & !0xfff);
+    let raw_len = ff_rva - 0x1000 + ff;
+    let mut w = common::Image::new(0x200 + raw_len);
+    w.bytes(0, b"MZ").u32(0x3c, 0x40).bytes(0x40, b"PE\0\0");
+    w.u16(0x44, 0x8664)
+        .u16(0x46, 1)
+        .u16(0x54, 0xf0)
+        .u16(0x56, 0x22);
+    let o = 0x58;
+    w.u16(o, 0x20b)
+        .u32(o + 16, 0x1000)
+        .u64(o + 24, 0x1_4000_0000)
+        .u32(o + 32, 0x1000)
+        .u32(o + 36, 0x200)
+        .u16(o + 40, 6)
+        .u16(o + 48, 6)
+        .u32(o + 56, (0x1000 + ((raw_len + 0xfff) & !0xfff)) as u32)
+        .u32(o + 60, 0x200)
+        .u16(o + 68, 3)
+        .u32(o + 108, 16);
+    // Import directory
+    w.u32(o + 120, 0x1000).u32(o + 124, table as u32);
+    let s = o + 0xf0;
+    w.bytes(s, b".idata\0\0")
+        .u32(s + 8, raw_len as u32)
+        .u32(s + 12, 0x1000)
+        .u32(s + 16, raw_len as u32)
+        .u32(s + 20, 0x200)
+        .u32(s + 36, 0xc000_0040);
+    for i in 0..n {
+        let d = 0x200 + i * 20;
+        w.u32(d, ff_rva as u32)
+            .u32(d + 12, ff_rva as u32)
+            .u32(d + 16, ff_rva as u32);
+    }
+    let mut data = w.finish();
+    data[0x200 + ff_rva - 0x1000..].fill(0xff);
+    data
+}
+
+#[test]
+fn the_import_count_shares_one_budget() {
+    let mut host = Host::with_chunk(shared_thunk_region(64, 4 << 20), 64 * 1024);
+    host.budget = 2_000;
+    host.session.expand(host.root, 100);
+    host.run();
+    // 64 thunk tables of 512Ki entries each would take thousands of steps;
+    // the shared budget reads 2 MiB of thunks.
+    assert!(host.polls < 2_000, "{} polls", host.polls);
+    let summary = host.session.node(host.root).unwrap().summary.clone();
+    assert_eq!(
+        summary.as_deref(),
+        Some("PE32+ x64 EXE (console), at least 262144 imports from 64 DLLs")
+    );
+}

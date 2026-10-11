@@ -22,6 +22,10 @@ const ORDINAL_FLAG_64: u64 = 0x8000_0000_0000_0000;
 const MAX_MODULES: u32 = 1 << 14;
 /// Thunk tables longer than this are cut off.
 const MAX_THUNKS: u32 = 1 << 20;
+/// The image summary counts at most this many imports over all DLLs, so a
+/// table of descriptors that all point at one huge thunk region costs a
+/// bounded amount of reading.
+const MAX_SUMMARY_THUNKS: u64 = 1 << 18;
 
 fn ordinal_flag(pe: &PeInfo) -> u64 {
     if pe.wide {
@@ -43,13 +47,23 @@ fn thunk_value(pe: &PeInfo, data: &[u8]) -> u64 {
 // ---------------------------------------------------------------------------
 // Counting, for the image summary
 
-/// `(DLLs, functions)` imported through the import directory.
-pub(super) async fn count(cx: &Cx, pe: &PeInfo) -> Result<(u64, u64)> {
+/// Imports counted for the image summary.
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct ImportCount {
+    pub dlls: u64,
+    pub functions: u64,
+    /// The shared budget ran out: there are at least `functions`.
+    pub capped: bool,
+}
+
+/// DLLs and functions imported through the import directory. Functions are
+/// counted against one budget shared by all descriptors.
+pub(super) async fn count(cx: &Cx, pe: &PeInfo) -> Result<ImportCount> {
+    let mut out = ImportCount::default();
     let (rva, _) = pe.directory(DIR_IMPORT);
     if rva == 0 {
-        return Ok((0, 0));
+        return Ok(out);
     }
-    let (mut dlls, mut functions) = (0u64, 0u64);
     for i in 0..MAX_MODULES {
         let at = i
             .checked_mul(20)
@@ -59,13 +73,21 @@ pub(super) async fn count(cx: &Cx, pe: &PeInfo) -> Result<(u64, u64)> {
         if d.iter().all(|&b| b == 0) {
             break;
         }
-        dlls = dlls.saturating_add(1);
+        out.dlls = out.dlls.saturating_add(1);
+        if out.capped {
+            continue;
+        }
         let lookup = u32_le(&d, 0).unwrap_or(0);
         let first = u32_le(&d, 16).unwrap_or(0);
         let table = if lookup != 0 { lookup } else { first };
-        functions = functions.saturating_add(count_thunks(cx, pe, table).await);
+        let left = MAX_SUMMARY_THUNKS.saturating_sub(out.functions);
+        let (n, ended) = count_thunks_upto(cx, pe, table, left).await;
+        out.functions = out.functions.saturating_add(n);
+        if !ended && n >= left {
+            out.capped = true;
+        }
     }
-    Ok((dlls, functions))
+    Ok(out)
 }
 
 /// The number of DLLs in the delay-load directory.
@@ -97,10 +119,15 @@ async fn count_thunks(cx: &Cx, pe: &PeInfo, rva: u32) -> u64 {
 
 /// Like [`count_thunks`]; also whether the terminating zero was found.
 async fn count_thunks_ended(cx: &Cx, pe: &PeInfo, rva: u32) -> (u64, bool) {
+    count_thunks_upto(cx, pe, rva, u64::from(MAX_THUNKS)).await
+}
+
+/// Like [`count_thunks_ended`], counting at most `limit` entries.
+async fn count_thunks_upto(cx: &Cx, pe: &PeInfo, rva: u32, limit: u64) -> (u64, bool) {
     let width = usize::from(pe.wide).saturating_mul(4).saturating_add(4);
     let mut n = 0u64;
     let mut at = rva;
-    while n < u64::from(MAX_THUNKS) {
+    while n < limit {
         let Ok(span) = pe.rva_span(at, 4096) else {
             break;
         };
@@ -111,6 +138,9 @@ async fn count_thunks_ended(cx: &Cx, pe: &PeInfo, rva: u32) -> (u64, bool) {
         for chunk in data.chunks_exact(width) {
             if chunk.iter().all(|&b| b == 0) {
                 return (n, true);
+            }
+            if n >= limit {
+                return (n, false);
             }
             n = n.saturating_add(1);
             whole = whole.saturating_add(width);
@@ -194,10 +224,14 @@ pub(super) async fn imports(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
         } else {
             descriptor.address
         };
-        let n = count_thunks(&cx, &pe, table).await;
-        let mut summary = plural(n, "function");
-        if descriptor.timestamp != 0 {
-            summary.push_str(", bound");
+        // Counting reads the thunk table; skip it for nodes before the
+        // host's window, which are dropped.
+        let mut summary = String::new();
+        if !cx.skipping() {
+            summary = plural(count_thunks(&cx, &pe, table).await, "function");
+            if descriptor.timestamp != 0 {
+                summary.push_str(", bound");
+            }
         }
         cx.push(
             node.span(span)
@@ -548,8 +582,8 @@ pub(super) async fn delay_imports(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<
             None => Node::new("<no name>"),
         };
         let n = match d.rva(&pe, d.int) {
-            Some(int) => count_thunks(&cx, &pe, int).await,
-            None => 0,
+            Some(int) if !cx.skipping() => count_thunks(&cx, &pe, int).await,
+            _ => 0,
         };
         cx.push(
             node.span(span)
