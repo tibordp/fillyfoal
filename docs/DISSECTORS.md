@@ -404,7 +404,7 @@ Helpers: `crate::bytes::{u16_le, u32_be, ..., uleb128}`,
 filetime_to_unix, mac_to_unix}`, `crate::codec::{crc32, adler32}`,
 `crate::codec::crc` (CRC-32C, CRC-64/XZ, CRC-24, CRC-16 variants, CRC-8, or
 `Crc::new(width, poly, init, reflected, xorout)` for another; never write a
-bitwise CRC loop), `crate::codec::charset` (single-byte code pages by WHATWG
+bitwise CRC loop), `crate::codec::charset` (single-byte and East Asian double-byte code pages by WHATWG
 label).
 
 ## 8. Rules (enforced by lints and tests)

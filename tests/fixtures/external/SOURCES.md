@@ -52,6 +52,7 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `lzma/bottles.txt.lzma` | XZ Utils 5.8 | reproduced byte-for-byte: `xz --format=lzma -6` |
 | `zstd/bottles.txt.zst` | zstd 1.5.7 CLI | reproduced byte-for-byte: `zstd -13 FILE` (content size recorded) |
 | `zstd/large-member.tar.zst` | zstd 1.5.7 CLI | reproduced byte-for-byte: `zstd -19 FILE`; commit f0d9d8d1 |
+| `zstd-dict/words.zdict` | zstd 1.5.7 CLI | reproduced byte-for-byte by `crates/codec/src/codec/testdata/words-dict.sh` (`zstd --train` on 2000-byte pieces of the codec's `words.txt`, `--maxdict=4096 --dictID=4242`); the same file as that directory's `words.zdict` |
 | `lz4/bottles.txt.lz4` | lz4 1.10 CLI | reproduced byte-for-byte: `lz4 -9 -BX --content-size FILE` |
 | `lz4/uncompressed-block.lz4` | lz4 1.10 CLI | reproduced byte-for-byte: `lz4 -1 --no-frame-crc FILE` |
 | `lz4-legacy/legacy.lz4` | lz4 1.10 CLI | reproduced byte-for-byte: `lz4 -l -1` |
@@ -131,7 +132,7 @@ byte-reproducible; the others are (the scripts fix UUIDs, labels and times).
 | `ext/mke2fs-ext4.img.raw.zst` | e2fsprogs 1.47.2 mke2fs | `make-ext.sh`: `mke2fs -t ext4 -O inline_data,^resize_inode -J size=1 -d tree`, `e2fsck -fyD` (extents, flex_bg, metadata_csum, inline data, an htree directory, attribute blocks, an orphan file, a journal) |
 | `ext/mke2fs-metabg.img.raw.zst` | e2fsprogs 1.47.2 mke2fs | `make-ext.sh`: `mke2fs -t ext4 -b 1024 -O meta_bg,^resize_inode,^has_journal -g 256 -N 160 -d tree` (20 groups, 16 descriptors per block: groups 16-19 keep their descriptors in their own meta group; 140 empty files put inodes there), `e2fsck -fyD` |
 | `squashfs/` | squashfs-tools 4.6.1 mksquashfs | `make-squashfs.sh`: reproducible; `-b 16K -xattrs` with gzip, LZMA, LZO, xz, LZ4 and zstd, and `-no-compression -no-fragments -no-exports` for `mksquashfs-plain.sqfs` |
-| `btrfs/` | btrfs-progs 6.14 mkfs.btrfs | `make-btrfs.sh`: `mkfs.btrfs -r tree --shrink` (and `--compress zstd`); the chunk tree UUID is random, so not byte-reproducible |
+| `btrfs/` | btrfs-progs 6.14 mkfs.btrfs | `make-btrfs.sh`: `mkfs.btrfs -r tree --shrink` (and `--compress zstd`; `lzo.btrfs.raw.zst`: `--compress lzo` with an extra 311 KiB `big.txt` in three 128 KiB extents); the chunk tree UUID is random, so not byte-reproducible |
 | `f2fs/sload.f2fs.raw.zst` | f2fs-tools 1.16 mkfs.f2fs, sload.f2fs | `make-f2fs.sh`: `mkfs.f2fs -T … -U … -O extra_attr,inode_checksum,sb_checksum,inode_crtime`, `sload.f2fs -f tree`; the script bind-mounts a neutral `/proc/version` (`Linux version 6.12.0 (fillyfoal@fillyfoal)`), which the superblock records |
 | `f2fs/large-nat.f2fs.raw.zst` | f2fs-tools 1.16 mkfs.f2fs | `make-f2fs.sh`: `mkfs.f2fs -i -T … -U … -l fillyfoal` on 64 MiB (empty; LARGE_NAT_BITMAP, so the checkpoint checksum sits at offset 192), same neutral `/proc/version` |
 | `jfs/mkfs.jfs.raw.zst` | jfsutils 1.1.15 mkfs.jfs | `make-small.sh`: an empty 16 MiB aggregate (no tool fills JFS without a mount, and the kernel used has no JFS); random UUID |
@@ -294,6 +295,8 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `rocksdb-sst/v5-crc32c.sst` | RocksDB via rocksdict 0.3.29 | same script: format version 5, CRC-32C, no compression, 512-byte blocks, index restart interval 4 (delta-encoded index values after shared keys) |
 | `rocksdb-sst/v6-xxhash.sst` | RocksDB via rocksdict 0.3.29 | same script: format version 6, xxHash32 checksums, no compression |
 | `rocksdb-sst/v4-xxhash64.sst` | RocksDB via rocksdict 0.3.29 | same script: format version 4, xxHash64 checksums, no compression |
+| `rocksdb-sst/zstd-dict.sst` | RocksDB via rocksdict 0.3.29 | same script: ZSTD with a 2 KiB compression dictionary of raw samples (`rocksdb.compression_dict`), 512-byte blocks; unedited |
+| `rocksdb-sst/zstd-trained.sst` | RocksDB via rocksdict 0.3.29 | same script: the same with `zstd_max_train_bytes` set, so the dictionary is a formatted one from zstd's trainer; 400 rows; unedited |
 | `bam/small.bam` | htslib (via pysam, inferred) | htslib BGZF block layout; `@PG ID:gen PN:python` in the header; indexed by bai/small.bam.bai |
 | `bam/many-blocks.bam` | samtools 1.16.1 (htslib, Debian bookworm) | `tests/data/bam/many-blocks.sh` in `debian:bookworm-slim`: `samtools view -b --no-PG` of 100 synthetic reads with 60000-byte array tags, 102 BGZF blocks (5.7 MiB of records, most spanning two blocks) ending in the EOF block; reproduced byte-for-byte |
 | `bai/small.bam.bai` | htslib (via pysam, inferred) | htslib index with metadata pseudo-bins (bin 37450) |
@@ -865,6 +868,9 @@ data descriptor (general purpose bit 3).
 |---|---|---|
 | `journald/compact.journal.gz` | systemd-journal-remote, systemd 257 (257.13-1~deb13u1, Debian trixie) | `sh tests/data/journald/make.sh` (Docker `debian:trixie`, `inside.sh`): three entries from a fixed export-format stream (fixed boot/machine IDs, timestamps, hostname `fillyfoal`) with `SYSTEMD_JOURNAL_COMPACT=1` and `MaxFileSize=1M` (minimum hash tables). Edited: cut after the tail object and `arena_size` set to match (`trim.py`; the rest was fallocated zeros), then `gzip -9 -n`. The trimmed file passes `journalctl --verify`; header and entries checked against `journalctl --header` / `-o export`. File and seqnum IDs are random per run |
 | `journald/regular.journal.gz` | same | same script, `SYSTEMD_JOURNAL_COMPACT=0` (regular layout, DATA payload at +64) |
+| `journald/zstd.journal.gz` | same | same script: the three entries and a fourth with a 1 KiB `MESSAGE` (above journald's 512-byte compression threshold), compact, `SYSTEMD_JOURNAL_COMPRESS=ZSTD` (a zstd-compressed DATA object, header flag COMPRESSED_ZSTD); trimmed and verified the same way |
+| `journald/lz4.journal.gz` | same | as `zstd.journal.gz` with `SYSTEMD_JOURNAL_COMPRESS=LZ4` (u64 size, then an LZ4 block) |
+| `journald/xz.journal.gz` | same | as `zstd.journal.gz` with `SYSTEMD_JOURNAL_COMPRESS=XZ` (an .xz stream) |
 | `arm-fip/fip.bin` | TF-A fiptool 2.12.1 (Debian trixie `arm-trusted-firmware-tools` 2.12.1+dfsg-1) | reproduced byte for byte by `sh tests/data/arm-fip/fip.sh` (`fiptool create --align 16 --tb-fw --soc-fw --tos-fw --nt-fw` with one-line text payloads); entries checked against `fiptool info`. The same script prints the ToC UUID table in platform.rs from a FIP holding every image type |
 | `git-pack/signed.pack` | git 2.47.3 (Debian trixie) | `sh tests/data/git-pack/signed.sh` (Docker, `inside.sh`): four commits and an annotated tag by `fillyfoal <test@example.com>`, the last two commits and the tag SSH-signed with a throwaway ed25519 key made in the container (multi-line `gpgsig` headers), `git repack -a -d -f` giving ofs-deltas; `git verify-pack -v` accepts it. The key is new per run, so signatures and object IDs differ between runs |
 | `gguf/nested.gguf` | gguf-py 0.17.1 (`GGUFWriter`) | reproduced byte for byte by `uv run --with gguf==0.17.1 --with numpy python3 -I tests/data/gguf/nested.py OUT`: nested arrays (`add_array` of lists of lists, two and three levels) before two tensors; checked against `GGUFReader` (field types, tensor shapes and offsets) |
@@ -872,6 +878,13 @@ data descriptor (general purpose bit 3).
 | `onnx/named.onnx` | onnx 1.19.1 | same script: producer, domain, model version, doc string, two opset imports and metadata; passes `onnx.checker` |
 | `protobuf/person.pb` | protoc (libprotoc 34.1) | reproduced byte for byte by `sh tests/data/protobuf/lookalike.sh` (`protoc --encode=demo.Person lookalike.proto`): a generic message that starts like an ONNX model (`08 03 12 05 alice`); negative for the ONNX probe |
 | `protobuf/client-config.pb` | protoc (libprotoc 34.1) | same script (`demo.ClientConfig`): `08 01 12 0b some-client 22 ...`; negative for the ONNX probe |
+## E-books (calibre)
+
+| Path | Producer | Evidence |
+|---|---|---|
+| `mobi/calibre.mobi` | calibre 6.13.0 `ebook-convert` (debian:bookworm) | `tests/data/mobi/calibre.sh`: `--mobi-file-type old` from generated text (MOBI 6, PalmDOC LZ77, trailing entries); calibre records the conversion time and a random UUID, so not byte-reproducible; unedited. The decoded text matches calibre's own `MobiReader.extract_text` (SHA-256 compared) |
+| `palmdoc/calibre.pdb` | calibre 6.13.0 `ebook-convert` | same script: `--format doc` (PalmDOC, LZ77); unedited. The decoded text matches calibre's `decompress_doc` over the text records |
+
 ## Printer languages, TeX output and fonts
 | `pcl/gs-cdj550.pcl` | Ghostscript 10.07.1 (`cdj550` device) | `tests/data/pcl/make.sh`: three small colour rectangles on a 2-inch page at 75 dpi; bare PCL 5 colour, starts with `ESC*rbC` (no reset), raster rows sent plane by plane (`ESC*b#V` / `#v` in combined sequences); reproduced byte-for-byte |
 | `pjl/gs-pjxl300.pcl` | Ghostscript 10.07.1 (`pjxl300` device) | `tests/data/pcl/make.sh`: the same page as PJL `ENTER LANGUAGE = PCL` around PCL 5 colour starting with `ESC*rbC`; reproduced byte-for-byte |

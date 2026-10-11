@@ -3,6 +3,8 @@
 # entries (journal export format, fixed IDs and timestamps) into a compact
 # and a regular journal with systemd-journal-remote, nothing from any host
 # journal. MaxFileSize keeps the hash tables at their 2047/333-item minimum.
+# Then a fourth entry with a 1 KiB message (above the 512-byte compression
+# threshold) after the three, compressed with each of zstd, LZ4 and XZ.
 set -eu
 apt-get update -qq >/dev/null
 apt-get install -y -qq systemd-journal-remote >/dev/null 2>&1
@@ -28,3 +30,12 @@ entry() {
 
 SYSTEMD_JOURNAL_COMPACT=1 /usr/lib/systemd/systemd-journal-remote -o /work/out/compact.journal /work/in.export
 SYSTEMD_JOURNAL_COMPACT=0 /usr/lib/systemd/systemd-journal-remote -o /work/out/regular.journal /work/in.export
+
+{
+    cat /work/in.export
+    entry 1767225603000000 4000000 4 6 "a long message: $(i=0; while [ $i -lt 40 ]; do printf 'word%02d filler text ' $i; i=$((i + 1)); done)"
+} > /work/long.export
+for c in zstd lz4 xz; do
+    SYSTEMD_JOURNAL_COMPRESS=$(echo $c | tr a-z A-Z) SYSTEMD_JOURNAL_COMPACT=1 \
+        /usr/lib/systemd/systemd-journal-remote -o /work/out/$c.journal /work/long.export
+done

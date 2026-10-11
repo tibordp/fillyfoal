@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ euc-kr.txt — EUC-KR text, LF line endings, 5 lines  [0x0+0xfe]
+    Encoding: "EUC-KR" — recognised from the characters
+    Line endings: "LF" — 5 LF, 0 CRLF, 0 CR
+  ▾ Lines — 5 lines  [0x0+0xfe]
+      Line 1: "이것은 한국어로 쓴 텍스트 파일입니다."  [0x0+0x25]
+      Line 2: "파일은 완성형 한글 코드로 저장되어 있습니다."  [0x26+0x2c]
+      Line 3: "어제는 비가 많이 왔지만 오늘은 날씨가 아주 좋습니다."  [0x53+0x34]
+      Line 4: "새로운 언어를 배우는 것은 시간이 걸리지만 정말 재미있습니다."  [0x88+0x3c]
+      Line 5: "이 파일은 문자 인코딩 판별을 확인하기 위해 만들었습니다."  [0xc5+0x38]

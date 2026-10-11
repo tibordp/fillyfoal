@@ -480,7 +480,7 @@ async fn journal(cx: Cx, input: Input) -> Result<()> {
         Node::new("Objects")
             .span(arena)
             .summary(format!("{} objects", h.objects))
-            .lazy(journal_objects, (arena, compact)),
+            .lazy(journal_objects, (input, arena, compact)),
     );
     let state = lookup(JOURNAL_STATES, h.state.into()).unwrap_or("unknown");
     let first = crate::render::value(&Value::Timestamp {
@@ -504,13 +504,50 @@ const JOURNAL_OBJECTS: EnumTable = &[
     (7, "TAG"),
 ];
 
-async fn journal_objects(cx: Cx, (arena, compact): (Span, bool)) -> Result<()> {
+/// How a DATA object's payload is compressed (object header flags,
+/// `journal-def.h`): the codec, the bytes before the stream (LZ4 starts
+/// with the decoded size as a little-endian u64) and its name.
+fn journal_codec(flags: u8) -> Option<(crate::codec::Codec, u64, &'static str)> {
+    use crate::codec::Codec;
+    match flags & 7 {
+        1 => Some((Codec::Xz, 0, "XZ")),
+        2 => Some((Codec::Lz4Block, 8, "LZ4")),
+        4 => Some((Codec::Zstd, 0, "zstd")),
+        _ => None,
+    }
+}
+
+/// Compressed payloads up to this size are decoded for the summary.
+const JOURNAL_PREVIEW_MAX: u64 = 64 * 1024;
+
+/// The first bytes of a compressed DATA payload, for the summary: one
+/// bounded decoding step over a payload of at most [`JOURNAL_PREVIEW_MAX`]
+/// bytes, charged by what it produced.
+async fn journal_preview(cx: &Cx, payload: Span, codec: &crate::codec::Codec) -> Option<Vec<u8>> {
+    if payload.len > JOURNAL_PREVIEW_MAX {
+        return None;
+    }
+    let data = cx.read(payload).await.ok()?;
+    let mut decoder = codec.decoder()?;
+    let mut out = Vec::new();
+    decoder
+        .decode(&data, true, &mut out, 200, 256 * 1024)
+        .ok()?;
+    for _ in 0..out.len() / 4096 {
+        cx.checkpoint().await;
+    }
+    out.truncate(200);
+    Some(out)
+}
+
+async fn journal_objects(cx: Cx, (input, arena, compact): (Input, Span, bool)) -> Result<()> {
     let payload_at = if compact { 72 } else { 64 };
     let mut cur = Cursor::new(&cx, arena, LE);
     while cur.remaining() >= 16 {
         let start = cur.pos();
         let header = cur.bytes(16).await?;
         let kind = header.first().copied().unwrap_or(0);
+        let flags = header.get(1).copied().unwrap_or(0);
         let size = crate::bytes::u64_le(&header, 8).unwrap_or(0);
         if size < 16 {
             break;
@@ -522,7 +559,28 @@ async fn journal_objects(cx: Cx, (arena, compact): (Span, bool)) -> Result<()> {
                 .to_owned(),
         )
         .span(span);
-        if kind == 1 {
+        if kind == 1
+            && let Some((codec, skip, name)) = journal_codec(flags)
+        {
+            // A compressed DATA payload (from journald's threshold, 512
+            // bytes by default): decoded on expansion.
+            let payload = span.tail(payload_at);
+            let stream = payload.tail(skip);
+            let expected = if skip == 8 {
+                let prefix = cx.read_avail(payload.sub(0, 8)).await?;
+                crate::bytes::u64_le(&prefix, 0)
+            } else {
+                None
+            };
+            let preview = journal_preview(&cx, stream, &codec).await;
+            let summary = match preview {
+                Some(p) => format!("{name}: {}", String::from_utf8_lossy(&p)),
+                None => format!("{name}-compressed, {} bytes", payload.len),
+            };
+            node = crate::formats::content(node.name.clone(), input, stream, codec, expected)
+                .span(span)
+                .summary(summary);
+        } else if kind == 1 {
             // DATA: payload is "FIELD=value" after a 64-byte header (72 in
             // compact journals).
             let payload = cx.read_avail(span.sub(payload_at, 200)).await?;

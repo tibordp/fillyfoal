@@ -117,6 +117,9 @@ struct Flavor {
     user_keys: bool,
     /// Index values are delta-encoded.
     delta: bool,
+    /// The handle of the ZSTD compression dictionary
+    /// (`rocksdb.compression_dict`), if the table has one.
+    dict: Option<(u64, u64)>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -191,6 +194,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         base: 0,
         user_keys: false,
         delta: false,
+        dict: None,
     };
     let footer = parse_footer(file, &tail, &mut flavor)?;
     let (meta_off, meta_size) = footer.meta;
@@ -206,6 +210,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         })
     };
     let index = footer.index.or_else(|| named(b"rocksdb.index"));
+    if flavor.rocks {
+        flavor.dict = named(b"rocksdb.compression_dict");
+    }
     if flavor.rocks
         && let Some((off, size)) = named(b"rocksdb.properties")
         && let Ok(props) = block_kv(&cx, file, off, size, flavor).await
@@ -570,7 +577,7 @@ async fn block_entries(
     flavor: Flavor,
 ) -> Result<usize> {
     let (data, compression, _) = read_block(cx, file, offset, size, flavor).await?;
-    let (data, _) = decompress(cx, file.sub(offset, size), data, compression, flavor).await?;
+    let (data, _) = decompress(cx, file, file.sub(offset, size), data, compression, flavor).await?;
     count_entries(cx, &data, kind == BlockKind::Index && flavor.delta).await
 }
 
@@ -584,7 +591,7 @@ async fn block_kv(
     flavor: Flavor,
 ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
     let (data, compression, _) = read_block(cx, file, offset, size, flavor).await?;
-    let (data, _) = decompress(cx, file.sub(offset, size), data, compression, flavor).await?;
+    let (data, _) = decompress(cx, file, file.sub(offset, size), data, compression, flavor).await?;
     let mut walk = Entries::new(&data, false)?;
     let mut out = Vec::new();
     while let Some(entry) = walk.next(&data) {
@@ -605,6 +612,7 @@ async fn block_kv(
 /// block is compressed).
 async fn decompress(
     cx: &Cx,
+    file: Span,
     span: Span,
     data: Vec<u8>,
     kind: u8,
@@ -618,7 +626,10 @@ async fn decompress(
         (2, true) => Codec::Deflate,
         (3, true) => Codec::Bzip2,
         (4 | 5, true) => Codec::Lz4Block,
-        (7, true) => Codec::Zstd,
+        (7, true) => match flavor.dict {
+            Some((off, size)) => Codec::ZstdDict(dictionary(cx, file, off, size, flavor).await?),
+            None => Codec::Zstd,
+        },
         _ => {
             return Err(Diagnostic::unsupported(format!(
                 "{} compression",
@@ -653,6 +664,29 @@ async fn decompress(
         crate::codec::read_all(cx, decoded.span).await?,
         decoded.span,
     ))
+}
+
+/// The table's ZSTD compression dictionary (raw samples, or a formatted
+/// dictionary from zstd's trainer), parsed once per table.
+async fn dictionary(
+    cx: &Cx,
+    file: Span,
+    offset: u64,
+    size: u64,
+    flavor: Flavor,
+) -> Result<crate::codec::zstd::Dict> {
+    use crate::codec::zstd::{Dict, Dictionary};
+    let span = file.sub(offset, size);
+    if let Some(d) = cx.cached::<Dictionary>(span, "sst-zstd-dict") {
+        return Ok(Dict(d));
+    }
+    let (data, kind, _) = read_block(cx, file, offset, size, flavor).await?;
+    if kind != 0 {
+        return Err(Diagnostic::unsupported("compressed compression dictionary").at(span));
+    }
+    let d = std::sync::Arc::new(Dictionary::parse(&data).map_err(|e| e.at(span))?);
+    cx.cache(span, "sst-zstd-dict", d.clone());
+    Ok(Dict(d))
 }
 
 fn text(bytes: &[u8]) -> Value {
@@ -697,7 +731,7 @@ async fn block(
     }
     let span = file.sub(offset, size);
     let delta = kind == BlockKind::Index && flavor.delta;
-    match decompress(&cx, span, data, compression, flavor).await {
+    match decompress(&cx, file, span, data, compression, flavor).await {
         Err(e) => cx.emit(Node::new("Contents").span(span).diag(e)),
         Ok((data, span)) => {
             let n = count_entries(&cx, &data, delta).await?;
@@ -759,6 +793,19 @@ async fn block(
                                 format!("{len} bytes")
                             })
                             .target(file.sub(off, len));
+                        if kind == BlockKind::Meta && name == "rocksdb.compression_dict" {
+                            // A formatted zstd dictionary, or raw samples.
+                            let dict = file.sub(off, len);
+                            let magic = cx.read_avail(dict.sub(0, 4)).await?;
+                            node = if u32_le(&magic, 0) == Some(crate::codec::zstd::DICT_MAGIC) {
+                                crate::formats::embedded(name.clone(), input.nested(dict))
+                            } else {
+                                Node::new(name.clone())
+                                    .span(dict)
+                                    .desc("Raw zstd dictionary content (sampled data)")
+                            }
+                            .summary(format!("{len} bytes"));
+                        }
                         if let Some(sub) = sub {
                             node = node.lazy(
                                 crate::expander!(self::block: (Input, u64, u64, BlockKind, Flavor)),

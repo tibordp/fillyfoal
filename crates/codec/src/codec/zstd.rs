@@ -1,6 +1,9 @@
 //! Zstandard decompression (RFC 8878): frames of raw, RLE and compressed
 //! blocks; Huffman-coded literals; FSE-coded sequences with repeat offsets;
-//! XXH64 content checksums. Dictionaries are not supported.
+//! XXH64 content checksums; dictionaries (raw content, or the formatted
+//! kind with entropy tables and repeat offsets) when the container has one.
+
+use std::sync::Arc;
 
 use crate::codec::pipeline::{Decode, Step};
 use crate::error::{Diagnostic, Result};
@@ -479,6 +482,180 @@ struct FrameState {
     reps: [usize; 3],
 }
 
+impl FrameState {
+    /// The state a frame starts with: no tables, the default repeat
+    /// offsets.
+    fn fresh() -> Self {
+        FrameState {
+            huffman: None,
+            ll: None,
+            of: None,
+            ml: None,
+            reps: [1, 4, 8],
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Dictionaries
+
+/// The magic number of a formatted dictionary.
+pub const DICT_MAGIC: u32 = 0xec30_a437;
+
+/// A zstd dictionary (RFC 8878 §5): content that frames may reach back
+/// into as if it preceded them and, in a formatted dictionary, the entropy
+/// tables and repeat offsets frames start with.
+pub struct Dictionary {
+    /// The Dictionary_ID (0 for raw content).
+    pub id: u32,
+    /// Where the parts of a formatted dictionary lie in its bytes.
+    pub layout: Option<DictLayout>,
+    content: Vec<u8>,
+    st: FrameState,
+}
+
+/// The parts of a formatted dictionary, as offsets into its bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DictLayout {
+    /// Huffman tree description of the literals.
+    pub huffman: (usize, usize),
+    /// FSE table descriptions: offsets, match lengths, literal lengths.
+    pub offsets: (usize, usize),
+    pub match_lengths: (usize, usize),
+    pub literal_lengths: (usize, usize),
+    /// The three repeat offsets (12 bytes).
+    pub reps_at: usize,
+    /// Where the content starts (it runs to the end).
+    pub content_at: usize,
+}
+
+impl Dictionary {
+    /// A dictionary from its bytes: a formatted one if they start with
+    /// [`DICT_MAGIC`], otherwise raw content. Bounded work: the tables are
+    /// small and the content is only copied.
+    pub fn parse(bytes: &[u8]) -> Result<Self> {
+        if bytes.get(..4).map(le) != Some(u64::from(DICT_MAGIC)) {
+            return Ok(Dictionary {
+                id: 0,
+                layout: None,
+                content: bytes.to_vec(),
+                st: FrameState::fresh(),
+            });
+        }
+        let (id, layout, st) = formatted(bytes, bytes.len())?;
+        Ok(Dictionary {
+            id,
+            layout: Some(layout),
+            content: bytes.get(layout.content_at..).unwrap_or_default().to_vec(),
+            st,
+        })
+    }
+
+    /// The ID, layout and repeat offsets of a formatted dictionary of
+    /// `total` bytes, from its first bytes (the tables and repeat offsets
+    /// fit in [`DICT_HEADER_MAX`]).
+    pub fn header(head: &[u8], total: usize) -> Result<(u32, DictLayout, [usize; 3])> {
+        if head.get(..4).map(le) != Some(u64::from(DICT_MAGIC)) {
+            return Err(bad("not a formatted dictionary"));
+        }
+        let (id, layout, st) = formatted(head, total)?;
+        Ok((id, layout, st.reps))
+    }
+
+    /// The content frames reach back into.
+    pub fn content(&self) -> &[u8] {
+        &self.content
+    }
+
+    /// The repeat offsets frames start with.
+    pub fn reps(&self) -> [usize; 3] {
+        self.st.reps
+    }
+}
+
+/// The most bytes a formatted dictionary's header (magic, ID, entropy
+/// tables, repeat offsets) can take.
+pub const DICT_HEADER_MAX: usize = 1024;
+
+/// Parses a formatted dictionary's header from `bytes` (at least its
+/// header), the whole dictionary being `total` bytes long.
+fn formatted(bytes: &[u8], total: usize) -> Result<(u32, DictLayout, FrameState)> {
+    let id = u32::try_from(le(bytes
+        .get(4..8)
+        .ok_or_else(|| bad("truncated dictionary"))?))
+    .unwrap_or(0);
+    let rest = |at: usize| bytes.get(at..).unwrap_or_default();
+    let mut at = 8usize;
+    let (huffman, used) = Huffman::read(rest(at))?;
+    let huffman_at = (at, at.saturating_add(used));
+    at = huffman_at.1;
+    let mut fse = |max_symbol: usize, max_log: u32| -> Result<(Fse, (usize, usize))> {
+        let (t, used) = Fse::read(rest(at), max_symbol, max_log)?;
+        let span = (at, at.saturating_add(used));
+        at = span.1;
+        Ok((t, span))
+    };
+    let (of, of_at) = fse(31, 8)?;
+    let (ml, ml_at) = fse(52, 9)?;
+    let (ll, ll_at) = fse(35, 9)?;
+    let reps_at = at;
+    let reps_bytes = bytes
+        .get(at..at.saturating_add(12))
+        .ok_or_else(|| bad("truncated dictionary"))?;
+    let content_at = at.saturating_add(12);
+    let content_len = total.saturating_sub(content_at);
+    let mut reps = [0usize; 3];
+    for (r, b) in reps.iter_mut().zip(reps_bytes.chunks(4)) {
+        *r = usize::try_from(le(b)).unwrap_or(usize::MAX);
+        if *r == 0 || *r > content_len {
+            return Err(bad("dictionary repeat offset outside its content"));
+        }
+    }
+    let layout = DictLayout {
+        huffman: huffman_at,
+        offsets: of_at,
+        match_lengths: ml_at,
+        literal_lengths: ll_at,
+        reps_at,
+        content_at,
+    };
+    let st = FrameState {
+        huffman: Some(huffman),
+        ll: Some(ll),
+        of: Some(of),
+        ml: Some(ml),
+        reps,
+    };
+    Ok((id, layout, st))
+}
+
+/// A shared [`Dictionary`] as a codec parameter; equal when it is the same
+/// dictionary (same ID and content).
+#[derive(Clone)]
+pub struct Dict(pub Arc<Dictionary>);
+
+impl PartialEq for Dict {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+            || (self.0.id == other.0.id
+                && self.0.layout == other.0.layout
+                && self.0.content == other.0.content)
+    }
+}
+
+impl Eq for Dict {}
+
+impl std::fmt::Debug for Dict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Dict(id {}, {} bytes of content)",
+            self.0.id,
+            self.0.content.len()
+        )
+    }
+}
+
 fn literals(block: &[u8], st: &mut FrameState) -> Result<(Vec<u8>, usize)> {
     let b0 = *block.first().ok_or_else(|| bad("empty block"))?;
     let kind = b0 & 3;
@@ -590,6 +767,7 @@ fn compressed_block(
     frame_start: usize,
     window: usize,
     limit: usize,
+    dict: &[u8],
 ) -> Result<()> {
     let (lits, mut pos) = literals(block, st)?;
     let b0 = usize::from(
@@ -713,14 +891,29 @@ fn compressed_block(
             .ok_or_else(|| bad("literals overrun"))?;
         out.extend_from_slice(lit);
         lit_pos = lit_pos.saturating_add(lit_len);
-        if offset == 0 || offset > out.len().saturating_sub(frame_start) || offset > window {
+        // The frame's output so far (or, once released, at least its
+        // window); a match reaching further back continues into the
+        // dictionary's content, as if it preceded the frame.
+        let avail = out.len().saturating_sub(frame_start);
+        let before = offset.saturating_sub(avail);
+        if offset == 0
+            || (before == 0 && offset > window)
+            || before > dict.len()
+            || (before > 0 && dict.is_empty())
+        {
             return Err(bad("match offset beyond the window"));
         }
         if out.len().saturating_add(match_len) > limit {
             return Err(Diagnostic::output_limit(limit));
         }
+        let from_dict = before.min(match_len);
+        let start = dict.len().saturating_sub(before);
+        out.extend_from_slice(
+            dict.get(start..start.saturating_add(from_dict))
+                .unwrap_or_default(),
+        );
         let from = out.len().saturating_sub(offset);
-        for k in 0..match_len {
+        for k in 0..match_len.saturating_sub(from_dict) {
             let b = out.get(from.saturating_add(k)).copied().unwrap_or(0);
             out.push(b);
         }
@@ -890,6 +1083,7 @@ pub struct Zstd {
     frame: Option<Frame>,
     single: bool,
     done: bool,
+    dict: Option<Dict>,
 }
 
 impl Zstd {
@@ -901,6 +1095,16 @@ impl Zstd {
             frame: None,
             single: false,
             done: false,
+            dict: None,
+        }
+    }
+
+    /// Concatenated frames that may use `dict`: frames naming no
+    /// dictionary, or naming its ID, start from it.
+    pub fn with_dictionary(dict: Dict) -> Self {
+        Zstd {
+            dict: Some(dict),
+            ..Zstd::new()
         }
     }
 
@@ -981,9 +1185,16 @@ impl Zstd {
         let dict = le(input
             .get(at..at.saturating_add(dict_len))
             .ok_or_else(|| bad("truncated frame header"))?);
-        if dict != 0 {
-            return Err(Diagnostic::unsupported("zstd frame using a dictionary"));
-        }
+        let dict = u32::try_from(dict).unwrap_or(u32::MAX);
+        let st = match &self.dict {
+            Some(d) if dict == 0 || dict == d.0.id => d.0.st.clone(),
+            _ if dict != 0 => {
+                return Err(Diagnostic::unsupported(format!(
+                    "zstd frame using a dictionary (ID {dict}) that is not available"
+                )));
+            }
+            _ => FrameState::fresh(),
+        };
         at = at.saturating_add(dict_len);
         let fcs = le(input
             .get(at..at.saturating_add(fcs_len))
@@ -1006,13 +1217,7 @@ impl Zstd {
             produced: 0,
             hash: (fhd & 0x04 != 0).then(|| Xxh64::new(0)),
             size,
-            st: FrameState {
-                huffman: None,
-                ll: None,
-                of: None,
-                ml: None,
-                reps: [1, 4, 8],
-            },
+            st,
         });
         Ok(())
     }
@@ -1052,7 +1257,23 @@ impl Zstd {
                 let block = input
                     .get(pos..pos.saturating_add(size))
                     .ok_or_else(|| bad("truncated compressed block"))?;
-                compressed_block(block, &mut frame.st, out, frame.start, frame.window, limit)?;
+                // The dictionary is valid until the frame has produced a
+                // window's worth (and until then none of the frame's output
+                // has been released, so it directly precedes the frame).
+                let window = u64::try_from(frame.window).unwrap_or(u64::MAX);
+                let dict = match &self.dict {
+                    Some(d) if frame.produced <= window => d.0.content(),
+                    _ => &[],
+                };
+                compressed_block(
+                    block,
+                    &mut frame.st,
+                    out,
+                    frame.start,
+                    frame.window,
+                    limit,
+                    dict,
+                )?;
             }
             _ => return Err(bad("reserved block type")),
         }
@@ -1262,6 +1483,95 @@ mod tests {
         let rest = decode_all(d.as_mut(), &WORDS8[at..], 1 << 30).unwrap();
         assert_eq!(rest, &all[head.len()..]);
         assert_eq!(rest.len(), 1000 + 8192 + 30_000);
+    }
+
+    /// `words.zdict`, `words-dict.zst`, `words-raw.zst`: see
+    /// `testdata/words-dict.sh` (the zstd CLI).
+    const WORDS: &[u8] = include_bytes!("testdata/words.txt");
+    const ZDICT: &[u8] = include_bytes!("testdata/words.zdict");
+    const WITH_DICT: &[u8] = include_bytes!("testdata/words-dict.zst");
+    const WITH_RAW: &[u8] = include_bytes!("testdata/words-raw.zst");
+
+    fn dict(bytes: &[u8]) -> Dict {
+        Dict(Arc::new(Dictionary::parse(bytes).unwrap()))
+    }
+
+    #[test]
+    fn formatted_dictionary_primes_tables_reps_and_window() {
+        use crate::codec::pipeline::decode_all;
+        let d = dict(ZDICT);
+        assert_eq!(d.0.id, 4242);
+        let layout = d.0.layout.unwrap();
+        assert_eq!(layout.huffman.0, 8);
+        assert_eq!(layout.content_at + d.0.content().len(), ZDICT.len());
+        let expected = [
+            &WORDS[..2000],
+            &WORDS[50_000..110_000],
+            &WORDS[20_000..20_300],
+        ]
+        .concat();
+        let out = decode_all(
+            &mut Streaming(Zstd::with_dictionary(d.clone())),
+            WITH_DICT,
+            1 << 30,
+        )
+        .unwrap();
+        assert_eq!(out, expected);
+        let (checked, largest) = verify_checkpoints(
+            || Box::new(Streaming(Zstd::with_dictionary(d.clone()))),
+            WITH_DICT,
+            1024,
+            1,
+        )
+        .unwrap();
+        assert!(checked >= 8, "{checked}");
+        // Tables only: the dictionary is shared, not copied.
+        assert!(largest < 16 * 1024, "{largest}");
+        // Without it, or with another one, the frames are refused.
+        let e = decode_all(&mut Streaming(Zstd::new()), WITH_DICT, 1 << 30).unwrap_err();
+        assert!(e.message.contains("dictionary (ID 4242)"), "{}", e.message);
+        let other = dict(&WORDS[..100]); // raw content, ID 0
+        let e = decode_all(
+            &mut Streaming(Zstd::with_dictionary(other)),
+            WITH_DICT,
+            1 << 30,
+        )
+        .unwrap_err();
+        assert!(e.message.contains("dictionary (ID 4242)"), "{}", e.message);
+    }
+
+    #[test]
+    fn raw_content_dictionary_precedes_the_frame() {
+        use crate::codec::pipeline::decode_all;
+        let d = dict(&WORDS[..8192]);
+        assert_eq!((d.0.id, d.0.layout), (0, None));
+        let out = decode_all(
+            &mut Streaming(Zstd::with_dictionary(d.clone())),
+            WITH_RAW,
+            1 << 30,
+        )
+        .unwrap();
+        assert_eq!(out, &WORDS[30_000..40_000]);
+        verify_checkpoints(
+            || Box::new(Streaming(Zstd::with_dictionary(d.clone()))),
+            WITH_RAW,
+            1024,
+            1,
+        )
+        .unwrap();
+        // The frame names no dictionary: without one, its first match
+        // reaching back before the frame fails.
+        let e = decode_all(&mut Streaming(Zstd::new()), WITH_RAW, 1 << 30).unwrap_err();
+        assert!(e.message.contains("beyond the window"), "{}", e.message);
+    }
+
+    #[test]
+    fn bad_dictionaries_are_rejected() {
+        assert!(Dictionary::parse(&ZDICT[..20]).is_err());
+        let mut bad_reps = ZDICT.to_vec();
+        let at = dict(ZDICT).0.layout.unwrap().reps_at;
+        bad_reps[at..at + 4].copy_from_slice(&0u32.to_le_bytes());
+        assert!(Dictionary::parse(&bad_reps).is_err());
     }
 
     #[test]

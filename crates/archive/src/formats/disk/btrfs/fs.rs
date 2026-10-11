@@ -183,6 +183,7 @@ async fn inode_view(cx: Cx, (fs, tree, ino): (FsRef, u64, u64)) -> Result<()> {
 fn codec_of(compression: u8) -> Option<Codec> {
     match compression {
         1 => Some(Codec::Zlib),
+        2 => Some(Codec::BtrfsLzo),
         3 => Some(Codec::Zstd),
         _ => None,
     }
@@ -221,11 +222,15 @@ async fn content(
             let inline = span.tail(21);
             let piece = if compression == 0 {
                 inline
-            } else {
-                let codec = codec_of(compression).ok_or_else(|| {
-                    Diagnostic::unsupported(format!("compression type {compression}")).at(inline)
-                })?;
+            } else if let Some(codec) = codec_of(compression) {
                 decode_span(cx, inline, &codec, Some(ram)).await?.span
+            } else {
+                // Shown as a hole, so the rest of the file stays readable.
+                cx.diag(
+                    Diagnostic::unsupported(format!("compression type {compression}")).at(inline),
+                );
+                list.hole(cx, ram.min(left))?;
+                continue;
             };
             list.data(piece.sub(0, ram.min(left)));
             continue;
@@ -247,11 +252,12 @@ async fn content(
         };
         let decoded = if compression == 0 {
             extent
-        } else {
-            let codec = codec_of(compression).ok_or_else(|| {
-                Diagnostic::unsupported(format!("compression type {compression}")).at(extent)
-            })?;
+        } else if let Some(codec) = codec_of(compression) {
             cx.decode_lazy(extent, &codec, ram)?
+        } else {
+            cx.diag(Diagnostic::unsupported(format!("compression type {compression}")).at(extent));
+            list.hole(cx, len)?;
+            continue;
         };
         list.data(decoded.sub(offset, len));
     }

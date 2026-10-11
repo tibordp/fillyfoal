@@ -1,6 +1,7 @@
 #!/bin/sh
 # Builds the journald fixtures: a compact (systemd 252+ default) and a
-# regular journal written by systemd-journal-remote in a Debian trixie
+# regular journal, and compact ones with a zstd, LZ4 or XZ compressed DATA
+# object, written by systemd-journal-remote in a Debian trixie
 # container from a fixed export-format stream, trimmed after the last
 # object (trim.py), checked with `journalctl --header --verify` and
 # stored gzip'd (`gzip -9 -n`).
@@ -17,13 +18,13 @@ B=/tmp/fixtures/system-journald
 rm -rf "$B"
 mkdir -p "$B/out"
 docker run --rm -v "$B:/work" -v "$SRC:/scripts:ro" -w /work debian:trixie sh /scripts/inside.sh
-for k in compact regular; do
+for k in compact regular zstd lz4 xz; do
     python3 -I "$SRC/trim.py" "$B/out/$k.journal" "$B/out/$k-trim.journal"
 done
 docker run --rm -v "$B:/work" -v "$SRC:/scripts:ro" -w /work debian:trixie sh -c \
     'apt-get update -qq >/dev/null && apt-get install -y -qq systemd >/dev/null 2>&1; sh /scripts/verify.sh'
 mkdir -p "$FIX/journald"
-for k in compact regular; do
+for k in compact regular zstd lz4 xz; do
     gzip -9 -n -c "$B/out/$k-trim.journal" > "$FIX/journald/$k.journal.gz"
 done
 cat "$B/out/version.txt"

@@ -7,7 +7,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::{Head, Input, Probe, embedded};
+use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -191,9 +191,71 @@ async fn palm(cx: Cx, input: Input) -> Result<()> {
             node = node.summary(title);
         }
         cx.emit(node);
+        cx.emit(book_text(&cx, input, record0, &offsets).await?);
     }
     cx.annotate(summary);
     Ok(())
+}
+
+/// The book's text: the text records after record 0, without their
+/// trailing entries, decompressed and joined.
+async fn book_text(cx: &Cx, input: Input, record0: Span, offsets: &[u64]) -> Result<Node> {
+    use crate::codec::Codec;
+    use crate::codec::palmdoc::Book;
+    let head = cx.read_avail(record0.sub(0, 0xf4)).await?;
+    let compression = u16_be(&head, 0).unwrap_or(0);
+    let length = u64::from(u32_be(&head, 4).unwrap_or(0));
+    let count = usize::from(u16_be(&head, 8).unwrap_or(0));
+    let encryption = u16_be(&head, 12).unwrap_or(0);
+    // The MOBI header's extra data flags, if it is long enough to have
+    // them (from header length 0xE4, at 0xF2 in record 0).
+    let mobi = head.get(16..20) == Some(b"MOBI");
+    let header_len = u32_be(&head, 20).unwrap_or(0);
+    let trailing = if mobi && header_len >= 0xe4 {
+        u16_be(&head, 0xf2).unwrap_or(0)
+    } else {
+        0
+    };
+    let first = offsets.get(1).copied().unwrap_or(input.span.len);
+    let end = offsets
+        .get(count.saturating_add(1))
+        .copied()
+        .unwrap_or(input.span.len);
+    let span = input.span.sub(first, end.saturating_sub(first));
+    let node = Node::new("Text").span(span);
+    let records: Option<Vec<u32>> = (1..=count)
+        .map(|i| {
+            let start = *offsets.get(i)?;
+            let next = offsets
+                .get(i.saturating_add(1))
+                .copied()
+                .unwrap_or(input.span.len);
+            u32::try_from(next.checked_sub(start)?).ok()
+        })
+        .collect();
+    let Some(records) = records.filter(|r| !r.is_empty()) else {
+        return Ok(node.diag(Diagnostic::malformed(
+            "text records missing or out of order",
+        )));
+    };
+    if encryption != 0 && mobi {
+        return Ok(node.diag(Diagnostic::unsupported("encrypted Mobipocket text")));
+    }
+    let compressed = match compression {
+        1 => false,
+        2 => true,
+        17480 => return Ok(node.diag(Diagnostic::unsupported("HUFF/CDIC compression"))),
+        c => return Ok(node.diag(Diagnostic::unsupported(format!("text compression {c}")))),
+    };
+    let codec = Codec::PalmDoc(Book {
+        records: records.into(),
+        trailing,
+        compressed,
+    });
+    Ok(
+        crate::formats::content("Text", input, span, codec, Some(length))
+            .summary(format!("{length} bytes in {count} records")),
+    )
 }
 
 async fn palm_records(cx: Cx, (input, offsets): (Input, Vec<u64>)) -> Result<()> {
@@ -212,9 +274,13 @@ async fn palm_records(cx: Cx, (input, offsets): (Input, Vec<u64>)) -> Result<()>
             continue;
         }
         let span = input.span.sub(start, end.saturating_sub(start));
+        // Records are mostly compressed text or images: shown as data
+        // unless a format is recognised.
         cx.push(
-            embedded(format!("Record {i}"), input.nested(span))
-                .summary(format!("{} bytes", span.len)),
+            Node::new(format!("Record {i}"))
+                .span(span)
+                .summary(format!("{} bytes", span.len))
+                .lazy(crate::formats::dissect_or_data, input.nested(span)),
         )
         .await;
     }

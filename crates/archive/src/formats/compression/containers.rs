@@ -535,13 +535,66 @@ declare_format!(pub ZSTD_DICT = "zstd-dict", "Zstandard dictionary", ["dict", "z
     Probe::Magic(&[(0, b"\x37\xa4\x30\xec")]), zstd_dict);
 
 async fn zstd_dict(cx: Cx, input: Input) -> Result<()> {
+    use crate::codec::zstd::{DICT_HEADER_MAX, Dictionary};
     let file = input.span;
     let head = cx.block(file.sub(0, 8)).await?;
     let mut f = Fields::emitting(&cx, &head, LE);
     f.u32("Magic").hex().emit()?;
     let id = f.u32("Dictionary ID").emit()?;
-    cx.emit(Node::new("Entropy tables and content").span(file.tail(8)));
-    cx.annotate(format!("zstd dictionary {id}, {} bytes", file.len));
+    let bytes = cx
+        .read_avail(file.sub(0, crate::bytes::to_u64(DICT_HEADER_MAX)))
+        .await?;
+    let total = usize::try_from(file.len).unwrap_or(usize::MAX);
+    let at = |(start, end): (usize, usize)| {
+        let start = crate::bytes::to_u64(start);
+        file.sub(start, crate::bytes::to_u64(end).saturating_sub(start))
+    };
+    match Dictionary::header(&bytes, total) {
+        Ok((_, layout, reps)) => {
+            cx.emit(
+                Node::new("Literals Huffman tree")
+                    .span(at(layout.huffman))
+                    .desc("The tree that frames' first treeless literals use"),
+            );
+            for (name, part) in [
+                ("Offset code table", layout.offsets),
+                ("Match length table", layout.match_lengths),
+                ("Literal length table", layout.literal_lengths),
+            ] {
+                cx.emit(
+                    Node::new(name)
+                        .span(at(part))
+                        .desc("FSE table description, for frames' repeat modes"),
+                );
+            }
+            let [r1, r2, r3] = reps;
+            cx.emit(
+                Node::new("Repeat offsets")
+                    .span(at((layout.reps_at, layout.content_at)))
+                    .value(Value::Text(format!("{r1}, {r2}, {r3}"))),
+            );
+            let content = file.tail(crate::bytes::to_u64(layout.content_at));
+            cx.emit(
+                Node::new("Content")
+                    .span(content)
+                    .summary(format!("{} bytes", content.len))
+                    .desc("Data that frames using the dictionary reach back into")
+                    .lazy(crate::formats::dissect_or_data, input.nested(content)),
+            );
+            cx.annotate(format!(
+                "zstd dictionary {id}, {} bytes of content",
+                content.len
+            ));
+        }
+        Err(e) => {
+            cx.emit(
+                Node::new("Entropy tables and content")
+                    .span(file.tail(8))
+                    .diag(e),
+            );
+            cx.annotate(format!("zstd dictionary {id}, {} bytes", file.len));
+        }
+    }
     Ok(())
 }
 

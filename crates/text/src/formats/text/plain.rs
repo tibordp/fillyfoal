@@ -116,9 +116,9 @@ async fn overview(cx: &Cx, span: Span) -> Result<Overview> {
             // A coding cookie names the code page of legacy 8-bit text.
             let cookie = encoding::coding_cookie(&head);
             match encoding::declared_charset(&head, cookie.as_deref()) {
-                Some(c) => {
+                Some(e) => {
                     declared = true;
-                    (Encoding::Single(c), 0)
+                    (e, 0)
                 }
                 None => (encoding::classify(&head).unwrap_or(Encoding::Utf8), 0),
             }
@@ -186,6 +186,8 @@ fn emit_overview(cx: &Cx, span: Span, o: &Overview) {
         encoding = encoding.summary("declared by a coding comment");
     } else if matches!(o.encoding, Encoding::Single(_)) {
         encoding = encoding.summary("guessed from the letters");
+    } else if matches!(o.encoding, Encoding::Multi(_)) {
+        encoding = encoding.summary("recognised from the characters");
     }
     cx.emit(encoding);
     let e = &o.endings;
@@ -219,7 +221,9 @@ fn emit_overview(cx: &Cx, span: Span, o: &Overview) {
 /// Pushes the lines of `span` as a paged collection, numbering from
 /// `first + 1`.
 pub async fn lines(cx: Cx, (span, encoding, first): (Span, Encoding, u64)) -> Result<()> {
-    if encoding.ascii_compatible() {
+    // Line breaks are single bytes in every 8-bit encoding (the trail
+    // bytes of double-byte code pages are never CR or LF).
+    if encoding.unit() == 1 {
         let mut lines = Lines::new(&cx, span);
         // Resume marks: (byte position, lines so far).
         let (pos, number) = cx.resume::<(u64, u64)>().unwrap_or((0, first));

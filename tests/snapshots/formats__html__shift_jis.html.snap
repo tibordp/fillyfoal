@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ shift_jis.html — HTML document: 日本語のページ (shift_jis)  [0x0+0x1a0]
+    DOCTYPE: "html"  [#1:0x0+0xf]
+  ▾ html — lang="ja" (2 elements)  [#1:0x10+0x214]
+      @lang: "ja"  [#1:0x1c+0x2]
+    ▾ head — 2 elements  [#1:0x21+0x4e]
+      ▾ meta — charset="Shift_JIS"  [#1:0x28+0x1a]
+          @charset: "Shift_JIS"  [#1:0x37+0x9]
+        title: "日本語のページ"  [#1:0x43+0x24]
+    ▾ body — 1 element  [#1:0x70+0x1ac]
+      ▾ p — 5 elements  [#1:0x77+0x19d]
+          #text: "これは日本語のテキストファイルです。"  [#1:0x7a+0x36]
+          br  [#1:0xb0+0x4]
+          #text: "文字コードはシフトJISで保存されています。"  [#1:0xb4+0x3d]
+          br  [#1:0xf1+0x4]
+          #text: "昨日は雨が降っていましたが、今日はとても良い天気です。"  [#1:0xf5+0x52]
+          br  [#1:0x147+0x4]
+          #text: "駅の近くに新しい本屋ができたので、週末に行ってみようと思います。"  [#1:0x14b+0x61]
+          br  [#1:0x1ac+0x4]
+          #text: "このファイルは文字コードの判定を確認するために作られました。"  [#1:0x1b0+0x5b]
+          br  [#1:0x20b+0x4]

@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ gbk.txt — GBK text, LF line endings, 5 lines  [0x0+0xbf]
+    Encoding: "GBK" — recognised from the characters
+    Line endings: "LF" — 5 LF, 0 CRLF, 0 CR
+  ▾ Lines — 5 lines  [0x0+0xbf]
+      Line 1: "这是一个用简体中文写的文本文件。"  [0x0+0x20]
+      Line 2: "文件使用国标扩展编码保存。"  [0x21+0x1a]
+      Line 3: "今天天气很好，我们打算下午去公园散步。"  [0x3c+0x26]
+      Line 4: "学习一门新的语言需要时间和耐心，但是非常有意思。"  [0x63+0x30]
+      Line 5: "这个文件是为了测试字符编码的识别而生成的。"  [0x94+0x2a]

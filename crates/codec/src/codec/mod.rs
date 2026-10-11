@@ -36,6 +36,7 @@ pub mod lznt1;
 pub mod lzo;
 pub mod lzx;
 pub mod meatpack;
+pub mod palmdoc;
 pub mod pbz;
 pub mod pipeline;
 pub mod psarc;
@@ -138,6 +139,11 @@ pub enum Codec {
     CabFolder(cab::Folder),
     /// Zstandard frames.
     Zstd,
+    /// The text records of a PalmDOC or Mobipocket book (see [`palmdoc`]).
+    PalmDoc(palmdoc::Book),
+    /// Zstandard frames that may use this dictionary (see
+    /// [`zstd::Dictionary`]).
+    ZstdDict(zstd::Dict),
     /// The bit-level LZ77 of Guitar Pro 6 `BCFZ` files (after their 8-byte
     /// header), decoding to `size` bytes (see [`bcfz`]).
     Bcfz {
@@ -160,6 +166,9 @@ pub enum Codec {
     Lzo1x,
     /// The lzop (`.lzo`) container.
     Lzop,
+    /// btrfs's LZO extents: a total length, then LZO1X segments of up to
+    /// one sector each (see [`lzo::BtrfsLzo`]).
+    BtrfsLzo,
     /// Raw LZF (liblzf).
     Lzf,
     /// LZF in the `lzf` tool's `ZV` blocks.
@@ -340,6 +349,9 @@ impl Codec {
             Codec::NsisBzip2 => "nsis-bzip2",
             Codec::Zstd => "zstd",
             Codec::ZstdFrame => "zstd-frame",
+            Codec::ZstdDict(_) => "zstd-dict",
+            Codec::PalmDoc(_) => "palmdoc",
+            Codec::BtrfsLzo => "btrfs-lzo",
             Codec::UnixCompress => "unix-compress",
             Codec::Lznt1 { .. } => "lznt1",
             Codec::Xpress { .. } => "xpress",
@@ -430,6 +442,9 @@ impl Codec {
             Codec::NsisBzip2 => "nsis-bzip2 (lazy)",
             Codec::Zstd => "zstd (lazy)",
             Codec::ZstdFrame => "zstd-frame (lazy)",
+            Codec::ZstdDict(_) => "zstd-dict (lazy)",
+            Codec::PalmDoc(_) => "palmdoc (lazy)",
+            Codec::BtrfsLzo => "btrfs-lzo (lazy)",
             Codec::UnixCompress => "unix-compress (lazy)",
             Codec::Lznt1 { .. } => "lznt1 (lazy)",
             Codec::Xpress { .. } => "xpress (lazy)",
@@ -519,6 +534,9 @@ impl Codec {
             | Codec::Xz
             | Codec::Zstd
             | Codec::ZstdFrame
+            | Codec::ZstdDict(_)
+            | Codec::PalmDoc(_)
+            | Codec::BtrfsLzo
             | Codec::UnixCompress
             | Codec::Lznt1 { .. }
             | Codec::Xpress { .. }
@@ -608,12 +626,14 @@ impl Codec {
             Codec::SasRdc => 1_400,
             // Each zero byte of a long length adds 255 bytes.
             Codec::DwgLz77 { .. } => 256,
+            // A two-byte back-reference copies up to 10 bytes.
+            Codec::PalmDoc(_) => 8,
             // A block of up to 900 kB can encode runs of 255-byte repeats.
             Codec::Bzip2 | Codec::NsisBzip2 => 50_000,
             // LZMA's longest match (273 bytes) costs a handful of bits.
             Codec::Xz | Codec::LzmaAlone | Codec::Lzma2 { .. } | Codec::LzmaRaw { .. } => 7_000,
             // RLE blocks can encode 128 KiB in four bytes.
-            Codec::Zstd | Codec::ZstdFrame => 32_768,
+            Codec::Zstd | Codec::ZstdFrame | Codec::ZstdDict(_) => 32_768,
             Codec::UnixCompress => 8_000,
             // A 32 KiB copy costs 35 bits.
             Codec::Bcfz { .. } => 8_000,
@@ -630,7 +650,7 @@ impl Codec {
             Codec::XpressHuffman { .. } => 512,
             Codec::Xpress { .. } => 32_768,
             // Each zero length byte adds 255 bytes.
-            Codec::Lzo1x | Codec::Lzop => 512,
+            Codec::Lzo1x | Codec::Lzop | Codec::BtrfsLzo => 512,
             // At most 264 bytes per 3-byte back reference.
             Codec::Lzf | Codec::LzfFramed => 128,
             // At most 17 bytes per 2-byte reference (plus control bits).
@@ -743,6 +763,9 @@ impl Codec {
             }
             Codec::Zstd => Box::new(Streaming(zstd::Zstd::new())),
             Codec::ZstdFrame => Box::new(Streaming(zstd::Zstd::single_frame())),
+            Codec::ZstdDict(d) => Box::new(Streaming(zstd::Zstd::with_dictionary(d.clone()))),
+            Codec::PalmDoc(book) => Box::new(Streaming(palmdoc::Records::new(book.clone()))),
+            Codec::BtrfsLzo => Box::new(Streaming(lzo::BtrfsLzo::default())),
             Codec::Bzip2 => Box::new(Streaming(bzip2::Bzip2::default())),
             Codec::NsisBzip2 => Box::new(Streaming(bzip2::Bzip2::nsis())),
             Codec::Lz4Frame => Box::new(Streaming(lz::Lz4Frame::default())),
