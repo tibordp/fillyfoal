@@ -1,0 +1,31 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ gpg-clearsigned.asc — OpenPGP clearsigned message, hash SHA512  [0x0+0x165]
+  ▾ PGP SIGNED MESSAGE  [0x0+0x81]
+      Hash: "SHA512"  [0x23+0xd]
+    ▾ Signed text — UTF-8 text, LF line endings, 3 lines  [#1:0x0+0x4b]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 2 LF, 0 CRLF, 0 CR
+      ▾ Lines — 3 lines  [#1:0x0+0x4b]
+          Line 1: "fillyfoal clearsigned text"  [#1:0x0+0x1a]
+          Line 2: "- a line starting with a dash"  [#1:0x1b+0x1d]
+          Line 3: "From the last line"  [#1:0x39+0x12]
+  ▾ PGP SIGNATURE  [0x81+0xe4]
+      Checksum: 0x782f7c  [0x143+0x6]
+    ▾ Packets — 119 bytes  [#2:0x0+0x77]
+      ▾ Signature Packet — v4 text document, EdDSA (legacy) with SHA-512  [#2:0x0+0x77]
+          Packet header: Signature (0x2) — old format, 117 body bytes  [#2:0x0+0x2]
+          Version: 4  [#2:0x2+0x1]
+          Signature type: text document (0x1)  [#2:0x3+0x1]
+          Public-key algorithm: EdDSA (legacy) (0x16)  [#2:0x4+0x1]
+          Hash algorithm: SHA-512 (0xa)  [#2:0x5+0x1]
+        ▾ Hashed subpackets — 29 bytes  [#2:0x6+0x1f]
+            Issuer Fingerprint: "3DEC5826A876A07EA8CF96A521DFE2B1099842BD" — v4  [#2:0x8+0x17]
+            Signature Creation Time: 2026-10-11 17:13:12 UTC  [#2:0x1f+0x6]
+        ▾ Unhashed subpackets — 10 bytes  [#2:0x25+0xc]
+            Issuer Key ID: "21DFE2B1099842BD"  [#2:0x27+0xa]
+          Hash prefix: 63 2d  |c-|  [#2:0x31+0x2]
+          r: 15 cb 9e 14 00 e3 cd e6 ba 3b ce 84 48 62 b9 df …  |.........;..Hb..| — 253-bit  [#2:0x33+0x22]
+          s: f4 cf 8d 2c 0b a6 5d 9e 93 41 b0 f9 9a da ff 56 …  |...,..]..A.....V| — 256-bit  [#2:0x55+0x22]

@@ -2,7 +2,18 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ signed.asc — OpenPGP armor: PGP SIGNED MESSAGE  [0x0+0xc9]
-  ▾ PGP SIGNED MESSAGE  [0x0+0xc9]
+▾ signed.asc — OpenPGP clearsigned message, hash SHA256  [0x0+0xc9]
+  ▾ PGP SIGNED MESSAGE  [0x0+0x4f]
       Hash: "SHA256"  [0x23+0xd]
-      ! malformed: invalid base64 [0x36+0x1]
+    ▾ Signed text — UTF-8 text, LF line endings, 3 lines  [#1:0x0+0x1b]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 2 LF, 0 CRLF, 0 CR
+      ▾ Lines — 3 lines  [#1:0x0+0x1b]
+          Line 1: "Hello,"  [#1:0x0+0x6]
+          Line 2: "-- dash escaped"  [#1:0x7+0xf]
+          Line 3: "Bye."  [#1:0x17+0x4]
+  ▾ PGP SIGNATURE  [0x4f+0x7a]
+      Checksum: 0x74849  [0xa7+0x6]
+    ▾ Packets — 40 bytes  [#2:0x0+0x28]
+        Trailing data  [#2:0x0+0x28]
+          ! malformed: not an OpenPGP packet header

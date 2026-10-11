@@ -15,50 +15,60 @@ pub(super) fn annotation(kind: Kind, head: &[u8], len: u64) -> String {
             None => "Apple provisioning profile".into(),
         };
     }
+    // CRLs and key stores often outgrow the bytes read for the summary
+    // (or are BER-streamed); their summaries cope with a cut-off content.
+    let partial = der::first_partial(head).map(|(_, content, _)| content);
     let outer = der::first(head);
-    let detail = outer.and_then(|(tlv, content)| match kind {
-        Kind::Generic => Some(format!("{}, {} bytes", tlv.label(), len)),
-        Kind::Certificate => certificate(content),
-        Kind::Crl => crl(content),
-        Kind::Csr => csr(content),
-        Kind::Pkcs7 => pkcs7(content),
-        Kind::Provision => None,
-        Kind::Pkcs12 => pkcs12(content),
-        Kind::EncryptedKey => {
-            der::first(content).map(|(_, alg)| format!("encrypted with {}", pbe::describe(alg)))
-        }
-        Kind::OcspRequest => ocsp_request(content),
-        Kind::OcspResponse => ocsp_response(content),
-        Kind::TsQuery => ts_query(content),
-        Kind::TsReply => ts_reply(content),
-        Kind::Pkcs8 => pkcs8(content),
-        Kind::RsaPrivateKey => {
-            let mut ints = der::elements(content).skip(1);
-            let n = ints.next()?;
-            let e = ints.next()?;
-            let mut seq = Vec::new();
-            for (t, c) in [n, e] {
-                seq.extend(encode(&t, c));
+    let detail = match kind {
+        Kind::Crl => partial.and_then(crl),
+        Kind::Pkcs12 => partial.and_then(pkcs12),
+        _ => None,
+    };
+    let detail = detail.or_else(|| {
+        outer.and_then(|(tlv, content)| match kind {
+            Kind::Generic => Some(format!("{}, {} bytes", tlv.label(), len)),
+            Kind::Certificate => certificate(content),
+            Kind::Crl => None,
+            Kind::Csr => csr(content),
+            Kind::Pkcs7 => pkcs7(content),
+            Kind::Provision => None,
+            Kind::Pkcs12 => None,
+            Kind::EncryptedKey => {
+                der::first(content).map(|(_, alg)| format!("encrypted with {}", pbe::describe(alg)))
             }
-            x509::rsa_public_key(&seq)
-        }
-        Kind::RsaPublicKey => x509::rsa_public_key(content),
-        Kind::EcPrivateKey => ec_private_key(content),
-        Kind::DsaPrivateKey | Kind::DsaParams => {
-            let skip = usize::from(kind == Kind::DsaPrivateKey);
-            let mut ints = der::elements(content).skip(skip);
-            let p = ints.next().map(|(_, p)| x509::integer_bits(p))?;
-            let q = ints.next().map(|(_, q)| x509::integer_bits(q))?;
-            Some(format!("{p}-bit p, {q}-bit q"))
-        }
-        Kind::Spki => x509::public_key_info(content),
-        Kind::KrbTicket => krb_ticket(content),
-        Kind::DhParams => {
-            let mut ints = der::elements(content);
-            let p = ints.next().map(|(_, p)| x509::integer_bits(p))?;
-            let g = ints.next().and_then(|(_, g)| der::integer(g))?;
-            Some(format!("{p}-bit prime, generator {g}"))
-        }
+            Kind::OcspRequest => ocsp_request(content),
+            Kind::OcspResponse => ocsp_response(content),
+            Kind::TsQuery => ts_query(content),
+            Kind::TsReply => ts_reply(content),
+            Kind::Pkcs8 => pkcs8(content),
+            Kind::RsaPrivateKey => {
+                let mut ints = der::elements(content).skip(1);
+                let n = ints.next()?;
+                let e = ints.next()?;
+                let mut seq = Vec::new();
+                for (t, c) in [n, e] {
+                    seq.extend(encode(&t, c));
+                }
+                x509::rsa_public_key(&seq)
+            }
+            Kind::RsaPublicKey => x509::rsa_public_key(content),
+            Kind::EcPrivateKey => ec_private_key(content),
+            Kind::DsaPrivateKey | Kind::DsaParams => {
+                let skip = usize::from(kind == Kind::DsaPrivateKey);
+                let mut ints = der::elements(content).skip(skip);
+                let p = ints.next().map(|(_, p)| x509::integer_bits(p))?;
+                let q = ints.next().map(|(_, q)| x509::integer_bits(q))?;
+                Some(format!("{p}-bit p, {q}-bit q"))
+            }
+            Kind::Spki => x509::public_key_info(content),
+            Kind::KrbTicket => krb_ticket(content),
+            Kind::DhParams => {
+                let mut ints = der::elements(content);
+                let p = ints.next().map(|(_, p)| x509::integer_bits(p))?;
+                let g = ints.next().and_then(|(_, g)| der::integer(g))?;
+                Some(format!("{p}-bit prime, generator {g}"))
+            }
+        })
     });
     let title = match kind {
         Kind::Generic => "ASN.1 DER",
@@ -206,23 +216,27 @@ pub(super) fn certificate(cert: &[u8]) -> Option<String> {
     Some(out)
 }
 
+/// From a CertificateList's content, which may be cut off.
 fn crl(list: &[u8]) -> Option<String> {
-    let (_, tbs) = der::first(list)?;
-    let mut fields = der::elements(tbs).peekable();
-    if fields.peek().is_some_and(|(t, _)| t.id == 0x02) {
+    let (_, tbs, _) = der::first_partial(list)?;
+    let mut fields = der::partial_elements(tbs).peekable();
+    if fields.peek().is_some_and(|(t, _, _)| t.id == 0x02) {
         fields.next();
     }
     let _signature = fields.next()?;
-    let (_, issuer) = fields.next()?;
-    let (t, this_update) = fields.next()?;
+    let (_, issuer, _) = fields.next().filter(|(_, _, done)| *done)?;
+    let (t, this_update, _) = fields.next()?;
     let mut out = format!("issued by {}", short_name(issuer));
     if let Some(time) = der::time(t.tag, this_update) {
         out = format!("{out}, updated {}", date(time));
     }
-    let revoked = fields
-        .find(|(t, _)| t.id == 0x30)
-        .map_or(0, |(_, list)| der::elements(list).count());
-    Some(format!("{out}, {revoked} revoked"))
+    let revoked = fields.find(|(t, _, _)| t.id == 0x30);
+    let revoked = match revoked {
+        None => "0 revoked".to_owned(),
+        Some((_, list, true)) => format!("{} revoked", der::elements(list).count()),
+        Some((_, list, false)) => format!("at least {} revoked", der::elements(list).count()),
+    };
+    Some(format!("{out}, {revoked}"))
 }
 
 fn csr(request: &[u8]) -> Option<String> {
@@ -343,12 +357,13 @@ fn encapsulated(info: &[u8]) -> Option<String> {
     })
 }
 
+/// From a PFX's content, which may be cut off before the MacData.
 fn pkcs12(pfx: &[u8]) -> Option<String> {
-    let mut fields = der::elements(pfx);
-    let (_, version) = fields.next()?;
+    let mut fields = der::partial_elements(pfx);
+    let (_, version, _) = fields.next()?;
     let mut out = format!("version {}", der::integer(version)?);
     let _auth_safe = fields.next()?;
-    if let Some((_, mac)) = fields.next()
+    if let Some((_, mac, _)) = fields.next()
         && let Some((_, digest_info)) = der::first(mac)
         && let Some((_, alg)) = der::first(digest_info)
         && let Some(name) = algorithm(alg)

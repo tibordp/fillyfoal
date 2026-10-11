@@ -158,6 +158,38 @@ pub fn elements(data: &[u8]) -> impl Iterator<Item = (Tlv, &[u8])> {
     })
 }
 
+/// The TLVs at the start of `data` as far as their headers are visible,
+/// with as much of each content as `data` holds and whether that is all of
+/// it. The last one yielded may be incomplete (cut off by the end of
+/// `data`, or of BER indefinite length); nothing follows it. For looking at
+/// the start of a structure larger than the bytes at hand (a probe window).
+pub fn partial_elements(data: &[u8]) -> impl Iterator<Item = (Tlv, &[u8], bool)> {
+    let mut rest = Some(data);
+    std::iter::from_fn(move || {
+        let tlv = header(rest?)?;
+        let start = to_usize(tlv.header);
+        let after = rest?.get(start..)?;
+        let end = tlv.len.map(to_usize).filter(|&len| len <= after.len());
+        match end {
+            Some(len) => {
+                let (content, next) = after.split_at(len);
+                rest = Some(next);
+                Some((tlv, content, true))
+            }
+            None => {
+                rest = None;
+                Some((tlv, after, false))
+            }
+        }
+    })
+}
+
+/// The first element of `data` and as much of its content as `data` holds,
+/// with whether that is all of it (see [`partial_elements`]).
+pub fn first_partial(data: &[u8]) -> Option<(Tlv, &[u8], bool)> {
+    partial_elements(data).next()
+}
+
 /// The first element of `data` and its content, if complete.
 pub fn first(data: &[u8]) -> Option<(Tlv, &[u8])> {
     elements(data).next()
@@ -379,5 +411,19 @@ mod tests {
         assert_eq!(date(951_868_800), "2000-03-01");
         assert!(is_nested_der(&[0x30, 0x03, 0x02, 0x01, 0x05]));
         assert!(!is_nested_der(&[0x30, 0x03, 0x02, 0x01]));
+    }
+
+    #[test]
+    fn partial_elements_stop_after_the_first_incomplete_one() {
+        let data = [0x02, 0x01, 0x05, 0x30, 0x05, 0x02, 0x01, 0x06, 0x02];
+        let got: Vec<_> = partial_elements(&data)
+            .map(|(t, c, done)| (t.id, c.len(), done))
+            .collect();
+        assert_eq!(got, [(0x02, 1, true), (0x30, 4, false)]);
+        let got: Vec<_> = partial_elements(&[0x30, 0x80, 0x02, 0x01, 0x07, 0x00, 0x00])
+            .map(|(t, c, done)| (t.id, c.len(), done))
+            .collect();
+        assert_eq!(got, [(0x30, 5, false)]);
+        assert!(partial_elements(&[0x30]).next().is_none());
     }
 }

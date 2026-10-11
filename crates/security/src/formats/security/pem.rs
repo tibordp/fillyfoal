@@ -75,6 +75,91 @@ pub struct Block {
     /// OpenPGP's `=XXXX` CRC-24 line.
     pub checksum: Option<Range<usize>>,
     pub complete: bool,
+    /// An OpenPGP cleartext signature's text (`PGP SIGNED MESSAGE`): the
+    /// body is dash-escaped text, not base64, and the block ends where the
+    /// `PGP SIGNATURE` block begins (RFC 4880 §7).
+    pub cleartext: bool,
+}
+
+/// The label of an OpenPGP cleartext-signed message.
+pub const SIGNED_MESSAGE: &str = "PGP SIGNED MESSAGE";
+const SIGNATURE_BEGIN: &[u8] = b"-----BEGIN PGP SIGNATURE-----";
+
+/// The line of `text` starting at `start` (before `end`): its range,
+/// with its line ending.
+fn line_at(text: &[u8], start: usize, end: usize) -> Option<Range<usize>> {
+    if start >= end {
+        return None;
+    }
+    let e = text
+        .get(start..end)?
+        .iter()
+        .position(|&b| b == b'\n')
+        .map_or(end, |e| start.saturating_add(e).saturating_add(1));
+    Some(start..e)
+}
+
+/// `Key: value` header lines from `pos` up to a blank line (consumed) or
+/// `end`; the headers and where the lines after them start.
+fn header_lines(
+    text: &[u8],
+    mut pos: usize,
+    end: usize,
+) -> (Vec<(String, String, Range<usize>)>, usize) {
+    let mut headers = Vec::new();
+    while let Some(r) = line_at(text, pos, end) {
+        let l = text.get(r.clone()).unwrap_or_default().trim_ascii();
+        pos = r.end;
+        if l.is_empty() {
+            break;
+        }
+        if let Some(colon) = l.iter().position(|&b| b == b':') {
+            let key = String::from_utf8_lossy(l.get(..colon).unwrap_or_default()).into_owned();
+            let value =
+                String::from_utf8_lossy(l.get(colon.saturating_add(1)..).unwrap_or_default())
+                    .trim()
+                    .to_owned();
+            headers.push((key, value, r));
+        }
+    }
+    (headers, pos)
+}
+
+/// A cleartext-signed message from its BEGIN line: hash headers, a blank
+/// line, then the text up to the line ending before the signature block.
+fn cleartext_block(text: &[u8], begin: usize, line_end: usize) -> Block {
+    let mut sig = None;
+    let mut from = line_end;
+    while let Some(at) = find_begin(text, from) {
+        if text
+            .get(at..)
+            .is_some_and(|t| t.starts_with(SIGNATURE_BEGIN))
+        {
+            sig = Some(at);
+            break;
+        }
+        from = at.saturating_add(1);
+    }
+    let end = sig.unwrap_or(text.len());
+    let (headers, body_start) = header_lines(text, line_end, end);
+    // The line ending before the signature belongs to the separator.
+    let mut body_end = end.max(body_start);
+    if sig.is_some() {
+        if text.get(..body_end).is_some_and(|t| t.ends_with(b"\r\n")) {
+            body_end = body_end.saturating_sub(2);
+        } else if text.get(..body_end).is_some_and(|t| t.ends_with(b"\n")) {
+            body_end = body_end.saturating_sub(1);
+        }
+    }
+    Block {
+        label: SIGNED_MESSAGE.to_owned(),
+        whole: begin..end,
+        headers,
+        body: body_start..body_end.max(body_start),
+        checksum: None,
+        complete: sig.is_some(),
+        cleartext: true,
+    }
 }
 
 /// Splits armored text into blocks.
@@ -107,54 +192,32 @@ fn next_block(text: &[u8], from: usize) -> Option<Block> {
         .get(11..line.len().saturating_sub(5))
         .map(|l| String::from_utf8_lossy(l).into_owned())
         .unwrap_or_default();
+    if label == SIGNED_MESSAGE {
+        return Some(cleartext_block(text, begin, line_end));
+    }
     let end_marker = format!("-----END {label}-----");
     let end = find(text, end_marker.as_bytes(), line_end);
     let content_end = end.unwrap_or(text.len());
     // Headers ("Key: value") until a blank line, if any line has a colon.
     let mut headers = Vec::new();
     let mut pos = line_end;
-    let lines = |start: usize| -> Option<(usize, usize)> {
-        if start >= content_end {
-            return None;
-        }
-        let e = text
-            .get(start..content_end)?
-            .iter()
-            .position(|&b| b == b'\n')
-            .map_or(content_end, |e| start.saturating_add(e).saturating_add(1));
-        Some((start, e))
-    };
-    if let Some((s, e)) = lines(pos)
-        && text.get(s..e).is_some_and(|l| l.contains(&b':'))
+    if let Some(r) = line_at(text, pos, content_end)
+        && text.get(r).is_some_and(|l| l.contains(&b':'))
     {
-        while let Some((s, e)) = lines(pos) {
-            let l = text.get(s..e).unwrap_or_default().trim_ascii();
-            pos = e;
-            if l.is_empty() {
-                break;
-            }
-            if let Some(colon) = l.iter().position(|&b| b == b':') {
-                let key = String::from_utf8_lossy(l.get(..colon).unwrap_or_default()).into_owned();
-                let value =
-                    String::from_utf8_lossy(l.get(colon.saturating_add(1)..).unwrap_or_default())
-                        .trim()
-                        .to_owned();
-                headers.push((key, value, s..e));
-            }
-        }
+        (headers, pos) = header_lines(text, pos, content_end);
     }
     let body_start = pos;
     let mut body_end = content_end;
     let mut checksum = None;
     // OpenPGP: a final line "=XXXX" is a CRC-24, not base64 data.
     let mut scan = body_start;
-    while let Some((s, e)) = lines(scan) {
-        if text.get(s) == Some(&b'=') {
-            body_end = s;
-            checksum = Some(s..e);
+    while let Some(r) = line_at(text, scan, content_end) {
+        if text.get(r.start) == Some(&b'=') {
+            body_end = r.start;
+            checksum = Some(r);
             break;
         }
-        scan = e;
+        scan = r.end;
     }
     let whole_end = end.map_or(text.len(), |e| {
         let after = e.saturating_add(end_marker.len());
@@ -173,12 +236,16 @@ fn next_block(text: &[u8], from: usize) -> Option<Block> {
         body: body_start..body_end,
         checksum,
         complete: end.is_some(),
+        cleartext: false,
     })
 }
 
 /// Decodes a block's body into a derived source.
 pub async fn decode_block(cx: &Cx, text: &[u8], span: Span, block: &Block) -> Result<Span> {
     let body = span.sub(to_u64(block.body.start), to_u64(block.body.len()));
+    if block.cleartext {
+        return Err(Diagnostic::malformed("cleartext-signed text, not base64").at(body));
+    }
     let origin = Origin {
         parent: body,
         transform: "base64",
@@ -316,5 +383,20 @@ mod tests {
         assert_eq!(b[0].headers.len(), 1);
         assert_eq!(&text[b[0].body.clone()], b"AAAA\n");
         assert!(b[0].checksum.is_some() && b[0].complete);
+    }
+
+    #[test]
+    fn cleartext_signed_message() {
+        let text = b"-----BEGIN PGP SIGNED MESSAGE-----\nHash: SHA256\n\nhello\n- -dash\n\
+            -----BEGIN PGP SIGNATURE-----\n\nAAAA\n=abcd\n-----END PGP SIGNATURE-----\n";
+        let first = next_block(text, 0).unwrap();
+        assert!(first.cleartext && first.complete);
+        assert_eq!(first.headers.len(), 1);
+        assert_eq!(&text[first.body.clone()], b"hello\n- -dash");
+        let second = next_block(text, first.whole.end).unwrap();
+        assert_eq!(second.label, "PGP SIGNATURE");
+        assert_eq!(second.whole.start, first.whole.end);
+        assert_eq!(text[second.body.clone()].trim_ascii(), b"AAAA");
+        assert!(!second.cleartext && second.checksum.is_some());
     }
 }

@@ -369,6 +369,11 @@ and reproduce every file byte for byte.
 | `dsa-private-key/` | OpenSSL 3.6.3 (`openssl dsa -outform DER`) | the same script: DSA private key (OpenSSL's traditional encoding) |
 | `der/generic.der` | OpenSSL 3.6.3 (`openssl asn1parse -genconf`) | the same script: one SEQUENCE of assorted universal types (BOOLEAN, INTEGERs, NULL, OID, strings, times, BIT/OCTET STRING, ENUMERATED, SET, implicit and explicit tags) |
 | `pem/chain.pem` | OpenSSL 3 (openssl CLI) | leaf + CA chain; `openssl verify` accepts it |
+| `pkcs12/large-plain.p12` | OpenSSL 3.6.3 (`openssl pkcs12 -export -keypbe NONE -certpbe NONE -nomac`) | `sh tests/data/pkcs12/make-large.sh`: a password-less store larger than the probe window, its size from a certificate with a 40,000-byte private extension (1.3.6.1.4.1.55555.9); checked against `openssl pkcs12 -info` |
+| `pkcs12/nss-pk12util.p12` | NSS 3.105 `pk12util -o` (Alpine 3.20 nss-tools) | `sh tests/data/pkcs12/make-nss.sh` (Docker, fresh NSS database): an EC P-256 key and certificate made by the host's openssl, imported and exported again; BER throughout (indefinite lengths, segmented OCTET STRINGs), PBES2 with 600,000 iterations, SHA-256 MAC; password `fillyfoal`; checked against `openssl pkcs12 -info` |
+| `crl/large.crl` | OpenSSL 3.6.3 (`openssl ca -gencrl`) | `sh tests/data/crl/make-large.sh`: 1000 revoked 20-byte serials from a CA database written by the script (about 39 KB, more than the probe window); checked against `openssl crl -text` |
+| `pkcs7/signed-stream.p7m` | OpenSSL 3.6.3 (`openssl cms -sign -stream -outform DER`) | `sh tests/data/pkcs7/make-stream.sh`: BER-streamed SignedData (indefinite lengths, segmented eContent), content attached, no certificates; checked against `openssl asn1parse` |
+| `pkcs7/enveloped-stream.p7m` | OpenSSL 3.6.3 (`openssl cms -encrypt -stream -outform DER`) | the same script: BER-streamed EnvelopedData, AES-256-CBC, RSA key-transport recipient |
 
 ## Keyrings, Kerberos and age (Docker)
 
@@ -381,6 +386,9 @@ and reproduce every file byte for byte.
 | `pgp/gpg-signed-encrypted.gpg` | GnuPG 2.4.9 (Alpine 3.20) | the same script: signed (with a notation), ZLIB-compressed and encrypted to the key (ECDH, AES-256 OCB AEAD packet) |
 | `pgp/gpg-symmetric.gpg` | GnuPG 2.4.9 (Alpine 3.20) | the same script: `--symmetric` with passphrase `fillyfoal` (iterated SHA-512 S2K, AES-256, SEIPD v1 with MDC); decrypts with the test passphrase |
 | `pgp/gpg-detached.sig` | GnuPG 2.4.9 (Alpine 3.20) | the same script: a detached signature by the signing subkey |
+| `pgp/gpg-signed.gpg` | GnuPG 2.4.9 (Alpine 3.20) | `sh tests/data/pgp/make-gpg-wave-a.sh` (Docker, throwaway GNUPGHOME, unprotected throwaway key): plain `gpg -s`, a ZIP Compressed Data packet of indeterminate length (old format, `a3 01`); checked against `gpg --list-packets --verbose` |
+| `pgp/gpg-secret-subkeys.gpg` | GnuPG 2.4.9 (Alpine 3.20) | the same script: `--export-secret-subkeys`; the primary key is a GNU-dummy stub (S2K specifier 101, mode 1001), the encryption subkey unprotected |
+| `pgp-armor/gpg-clearsigned.asc` | GnuPG 2.4.9 (Alpine 3.20) | the same script: `--clearsign` (SHA-512) of a text with dash-escaped lines |
 | `krb5-ccache/` | MIT Kerberos 1.21.3 (Debian trixie krb5-kdc, krb5-user) | `sh tests/data/krb5-ccache/make.sh` in Docker with no network: a throwaway KDC for FILLYFOAL.TEST; `kinit -f -r 2d` and `kvno` into a version 4 cache (TGT and two service tickets, a `fast_avail` config entry), `ccache_type = 3` for a version 3 cache; checked against `klist -e -f -a` |
 | `putty-key/` | PuTTYgen 0.83 (Debian trixie putty-tools) | `sh tests/data/putty-key/make-puttygen.sh` in Docker with no network: PPK v3 Ed25519 and ECDSA P-384 keys without a passphrase, an RSA-1024 key encrypted with Argon2id (64 KiB, 1 pass), a PPK v2 encrypted Ed25519 key; passphrase `fillyfoal`; every MAC verifies |
 | `jks/keytool.jks` | keytool (Eclipse Temurin 21.0.12 JRE) | `sh tests/data/jks/make-keytool.sh` in Docker with no network: an EC private key entry with its certificate and a trusted certificate; password `fillyfoal` |
