@@ -47,3 +47,6 @@ ffmpeg $F $T testsrc=size=16x16:rate=25 -frames:v 2 -vf setsar=12/11 -c:v mpeg1v
 # Written to a pipe, so the muxer cannot seek back: RIFF and data sizes stay 0xffffffff.
 ffmpeg $F $T sine=frequency=440:sample_rate=8000:duration=0.05 -c:a pcm_s16le -bitexact -f wav - \
   | cat > "$OUT/wav/piped.wav"
+mkdir -p "$OUT/mkv"
+# AV1 in Matroska: OBUs per block, the sequence header OBU in CodecPrivate (av1C).
+ffmpeg $F $T testsrc=size=32x32:rate=25 -frames:v 2 -c:v libsvtav1 -bitexact -f matroska "$OUT/mkv/av1.mkv" 2>/dev/null

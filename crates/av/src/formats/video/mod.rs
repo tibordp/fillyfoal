@@ -10,6 +10,7 @@
 
 pub mod annexb;
 pub mod asf;
+pub mod coded;
 pub mod containers;
 pub mod flv;
 pub mod gamevideo;
