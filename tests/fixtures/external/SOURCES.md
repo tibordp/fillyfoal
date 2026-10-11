@@ -893,3 +893,6 @@ Stored whole as `.raw.zst` (zstd -19).
 | `csv/records.csv` | CPython 3.14 `csv.writer` | `tests/data/text/large.sh` (QUOTE_MINIMAL, CRLF records, quoted fields with commas, quotes and line breaks); reproduced byte-for-byte |
 | `json/items.json` | jq 1.8.1 | `tests/data/text/large.sh` (`jq -n` pretty-printing an array of 240 objects); reproduced byte-for-byte |
 | `text/lines-utf16le.txt` | macOS `iconv` (UTF-8 to UTF-16LE) | `tests/data/text/large.sh`; the byte order mark is prepended by the script, the text is ours |
+## Robotics recordings
+| `mcap/zstd.mcap` | Python `mcap` 1.2.2 `Writer` (zstandard 0.25.0) | `uv run --with mcap==1.2.2 --with zstandard==0.25.0 --with lz4==4.4.5 python3 -I tests/data/mcap/make.py OUTDIR`; reproduced byte-for-byte; one zstd chunk with a schema, two channels and nine JSON messages, then the summary section |
+| `mcap/lz4.mcap` | Python `mcap` 1.2.2 `Writer` (lz4 4.4.5) | same script; the same records in one LZ4-frame chunk |
