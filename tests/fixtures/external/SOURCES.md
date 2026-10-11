@@ -203,6 +203,7 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `coff-import/` | LLVM llvm-dlltool / llvm-lib | the three short import records are members of ar/filly-import.lib, extracted unchanged |
 | `ar/filly-import.lib` | LLVM llvm-dlltool / llvm-lib (20-22) | reproduced byte-for-byte from a three-line .def file (`fillyfoal_answer`, `fillyfoal_data DATA`, `fillyfoal_ordinal @7 NONAME`) |
 | `ar/libbsd.a` | macOS ar/libtool (cctools) | reproduced byte-for-byte from its own members with `ZERO_AR_DATE=1 ar rcs` / `libtool -static`; members are clang objects |
+| `wasm/rust-cdylib.wasm` | rustc 1.98.1 (48a229cea 2026-09-01), wasm32-unknown-unknown | `producers` section names rustc; reproduced byte-for-byte in `/tmp/fixtures/exec-wasm` from `tests/data/wasm/rust-cdylib.rs` (copied there as `lib.rs`) by `rustc --target wasm32-unknown-unknown --crate-type cdylib -C opt-level=1 -C panic=abort -o rust-cdylib.wasm lib.rs` (no debug info, so no paths) |
 | `xcoff/` | Homebrew LLVM 22.1.8 | both objects (`Homebrew LLVM version 22.1.8` producer string) |
 | `llvm-bitcode/apple.bc` | Apple clang 21.0.0 | IDENTIFICATION block / producer string |
 | `llvm-bitcode/linux.bc` | Homebrew clang 22.1.8 | IDENTIFICATION block / producer string |

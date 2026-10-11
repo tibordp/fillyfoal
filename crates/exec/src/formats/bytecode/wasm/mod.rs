@@ -1,13 +1,18 @@
 //! WebAssembly binary modules (`\0asm`).
 //!
 //! The file is a header and a sequence of sections (id, LEB128 size,
-//! contents). The top level lists sections; expanding one decodes its
-//! vector of entries (types, imports, exports, function bodies, data
-//! segments, ...). Function names come from the custom `name` section,
-//! which is read when the code section is expanded.
+//! contents). The top level walks the section headers only; expanding a
+//! section walks its vector of entries (types, imports, exports, function
+//! bodies, data segments, ...) through a read-ahead window, one bounded
+//! piece at a time, with resume marks so a page deep into a large vector
+//! does not re-walk it. A function body is read only when its entry is
+//! expanded. Function names come from the custom `name` section: the code
+//! section walks its function-name map alongside the bodies, and the
+//! instruction listing looks names up in a sparse index of that map.
 
 mod ops;
 
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -17,7 +22,8 @@ use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::binutil::{NodeExt, Reader};
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, count, plural};
+use crate::formats::util::pace::{Pace, STEPS_PER_UNIT};
 use crate::formats::util::val::{hex, name_or, text, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
@@ -25,8 +31,24 @@ use crate::span::Span;
 use crate::value::{EnumTable, Value};
 
 const LE: Endian = Endian::Little;
-/// Largest section decoded in memory.
-const MAX_SECTION: u64 = 16 << 20;
+/// Bytes read ahead when walking a vector.
+const WINDOW: u64 = 64 << 10;
+/// Bytes read ahead when looking up one name.
+const LOOKUP_WINDOW: u64 = 4 << 10;
+/// Largest single entry decoded in memory. Code bodies and data segment
+/// payloads are not part of their entries' decoding.
+const MAX_ENTRY: u64 = 4 << 20;
+/// Largest import section the top level walks to count imported functions.
+const ROOT_IMPORTS: u64 = 1 << 20;
+/// Bytes of a function body looked at for its locals in the code listing.
+const LOCALS_PEEK: u64 = 4 << 10;
+/// Entries of the function-name map between two points of its index.
+const NAME_STRIDE: u64 = 64;
+/// Work charged per decoded item on top of its bytes (allocating and
+/// rendering it), in [`STEPS_PER_UNIT`]ths of a unit.
+const ITEM_COST: u64 = 256;
+/// Most sections listed: real modules have a few dozen.
+const MAX_SECTIONS: usize = 10_000;
 
 pub static FORMAT: Format = Format {
     name: "wasm",
@@ -105,6 +127,10 @@ impl ModuleInfo {
             .find(|(_, n)| n == name)
             .and_then(|(i, _)| self.sections.get(*i))
     }
+}
+
+fn malformed(at: Span, what: &str) -> Diagnostic {
+    Diagnostic::malformed(format!("truncated or malformed {what}")).at(at)
 }
 
 // ---------------------------------------------------------------------------
@@ -225,6 +251,188 @@ fn const_expr(r: &mut Reader<'_>) -> Option<String> {
     Some(parts.join(" "))
 }
 
+/// The import descriptor after the kind byte, rendered.
+fn import_desc(r: &mut Reader<'_>, kind: u8) -> Option<String> {
+    Some(match kind {
+        0 => format!("type {}", r.uleb()?),
+        1 => table_type(r)?,
+        2 => limits(r)?,
+        3 => global_type(r)?,
+        4 => {
+            r.u8()?;
+            format!("type {}", r.uleb()?)
+        }
+        _ => return None,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Windowed reading
+
+/// A read-ahead buffer over a region, for decoding variable-length items
+/// that are each small but together may be far larger than one read.
+struct Window {
+    region: Span,
+    /// Offset of `data` in the region.
+    base: u64,
+    data: Vec<u8>,
+    /// No more bytes follow `data` (the region's end, or the source's).
+    exhausted: bool,
+    step: u64,
+}
+
+impl Window {
+    fn new(region: Span, step: u64) -> Self {
+        Window {
+            region,
+            base: 0,
+            data: Vec::new(),
+            exhausted: false,
+            step,
+        }
+    }
+
+    /// The buffered bytes from `pos` on, if `pos` is buffered.
+    fn from(&self, pos: u64) -> Option<&[u8]> {
+        let off = usize::try_from(pos.checked_sub(self.base)?).ok()?;
+        self.data.get(off..)
+    }
+
+    /// Decodes the item at `pos` (relative to the region) with `f`, which
+    /// sees the bytes from `pos` on and returns `None` when it needs more.
+    /// The window is refilled from `pos`, growing up to [`MAX_ENTRY`];
+    /// `Ok(None)` means the item is malformed or runs past the end.
+    async fn decode<T>(
+        &mut self,
+        cx: &Cx,
+        pos: u64,
+        mut f: impl FnMut(&[u8]) -> Option<T>,
+    ) -> Result<Option<T>> {
+        let max = MAX_ENTRY.min(cx.limits().max_read).max(self.step);
+        loop {
+            let mut want = self.step;
+            if let Some(buf) = self.from(pos) {
+                if let Some(t) = f(buf) {
+                    return Ok(Some(t));
+                }
+                if self.exhausted {
+                    return Ok(None);
+                }
+                if self.base == pos {
+                    let have = to_u64(buf.len());
+                    if have >= max {
+                        return Err(
+                            Diagnostic::limit(format!("entry larger than {max:#x} bytes"))
+                                .at(self.region.sub(pos, have)),
+                        );
+                    }
+                    want = have.saturating_mul(2).clamp(self.step, max);
+                }
+            }
+            let span = self.region.sub(pos, want);
+            self.data = cx.read_avail(span).await?;
+            self.base = pos;
+            self.exhausted = to_u64(self.data.len()) < want;
+        }
+    }
+}
+
+/// State of a vector walk, recorded in resume marks: the position of the
+/// next entry (relative to the vector's region), its index, the number of
+/// entries, and per-vector counters.
+#[derive(Clone, Copy, Debug, Default)]
+struct Walk {
+    pos: u64,
+    index: u64,
+    count: u64,
+    aux: [u64; 5],
+}
+
+/// One decoded vector entry: its node (without a span) and its length,
+/// which for sized entries may extend past the bytes decoded.
+struct Entry {
+    node: Node,
+    len: Option<u64>,
+}
+
+impl Entry {
+    fn new(node: Node) -> Self {
+        Entry { node, len: None }
+    }
+}
+
+/// Reads a vector's leading count.
+async fn vector_count(cx: &Cx, region: Span, what: &str) -> Result<(u64, u64)> {
+    let mut cur = Cursor::new(cx, region, LE);
+    let count = cur
+        .uleb128()
+        .await
+        .map_err(|_| malformed(region.sub(0, 1), &format!("{what} count")))?;
+    Ok((count, cur.pos()))
+}
+
+/// Walks a vector in `region`: a LEB128 count, then `count` entries, each
+/// decoded by `entry` (given the entry's index and the walk's counters) and
+/// pushed as a node spanning its bytes. `pre` children were emitted before
+/// the walk (on a fresh run only).
+async fn vector<F>(
+    cx: &Cx,
+    region: Span,
+    resumed: Option<Walk>,
+    pre: u64,
+    what: &str,
+    mut entry: F,
+) -> Result<()>
+where
+    F: FnMut(&mut Reader<'_>, u64, &mut [u64; 5]) -> Option<Entry>,
+{
+    let mut walk = match resumed {
+        Some(w) => w,
+        None => {
+            let (count, pos) = vector_count(cx, region, what).await?;
+            Walk {
+                pos,
+                count,
+                ..Walk::default()
+            }
+        }
+    };
+    if walk.count <= region.len {
+        cx.set_count(Count::Exact(walk.count.saturating_add(pre)));
+    }
+    let mut win = Window::new(region, WINDOW);
+    let mut pace = Pace::new(cx, STEPS_PER_UNIT);
+    while walk.index < walk.count {
+        let at = walk;
+        cx.mark(move || at);
+        let got = win
+            .decode(cx, walk.pos, |buf| {
+                let mut r = Reader::new(buf);
+                let mut aux = walk.aux;
+                let e = entry(&mut r, walk.index, &mut aux)?;
+                Some((e, aux, to_u64(r.pos())))
+            })
+            .await?;
+        let start = region.tail(walk.pos);
+        let Some((e, aux, decoded)) = got else {
+            return Err(malformed(start.sub(0, 1), what));
+        };
+        let len = e.len.unwrap_or(decoded);
+        if len == 0 || len > start.len {
+            return Err(malformed(start.sub(0, 1), what));
+        }
+        pace.add(decoded.saturating_add(ITEM_COST)).await;
+        cx.push(e.node.span(start.sub(0, len))).await;
+        walk.pos = walk.pos.saturating_add(len);
+        walk.index = walk.index.saturating_add(1);
+        walk.aux = aux;
+    }
+    if walk.pos < region.len {
+        cx.diag(Diagnostic::warning("data after the last entry"));
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 
@@ -243,14 +451,31 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         header,
     ));
 
+    // Section headers only: an id, a size and, for custom sections, the
+    // name at the start of the contents.
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(8);
     let mut sections = Vec::new();
     let mut custom_names = Vec::new();
+    let mut rest = None;
     while !cur.at_end() {
         let start = cur.pos();
+        if sections.len() >= MAX_SECTIONS {
+            cx.diag(Diagnostic::limit(format!(
+                "more than {MAX_SECTIONS} sections"
+            )));
+            rest = Some(file.tail(start));
+            break;
+        }
         let id = cur.u8().await?;
         let size = cur.uleb128().await?;
+        if id == 0 && size == 0 {
+            // A custom section starts with its name: this is not a section
+            // header (zeros, or data past the module).
+            cx.diag(Diagnostic::malformed("custom section without a name").at(file.sub(start, 2)));
+            rest = Some(file.tail(start));
+            break;
+        }
         let body = file.sub(cur.pos(), size);
         if body.len < size {
             cx.diag(Diagnostic::truncated(
@@ -280,7 +505,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         module_summary(&cx, &m).await
     };
     cx.annotate(summary);
-    cx.set_count(Count::Exact(to_u64(m.sections.len()).saturating_add(1)));
+    cx.set_count(Count::Exact(
+        to_u64(m.sections.len())
+            .saturating_add(1)
+            .saturating_add(rest.map_or(0, |_| 1)),
+    ));
     for (index, s) in m.sections.iter().enumerate() {
         // `custom_names` is in section order.
         let custom = m
@@ -295,8 +524,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let count = if matches!(s.id, 0 | 8 | 12) {
             None
         } else {
-            let data = cx.read_avail(s.body.sub(0, 10)).await?;
-            Reader::new(&data).uleb()
+            leading_count(&cx, s.body).await
         };
         let mut summary = format!("{:#x} bytes", s.body.len);
         if let Some(n) = count {
@@ -310,6 +538,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
+    if let Some(rest) = rest {
+        cx.push(
+            Node::new("Unparsed")
+                .span(rest)
+                .summary(format!("{:#x} bytes", rest.len)),
+        )
+        .await;
+    }
     Ok(())
 }
 
@@ -320,21 +556,36 @@ fn header(f: &mut Fields<'_>, _: &()) -> Result<()> {
     Ok(())
 }
 
+/// The LEB128 count a vector section starts with (a small read).
+async fn leading_count(cx: &Cx, body: Span) -> Option<u64> {
+    let data = cx.read_avail(body.sub(0, 10)).await.ok()?;
+    Reader::new(&data).uleb()
+}
+
 async fn module_summary(cx: &Cx, m: &ModuleInfo) -> String {
     let mut parts = vec!["WebAssembly module".to_owned()];
-    let count = |id: u8| async move {
-        let s = m.find(id)?;
-        let data = cx.read_avail(s.body.sub(0, 10)).await.ok()?;
-        Reader::new(&data).uleb()
+    // Counting imported functions walks the import section; a large one is
+    // summarised by its count instead.
+    let imports = m.find(2);
+    let imported = match imports {
+        Some(s) if s.body.len <= ROOT_IMPORTS => Some(import_kinds(cx, s.body).await[0]),
+        Some(_) => None,
+        None => Some(0),
     };
-    let imported = match m.find(2) {
-        Some(s) => imports_by_kind(cx, s.body).await.unwrap_or_default(),
-        None => [0; 5],
-    };
-    if let Some(n) = count(3).await {
+    if let Some(s) = m.find(3)
+        && let Some(n) = leading_count(cx, s.body).await
+    {
         let mut s = format!("{n} functions");
-        if imported[0] > 0 {
-            s.push_str(&format!(" + {} imported", imported[0]));
+        match imported {
+            Some(0) => {}
+            Some(k) => s.push_str(&format!(" + {k} imported")),
+            None => {
+                if let Some(i) = imports
+                    && let Some(k) = leading_count(cx, i.body).await
+                {
+                    s.push_str(&format!(", {}", plural(k, "import")));
+                }
+            }
         }
         parts.push(s);
     }
@@ -356,196 +607,188 @@ async fn module_summary(cx: &Cx, m: &ModuleInfo) -> String {
     parts.join(", ")
 }
 
-/// How many functions, tables, memories, globals and tags are imported.
-async fn imports_by_kind(cx: &Cx, body: Span) -> Result<[u64; 5]> {
-    let data = cx.read(body.sub(0, MAX_SECTION)).await?;
-    let mut r = Reader::new(&data);
+/// How many functions, tables, memories, globals and tags are imported
+/// (walked once per import section and cached; a malformed entry ends the
+/// count).
+async fn import_kinds(cx: &Cx, body: Span) -> [u64; 5] {
+    if let Some(k) = cx.cached::<[u64; 5]>(body, "wasm-import-kinds") {
+        return *k;
+    }
     let mut out = [0u64; 5];
-    let n = r.uleb().unwrap_or(0);
-    for _ in 0..n {
-        cx.checkpoint().await;
-        if name(&mut r).is_none() || name(&mut r).is_none() {
-            break;
-        }
-        let Some(kind) = r.u8() else { break };
-        let ok = match kind {
-            0 => r.uleb().is_some(),
-            1 => table_type(&mut r).is_some(),
-            2 => limits(&mut r).is_some(),
-            3 => global_type(&mut r).is_some(),
-            4 => r.u8().is_some() && r.uleb().is_some(),
-            _ => false,
-        };
-        if !ok {
-            break;
-        }
-        if let Some(slot) = out.get_mut(usize::from(kind)) {
-            *slot = slot.saturating_add(1);
+    if let Ok((count, mut pos)) = vector_count(cx, body, "import").await {
+        let mut win = Window::new(body, WINDOW);
+        let mut pace = Pace::new(cx, STEPS_PER_UNIT);
+        for _ in 0..count {
+            let got = win
+                .decode(cx, pos, |buf| {
+                    let mut r = Reader::new(buf);
+                    name(&mut r)?;
+                    name(&mut r)?;
+                    let kind = r.u8()?;
+                    import_desc(&mut r, kind)?;
+                    Some((kind, to_u64(r.pos())))
+                })
+                .await;
+            let Ok(Some((kind, len))) = got else { break };
+            if let Some(slot) = out.get_mut(usize::from(kind)) {
+                *slot = slot.saturating_add(1);
+            }
+            pos = pos.saturating_add(len);
+            pace.add(len.saturating_add(ITEM_COST)).await;
         }
     }
-    Ok(out)
+    cx.cache(body, "wasm-import-kinds", Arc::new(out));
+    out
+}
+
+async fn imported_functions(cx: &Cx, m: &ModuleInfo) -> u64 {
+    match m.find(2) {
+        Some(s) => import_kinds(cx, s.body).await[0],
+        None => 0,
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Sections
-
-/// Decoding context for one section: its bytes and where they are.
-struct Body<'a> {
-    r: Reader<'a>,
-    span: Span,
-}
-
-impl Body<'_> {
-    fn at(&self, start: usize) -> Span {
-        self.span
-            .sub(to_u64(start), to_u64(self.r.pos().saturating_sub(start)))
-    }
-
-    fn malformed(&self, what: &str) -> Diagnostic {
-        Diagnostic::malformed(format!("truncated or malformed {what}"))
-            .at(self.span.sub(to_u64(self.r.pos()), 1))
-    }
-}
 
 async fn section(cx: Cx, (m, index): (Module, usize)) -> Result<()> {
     let s = *m
         .sections
         .get(index)
         .ok_or_else(|| Diagnostic::internal("section index out of range"))?;
-    let header = cx
-        .block(s.span.sub(0, s.span.len.saturating_sub(s.body.len)))
-        .await?;
-    let mut f = Fields::emitting(&cx, &header, LE);
-    f.u8("id").enumeration(SECTION).emit()?;
-    let size_len = header.span.len.saturating_sub(1);
-    f.bytes("size", size_len)
-        .with(|_, n| n.value(uint(s.body.len, 32)).desc("LEB128"))
-        .emit()?;
-    if s.body.len > MAX_SECTION {
-        return Err(Diagnostic::limit("section too large to decode").at(s.body));
+    let resumed = cx.resume::<Walk>();
+    if resumed.is_none() {
+        let header = cx
+            .block(s.span.sub(0, s.span.len.saturating_sub(s.body.len)))
+            .await?;
+        let mut f = Fields::emitting(&cx, &header, LE);
+        f.u8("id").enumeration(SECTION).emit()?;
+        let size_len = header.span.len.saturating_sub(1);
+        f.bytes("size", size_len)
+            .with(|_, n| n.value(uint(s.body.len, 32)).desc("LEB128"))
+            .emit()?;
     }
-    let data = cx.read(s.body).await?;
-    let mut b = Body {
-        r: Reader::new(&data),
-        span: s.body,
-    };
+    let body = s.body;
     match s.id {
-        0 => custom(&cx, &mut b).await,
-        1 => types(&cx, &mut b).await,
-        2 => imports(&cx, &mut b).await,
+        0 => custom(&cx, body, resumed).await,
+        1 => {
+            vector(&cx, body, resumed, 2, "type", |r, _, aux| {
+                // aux[0]: the index of the next type (a recursion group
+                // defines several).
+                let start_index = aux[0];
+                let s = if r.peek()? == 0x4e {
+                    r.u8()?;
+                    let n = r.uleb()?;
+                    let mut members = Vec::new();
+                    for _ in 0..n {
+                        members.push(sub_type(r)?);
+                    }
+                    aux[0] = aux[0].saturating_add(n);
+                    format!("rec {{{}}}", members.join("; "))
+                } else {
+                    aux[0] = aux[0].saturating_add(1);
+                    sub_type(r)?
+                };
+                Some(Entry::new(
+                    Node::new(format!("type {start_index}")).value(text(s)),
+                ))
+            })
+            .await
+        }
+        2 => {
+            vector(&cx, body, resumed, 2, "import", |r, _, aux| {
+                // aux[kind]: imports of each kind so far.
+                let module = name(r)?;
+                let field = name(r)?;
+                let kind = r.u8()?;
+                let desc = import_desc(r, kind)?;
+                let slot = aux.get_mut(usize::from(kind))?;
+                let index = *slot;
+                *slot = slot.saturating_add(1);
+                Some(Entry::new(
+                    Node::new(format!("{module}.{field}"))
+                        .value(text(format!(
+                            "{} {index}",
+                            name_or(EXTERNAL_KIND, kind.into(), "kind")
+                        )))
+                        .maybe_summary(desc),
+                ))
+            })
+            .await
+        }
         3 => {
-            let imported = match m.find(2) {
-                Some(s) => imports_by_kind(&cx, s.body).await.unwrap_or_default()[0],
-                None => 0,
-            };
-            vector(&cx, &mut b, "function", |b, i| {
-                let t = b.r.uleb()?;
-                Some((
-                    format!("func {}", imported.saturating_add(i)),
-                    text(format!("type {t}")),
-                    String::new(),
+            let imported = imported_functions(&cx, &m).await;
+            vector(&cx, body, resumed, 2, "function", |r, i, _| {
+                let t = r.uleb()?;
+                Some(Entry::new(
+                    Node::new(format!("func {}", imported.saturating_add(i)))
+                        .value(text(format!("type {t}"))),
                 ))
             })
             .await
         }
         4 => {
-            vector(&cx, &mut b, "table", |b, i| {
-                Some((
-                    format!("table {i}"),
-                    text(table_type(&mut b.r)?),
-                    String::new(),
+            vector(&cx, body, resumed, 2, "table", |r, i, _| {
+                Some(Entry::new(
+                    Node::new(format!("table {i}")).value(text(table_type(r)?)),
                 ))
             })
             .await
         }
         5 => {
-            vector(&cx, &mut b, "memory", |b, i| {
-                let l = limits(&mut b.r)?;
-                Some((format!("memory {i}"), text(l), "pages of 64 KiB".to_owned()))
+            vector(&cx, body, resumed, 2, "memory", |r, i, _| {
+                let l = limits(r)?;
+                Some(Entry::new(
+                    Node::new(format!("memory {i}"))
+                        .value(text(l))
+                        .summary("pages of 64 KiB"),
+                ))
             })
             .await
         }
         6 => {
-            vector(&cx, &mut b, "global", |b, i| {
-                let t = global_type(&mut b.r)?;
-                let init = const_expr(&mut b.r)?;
-                Some((format!("global {i}"), text(t), init))
+            vector(&cx, body, resumed, 2, "global", |r, i, _| {
+                let t = global_type(r)?;
+                let init = const_expr(r)?;
+                Some(Entry::new(
+                    Node::new(format!("global {i}"))
+                        .value(text(t))
+                        .maybe_summary(init),
+                ))
             })
             .await
         }
         7 => {
-            vector(&cx, &mut b, "export", |b, _| {
-                let n = name(&mut b.r)?;
-                let kind = b.r.u8()?;
-                let index = b.r.uleb()?;
-                Some((
-                    n,
-                    text(format!(
-                        "{} {index}",
-                        name_or(EXTERNAL_KIND, kind.into(), "kind")
-                    )),
-                    String::new(),
-                ))
+            vector(&cx, body, resumed, 2, "export", |r, _, _| {
+                let n = name(r)?;
+                let kind = r.u8()?;
+                let index = r.uleb()?;
+                Some(Entry::new(Node::new(n).value(text(format!(
+                    "{} {index}",
+                    name_or(EXTERNAL_KIND, kind.into(), "kind")
+                )))))
             })
             .await
         }
-        8 => {
-            let start = b.r.pos();
-            let f = b.r.uleb().ok_or_else(|| b.malformed("start"))?;
-            cx.emit(
-                Node::new("start function")
-                    .span(b.at(start))
-                    .value(uint(f, 32)),
-            );
-            Ok(())
-        }
-        9 => vector(&cx, &mut b, "element segment", element).await,
-        10 => code(&cx, &m, &mut b).await,
-        11 => {
-            vector(&cx, &mut b, "data segment", |b, i| {
-                let flags = b.r.uleb()?;
-                let mode = match flags {
-                    0 => format!("active, offset {}", const_expr(&mut b.r)?),
-                    1 => "passive".to_owned(),
-                    2 => {
-                        let mem = b.r.uleb()?;
-                        format!("active in memory {mem}, offset {}", const_expr(&mut b.r)?)
-                    }
-                    _ => return None,
-                };
-                let len = b.r.uleb()?;
-                let bytes = b.r.bytes(usize::try_from(len).ok()?)?;
-                let preview = bytes.get(..32).unwrap_or(bytes).to_vec();
-                Some((
-                    format!("segment {i}"),
-                    Value::Bytes(preview),
-                    format!("{mode}, {len} bytes"),
-                ))
-            })
-            .await
-        }
-        12 => {
-            let start = b.r.pos();
-            let n = b.r.uleb().ok_or_else(|| b.malformed("data count"))?;
-            cx.emit(
-                Node::new("data segments")
-                    .span(b.at(start))
-                    .value(uint(n, 32)),
-            );
-            Ok(())
-        }
+        8 => single(&cx, body, "start function", "start").await,
+        9 => vector(&cx, body, resumed, 2, "element segment", element).await,
+        10 => code(&cx, &m, body, resumed).await,
+        11 => vector(&cx, body, resumed, 2, "data segment", data_segment).await,
+        12 => single(&cx, body, "data segments", "data count").await,
         13 => {
-            vector(&cx, &mut b, "tag", |b, i| {
-                b.r.u8()?;
-                let t = b.r.uleb()?;
-                Some((format!("tag {i}"), text(format!("type {t}")), String::new()))
+            vector(&cx, body, resumed, 2, "tag", |r, i, _| {
+                r.u8()?;
+                let t = r.uleb()?;
+                Some(Entry::new(
+                    Node::new(format!("tag {i}")).value(text(format!("type {t}"))),
+                ))
             })
             .await
         }
         _ => {
             cx.emit(
                 Node::new("Contents")
-                    .span(s.body)
+                    .span(body)
                     .diag(Diagnostic::unsupported(format!("section id {}", s.id))),
             );
             Ok(())
@@ -553,33 +796,14 @@ async fn section(cx: Cx, (m, index): (Module, usize)) -> Result<()> {
     }
 }
 
-/// Decodes a vector: a LEB128 count, then `count` entries. Each entry
-/// becomes a node `(name, value, summary)` spanning its bytes.
-async fn vector(
-    cx: &Cx,
-    b: &mut Body<'_>,
-    what: &str,
-    mut entry: impl FnMut(&mut Body<'_>, u64) -> Option<(String, Value, String)>,
-) -> Result<()> {
-    let n =
-        b.r.uleb()
-            .ok_or_else(|| b.malformed(&format!("{what} count")))?;
-    for i in 0..n {
-        let start = b.r.pos();
-        let Some((label, value, summary)) = entry(b, i) else {
-            return Err(b.malformed(what));
-        };
-        cx.push(
-            Node::new(label)
-                .span(b.at(start))
-                .value(value)
-                .maybe_summary(summary),
-        )
-        .await;
-    }
-    if !b.r.at_end() {
-        cx.diag(Diagnostic::warning("data after the last entry"));
-    }
+/// A section holding one LEB128 number (start, data count).
+async fn single(cx: &Cx, body: Span, label: &'static str, what: &str) -> Result<()> {
+    let mut cur = Cursor::new(cx, body, LE);
+    let n = cur
+        .uleb128()
+        .await
+        .map_err(|_| malformed(body.sub(0, 1), what))?;
+    cx.emit(Node::new(label).span(cur.since(0)).value(uint(n, 32)));
     Ok(())
 }
 
@@ -659,68 +883,14 @@ fn sub_type(r: &mut Reader<'_>) -> Option<String> {
     }
 }
 
-async fn types(cx: &Cx, b: &mut Body<'_>) -> Result<()> {
-    let mut index = 0u64;
-    vector(cx, b, "type", |b, _| {
-        let start_index = index;
-        let s = if b.r.peek()? == 0x4e {
-            b.r.u8()?;
-            let n = b.r.uleb()?;
-            let mut members = Vec::new();
-            for _ in 0..n {
-                members.push(sub_type(&mut b.r)?);
-            }
-            index = index.saturating_add(n);
-            format!("rec {{{}}}", members.join("; "))
-        } else {
-            index = index.saturating_add(1);
-            sub_type(&mut b.r)?
-        };
-        Some((format!("type {start_index}"), text(s), String::new()))
-    })
-    .await
-}
-
-async fn imports(cx: &Cx, b: &mut Body<'_>) -> Result<()> {
-    let mut counters = [0u64; 5];
-    vector(cx, b, "import", |b, _| {
-        let module = name(&mut b.r)?;
-        let field = name(&mut b.r)?;
-        let kind = b.r.u8()?;
-        let desc = match kind {
-            0 => format!("type {}", b.r.uleb()?),
-            1 => table_type(&mut b.r)?,
-            2 => limits(&mut b.r)?,
-            3 => global_type(&mut b.r)?,
-            4 => {
-                b.r.u8()?;
-                format!("type {}", b.r.uleb()?)
-            }
-            _ => return None,
-        };
-        let slot = counters.get_mut(usize::from(kind))?;
-        let index = *slot;
-        *slot = slot.saturating_add(1);
-        Some((
-            format!("{module}.{field}"),
-            text(format!(
-                "{} {index}",
-                name_or(EXTERNAL_KIND, kind.into(), "kind")
-            )),
-            desc,
-        ))
-    })
-    .await
-}
-
-fn element(b: &mut Body<'_>, i: u64) -> Option<(String, Value, String)> {
-    let flags = b.r.uleb()?;
+fn element(r: &mut Reader<'_>, i: u64, _: &mut [u64; 5]) -> Option<Entry> {
+    let flags = r.uleb()?;
     let passive_or_declarative = flags & 1 != 0;
     let explicit_table = flags & 2 != 0;
     let expressions = flags & 4 != 0;
     let mut mode = if !passive_or_declarative {
-        let table = if explicit_table { b.r.uleb()? } else { 0 };
-        format!("active in table {table}, offset {}", const_expr(&mut b.r)?)
+        let table = if explicit_table { r.uleb()? } else { 0 };
+        format!("active in table {table}, offset {}", const_expr(r)?)
     } else if explicit_table {
         "declarative".to_owned()
     } else {
@@ -728,153 +898,338 @@ fn element(b: &mut Body<'_>, i: u64) -> Option<(String, Value, String)> {
     };
     if passive_or_declarative || explicit_table {
         if expressions {
-            mode.push_str(&format!(", {}", val_type(&mut b.r)?));
+            mode.push_str(&format!(", {}", val_type(r)?));
         } else {
-            b.r.u8()?; // elemkind: funcref
+            r.u8()?; // elemkind: funcref
         }
     }
-    let n = b.r.uleb()?;
+    let n = r.uleb()?;
     let mut items = Vec::new();
     for _ in 0..n {
         let item = if expressions {
-            const_expr(&mut b.r)?
+            const_expr(r)?
         } else {
-            format!("func {}", b.r.uleb()?)
+            format!("func {}", r.uleb()?)
         };
         // 128 items join to more than the 120 characters shown.
         if items.len() < 128 {
             items.push(item);
         }
     }
-    Some((
-        format!("segment {i}"),
-        text(clip(&items.join(", "), 120)),
-        format!("{mode}, {n} items"),
+    Some(Entry::new(
+        Node::new(format!("segment {i}"))
+            .value(text(clip(&items.join(", "), 120)))
+            .summary(format!("{mode}, {n} items")),
     ))
+}
+
+/// A data segment: its mode and a preview of its bytes. The payload itself
+/// is not read.
+fn data_segment(r: &mut Reader<'_>, i: u64, _: &mut [u64; 5]) -> Option<Entry> {
+    let flags = r.uleb()?;
+    let mode = match flags {
+        0 => format!("active, offset {}", const_expr(r)?),
+        1 => "passive".to_owned(),
+        2 => {
+            let mem = r.uleb()?;
+            format!("active in memory {mem}, offset {}", const_expr(r)?)
+        }
+        _ => return None,
+    };
+    let len = r.uleb()?;
+    let head = to_u64(r.pos());
+    let preview = r.bytes(usize::try_from(len.min(32)).ok()?)?.to_vec();
+    Some(Entry {
+        node: Node::new(format!("segment {i}"))
+            .value(Value::Bytes(preview))
+            .summary(format!("{mode}, {len} bytes")),
+        len: Some(head.saturating_add(len)),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Function names
+
+/// The function-name map of the `name` section (its subsection 1), found by
+/// walking the subsection headers.
+async fn function_names(cx: &Cx, m: &ModuleInfo) -> Option<Span> {
+    let s = m.custom("name")?;
+    let mut cur = Cursor::new(cx, s.body, LE);
+    let len = cur.uleb128().await.ok()?;
+    cur.skip(len);
+    while !cur.at_end() {
+        let id = cur.u8().await.ok()?;
+        let size = cur.uleb128().await.ok()?;
+        if id == 1 {
+            return Some(s.body.sub(cur.pos(), size));
+        }
+        cur.skip(size);
+    }
+    None
+}
+
+/// Decodes one `(index, name)` pair of a name map: the index, the name and
+/// the pair's length.
+fn name_pair(buf: &[u8]) -> Option<(u64, String, u64)> {
+    let mut r = Reader::new(buf);
+    let index = r.uleb()?;
+    let n = name(&mut r)?;
+    Some((index, n, to_u64(r.pos())))
+}
+
+/// A sparse index of a function-name map: every [`NAME_STRIDE`]th entry's
+/// function index, position and ordinal. Names are sorted by index, so a
+/// lookup reads at most a stride or two of entries.
+struct NameIndex {
+    first: u64,
+    count: u64,
+    points: Vec<(u64, u64, u64)>,
+}
+
+async fn name_index(cx: &Cx, map: Span) -> Arc<NameIndex> {
+    if let Some(index) = cx.cached::<NameIndex>(map, "wasm-name-index") {
+        return index;
+    }
+    let mut index = NameIndex {
+        first: 0,
+        count: 0,
+        points: Vec::new(),
+    };
+    if let Ok((count, first)) = vector_count(cx, map, "function names").await {
+        index.first = first;
+        let mut win = Window::new(map, WINDOW);
+        let mut pace = Pace::new(cx, STEPS_PER_UNIT);
+        let mut pos = first;
+        for k in 0..count {
+            let Ok(Some((f, _, len))) = win.decode(cx, pos, name_pair).await else {
+                break;
+            };
+            if k.is_multiple_of(NAME_STRIDE) {
+                index.points.push((f, pos, k));
+            }
+            index.count = k.saturating_add(1);
+            pos = pos.saturating_add(len);
+            pace.add(len.saturating_add(ITEM_COST)).await;
+        }
+    }
+    let index = Arc::new(index);
+    cx.cache(map, "wasm-name-index", index.clone());
+    index
+}
+
+/// The name of function `f` (the first one given for it).
+async fn lookup_name(cx: &Cx, map: Span, index: &NameIndex, f: u64) -> Option<String> {
+    // The last point before `f`: the first name for `f` follows it.
+    let k = index.points.partition_point(|&(i, _, _)| i < f);
+    let (mut pos, mut ordinal) = match k.checked_sub(1).and_then(|k| index.points.get(k)) {
+        Some(&(_, pos, ordinal)) => (pos, ordinal),
+        None => (index.first, 0),
+    };
+    let mut win = Window::new(map, LOOKUP_WINDOW);
+    for _ in 0..NAME_STRIDE.saturating_mul(2) {
+        if ordinal >= index.count {
+            break;
+        }
+        let (i, n, len) = win.decode(cx, pos, name_pair).await.ok().flatten()?;
+        if i == f {
+            return Some(n);
+        }
+        if i > f {
+            break;
+        }
+        pos = pos.saturating_add(len);
+        ordinal = ordinal.saturating_add(1);
+    }
+    None
 }
 
 // ---------------------------------------------------------------------------
 // Code
 
-/// Function names by index (the first name given for an index wins).
-async fn function_names(cx: &Cx, m: &ModuleInfo) -> BTreeMap<u64, String> {
-    let Some(s) = m.custom("name") else {
-        return BTreeMap::new();
+/// The code section: one entry per body (its size and span), labelled with
+/// the function's name. The function-name map is walked alongside, its
+/// position kept in the walk's counters (`aux[0]`: position, `aux[1]`:
+/// entries left).
+async fn code(cx: &Cx, m: &ModuleInfo, region: Span, resumed: Option<Walk>) -> Result<()> {
+    let imported = imported_functions(cx, m).await;
+    let names = function_names(cx, m).await;
+    let mut walk = match resumed {
+        Some(w) => w,
+        None => {
+            let (count, pos) = vector_count(cx, region, "function count").await?;
+            let mut aux = [0u64; 5];
+            if let Some(map) = names
+                && let Ok((n, first)) = vector_count(cx, map, "function names").await
+            {
+                aux[0] = first;
+                aux[1] = n;
+            }
+            Walk {
+                pos,
+                index: 0,
+                count,
+                aux,
+            }
+        }
     };
-    let Ok(data) = cx.read(s.body.sub(0, MAX_SECTION)).await else {
-        return BTreeMap::new();
-    };
-    let mut r = Reader::new(&data);
-    let _ = name(&mut r);
-    while !r.at_end() {
-        cx.checkpoint().await;
-        let Some(id) = r.u8() else { break };
-        let Some(size) = r.uleb() else { break };
-        let Some(sub) = r.bytes(usize::try_from(size).unwrap_or(usize::MAX)) else {
-            break;
-        };
-        if id == 1 {
-            let mut s = Reader::new(sub);
-            let n = s.uleb().unwrap_or(0);
-            let mut out = BTreeMap::new();
-            for k in 0..n {
-                if k.is_multiple_of(256) {
-                    cx.checkpoint().await;
-                }
-                let (Some(index), Some(n)) = (s.uleb(), name(&mut s)) else {
+    if walk.count <= region.len {
+        cx.set_count(Count::Exact(walk.count.saturating_add(2)));
+    }
+    let mut win = Window::new(region, WINDOW);
+    let mut name_win = names.map(|map| Window::new(map, WINDOW));
+    let mut pace = Pace::new(cx, STEPS_PER_UNIT);
+    while walk.index < walk.count {
+        let at = walk;
+        cx.mark(move || at);
+        let index = imported.saturating_add(walk.index);
+
+        let mut label = None;
+        if let Some(nw) = name_win.as_mut() {
+            while walk.aux[1] > 0 {
+                let Ok(Some((f, n, len))) = nw.decode(cx, walk.aux[0], name_pair).await else {
+                    walk.aux[1] = 0;
                     break;
                 };
-                out.entry(index).or_insert(n);
+                if f > index {
+                    break;
+                }
+                walk.aux[0] = walk.aux[0].saturating_add(len);
+                walk.aux[1] = walk.aux[1].saturating_sub(1);
+                pace.add(len.saturating_add(ITEM_COST)).await;
+                if f == index {
+                    label = Some(n);
+                    break;
+                }
             }
-            return out;
         }
-    }
-    BTreeMap::new()
-}
 
-async fn code(cx: &Cx, m: &ModuleInfo, b: &mut Body<'_>) -> Result<()> {
-    let imported = match m.find(2) {
-        Some(s) => imports_by_kind(cx, s.body).await.unwrap_or_default()[0],
-        None => 0,
-    };
-    let names = Arc::new(function_names(cx, m).await);
-    let n = b.r.uleb().ok_or_else(|| b.malformed("function count"))?;
-    cx.set_count(Count::Exact(n));
-    for i in 0..n {
-        let start = b.r.pos();
-        let size =
-            b.r.uleb()
-                .ok_or_else(|| b.malformed("function body size"))?;
-        let body_start = b.r.pos();
-        let Some(body) = b.r.bytes(usize::try_from(size).unwrap_or(usize::MAX)) else {
-            return Err(b.malformed("function body"));
+        let start = region.tail(walk.pos);
+        let got = win
+            .decode(cx, walk.pos, |buf| {
+                let mut r = Reader::new(buf);
+                let size = r.uleb()?;
+                let head = r.pos();
+                let avail = r.rest();
+                let want = usize::try_from(size.min(LOCALS_PEEK)).ok()?;
+                let body = avail.get(..want.min(avail.len()))?;
+                let (locals, parsed, complete) = locals(body);
+                if !complete && body.len() < want {
+                    return None;
+                }
+                Some((size, to_u64(head), parsed, locals))
+            })
+            .await?;
+        let Some((size, head, locals_len, locals)) = got else {
+            return Err(malformed(start.sub(0, 1), "function body size"));
         };
-        let index = imported.saturating_add(i);
-        let label = names
-            .get(&index)
-            .map_or_else(|| format!("func {index}"), Clone::clone);
-        // Locals: groups of (count, type).
-        let mut r = Reader::new(body);
-        let mut locals = Vec::new();
-        let groups = r.uleb().unwrap_or(0);
-        for _ in 0..groups.min(4096) {
-            let (Some(count), Some(t)) = (r.uleb(), val_type(&mut r)) else {
-                break;
-            };
-            locals.push(format!("{count} × {t}"));
+        let len = head.saturating_add(size);
+        if len > start.len {
+            return Err(malformed(start.sub(head, 1), "function body"));
         }
-        let code_len = to_u64(body.len().saturating_sub(r.pos()));
+        pace.add(head.saturating_add(locals_len).saturating_add(ITEM_COST))
+            .await;
+
+        let code_len = size.saturating_sub(locals_len);
         let mut summary = format!("{code_len} bytes of code");
         if !locals.is_empty() {
             summary.push_str(&format!(", locals {}", locals.join(", ")));
         }
-        let span = b.at(start);
-        let body_span = b.span.sub(to_u64(body_start), size);
-        let locals_span = body_span.sub(0, to_u64(r.pos()));
-        let code_span = body_span.tail(to_u64(r.pos()));
+        let label = label.unwrap_or_else(|| format!("func {index}"));
         cx.push(
             Node::new(label)
-                .span(span)
+                .span(start.sub(0, len))
                 .value(hex(index, 32))
                 .summary(summary)
-                .lazy(
-                    function_body,
-                    (locals_span, code_span, locals, names.clone()),
-                ),
+                .lazy(function_body, (start.sub(head, size), names)),
         )
         .await;
+        walk.pos = walk.pos.saturating_add(len);
+        walk.index = walk.index.saturating_add(1);
+    }
+    if walk.pos < region.len {
+        cx.diag(Diagnostic::warning("data after the last entry"));
     }
     Ok(())
 }
 
-type Names = Arc<BTreeMap<u64, String>>;
+/// The local declarations at the start of a function body (groups of
+/// count and type, at most 4096 shown): the rendered groups, their length,
+/// and whether they were decoded to the end.
+fn locals(body: &[u8]) -> (Vec<String>, u64, bool) {
+    let mut r = Reader::new(body);
+    let mut out = Vec::new();
+    let Some(groups) = r.uleb() else {
+        return (out, 0, false);
+    };
+    for _ in 0..groups.min(4096) {
+        let (Some(count), Some(t)) = (r.uleb(), val_type(&mut r)) else {
+            return (out, to_u64(r.pos()), false);
+        };
+        out.push(format!("{count} × {t}"));
+    }
+    (out, to_u64(r.pos()), true)
+}
 
-async fn function_body(
-    cx: Cx,
-    (locals_span, code_span, locals, names): (Span, Span, Vec<String>, Names),
-) -> Result<()> {
+async fn function_body(cx: Cx, (body, names): (Span, Option<Span>)) -> Result<()> {
+    let data = cx.read(body).await?;
+    let (locals, len, _) = locals(&data);
     cx.emit(
         Node::new("Locals")
-            .span(locals_span)
+            .span(body.sub(0, len))
             .maybe_summary(locals.join(", ")),
     );
+    let code = body.tail(len);
     cx.emit(
         Node::new("Instructions")
-            .span(code_span)
-            .summary(format!("{} bytes", code_span.len))
-            .lazy(instructions, (code_span, names)),
+            .span(code)
+            .summary(format!("{} bytes", code.len))
+            .lazy(instructions, (code, names)),
     );
     Ok(())
 }
 
-async fn instructions(cx: Cx, (span, names): (Span, Names)) -> Result<()> {
+async fn instructions(cx: Cx, (span, names): (Span, Option<Span>)) -> Result<()> {
     let data = cx.read(span).await?;
-    let mut r = Reader::new(&data);
-    let name = |f: u64| names.get(&f).cloned();
-    let mut depth = 0usize;
-    while !r.at_end() {
-        let start = r.pos();
-        let Some((mnemonic, operands)) = ops::instruction(&mut r, &name) else {
+    let (mut pos, mut depth) = cx.resume::<(usize, usize)>().unwrap_or((0, 0));
+    let mut index: Option<Arc<NameIndex>> = None;
+    let mut resolved: BTreeMap<u64, Option<String>> = BTreeMap::new();
+    while pos < data.len() {
+        let at = (pos, depth);
+        cx.mark(move || at);
+        let start = pos;
+        // Decode once noting the function a call refers to; if it has a
+        // name, decode again with it.
+        let wanted = Cell::new(None);
+        let mut r = Reader::at(&data, start);
+        let mut decoded = ops::instruction(&mut r, &|f| {
+            wanted.set(Some(f));
+            None
+        });
+        let mut end = r.pos();
+        if let (Some(f), Some(map), false) = (wanted.get(), names, cx.skipping()) {
+            let n = match resolved.get(&f) {
+                Some(n) => n.clone(),
+                None => {
+                    let ix = match &index {
+                        Some(ix) => ix.clone(),
+                        None => {
+                            let ix = name_index(&cx, map).await;
+                            index = Some(ix.clone());
+                            ix
+                        }
+                    };
+                    let n = lookup_name(&cx, map, &ix, f).await;
+                    resolved.insert(f, n.clone());
+                    n
+                }
+            };
+            if n.is_some() {
+                let mut r = Reader::at(&data, start);
+                decoded = ops::instruction(&mut r, &|_| n.clone());
+                end = r.pos();
+            }
+        }
+        let Some((mnemonic, operands)) = decoded else {
             cx.push(
                 Node::new(format!("{start:#x}"))
                     .span(span.tail(to_u64(start)))
@@ -898,11 +1253,12 @@ async fn instructions(cx: Cx, (span, names): (Span, Names)) -> Result<()> {
         }
         cx.push(
             Node::new(format!("{start:#x}"))
-                .span(span.sub(to_u64(start), to_u64(r.pos().saturating_sub(start))))
+                .span(span.sub(to_u64(start), to_u64(end.saturating_sub(start))))
                 .value(text(format!("{indent}{mnemonic}")))
                 .maybe_summary(operands),
         )
         .await;
+        pos = end.max(start.saturating_add(1));
     }
     Ok(())
 }
@@ -910,133 +1266,154 @@ async fn instructions(cx: Cx, (span, names): (Span, Names)) -> Result<()> {
 // ---------------------------------------------------------------------------
 // Custom sections
 
-async fn custom(cx: &Cx, b: &mut Body<'_>) -> Result<()> {
-    let start = b.r.pos();
-    let section = name(&mut b.r).ok_or_else(|| b.malformed("custom section name"))?;
-    cx.emit(
-        Node::new("name")
-            .span(b.at(start))
-            .value(text(section.clone())),
-    );
-    let rest = b.span.tail(to_u64(b.r.pos()));
+async fn custom(cx: &Cx, body: Span, resumed: Option<Walk>) -> Result<()> {
+    let mut cur = Cursor::new(cx, body, LE);
+    let len = cur
+        .uleb128()
+        .await
+        .map_err(|_| malformed(body.sub(0, 1), "custom section name"))?;
+    if len > 0x1_0000 {
+        return Err(malformed(body.sub(0, 1), "custom section name"));
+    }
+    let bytes = cur
+        .bytes(len)
+        .await
+        .map_err(|_| malformed(body.sub(0, 1), "custom section name"))?;
+    let section = String::from_utf8_lossy(&bytes).into_owned();
+    let rest = body.tail(cur.pos());
+    if resumed.is_none() {
+        cx.emit(
+            Node::new("name")
+                .span(cur.since(0))
+                .value(text(section.clone())),
+        );
+    }
     match section.as_str() {
-        "name" => {
-            while !b.r.at_end() {
-                cx.checkpoint().await;
-                let start = b.r.pos();
-                let id = b.r.u8().ok_or_else(|| b.malformed("name subsection"))?;
-                let size = b.r.uleb().ok_or_else(|| b.malformed("name subsection"))?;
-                let body_start = b.r.pos();
-                let sub =
-                    b.r.bytes(usize::try_from(size).unwrap_or(usize::MAX))
-                        .ok_or_else(|| b.malformed("name subsection"))?
-                        .to_vec();
-                let span = b.at(start);
-                let body = b.span.sub(to_u64(body_start), size);
-                let label = name_or(NAME_SUBSECTION, id.into(), "Subsection");
-                cx.emit(
-                    Node::new(label)
-                        .span(span)
-                        .lazy(name_subsection, (id, body, sub)),
-                );
-            }
-        }
+        "name" => name_section(cx, rest, resumed).await,
         "producers" => {
-            let n = b.r.uleb().ok_or_else(|| b.malformed("producers"))?;
-            for _ in 0..n {
-                cx.checkpoint().await;
-                let start = b.r.pos();
-                let field = name(&mut b.r).ok_or_else(|| b.malformed("producers"))?;
-                let count = b.r.uleb().ok_or_else(|| b.malformed("producers"))?;
+            vector(cx, rest, resumed, 3, "producers", |r, _, _| {
+                let field = name(r)?;
+                let count = r.uleb()?;
                 let mut values = Vec::new();
-                for k in 0..count {
-                    if k.is_multiple_of(256) {
-                        cx.checkpoint().await;
-                    }
-                    let (Some(n), Some(v)) = (name(&mut b.r), name(&mut b.r)) else {
-                        return Err(b.malformed("producers"));
-                    };
+                for _ in 0..count {
+                    let n = name(r)?;
+                    let v = name(r)?;
                     values.push(if v.is_empty() { n } else { format!("{n} {v}") });
                 }
-                cx.emit(
-                    Node::new(field)
-                        .span(b.at(start))
-                        .value(text(values.join(", "))),
-                );
-            }
+                Some(Entry::new(Node::new(field).value(text(values.join(", ")))))
+            })
+            .await
         }
         "target_features" => {
-            let n = b.r.uleb().ok_or_else(|| b.malformed("target features"))?;
-            for _ in 0..n {
-                cx.checkpoint().await;
-                let start = b.r.pos();
-                let prefix = b.r.u8().ok_or_else(|| b.malformed("target features"))?;
-                let feature = name(&mut b.r).ok_or_else(|| b.malformed("target features"))?;
-                cx.emit(
-                    Node::new(feature)
-                        .span(b.at(start))
-                        .value(text(match prefix {
-                            b'+' => "used",
-                            b'-' => "disallowed",
-                            b'=' => "required",
-                            _ => "?",
-                        })),
-                );
-            }
+            vector(cx, rest, resumed, 3, "target features", |r, _, _| {
+                let prefix = r.u8()?;
+                let feature = name(r)?;
+                Some(Entry::new(Node::new(feature).value(text(match prefix {
+                    b'+' => "used",
+                    b'-' => "disallowed",
+                    b'=' => "required",
+                    _ => "?",
+                }))))
+            })
+            .await
         }
         "sourceMappingURL" | "external_debug_info" => {
-            let start = b.r.pos();
-            let url = name(&mut b.r).ok_or_else(|| b.malformed("URL"))?;
-            cx.emit(Node::new("URL").span(b.at(start)).value(text(url)));
+            let mut win = Window::new(rest, LOOKUP_WINDOW);
+            let got = win
+                .decode(cx, 0, |buf| {
+                    let mut r = Reader::new(buf);
+                    let url = name(&mut r)?;
+                    Some((url, to_u64(r.pos())))
+                })
+                .await?;
+            let (url, len) = got.ok_or_else(|| malformed(rest.sub(0, 1), "URL"))?;
+            cx.emit(Node::new("URL").span(rest.sub(0, len)).value(text(url)));
+            Ok(())
         }
-        _ => cx.emit(
-            Node::new("Contents")
-                .span(rest)
-                .summary(format!("{:#x} bytes", rest.len)),
-        ),
+        _ => {
+            cx.emit(
+                Node::new("Contents")
+                    .span(rest)
+                    .summary(format!("{:#x} bytes", rest.len)),
+            );
+            Ok(())
+        }
+    }
+}
+
+/// The subsections of the `name` section (id, size, contents), each
+/// decoded when expanded.
+async fn name_section(cx: &Cx, region: Span, resumed: Option<Walk>) -> Result<()> {
+    let mut walk = resumed.unwrap_or_default();
+    let mut cur = Cursor::new(cx, region, LE);
+    while walk.pos < region.len {
+        let at = walk;
+        cx.mark(move || at);
+        cur.seek(walk.pos);
+        let bad = || malformed(region.sub(walk.pos, 1), "name subsection");
+        let id = cur.u8().await.map_err(|_| bad())?;
+        let size = cur.uleb128().await.map_err(|_| bad())?;
+        let body = region.sub(cur.pos(), size);
+        if body.len < size {
+            return Err(bad());
+        }
+        let label = name_or(NAME_SUBSECTION, id.into(), "Subsection");
+        let mut node = Node::new(label).span(region.sub(
+            walk.pos,
+            cur.pos().saturating_add(size).saturating_sub(walk.pos),
+        ));
+        if id != 0
+            && let Some(n) = leading_count(cx, body).await
+        {
+            node = node.summary(count(n, "entry", "entries"));
+        }
+        cx.push(node.lazy(name_subsection, (id, body))).await;
+        walk.pos = cur.pos().saturating_add(size);
     }
     Ok(())
 }
 
-async fn name_subsection(cx: Cx, (id, span, data): (u8, Span, Vec<u8>)) -> Result<()> {
-    let mut b = Body {
-        r: Reader::new(&data),
-        span,
-    };
+async fn name_subsection(cx: Cx, (id, body): (u8, Span)) -> Result<()> {
+    let resumed = cx.resume::<Walk>();
     match id {
         0 => {
-            let start = b.r.pos();
-            let n = name(&mut b.r).ok_or_else(|| b.malformed("module name"))?;
-            cx.emit(Node::new("module").span(b.at(start)).value(text(n)));
+            let mut win = Window::new(body, LOOKUP_WINDOW);
+            let got = win
+                .decode(&cx, 0, |buf| {
+                    let mut r = Reader::new(buf);
+                    let n = name(&mut r)?;
+                    Some((n, to_u64(r.pos())))
+                })
+                .await?;
+            let (n, len) = got.ok_or_else(|| malformed(body.sub(0, 1), "module name"))?;
+            cx.emit(Node::new("module").span(body.sub(0, len)).value(text(n)));
             Ok(())
         }
         2 | 3 | 10 => {
             // Indirect name maps: (index, name map).
-            vector(&cx, &mut b, "indirect name map", |b, _| {
-                let outer = b.r.uleb()?;
-                let n = b.r.uleb()?;
+            vector(&cx, body, resumed, 0, "indirect name map", |r, _, _| {
+                let outer = r.uleb()?;
+                let n = r.uleb()?;
                 let mut names = Vec::new();
                 for _ in 0..n {
-                    let i = b.r.uleb()?;
-                    let entry = format!("{i}: {}", name(&mut b.r)?);
+                    let i = r.uleb()?;
+                    let entry = format!("{i}: {}", name(r)?);
                     // 128 entries join to more than the 120 characters shown.
                     if names.len() < 128 {
                         names.push(entry);
                     }
                 }
-                Some((
-                    format!("[{outer}]"),
-                    text(clip(&names.join(", "), 120)),
-                    String::new(),
+                Some(Entry::new(
+                    Node::new(format!("[{outer}]")).value(text(clip(&names.join(", "), 120))),
                 ))
             })
             .await
         }
         _ => {
-            vector(&cx, &mut b, "name map", |b, _| {
-                let index = b.r.uleb()?;
-                let n = name(&mut b.r)?;
-                Some((format!("[{index}]"), text(n), String::new()))
+            vector(&cx, body, resumed, 0, "name map", |r, _, _| {
+                let index = r.uleb()?;
+                let n = name(r)?;
+                Some(Entry::new(Node::new(format!("[{index}]")).value(text(n))))
             })
             .await
         }

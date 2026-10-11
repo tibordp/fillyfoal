@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ filly-names.wasm — WebAssembly module, 6 functions + 2 imported, 6 exports (memory, greet, apply, counter, fib, average)  [0x0+0x2b0]
   ▾ Header  [0x0+0x8]
@@ -161,7 +161,7 @@ expression: "common::explore(&name, &data)"
       name: "name"  [0x19a+0x5]
     ▾ Module name  [0x19f+0x8]
         module: "filly"  [0x1a1+0x6]
-    ▾ Function names  [0x1a7+0x40]
+    ▾ Function names — 8 entries  [0x1a7+0x40]
         [0]: "host_log"  [0x1aa+0xa]
         [1]: "host_random"  [0x1b4+0xd]
         [2]: "greet"  [0x1c1+0x7]
@@ -170,9 +170,9 @@ expression: "common::explore(&name, &data)"
         [5]: "average"  [0x1d4+0x9]
         [6]: "add"  [0x1dd+0x5]
         [7]: "mul"  [0x1e2+0x5]
-    ▾ Local names  [0x1e7+0xe]
+    ▾ Local names — 1 entry  [0x1e7+0xe]
         [4]: "0: n, 1: a, 2: b"  [0x1ea+0xb]
-    ▾ Global names  [0x1f5+0x1d]
+    ▾ Global names — 2 entries  [0x1f5+0x1d]
         [0]: "__stack_pointer"  [0x1f8+0x11]
         [1]: "counter"  [0x209+0x9]
   ▾ Custom "producers" — 0x43 bytes  [0x212+0x45]
