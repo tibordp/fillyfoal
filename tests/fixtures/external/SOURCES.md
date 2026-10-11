@@ -118,6 +118,7 @@ byte-reproducible; the others are (the scripts fix UUIDs, labels and times).
 | `squashfs/` | squashfs-tools 4.6.1 mksquashfs | `make-squashfs.sh`: reproducible; `-b 16K -xattrs` with gzip, LZMA, LZO, xz, LZ4 and zstd, and `-no-compression -no-fragments -no-exports` for `mksquashfs-plain.sqfs` |
 | `btrfs/` | btrfs-progs 6.14 mkfs.btrfs | `make-btrfs.sh`: `mkfs.btrfs -r tree --shrink` (and `--compress zstd`); the chunk tree UUID is random, so not byte-reproducible |
 | `f2fs/sload.f2fs.raw.zst` | f2fs-tools 1.16 mkfs.f2fs, sload.f2fs | `make-f2fs.sh`: `mkfs.f2fs -T … -U … -O extra_attr,inode_checksum,sb_checksum,inode_crtime`, `sload.f2fs -f tree`; the script bind-mounts a neutral `/proc/version` (`Linux version 6.12.0 (fillyfoal@fillyfoal)`), which the superblock records |
+| `f2fs/large-nat.f2fs.raw.zst` | f2fs-tools 1.16 mkfs.f2fs | `make-f2fs.sh`: `mkfs.f2fs -i -T … -U … -l fillyfoal` on 64 MiB (empty; LARGE_NAT_BITMAP, so the checkpoint checksum sits at offset 192), same neutral `/proc/version` |
 | `jfs/mkfs.jfs.raw.zst` | jfsutils 1.1.15 mkfs.jfs | `make-small.sh`: an empty 16 MiB aggregate (no tool fills JFS without a mount, and the kernel used has no JFS); random UUID |
 | `cramfs/mkcramfs.cramfs` | util-linux 2.41 mkfs.cramfs | `make-small.sh`: `mkfs.cramfs -N little -n fillyfoal tree` |
 | `minix/` | util-linux 2.41 mkfs.minix | `make-small.sh`: empty 64 KiB filesystems of versions 1, 2 and 3 (`mkfs.minix -1/-2/-3`; no tool fills them without a mount) |
