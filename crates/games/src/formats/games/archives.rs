@@ -2,7 +2,7 @@
 //! NARC, Sony PSARC, XNA XNB, Unreal Engine `.pak`, Bethesda BSA/BA2,
 //! Blizzard MPQ and RPG Maker RGSSAD.
 
-use crate::bytes::{u16_be, u16_le, u32_be, u32_le, u64_le};
+use crate::bytes::{u16_be, u16_le, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Record, emit_record, read_record};
@@ -443,42 +443,108 @@ async fn xnb(cx: Cx, input: Input) -> Result<()> {
 // ---------------------------------------------------------------------------
 // Unreal Engine 4/5 .pak (footer at the end)
 
-fn upak_probe(h: &Head<'_>) -> bool {
-    // The footer's magic sits 44 bytes (or more, for newer versions) before
-    // the end; check the common positions.
-    [44usize, 61, 189, 221].iter().any(|&back| {
-        h.tail.len() >= back
-            && h.tail.get(
-                h.tail.len().saturating_sub(back)
-                    ..h.tail.len().saturating_sub(back).saturating_add(4),
-            ) == Some(b"\xe1\x12\x6f\x5a")
+const UPAK_MAGIC: &[u8] = b"\xe1\x12\x6f\x5a";
+
+/// Where FPakInfo's magic sits, counted back from the end of the file, for
+/// each footer layout: 44 (v1 to v7: magic, version, index offset and size,
+/// SHA-1; the encrypted-index byte and the key GUID come *before* the
+/// magic), 172 (v8 with four compression method names), 204 (v8 with five,
+/// v10 and later) and 205 (v9, which adds the frozen-index byte).
+const UPAK_BACKS: [usize; 4] = [44, 172, 204, 205];
+
+/// Whether a footer of `version` puts the magic `back` bytes from the end.
+fn upak_layout_fits(version: u32, back: usize) -> bool {
+    match version {
+        1..=7 => back == 44,
+        8 => back == 172 || back == 204,
+        9 => back == 205,
+        10..=15 => back == 204,
+        _ => false,
+    }
+}
+
+/// The magic's distance from the end and the footer version, if `tail` (the
+/// file's last bytes) ends in a pak footer.
+fn upak_footer(tail: &[u8]) -> Option<(usize, u32)> {
+    UPAK_BACKS.iter().find_map(|&back| {
+        let at = tail.len().checked_sub(back)?;
+        let version = u32_le(tail, at.checked_add(4)?)?;
+        (tail.get(at..at.checked_add(4)?) == Some(UPAK_MAGIC) && upak_layout_fits(version, back))
+            .then_some((back, version))
     })
+}
+
+fn upak_probe(h: &Head<'_>) -> bool {
+    upak_footer(h.tail).is_some()
 }
 
 declare_format!(pub UNREAL_PAK = "unreal-pak", "Unreal Engine pak file", ["pak"], "application/x-unreal-pak",
     Probe::Custom(upak_probe), unreal_pak);
 
+const UPAK_VERSIONS: crate::value::EnumTable = &[
+    (1, "Initial"),
+    (2, "NoTimestamps"),
+    (3, "CompressionEncryption"),
+    (4, "IndexEncryption"),
+    (5, "RelativeChunkOffsets"),
+    (6, "DeleteRecords"),
+    (7, "EncryptionKeyGuid"),
+    (8, "FNameBasedCompressionMethod"),
+    (9, "FrozenIndex"),
+    (10, "PathHashIndex"),
+    (11, "Fnv64BugFix"),
+];
+
+/// FPakInfo, from the key GUID (v7+) or the encrypted-index byte (v4+) to
+/// the end of the file. Returns the index offset and size.
+fn upak_info(f: &mut Fields<'_>, &(version, back): &(u32, usize)) -> Result<(u64, u64)> {
+    if version >= 7 {
+        f.guid("Encryption key GUID").emit()?;
+    }
+    if version >= 4 {
+        f.u8("Encrypted index").emit()?;
+    }
+    f.u32("Magic").hex().emit()?;
+    f.u32("Version").enumeration(UPAK_VERSIONS).emit()?;
+    let offset = f.u64("Index offset").hex().emit()?;
+    let size = f.u64("Index size").emit()?;
+    f.bytes("Index hash (SHA-1)", 20).emit()?;
+    if back == 205 {
+        f.u8("Frozen index").emit()?;
+    }
+    let names = match back {
+        172 => 4,
+        204 | 205 => 5,
+        _ => 0,
+    };
+    for _ in 0..names {
+        f.ascii("Compression method", 32).emit()?;
+    }
+    Ok((offset, size))
+}
+
 async fn unreal_pak(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let tail = cx.read(file.sub(file.len.saturating_sub(256), 256)).await?;
-    let at = tail
-        .windows(4)
-        .rposition(|w| w == b"\xe1\x12\x6f\x5a")
-        .ok_or_else(|| Diagnostic::malformed("no pak footer"))?;
-    let footer = file.sub(
-        file.len
-            .saturating_sub(256)
-            .saturating_add(crate::bytes::to_u64(at)),
-        file.len,
-    );
-    let version = u32_le(&tail, at.saturating_add(4)).unwrap_or(0);
-    let index_offset = u64_le(&tail, at.saturating_add(8)).unwrap_or(0);
-    let index_size = u64_le(&tail, at.saturating_add(16)).unwrap_or(0);
+    let tail_len = file.len.min(256);
+    let tail = cx
+        .read(file.sub(file.len.saturating_sub(tail_len), tail_len))
+        .await?;
+    let (back, version) =
+        upak_footer(&tail).ok_or_else(|| Diagnostic::malformed("no pak footer"))?;
+    // The key GUID (v7+) and the encrypted-index byte (v4+) precede the magic.
+    let prefix: u64 = match version {
+        7.. => 17,
+        4.. => 1,
+        _ => 0,
+    };
+    let footer_len = crate::bytes::to_u64(back).saturating_add(prefix);
+    let footer = file.sub(file.len.saturating_sub(footer_len), footer_len);
+    let (index_offset, index_size) =
+        crate::fields::parse(&cx, footer, LE, &(version, back), upak_info).await?;
     cx.emit(Node::new("Data").span(file.sub(0, index_offset)));
     cx.emit(Node::new("Index").span(file.sub(index_offset, index_size)));
     cx.emit(
-        Node::new("Footer")
-            .span(footer)
+        crate::fields::struct_node("Footer", footer, LE, (version, back), upak_info)
             .summary(format!("version {version}")),
     );
     cx.annotate(format!("Unreal pak v{version}, index {index_size} bytes"));
