@@ -11,6 +11,7 @@
 pub mod adobe;
 pub mod bitmap;
 pub mod eot;
+mod opentype;
 pub mod pfb;
 pub mod raster;
 pub mod tables;
@@ -74,7 +75,7 @@ pub fn flavor(version: u32) -> &'static str {
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
-    let summary = font_at(&cx, input.span, 0).await?;
+    let summary = font_at(&cx, input, input.span, 0).await?;
     cx.annotate(summary);
     Ok(())
 }
@@ -85,12 +86,14 @@ pub struct TableEntry {
     pub tag: String,
     pub checksum: u32,
     pub span: Span,
+    /// The font the table belongs to, for content dissected as another format.
+    pub input: Input,
 }
 
 /// Emits the offset table and the table directory of the font whose offset
 /// table is at `base` (table offsets are relative to `file`, which matters
 /// in collections). Returns a summary.
-async fn font_at(cx: &Cx, file: Span, base: u64) -> Result<String> {
+async fn font_at(cx: &Cx, input: Input, file: Span, base: u64) -> Result<String> {
     let head = cx.read(file.sub_exact(base, 12)?).await?;
     let version = u32_be(&head, 0).unwrap_or(0);
     let count = u16_be(&head, 4).unwrap_or(0);
@@ -126,6 +129,7 @@ async fn font_at(cx: &Cx, file: Span, base: u64) -> Result<String> {
             tag,
             checksum,
             span: file.sub(offset, length),
+            input,
         });
     }
     let mut summary = flavor(version).to_owned();
@@ -212,7 +216,7 @@ async fn table(cx: Cx, entry: TableEntry) -> Result<()> {
             )))
         });
     }
-    tables::decode(&cx, &entry.tag, entry.span).await
+    tables::decode(&cx, entry.input, &entry.tag, entry.span).await
 }
 
 /// TrueType collections: a header listing the offset tables of the fonts.
@@ -249,7 +253,7 @@ pub async fn collection(cx: Cx, input: Input) -> Result<()> {
         let at = u64::from(offset);
         let mut node = Node::new(format!("Font {i}"))
             .span(file.sub(at, 12))
-            .lazy(collection_font, (file, at));
+            .lazy(collection_font, (input, file, at));
         if let Ok(names) = font_name_at(&cx, file, at).await {
             node = node.summary(names);
         }
@@ -258,8 +262,8 @@ pub async fn collection(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn collection_font(cx: Cx, (file, at): (Span, u64)) -> Result<()> {
-    let summary = font_at(&cx, file, at).await?;
+async fn collection_font(cx: Cx, (input, file, at): (Input, Span, u64)) -> Result<()> {
+    let summary = font_at(&cx, input, file, at).await?;
     cx.annotate(summary);
     Ok(())
 }

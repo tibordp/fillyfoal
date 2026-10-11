@@ -870,6 +870,7 @@ which reproduces all five byte for byte. Each keeps the glyphs for
 GSUB/GPOS/GDEF, hinting tables, and every name record.
 | `sfnt/freeserif-subset.ttf` | fontTools 4.66.1 `subset` of FreeSerif.ttf (FontForge-built, `FFTM` dropped) | reproduced byte-for-byte; TrueType outlines |
 | `sfnt/freeserif-subset.otf` | fontTools 4.66.1 `subset` of FreeSerif.otf | reproduced byte-for-byte; CFF outlines |
+| `sfnt/fonttools-cff2-svg-dsig.otf` | fontTools 4.66.1 `FontBuilder`, OpenSSL 3.6.3 | `sh tests/data/sfnt/make_cff2_svg_dsig.sh`: two glyphs with CFF2 outlines, an `SVG ` table with one plain and one gzipped document (gzipped by fontTools), and a `DSIG` table whose format 1 block holds a detached DER PKCS#7 SignedData made by `openssl cms -sign` with a throwaway self-signed EC key (CN=fillyfoal) over a fixed text, not over the font; key, certificate and signing time are new each run |
 | `woff/freeserif-subset.woff` | fontTools 4.66.1 (`flavor=woff`, zlib) | reproduced byte-for-byte; the TrueType subset |
 | `woff2/freeserif-subset.woff2` | fontTools 4.66.1 (`flavor=woff2`, Brotli 1.2.0) | reproduced byte-for-byte; the TrueType subset with fontTools' default glyf/loca transform |
 | `ttc/freefont-subset.ttc` | fontTools 4.66.1 `TTCollection` | reproduced byte-for-byte; FreeSans and FreeSerif TrueType subsets, identical tables shared |

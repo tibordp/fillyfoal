@@ -8,6 +8,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::fmt::{clip, fourcc};
+use crate::formats::{Input, embedded_named};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, field, flag, lookup};
@@ -467,8 +468,8 @@ fn post(f: &mut Fields<'_>, _: &()) -> Result<()> {
     Ok(())
 }
 
-/// Emits the decoded fields of table `tag` at `span`.
-pub async fn decode(cx: &Cx, tag: &str, span: Span) -> Result<()> {
+/// Emits the decoded fields of table `tag` at `span`, in the font `input`.
+pub async fn decode(cx: &Cx, input: Input, tag: &str, span: Span) -> Result<()> {
     let layout: Option<crate::fields::Layout<(), ()>> = match tag {
         "head" => Some(head),
         "hhea" | "vhea" => Some(hhea),
@@ -485,6 +486,16 @@ pub async fn decode(cx: &Cx, tag: &str, span: Span) -> Result<()> {
         "name" => name_table(cx, span).await,
         "cmap" => cmap(cx, span).await,
         "fvar" => fvar(cx, span).await,
+        // The outlines of an OpenType CFF font are a bare CFF (or CFF2) font
+        // program, dissected by the docs crate's CFF dissector.
+        "CFF " | "CFF2" => {
+            cx.emit(embedded_named("CFF font", input.nested(span), "cff"));
+            Ok(())
+        }
+        "GSUB" => super::opentype::layout(cx, span, false).await,
+        "GPOS" => super::opentype::layout(cx, span, true).await,
+        "DSIG" => super::opentype::dsig(cx, input, span).await,
+        "SVG " => super::opentype::svg(cx, input, span).await,
         _ => {
             cx.emit(
                 Node::new("Data")
