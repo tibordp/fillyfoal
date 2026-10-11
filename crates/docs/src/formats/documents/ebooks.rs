@@ -147,6 +147,12 @@ const EXTH: EnumTable = &[
     (525, "Writing mode"),
 ];
 
+/// EXTH records holding a big-endian u32 (calibre's MOBI writer and the
+/// MobileRead wiki): sample, start reading, KF8 boundary, resource count,
+/// 131, cover and thumbnail offsets, fake cover, creator software and
+/// version. Everything else is text (501 is "EBOK", "PDOC", ...).
+const EXTH_NUMERIC: &[u32] = &[115, 116, 121, 125, 131, 201, 202, 203, 204, 205, 206, 207];
+
 async fn palm(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: PalmHeader = read_record(&cx, file.sub(0, PalmHeader::SIZE), BE).await?;
@@ -305,7 +311,7 @@ async fn exth_records(cx: Cx, span: Span) -> Result<()> {
         let data_len = u64::from(len.saturating_sub(8));
         let data = cur.bytes(data_len).await?;
         let name = lookup(EXTH, kind.into()).map_or_else(|| format!("EXTH {kind}"), str::to_owned);
-        let value = if data_len == 4 && kind >= 115 && kind != 503 && kind != 524 {
+        let value = if data_len == 4 && EXTH_NUMERIC.contains(&kind) {
             Value::UInt {
                 value: u32_be(&data, 0).unwrap_or(0).into(),
                 bits: 32,
