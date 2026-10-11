@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ testnet4-blk00000.dat — Bitcoin testnet4, 2 block(s)  [0x0+0xc2]
+  ▾ Block 1: 2024-05-03 23:11:00 UTC — 81 bytes  [0x8+0x50] → 0x0+0x59
+      Version: 0x1  [0x8+0x4]
+      Previous block hash: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0xc+0x20]
+      Merkle root: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x2c+0x20]
+      Time: 2024-05-03 23:11:00 UTC  [0x4c+0x4]
+      Bits (target): 0x1d00ffff  [0x50+0x4]
+      Nonce: 393743547  [0x54+0x4]
+  ▾ Block 2: 2024-05-03 23:13:20 UTC — 81 bytes  [0x61+0x50] → 0x59+0x59
+      Version: 0x20000000  [0x61+0x4]
+      Previous block hash: 00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f …  |................|  [0x65+0x20]
+      Merkle root: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x85+0x20]
+      Time: 2024-05-03 23:13:20 UTC  [0xa5+0x4]
+      Bits (target): 0x1d00ffff  [0xa9+0x4]
+      Nonce: 1  [0xad+0x4]

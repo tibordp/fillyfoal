@@ -1,4 +1,10 @@
 //! Bitcoin Core block files (`blk*.dat`).
+//!
+//! Each block is prefixed by the network's message start bytes (mainnet,
+//! testnet3, testnet4, signet, regtest) and its size. Bitcoin Core 28.0 and
+//! later obfuscate new block files with a random XOR key kept in `xor.dat`
+//! (`-blocksxor`); such files have no recognisable magic and are not
+//! identified.
 
 use crate::cx::Cx;
 use crate::declare_format;
@@ -15,7 +21,7 @@ const LE: Endian = Endian::Little;
 // Bitcoin block files (blk*.dat)
 
 declare_format!(pub BITCOIN_BLOCKS = "bitcoin-blocks", "Bitcoin block file", ["dat"], "application/x-bitcoin-blocks",
-    Probe::Magic(&[(0, b"\xf9\xbe\xb4\xd9"), (0, b"\x0b\x11\x09\x07"), (0, b"\x0a\x03\xcf\x40"), (0, b"\xfa\xbf\xb5\xda")]), bitcoin_blocks);
+    Probe::Magic(&[(0, b"\xf9\xbe\xb4\xd9"), (0, b"\x0b\x11\x09\x07"), (0, b"\x0a\x03\xcf\x40"), (0, b"\xfa\xbf\xb5\xda"), (0, b"\x1c\x16\x3f\x28")]), bitcoin_blocks);
 
 record! {
     pub struct BlockHeader {
@@ -60,6 +66,7 @@ async fn bitcoin_blocks(cx: Cx, input: Input) -> Result<()> {
         b"\xf9\xbe\xb4\xd9" => "mainnet",
         b"\x0b\x11\x09\x07" => "testnet3",
         b"\x0a\x03\xcf\x40" => "signet",
+        b"\x1c\x16\x3f\x28" => "testnet4",
         _ => "regtest",
     };
     cx.annotate(format!("Bitcoin {network}, {blocks} block(s)"));
