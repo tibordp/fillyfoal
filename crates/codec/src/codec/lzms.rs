@@ -2,7 +2,11 @@
 //! Huffman codes, as in WIM and ESD images (one block per WIM chunk).
 //!
 //! Written from wimlib's description of the format (`lzms_decompress.c`,
-//! wimlib 1.13), which reverse-engineered it:
+//! wimlib 1.13), which reverse-engineered it, and checked against wimlib
+//! 1.13.6's `lzms_decompress.c`, `lzms_common.c` (slot tables, x86 filter)
+//! and `compress_common.c` (Huffman code construction), which it follows
+//! closely; no code was copied. Notices and licences (LGPL-3.0-or-later,
+//! MIT) are in `THIRD-PARTY.md`. In outline:
 //!
 //! - A block is read in little-endian 16-bit units from both ends: a binary
 //!   range decoder reads forwards from the start, and a bitstream of

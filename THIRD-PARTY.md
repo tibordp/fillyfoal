@@ -286,6 +286,80 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 `archive_read_support_format_rar.c`, the third from that of
 `archive_read_support_format_rar5.c`.)
 
+## LZMS decompression — wimlib
+
+The LZMS decoder in `crates/codec/src/codec/lzms.rs` was written from the
+format description at the top of wimlib's `src/lzms_decompress.c` and checked
+against that file and `src/lzms_common.c` in wimlib 1.13.6
+(<https://wimlib.net/>). It follows them closely: the range decoder and
+probability updates, the delayed repeat-offset queues, the adaptive Huffman
+rebuild schedule, the offset and length slot tables (generated here from run
+lengths; identical to wimlib's `lzms_offset_slot_base`,
+`lzms_extra_offset_bits`, `lzms_length_slot_base` and
+`lzms_extra_length_bits`), the constants of `include/wimlib/lzms_constants.h`,
+and the x86 filter (`lzms_x86_filter` and `translate_if_needed`, including the
+skipped first byte and the extra MOV conditions). The Huffman code lengths are
+computed as wimlib's `make_canonical_huffman_code` in `src/compress_common.c`
+does (leaves sorted by frequency then symbol, two-queue tree construction with
+ties to leaves, its length-limiting step), because the decoder must build the
+same codes the compressor did. The solid-resource framing in
+`crates/codec/src/codec/wim.rs` and the solid lookup-table runs in
+`crates/archive/src/formats/archive/wim.rs` follow the descriptions in
+`src/resource.c` and `src/blob_table.c`. No code was copied; the Rust is our
+own.
+
+`lzms_decompress.c` and `lzms_common.c` carry this notice (comment markers
+removed):
+
+```text
+Copyright (C) 2013-2016 Eric Biggers
+
+This file is free software; you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by the Free
+Software Foundation; either version 3 of the License, or (at your option) any
+later version.
+
+This file is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
+details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this file; if not, see http://www.gnu.org/licenses/.
+```
+
+`resource.c` carries the same text with `Copyright (C) 2012, 2013, 2015 Eric
+Biggers`, and `blob_table.c` with `Copyright (C) 2012-2016 Eric Biggers`.
+`lzms_constants.h` has no header of its own; wimlib's `COPYING` puts every
+file of the project under the GNU GPL version 3 or later (and the library,
+which these files belong to, alternatively under the LGPL version 3 or later).
+`compress_common.c` carries this notice:
+
+```text
+Copyright 2022 Eric Biggers
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+```
+
 ## Guitar Pro field names — PyGuitarPro
 
 Flag and enumeration labels in `crates/av/src/formats/audio/guitar_pro/` follow
