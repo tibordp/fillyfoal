@@ -721,7 +721,14 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
         )),
         b"sgpd" => {
             let t = d.get(4..8)?;
-            let n = u32_be(&d, if version >= 1 { 12 } else { 8 })?;
+            // default_length (version 1 on) and
+            // default_group_description_index (version 2 on) come first.
+            let at = match version {
+                0 => 8,
+                1 => 12,
+                _ => 16,
+            };
+            let n = u32_be(&d, at)?;
             Some(match grouping_name(t) {
                 Some(name) => format!("{} ({name}): {}", fourcc(t), plural(n, "description")),
                 None => format!("{}: {}", fourcc(t), plural(n, "description")),
@@ -1009,14 +1016,16 @@ async fn sgpd(cx: &Cx, body: Span) -> Result<()> {
         })
         .emit()?;
     let mut default_length = 0u32;
-    if v == 1 {
+    if v >= 1 {
         default_length = f
             .u32("Default length")
             .desc("0 = each entry starts with its length")
             .emit()?;
     }
     if v >= 2 {
-        f.u32("Default sample description index").emit()?;
+        f.u32("Default group description index")
+            .desc("Description for samples that no sbgp maps; 0 = none")
+            .emit()?;
     }
     let n = f.u32("Entry count").emit()?;
     let mut raw = [0u8; 4];
@@ -1034,11 +1043,11 @@ async fn sgpd(cx: &Cx, body: Span) -> Result<()> {
             cx.checkpoint().await;
         }
         let start = f.pos();
-        let mut len = if v == 1 && default_length == 0 {
+        let mut len = if v >= 1 && default_length == 0 {
             let mut silent = Fields::new(&block, BE);
             silent.seek(start);
             Some(u64::from(silent.u32("Length").get()?).saturating_add(4))
-        } else if v == 1 {
+        } else if v >= 1 {
             Some(u64::from(default_length))
         } else {
             None
@@ -1058,7 +1067,7 @@ async fn sgpd(cx: &Cx, body: Span) -> Result<()> {
             .data
             .get(to_usize(start)..to_usize(start.saturating_add(len)))
             .unwrap_or_default();
-        let lead = if v == 1 && default_length == 0 { 4 } else { 0 };
+        let lead = if v >= 1 && default_length == 0 { 4 } else { 0 };
         let mut node = struct_node(
             format!("Entry {}", i.saturating_add(1)),
             span,
