@@ -353,21 +353,66 @@ pub fn is_container(family: Family, id: &FourCc) -> bool {
 
 /// Reads the chunk header at `pos` of `region`: id, declared size, and the
 /// whole chunk's length (header, data, pad), resolving RF64 sizes.
-async fn header(cx: &Cx, ctx: &Ctx, region: Span, pos: u64) -> Result<(FourCc, u64, u64)> {
+async fn header(cx: &Cx, ctx: &Ctx, region: Span, pos: u64) -> Result<Header> {
     let h = cx.read(region.sub(pos, 8)).await?;
     let id = crate::bytes::array::<4>(&h, 0).unwrap_or_default();
     let raw = get::<u32>(&h, 4, ctx.endian).unwrap_or(0);
+    let rest = region.len.saturating_sub(pos).saturating_sub(8);
+    let streamed = streamed_data(cx, ctx, region, pos, &id, raw).await?;
     let size = if raw == u32::MAX && ctx.family == Family::Riff {
         ctx.sizes
             .iter()
             .find(|(i, _)| *i == id)
             .map(|(_, s)| *s)
-            .unwrap_or_else(|| region.len.saturating_sub(pos).saturating_sub(8))
+            .unwrap_or(rest)
+    } else if streamed {
+        rest
     } else {
         u64::from(raw)
     };
     let total = size.saturating_add(8).saturating_add(size & 1);
-    Ok((id, size, total))
+    Ok(Header {
+        id,
+        size,
+        total,
+        streamed,
+    })
+}
+
+/// A chunk header as read by [`header`].
+struct Header {
+    id: FourCc,
+    /// The data size in use (from the ds64 table, or to the end for a
+    /// streamed `data` chunk).
+    size: u64,
+    /// Header, data and pad byte.
+    total: u64,
+    /// The stored size was 0 and is taken to run to the end of the region.
+    streamed: bool,
+}
+
+/// Whether this is a WAVE `data` chunk whose size a streaming writer left
+/// as 0 while samples follow. FFmpeg's WAV demuxer reads a `data` chunk of
+/// size 0 (or 0xffffffff) to the end of the file; here it is only taken so
+/// when the bytes after the header do not start another chunk, so that a
+/// really empty `data` chunk followed by, say, `LIST` still reads as empty.
+async fn streamed_data(
+    cx: &Cx,
+    ctx: &Ctx,
+    region: Span,
+    pos: u64,
+    id: &FourCc,
+    raw: u32,
+) -> Result<bool> {
+    if raw != 0 || id != b"data" || ctx.family != Family::Riff || &ctx.form != b"WAVE" {
+        return Ok(false);
+    }
+    let after = pos.saturating_add(8);
+    if after >= region.len {
+        return Ok(false);
+    }
+    let next = cx.read_avail(region.sub(after, 4)).await?;
+    Ok(!is_fourcc(&next))
 }
 
 /// The top-level chunks of `region` (at most `max`), for describing a file
@@ -376,7 +421,9 @@ pub async fn scan(cx: &Cx, ctx: &Ctx, region: Span, max: usize) -> Result<Vec<En
     let mut out = Vec::new();
     let mut pos = 0u64;
     while pos.saturating_add(8) <= region.len && out.len() < max {
-        let (id, size, total) = header(cx, ctx, region, pos).await?;
+        let Header {
+            id, size, total, ..
+        } = header(cx, ctx, region, pos).await?;
         out.push(Entry {
             id,
             data: region.sub(pos.saturating_add(8), size),
@@ -403,7 +450,12 @@ pub async fn walk(cx: &Cx, ctx: &Ctx, region: Span, list: FourCc) -> Result<()> 
             cx.emit(Node::new("Trailing bytes").span(region.tail(pos)));
             break;
         }
-        let (id, size, total) = header(cx, ctx, region, pos).await?;
+        let Header {
+            id,
+            size,
+            total,
+            streamed,
+        } = header(cx, ctx, region, pos).await?;
         if id == [0; 4] && size == 0 {
             cx.emit(
                 Node::new("Zero padding")
@@ -423,7 +475,15 @@ pub async fn walk(cx: &Cx, ctx: &Ctx, region: Span, list: FourCc) -> Result<()> 
             list,
             parent: region,
         };
-        let node = chunk_node(cx, chunk).await;
+        let mut node = chunk_node(cx, chunk).await;
+        if streamed {
+            node = node.diag(
+                Diagnostic::warning(
+                    "chunk size is 0 (left unset by a streaming writer); taken to run to the end",
+                )
+                .at(span.sub(4, 4)),
+            );
+        }
         cx.progress_in(region, span.offset);
         cx.push(node).await;
         pos = pos.saturating_add(total);
@@ -476,8 +536,13 @@ async fn expand(cx: Cx, chunk: Chunk) -> Result<()> {
     let raw = f
         .u32("Chunk size")
         .with(|&v, n| {
-            if v == u32::MAX && chunk.ctx.family == Family::Riff {
+            if v == u32::MAX && chunk.ctx.family == Family::Riff && !chunk.ctx.sizes.is_empty() {
                 n.summary(format!("see ds64: {} bytes", chunk.size))
+            } else if (v == 0 || v == u32::MAX) && chunk.size > 0 && chunk.size != u64::from(v) {
+                n.summary(format!(
+                    "unset (streaming writer): {} bytes to the end",
+                    chunk.size
+                ))
             } else {
                 n
             }
@@ -703,6 +768,27 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         form,
         sizes: sizes.into(),
     };
+    // Streaming writers that cannot seek back leave the size unset: FFmpeg
+    // writes 0xffffffff, others 0 (FFmpeg's demuxer ignores it and reads to
+    // the end of the file). A size too small to hold the form type and one
+    // chunk header cannot be right when more follows.
+    let unset = raw == u32::MAX && matches!(&magic, b"RIFF" | b"RIFX");
+    if (size < 12 || unset) && file.len > 12 {
+        cx.diag(
+            Diagnostic::warning(if unset {
+                "container size 0xffffffff (left unset by a streaming writer); chunks are read \
+                 to the end of the file"
+                    .to_owned()
+            } else {
+                format!(
+                    "container size {size} is too small for any chunk (left unset by a \
+                     streaming writer?); chunks are read to the end of the file"
+                )
+            })
+            .at(file.sub(4, 4)),
+        );
+        size = file.len.saturating_sub(8);
+    }
     let region = file.sub(12, size.saturating_sub(4));
     if file.len < size.saturating_add(8) {
         cx.diag(Diagnostic::truncated(
@@ -722,7 +808,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     walk(&cx, &ctx, region, form).await?;
 
-    let end = size.saturating_add(8).saturating_add(size & 1);
+    let end = size.saturating_add(8).saturating_add(size & 1).max(12);
     if end < file.len {
         let rest = file.tail(end);
         let next = cx.read_avail(rest.sub(0, 4)).await?;
