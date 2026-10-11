@@ -247,8 +247,9 @@ async fn vpk_tree(cx: Cx, (input, tree): (Input, Span)) -> Result<()> {
 // BSP maps
 
 fn quake1_bsp(h: &Head<'_>) -> bool {
-    // Version 29, then 15 lump entries whose offsets lie within the file.
-    h.at(0, b"\x1d\x00\x00\x00")
+    // Version 29 (Quake) or 30 (Half-Life's GoldSrc, same lump directory),
+    // then 15 lump entries whose offsets lie within the file.
+    (h.at(0, b"\x1d\x00\x00\x00") || h.at(0, b"\x1e\x00\x00\x00"))
         && (0..15usize).all(|i| {
             let at = 4usize.saturating_add(i.saturating_mul(8));
             let offset = u32_le(h.data, at).unwrap_or(u32::MAX);
@@ -257,7 +258,7 @@ fn quake1_bsp(h: &Head<'_>) -> bool {
         })
 }
 
-declare_format!(pub BSP = "bsp", "Quake / Quake II / Quake III / Source map", ["bsp"], "application/x-bsp",
+declare_format!(pub BSP = "bsp", "Quake / Half-Life / Quake II / Quake III / Source map", ["bsp"], "application/x-bsp",
     Probe::Custom(|h| h.starts_with(b"IBSP") || h.starts_with(b"VBSP") || h.starts_with(b"RBSP") || quake1_bsp(h)), bsp);
 
 const Q1_LUMPS: [&str; 15] = [
@@ -327,6 +328,7 @@ async fn bsp(cx: Cx, input: Input) -> Result<()> {
         b"IBSP" if version == 38 => ("Quake II", &Q2_LUMPS, 8, false),
         b"IBSP" | b"RBSP" => ("Quake III", &Q3_LUMPS, 8, false),
         b"VBSP" => ("Source", &[], 8, true),
+        [30, 0, 0, 0] => ("Half-Life (GoldSrc)", &Q1_LUMPS, 4, false),
         _ => ("Quake", &Q1_LUMPS, 4, false),
     };
     cx.emit(
@@ -495,8 +497,10 @@ async fn md3(cx: Cx, input: Input) -> Result<()> {
         }
         let name = crate::text::until_nul(header.get(4..68).unwrap_or_default());
         let end = u64::from(u32_le(&header, 104).unwrap_or(0));
-        let verts = u32_le(&header, 88).unwrap_or(0);
-        let tris = u32_le(&header, 92).unwrap_or(0);
+        // md3Surface_t: ident, name[64], flags, numFrames, numShaders,
+        // numVerts (80), numTriangles (84), then the offsets.
+        let verts = u32_le(&header, 80).unwrap_or(0);
+        let tris = u32_le(&header, 84).unwrap_or(0);
         cx.push(
             Node::new(name)
                 .span(file.sub(at, end))
