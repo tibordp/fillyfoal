@@ -7,10 +7,10 @@
 //! packed. Encoded headers are decompressed and then parsed like plain ones.
 //!
 //! Members of "Copy" folders are dissected in place. Folders whose coders
-//! form a simple chain (LZMA, LZMA2, Deflate, BZip2, Zstandard or LZ4, then
+//! form a simple chain (LZMA, LZMA2, PPMd, Deflate, Deflate64, BZip2, Zstandard or LZ4, then
 //! optionally BCJ x86/ARM/ARM64 or Delta filters) are decoded, and solid
 //! folders are split into their files by the substream sizes. Multi-stream
-//! coders (BCJ2), PPMd, Deflate64 and encryption are unsupported leaves.
+//! coders (BCJ2) and encryption are unsupported leaves.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -850,6 +850,12 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
             }
         }
         [0x04, 0x01, 0x08] => Codec::Deflate,
+        [0x04, 0x01, 0x09] => Codec::Deflate64,
+        // Properties: the model order, then its memory size.
+        [0x03, 0x04, 0x01] => match (last.props.first(), u32_le(&last.props, 1)) {
+            (Some(&order), Some(mem)) => Codec::Ppmd7 { order, mem, size },
+            _ => return Err("PPMd with invalid properties".to_owned()),
+        },
         [0x04, 0x02, 0x02] => Codec::Bzip2,
         [0x04, 0xf7, 0x11, 0x01] => Codec::Zstd,
         [0x04, 0xf7, 0x11, 0x04] => Codec::Lz4Frame,

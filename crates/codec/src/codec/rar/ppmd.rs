@@ -1347,3 +1347,137 @@ impl Ppm {
         }
     }
 }
+
+/// 7z PPMd (coder `03 04 01`): this model with 7-Zip's range coder
+/// (`Ppmd7z_RangeDec`: a zero byte, then a 4-byte big-endian code), decoding
+/// exactly `size` bytes (7z records the unpacked size; an end marker, if
+/// the encoder wrote one, is left unread). Properties: the model order and
+/// its memory size.
+#[derive(Clone)]
+pub struct Ppmd7 {
+    ppm: Box<Ppm>,
+    order: u32,
+    mem: u32,
+    size: u64,
+    produced: u64,
+    /// Bit position in the input (always a whole byte).
+    pos: u64,
+    started: bool,
+}
+
+/// 7-Zip's limits on the model (`PPMD7_MIN_ORDER`, `PPMD7_MAX_ORDER`,
+/// `PPMD7_MIN_MEM_SIZE`, `PPMD7_MAX_MEM_SIZE`).
+const SEVEN_MIN_MEM: u32 = 1 << 11;
+const SEVEN_MAX_MEM: u32 = u32::MAX - 12 * 3;
+
+impl Ppmd7 {
+    pub fn new(order: u32, mem: u32, size: u64) -> Self {
+        Ppmd7 {
+            ppm: Box::new(Ppm::new()),
+            order,
+            mem,
+            size,
+            produced: 0,
+            pos: 0,
+            started: false,
+        }
+    }
+
+    fn begin(&mut self, input: &[u8]) -> Result<()> {
+        if !(2..=MAX_ORDER as u32).contains(&self.order)
+            || !(SEVEN_MIN_MEM..=SEVEN_MAX_MEM).contains(&self.mem)
+        {
+            return Err(Diagnostic::unsupported(format!(
+                "PPMd order {} with {:#x} bytes of memory",
+                self.order, self.mem
+            )));
+        }
+        let head = input
+            .get(..5)
+            .ok_or_else(|| Diagnostic::malformed("PPMd: input ends unexpectedly"))?;
+        let mut code = 0u32;
+        for &b in head.get(1..).unwrap_or_default() {
+            code = code << 8 | u32::from(b);
+        }
+        if head.first() != Some(&0) || code == u32::MAX {
+            return Err(Diagnostic::malformed("PPMd: invalid range coder start"));
+        }
+        let ppm = &mut self.ppm;
+        ppm.seven = true;
+        ppm.low = 0;
+        ppm.range = u32::MAX;
+        ppm.code = code;
+        ppm.start(self.order, self.mem);
+        self.pos = 5 * 8;
+        self.started = true;
+        Ok(())
+    }
+}
+
+impl crate::codec::pipeline::Decode for Ppmd7 {
+    fn step(
+        &mut self,
+        input: &[u8],
+        _eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<crate::codec::pipeline::Step> {
+        use crate::codec::pipeline::Step;
+        if !self.started {
+            self.begin(input)?;
+        }
+        let left = self.size.saturating_sub(self.produced);
+        let n = u64::try_from(step.max(1)).unwrap_or(u64::MAX).min(left);
+        let mut bits = Bits {
+            data: input,
+            base: 0,
+            pos: self.pos,
+        };
+        for _ in 0..n {
+            if out.len() >= limit {
+                return Err(Diagnostic::output_limit(limit));
+            }
+            let c = self
+                .ppm
+                .decode_char(&mut bits)
+                .ok_or_else(|| Diagnostic::malformed("PPMd: corrupt data"))?;
+            out.push(c);
+        }
+        // The range coder reads whole bytes ahead of the symbols; reading
+        // past the input means it ran out (or the stream is truncated).
+        if bits.pos > bits.end() {
+            return Err(Diagnostic::malformed("PPMd: input ends unexpectedly"));
+        }
+        self.pos = bits.pos;
+        self.produced = self.produced.saturating_add(n);
+        Ok(if self.produced >= self.size {
+            Step::Done
+        } else {
+            Step::More
+        })
+    }
+
+    fn consumed(&self) -> usize {
+        usize::try_from(self.pos / 8).unwrap_or(usize::MAX)
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.consumed()
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self
+            .pos
+            .saturating_sub(u64::try_from(n).unwrap_or(u64::MAX).saturating_mul(8));
+    }
+
+    /// All of it: the model keeps its own history.
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(std::mem::size_of::<Ppm>().saturating_add(self.ppm.heap_size()))
+    }
+}

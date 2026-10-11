@@ -67,10 +67,10 @@ exploration pays for additional work only as needed.
   `Unsupported` leaf that names the codec and keeps its span.
 - In practice every codec so far is in-house (`crates/codec/src/codec/`, no features
   needed):
-  - general-purpose: DEFLATE/zlib, bzip2 (and NSIS's variant), LZMA/LZMA2/xz
+  - general-purpose: DEFLATE/zlib and Deflate64, bzip2 (and NSIS's variant), LZMA/LZMA2/xz
     (+ BCJ x86/ARM/ARM64, Delta), Zstandard, Brotli, LZ4, Snappy,
     LZFSE/LZVN and Apple `pbz*`, Unix `.Z`, LZO1X/lzop, LZF;
-  - archivers: RAR 2.9/3.x and 5/7 (LZ, PPMd var. H, standard filters),
+  - archivers: RAR 2.9/3.x and 5/7 (LZ, PPMd var. H, standard filters), 7z PPMd,
     MSZIP/LZX/Quantum (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1,
     PKWARE implode and DCL implode, the LHA/ARJ/ZOO/`COMPRESS.EXE` LZSS and
     LZH family (`-lh1-`, `-lh4-`..`-lh7-`, `-lzs-`, `-lz5-`, ARJ 1-4, ZOO LZW,
