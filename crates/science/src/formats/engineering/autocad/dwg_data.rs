@@ -57,7 +57,10 @@ fn sentinel_check(want: [u8; 16]) -> impl FnOnce(&Vec<u8>) -> Option<Diagnostic>
 }
 
 /// Whether a size field is followed by a high size (R2010+ with a
-/// maintenance release above 3, and R2018).
+/// maintenance release above 3, and R2018). The size counts every byte
+/// after the size field up to the CRC, the high size included: in files
+/// written by LibreDWG the CRC sits at 20 + size (its `encode_header_vars`
+/// and `encode_classes` patch the size after writing the high size).
 fn has_high_size(d: &Drawing) -> bool {
     d.ver >= Ver::R2018 || (d.ver >= Ver::R2010 && d.maint > 3)
 }
@@ -77,14 +80,15 @@ pub async fn header_vars(cx: &Cx, d: &Drawing, data: Span) -> Result<()> {
     if high {
         f.u32("High size").hex().emit()?;
     }
-    let vars = data.sub(start, size);
+    let len = size.saturating_sub(start.saturating_sub(20));
+    let vars = data.sub(start, len);
     cx.emit(
         Node::new("Variables")
             .span(vars)
-            .summary(format!("{size:#x} bytes, bit-coded"))
+            .summary(format!("{len:#x} bytes, bit-coded"))
             .desc("The header variables ($ACADVER, $EXTMIN, ...) are not decoded"),
     );
-    let tail = cx.block(data.sub(start.saturating_add(size), 18)).await?;
+    let tail = cx.block(data.sub(20u64.saturating_add(size), 18)).await?;
     let mut f = Fields::emitting(cx, &tail, LE);
     f.u16("CRC").hex().emit()?;
     f.bytes("End sentinel", 16)
@@ -136,7 +140,8 @@ async fn parse_classes(cx: &Cx, data: &[u8], ver: Ver, high: bool) -> Classes {
     let mut out = Classes::default();
     let size = u64::from(u32_le(data, 16).unwrap_or(0));
     let area = if high { 24u64 } else { 20 };
-    out.end = area.saturating_add(size);
+    // The size counts from after the size field, the high size included.
+    out.end = 20u64.saturating_add(size).max(area);
     let end_bit = out.end.saturating_mul(8);
     let bytes = data.get(..to_usize(out.end)).unwrap_or(data);
     let mut r = Bits::new(bytes, area.saturating_mul(8));
@@ -859,9 +864,14 @@ const PREVIEW_CODES: &[(u64, &str)] = &[(1, "header"), (2, "BMP"), (3, "WMF"), (
 pub async fn preview(cx: &Cx, d: &Drawing, span: Span, base: u64) -> Result<()> {
     let head = cx.block(span.sub(0, 21)).await?;
     let mut f = Fields::emitting(cx, &head, LE);
-    f.bytes("Sentinel", 16)
+    let sentinel = f
+        .bytes("Sentinel", 16)
         .check(sentinel_check(SENTINEL_PREVIEW))
         .emit()?;
+    if sentinel != SENTINEL_PREVIEW {
+        // Not a preview: its directory would be noise.
+        return Ok(());
+    }
     let size = u64::from(f.u32("Size").hex().emit()?);
     let count = u64::from(f.u8("Image count").emit()?);
     let dir = cx
@@ -909,7 +919,24 @@ pub async fn preview(cx: &Cx, d: &Drawing, span: Span, base: u64) -> Result<()> 
         };
         cx.emit(node);
     }
-    let end = 20u64.saturating_add(size);
+    // The size counts from after the size field to the end sentinel.
+    // LibreDWG 0.14 writes 5 for an empty preview, with the sentinel right
+    // after the image count: if the sentinel is missing where the size
+    // says but follows the images, take it from there.
+    let mut end = 20u64.saturating_add(size);
+    if end != next {
+        let declared = cx.read_avail(span.sub(end, 16)).await?;
+        if declared.as_slice() != SENTINEL_PREVIEW_END {
+            let after = cx.read_avail(span.sub(next, 16)).await?;
+            if after.as_slice() == SENTINEL_PREVIEW_END {
+                cx.diag(Diagnostic::warning(format!(
+                    "the size says {size:#x} bytes, the images end after {:#x}",
+                    next.saturating_sub(20)
+                )));
+                end = next;
+            }
+        }
+    }
     let tail = cx.block(span.sub(end, 16)).await?;
     let mut f = Fields::emitting(cx, &tail, LE);
     f.bytes("End sentinel", 16)
