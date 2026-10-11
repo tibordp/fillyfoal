@@ -265,6 +265,7 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `rocksdb-sst/snappy.sst` | RocksDB via rocksdict | edit: identity properties overwritten with `x`; RocksDB still ingests the file |
 | `rocksdb-sst/zstd.sst` | RocksDB via rocksdict | edit: identity properties overwritten with `x`; RocksDB still ingests the file |
 | `bam/small.bam` | htslib (via pysam, inferred) | htslib BGZF block layout; `@PG ID:gen PN:python` in the header; indexed by bai/small.bam.bai |
+| `bam/many-blocks.bam` | samtools 1.16.1 (htslib, Debian bookworm) | `tests/data/bam/many-blocks.sh` in `debian:bookworm-slim`: `samtools view -b --no-PG` of 100 synthetic reads with 60000-byte array tags, 102 BGZF blocks (5.7 MiB of records, most spanning two blocks) ending in the EOF block; reproduced byte-for-byte |
 | `bai/small.bam.bai` | htslib (via pysam, inferred) | htslib index with metadata pseudo-bins (bin 37450) |
 | `bcf/small.bcf` | htslib (via pysam, inferred) | header has the `##FILTER=<ID=PASS...>` line htslib inserts |
 | `vcf-bgzf/small.vcf.bgz` | htslib (via pysam, inferred) | header has the `##FILTER=<ID=PASS...>` line htslib inserts; BGZF with EOF block |
