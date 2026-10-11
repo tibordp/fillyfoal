@@ -5,14 +5,21 @@
 //! headers are built from variable-length integers and carry "extra area"
 //! records. Blocks are listed in pages; expanding one decodes its header and
 //! shows its data. File contents are embedded children: stored ones in
-//! place, compressed ones (RAR 2.9 LZ/PPMd and RAR 5.0/7.0, see
+//! place, compressed ones (RAR 2.9 LZ/PPMd and RAR 5.0, see
 //! [`crate::codec::rar`]) decoded on demand, with their CRC32 checked.
 //!
 //! In a solid archive the files of a run share one dictionary: the run is
 //! decoded as one stream over its files' packed data (a pieces source), and
-//! each file is a span of the output. RAR 1.5/2.0 compression, encryption
-//! and multi-volume members remain unsupported leaves; RAR 5 BLAKE2sp
-//! hashes are shown but not checked.
+//! each file is a span of the output. Encryption and multi-volume members
+//! remain unsupported leaves; RAR 5 BLAKE2sp hashes are shown but not
+//! checked.
+//!
+//! Members compressed by RAR 1.5–2.x (compression versions 15, 20 and 26)
+//! and RAR 7.0 streams (algorithm version 1, used only for dictionaries over
+//! 4 GB) are listed with their headers but not decompressed. The decoders
+//! follow libarchive, which reads neither; the other implementations
+//! (unRAR, 7-Zip's RAR code) are under licences that aren't GPL-compatible,
+//! so a decoder for these needs a clean, GPL-compatible source.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
