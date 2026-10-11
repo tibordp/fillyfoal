@@ -9,6 +9,7 @@
 
 pub mod ace;
 pub mod bcfz;
+pub mod bcj2;
 pub mod binhex;
 pub mod brotli;
 pub mod bzip2;
@@ -249,6 +250,9 @@ pub enum Codec {
     /// A RAR 2.9/5.0 group of files (one, or a solid run) decoded as one
     /// stream (see [`rar`]).
     Rar(rar::Params),
+    /// A 7z BCJ2 folder: four packed streams, each through its own codec,
+    /// combined by 7-Zip's BCJ2 x86 converter (see [`bcj2`]).
+    Bcj2(Arc<bcj2::Params>),
     /// A BCJ (x86, ARM, ARM64, PowerPC, IA-64, ARM Thumb, SPARC, RISC-V) or Delta filter, decoding direction, on its
     /// own (7-Zip folders chain it after their decompressor).
     PostFilter(lzma::Post),
@@ -373,6 +377,7 @@ impl Codec {
             Codec::Psarc(_) => "psarc",
             Codec::Rar(_) => "rar",
             Codec::Ppmd7 { .. } => "ppmd7",
+            Codec::Bcj2(_) => "bcj2",
             Codec::PostFilter(lzma::Post::X86) => "bcj-x86",
             Codec::PostFilter(lzma::Post::Arm) => "bcj-arm",
             Codec::PostFilter(lzma::Post::Arm64) => "bcj-arm64",
@@ -461,6 +466,7 @@ impl Codec {
             Codec::Psarc(_) => "psarc (lazy)",
             Codec::Rar(_) => "rar (lazy)",
             Codec::Ppmd7 { .. } => "ppmd7 (lazy)",
+            Codec::Bcj2(_) => "bcj2 (lazy)",
             Codec::PostFilter(lzma::Post::X86) => "bcj-x86 (lazy)",
             Codec::PostFilter(lzma::Post::Arm) => "bcj-arm (lazy)",
             Codec::PostFilter(lzma::Post::Arm64) => "bcj-arm64 (lazy)",
@@ -535,7 +541,9 @@ impl Codec {
             Codec::SpssBytecode { .. } | Codec::SasRle | Codec::SasRdc => "decompressed",
             Codec::DwgLz77 { .. } => "decompressed",
             Codec::Lzh(_) | Codec::Psarc(_) => "decompressed",
-            Codec::Rar(_) | Codec::Ppmd7 { .. } | Codec::Yaz0 { .. } => "decompressed",
+            Codec::Rar(_) | Codec::Ppmd7 { .. } | Codec::Bcj2(_) | Codec::Yaz0 { .. } => {
+                "decompressed"
+            }
             Codec::PostFilter(_) | Codec::BinHex => "decoded",
             Codec::AsciiHex
             | Codec::Ascii85
@@ -626,6 +634,8 @@ impl Codec {
             Codec::Rar(_) => 1 << 16,
             // A highly probable symbol costs a small fraction of a bit.
             Codec::Ppmd7 { .. } => 1 << 16,
+            // As its main stream's codec (the other streams are smaller).
+            Codec::Bcj2(p) => p.streams.first().map_or(1, |s| s.codec.max_ratio()),
             Codec::CabFolder(f) if f.method() == 0 => 1,
             Codec::CabFolder(_) => 32_768,
             Codec::Lzfse => 4_096,
@@ -713,6 +723,7 @@ impl Codec {
             Codec::Lzx(params) => Box::new(lzx::LzxStream::new(*params)),
             Codec::CabFolder(folder) => Box::new(cab::FolderDecoder::new(*folder)),
             Codec::Rar(params) => Box::new(rar::Stream::new(params.clone())),
+            Codec::Bcj2(params) => Box::new(bcj2::Bcj2::new(params)),
             Codec::Ppmd7 { order, mem, size } => {
                 Box::new(Streaming(rar::Ppmd7::new(u32::from(*order), *mem, *size)))
             }

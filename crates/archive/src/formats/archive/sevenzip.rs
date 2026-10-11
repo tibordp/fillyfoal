@@ -9,9 +9,10 @@
 //! Members of "Copy" folders are dissected in place. Folders whose coders
 //! form a simple chain (LZMA, LZMA2, PPMd, Deflate, Deflate64, BZip2,
 //! Zstandard or LZ4, then optionally BCJ (x86, ARM, ARM64, ARM Thumb,
-//! PowerPC, SPARC, IA-64, RISC-V) or Delta filters) are decoded, and solid
-//! folders are split into their files by the substream sizes. Multi-stream
-//! coders (BCJ2) and encryption are unsupported leaves.
+//! PowerPC, SPARC, IA-64, RISC-V) or Delta filters) are decoded, and so are
+//! BCJ2 folders (four packed streams, see `codec::bcj2`); solid folders are
+//! split into their files by the substream sizes. Encryption is an
+//! unsupported leaf.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -154,6 +155,11 @@ struct Folder {
     unpack_sizes: Vec<u64>,
     /// Packed streams this folder reads.
     packed: u64,
+    /// The coder input each packed stream feeds (listed when there are
+    /// several; else the input no bind pair feeds).
+    pack_inputs: Vec<u64>,
+    /// The sizes of this folder's packed streams, in order.
+    pack_sizes: Vec<u64>,
     /// Files (substreams) in this folder.
     streams: u64,
 }
@@ -457,8 +463,11 @@ impl Parser<'_> {
                 return Err("too many packed streams");
             }
             for _ in 0..f.packed {
-                self.number()?;
+                let input = self.number()?;
+                f.pack_inputs.push(input);
             }
+        } else if let Some(input) = (0..ins).find(|i| f.binds.iter().all(|&(inp, _)| inp != *i)) {
+            f.pack_inputs.push(input);
         }
         f.streams = 1;
         Ok(f)
@@ -580,6 +589,18 @@ impl Parser<'_> {
                 }
                 _ => return Err("unexpected property in streams info"),
             }
+        }
+        // Each folder's packed stream sizes, in order.
+        let mut next = 0usize;
+        for f in &mut s.folders {
+            self.cx.checkpoint().await;
+            let n = to_usize(f.packed.min(MAX_CODERS));
+            f.pack_sizes = s
+                .pack_sizes
+                .get(next..next.saturating_add(n))
+                .unwrap_or_default()
+                .to_vec();
+            next = next.saturating_add(n);
         }
         if !saw_substreams {
             for f in &s.folders {
@@ -795,11 +816,15 @@ struct Plan {
     size: u64,
     /// Post-filters, in the order they are applied.
     post: Vec<Post>,
+    /// For a folder of several packed streams (BCJ2): the (offset, length)
+    /// of each, relative to the folder's packed data, in the order the
+    /// codec's input has them.
+    pieces: Vec<(u64, u64)>,
 }
 
-/// The decoding plan of `f`, or why it cannot be decoded. Only simple
-/// chains of one-input, one-output coders are supported (not BCJ2): the
-/// packed stream feeds a decompressor, whose output runs through filters.
+/// The decoding plan of `f`, or why it cannot be decoded: a chain of
+/// one-input, one-output coders (the packed stream feeds a decompressor,
+/// whose output runs through filters), or a BCJ2 folder.
 fn plan(f: &Folder) -> std::result::Result<Plan, String> {
     let n = f.coders.len();
     let simple = f.packed == 1
@@ -807,7 +832,7 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
         && f.coders.iter().all(|c| c.ins == 1 && c.outs == 1)
         && f.binds.len() == n.saturating_sub(1);
     if !simple {
-        return Err(f.methods());
+        return bcj2_plan(f);
     }
     // With one-in, one-out coders, input and output indices are coder
     // indices. The packed stream feeds the coder whose input is unbound;
@@ -831,38 +856,7 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
     let coder = |i: u64| f.coders.get(to_usize(i));
     let last = coder(first).ok_or_else(|| f.methods())?;
     let size = f.unpack_sizes.get(to_usize(first)).copied().unwrap_or(0);
-    let codec = match last.id.as_slice() {
-        [0x00] => Codec::Stored,
-        [0x21] => Codec::Lzma2 {
-            dict: last
-                .props
-                .first()
-                .and_then(|&p| crate::codec::lzma::lzma2_dict(p)),
-        },
-        [0x03, 0x01, 0x01] => {
-            let props = last
-                .props
-                .first()
-                .and_then(|&b| crate::codec::lzma::Props::from_byte(b).ok())
-                .ok_or_else(|| "LZMA with invalid properties".to_owned())?;
-            Codec::LzmaRaw {
-                props,
-                size: Some(to_usize(size)),
-                dict: crate::bytes::u32_le(&last.props, 1),
-            }
-        }
-        [0x04, 0x01, 0x08] => Codec::Deflate,
-        [0x04, 0x01, 0x09] => Codec::Deflate64,
-        // Properties: the model order, then its memory size.
-        [0x03, 0x04, 0x01] => match (last.props.first(), u32_le(&last.props, 1)) {
-            (Some(&order), Some(mem)) => Codec::Ppmd7 { order, mem, size },
-            _ => return Err("PPMd with invalid properties".to_owned()),
-        },
-        [0x04, 0x02, 0x02] => Codec::Bzip2,
-        [0x04, 0xf7, 0x11, 0x01] => Codec::Zstd,
-        [0x04, 0xf7, 0x11, 0x04] => Codec::Lz4Frame,
-        id => return Err(method_name(id)),
-    };
+    let codec = decompressor(last, size)?;
     let mut post = Vec::new();
     for &i in order.get(1..).unwrap_or_default() {
         let c = coder(i).ok_or_else(|| f.methods())?;
@@ -878,7 +872,142 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
             id => return Err(method_name(id)),
         });
     }
-    Ok(Plan { codec, size, post })
+    Ok(Plan {
+        codec,
+        size,
+        post,
+        pieces: Vec::new(),
+    })
+}
+
+/// The codec of a decompressing coder with `size` bytes of output.
+fn decompressor(c: &Coder, size: u64) -> std::result::Result<Codec, String> {
+    Ok(match c.id.as_slice() {
+        [0x00] => Codec::Stored,
+        [0x21] => Codec::Lzma2 {
+            dict: c
+                .props
+                .first()
+                .and_then(|&p| crate::codec::lzma::lzma2_dict(p)),
+        },
+        [0x03, 0x01, 0x01] => {
+            let props = c
+                .props
+                .first()
+                .and_then(|&b| crate::codec::lzma::Props::from_byte(b).ok())
+                .ok_or_else(|| "LZMA with invalid properties".to_owned())?;
+            Codec::LzmaRaw {
+                props,
+                size: Some(to_usize(size)),
+                dict: crate::bytes::u32_le(&c.props, 1),
+            }
+        }
+        [0x04, 0x01, 0x08] => Codec::Deflate,
+        [0x04, 0x01, 0x09] => Codec::Deflate64,
+        // Properties: the model order, then its memory size.
+        [0x03, 0x04, 0x01] => match (c.props.first(), u32_le(&c.props, 1)) {
+            (Some(&order), Some(mem)) => Codec::Ppmd7 { order, mem, size },
+            _ => return Err("PPMd with invalid properties".to_owned()),
+        },
+        [0x04, 0x02, 0x02] => Codec::Bzip2,
+        [0x04, 0xf7, 0x11, 0x01] => Codec::Zstd,
+        [0x04, 0xf7, 0x11, 0x04] => Codec::Lz4Frame,
+        id => return Err(method_name(id)),
+    })
+}
+
+/// The plan of a BCJ2 folder: the BCJ2 coder's output is the folder's,
+/// and each of its four inputs (main, CALL, JMP, range coder) is a packed
+/// stream, either as is or through one decompressing coder. The codec's
+/// input is the packed streams reordered so the three small ones come
+/// first: the decoder reads all four side by side, and the main stream, by
+/// far the largest, is then read only as far as needed.
+fn bcj2_plan(f: &Folder) -> std::result::Result<Plan, String> {
+    use crate::codec::bcj2;
+    let fail = || f.methods();
+    if f.coders.iter().any(|c| c.outs != 1) || f.binds.len() != f.coders.len().saturating_sub(1) {
+        return Err(fail());
+    }
+    // With one output per coder, output indices are coder indices.
+    let last = (0..to_u64(f.coders.len()))
+        .find(|i| f.binds.iter().all(|&(_, out)| out != *i))
+        .ok_or_else(fail)?;
+    let bcj2 = f.coders.get(to_usize(last)).ok_or_else(fail)?;
+    if bcj2.id != [0x03, 0x03, 0x01, 0x1b] || bcj2.ins != 4 {
+        return Err(fail());
+    }
+    let base = |c: u64| {
+        f.coders
+            .iter()
+            .take(to_usize(c))
+            .fold(0u64, |a, c| a.saturating_add(c.ins))
+    };
+    let mut pack_offsets = Vec::new();
+    let mut at = 0u64;
+    for &len in &f.pack_sizes {
+        pack_offsets.push(at);
+        at = at.saturating_add(len);
+    }
+    // Each BCJ2 input: its packed stream, codec and decoded size. Every
+    // other coder must feed one of them straight from a packed stream.
+    let mut inputs = Vec::new();
+    for j in 0..4u64 {
+        let input = base(last).saturating_add(j);
+        let (pack_input, codec, size) = match f.binds.iter().find(|&&(inp, _)| inp == input) {
+            Some(&(_, out)) => {
+                let c = f.coders.get(to_usize(out)).ok_or_else(fail)?;
+                if c.ins != 1 || out == last {
+                    return Err(fail());
+                }
+                let size = f.unpack_sizes.get(to_usize(out)).copied().unwrap_or(0);
+                (base(out), decompressor(c, size)?, Some(size))
+            }
+            None => (input, Codec::Stored, None),
+        };
+        let p = f
+            .pack_inputs
+            .iter()
+            .position(|&i| i == pack_input)
+            .ok_or_else(fail)?;
+        let offset = pack_offsets.get(p).copied().ok_or_else(fail)?;
+        let len = f.pack_sizes.get(p).copied().ok_or_else(fail)?;
+        inputs.push((offset, len, codec, size.unwrap_or(len)));
+    }
+    // The codec's input: CALL, JMP, range coder, then main.
+    let mut pieces = Vec::new();
+    let mut streams = Vec::new();
+    let mut at = 0u64;
+    for j in [1usize, 2, 3, 0] {
+        let (offset, len, _, _) = inputs.get(j).ok_or_else(fail)?;
+        pieces.push((*offset, *len));
+        streams.push((j, at));
+        at = at.saturating_add(*len);
+    }
+    let stream = |j: usize| -> std::result::Result<bcj2::Stream, String> {
+        let (_, len, codec, size) = inputs.get(j).cloned().ok_or_else(fail)?;
+        let offset = streams
+            .iter()
+            .find(|&&(k, _)| k == j)
+            .map(|&(_, o)| o)
+            .ok_or_else(fail)?;
+        Ok(bcj2::Stream {
+            offset,
+            len,
+            codec,
+            size,
+        })
+    };
+    let size = f.unpack_sizes.get(to_usize(last)).copied().unwrap_or(0);
+    let params = bcj2::Params {
+        streams: [stream(0)?, stream(1)?, stream(2)?, stream(3)?],
+        size,
+    };
+    Ok(Plan {
+        codec: Codec::Bcj2(Arc::new(params)),
+        size,
+        post: Vec::new(),
+        pieces,
+    })
 }
 
 /// The branch converter (BCJ) a coder ID names, in its short (xz-style)
@@ -920,6 +1049,23 @@ async fn folder_output(cx: &Cx, span: Span, plan: &Plan) -> Result<(Span, Option
     if codec == Codec::Stored {
         return Ok((span, None));
     }
+    // Several packed streams, in the order the codec reads them.
+    let span = if plan.pieces.is_empty() {
+        span
+    } else {
+        let pieces = plan
+            .pieces
+            .iter()
+            .map(|&(offset, len)| span.sub(offset, len))
+            .collect();
+        cx.add_pieces(
+            crate::span::Origin {
+                parent: span,
+                transform: "7z packed streams",
+            },
+            pieces,
+        )?
+    };
     if plan.size > LAZY_THRESHOLD && plan.size <= span.len.saturating_mul(codec.max_ratio()) {
         let decoded = cx.decode_lazy(span, &codec, plan.size)?;
         return Ok((decoded, None));

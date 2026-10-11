@@ -401,7 +401,7 @@ closely enough to credit:
 
 - LZO1X decoding (`crates/codec/src/codec/lzo.rs`): the LZO format by Markus F.X.J.
   Oberhumer (LZO is GPL-2.0-or-later).
-- LZMA, LZMA2 and the BCJ filters (`crates/codec/src/codec/lzma.rs`, `crates/codec/src/codec/xz.rs`):
+- LZMA, LZMA2, the BCJ filters and BCJ2 (`crates/codec/src/codec/lzma.rs`, `crates/codec/src/codec/xz.rs`, `crates/codec/src/codec/bcj2.rs`):
   Igor Pavlov's LZMA SDK and XZ Utils (public domain / 0BSD).
 - Poly1305 (`crates/codec/src/codec/crypto/poly1305.rs`): Andrew Moon's poly1305-donna
   (public domain / MIT).
