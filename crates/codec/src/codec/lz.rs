@@ -822,6 +822,186 @@ impl Decode for Lz4Frame {
     }
 }
 
+/// The HDF5 LZ4 filter's framing (filter 32004, `H5Zlz4.c`): a big-endian
+/// u64 decoded size and u32 block size, then per block a big-endian u32
+/// compressed size and the block, an independent raw LZ4 block, or the
+/// bytes themselves when the compressed size equals the block's decoded
+/// size (the last block holds what remains).
+#[derive(Clone, Default)]
+pub struct Hdf5Lz4 {
+    /// The next header's position (the current block's, while one is being
+    /// decoded).
+    pos: usize,
+    /// Decoded size and block size, once the header is read.
+    sizes: Option<(u64, u64)>,
+    /// Bytes decoded by the finished blocks.
+    produced: u64,
+    body: Option<Hdf5Lz4Block>,
+    done: bool,
+}
+
+/// The block an [`Hdf5Lz4`] is decoding.
+#[derive(Clone)]
+struct Hdf5Lz4Block {
+    body: Lz4Body,
+    /// Where the block's output starts in the caller's output, less what
+    /// of it has been released (`released`).
+    start: usize,
+    released: usize,
+    /// The block's decoded size.
+    want: usize,
+}
+
+impl Hdf5Lz4Block {
+    /// Bytes the block has produced, given `out_len` bytes of output.
+    fn produced(&self, out_len: usize) -> usize {
+        out_len
+            .saturating_sub(self.start)
+            .saturating_add(self.released)
+    }
+}
+
+impl Hdf5Lz4 {
+    /// Reads the stream header or a block header.
+    fn header(&mut self, input: &[u8], out: &[u8]) -> Result<()> {
+        let pos = self.pos;
+        let Some((total, block)) = self.sizes else {
+            let (Some(total), Some(block)) = (
+                crate::bytes::u64_be(input, pos),
+                crate::bytes::u32_be(input, pos.saturating_add(8)),
+            ) else {
+                return Err(bad("truncated HDF5 LZ4 header"));
+            };
+            let block = u64::from(block);
+            if block == 0 && total > 0 {
+                return Err(bad("HDF5 LZ4 block size 0"));
+            }
+            self.sizes = Some((total, block));
+            self.pos = pos.saturating_add(12);
+            return Ok(());
+        };
+        let want = block.min(total.saturating_sub(self.produced));
+        if want == 0 {
+            self.done = true;
+            return Ok(());
+        }
+        let size =
+            crate::bytes::u32_be(input, pos).ok_or_else(|| bad("truncated HDF5 LZ4 block size"))?;
+        self.body = Some(Hdf5Lz4Block {
+            body: Lz4Body {
+                sub: Sub::new(pos.saturating_add(4), crate::bytes::to_usize(size.into())),
+                block: (u64::from(size) != want).then(|| Lz4Block {
+                    base: out.len(),
+                    ..Lz4Block::default()
+                }),
+                trailer: 0,
+                legacy: false,
+            },
+            start: out.len(),
+            released: 0,
+            want: crate::bytes::to_usize(want),
+        });
+        Ok(())
+    }
+}
+
+impl Decode for Hdf5Lz4 {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
+        let mark = out.len();
+        let mut read = 0usize;
+        loop {
+            let work = out.len().saturating_sub(mark).saturating_add(read);
+            if work >= step.max(1) {
+                return Ok(Step::More);
+            }
+            if let Some(b) = self.body.as_mut() {
+                let room = step.saturating_sub(work);
+                // A block may not decode past its own size.
+                let cap = out
+                    .len()
+                    .saturating_add(b.want.saturating_sub(b.produced(out.len())));
+                if !b.body.step(input, eof, out, room, limit.min(cap))? {
+                    return Ok(Step::More);
+                }
+                let got = b.produced(out.len());
+                if got != b.want {
+                    return Err(bad(&format!(
+                        "HDF5 LZ4 block decoded to {got} bytes, expected {}",
+                        b.want
+                    )));
+                }
+                self.produced = self.produced.saturating_add(crate::bytes::to_u64(b.want));
+                self.pos = b.body.sub.end;
+                self.body = None;
+                continue;
+            }
+            if self.done {
+                return Ok(Step::Done);
+            }
+            self.header(input, out)?;
+            read = read.saturating_add(5);
+        }
+    }
+
+    fn consumed(&self) -> usize {
+        self.pos
+    }
+
+    fn releasable_input(&self) -> usize {
+        match &self.body {
+            Some(b) => b
+                .body
+                .sub
+                .from
+                .saturating_add(b.body.block.as_ref().map_or(0, |d| d.releasable_input())),
+            None => self.pos,
+        }
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+        if let Some(b) = self.body.as_mut() {
+            let inner = b.body.sub.release(n);
+            if let Some(d) = b.body.block.as_mut() {
+                d.release_input(inner);
+            }
+        }
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        // A compressed block refers back into its own output; blocks are
+        // independent of each other.
+        self.body
+            .as_ref()
+            .and_then(|b| b.body.block.as_ref())
+            .map_or(out_len, |d| d.releasable_output(out_len))
+    }
+
+    fn release_output(&mut self, n: usize) {
+        if let Some(b) = self.body.as_mut() {
+            let k = n.min(b.start);
+            b.released = b.released.saturating_add(n.saturating_sub(k));
+            b.start = b.start.saturating_sub(k);
+            if let Some(d) = b.body.block.as_mut() {
+                d.release_output(n);
+            }
+        }
+    }
+
+    /// No heap: blocks are independent and decoded into the caller's
+    /// output.
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
+}
+
 /// Raw Snappy: a varint length, then literals and copies.
 pub fn snappy_raw(input: &[u8], limit: usize) -> Result<Vec<u8>> {
     let mut out = Vec::new();
@@ -1215,6 +1395,44 @@ mod tests {
         let block = include_bytes!("testdata/words8.lz4-block");
         let checked = checkpoints(|| Box::new(Streaming(Lz4Block::new())), block, 4096);
         assert!(checked > 40, "{checked}");
+    }
+
+    /// `testdata/words8.hdf5-lz4`: one chunk written by hdf5plugin 6.0.0's
+    /// H5Zlz4 (tests/data/hdf5/make_lz4.py): 136,072 bytes in 32 KiB
+    /// blocks, three of text, one of noise stored raw, a short last one.
+    const HDF5_LZ4: &[u8] = include_bytes!("testdata/words8.hdf5-lz4");
+
+    #[test]
+    fn hdf5_lz4_decodes_compressed_and_stored_blocks() {
+        let mut d = Hdf5Lz4::default();
+        let mut out = Vec::new();
+        while d.step(HDF5_LZ4, true, &mut out, 4096, 1 << 30).unwrap() == Step::More {}
+        assert_eq!(out.len(), 136_072);
+        let words = include_bytes!("testdata/words.txt");
+        assert_eq!(out.get(..98_304), words.get(..98_304));
+        assert_eq!(out.get(131_072..), words.get(..5000));
+        assert_eq!(crate::codec::crc::crc32(&out), 0xa551_69b7);
+        assert_eq!(d.consumed(), HDF5_LZ4.len());
+        for step in [1000, 4096, 70_000] {
+            let checked = checkpoints(|| Box::new(Streaming(Hdf5Lz4::default())), HDF5_LZ4, step);
+            assert!(checked >= 136_072 / step / 2, "{checked}");
+        }
+    }
+
+    #[test]
+    fn hdf5_lz4_rejects_a_block_of_the_wrong_size() {
+        // Claims 10 bytes in one block; the block holds "abc" only.
+        let mut data = vec![0, 0, 0, 0, 0, 0, 0, 10, 0, 0, 0, 16, 0, 0, 0, 4];
+        data.extend_from_slice(&[0x30, b'a', b'b', b'c']);
+        let mut d = Hdf5Lz4::default();
+        let mut out = Vec::new();
+        let r = loop {
+            match d.step(&data, true, &mut out, 4096, 1 << 20) {
+                Ok(Step::More) => {}
+                other => break other,
+            }
+        };
+        assert!(r.is_err(), "{:?}", r.ok());
     }
 
     #[test]

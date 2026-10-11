@@ -623,6 +623,7 @@ fn codec_for(f: &Filter) -> Option<Codec> {
         1 => Codec::Zlib,
         307 => Codec::Bzip2,
         32000 => Codec::Lzf,
+        32004 => Codec::Hdf5Lz4,
         32015 => Codec::Zstd,
         _ => return None,
     })
