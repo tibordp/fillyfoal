@@ -317,6 +317,7 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `las/las12.las` | laspy 2.6.1 (numpy 2.3.4) | same script, byte for byte: LAS 1.2, point format 1, the same points and VLR |
 | `laz/las14.laz` | laspy 2.6.1 with lazrs 0.7.0 | same script, byte for byte: `las14.las` compressed (layered chunked LASzip), the extended VLR after the chunk table |
 | `3ds/pyramid.3ds` | Assimp 5.2.5 (Debian bookworm `assimp-utils`) | reproduced byte-for-byte by `tests/data/3ds/make_assimp.sh` in `debian:bookworm-slim` (`assimp export pyramid.obj pyramid.3ds -f3ds` of our OBJ/MTL): two meshes whose face arrays (0x4120) carry material groups (0x4130), three materials, a keyframer section |
+| `sas7bdat/readstat.sas7bdat` | ReadStat 1.1.8 (Debian bookworm `readstat`) | `tests/data/sas7bdat/make_readstat.sh` in `debian:bookworm-slim`: our CSV and JSON metadata to Stata, then `readstat cars.dta readstat.sas7bdat`; 64-bit little-endian, uncompressed, three columns with labels, four rows, one missing value; reproduces it except the creation and modification times. pandas 2.3.3 and pyreadstat 1.3.1 read the same rows |
 
 ## Binary value encodings
 
