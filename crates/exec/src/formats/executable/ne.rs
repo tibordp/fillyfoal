@@ -12,8 +12,9 @@ use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
-use crate::fields::{Endian, parse};
+use crate::fields::{Endian, Fields, parse};
 use crate::formats::util::arcutil::push_nodes;
+use crate::formats::util::binutil::data_node;
 use crate::formats::util::fmt::clip;
 use crate::formats::util::val::name_or;
 use crate::formats::{Format, Head, Input, Probe};
@@ -191,13 +192,33 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         h.cseg
     ));
 
+    // Imported modules.
+    let mut modules = Vec::new();
+    for i in 0..usize::from(h.cmod) {
+        let off = u16_le(
+            &tables,
+            usize::from(h.modtab).saturating_add(i.saturating_mul(2)),
+        )
+        .unwrap_or(0);
+        let at = usize::from(h.imptab).saturating_add(off.into());
+        if let Some((s, len)) = pascal(&tables, at) {
+            modules.push(Node::new(s).span(ne.sub(to_u64(at), to_u64(len))));
+        }
+    }
+    let names_list: Vec<String> = modules.iter().map(|n| n.name.to_string()).collect();
+
     // Segments.
     let segtab = ne.sub(h.segtab.into(), u64::from(h.cseg).saturating_mul(8));
+    let imports = Arc::new(Imports {
+        modules: names_list.clone(),
+        imptab: h.imptab,
+        tables: tables.clone(),
+    });
     cx.emit(
         Node::new("Segment Table")
             .span(segtab)
             .summary(format!("{} segments", h.cseg))
-            .lazy(segments, (file, segtab, shift)),
+            .lazy(segments, (file, segtab, shift, imports)),
     );
     // Resources.
     if h.rsrctab != h.restab {
@@ -225,21 +246,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         &nonresident,
         nonres_span,
     ));
-    // Imported modules.
-    let mut modules = Vec::new();
-    for i in 0..usize::from(h.cmod) {
-        let off = u16_le(
-            &tables,
-            usize::from(h.modtab).saturating_add(i.saturating_mul(2)),
-        )
-        .unwrap_or(0);
-        let at = usize::from(h.imptab).saturating_add(off.into());
-        if let Some((s, len)) = pascal(&tables, at) {
-            modules.push(Node::new(s).span(ne.sub(to_u64(at), to_u64(len))));
-        }
-    }
     let modtab = ne.sub(h.modtab.into(), u64::from(h.cmod).saturating_mul(2));
-    let names_list: Vec<String> = modules.iter().map(|n| n.name.to_string()).collect();
     cx.emit(
         Node::new("Module References")
             .span(modtab)
@@ -276,7 +283,41 @@ fn name_list(
         .lazy(push_nodes, Arc::new(nodes))
 }
 
-async fn segments(cx: Cx, (file, table, shift): (Span, Span, u32)) -> Result<()> {
+/// What naming relocation targets needs: the module reference names and
+/// the region holding the imported-names table.
+struct Imports {
+    modules: Vec<String>,
+    tables: Vec<u8>,
+    imptab: u16,
+}
+
+impl Imports {
+    /// Module reference `index` (1-based).
+    fn module(&self, index: u16) -> String {
+        usize::from(index)
+            .checked_sub(1)
+            .and_then(|i| self.modules.get(i))
+            .cloned()
+            .unwrap_or_else(|| format!("module #{index}"))
+    }
+
+    /// The imported name at `offset` in the imported-names table.
+    fn name(&self, offset: u16) -> String {
+        pascal(
+            &self.tables,
+            usize::from(self.imptab).saturating_add(offset.into()),
+        )
+        .map_or_else(|| format!("name @{offset:#x}"), |(s, _)| s)
+    }
+}
+
+/// `RELOCINFO`: relocation records follow the segment's data.
+const SEG_RELOCINFO: u16 = 0x100;
+
+async fn segments(
+    cx: Cx,
+    (file, table, shift, imports): (Span, Span, u32, Arc<Imports>),
+) -> Result<()> {
     let count = table.len / 8;
     cx.set_count(Count::Exact(count));
     for i in 0..count {
@@ -289,12 +330,124 @@ async fn segments(cx: Cx, (file, table, shift): (Span, Span, u32)) -> Result<()>
             u64::from(s.length)
         };
         let kind = if s.flags & 1 != 0 { "DATA" } else { "CODE" };
-        let mut node = SegmentEntry::node(format!("Segment {}", i.saturating_add(1)), at, LE)
-            .summary(format!("{kind}, {len:#x} bytes at {offset:#x}"));
+        let mut summary = format!("{kind}, {len:#x} bytes at {offset:#x}");
+        if s.flags & SEG_RELOCINFO != 0 {
+            summary.push_str(", relocations");
+        }
+        let mut node = Node::new(format!("Segment {}", i.saturating_add(1)))
+            .span(at)
+            .summary(summary)
+            .lazy(segment, (file, at, offset, len, imports.clone()));
         if s.sector != 0 {
             node = node.target(file.sub(offset, len));
         }
         cx.push(node).await;
+    }
+    Ok(())
+}
+
+/// One segment: its table entry, its data and its relocation records.
+async fn segment(
+    cx: Cx,
+    (file, entry, offset, len, imports): (Span, Span, u64, u64, Arc<Imports>),
+) -> Result<()> {
+    let block = cx.block(entry).await?;
+    let s = SegmentEntry::layout(&mut Fields::emitting(&cx, &block, LE), &())?;
+    if s.sector == 0 {
+        return Ok(());
+    }
+    cx.emit(data_node("Data", file.sub(offset, len), len));
+    if s.flags & SEG_RELOCINFO == 0 {
+        return Ok(());
+    }
+    let at = offset.saturating_add(len);
+    let head = cx.read(file.sub_exact(at, 2)?).await?;
+    let n = u16_le(&head, 0).unwrap_or(0);
+    let span = file.sub(at, u64::from(n).saturating_mul(8).saturating_add(2));
+    cx.emit(
+        Node::new("Relocations")
+            .span(span)
+            .summary(format!("{n} records"))
+            .lazy(relocations, (span, n, imports)),
+    );
+    Ok(())
+}
+
+/// The location a relocation patches.
+const RELOC_SOURCE: EnumTable = &[
+    (0, "LOBYTE"),
+    (2, "SEGMENT"),
+    (3, "FAR_ADDR"),
+    (5, "OFFSET"),
+    (11, "PTR48"),
+    (13, "OFFSET32"),
+];
+
+/// Floating-point fixups (`OSFIXUP` targets) Windows applies for 8087
+/// emulation.
+const OS_FIXUP: EnumTable = &[
+    (1, "FIARQQ/FJARQQ"),
+    (2, "FISRQQ/FJSRQQ"),
+    (3, "FICRQQ/FJCRQQ"),
+    (4, "FIERQQ"),
+    (5, "FIDRQQ"),
+    (6, "FIWRQQ"),
+];
+
+/// A segment's relocation records: a count, then 8-byte records of source
+/// type, flags (target type, additive), source offset and the target.
+async fn relocations(cx: Cx, (span, n, imports): (Span, u16, Arc<Imports>)) -> Result<()> {
+    cx.emit(
+        Node::new("Count")
+            .span(span.sub(0, 2))
+            .value(crate::formats::util::val::uint(n, 16)),
+    );
+    let records = span.tail(2);
+    let data = cx.read_avail(records).await?;
+    let have = data.len() / 8;
+    for i in 0..usize::from(n) {
+        let base = i.saturating_mul(8);
+        let at = records.sub(to_u64(base), 8);
+        if i >= have {
+            cx.diag(Diagnostic::truncated(records, to_u64(data.len())));
+            break;
+        }
+        let b = |o: usize| data.get(base.saturating_add(o)).copied().unwrap_or(0);
+        let w = |o: usize| u16_le(&data, base.saturating_add(o)).unwrap_or(0);
+        let (source, flags, offset) = (b(0), b(1), w(2));
+        let (mut target, desc) = match flags & 3 {
+            0 if b(4) == 0xff => (
+                format!("movable entry, ordinal {}", w(6)),
+                "Internal reference through the entry table",
+            ),
+            0 => (
+                format!("segment {}:{:#06x}", b(4), w(6)),
+                "Internal reference",
+            ),
+            1 => (
+                format!("{}.{}", imports.module(w(4)), w(6)),
+                "Import by ordinal",
+            ),
+            2 => (
+                format!("{}.{}", imports.module(w(4)), imports.name(w(6))),
+                "Import by name",
+            ),
+            _ => (
+                format!("OS fixup {}", name_or(OS_FIXUP, w(4).into(), "type")),
+                "Operating system fixup",
+            ),
+        };
+        if flags & 4 != 0 {
+            target.push_str(" (additive)");
+        }
+        cx.push(
+            Node::new(name_or(RELOC_SOURCE, source.into(), "source"))
+                .span(at)
+                .value(crate::formats::util::val::hex(offset, 16))
+                .summary(target)
+                .desc(desc),
+        )
+        .await;
     }
     Ok(())
 }

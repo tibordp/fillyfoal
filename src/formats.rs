@@ -119,6 +119,11 @@ pub static FORMATS: &[&Format] = &[
     // -- executables & code --
     #[cfg(feature = "exec")]
     &executable::pe::DOS_EXE,
+    // NE and LE/LX images behind an MZ stub, before the PE probe (any MZ).
+    #[cfg(feature = "exec")]
+    &executable::ne::FORMAT,
+    #[cfg(feature = "exec")]
+    &executable::lx::FORMAT,
     #[cfg(feature = "exec")]
     &executable::pe::FORMAT,
     #[cfg(feature = "archive")]
@@ -162,10 +167,6 @@ pub static FORMATS: &[&Format] = &[
     &android::apksig::SIGNING_BLOCK,
     #[cfg(feature = "system")]
     &forensics::minidump::FORMAT,
-    #[cfg(feature = "exec")]
-    &executable::ne::FORMAT,
-    #[cfg(feature = "exec")]
-    &executable::lx::FORMAT,
     #[cfg(feature = "exec")]
     &executable::omf::FORMAT,
     #[cfg(feature = "exec")]
