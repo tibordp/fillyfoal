@@ -51,14 +51,19 @@ fn probe(h: &Head<'_>) -> bool {
     }
 }
 
+/// Volume attributes (`kHFSVolume…Bit` in xnu's `hfs_format.h`, TN1150).
 const ATTRIBUTES: FlagTable = &[
-    flag(1 << 7, "UNMOUNTED"),
-    flag(1 << 8, "SPARED_BLOCKS"),
-    flag(1 << 9, "NO_CACHE_REQUIRED"),
-    flag(1 << 10, "BOOT_VOLUME_INCONSISTENT"),
-    flag(1 << 11, "CATALOG_NODE_IDS_REUSED"),
+    flag(1 << 7, "HARDWARE_LOCK"),
+    flag(1 << 8, "UNMOUNTED"),
+    flag(1 << 9, "SPARED_BLOCKS"),
+    flag(1 << 10, "NO_CACHE_REQUIRED"),
+    flag(1 << 11, "BOOT_VOLUME_INCONSISTENT"),
+    flag(1 << 12, "CATALOG_NODE_IDS_REUSED"),
     flag(1 << 13, "JOURNALED"),
+    flag(1 << 14, "INCONSISTENT"),
     flag(1 << 15, "SOFTWARE_LOCK"),
+    flag(1 << 30, "CONTENT_PROTECTION"),
+    flag(1 << 31, "UNUSED_NODE_FIX"),
 ];
 
 fn hfs_time(v: &u32, node: Node) -> Node {

@@ -42,7 +42,20 @@ mke2fs $opts -t ext4 -O inline_data,^resize_inode -L fillyfoal-ext4 -J size=1 -N
 mke2fs $opts -t ext3 -L fillyfoal-ext3 -J size=1 -N 64 ext3.img 4M
 # ext2: block maps, no journal.
 mke2fs $opts -t ext2 -L fillyfoal-ext2 -N 64 ext2.img 2M
-for f in ext4 ext3 ext2; do
+# ext4 with META_BG and no resize inode: 20 groups of 256 blocks and 16
+# descriptors per block, so groups 16-19 keep their descriptors in their own
+# meta group. 140 empty files fill the inode tables up into those groups.
+M=/tmp/metabg
+rm -rf "$M"
+mkdir -p "$M/many"
+printf 'Hello, meta groups!\n' > "$M/hello.txt"
+for i in $(seq -w 1 140); do : > "$M/many/f$i"; done
+touch -h -d "$STAMP" "$M" "$M"/* "$M"/*/*
+mke2fs -q -F -b 1024 -U 00000000-0000-4000-8000-0000000000e5 \
+  -E hash_seed=00000000-0000-4000-8000-0000000000a5,root_owner=0:0 -d "$M" \
+  -t ext4 -O meta_bg,^resize_inode,^has_journal -g 256 -N 160 \
+  -L fillyfoal-metabg metabg.img 5M
+for f in ext4 ext3 ext2 metabg; do
   e2fsck -fyD $f.img >/dev/null 2>&1 || true
   e2fsck -fn $f.img
   dumpe2fs $f.img > $f.dumpe2fs.txt 2>&1

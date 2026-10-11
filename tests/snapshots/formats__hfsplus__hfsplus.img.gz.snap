@@ -7,7 +7,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Volume header  [0x400+0x200]
       Signature: "H+"  [0x400+0x2]
       Version: 4  [0x402+0x2]
-      Attributes: 0x80000100 [SPARED_BLOCKS | 0x80000000]  [0x404+0x4]
+      Attributes: 0x80000100 [UNMOUNTED | UNUSED_NODE_FIX]  [0x404+0x4]
       Last mounted version: "10.0"  [0x408+0x4]
       Journal info block: 0  [0x40c+0x4]
       Created (local time): 2026-10-06 00:44:44 UTC  [0x410+0x4]

@@ -259,12 +259,18 @@ fn cp_layout(f: &mut Fields<'_>, computed: &Option<u32>) -> Result<()> {
     let csum_at = f.u32("Checksum offset").emit()?;
     f.u64("Elapsed time (s)").emit()?;
     f.bytes("Allocation types", 16).emit()?;
+    let csum_at = u64::from(csum_at);
+    // LARGE_NAT_BITMAP moves the checksum in front of the bitmaps
+    // (checksum_offset 192), which then run to the end of the block.
+    let early = csum_at == f.pos();
+    if early {
+        cp_checksum(f, computed)?;
+    }
     let bitmaps = u64::from(sit).saturating_add(nat.into()).min(f.remaining());
     if bitmaps > 0 {
         f.bytes("SIT and NAT version bitmaps", bitmaps).emit()?;
     }
-    let csum_at = u64::from(csum_at);
-    if csum_at > f.pos() && csum_at.saturating_add(4) <= f.block().span.len {
+    if !early && csum_at > f.pos() && csum_at.saturating_add(4) <= f.block().span.len {
         let gap = csum_at.saturating_sub(f.pos());
         f.node(
             Node::new("Unused")
@@ -272,14 +278,7 @@ fn cp_layout(f: &mut Fields<'_>, computed: &Option<u32>) -> Result<()> {
                 .summary(size(gap)),
         );
         f.skip(gap);
-        f.u32("Checksum")
-            .hex()
-            .with(|&v, n| match computed {
-                Some(c) if *c == v => n.summary("valid"),
-                Some(c) => n.diag(Diagnostic::warning(format!("mismatch: computed {c:#010x}"))),
-                None => n,
-            })
-            .emit()?;
+        cp_checksum(f, computed)?;
     }
     let rest = f.remaining();
     if rest > 0 {
@@ -292,10 +291,34 @@ fn cp_layout(f: &mut Fields<'_>, computed: &Option<u32>) -> Result<()> {
     Ok(())
 }
 
-/// A checkpoint pack's block: (version, checksum ok, flags).
+fn cp_checksum(f: &mut Fields<'_>, computed: &Option<u32>) -> Result<()> {
+    f.u32("Checksum")
+        .hex()
+        .with(|&v, n| match computed {
+            Some(c) if *c == v => n.summary("valid"),
+            Some(c) => n.diag(Diagnostic::warning(format!("mismatch: computed {c:#010x}"))),
+            None => n,
+        })
+        .emit()?;
+    Ok(())
+}
+
+/// A checkpoint pack's block: (version, checksum ok, computed checksum).
+/// The CRC covers the block up to the checksum and, when the checksum is
+/// not at the end (LARGE_NAT_BITMAP), the rest of the block after it
+/// (`f2fs_checkpoint_chksum`).
 fn cp_info(raw: &[u8]) -> (u64, bool, Option<u32>) {
     let csum_at = to_usize(u32_le(raw, 164).unwrap_or(0).into());
-    let computed = raw.get(..csum_at).map(|b| f2fs_crc(MAGIC, &[b]));
+    let block = to_usize(BLOCK);
+    let computed = raw.get(..csum_at).map(|head| {
+        let tail_at = csum_at.saturating_add(4);
+        let tail = if tail_at < block {
+            raw.get(tail_at..block).unwrap_or_default()
+        } else {
+            &[]
+        };
+        f2fs_crc(MAGIC, &[head, tail])
+    });
     let ok = computed.is_some() && computed == u32_le(raw, csum_at);
     (u64_le(raw, 0).unwrap_or(0), ok, computed)
 }

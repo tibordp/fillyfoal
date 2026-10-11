@@ -114,11 +114,14 @@ byte-reproducible; the others are (the scripts fix UUIDs, labels and times).
 | `ext/mke2fs-ext2.img.raw.zst` | e2fsprogs 1.47.2 mke2fs | `make-ext.sh`: `mke2fs -t ext2 -b 1024 -d tree` (block maps with double indirect blocks), then `e2fsck -fyD` (which stamps the run's time) |
 | `ext/mke2fs-ext3.img.raw.zst` | e2fsprogs 1.47.2 mke2fs | `make-ext.sh`: `mke2fs -t ext3 -J size=1 -d tree`, `e2fsck -fyD` (an htree directory, a journal) |
 | `ext/mke2fs-ext4.img.raw.zst` | e2fsprogs 1.47.2 mke2fs | `make-ext.sh`: `mke2fs -t ext4 -O inline_data,^resize_inode -J size=1 -d tree`, `e2fsck -fyD` (extents, flex_bg, metadata_csum, inline data, an htree directory, attribute blocks, an orphan file, a journal) |
+| `ext/mke2fs-metabg.img.raw.zst` | e2fsprogs 1.47.2 mke2fs | `make-ext.sh`: `mke2fs -t ext4 -b 1024 -O meta_bg,^resize_inode,^has_journal -g 256 -N 160 -d tree` (20 groups, 16 descriptors per block: groups 16-19 keep their descriptors in their own meta group; 140 empty files put inodes there), `e2fsck -fyD` |
 | `squashfs/` | squashfs-tools 4.6.1 mksquashfs | `make-squashfs.sh`: reproducible; `-b 16K -xattrs` with gzip, LZMA, LZO, xz, LZ4 and zstd, and `-no-compression -no-fragments -no-exports` for `mksquashfs-plain.sqfs` |
 | `btrfs/` | btrfs-progs 6.14 mkfs.btrfs | `make-btrfs.sh`: `mkfs.btrfs -r tree --shrink` (and `--compress zstd`); the chunk tree UUID is random, so not byte-reproducible |
 | `f2fs/sload.f2fs.raw.zst` | f2fs-tools 1.16 mkfs.f2fs, sload.f2fs | `make-f2fs.sh`: `mkfs.f2fs -T … -U … -O extra_attr,inode_checksum,sb_checksum,inode_crtime`, `sload.f2fs -f tree`; the script bind-mounts a neutral `/proc/version` (`Linux version 6.12.0 (fillyfoal@fillyfoal)`), which the superblock records |
+| `f2fs/large-nat.f2fs.raw.zst` | f2fs-tools 1.16 mkfs.f2fs | `make-f2fs.sh`: `mkfs.f2fs -i -T … -U … -l fillyfoal` on 64 MiB (empty; LARGE_NAT_BITMAP, so the checkpoint checksum sits at offset 192), same neutral `/proc/version` |
 | `jfs/mkfs.jfs.raw.zst` | jfsutils 1.1.15 mkfs.jfs | `make-small.sh`: an empty 16 MiB aggregate (no tool fills JFS without a mount, and the kernel used has no JFS); random UUID |
 | `cramfs/mkcramfs.cramfs` | util-linux 2.41 mkfs.cramfs | `make-small.sh`: `mkfs.cramfs -N little -n fillyfoal tree` |
+| `cramfs/mkcramfs-padded.cramfs` | util-linux 2.41 mkfs.cramfs | `make-small.sh`: `mkfs.cramfs -p -N little -n fillyfoal tree` (a zero 512-byte boot block in front) |
 | `minix/` | util-linux 2.41 mkfs.minix | `make-small.sh`: empty 64 KiB filesystems of versions 1, 2 and 3 (`mkfs.minix -1/-2/-3`; no tool fills them without a mount) |
 | `fat/` | dosfstools 4.2 mkfs.fat, mtools 4.0 | `make-fat.sh`: `mkfs.fat -F 12/16/32 -i … -n FILLYFOAL`, filled with `mcopy -s -m` (long names, subdirectories) under `SOURCE_DATE_EPOCH` |
 | `exfat/linux-exfat.img.raw.zst` | exfatprogs mkfs.exfat, Linux 7.0 exfat | `make-fat.sh`: `mkfs.exfat -L fillyfoal -c 4K -b 4K`, mounted and filled; random volume serial |

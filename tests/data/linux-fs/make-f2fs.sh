@@ -1,5 +1,5 @@
 #!/bin/sh
-# F2FS fixture (tests/fixtures/external/f2fs/). From the repository root:
+# F2FS fixtures (tests/fixtures/external/f2fs/). From the repository root:
 #
 #   docker build -t fillyfoal-fs-tools tests/data/linux-fs
 #   mkdir -p /tmp/fixtures/fs-f2fs
@@ -25,4 +25,11 @@ sload.f2fs -f /tmp/tree -T 1704067200 f2fs.img
 fsck.f2fs f2fs.img
 dump.f2fs -i 3 f2fs.img > f2fs.root.txt 2>&1 || true
 zstd -q -19 -f f2fs.img -o f2fs.img.raw.zst
+# -i (LARGE_NAT_BITMAP): the checkpoint checksum sits at offset 192, before
+# the NAT/SIT bitmaps, and covers the rest of the block after it too.
+truncate -s 64m large-nat.img
+mkfs.f2fs -q -f -i -T 1704067200 -U 00000000-0000-4000-8000-0000000000f3 \
+  -l fillyfoal large-nat.img
+fsck.f2fs large-nat.img
+zstd -q -19 -f large-nat.img -o large-nat.img.raw.zst
 ls -l ./*.zst
