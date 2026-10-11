@@ -5,6 +5,12 @@
 //! time. Slow, small and easy to audit. The decoder works on input
 //! that is fully in memory and can stop at any symbol boundary, so callers
 //! decode in bounded steps and yield to the budget in between.
+//!
+//! [`Inflate::deflate64`] decodes Deflate64 (PKWARE's "enhanced deflate",
+//! ZIP method 9, 7-Zip coder `04 01 09`): a 64 KiB window, length code 285
+//! as base 3 plus 16 extra bits, and distance codes 30 and 31 (bases 32769
+//! and 49153, 14 extra bits), as in 7-Zip's `DeflateDecoder` and zlib's
+//! `contrib/infback9`.
 
 use crate::error::{Diagnostic, Result};
 
@@ -25,6 +31,12 @@ const DIST_EXTRA: [u8; 30] = [
     0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13,
     13,
 ];
+/// Deflate64's distance codes 30 and 31.
+const DIST64_BASE: [u16; 2] = [32769, 49153];
+const DIST64_EXTRA: u8 = 14;
+/// Deflate64's length code 285: base 3 and 16 extra bits.
+const LENGTH64_BASE: u16 = 3;
+const LENGTH64_EXTRA: u8 = 16;
 const CODE_LENGTH_ORDER: [usize; 19] = [
     16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15,
 ];
@@ -85,6 +97,8 @@ impl Huffman {
 
 /// How far back a DEFLATE match can reach.
 pub const WINDOW: usize = 32 * 1024;
+/// How far back a Deflate64 match can reach.
+pub const WINDOW64: usize = 64 * 1024;
 
 fn bad(message: &str) -> Diagnostic {
     Diagnostic::malformed(format!("deflate: {message}"))
@@ -107,6 +121,8 @@ pub struct Inflate {
     bit: usize,
     state: State,
     last: bool,
+    /// Deflate64 rather than DEFLATE.
+    deflate64: bool,
 }
 
 impl Default for Inflate {
@@ -121,7 +137,21 @@ impl Inflate {
             bit: 0,
             state: State::Header,
             last: false,
+            deflate64: false,
         }
+    }
+
+    /// A Deflate64 inflater (see the module docs).
+    pub fn deflate64() -> Self {
+        Inflate {
+            deflate64: true,
+            ..Self::new()
+        }
+    }
+
+    /// How far back matches can reach: the output a caller must keep.
+    pub fn window(&self) -> usize {
+        if self.deflate64 { WINDOW64 } else { WINDOW }
     }
 
     /// Bytes of input consumed so far (rounded up to whole bytes).
@@ -186,7 +216,7 @@ impl Inflate {
                                 remaining: usize::try_from(len).unwrap_or(0),
                             }
                         }
-                        1 => fixed()?,
+                        1 => fixed(self.deflate64)?,
                         2 => self.dynamic(input)?,
                         _ => return Err(bad("invalid block type 3")),
                     };
@@ -279,18 +309,29 @@ impl Inflate {
                 return Ok(true);
             }
             let index = symbol.saturating_sub(257);
-            let base = LENGTH_BASE
-                .get(index)
-                .ok_or_else(|| bad("invalid length symbol"))?;
-            let extra = LENGTH_EXTRA.get(index).copied().unwrap_or(0);
-            let len = usize::from(*base)
+            let (base, extra) = if self.deflate64 && index == 28 {
+                (LENGTH64_BASE, LENGTH64_EXTRA)
+            } else {
+                let base = LENGTH_BASE
+                    .get(index)
+                    .ok_or_else(|| bad("invalid length symbol"))?;
+                (*base, LENGTH_EXTRA.get(index).copied().unwrap_or(0))
+            };
+            let len = usize::from(base)
                 .saturating_add(usize::try_from(self.bits(input, extra.into())?).unwrap_or(0));
             let d = usize::from(self.decode(input, dist)?);
-            let base = DIST_BASE
-                .get(d)
-                .ok_or_else(|| bad("invalid distance symbol"))?;
-            let extra = DIST_EXTRA.get(d).copied().unwrap_or(0);
-            let distance = usize::from(*base)
+            let (base, extra) = match (DIST_BASE.get(d), d.checked_sub(30)) {
+                (Some(base), _) => (*base, DIST_EXTRA.get(d).copied().unwrap_or(0)),
+                (None, Some(i)) if self.deflate64 => (
+                    DIST64_BASE
+                        .get(i)
+                        .copied()
+                        .ok_or_else(|| bad("invalid distance symbol"))?,
+                    DIST64_EXTRA,
+                ),
+                _ => return Err(bad("invalid distance symbol")),
+            };
+            let distance = usize::from(base)
                 .saturating_add(usize::try_from(self.bits(input, extra.into())?).unwrap_or(0));
             if distance > out.len() {
                 return Err(bad("distance reaches before the start of the output"));
@@ -317,7 +358,8 @@ impl Inflate {
         let ncode = usize::try_from(self.bits(input, 4)?)
             .unwrap_or(0)
             .saturating_add(4);
-        if nlen > 286 || ndist > 30 {
+        let max_dist = if self.deflate64 { 32 } else { 30 };
+        if nlen > 286 || ndist > max_dist {
             return Err(bad("too many length or distance codes"));
         }
         let mut lengths = [0u8; 19];
@@ -367,7 +409,8 @@ impl Inflate {
     }
 }
 
-fn fixed() -> Result<State> {
+/// The fixed codes; Deflate64 also uses distance codes 30 and 31.
+fn fixed(deflate64: bool) -> Result<State> {
     let mut lit = [0u8; 288];
     for (i, slot) in lit.iter_mut().enumerate() {
         *slot = match i {
@@ -379,7 +422,7 @@ fn fixed() -> Result<State> {
     }
     Ok(State::Codes {
         lit: Huffman::new(&lit)?,
-        dist: Huffman::new(&[5u8; 30])?,
+        dist: Huffman::new(if deflate64 { &[5u8; 32] } else { &[5u8; 30] })?,
     })
 }
 

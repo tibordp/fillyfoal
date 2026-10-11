@@ -1,0 +1,44 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ bcj-armthumb.7z — 7-Zip archive, 1 file, LZMA2 + BCJ ARM-Thumb  [0x0+0x1439]
+  ▾ Signature header — version 0.4  [0x0+0x20]
+      Signature: 37 7a bc af 27 1c  |7z..'.|  [0x0+0x6]
+      Major version: 0  [0x6+0x1]
+      Minor version: 4  [0x7+0x1]
+      Start header CRC: 0x46516cf8  [0x8+0x4]
+      Next header offset: 0x13bf  [0xc+0x8]
+      Next header size: 90 — 90 bytes  [0x14+0x8]
+      Next header CRC: 0x9ff870b5  [0x1c+0x4]
+  ▾ Files — 1 file  [0x13df+0x5a]
+    ▾ code.bin — 8 KiB  [0x20+0x13bf]
+        Modification time: 2024-01-02 03:04:00 UTC
+        Attributes: 0x81a48020 — -rw-r--r--
+        Size: 8192 — 8 KiB
+        Folder: 0
+      ▾ Content — 0x2000 bytes decompressed  [0x20+0x13bf]
+          Data  [#1:0x0+0x2000]
+  ▾ Folders — 1 folder  [0x20+0x13bf]
+    ▾ Folder 0 — LZMA2 + BCJ ARM-Thumb, 4.9 KiB → 8 KiB, 1 stream  [0x20+0x13bf]
+        Coder 0: "LZMA2" — 1 in, 1 out
+        Coder 1: "BCJ ARM-Thumb" — 1 in, 1 out
+        Unpacked size: 8192 — 8 KiB
+        Streams: 1
+      ▾ Data — 0x2000 bytes decompressed  [0x20+0x13bf]
+          Data  [#1:0x0+0x2000]
+  ▾ Next header — kHeader  [0x13df+0x5a]
+    ▾ kMainStreamsInfo  [0x13e0+0x27]
+      ▾ kPackInfo — 1 packed stream, at 0x0  [0x13e1+0x7]
+          kSize — 1 size  [0x13e4+0x3]
+      ▾ kUnPackInfo — 1 folder  [0x13e8+0x16]
+          Folder 0 — LZMA2 + BCJ ARM-Thumb  [0x13ec+0xc]
+          kCodersUnPackSize  [0x13f8+0x5]
+      ▾ kSubStreamsInfo — 1 stream  [0x13fe+0x8]
+          kCRC — 1 CRC  [0x13ff+0x6]
+    ▾ kFilesInfo — 1 file  [0x1407+0x31]
+        kDummy — 1 byte  [0x1409+0x3]
+        kName — 19 bytes  [0x140c+0x15]
+        kDummy — 0 bytes  [0x1421+0x2]
+        kMTime — 10 bytes  [0x1423+0xc]
+        kWinAttributes — 6 bytes  [0x142f+0x8]

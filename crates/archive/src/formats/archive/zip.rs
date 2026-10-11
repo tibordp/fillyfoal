@@ -1311,6 +1311,7 @@ async fn method_codec(
     let codec = match method {
         0 => Codec::Stored,
         8 => Codec::Deflate,
+        9 => Codec::Deflate64,
         12 => Codec::Bzip2,
         20 | 93 => Codec::Zstd,
         95 => Codec::Xz,

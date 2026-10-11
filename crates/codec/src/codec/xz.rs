@@ -376,12 +376,33 @@ impl XzStream {
             hp = hp.saturating_add(props_len);
             match id {
                 0x21 => dict = Some(dict_size(props.first().copied().unwrap_or(0))),
-                0x03 => posts.push(Post::Delta(
-                    usize::from(props.first().copied().unwrap_or(0)).saturating_add(1),
+                0x03 => posts.push((
+                    Post::Delta(usize::from(props.first().copied().unwrap_or(0)).saturating_add(1)),
+                    0,
                 )),
-                0x04 => posts.push(Post::X86),
-                0x07 => posts.push(Post::Arm),
-                0x0a => posts.push(Post::Arm64),
+                0x04..=0x0b => {
+                    let kind = match id {
+                        0x04 => Post::X86,
+                        0x05 => Post::PowerPc,
+                        0x06 => Post::Ia64,
+                        0x07 => Post::Arm,
+                        0x08 => Post::ArmThumb,
+                        0x09 => Post::Sparc,
+                        0x0a => Post::Arm64,
+                        _ => Post::RiscV,
+                    };
+                    // An optional 4-byte start offset, a multiple of the
+                    // instruction alignment (as liblzma requires).
+                    let start = match props.len() {
+                        0 => 0,
+                        4 => crate::bytes::u32_le(props, 0).unwrap_or(0),
+                        _ => return Err(bad("invalid BCJ filter properties")),
+                    };
+                    if start.checked_rem(kind.alignment()) != Some(0) {
+                        return Err(bad("misaligned BCJ start offset"));
+                    }
+                    posts.push((kind, start));
+                }
                 other => return Err(Diagnostic::unsupported(format!("xz filter {other:#x}"))),
             }
         }
@@ -397,7 +418,7 @@ impl XzStream {
                 stages: posts
                     .iter()
                     .rev()
-                    .map(|&p| (PostState::new(p), Vec::new()))
+                    .map(|&(p, start)| (PostState::with_start(p, start), Vec::new()))
                     .collect(),
             })
         });

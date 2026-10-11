@@ -1169,16 +1169,38 @@ fn test_ms(b: u8) -> bool {
     b == 0 || b == 0xff
 }
 
-/// An xz/7-Zip filter after the decompressor.
+/// An xz/7-Zip filter after the decompressor. The branch converters other
+/// than x86, ARM and ARM64 follow liblzma's `simple/*.c` (xz, 0BSD).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Post {
     X86,
     Arm,
     Arm64,
+    /// Big-endian PowerPC (`B` with AA=0, LK=1).
+    PowerPc,
+    /// IA-64 (Itanium bundles).
+    Ia64,
+    /// ARM Thumb (`BL` pairs).
+    ArmThumb,
+    /// SPARC (`CALL`).
+    Sparc,
+    /// RISC-V (`JAL`, `AUIPC` pairs).
+    RiscV,
     Delta(usize),
 }
 
 impl Post {
+    /// The alignment a start offset must have (liblzma's `unfiltered_max`
+    /// aside, xz rejects offsets that are not a multiple of it).
+    pub fn alignment(self) -> u32 {
+        match self {
+            Post::X86 | Post::Delta(_) => 1,
+            Post::ArmThumb | Post::RiscV => 2,
+            Post::Arm | Post::Arm64 | Post::PowerPc | Post::Sparc => 4,
+            Post::Ia64 => 16,
+        }
+    }
+
     /// Filters a whole buffer (a stream from position 0).
     pub fn apply(self, buf: &mut [u8]) {
         PostState::new(self).run(buf, true);
@@ -1202,9 +1224,15 @@ pub struct PostState {
 
 impl PostState {
     pub fn new(kind: Post) -> Self {
+        Self::with_start(kind, 0)
+    }
+
+    /// A branch converter whose stream starts at address `start` (the xz
+    /// BCJ "start offset" property).
+    pub fn with_start(kind: Post, start: u32) -> Self {
         PostState {
             kind,
-            pos: 0,
+            pos: u64::from(start),
             prev_pos: u64::MAX,
             prev_mask: 0,
             history: [0; 256],
@@ -1226,6 +1254,20 @@ impl PostState {
                 arm64(buf, self.pos);
                 buf.len() & !3
             }
+            Post::PowerPc => {
+                powerpc(buf, self.pos);
+                buf.len() & !3
+            }
+            Post::Sparc => {
+                sparc(buf, self.pos);
+                buf.len() & !3
+            }
+            Post::Ia64 => {
+                ia64(buf, self.pos);
+                buf.len() & !15
+            }
+            Post::ArmThumb => arm_thumb(buf, self.pos),
+            Post::RiscV => riscv(buf, self.pos),
             Post::Delta(d) => {
                 self.delta(buf, d);
                 buf.len()
@@ -1480,6 +1522,183 @@ fn arm64(buf: &mut [u8], pos: u64) {
     }
 }
 
+/// The stream address (modulo 2^32) of byte `i` of a buffer starting at
+/// stream position `pos`.
+fn addr(pos: u64, i: usize) -> u32 {
+    u32::try_from(pos & 0xffff_ffff)
+        .unwrap_or(0)
+        .wrapping_add(u32::try_from(i).unwrap_or(0))
+}
+
+/// PowerPC BCJ (liblzma `powerpc.c`), over the whole words of `buf`.
+fn powerpc(buf: &mut [u8], pos: u64) {
+    for (i, w) in buf.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+        if w[0] >> 2 == 0x12 && w[3] & 3 == 1 {
+            let src = u32::from_be_bytes(*w) & 0x03ff_fffc;
+            let dest = src.wrapping_sub(pc(pos, i));
+            let d = dest.to_be_bytes();
+            w[0] = 0x48 | (d[0] & 3);
+            w[1] = d[1];
+            w[2] = d[2];
+            w[3] = (w[3] & 3) | d[3];
+        }
+    }
+}
+
+/// SPARC BCJ (liblzma `sparc.c`), over the whole words of `buf`.
+fn sparc(buf: &mut [u8], pos: u64) {
+    for (i, w) in buf.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+        if (w[0] == 0x40 && w[1] & 0xc0 == 0) || (w[0] == 0x7f && w[1] & 0xc0 == 0xc0) {
+            let src = u32::from_be_bytes(*w) << 2;
+            let dest = src.wrapping_sub(pc(pos, i)) >> 2;
+            let dest = ((0u32.wrapping_sub((dest >> 22) & 1) << 22) & 0x3fff_ffff)
+                | (dest & 0x003f_ffff)
+                | 0x4000_0000;
+            *w = dest.to_be_bytes();
+        }
+    }
+}
+
+/// IA-64 BCJ (liblzma `ia64.c`), over the whole 16-byte bundles of `buf`.
+fn ia64(buf: &mut [u8], pos: u64) {
+    const BRANCH_TABLE: [u32; 32] = [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 6, 6, 0, 0, 7, 7, 4, 4, 0, 0, 4, 4,
+        0, 0,
+    ];
+    for (b, bundle) in buf.as_chunks_mut::<16>().0.iter_mut().enumerate() {
+        let mask = BRANCH_TABLE
+            .get(usize::from(bundle[0] & 0x1f))
+            .copied()
+            .unwrap_or(0);
+        let at = addr(pos, b.saturating_mul(16));
+        for slot in 0..3u32 {
+            if (mask >> slot) & 1 == 0 {
+                continue;
+            }
+            let bit_pos = 5u32.saturating_add(slot.saturating_mul(41));
+            let byte_pos = usize::try_from(bit_pos >> 3).unwrap_or(0);
+            let bit_res = bit_pos & 7;
+            let Some(bytes) = bundle.get_mut(byte_pos..byte_pos.saturating_add(6)) else {
+                continue;
+            };
+            let mut raw = [0u8; 8];
+            if let Some(dst) = raw.get_mut(..6) {
+                dst.copy_from_slice(bytes);
+            }
+            let mut instruction = u64::from_le_bytes(raw);
+            let mut norm = instruction >> bit_res;
+            if (norm >> 37) & 0xf != 0x5 || (norm >> 9) & 0x7 != 0 {
+                continue;
+            }
+            let mut src = u32::try_from((norm >> 13) & 0xf_ffff).unwrap_or(0);
+            src |= u32::try_from((norm >> 36) & 1).unwrap_or(0) << 20;
+            src <<= 4;
+            let dest = src.wrapping_sub(at) >> 4;
+            norm &= !(0x8f_ffffu64 << 13);
+            norm |= u64::from(dest & 0xf_ffff) << 13;
+            norm |= u64::from(dest & 0x10_0000) << (36 - 20);
+            instruction &= (1u64 << bit_res).wrapping_sub(1);
+            instruction |= norm << bit_res;
+            if let Some(src) = instruction.to_le_bytes().get(..6) {
+                bytes.copy_from_slice(src);
+            }
+        }
+    }
+}
+
+/// ARM Thumb BCJ (liblzma `armthumb.c`); returns where it stopped.
+fn arm_thumb(buf: &mut [u8], pos: u64) -> usize {
+    let mut i = 0usize;
+    while let Some(w) = buf
+        .get_mut(i..i.saturating_add(4))
+        .and_then(|s| <&mut [u8; 4]>::try_from(s).ok())
+    {
+        let (b0, b1, b2, b3) = (
+            u32::from(w[0]),
+            u32::from(w[1]),
+            u32::from(w[2]),
+            u32::from(w[3]),
+        );
+        if b1 & 0xf8 == 0xf0 && b3 & 0xf8 == 0xf8 {
+            let src = ((b1 & 7) << 19 | b0 << 11 | (b3 & 7) << 8 | b2) << 1;
+            let dest = src.wrapping_sub(addr(pos, i).wrapping_add(4)) >> 1;
+            w[1] = 0xf0 | ((dest >> 19) & 7) as u8;
+            w[0] = (dest >> 11) as u8;
+            w[3] = 0xf8 | ((dest >> 8) & 7) as u8;
+            w[2] = dest as u8;
+            i = i.saturating_add(2);
+        }
+        i = i.saturating_add(2);
+    }
+    i
+}
+
+/// RISC-V BCJ (liblzma `riscv.c`, decoder); returns where it stopped.
+fn riscv(buf: &mut [u8], pos: u64) -> usize {
+    let Some(size) = buf.len().checked_sub(8) else {
+        return 0;
+    };
+    let le = |b: &[u8], at: usize| crate::bytes::u32_le(b, at).unwrap_or(0);
+    let mut i = 0usize;
+    while i <= size {
+        let Some(w) = buf
+            .get_mut(i..i.saturating_add(8))
+            .and_then(|s| <&mut [u8; 8]>::try_from(s).ok())
+        else {
+            break;
+        };
+        let mut inst = u32::from(w[0]);
+        if inst == 0xef {
+            // JAL
+            let b1 = u32::from(w[1]);
+            if b1 & 0x0d != 0 {
+                i = i.saturating_add(2);
+                continue;
+            }
+            let (b2, b3) = (u32::from(w[2]), u32::from(w[3]));
+            let a = ((b1 & 0xf0) << 13 | b2 << 9 | b3 << 1).wrapping_sub(addr(pos, i));
+            w[1] = ((b1 & 0x0f) | ((a >> 8) & 0xf0)) as u8;
+            w[2] = (((a >> 16) & 0x0f) | ((a >> 7) & 0x10) | ((a << 4) & 0xe0)) as u8;
+            w[3] = (((a >> 4) & 0x7f) | ((a >> 13) & 0x80)) as u8;
+            i = i.saturating_add(4);
+        } else if inst & 0x7f == 0x17 {
+            // AUIPC
+            inst = le(w.as_slice(), 0);
+            let mut inst2;
+            if inst & 0xe80 != 0 {
+                inst2 = le(w.as_slice(), 4);
+                // NOT_AUIPC_PAIR
+                if ((inst << 8) ^ inst2.wrapping_sub(3)) & 0xf_8003 != 0 {
+                    i = i.saturating_add(6);
+                    continue;
+                }
+                let a = (inst & 0xffff_f000).wrapping_add(inst2 >> 20);
+                inst = 0x17 | 2 << 7 | inst2 << 12;
+                inst2 = a;
+            } else {
+                let rs1 = inst >> 27;
+                // NOT_SPECIAL_AUIPC
+                if (inst.wrapping_sub(0x3117) << 18) >= (rs1 & 0x1d) {
+                    i = i.saturating_add(4);
+                    continue;
+                }
+                let a = crate::bytes::u32_be(w.as_slice(), 4)
+                    .unwrap_or(0)
+                    .wrapping_sub(addr(pos, i));
+                inst2 = (inst >> 12) | a << 20;
+                inst = 0x17 | rs1 << 7 | (a.wrapping_add(0x800) & 0xffff_f000);
+            }
+            let (lo, hi) = w.split_at_mut(4);
+            lo.copy_from_slice(&inst.to_le_bytes());
+            hi.copy_from_slice(&inst2.to_le_bytes());
+            i = i.saturating_add(8);
+        } else {
+            i = i.saturating_add(2);
+        }
+    }
+    i
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
 mod tests {
@@ -1609,6 +1828,81 @@ mod tests {
         assert_eq!(seen, 3);
     }
 
+    /// The input of `tests/data/xz/make_bcj.sh` (`bcjdata.py`).
+    fn bcj_input() -> Vec<u8> {
+        const VOCAB: [u8; 16] = [
+            0x00, 0x01, 0x05, 0x10, 0x16, 0x17, 0x40, 0x48, 0x4B, 0x7F, 0xC0, 0xE8, 0xEB, 0xEF,
+            0xF0, 0xF8,
+        ];
+        let mut x: u32 = 2024;
+        (0..8192)
+            .map(|_| {
+                x = x.wrapping_mul(1_103_515_245).wrapping_add(12345) & 0x7fff_ffff;
+                VOCAB[((x >> 16) & 15) as usize]
+            })
+            .collect()
+    }
+
+    /// The branch converters against XZ Utils 5.8.4 and 7-Zip 26.03
+    /// (the external fixtures written by `tests/data/xz/make_bcj.sh`).
+    #[test]
+    fn bcj_filters_match_xz_and_7zip() {
+        use crate::codec::Codec;
+        let want = bcj_input();
+        let xz: [&[u8]; 7] = [
+            include_bytes!("../../../../tests/fixtures/external/xz/bcj-powerpc.xz"),
+            include_bytes!("../../../../tests/fixtures/external/xz/bcj-ia64.xz"),
+            include_bytes!("../../../../tests/fixtures/external/xz/bcj-armthumb.xz"),
+            include_bytes!("../../../../tests/fixtures/external/xz/bcj-sparc.xz"),
+            include_bytes!("../../../../tests/fixtures/external/xz/bcj-riscv.xz"),
+            include_bytes!("../../../../tests/fixtures/external/xz/bcj-x86-start.xz"),
+            include_bytes!("../../../../tests/fixtures/external/xz/bcj-riscv-start.xz"),
+        ];
+        for (i, data) in xz.iter().enumerate() {
+            let mut d = Codec::Xz.decoder().unwrap();
+            let out = decode_all(d.as_mut(), data, 1 << 20).unwrap();
+            assert!(out == want, "xz fixture {i}");
+            assert!(d.warning(&out).is_none(), "xz fixture {i}");
+        }
+        // 7z: the packed stream (LZMA2) at 0x20, then the converter.
+        let sevenz: [(&[u8], usize, Post); 3] = [
+            (
+                include_bytes!("../../../../tests/fixtures/external/7z/bcj-armthumb.7z"),
+                0x13bf,
+                Post::ArmThumb,
+            ),
+            (
+                include_bytes!("../../../../tests/fixtures/external/7z/bcj-sparc.7z"),
+                0x1469,
+                Post::Sparc,
+            ),
+            (
+                include_bytes!("../../../../tests/fixtures/external/7z/bcj-riscv.7z"),
+                0x145f,
+                Post::RiscV,
+            ),
+        ];
+        for (data, len, post) in sevenz {
+            let codec = Codec::chain(
+                "t",
+                "t (lazy)",
+                [Codec::Lzma2 { dict: None }, Codec::PostFilter(post)],
+            );
+            let out = decode_all(
+                codec.decoder().unwrap().as_mut(),
+                &data[0x20..0x20 + len],
+                1 << 20,
+            )
+            .unwrap();
+            assert!(out == want, "{post:?}");
+        }
+        // Without the converters the output differs (each one changed
+        // something).
+        let mut d = Codec::Lzma2 { dict: None }.decoder().unwrap();
+        let raw = decode_all(d.as_mut(), &sevenz[1].0[0x20..0x20 + sevenz[1].1], 1 << 20).unwrap();
+        assert!(raw != want);
+    }
+
     #[test]
     fn post_filter_checkpoints() {
         // Delta (distance 2) over a few kilobytes, as a stand-alone stage.
@@ -1619,7 +1913,17 @@ mod tests {
         }
         let out = decode_all(&mut PostFilter::new(Post::Delta(2)), &encoded, 1 << 20).unwrap();
         assert_eq!(out, raw);
-        for post in [Post::Delta(2), Post::X86, Post::Arm, Post::Arm64] {
+        for post in [
+            Post::Delta(2),
+            Post::X86,
+            Post::Arm,
+            Post::Arm64,
+            Post::PowerPc,
+            Post::Ia64,
+            Post::ArmThumb,
+            Post::Sparc,
+            Post::RiscV,
+        ] {
             let (checked, largest) =
                 verify_checkpoints(|| Box::new(PostFilter::new(post)), &encoded, 100, 1).unwrap();
             assert!(checked > 20, "{checked}");

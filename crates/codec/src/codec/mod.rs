@@ -9,6 +9,7 @@
 
 pub mod ace;
 pub mod bcfz;
+pub mod bcj2;
 pub mod binhex;
 pub mod brotli;
 pub mod bzip2;
@@ -74,6 +75,8 @@ pub enum Codec {
     Stored,
     /// Raw DEFLATE (RFC 1951).
     Deflate,
+    /// Raw Deflate64 (ZIP method 9; see [`inflate`]).
+    Deflate64,
     /// zlib-wrapped DEFLATE (RFC 1950), with its Adler-32 checked.
     Zlib,
     /// gzip members (RFC 1952) from the first member's DEFLATE data on (its
@@ -239,10 +242,20 @@ pub enum Codec {
     Lzh(lzh::Params),
     /// A PSARC entry's zlib or LZMA blocks (see [`psarc`]).
     Psarc(psarc::Entry),
+    /// 7z PPMd (variant H with 7-Zip's range coder): model `order`, `mem`
+    /// bytes of model memory, `size` bytes of output (see [`rar::Ppmd7`]).
+    Ppmd7 {
+        order: u8,
+        mem: u32,
+        size: u64,
+    },
     /// A RAR 2.9/5.0 group of files (one, or a solid run) decoded as one
     /// stream (see [`rar`]).
     Rar(rar::Params),
-    /// A BCJ (x86, ARM, ARM64) or Delta filter, decoding direction, on its
+    /// A 7z BCJ2 folder: four packed streams, each through its own codec,
+    /// combined by 7-Zip's BCJ2 x86 converter (see [`bcj2`]).
+    Bcj2(Arc<bcj2::Params>),
+    /// A BCJ (x86, ARM, ARM64, PowerPC, IA-64, ARM Thumb, SPARC, RISC-V) or Delta filter, decoding direction, on its
     /// own (7-Zip folders chain it after their decompressor).
     PostFilter(lzma::Post),
     /// Nintendo Yaz0 LZ77 (the body after the 16-byte header), decoding to
@@ -306,6 +319,7 @@ impl Codec {
         match self {
             Codec::Stored => "stored",
             Codec::Deflate => "deflate",
+            Codec::Deflate64 => "deflate64",
             Codec::Zlib => "zlib",
             Codec::Gzip => "gzip",
             Codec::ZipCrypto(_) => "zipcrypto",
@@ -364,9 +378,16 @@ impl Codec {
             Codec::Lzh(_) => "lzh",
             Codec::Psarc(_) => "psarc",
             Codec::Rar(_) => "rar",
+            Codec::Ppmd7 { .. } => "ppmd7",
+            Codec::Bcj2(_) => "bcj2",
             Codec::PostFilter(lzma::Post::X86) => "bcj-x86",
             Codec::PostFilter(lzma::Post::Arm) => "bcj-arm",
             Codec::PostFilter(lzma::Post::Arm64) => "bcj-arm64",
+            Codec::PostFilter(lzma::Post::PowerPc) => "bcj-powerpc",
+            Codec::PostFilter(lzma::Post::Ia64) => "bcj-ia64",
+            Codec::PostFilter(lzma::Post::ArmThumb) => "bcj-armthumb",
+            Codec::PostFilter(lzma::Post::Sparc) => "bcj-sparc",
+            Codec::PostFilter(lzma::Post::RiscV) => "bcj-riscv",
             Codec::PostFilter(lzma::Post::Delta(_)) => "delta",
             Codec::Yaz0 { .. } => "yaz0",
             Codec::BinHex => "binhex",
@@ -387,6 +408,7 @@ impl Codec {
         match self {
             Codec::Stored => "stored",
             Codec::Deflate => "deflate (lazy)",
+            Codec::Deflate64 => "deflate64 (lazy)",
             Codec::Zlib => "zlib (lazy)",
             Codec::Gzip => "gzip (lazy)",
             Codec::ZipCrypto(_) => "zipcrypto (lazy)",
@@ -445,9 +467,16 @@ impl Codec {
             Codec::Lzh(_) => "lzh (lazy)",
             Codec::Psarc(_) => "psarc (lazy)",
             Codec::Rar(_) => "rar (lazy)",
+            Codec::Ppmd7 { .. } => "ppmd7 (lazy)",
+            Codec::Bcj2(_) => "bcj2 (lazy)",
             Codec::PostFilter(lzma::Post::X86) => "bcj-x86 (lazy)",
             Codec::PostFilter(lzma::Post::Arm) => "bcj-arm (lazy)",
             Codec::PostFilter(lzma::Post::Arm64) => "bcj-arm64 (lazy)",
+            Codec::PostFilter(lzma::Post::PowerPc) => "bcj-powerpc (lazy)",
+            Codec::PostFilter(lzma::Post::Ia64) => "bcj-ia64 (lazy)",
+            Codec::PostFilter(lzma::Post::ArmThumb) => "bcj-armthumb (lazy)",
+            Codec::PostFilter(lzma::Post::Sparc) => "bcj-sparc (lazy)",
+            Codec::PostFilter(lzma::Post::RiscV) => "bcj-riscv (lazy)",
             Codec::PostFilter(lzma::Post::Delta(_)) => "delta (lazy)",
             Codec::Yaz0 { .. } => "yaz0 (lazy)",
             Codec::BinHex => "binhex (lazy)",
@@ -467,7 +496,7 @@ impl Codec {
     pub fn verb(&self) -> &'static str {
         match self {
             Codec::Stored => "stored",
-            Codec::Deflate | Codec::Zlib | Codec::Gzip => "decompressed",
+            Codec::Deflate | Codec::Deflate64 | Codec::Zlib | Codec::Gzip => "decompressed",
             Codec::ZipCrypto(_)
             | Codec::AesCtrLe(_)
             | Codec::Rc4(_)
@@ -514,7 +543,9 @@ impl Codec {
             Codec::SpssBytecode { .. } | Codec::SasRle | Codec::SasRdc => "decompressed",
             Codec::DwgLz77 { .. } => "decompressed",
             Codec::Lzh(_) | Codec::Psarc(_) => "decompressed",
-            Codec::Rar(_) | Codec::Yaz0 { .. } => "decompressed",
+            Codec::Rar(_) | Codec::Ppmd7 { .. } | Codec::Bcj2(_) | Codec::Yaz0 { .. } => {
+                "decompressed"
+            }
             Codec::PostFilter(_) | Codec::BinHex => "decoded",
             Codec::AsciiHex
             | Codec::Ascii85
@@ -603,6 +634,10 @@ impl Codec {
             Codec::Lzx(_) => 32_768,
             // A 4 KiB RAR 5 match costs a few bits; PPMd runs cost less.
             Codec::Rar(_) => 1 << 16,
+            // A highly probable symbol costs a small fraction of a bit.
+            Codec::Ppmd7 { .. } => 1 << 16,
+            // As its main stream's codec (the other streams are smaller).
+            Codec::Bcj2(p) => p.streams.first().map_or(1, |s| s.codec.max_ratio()),
             Codec::CabFolder(f) if f.method() == 0 => 1,
             Codec::CabFolder(_) => 32_768,
             Codec::Lzfse => 4_096,
@@ -615,6 +650,8 @@ impl Codec {
             Codec::Brotli => 1 << 20,
             Codec::Lzw { .. } => 4096,
             Codec::Deflate | Codec::Zlib | Codec::Gzip => 1032,
+            // A 64 KiB match costs about 30 bits.
+            Codec::Deflate64 => 16_384,
             // A 259-byte match costs a handful of bits; a solid member's
             // output is unrelated to the bytes before it, so no bound.
             Codec::Ace(p) if p.members.len() > 1 => u64::MAX,
@@ -644,6 +681,7 @@ impl Codec {
         Some(match self {
             Codec::Stored => return None,
             Codec::Deflate => Box::new(Streaming(inflate::Inflate::new())),
+            Codec::Deflate64 => Box::new(Streaming(inflate::Inflate::deflate64())),
             Codec::Zlib => Box::new(Streaming(Zlib::default())),
             Codec::Gzip => Box::new(Streaming(gzip::Gzip::default())),
             Codec::AsciiHex => {
@@ -690,6 +728,10 @@ impl Codec {
             Codec::Lzx(params) => Box::new(lzx::LzxStream::new(*params)),
             Codec::CabFolder(folder) => Box::new(cab::FolderDecoder::new(*folder)),
             Codec::Rar(params) => Box::new(rar::Stream::new(params.clone())),
+            Codec::Bcj2(params) => Box::new(bcj2::Bcj2::new(params)),
+            Codec::Ppmd7 { order, mem, size } => {
+                Box::new(Streaming(rar::Ppmd7::new(u32::from(*order), *mem, *size)))
+            }
             Codec::Zstd => Box::new(Streaming(zstd::Zstd::new())),
             Codec::ZstdFrame => Box::new(Streaming(zstd::Zstd::single_frame())),
             Codec::Bzip2 => Box::new(Streaming(bzip2::Bzip2::default())),
@@ -774,8 +816,8 @@ impl Decode for inflate::Inflate {
     }
 
     fn releasable_output(&self, out_len: usize) -> usize {
-        // Back-references reach at most 32 KiB.
-        out_len.saturating_sub(inflate::WINDOW)
+        // Back-references reach at most 32 KiB (64 KiB for Deflate64).
+        out_len.saturating_sub(self.window())
     }
 
     fn heap_size(&self) -> Option<usize> {
@@ -954,6 +996,56 @@ mod tests {
         assert!(inflate::inflate(dynamic, 1000).is_err());
         // Truncation is an error, not a panic.
         assert!(inflate::inflate(&dynamic[..dynamic.len() / 2], 1 << 20).is_err());
+    }
+
+    /// Deflate64 from 7-Zip 26.03 (`7zz a -tzip -mm=Deflate64 -mx=9`, the
+    /// raw stream of the entry; input from `tests/data/7z/make_codecs.sh`):
+    /// 40 000 bytes repeated (distances past 32 KiB) and a 70 000-byte run.
+    #[test]
+    fn deflate64_from_7zip() {
+        let data = include_bytes!("testdata/salad.deflate64");
+        let out = inflate::inflate(data, usize::MAX).err();
+        assert!(out.is_some(), "plain DEFLATE must not accept it");
+        let mut d = Codec::Deflate64.decoder().unwrap();
+        let out = pipeline::decode_all(d.as_mut(), data, 1 << 20).unwrap();
+        assert_eq!(out.len(), 155_000);
+        assert_eq!(crc32(&out), 0x5555_a130);
+        assert_eq!(&out[40_000..80_000], &out[..40_000]);
+        let (checked, _) =
+            pipeline::verify_checkpoints(|| Codec::Deflate64.decoder().unwrap(), data, 4096, 3)
+                .unwrap();
+        assert!(checked > 5, "{checked}");
+    }
+
+    /// 7z PPMd from 7-Zip 26.03 (`7zz a -t7z -m0=PPMd:o=6:mem=1m`, the
+    /// packed stream; the first 20 000 bytes of the Deflate64 test's input).
+    #[test]
+    fn ppmd7_from_7zip() {
+        let data = include_bytes!("testdata/salad.ppmd7");
+        let codec = Codec::Ppmd7 {
+            order: 6,
+            mem: 1 << 20,
+            size: 20_000,
+        };
+        let out = pipeline::decode_all(codec.decoder().unwrap().as_mut(), data, 1 << 20).unwrap();
+        assert_eq!(out.len(), 20_000);
+        assert_eq!(crc32(&out), 0xd2f8_5e64);
+        let (checked, _) =
+            pipeline::verify_checkpoints(|| codec.decoder().unwrap(), data, 2048, 2).unwrap();
+        assert!(checked > 3, "{checked}");
+        // Truncated: an error, after the bytes that could be decoded.
+        assert!(
+            pipeline::decode_all(codec.decoder().unwrap().as_mut(), &data[..1000], 1 << 20)
+                .is_err()
+        );
+        // Out of 7-Zip's range: unsupported.
+        let bad = Codec::Ppmd7 {
+            order: 1,
+            mem: 1 << 20,
+            size: 1,
+        };
+        let err = pipeline::decode_all(bad.decoder().unwrap().as_mut(), data, 1 << 20).unwrap_err();
+        assert_eq!(err.kind, crate::error::DiagKind::Unsupported);
     }
 
     #[test]

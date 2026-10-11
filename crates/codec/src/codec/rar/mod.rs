@@ -59,6 +59,8 @@ mod ppmd;
 mod v3;
 mod v5;
 
+pub use ppmd::Ppmd7;
+
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize};
