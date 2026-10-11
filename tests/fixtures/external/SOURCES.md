@@ -265,6 +265,10 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `rocksdb-sst/lz4.sst` | RocksDB via rocksdict | edit: identity properties overwritten with `x`; RocksDB still ingests the file |
 | `rocksdb-sst/snappy.sst` | RocksDB via rocksdict | edit: identity properties overwritten with `x`; RocksDB still ingests the file |
 | `rocksdb-sst/zstd.sst` | RocksDB via rocksdict | edit: identity properties overwritten with `x`; RocksDB still ingests the file |
+| `rocksdb-sst/default-v6.sst` | RocksDB via rocksdict 0.3.29 (`SstFileWriter`, python:3.12-slim, host name `fillyfoal`) | `tests/data/rocksdb-sst/make.sh`: 150 keys, default table options (format version 6, XXH3 checksums with context, Snappy) and 1 KiB blocks; unedited (host identity `fillyfoal`, db identity `SST Writer`, random session identity) |
+| `rocksdb-sst/v5-crc32c.sst` | RocksDB via rocksdict 0.3.29 | same script: format version 5, CRC-32C, no compression, 512-byte blocks, index restart interval 4 (delta-encoded index values after shared keys) |
+| `rocksdb-sst/v6-xxhash.sst` | RocksDB via rocksdict 0.3.29 | same script: format version 6, xxHash32 checksums, no compression |
+| `rocksdb-sst/v4-xxhash64.sst` | RocksDB via rocksdict 0.3.29 | same script: format version 4, xxHash64 checksums, no compression |
 | `bam/small.bam` | htslib (via pysam, inferred) | htslib BGZF block layout; `@PG ID:gen PN:python` in the header; indexed by bai/small.bam.bai |
 | `bam/many-blocks.bam` | samtools 1.16.1 (htslib, Debian bookworm) | `tests/data/bam/many-blocks.sh` in `debian:bookworm-slim`: `samtools view -b --no-PG` of 100 synthetic reads with 60000-byte array tags, 102 BGZF blocks (5.7 MiB of records, most spanning two blocks) ending in the EOF block; reproduced byte-for-byte |
 | `bai/small.bam.bai` | htslib (via pysam, inferred) | htslib index with metadata pseudo-bins (bin 37450) |
