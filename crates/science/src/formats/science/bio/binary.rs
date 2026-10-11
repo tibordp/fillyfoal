@@ -14,7 +14,7 @@ use crate::formats::util::lines::{enumeration, float32, hex, int, preview, summa
 use crate::formats::{Codec, Head, Input, Probe, content, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
-use crate::span::{Origin, Span};
+use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, flag, lookup};
 
 const LE: Endian = Endian::Little;
@@ -182,45 +182,236 @@ async fn bgzf_block_node(
     Ok(())
 }
 
-/// Most blocks decompressed into one stream, and whether that was all of it.
-const STREAM_BLOCKS: u32 = 64;
+/// Files larger than this have their content decoded from the start as it
+/// is read instead of walked block by block first (see [`bgzf_stream`]).
+const WALK_MAX: u64 = 1 << 30;
+/// File bytes read at once while walking the block headers.
+const WALK_BATCH: u64 = 1 << 20;
+/// Blocks seeded at most, whatever the limits allow.
+const MAX_SEEDS: usize = 1 << 20;
+/// The most a BGZF block decodes to.
+const MAX_BLOCK_DATA: u32 = 0x10000;
 
-/// Decompresses the first blocks of a BGZF file into one contiguous source
-/// (the blocks' decoded sources joined as pieces). `head_only` stops after a
-/// few blocks, which is enough for headers.
-async fn bgzf_stream(cx: &Cx, file: Span, head_only: bool) -> Result<(Span, bool)> {
-    let max = if head_only { 4 } else { STREAM_BLOCKS };
-    let mut pieces = Vec::new();
+/// The decompressed content of a BGZF file: one gzip stream over all of its
+/// blocks, decoded on demand.
+struct BgzfStream {
+    span: Span,
+    /// Why the content ends before the file does (a truncated or malformed
+    /// block), or why it was not walked.
+    note: Option<Diagnostic>,
+}
+
+/// What the block header walk found: where the content's encoded blocks
+/// end in the file, its total decoded size, and block starts to seed
+/// (encoded offset after the first header, decoded offset, blocks before).
+struct Walk {
+    end: u64,
+    total: u64,
+    starts: Vec<(u64, u64, u64)>,
+    note: Option<Diagnostic>,
+}
+
+/// A block at the start of `b`: its total size and ISIZE.
+enum Parsed {
+    Block(u64, u32),
+    /// `b` holds too little of it to tell.
+    Short,
+    NotBlock,
+    Bad(String),
+}
+
+fn parse_block(b: &[u8]) -> Parsed {
+    let magic = b"\x1f\x8b\x08";
+    if b.len() < 12 {
+        return if magic.starts_with(b.get(..3).unwrap_or(b)) {
+            Parsed::Short
+        } else {
+            Parsed::NotBlock
+        };
+    }
+    if !b.starts_with(magic) || b.get(3).is_none_or(|&f| f & 0x04 == 0) {
+        return Parsed::NotBlock;
+    }
+    let xlen = usize::from(u16_le(b, 10).unwrap_or(0));
+    let Some(extra) = b.get(12..12usize.saturating_add(xlen)) else {
+        return Parsed::Short;
+    };
+    let Some(bsize) = bc_subfield(extra) else {
+        return Parsed::NotBlock;
+    };
+    let total = usize::from(bsize).saturating_add(1);
+    if total < xlen.saturating_add(20) {
+        return Parsed::Bad(format!("BGZF block size {total} is too small"));
+    }
+    let Some(isize) = u32_le(b, total.saturating_sub(4)) else {
+        return Parsed::Short;
+    };
+    if isize > MAX_BLOCK_DATA {
+        return Parsed::Bad(format!(
+            "BGZF block claims {isize} decompressed bytes (at most {MAX_BLOCK_DATA})"
+        ));
+    }
+    Parsed::Block(to_u64(total), isize)
+}
+
+/// Walks the block headers of `file` (whose first member header is `first`
+/// bytes long), reading them in batches: every block's BSIZE gives where
+/// the next starts and its ISIZE what it adds to the content. Charged per
+/// block; block starts are kept for at most `2 * max_seeds` blocks, thinned
+/// evenly as the walk goes.
+async fn walk_blocks(cx: &Cx, file: Span, first: u64, max_seeds: usize) -> Result<Walk> {
+    let mut walk = Walk {
+        end: 0,
+        total: 0,
+        starts: Vec::new(),
+        note: None,
+    };
+    let mut buf = Vec::new();
+    let mut base = 0u64;
     let mut pos = 0u64;
-    let mut complete = true;
-    let mut count = 0u32;
-    while let Some(block) = bgzf_block(cx, file, pos).await? {
-        if count >= max {
-            complete = false;
-            break;
-        }
-        if block.isize > 0 {
-            let decoded =
-                crate::codec::inflate_span(cx, block.cdata, false, Some(block.isize.into()))
-                    .await?;
-            pieces.push(decoded.span);
-            if decoded.error.is_some() {
-                complete = false;
+    let mut blocks = 0u64;
+    // Only every `stride`th block is kept.
+    let mut stride = 1u64;
+    while pos < file.len {
+        let at = to_usize(pos.saturating_sub(base));
+        let parsed = parse_block(buf.get(at..).unwrap_or_default());
+        let (size, isize) = match parsed {
+            Parsed::Block(size, isize) => (size, isize),
+            Parsed::Short => {
+                let read_to = base.saturating_add(to_u64(buf.len()));
+                if read_to < file.len && (pos > base || buf.is_empty()) {
+                    cx.progress_in(file, file.offset.saturating_add(pos));
+                    buf = cx.read_avail(file.sub(pos, WALK_BATCH)).await?;
+                    base = pos;
+                    continue;
+                }
+                walk.note = Some(
+                    Diagnostic::new(
+                        crate::error::DiagKind::Truncated,
+                        format!("truncated BGZF block at {pos:#x}: the content ends before it"),
+                    )
+                    .at(file.tail(pos)),
+                );
                 break;
             }
+            Parsed::NotBlock => break,
+            Parsed::Bad(why) => {
+                walk.note = Some(Diagnostic::malformed(format!(
+                    "{why} at {pos:#x}: the content ends before it"
+                )));
+                break;
+            }
+        };
+        if pos > 0 && isize > 0 && blocks.is_multiple_of(stride) {
+            walk.starts
+                .push((pos.saturating_sub(first), walk.total, blocks));
+            if walk.starts.len() >= max_seeds.saturating_mul(2) {
+                let mut keep = false;
+                walk.starts.retain(|_| {
+                    keep = !keep;
+                    keep
+                });
+                stride = stride.saturating_mul(2);
+            }
         }
-        count = count.saturating_add(1);
-        pos = pos.saturating_add(block.span.len.max(1));
+        blocks = blocks.saturating_add(1);
+        walk.total = walk.total.saturating_add(isize.into());
+        pos = pos.saturating_add(size);
+        walk.end = pos;
+        cx.checkpoint().await;
     }
-    let origin = Origin {
-        parent: file,
-        transform: if head_only {
-            "bgzf (first blocks)"
-        } else {
-            "bgzf"
-        },
+    Ok(walk)
+}
+
+/// How many blocks to seed: each seed costs its decoder's state, and all of
+/// them together stay within a sixteenth of what decoded data may hold.
+fn max_seeds(cx: &Cx) -> usize {
+    use crate::codec::pipeline::{Decoder, Streaming};
+    let per = Streaming(crate::codec::gzip::Gzip::at_member(0))
+        .state_size()
+        .saturating_add(96)
+        .max(1);
+    to_usize(cx.limits().max_derived / 16)
+        .checked_div(per)
+        .unwrap_or(0)
+        .clamp(1, MAX_SEEDS)
+}
+
+/// The decompressed content of the BGZF file `file`, memoized: one gzip
+/// stream from the end of the first block's header to the end of the last
+/// whole block, decoded on demand.
+///
+/// Its length (the sum of the blocks' ISIZEs) and where blocks start are
+/// found by walking the block headers first, so reads anywhere decode from
+/// the block before them (every block, or evenly spread ones when there are
+/// more than [`max_seeds`] allows). The walk reads the whole file (blocks
+/// are at most 64 KiB, the size of a host chunk), so a file over
+/// [`WALK_MAX`] is not walked: its content is decoded from the start as it
+/// is read, with its length found at the end. Record walkers read it in
+/// order anyway, and the decoder's own checkpoints make going back cheap.
+async fn bgzf_stream(cx: &Cx, file: Span) -> Result<std::sync::Arc<BgzfStream>> {
+    const KIND: &str = "bgzf stream";
+    if let Some(found) = cx.cached::<BgzfStream>(file, KIND) {
+        return Ok(found);
+    }
+    let head = cx.read_avail(file.sub(0, 0x10000)).await?;
+    let first = to_u64(crate::codec::gzip::header_len(&head).map_err(|e| e.at(file))?);
+    let stream = if file.len > WALK_MAX {
+        BgzfStream {
+            span: cx.decode_lazy_unsized(file.tail(first), &Codec::Gzip)?,
+            note: Some(Diagnostic::note(format!(
+                "blocks not walked in a file over {}: the content is decoded from the start as it is read",
+                crate::formats::util::fmt::size(WALK_MAX)
+            ))),
+        }
+    } else {
+        let max = max_seeds(cx);
+        let walk = walk_blocks(cx, file, first, max).await?;
+        let spacing = walk.total.checked_div(to_u64(max)).unwrap_or(0).max(1);
+        let mut last = 0u64;
+        let mut seeds = Vec::new();
+        for &(in_pos, out_pos, before) in &walk.starts {
+            if out_pos.saturating_sub(last) < spacing {
+                continue;
+            }
+            last = out_pos;
+            seeds.push(crate::cx::Seed {
+                out_pos,
+                in_pos,
+                decoder: Box::new(crate::codec::pipeline::Streaming(
+                    crate::codec::gzip::Gzip::at_member(before),
+                )),
+            });
+        }
+        let encoded = file.sub(first, walk.end.saturating_sub(first));
+        BgzfStream {
+            span: cx.decode_lazy_seeded(encoded, &Codec::Gzip, walk.total, seeds)?,
+            note: walk.note,
+        }
     };
-    Ok((cx.add_pieces(origin, pieces)?, complete))
+    let stream = std::sync::Arc::new(stream);
+    cx.cache(file, KIND, stream.clone());
+    Ok(stream)
+}
+
+/// Where `stream` really ends: its length, or, for content not walked
+/// whose decoder has not reached the end yet, nowhere yet.
+fn stream_end(cx: &Cx, stream: Span) -> u64 {
+    if cx.len_known(stream.source) {
+        cx.source_len(stream.source).min(stream.len)
+    } else {
+        u64::MAX
+    }
+}
+
+/// Whether `stream` holds `len` bytes at `at`. Content not walked is
+/// decoded up to there first to find out.
+async fn reaches(cx: &Cx, stream: Span, at: u64, len: u64) -> bool {
+    let end = at.saturating_add(len);
+    if !cx.len_known(stream.source) && len > 0 {
+        let _ = cx.read_avail(stream.sub(end.saturating_sub(1), 1)).await;
+    }
+    end <= stream_end(cx, stream)
 }
 
 fn blocks_node(input: Input) -> Node {
@@ -229,39 +420,50 @@ fn blocks_node(input: Input) -> Node {
         .lazy(bgzf_blocks, input)
 }
 
-fn stream_note(complete: bool) -> Option<Diagnostic> {
-    (!complete).then(|| {
-        Diagnostic::limit(format!(
-            "only the first {STREAM_BLOCKS} BGZF blocks are decompressed"
-        ))
-    })
+/// The node for the decompressed content, dissected as `format` (or
+/// identified).
+fn content_node(
+    cx: &Cx,
+    name: &'static str,
+    input: Input,
+    stream: &BgzfStream,
+    format: Option<&'static crate::formats::Format>,
+) -> Node {
+    let inner = input.nested(stream.span);
+    let node = if !cx.len_known(stream.span.source) {
+        Node::new(name)
+            .span(stream.span)
+            .lazy(crate::formats::dissect_unsized, inner)
+    } else if let Some(format) = format {
+        embedded_as(name, inner, format)
+    } else {
+        embedded(name, inner)
+    };
+    match &stream.note {
+        Some(d) => node.diag(d.clone()),
+        None => node,
+    }
 }
 
 async fn bgzf(cx: Cx, input: Input) -> Result<()> {
-    let (stream, complete) = bgzf_stream(&cx, input.span, false).await?;
+    let stream = bgzf_stream(&cx, input.span).await?;
     cx.emit(blocks_node(input));
-    let mut node = embedded("Decompressed data", input.nested(stream));
-    if let Some(d) = stream_note(complete) {
-        node = node.diag(d);
-    }
-    cx.emit(node);
+    cx.emit(content_node(&cx, "Decompressed data", input, &stream, None));
     cx.annotate("BGZF (blocked gzip)");
     Ok(())
 }
 
 async fn vcf_bgzf(cx: Cx, input: Input) -> Result<()> {
-    let (stream, complete) = bgzf_stream(&cx, input.span, false).await?;
+    let stream = bgzf_stream(&cx, input.span).await?;
     cx.emit(blocks_node(input));
-    let mut node = embedded_as(
+    cx.emit(content_node(
+        &cx,
         "Decompressed VCF",
-        input.nested(stream),
-        &crate::formats::science::bio::text::VCF,
-    );
-    if let Some(d) = stream_note(complete) {
-        node = node.diag(d);
-    }
-    cx.emit(node);
-    let head = cx.read_avail(stream.sub(0, 64)).await?;
+        input,
+        &stream,
+        Some(&crate::formats::science::bio::text::VCF),
+    ));
+    let head = cx.read_avail(stream.span.sub(0, 64)).await?;
     let version = String::from_utf8_lossy(&head)
         .lines()
         .next()
@@ -280,7 +482,7 @@ async fn vcf_bgzf(cx: Cx, input: Input) -> Result<()> {
 struct References(Vec<(String, u32)>);
 
 async fn bam(cx: Cx, input: Input) -> Result<()> {
-    let (head, _) = bgzf_stream(&cx, input.span, true).await?;
+    let head = bgzf_stream(&cx, input.span).await?.span;
     cx.emit(blocks_node(input));
     let mut cur = Cursor::new(&cx, head, LE);
     let magic_span = cur.span(4);
@@ -449,19 +651,27 @@ fn ref_name(refs: &References, id: i32) -> String {
 }
 
 async fn bam_alignments(cx: Cx, (input, start, refs): (Input, u64, References)) -> Result<()> {
-    let (stream, complete) = bgzf_stream(&cx, input.span, false).await?;
+    let bgzf = bgzf_stream(&cx, input.span).await?;
+    let stream = bgzf.span;
     let mut cur = Cursor::new(&cx, stream, LE);
     cur.seek(start);
     let mut count = 0u64;
-    while cur.remaining() >= 4 {
+    while cur.remaining() >= 4 && cur.pos() < stream_end(&cx, stream) {
         cx.progress_in(stream, stream.offset.saturating_add(cur.pos()));
         let at = cur.pos();
-        let size = cur.u32().await?;
-        let span = stream.sub(at, u64::from(size).saturating_add(4));
-        if span.len < u64::from(size).saturating_add(4) {
-            if complete {
-                cx.diag(Diagnostic::truncated(span, span.len));
-            }
+        let size = match cur.u32().await {
+            Ok(size) => size,
+            // Content not walked ends where its decoder does.
+            Err(_) if at >= stream_end(&cx, stream) => break,
+            Err(e) => return Err(e),
+        };
+        let len = u64::from(size).saturating_add(4);
+        let span = stream.sub(at, len);
+        if !reaches(&cx, stream, at, len).await {
+            cx.diag(Diagnostic::truncated(
+                span,
+                stream_end(&cx, stream).saturating_sub(at),
+            ));
             break;
         }
         let rec: BamRecord = read_record(&cx, span.sub(0, BamRecord::SIZE), LE).await?;
@@ -487,8 +697,8 @@ async fn bam_alignments(cx: Cx, (input, start, refs): (Input, u64, References)) 
         count = count.saturating_add(1);
         cur.seek(at.saturating_add(span.len));
     }
-    if let Some(d) = stream_note(complete) {
-        cx.diag(d);
+    if let Some(d) = &bgzf.note {
+        cx.diag(d.clone());
     }
     cx.set_count(Count::Exact(count));
     Ok(())
@@ -625,7 +835,7 @@ async fn bam_tags(cx: Cx, span: Span) -> Result<()> {
 // BCF
 
 async fn bcf(cx: Cx, input: Input) -> Result<()> {
-    let (head, _) = bgzf_stream(&cx, input.span, true).await?;
+    let head = bgzf_stream(&cx, input.span).await?.span;
     cx.emit(blocks_node(input));
     let mut cur = Cursor::new(&cx, head, LE);
     let magic = cur.bytes(5).await?;
@@ -759,19 +969,29 @@ async fn bcf_typed(cur: &mut Cursor<'_>) -> Result<String> {
 }
 
 async fn bcf_records(cx: Cx, (input, start, contigs): (Input, u64, References)) -> Result<()> {
-    let (stream, complete) = bgzf_stream(&cx, input.span, false).await?;
+    let bgzf = bgzf_stream(&cx, input.span).await?;
+    let stream = bgzf.span;
     let mut cur = Cursor::new(&cx, stream, LE);
     cur.seek(start);
-    while cur.remaining() >= 8 {
+    while cur.remaining() >= 8 && cur.pos() < stream_end(&cx, stream) {
         cx.progress_in(stream, stream.offset.saturating_add(cur.pos()));
         let at = cur.pos();
+        if !reaches(&cx, stream, at, 8).await {
+            break;
+        }
         let l_shared = cur.u32().await?;
         let l_indiv = cur.u32().await?;
-        let span = stream.sub(
-            at,
-            8u64.saturating_add(l_shared.into())
-                .saturating_add(l_indiv.into()),
-        );
+        let len = 8u64
+            .saturating_add(l_shared.into())
+            .saturating_add(l_indiv.into());
+        let span = stream.sub(at, len);
+        if !reaches(&cx, stream, at, len).await {
+            cx.diag(Diagnostic::truncated(
+                span,
+                stream_end(&cx, stream).saturating_sub(at),
+            ));
+            break;
+        }
         let shared: BcfShared = read_record(&cx, span.sub(0, BcfShared::SIZE), LE).await?;
         let mut body = Cursor::new(&cx, span, LE);
         body.seek(BcfShared::SIZE);
@@ -800,8 +1020,8 @@ async fn bcf_records(cx: Cx, (input, start, contigs): (Input, u64, References)) 
         .await;
         cur.seek(at.saturating_add(span.len.max(8)));
     }
-    if let Some(d) = stream_note(complete) {
-        cx.diag(d);
+    if let Some(d) = &bgzf.note {
+        cx.diag(d.clone());
     }
     Ok(())
 }
@@ -1047,15 +1267,16 @@ async fn tabix_header(cx: &Cx, stream: Span) -> Result<(u32, Vec<String>, u64)> 
 }
 
 async fn tabix(cx: Cx, input: Input) -> Result<()> {
-    let (stream, complete) = bgzf_stream(&cx, input.span, false).await?;
+    let bgzf = bgzf_stream(&cx, input.span).await?;
+    let stream = cx.known(bgzf.span).await;
     cx.emit(blocks_node(input));
     let (format, names, start) = tabix_header(&cx, stream).await?;
     let mut node = Node::new("Index").span(stream.tail(start)).lazy(
         index_refs,
         (stream.tail(start), IndexKind::Tabix, names.clone()),
     );
-    if let Some(d) = stream_note(complete) {
-        node = node.diag(d);
+    if let Some(d) = &bgzf.note {
+        node = node.diag(d.clone());
     }
     cx.emit(node);
     cx.annotate(format!(
@@ -1067,7 +1288,8 @@ async fn tabix(cx: Cx, input: Input) -> Result<()> {
 }
 
 async fn csi(cx: Cx, input: Input) -> Result<()> {
-    let (stream, complete) = bgzf_stream(&cx, input.span, false).await?;
+    let bgzf = bgzf_stream(&cx, input.span).await?;
+    let stream = cx.known(bgzf.span).await;
     cx.emit(blocks_node(input));
     let block = cx.block(stream.sub(0, 16)).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
@@ -1115,8 +1337,8 @@ async fn csi(cx: Cx, input: Input) -> Result<()> {
     let mut node = Node::new("Index")
         .span(refs)
         .lazy(index_refs, (refs, IndexKind::Csi, names));
-    if let Some(d) = stream_note(complete) {
-        node = node.diag(d);
+    if let Some(d) = &bgzf.note {
+        node = node.diag(d.clone());
     }
     cx.emit(node);
     cx.annotate(format!(
@@ -2405,6 +2627,30 @@ mod tests {
         assert_eq!(bc_subfield(b"BC\x02\x00\x1b\x00"), Some(27));
         assert_eq!(bc_subfield(b"XY\x01\x00\x00BC\x02\x00\x10\x00"), Some(16));
         assert_eq!(bc_subfield(b"BC\x03\x00\x1b\x00\x00"), None);
+    }
+
+    #[test]
+    fn block_headers_parse() {
+        // The EOF marker block htslib writes.
+        let eof = b"\x1f\x8b\x08\x04\0\0\0\0\0\xff\x06\0BC\x02\0\x1b\0\x03\0\0\0\0\0\0\0\0\0";
+        assert!(matches!(parse_block(eof), Parsed::Block(28, 0)));
+        assert!(matches!(parse_block(&eof[..27]), Parsed::Short));
+        assert!(matches!(parse_block(&eof[..5]), Parsed::Short));
+        assert!(matches!(parse_block(b"\x1f\x8b\x08\x00"), Parsed::Short));
+        assert!(matches!(parse_block(b"PK\x03\x04"), Parsed::NotBlock));
+        let with = |at: usize, v: u8| {
+            let mut b = eof.to_vec();
+            if let Some(x) = b.get_mut(at) {
+                *x = v;
+            }
+            b
+        };
+        // No extra field: plain gzip.
+        assert!(matches!(parse_block(&with(3, 0)), Parsed::NotBlock));
+        // ISIZE 0x20000.
+        assert!(matches!(parse_block(&with(26, 2)), Parsed::Bad(_)));
+        // BSIZE 10.
+        assert!(matches!(parse_block(&with(16, 10)), Parsed::Bad(_)));
     }
 
     #[test]
