@@ -17,7 +17,7 @@ expression: "common::explore(&display_name(&path), &data)"
         ! note: empty [#2:0x0+0x0]
     ▾ Stream 1: PDB info — 55 bytes  [#3:0x0+0x37]
         Version: VC70 (0x1312e94)  [#3:0x0+0x4]
-        Signature: 2023-11-14 22:13:20 UTC  [#3:0x4+0x4]
+        Signature: 0x6553f100  [#3:0x4+0x4]
         Age: 2  [#3:0x8+0x4]
         GUID: {12345678-1234-5678-9abc-def012345678}  [#3:0xc+0x10]
         Named stream map: string buffer size: 7  [#3:0x1c+0x4]

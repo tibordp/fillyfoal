@@ -135,7 +135,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 r_info: 0xa03 — symbol 10, type R_ARM_REL32  [0x364+0x4]
             ▾ type 0x60: 0x40 — external_counter  [0x368+0x8]
                 r_offset: 0x40  [0x368+0x4]
-                r_info: 0xb60 — symbol 11, type  0x60  [0x36c+0x4]
+                r_info: 0xb60 — symbol 11, type 0x60  [0x36c+0x4]
             ▾ R_ARM_REL32: 0x44 — calls  [0x370+0x8]
                 r_offset: 0x44  [0x370+0x4]
                 r_info: 0x503 — symbol 5, type R_ARM_REL32  [0x374+0x4]

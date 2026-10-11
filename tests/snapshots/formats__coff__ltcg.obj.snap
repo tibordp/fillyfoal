@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ltcg.obj — MSVC LTCG (/GL) object, AMD64, 48 bytes of compiler IL  [0x0+0x50]
+  ▾ Anonymous Object Header  [0x0+0x20]
+      Sig1: 0x0  [0x0+0x2]
+      Sig2: 0xffff  [0x2+0x2]
+      Version: 1  [0x4+0x2]
+      Machine: AMD64 (0x8664)  [0x6+0x2]
+      TimeDateStamp: 2020-07-04 04:05:20 UTC  [0x8+0x4]
+      ClassID: {0cb3fe38-d9a5-4dab-ac9b-d6b6222653c2}  [0xc+0x10]
+      SizeOfData: 48  [0x1c+0x4]
+    Compiler IL  [0x20+0x30]
