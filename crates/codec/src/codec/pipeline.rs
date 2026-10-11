@@ -109,6 +109,15 @@ pub trait Decode: Clone + Send + 'static {
     fn heap_size(&self) -> Option<usize> {
         None
     }
+
+    /// At a point the stream could be decoded from afresh (between frames,
+    /// members or blocks): the input position, relative to `input` as it
+    /// is now, where the next one starts. Lets the caller check positions a
+    /// container recorded (see `Seed` in the core). `None` (the default)
+    /// elsewhere, or if the codec does not say.
+    fn boundary(&self) -> Option<usize> {
+        None
+    }
 }
 
 /// Status of a [`Decoder`] step.
@@ -169,6 +178,11 @@ pub trait Decoder: Send {
     /// the caller keeps with it.
     fn state_size(&self) -> usize {
         0
+    }
+
+    /// See [`Decode::boundary`].
+    fn boundary(&self) -> Option<usize> {
+        None
     }
 }
 
@@ -233,6 +247,10 @@ impl<D: Decode> Decoder for Streaming<D> {
 
     fn state_size(&self) -> usize {
         std::mem::size_of::<D>().saturating_add(self.0.heap_size().unwrap_or(0))
+    }
+
+    fn boundary(&self) -> Option<usize> {
+        self.0.boundary()
     }
 }
 

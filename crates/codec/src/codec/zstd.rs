@@ -1179,6 +1179,11 @@ impl Decode for Zstd {
                 .saturating_add(fse(&st.ml)),
         )
     }
+
+    fn boundary(&self) -> Option<usize> {
+        // Between frames.
+        (self.frame.is_none() && !self.done).then_some(self.pos)
+    }
 }
 
 #[cfg(test)]

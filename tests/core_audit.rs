@@ -522,3 +522,193 @@ fn seeded_streams_start_decoding_near_a_read() {
         assert_eq!(bytes, content[at as usize..at as usize + 1000], "at {at}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Resume marks
+
+type Walk = std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>;
+
+/// Children named by index; records marks but never resumes from them.
+async fn forgetful(cx: Cx, n: u64) -> Result<()> {
+    for i in 0..n {
+        cx.mark(move || i);
+        cx.push(Node::new(i.to_string())).await;
+    }
+    Ok(())
+}
+
+/// Resumes from its marks, after probing for a key of another type.
+async fn probing(cx: Cx, n: u64) -> Result<()> {
+    let _probe: Option<String> = cx.resume::<String>();
+    let from = cx.resume::<u64>().unwrap_or(0);
+    for i in from..n {
+        cx.mark(move || i);
+        cx.push(Node::new(i.to_string())).await;
+    }
+    Ok(())
+}
+
+fn jump_back(dissector: fn(Cx, u64) -> Walk) -> Session {
+    let mut session = Session::new(Limits::default());
+    let root = session.add_root(Node::new("walk").lazy(dissector, 2000));
+    session.expand(root, 2000);
+    run(&mut session, &[], 1_000_000, 100);
+    // Back into the middle: restarts from a mark.
+    session.seek(root, 0, 10);
+    session.seek(root, 1000, 10);
+    run(&mut session, &[], 1_000_000, 100);
+    assert_indexed(&session, root);
+    assert_eq!(names(&session, root).0, 1000);
+    session
+}
+
+fn forgetful_boxed(cx: Cx, n: u64) -> Walk {
+    Box::pin(forgetful(cx, n))
+}
+
+fn probing_boxed(cx: Cx, n: u64) -> Walk {
+    Box::pin(probing(cx, n))
+}
+
+#[test]
+fn a_dissector_that_never_resumes_keeps_indices() {
+    jump_back(forgetful_boxed);
+}
+
+#[test]
+fn a_probe_for_another_key_type_leaves_the_resume_key() {
+    jump_back(probing_boxed);
+}
+
+/// Children named by where the walk started.
+async fn reporting(cx: Cx, n: u64) -> Result<()> {
+    let from = cx.resume::<u64>();
+    for i in from.unwrap_or(0)..n {
+        cx.mark(move || i);
+        cx.push(Node::new(format!("{i} from {from:?}"))).await;
+    }
+    Ok(())
+}
+
+#[test]
+fn reinterpreting_drops_resume_marks() {
+    let mut session = Session::new(Limits::default());
+    let root = session.add_root(Node::new("walk").lazy(reporting, 2000));
+    session.expand(root, 2000);
+    run(&mut session, &[], 1_000_000, 100);
+    let format = fillyfoal::formats::by_name("tar").unwrap();
+    session.reinterpret(root, Some(format));
+    session.seek(root, 1000, 1);
+    run(&mut session, &[], 1_000_000, 100);
+    assert_eq!(names(&session, root).1, vec!["1000 from None".to_owned()]);
+}
+
+// ---------------------------------------------------------------------------
+// Piece tables and seeds
+
+async fn many_pieces(cx: Cx, (file, n, transform): (Span, u64, &'static str)) -> Result<()> {
+    let pieces = (0..n)
+        .map(|i| Span::new(file.source, i % file.len, 1))
+        .collect::<Vec<_>>();
+    let joined = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: file,
+                transform,
+            },
+            &pieces,
+        )
+        .await;
+    cx.emit(Node::new(match joined {
+        Ok(span) => format!("{} bytes", span.len),
+        Err(e) => e.message,
+    }));
+    Ok(())
+}
+
+#[test]
+fn piece_tables_count_against_derived_memory() {
+    let mut session = Session::new(Limits {
+        max_derived: 1 << 20,
+        ..Limits::default()
+    });
+    let source = session.add_source(4096);
+    let file = Span::new(source, 0, 4096);
+    // 32 bytes a piece: 10,000 fit in 1 MiB, 100,000 do not.
+    let small = session.add_root(Node::new("small").lazy(many_pieces, (file, 10_000, "small")));
+    let large = session.add_root(Node::new("large").lazy(many_pieces, (file, 100_000, "large")));
+    session.expand(small, 1);
+    session.expand(large, 1);
+    run(&mut session, &[0; 4096], 1_000_000, 10_000);
+    assert_eq!(names(&session, small).1, vec!["10000 bytes".to_owned()]);
+    assert!(names(&session, large).1[0].starts_with("piece table would exceed"));
+    assert!(session.derived_bytes() >= 10_000 * 32);
+}
+
+/// A gzip member: header, stored DEFLATE, trailer.
+fn gzip_member(data: &[u8]) -> Vec<u8> {
+    let mut out = vec![0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 0xff];
+    out.extend(deflate_stored(data));
+    out.extend(fillyfoal::codec::crc32(data).to_le_bytes());
+    out.extend((data.len() as u32).to_le_bytes());
+    out
+}
+
+async fn lying_index(
+    cx: Cx,
+    (span, members, member_len, lie): (Span, Vec<u64>, u64, u64),
+) -> Result<()> {
+    // Member starts, as an index would record them; member `lie` claims
+    // the wrong output position.
+    let seeds = members
+        .iter()
+        .enumerate()
+        .skip(1)
+        .map(|(i, &at)| fillyfoal::Seed {
+            out_pos: i as u64 * member_len + if i as u64 == lie { 5000 } else { 0 },
+            in_pos: at,
+            decoder: Box::new(fillyfoal::codec::pipeline::Streaming(
+                fillyfoal::codec::gzip::Gzip::at_member(i as u64),
+            )),
+        })
+        .collect();
+    let len = members.len() as u64 * member_len;
+    let decoded = cx.decode_lazy_seeded(span, &Codec::Gzip, len, seeds)?;
+    cx.emit(Node::new("decoded").span(decoded));
+    Ok(())
+}
+
+#[test]
+fn an_index_that_disagrees_with_the_stream_is_dropped() {
+    let member_len = 300_000u64;
+    let content = pattern(member_len as usize * 20);
+    let mut stream = Vec::new();
+    let mut starts = Vec::new();
+    for chunk in content.chunks(member_len as usize) {
+        starts.push(stream.len() as u64);
+        stream.extend(gzip_member(chunk));
+    }
+    // Codec::Gzip starts after the first member's header.
+    let body = &stream[10..];
+    let starts: Vec<u64> = starts.iter().map(|s| s.saturating_sub(10)).collect();
+    let mut session = Session::new(checkpoint_limits());
+    let source = session.add_source(body.len() as u64);
+    let span = Span::new(source, 0, body.len() as u64);
+    let root =
+        session.add_root(Node::new("lying").lazy(lying_index, (span, starts, member_len, 7)));
+    session.expand(root, 10);
+    run(&mut session, body, 1_000_000, 100);
+    let child = session.children(root).unwrap().ids[0];
+    let decoded = session.node(child).unwrap().span.unwrap();
+    // A read across the end of member 6, decoded from member 6's seed,
+    // reaches member 7's start at a different output position than the
+    // index claims: the seeds are dropped and the read is decoded again from
+    // a point that can be trusted.
+    let at = 7 * member_len - 100;
+    let (bytes, _) = read_in_steps(&mut session, body, decoded.sub(at, 200), 1 << 20);
+    assert_eq!(bytes, content[at as usize..at as usize + 200]);
+    // And member 7 itself now comes out right.
+    let at = 7 * member_len + 6000;
+    let (bytes, _) = read_in_steps(&mut session, body, decoded.sub(at, 1000), 1 << 20);
+    assert_eq!(bytes, content[at as usize..at as usize + 1000]);
+}

@@ -519,6 +519,10 @@ impl<C: Catalog> Session<C> {
             && let Some(entry) = self.entry_mut(id)
         {
             entry.interpretation = None;
+            // Resume marks belong to the dissector that recorded them; the
+            // node may now run another (whose keys could even have the same
+            // type).
+            entry.marks.clear();
             self.collapse(id);
         }
     }

@@ -59,7 +59,23 @@ struct PieceIndex {
     len: u64,
 }
 
+/// A piece table too large for the derived-data limit.
+fn pieces_limit(sh: &Shared, origin: Origin) -> Diagnostic {
+    Diagnostic::limit(format!(
+        "piece table would exceed the {:#x}-byte limit for derived sources",
+        sh.limits.max_derived
+    ))
+    .at(origin.parent)
+}
+
 impl PieceIndex {
+    /// Bytes the table holds: each piece and its start.
+    fn bytes(&self) -> u64 {
+        to_u64(self.spans.len()).saturating_mul(to_u64(
+            std::mem::size_of::<Span>().saturating_add(std::mem::size_of::<u64>()),
+        ))
+    }
+
     fn extend(&mut self, sh: &Shared, pieces: &[Span]) {
         self.spans.reserve(pieces.len());
         self.starts.reserve(pieces.len());
@@ -168,6 +184,10 @@ struct Checkpoint {
     decoder: Box<dyn crate::codec::pipeline::Decoder>,
     /// Bytes held: the window and the decoder's state.
     cost: u64,
+    /// Seeded from a container's records, or taken while decoding from
+    /// such a point: trusted only until decoding from the start shows
+    /// otherwise (see [`LazyDecode::check_seeds`]).
+    seeded: bool,
 }
 
 /// State of a lazily decoded source: encoded input read so far, the
@@ -197,6 +217,8 @@ pub(crate) struct LazyDecode {
     /// Multiplier of the spacing between checkpoints; doubles each time
     /// they are thinned, so new ones stay as sparse as the kept ones.
     spread: u64,
+    /// This run of the decoder started from a seeded checkpoint.
+    run_seeded: bool,
 }
 
 impl LazyDecode {
@@ -217,6 +239,7 @@ impl LazyDecode {
             checkpoints: Vec::new(),
             checkpoint_bytes: 0,
             spread: 1,
+            run_seeded: false,
         })
     }
 
@@ -234,20 +257,22 @@ impl LazyDecode {
             .rev()
             .filter(|c| c.out_pos <= pos)
             .find_map(|c| Some((c, c.decoder.checkpoint()?)));
-        let (decoder, in_base, out, out_base) = match resume {
+        let (decoder, in_base, out, out_base, seeded) = match resume {
             Some((c, decoder)) => (
                 decoder,
                 c.in_pos,
                 c.window.clone(),
                 c.out_pos.saturating_sub(to_u64(c.window.len())),
+                c.seeded,
             ),
             None => {
                 let Some(decoder) = self.recipe.decoder() else {
                     return;
                 };
-                (decoder, 0, Vec::new(), 0)
+                (decoder, 0, Vec::new(), 0, false)
             }
         };
+        self.run_seeded = seeded;
         self.decoder = decoder;
         self.input = Vec::new();
         self.in_base = in_base;
@@ -305,12 +330,43 @@ impl LazyDecode {
                 window: self.out.get(keep_from..).unwrap_or_default().to_vec(),
                 decoder,
                 cost,
+                seeded: self.run_seeded,
             },
         );
         self.checkpoint_bytes = self.checkpoint_bytes.saturating_add(cost);
         while self.checkpoint_bytes > max_bytes && self.checkpoints.len() > 1 {
             self.thin();
         }
+    }
+
+    /// Checks checkpoints against the decoder: at a boundary it reports, a
+    /// checkpoint at the same input position must be at the same output
+    /// position. Seeds come from a container's records, which can disagree
+    /// with the stream (a crafted index); reads from a wrong one would
+    /// return the wrong bytes. On a conflict every seed (and checkpoint
+    /// taken while decoding from one) is dropped. Returns whether that
+    /// happened, and whether this run started from a seed, so its output
+    /// cannot be trusted either and decoding must start again.
+    fn check_seeds(&mut self) -> (bool, bool) {
+        let Some(at) = self.decoder.boundary() else {
+            return (false, false);
+        };
+        let input = self.in_base.saturating_add(to_u64(at));
+        let output = self.out_base.saturating_add(to_u64(self.out.len()));
+        let conflict = self
+            .checkpoints
+            .iter()
+            .any(|c| (c.seeded || self.run_seeded) && c.in_pos == input && c.out_pos != output);
+        if !conflict {
+            return (false, false);
+        }
+        self.checkpoints.retain(|c| !c.seeded);
+        self.checkpoint_bytes = self
+            .checkpoints
+            .iter()
+            .map(|c| c.cost)
+            .fold(0, u64::saturating_add);
+        (true, self.run_seeded)
     }
 
     /// Drops every other checkpoint (keeping the first), and spaces new ones
@@ -724,7 +780,19 @@ impl Shared {
             let status = decoder.decode(input, *input_eof, out, LAZY_STEP, cap);
             let produced = out.len().saturating_sub(produced_before);
             match status {
-                Ok(crate::codec::pipeline::Status::More) => st.checkpoint(max_checkpoint_bytes),
+                Ok(crate::codec::pipeline::Status::More) => {
+                    let (dropped, restart) = st.check_seeds();
+                    if dropped && failure.is_none() {
+                        failure = Some(Diagnostic::warning(
+                            "the container's index disagrees with the stream; not using it",
+                        ));
+                    }
+                    if restart {
+                        st.rewind(start);
+                        continue;
+                    }
+                    st.checkpoint(max_checkpoint_bytes);
+                }
                 Ok(crate::codec::pipeline::Status::NeedInput) if !*input_eof => *starved = true,
                 Ok(crate::codec::pipeline::Status::NeedInput) => {
                     *done = true;
@@ -870,6 +938,20 @@ pub(crate) struct Output {
     pub interpretation: Option<Interpretation>,
     /// Progress the dissector reported: (done, total).
     pub progress: Option<(u64, u64)>,
+}
+
+impl Output {
+    /// The first child or mark decides how the run started: a resume key
+    /// still on offer then was not taken (the dissector never asks, or the
+    /// key is of another type), so the walk started from the beginning,
+    /// and so does the count of children. Children before the window are
+    /// still skipped, so the result is the same, only slower.
+    fn settle_resume(&mut self) {
+        if self.resume.take().is_some() {
+            self.emitted = 0;
+            self.last_mark = 0;
+        }
+    }
 }
 
 pub fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -1243,7 +1325,7 @@ impl Cx {
         }
         let mut index = PieceIndex::default();
         index.extend(&lock(&self.shared), &pieces);
-        Ok(self.register_pieces(origin, index))
+        self.register_pieces(origin, index)
     }
 
     /// [`Cx::add_pieces`] for input-sized lists: indexes `pieces` a bounded
@@ -1256,19 +1338,32 @@ impl Cx {
         let mut index = PieceIndex::default();
         for batch in pieces.chunks(BATCH) {
             self.checkpoint().await;
-            index.extend(&lock(&self.shared), batch);
+            let sh = lock(&self.shared);
+            index.extend(&sh, batch);
+            if index.bytes() > sh.limits.max_derived {
+                return Err(pieces_limit(&sh, origin));
+            }
         }
-        Ok(self.register_pieces(origin, index))
+        self.register_pieces(origin, index)
     }
 
-    fn register_pieces(&self, origin: Origin, index: PieceIndex) -> Span {
+    fn register_pieces(&self, origin: Origin, index: PieceIndex) -> Result<Span> {
         let mut sh = lock(&self.shared);
         // Another expansion may have registered it while this one yielded.
         if let Some(&id) = sh.derived.get(&origin)
             && let Some(entry) = sh.source(id)
         {
-            return Span::new(id, 0, entry.len);
+            return Ok(Span::new(id, 0, entry.len));
         }
+        // The table is held for the session: it counts against the
+        // derived-data limit like decoded bytes, but nothing can make it
+        // again, so it is never evicted.
+        let bytes = index.bytes();
+        sh.make_room(bytes, origin.parent.source);
+        if sh.derived_bytes.saturating_add(bytes) > sh.limits.max_derived {
+            return Err(pieces_limit(&sh, origin));
+        }
+        sh.derived_bytes = sh.derived_bytes.saturating_add(bytes);
         let PieceIndex { spans, starts, len } = index;
         let id = SourceId(u32::try_from(sh.sources.len()).unwrap_or(u32::MAX));
         let tick = sh.tick;
@@ -1286,7 +1381,7 @@ impl Cx {
             len_known: true,
         });
         sh.derived.insert(origin, id);
-        Span::new(id, 0, len)
+        Ok(Span::new(id, 0, len))
     }
 
     /// A value previously stored with [`Cx::cache`] for `(span, kind)`.
@@ -1376,8 +1471,14 @@ impl Cx {
         len_known: bool,
         seeds: Vec<Seed>,
     ) -> Result<Span> {
-        let Some(mut fresh) = LazyDecode::new(span, codec) else {
+        if matches!(codec, Codec::Stored) {
+            // Stored content is its own decoding.
             return Ok(span);
+        }
+        let Some(mut fresh) = LazyDecode::new(span, codec) else {
+            return Err(
+                Diagnostic::unsupported(format!("no decoder for {}", codec.name())).at(span),
+            );
         };
         let mut last = 0u64;
         for seed in seeds {
@@ -1392,6 +1493,7 @@ impl Cx {
                 window: Vec::new(),
                 decoder: seed.decoder,
                 cost,
+                seeded: true,
             });
             fresh.checkpoint_bytes = fresh.checkpoint_bytes.saturating_add(cost);
         }
@@ -1443,6 +1545,7 @@ impl Cx {
     /// set of children; use [`Cx::push`] for collections.
     pub fn emit(&self, node: Node) {
         let mut out = lock(&self.out);
+        out.settle_resume();
         if out.emitted >= out.skip {
             out.nodes.push(node);
         }
@@ -1453,7 +1556,8 @@ impl Cx {
     /// window further on. A walker may then skip building the node (but
     /// must still call [`Cx::push`], which keeps the count).
     pub fn skipping(&self) -> bool {
-        let out = lock(&self.out);
+        let mut out = lock(&self.out);
+        out.settle_resume();
         out.emitted < out.skip
     }
 
@@ -1463,8 +1567,11 @@ impl Cx {
     /// child it emits or pushes has the mark's index. Returns `None` on a
     /// fresh start (or if the key has another type).
     pub fn resume<K: std::any::Any + Send + Sync + Clone>(&self) -> Option<K> {
-        let key = lock(&self.out).resume.take()?;
-        key.downcast_ref::<K>().cloned()
+        let mut out = lock(&self.out);
+        // A key of another type stays for whoever asks for that type.
+        let key = out.resume.as_ref()?.downcast_ref::<K>()?.clone();
+        out.resume = None;
+        Some(key)
     }
 
     /// Records a resume point: `key()` is walker state from which the walk
@@ -1475,6 +1582,7 @@ impl Cx {
     /// re-runs the expansion and drops the children before the window.
     pub fn mark<K: std::any::Any + Send + Sync>(&self, key: impl FnOnce() -> K) {
         let mut out = lock(&self.out);
+        out.settle_resume();
         let index = out.emitted;
         if index >= out.last_mark.saturating_add(MARK_SPACING) {
             out.last_mark = index;
@@ -1486,6 +1594,7 @@ impl Cx {
     /// not asked for this many children yet, so work beyond the requested
     /// page happens only on demand.
     pub async fn push(&self, node: Node) {
+        lock(&self.out).settle_resume();
         self.checkpoint().await;
         {
             let mut out = lock(&self.out);

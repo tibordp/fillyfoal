@@ -580,6 +580,11 @@ impl Decoder for XzStream {
         });
         size_of::<Self>().saturating_add(block)
     }
+
+    fn boundary(&self) -> Option<usize> {
+        // Between blocks, at the next block header (or the index).
+        (self.in_stream && self.block.is_none() && !self.done).then_some(self.pos)
+    }
 }
 
 /// A whole `.xz` file in memory (for containers that hold small ones).

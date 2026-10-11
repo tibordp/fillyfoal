@@ -240,6 +240,11 @@ impl Decode for Gzip {
         let warning = self.warning.as_ref().map_or(0, |w| w.message.capacity());
         Some(self.inflate.heap_size().saturating_add(warning))
     }
+
+    fn boundary(&self) -> Option<usize> {
+        // Between members, at the next member's header.
+        matches!(self.phase, Phase::Between).then_some(self.base)
+    }
 }
 
 #[cfg(test)]
