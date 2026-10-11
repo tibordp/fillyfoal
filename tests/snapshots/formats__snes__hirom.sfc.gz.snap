@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ hirom.sfc — "FILLYFOAL HIROM", HiROM, North America  [0x0+0x20000]
+  ▾ Internal header  [0xffc0+0x20]
+      Title: "FILLYFOAL HIROM      "  [0xffc0+0x15]
+      Map mode: HiROM (0x21)  [0xffd5+0x1]
+      Cartridge type: 0x2  [0xffd6+0x1]
+      ROM size: 7 — 128 KiB  [0xffd7+0x1]
+      RAM size: 3 — 8 KiB  [0xffd8+0x1]
+      Country: North America (0x1)  [0xffd9+0x1]
+      Developer ID: 0x33  [0xffda+0x1]
+      Version: 0  [0xffdb+0x1]
+      Checksum complement: 0xeeb8  [0xffdc+0x2]
+      Checksum: 0x1147  [0xffde+0x2]
+    Vectors  [0xffe0+0x20]

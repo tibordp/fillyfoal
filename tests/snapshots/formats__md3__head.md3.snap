@@ -16,4 +16,4 @@ expression: "common::explore(&display_name(&path), &data)"
       Tags offset: 0x6c  [0x60+0x4]
       Surfaces offset: 0x6c  [0x64+0x4]
       End offset: 0xdc  [0x68+0x4]
-    body — 108 vertices, 108 triangles  [0x6c+0x6c]
+    body — 3 vertices, 1 triangles  [0x6c+0x6c]

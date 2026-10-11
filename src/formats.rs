@@ -1166,8 +1166,6 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "games")]
     &retro::computers::ADF,
     #[cfg(feature = "games")]
-    &retro::computers::D64,
-    #[cfg(feature = "games")]
     &retro::patches::IPS,
     #[cfg(feature = "games")]
     &retro::patches::IPS32,
@@ -3258,6 +3256,9 @@ pub static FORMATS: &[&Format] = &[
     &data::ubjson::FORMAT,
     #[cfg(feature = "data")]
     &data::bson::FORMAT,
+    // D64 is known only by its size: after everything with magic.
+    #[cfg(feature = "games")]
+    &retro::computers::D64,
     // Weak, statistical probes.
     #[cfg(feature = "text")]
     &text::csv::TSV,

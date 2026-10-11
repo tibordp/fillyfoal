@@ -18,6 +18,9 @@ const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
 
 fn kib(n: u64) -> String {
+    if !n.is_multiple_of(1024) {
+        return format!("{n} bytes");
+    }
     if n >= 1024 * 1024 && n.is_multiple_of(1024 * 1024) {
         format!("{} MiB", n / (1024 * 1024))
     } else {
@@ -74,10 +77,28 @@ record! {
         flags6: u8 "Flags 6" .flags(NES_FLAGS6) .desc("High nibble: mapper bits 0-3"),
         flags7: u8 "Flags 7" .flags(NES_FLAGS7) .desc("High nibble: mapper bits 4-7"),
         flags8: u8 "Flags 8" .desc("PRG RAM size (iNES) or mapper bits 8-11 (NES 2.0)"),
-        flags9: u8 "Flags 9",
+        flags9: u8 "Flags 9" .desc("TV system (iNES) or PRG/CHR ROM size high nibbles (NES 2.0)"),
         flags10: u8 "Flags 10",
         _padding: bytes[5] "Padding",
     }
+}
+
+/// A PRG or CHR ROM size from its header byte `lsb` and, in NES 2.0, the
+/// nibble `msb` of byte 9: a 12-bit count of `unit`s, or, when the nibble is
+/// 0xF, the exponent-multiplier form `2^E × (2·MM + 1)` bytes with `lsb` =
+/// `EEEEEEMM`.
+fn nes_rom_size(nes2: bool, lsb: u8, msb: u8, unit: u64) -> u64 {
+    if !nes2 {
+        return u64::from(lsb).saturating_mul(unit);
+    }
+    if msb == 0x0f {
+        let multiplier = u64::from(lsb & 3).saturating_mul(2).saturating_add(1);
+        return 1u64
+            .checked_shl(u32::from(lsb >> 2))
+            .unwrap_or(u64::MAX)
+            .saturating_mul(multiplier);
+    }
+    (u64::from(msb) << 8 | u64::from(lsb)).saturating_mul(unit)
 }
 
 async fn nes(cx: Cx, input: Input) -> Result<()> {
@@ -88,8 +109,8 @@ async fn nes(cx: Cx, input: Input) -> Result<()> {
     if nes2 {
         mapper |= u16::from(h.flags8 & 0x0f) << 8;
     }
-    let prg = u64::from(h.prg).saturating_mul(16 * 1024);
-    let chr = u64::from(h.chr).saturating_mul(8 * 1024);
+    let prg = nes_rom_size(nes2, h.prg, h.flags9 & 0x0f, 16 * 1024);
+    let chr = nes_rom_size(nes2, h.chr, h.flags9 >> 4, 8 * 1024);
     let mapper_name = lookup(NES_MAPPERS, mapper.into()).unwrap_or("unknown mapper");
     cx.annotate(format!(
         "{}, mapper {mapper} ({mapper_name}), {} PRG, {} CHR",
@@ -578,30 +599,40 @@ async fn genesis(cx: Cx, input: Input) -> Result<()> {
 // ---------------------------------------------------------------------------
 // Super Nintendo (LoROM, optionally with a 512-byte copier header)
 
+/// Where the internal header can be: LoROM (bank 0's $FFC0 at file offset
+/// $7FC0) and HiROM (bank $C0's $FFC0 at $FFC0), each also after a 512-byte
+/// copier header. ExHiROM's header at $40FFC0 is beyond the probe's view.
+const SNES_BASES: [usize; 4] = [0x7fc0, 0x81c0, 0xffc0, 0x101c0];
+
+/// The offset of the internal header, if one with a matching checksum
+/// complement and a known map mode is found. When several qualify, the one
+/// whose map mode belongs at its offset (HiROM-type modes at $FFC0) wins,
+/// then the one whose copier header agrees with the file size.
 fn snes_header_at(h: &Head<'_>) -> Option<usize> {
-    [0x7fc0usize, 0x81c0].into_iter().find(|&base| {
-        let complement = h
-            .data
-            .get(base.saturating_add(0x1c)..base.saturating_add(0x1e));
-        let checksum = h
-            .data
-            .get(base.saturating_add(0x1e)..base.saturating_add(0x20));
-        let map = h.data.get(base.saturating_add(0x15)).copied().unwrap_or(0);
-        match (complement, checksum) {
-            (Some(c), Some(s)) => {
-                let c = u16::from_le_bytes([
-                    c.first().copied().unwrap_or(0),
-                    c.get(1).copied().unwrap_or(0),
-                ]);
-                let s = u16::from_le_bytes([
-                    s.first().copied().unwrap_or(0),
-                    s.get(1).copied().unwrap_or(0),
-                ]);
-                c ^ s == 0xffff && matches!(map & 0xef, 0x20 | 0x21 | 0x23 | 0x25 | 0x2a)
-            }
-            _ => false,
+    let copier = h.len % 0x400 == 0x200;
+    let mut best: Option<((bool, bool), usize)> = None;
+    for base in SNES_BASES {
+        let Some(map) = h.data.get(base.saturating_add(0x15)).copied() else {
+            continue;
+        };
+        let complement = u16_le(h.data, base.saturating_add(0x1c));
+        let checksum = u16_le(h.data, base.saturating_add(0x1e));
+        let (Some(c), Some(s)) = (complement, checksum) else {
+            continue;
+        };
+        if c ^ s != 0xffff || !matches!(map & 0xef, 0x20..=0x23 | 0x25 | 0x2a) {
+            continue;
         }
-    })
+        // HiROM, ExHiROM and SPC7110 carts map their header at $FFC0.
+        let hirom = matches!(map & 0x0f, 0x1 | 0x5 | 0xa);
+        let at_hirom = base >= 0xffc0;
+        let with_copier = matches!(base, 0x81c0 | 0x101c0);
+        let score = (hirom == at_hirom, with_copier == copier);
+        if best.is_none_or(|(s, _)| score > s) {
+            best = Some((score, base));
+        }
+    }
+    best.map(|(_, base)| base)
 }
 
 declare_format!(pub SNES = "snes", "Super Nintendo ROM", ["sfc", "smc", "swc"],
@@ -611,11 +642,15 @@ const SNES_MAP: EnumTable = &[
     (0x20, "LoROM"),
     (0x21, "HiROM"),
     (0x23, "SA-1"),
+    (0x22, "ExLoROM / S-DD1"),
     (0x25, "ExHiROM"),
+    (0x2a, "SPC7110"),
     (0x30, "LoROM + FastROM"),
     (0x31, "HiROM + FastROM"),
-    (0x32, "ExLoROM + FastROM"),
+    (0x32, "ExLoROM / S-DD1 + FastROM"),
+    (0x33, "SA-1 + FastROM"),
     (0x35, "ExHiROM + FastROM"),
+    (0x3a, "SPC7110 + FastROM"),
 ];
 
 const SNES_COUNTRY: EnumTable = &[
@@ -663,7 +698,7 @@ async fn snes(cx: Cx, input: Input) -> Result<()> {
         len_known: true,
     };
     let base = to_u64(snes_header_at(&probe).unwrap_or(0x7fc0));
-    if base == 0x81c0 {
+    if matches!(base, 0x81c0 | 0x101c0) {
         cx.emit(Node::new("Copier header").span(file.sub(0, 0x200)));
     }
     let span = file.sub(base, SnesHeader::SIZE);
