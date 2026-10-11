@@ -316,7 +316,10 @@ fn probe(h: &Head<'_>) -> bool {
                 && at(1).is_some_and(|t| lookup(SIG_TYPES, t.into()).is_some())
                 && known_pk(at(3))
         }
-        8 => matches!(at(0), Some(0..=3)) && len > 1,
+        // GnuPG writes Compressed Data in the old format with indeterminate
+        // length (`a3 01`), so the length says nothing; check the start of
+        // the compressed stream instead.
+        8 => (hd.len.is_none() || hd.partial || len > 1) && compressed_start(body),
         10 => body.starts_with(b"PGP"),
         11 => matches!(at(0), Some(b'b' | b't' | b'u' | b'l' | b'1' | b'm')),
         18 => matches!(at(0), Some(1 | 2)) && len > 20,
@@ -328,6 +331,26 @@ fn probe(h: &Head<'_>) -> bool {
         .get(to_usize(total))
         .is_none_or(|&b| b & 0x80 != 0 || hd.partial || hd.len.is_none());
     ok && next_ok && h.len >= 3
+}
+
+/// Whether a Compressed Data body starts plausibly: a known algorithm and
+/// the start of its stream (a packet header, a deflate block header, a zlib
+/// header, or `BZh`).
+fn compressed_start(body: &[u8]) -> bool {
+    let at = |i: usize| body.get(i).copied();
+    match at(0) {
+        Some(0) => at(1).is_some_and(|b| b & 0x80 != 0),
+        // Raw deflate: BTYPE 3 is reserved.
+        Some(1) => at(1).is_some_and(|b| (b >> 1) & 3 != 3),
+        Some(2) => match (at(1), at(2)) {
+            (Some(cmf), Some(flg)) => {
+                cmf & 0x0f == 8 && u16::from_be_bytes([cmf, flg]).is_multiple_of(31)
+            }
+            _ => false,
+        },
+        Some(3) => body.get(1..4) == Some(b"BZh"),
+        _ => false,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -841,11 +864,15 @@ fn key(b: &mut Body<'_>, secret: bool) -> Option<()> {
     }
     if secret {
         let usage = b.u8("S2K usage", None)?;
+        let mut specifier = None;
         if matches!(usage, 253..=255) {
             b.u8("Symmetric cipher", Some(CIPHERS))?;
-            s2k(b)?;
+            specifier = Some(s2k(b)?);
         }
-        b.rest(if usage == 0 {
+        b.rest(if specifier == Some(GNU_S2K) {
+            // A stub: the key is absent or kept elsewhere (a card, the agent).
+            "Stub data"
+        } else if usage == 0 {
             "Secret key material"
         } else {
             "Encrypted secret key material"
@@ -854,19 +881,49 @@ fn key(b: &mut Body<'_>, secret: bool) -> Option<()> {
     Some(())
 }
 
-fn s2k(b: &mut Body<'_>) -> Option<()> {
+/// S2K specifier 101: GnuPG's private extension (`g10/parse-packet.c`).
+const GNU_S2K: u8 = 101;
+
+/// The specifier read.
+fn s2k(b: &mut Body<'_>) -> Option<u8> {
     const S2K: EnumTable = &[
         (0, "simple"),
         (1, "salted"),
         (3, "iterated and salted"),
         (4, "Argon2"),
+        (101, "GnuPG extension"),
+    ];
+    // GnuPG's extension modes (stored as the mode minus 1000).
+    const GNU_MODES: EnumTable = &[
+        (1, "gnu-dummy (no secret key)"),
+        (2, "gnu-divert-to-card"),
+        (3, "gnu-mode1003 (agent-protected key)"),
     ];
     let kind = b.u8("S2K specifier", Some(S2K))?;
-    match kind {
+    let parsed = match kind {
         0 => b.u8("Hash algorithm", Some(HASHES)).map(|_| ()),
         1 => {
             b.u8("Hash algorithm", Some(HASHES))?;
             b.bytes("Salt", 8).map(|_| ())
+        }
+        GNU_S2K => {
+            b.u8("Hash algorithm", Some(HASHES))?;
+            let (magic, span) = b.take(3)?;
+            if magic != b"GNU" {
+                return None;
+            }
+            b.cx.emit(
+                Node::new("Extension")
+                    .span(span)
+                    .value(Value::Text("GNU".into())),
+            );
+            let mode = b.u8("Protection mode", Some(GNU_MODES))?;
+            if mode == 2 {
+                // The card's serial number, at most 16 bytes.
+                let len = b.u8("Serial number length", None)?;
+                b.bytes("Card serial number", usize::from(len.min(16)))?;
+            }
+            Some(())
         }
         3 => {
             b.u8("Hash algorithm", Some(HASHES))?;
@@ -887,7 +944,8 @@ fn s2k(b: &mut Body<'_>) -> Option<()> {
             b.u8("Memory exponent", None).map(|_| ())
         }
         _ => None,
-    }
+    };
+    parsed.map(|()| kind)
 }
 
 fn signature(b: &mut Body<'_>) -> Option<()> {
@@ -1624,6 +1682,13 @@ async fn dissect_armor(cx: Cx, input: Input) -> Result<()> {
     let labels: Vec<&str> = blocks.iter().map(|b| b.label.as_str()).collect();
     let mut summary = format!("OpenPGP armor: {}", labels.join(", "));
     if let Some(block) = blocks.first()
+        && block.cleartext
+    {
+        summary = "OpenPGP clearsigned message".to_owned();
+        if let Some((_, hash, _)) = block.headers.iter().find(|(k, _, _)| k == "Hash") {
+            summary = format!("{summary}, hash {hash}");
+        }
+    } else if let Some(block) = blocks.first()
         && let Ok(decoded) =
             crate::formats::security::pem::decode_block(&cx, &text, input.span, block).await
     {
@@ -1655,6 +1720,11 @@ async fn armor_block(
                 .span(pem::sub(input.span, range))
                 .value(Value::Text(value.clone())),
         );
+    }
+    if block.cleartext {
+        let span = signed_text(&cx, &text, pem::sub(input.span, &block.body), &block).await?;
+        cx.emit(crate::formats::embedded("Signed text", input.nested(span)));
+        return Ok(());
     }
     let decoded = pem::decode_block(&cx, &text, input.span, &block).await?;
     if let Some(range) = &block.checksum {
@@ -1696,6 +1766,37 @@ async fn armor_block(
             ),
     );
     Ok(())
+}
+
+/// The text a cleartext signature covers, with dash-escaping undone
+/// (RFC 4880 §7.1: a line starting with "- " loses those two characters).
+/// The body's own span if nothing is escaped, else a derived source.
+async fn signed_text(
+    cx: &Cx,
+    text: &[u8],
+    body_span: Span,
+    block: &crate::formats::security::pem::Block,
+) -> Result<Span> {
+    let body = text.get(block.body.clone()).unwrap_or_default();
+    let escaped = body.starts_with(b"- ") || crate::bytes::find(body, b"\n- ", 0).is_some();
+    if !escaped {
+        return Ok(body_span);
+    }
+    let origin = Origin {
+        parent: body_span,
+        transform: "dash-unescape",
+    };
+    if let Some(found) = cx.derived(origin) {
+        return Ok(found.span);
+    }
+    let mut out = Vec::with_capacity(body.len());
+    for (i, line) in body.split_inclusive(|&b| b == b'\n').enumerate() {
+        if i % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
+        out.extend_from_slice(line.strip_prefix(b"- ").unwrap_or(line));
+    }
+    Ok(cx.add_derived(origin, out, body_span.len, None)?.span)
 }
 
 #[cfg(test)]
