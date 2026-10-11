@@ -751,3 +751,6 @@ time zone.
 | `jar-manifest/MANIFEST.MF` | OpenJDK 21.0.12.1 `jar` (eclipse-temurin:21-jdk image) | extracted from a jar made by `jar --create --main-class com.example.Main --manifest m.txt`; `jar` wrapped the long `Class-Path` at 72 bytes mid-word and added `Created-By`; input manifest and commands in `tests/data/jar-manifest/make.sh` |
 | `python-metadata/PKG-INFO` | setuptools 80.9.0 (via build 1.2.2) | the sdist's `PKG-INFO` for a throwaway project with neutral metadata; reproduced byte-for-byte by `tests/data/python-metadata/make.sh` |
 | `deb822/hello_1.0.dsc` | dpkg-source 1.21.23 (debian:bookworm image) | `dpkg-source -b` on a throwaway native source package (`tests/data/deb822/make.sh`); unsigned; the checksums of the generated `.tar.xz` may differ on a re-run with another xz or tar |
+| `csv/records.csv` | CPython 3.14 `csv.writer` | `tests/data/text/large.sh` (QUOTE_MINIMAL, CRLF records, quoted fields with commas, quotes and line breaks); reproduced byte-for-byte |
+| `json/items.json` | jq 1.8.1 | `tests/data/text/large.sh` (`jq -n` pretty-printing an array of 240 objects); reproduced byte-for-byte |
+| `text/lines-utf16le.txt` | macOS `iconv` (UTF-8 to UTF-16LE) | `tests/data/text/large.sh`; the byte order mark is prepended by the script, the text is ours |
