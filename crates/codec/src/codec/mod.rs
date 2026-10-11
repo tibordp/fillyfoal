@@ -249,7 +249,7 @@ pub enum Codec {
     /// A RAR 2.9/5.0 group of files (one, or a solid run) decoded as one
     /// stream (see [`rar`]).
     Rar(rar::Params),
-    /// A BCJ (x86, ARM, ARM64) or Delta filter, decoding direction, on its
+    /// A BCJ (x86, ARM, ARM64, PowerPC, IA-64, ARM Thumb, SPARC, RISC-V) or Delta filter, decoding direction, on its
     /// own (7-Zip folders chain it after their decompressor).
     PostFilter(lzma::Post),
     /// Nintendo Yaz0 LZ77 (the body after the 16-byte header), decoding to
@@ -376,6 +376,11 @@ impl Codec {
             Codec::PostFilter(lzma::Post::X86) => "bcj-x86",
             Codec::PostFilter(lzma::Post::Arm) => "bcj-arm",
             Codec::PostFilter(lzma::Post::Arm64) => "bcj-arm64",
+            Codec::PostFilter(lzma::Post::PowerPc) => "bcj-powerpc",
+            Codec::PostFilter(lzma::Post::Ia64) => "bcj-ia64",
+            Codec::PostFilter(lzma::Post::ArmThumb) => "bcj-armthumb",
+            Codec::PostFilter(lzma::Post::Sparc) => "bcj-sparc",
+            Codec::PostFilter(lzma::Post::RiscV) => "bcj-riscv",
             Codec::PostFilter(lzma::Post::Delta(_)) => "delta",
             Codec::Yaz0 { .. } => "yaz0",
             Codec::BinHex => "binhex",
@@ -459,6 +464,11 @@ impl Codec {
             Codec::PostFilter(lzma::Post::X86) => "bcj-x86 (lazy)",
             Codec::PostFilter(lzma::Post::Arm) => "bcj-arm (lazy)",
             Codec::PostFilter(lzma::Post::Arm64) => "bcj-arm64 (lazy)",
+            Codec::PostFilter(lzma::Post::PowerPc) => "bcj-powerpc (lazy)",
+            Codec::PostFilter(lzma::Post::Ia64) => "bcj-ia64 (lazy)",
+            Codec::PostFilter(lzma::Post::ArmThumb) => "bcj-armthumb (lazy)",
+            Codec::PostFilter(lzma::Post::Sparc) => "bcj-sparc (lazy)",
+            Codec::PostFilter(lzma::Post::RiscV) => "bcj-riscv (lazy)",
             Codec::PostFilter(lzma::Post::Delta(_)) => "delta (lazy)",
             Codec::Yaz0 { .. } => "yaz0 (lazy)",
             Codec::BinHex => "binhex (lazy)",

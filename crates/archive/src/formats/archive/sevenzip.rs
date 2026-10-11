@@ -7,8 +7,9 @@
 //! packed. Encoded headers are decompressed and then parsed like plain ones.
 //!
 //! Members of "Copy" folders are dissected in place. Folders whose coders
-//! form a simple chain (LZMA, LZMA2, PPMd, Deflate, Deflate64, BZip2, Zstandard or LZ4, then
-//! optionally BCJ x86/ARM/ARM64 or Delta filters) are decoded, and solid
+//! form a simple chain (LZMA, LZMA2, PPMd, Deflate, Deflate64, BZip2,
+//! Zstandard or LZ4, then optionally BCJ (x86, ARM, ARM64, ARM Thumb,
+//! PowerPC, SPARC, IA-64, RISC-V) or Delta filters) are decoded, and solid
 //! folders are split into their files by the substream sizes. Multi-stream
 //! coders (BCJ2) and encryption are unsupported leaves.
 
@@ -85,6 +86,7 @@ fn method_name(id: &[u8]) -> String {
         [0x08] => "BCJ ARM-Thumb",
         [0x09] => "BCJ SPARC",
         [0x0a] => "BCJ ARM64",
+        [0x0b] => "BCJ RISC-V",
         [0x21] => "LZMA2",
         [0x03, 0x01, 0x01] => "LZMA",
         [0x03, 0x03, 0x01, 0x03] => "BCJ x86",
@@ -865,9 +867,11 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
     for &i in order.get(1..).unwrap_or_default() {
         let c = coder(i).ok_or_else(|| f.methods())?;
         post.push(match c.id.as_slice() {
-            [0x04] | [0x03, 0x03, 0x01, 0x03] if c.props.is_empty() => Post::X86,
-            [0x07] | [0x03, 0x03, 0x05, 0x01] if c.props.is_empty() => Post::Arm,
-            [0x0a] if c.props.iter().all(|&b| b == 0) => Post::Arm64,
+            // Branch converters; a start offset (4-byte props) other than
+            // zero is not supported.
+            id if branch(id).is_some() && c.props.iter().all(|&b| b == 0) => {
+                branch(id).unwrap_or(Post::X86)
+            }
             [0x03] => {
                 Post::Delta(usize::from(c.props.first().copied().unwrap_or(0)).saturating_add(1))
             }
@@ -875,6 +879,22 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
         });
     }
     Ok(Plan { codec, size, post })
+}
+
+/// The branch converter (BCJ) a coder ID names, in its short (xz-style)
+/// or long (`03 03 ..`) form.
+fn branch(id: &[u8]) -> Option<Post> {
+    Some(match id {
+        [0x04] | [0x03, 0x03, 0x01, 0x03] => Post::X86,
+        [0x05] | [0x03, 0x03, 0x02, 0x05] => Post::PowerPc,
+        [0x06] | [0x03, 0x03, 0x04, 0x01] => Post::Ia64,
+        [0x07] | [0x03, 0x03, 0x05, 0x01] => Post::Arm,
+        [0x08] | [0x03, 0x03, 0x07, 0x01] => Post::ArmThumb,
+        [0x09] | [0x03, 0x03, 0x08, 0x05] => Post::Sparc,
+        [0x0a] => Post::Arm64,
+        [0x0b] => Post::RiscV,
+        _ => return None,
+    })
 }
 
 /// Folders larger than this are decoded on demand.

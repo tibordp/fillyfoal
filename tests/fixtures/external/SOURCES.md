@@ -42,6 +42,13 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `bzip2/multi-block.bz2` | bzip2 1.0.8 | reproduced byte-for-byte: `bzip2 -1` |
 | `xz/bottles.txt.xz` | XZ Utils 5.8 | reproduced byte-for-byte: `xz -6` |
 | `xz/large-member.tar.xz` | XZ Utils 5.8 | reproduced byte-for-byte: `xz -9`; commit f0d9d8d1 ("fixtures from xz and zstd CLIs"); the tarball inside is the bsdtar ustar archive of gzip/large-member.tar.gz |
+| `xz/bcj-powerpc.xz` | XZ Utils 5.8.4 | pseudo machine code from `tests/data/xz/bcjdata.py`, reproduced byte-for-byte by `tests/data/xz/make_bcj.sh`: `xz --check=crc64 --powerpc --lzma2=preset=6` |
+| `xz/bcj-ia64.xz` | XZ Utils 5.8.4 | pseudo machine code from `tests/data/xz/bcjdata.py`, reproduced byte-for-byte by `tests/data/xz/make_bcj.sh`: `xz --check=crc64 --ia64 --lzma2=preset=6` |
+| `xz/bcj-armthumb.xz` | XZ Utils 5.8.4 | pseudo machine code from `tests/data/xz/bcjdata.py`, reproduced byte-for-byte by `tests/data/xz/make_bcj.sh`: `xz --check=crc64 --armthumb --lzma2=preset=6` |
+| `xz/bcj-sparc.xz` | XZ Utils 5.8.4 | pseudo machine code from `tests/data/xz/bcjdata.py`, reproduced byte-for-byte by `tests/data/xz/make_bcj.sh`: `xz --check=crc64 --sparc --lzma2=preset=6` |
+| `xz/bcj-riscv.xz` | XZ Utils 5.8.4 | pseudo machine code from `tests/data/xz/bcjdata.py`, reproduced byte-for-byte by `tests/data/xz/make_bcj.sh`: `xz --check=crc64 --riscv --lzma2=preset=6` |
+| `xz/bcj-x86-start.xz` | XZ Utils 5.8.4 | pseudo machine code from `tests/data/xz/bcjdata.py`, reproduced byte-for-byte by `tests/data/xz/make_bcj.sh`: `xz --check=crc64 --x86=start=4096 --lzma2=preset=6` |
+| `xz/bcj-riscv-start.xz` | XZ Utils 5.8.4 | pseudo machine code from `tests/data/xz/bcjdata.py`, reproduced byte-for-byte by `tests/data/xz/make_bcj.sh`: `xz --check=crc64 --riscv=start=4096 --lzma2=preset=6` |
 | `lzma/bottles.txt.lzma` | XZ Utils 5.8 | reproduced byte-for-byte: `xz --format=lzma -6` |
 | `zstd/bottles.txt.zst` | zstd 1.5.7 CLI | reproduced byte-for-byte: `zstd -13 FILE` (content size recorded) |
 | `zstd/large-member.tar.zst` | zstd 1.5.7 CLI | reproduced byte-for-byte: `zstd -19 FILE`; commit f0d9d8d1 |
@@ -72,6 +79,9 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `zip/encrypted-lzma-bzip2.zip` | 7-Zip (7zz) | two `7zz a -tzip` runs (AES-256 + BZip2, ZipCrypto + LZMA); NTFS extra fields and versions 51/63 as 7-Zip writes them; password `fillyfoal` |
 | `7z/deflate64.7z` | 7-Zip (7zz) 26.03 for macOS | reproduced byte-for-byte by `tests/data/7z/make_codecs.sh`: `7zz a -t7z -m0=Deflate64 -mx=9`; content is the deterministic word salad of `tests/data/7z/salad.py`, mtime 2024-01-02 03:04 UTC |
 | `7z/ppmd.7z` | 7-Zip (7zz) 26.03 for macOS | reproduced byte-for-byte by `tests/data/7z/make_codecs.sh`: `7zz a -t7z -m0=PPMd:o=6:mem=1m -mhc=off`; content is the deterministic word salad of `tests/data/7z/salad.py`, mtime 2024-01-02 03:04 UTC |
+| `7z/bcj-armthumb.7z` | 7-Zip (7zz) 26.03 for macOS | pseudo machine code from `tests/data/xz/bcjdata.py`, reproduced byte-for-byte by `tests/data/xz/make_bcj.sh`: `7zz a -t7z -m0=ARMT -m1=LZMA2 -mhc=off` |
+| `7z/bcj-sparc.7z` | 7-Zip (7zz) 26.03 for macOS | pseudo machine code from `tests/data/xz/bcjdata.py`, reproduced byte-for-byte by `tests/data/xz/make_bcj.sh`: `7zz a -t7z -m0=SPARC -m1=LZMA2 -mhc=off` |
+| `7z/bcj-riscv.7z` | 7-Zip (7zz) 26.03 for macOS | pseudo machine code from `tests/data/xz/bcjdata.py`, reproduced byte-for-byte by `tests/data/xz/make_bcj.sh`: `7zz a -t7z -m0=RISCV -m1=LZMA2 -mhc=off` |
 | `zip/deflate64.zip` | 7-Zip (7zz) 26.03 for macOS | reproduced byte-for-byte by `tests/data/7z/make_codecs.sh`: `7zz a -tzip -mm=Deflate64 -mx=9` (method 9, NTFS extra field); content is the deterministic word salad of `tests/data/7z/salad.py`, mtime 2024-01-02 03:04 UTC |
 | `xar/files.xar` | macOS xar(1) | TOC has real inode/device numbers and a `com.apple.provenance` extended attribute. Contents `hello.txt` (`hello tar\n`), `sub/pixel.png` and `sub/a-very-long-file-name-...-classic-tar-header.txt` (`x`), all with mtime `TZ=UTC touch -t 202401020304`, in a directory under `/tmp`; `xar -cf files.xar --prop-exclude user hello.txt sub` (no owner user name; uid, gid and group remain) |
 | `pbzx/pbz4.aar` | macOS aa (Apple Archive) | `aa archive` with LZ4 compression; entries carry `com.apple.provenance` xattrs |
