@@ -233,7 +233,10 @@ async fn pdb_info(cx: Cx, span: Span) -> Result<()> {
     let block = cx.block(span.sub(0, 32)).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
     f.u32("Version").enumeration(PDB_VERSIONS).emit()?;
-    f.u32("Signature").timestamp().emit()?;
+    f.u32("Signature")
+        .hex()
+        .desc("The time the PDB was written (MSVC), or a content hash (lld-link /Brepro)")
+        .emit()?;
     f.u32("Age").emit()?;
     f.guid("GUID")
         .desc("Matches the CodeView record of the image")
