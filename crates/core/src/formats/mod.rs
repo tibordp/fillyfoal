@@ -26,6 +26,10 @@ pub mod util;
 pub const HEAD_LEN: u64 = 0x10800;
 /// How many trailing bytes probes see.
 pub const TAIL_LEN: u64 = 0x400;
+/// How many trailing bytes second-phase probes that ask for it see (see
+/// [`DeepProbe`]): enough for md RAID's version 0.90 superblock, which
+/// starts 64 to 128 KiB before the end of the device.
+pub const DEEP_TAIL_LEN: u64 = 0x2_0000;
 
 /// The region a format dissector works on, plus how deeply it is embedded.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -83,6 +87,70 @@ impl Head<'_> {
     }
 }
 
+/// What a second-phase probe sees (see [`DeepProbe`]).
+pub struct Deep<'a> {
+    /// What the first phase saw.
+    pub head: &'a Head<'a>,
+    /// The last [`DEEP_TAIL_LEN`] bytes (all of them for a shorter input),
+    /// if a candidate asked for them and they are cheap to read; empty
+    /// otherwise (like [`Head::tail`] of content decoded on demand).
+    pub tail: &'a [u8],
+    /// The name of the node, if this is its own detection step: the file
+    /// name for a root, the member's name or path for archive members and
+    /// files in file systems. Names lie (and content nested in a node has
+    /// none), so a name may only break a tie for a signature too weak to
+    /// stand on its own, never stand in for one.
+    pub name: Option<&'a str>,
+    /// The format the first phase identified, if any.
+    pub first: Option<&'static Format>,
+}
+
+impl Deep<'_> {
+    /// `n` bytes at `offset` from the start of the input, if the head or
+    /// the deep tail holds them.
+    pub fn bytes(&self, offset: u64, n: usize) -> Option<&[u8]> {
+        let end = offset.checked_add(crate::bytes::to_u64(n))?;
+        if end <= crate::bytes::to_u64(self.head.data.len()) {
+            let at = crate::bytes::to_usize(offset);
+            return self.head.data.get(at..at.checked_add(n)?);
+        }
+        let tail_at = self
+            .head
+            .len
+            .checked_sub(crate::bytes::to_u64(self.tail.len()))?;
+        let at = crate::bytes::to_usize(offset.checked_sub(tail_at)?);
+        self.tail.get(at..at.checked_add(n)?)
+    }
+
+    /// Whether the node's name has extension `ext` (without the dot, any
+    /// case).
+    pub fn extension_is(&self, ext: &str) -> bool {
+        self.name
+            .and_then(|n| n.rsplit_once('.'))
+            .is_some_and(|(stem, e)| !stem.is_empty() && e.eq_ignore_ascii_case(ext))
+    }
+}
+
+/// A second-phase probe: for the few formats whose evidence lies outside
+/// what [`Head`] holds (a superblock 8 to 128 KiB before the end of a
+/// device) or that cannot be told apart without the file name (a headerless
+/// table of exactly the right size). The second phase runs only when the
+/// first phase matched nothing, or matched one of the formats a candidate
+/// lists in `over`; so files identified otherwise never pay for it, and the
+/// deeper tail is read once, only if a candidate that runs asks for it.
+/// Candidates are tried in registry order; the first that matches wins,
+/// else the first phase's answer stands.
+pub struct DeepProbe {
+    pub format: &'static Format,
+    /// Whether the probe needs [`Deep::tail`].
+    pub tail: bool,
+    /// Names of first-phase formats this probe may take precedence over
+    /// (what an md RAID1 member's data starts with: a file system, a
+    /// partition table). Empty: it runs only when nothing matched.
+    pub over: &'static [&'static str],
+    pub probe: fn(&Deep<'_>) -> bool,
+}
+
 pub enum Probe {
     /// Any of these `(offset, bytes)` pairs matches.
     Magic(&'static [(usize, &'static [u8])]),
@@ -126,6 +194,8 @@ impl std::fmt::Debug for Format {
 pub struct Registry {
     pub formats: &'static [&'static Format],
     pub streaming: &'static [&'static Format],
+    /// Second-phase probes, in the order they are tried (see [`DeepProbe`]).
+    pub deep: &'static [&'static DeepProbe],
 }
 
 impl Registry {
@@ -149,6 +219,45 @@ impl Registry {
     /// Picks the first format whose probe matches.
     pub fn identify(&self, head: &Head<'_>) -> Option<&'static Format> {
         self.formats.iter().copied().find(|f| f.probe.matches(head))
+    }
+
+    /// The second-phase probes that run after the first phase settled on
+    /// `first` (see [`DeepProbe`]).
+    pub fn deep_candidates(
+        &self,
+        first: Option<&'static Format>,
+    ) -> impl Iterator<Item = &'static DeepProbe> {
+        self.deep.iter().copied().filter(move |d| match first {
+            None => true,
+            Some(f) => d.over.contains(&f.name),
+        })
+    }
+
+    /// The second phase: the first candidate (for `deep.first`) that
+    /// matches, else `deep.first`.
+    pub fn identify_deep(&self, deep: &Deep<'_>) -> Option<&'static Format> {
+        self.deep_candidates(deep.first)
+            .find(|d| (d.probe)(deep))
+            .map(|d| d.format)
+            .or(deep.first)
+    }
+
+    /// Both phases over bytes in memory, as a session runs them at a node's
+    /// own detection step: `deep_tail` is the input's last
+    /// [`DEEP_TAIL_LEN`] bytes (or all of it), `name` the node's name.
+    pub fn identify_all(
+        &self,
+        head: &Head<'_>,
+        deep_tail: &[u8],
+        name: Option<&str>,
+    ) -> Option<&'static Format> {
+        let first = self.identify(head);
+        self.identify_deep(&Deep {
+            head,
+            tail: deep_tail,
+            name,
+            first,
+        })
     }
 
     /// Whether `format` dissects unsized streams from the front.
@@ -225,6 +334,21 @@ pub async fn head(cx: &Cx, span: Span) -> Result<(Vec<u8>, Vec<u8>)> {
     Ok((data, tail))
 }
 
+/// Reads what second-phase probes asking for it see: the last
+/// [`DEEP_TAIL_LEN`] bytes of `span` (`head` if it already holds all of
+/// them), or nothing where reading the tail would decode a whole stream
+/// (as for [`Head::tail`]).
+async fn deep_tail(cx: &Cx, span: Span, head: &[u8]) -> Result<Vec<u8>> {
+    if span.len <= crate::bytes::to_u64(head.len()) {
+        return Ok(head.to_vec());
+    }
+    if !cx.tail_is_cheap(span.source) || !cx.len_known(span.source) {
+        return Ok(Vec::new());
+    }
+    let n = DEEP_TAIL_LEN.min(cx.limits().max_read);
+    cx.read_avail(span.tail(span.len.saturating_sub(n))).await
+}
+
 /// Settles the format of `input`: `given` if the caller knows it, else by
 /// identification. A format the host forced on the node (see
 /// [`crate::Session::reinterpret`]) overrides both, but only at the node's
@@ -254,7 +378,28 @@ async fn settle(
                 len: input.span.len,
                 len_known: cx.len_known(input.span.source),
             };
-            (cx.registry().identify(&probe), data.is_empty())
+            let registry = cx.registry();
+            let first = registry.identify(&probe);
+            let mut candidates = registry.deep_candidates(first).peekable();
+            let format = if candidates.peek().is_none() {
+                first
+            } else {
+                let deep_tail = if candidates.any(|d| d.tail) {
+                    deep_tail(cx, input.span, &data).await?
+                } else {
+                    Vec::new()
+                };
+                // The name speaks for the node only at its own detection
+                // step; content nested inside it has none.
+                let name = claim.is_some().then(|| cx.node_name());
+                registry.identify_deep(&Deep {
+                    head: &probe,
+                    tail: &deep_tail,
+                    name: name.as_deref(),
+                    first,
+                })
+            };
+            (format, data.is_empty())
         }
     };
     if claim.is_some() {

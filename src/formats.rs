@@ -89,10 +89,22 @@ pub static STREAMING: &[&Format] = &[
     &text::plain::FORMAT,
 ];
 
+/// Second-phase probes, tried in this order when the first phase matched
+/// nothing or matched a format a probe may take precedence over (see
+/// [`DeepProbe`]). Only for evidence the first phase cannot see: a
+/// superblock near the end of a device, a file name.
+pub static DEEP: &[&DeepProbe] = &[
+    #[cfg(feature = "archive")]
+    &disk::mdraid::DEEP,
+    #[cfg(feature = "docs")]
+    &publishing::adobe::ACT_DEEP,
+];
+
 /// Every format.
 pub static REGISTRY: Registry = Registry {
     formats: FORMATS,
     streaming: STREAMING,
+    deep: DEEP,
 };
 
 /// The catalog of every format.
@@ -3295,4 +3307,14 @@ pub fn by_extension(extension: &str) -> Vec<&'static Format> {
 /// Picks the first format whose probe matches.
 pub fn identify(head: &Head<'_>) -> Option<&'static Format> {
     REGISTRY.identify(head)
+}
+
+/// Both probe phases, as a session runs them for a node named `name`; see
+/// [`Registry::identify_all`].
+pub fn identify_all(
+    head: &Head<'_>,
+    deep_tail: &[u8],
+    name: Option<&str>,
+) -> Option<&'static Format> {
+    REGISTRY.identify_all(head, deep_tail, name)
 }

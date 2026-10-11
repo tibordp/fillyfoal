@@ -955,6 +955,8 @@ pub(crate) struct Output {
     pub interpretation: Option<Interpretation>,
     /// Progress the dissector reported: (done, total).
     pub progress: Option<(u64, u64)>,
+    /// The name of the node being expanded (see [`Cx::node_name`]).
+    pub name: std::borrow::Cow<'static, str>,
 }
 
 impl Output {
@@ -1017,6 +1019,15 @@ impl Cx {
     pub(crate) fn forced_format(&self) -> Option<&'static Format> {
         let out = lock(&self.out);
         if out.claimed { None } else { out.forced }
+    }
+
+    /// The name of the node being expanded: for a root, the name the host
+    /// opened it under (normally the file name); for an archive member or a
+    /// file in a file system, usually its name or path there. Names are
+    /// whatever the parent dissector chose, so treat this as a hint only
+    /// (see `formats::Deep::name`).
+    pub fn node_name(&self) -> std::borrow::Cow<'static, str> {
+        lock(&self.out).name.clone()
     }
 
     /// Records what the node's own detection step settled on.
