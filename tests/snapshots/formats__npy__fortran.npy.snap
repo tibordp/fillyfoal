@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ fortran.npy — NumPy array >i4, shape (2, 3), Fortran order  [0x0+0x98]
+    Magic: 93 4e 55 4d 50 59  |.NUMPY|  [0x0+0x6]
+    Major version: 1  [0x6+0x1]
+    Minor version: 0  [0x7+0x1]
+    Header length: 118  [0x8+0x2]
+    Header: "{'descr': '>i4', 'fortran_order': True, 'shape': (2, 3), }"  [0xa+0x76]
+    dtype: ">i4"
+    Fortran order: true
+    Shape: "(2, 3)"
+    Data — 6 elements, 24 bytes  [0x80+0x18]

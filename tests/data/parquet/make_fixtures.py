@@ -61,3 +61,29 @@ pq.write_table(
     use_byte_stream_split=["id", "temp"],
     write_statistics=False,
 )
+
+# DELTA_BINARY_PACKED, DELTA_BYTE_ARRAY and DELTA_LENGTH_BYTE_ARRAY
+# columns (300 rows: several miniblocks), plus an INT96 timestamp column,
+# uncompressed, no dictionary.
+n = 300
+d = pa.table(
+    {
+        "i": pa.array([i * 7 - 1000 for i in range(n)], pa.int64()),
+        "s": pa.array([f"key{i // 3:04d}" for i in range(n)]),
+        "l": pa.array([f"v{i}" for i in range(n)]),
+        "ts": pa.array([1_700_000_000_000_000 + i for i in range(n)], pa.timestamp("us")),
+    }
+)
+pq.write_table(
+    d,
+    "delta.parquet",
+    use_dictionary=False,
+    compression="none",
+    column_encoding={
+        "i": "DELTA_BINARY_PACKED",
+        "s": "DELTA_BYTE_ARRAY",
+        "l": "DELTA_LENGTH_BYTE_ARRAY",
+    },
+    use_deprecated_int96_timestamps=True,
+    write_statistics=False,
+)

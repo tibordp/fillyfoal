@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ object.npy — NumPy array |O, shape (4), C order  [0x0+0x12a]
+    Magic: 93 4e 55 4d 50 59  |.NUMPY|  [0x0+0x6]
+    Major version: 1  [0x6+0x1]
+    Minor version: 0  [0x7+0x1]
+    Header length: 118  [0x8+0x2]
+    Header: "{'descr': '|O', 'fortran_order': False, 'shape': (4,), }"  [0xa+0x76]
+    dtype: "|O"
+    Fortran order: false
+    Shape: "(4)"
+    Data  [0x80+0xaa]

@@ -49,9 +49,10 @@ pub static FORMAT: Format = Format {
 };
 
 fn probe(h: &Head<'_>) -> bool {
-    h.starts_with(b"PAR1")
-        && h.len >= 12
-        && (h.tail.ends_with(b"PAR1") || h.tail.ends_with(b"PARE"))
+    // `PAR1` at both ends, or `PARE` at both ends (encrypted footer).
+    h.len >= 12
+        && ((h.starts_with(b"PAR1") && h.tail.ends_with(b"PAR1"))
+            || (h.starts_with(b"PARE") && h.tail.ends_with(b"PARE")))
 }
 
 // ---------------------------------------------------------------------------
@@ -635,6 +636,36 @@ static ROW_GROUP: StructDef = StructDef {
     ],
 };
 
+static AES_GCM: StructDef = StructDef {
+    name: "AesGcm",
+    fields: &[
+        f(1, "aad_prefix", P),
+        f(2, "aad_file_unique", P),
+        f(3, "supply_aad_prefix", P),
+    ],
+};
+
+static ENCRYPTION_ALGORITHM: StructDef = StructDef {
+    name: "EncryptionAlgorithm",
+    fields: &[
+        f(1, "AES_GCM_V1", Kind::Struct(&AES_GCM)),
+        f(2, "AES_GCM_CTR_V1", Kind::Struct(&AES_GCM)),
+    ],
+};
+
+/// Plaintext prefix of an encrypted footer.
+static FILE_CRYPTO_META_DATA: StructDef = StructDef {
+    name: "FileCryptoMetaData",
+    fields: &[
+        f(
+            1,
+            "encryption_algorithm",
+            Kind::Struct(&ENCRYPTION_ALGORITHM),
+        ),
+        f(2, "key_metadata", P),
+    ],
+};
+
 static COLUMN_ORDER: StructDef = StructDef {
     name: "ColumnOrder",
     fields: &[f(1, "TYPE_ORDER", Kind::Struct(&EMPTY))],
@@ -654,7 +685,11 @@ static FILE_META_DATA: StructDef = StructDef {
         ),
         f(6, "created_by", P),
         f(7, "column_orders", Kind::List(&Kind::Struct(&COLUMN_ORDER))),
-        f(8, "encryption_algorithm", P),
+        f(
+            8,
+            "encryption_algorithm",
+            Kind::Struct(&ENCRYPTION_ALGORITHM),
+        ),
         f(9, "footer_signing_key_metadata", P),
     ],
 };
@@ -954,24 +989,30 @@ async fn collect(cx: &Cx, buf: &Buf) -> Option<Meta> {
 // ---------------------------------------------------------------------------
 // Dissection
 
+fn magic_node(span: Span, bytes: &[u8]) -> Node {
+    Node::new("Magic")
+        .span(span)
+        .value(Value::Text(crate::text::latin1(bytes)))
+}
+
+fn length_node(span: Span, len: u64) -> Node {
+    Node::new("Metadata length").span(span).value(Value::UInt {
+        value: len,
+        bits: 32,
+        radix: Radix::Dec,
+    })
+}
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    cx.emit(
-        Node::new("Magic")
-            .span(file.sub(0, 4))
-            .value(Value::Text("PAR1".to_owned())),
-    );
+    let magic = cx.read(file.sub(0, 4)).await?;
+    cx.emit(magic_node(file.sub(0, 4), &magic));
     let tail_span = file.sub(file.len.saturating_sub(8), 8);
     let tail = cx.read(tail_span).await?;
     let len = u64::from(u32_le(&tail, 0).unwrap_or(0));
-    if tail.get(4..) == Some(b"PARE") {
-        cx.annotate("Parquet (encrypted footer)");
-        cx.emit(
-            Node::new("Encrypted footer")
-                .span(file.sub(file.len.saturating_sub(8).saturating_sub(len), len))
-                .diag(Diagnostic::unsupported("encrypted footer")),
-        );
-        return Ok(());
+    let tail_magic = tail.get(4..).unwrap_or_default();
+    if tail_magic == b"PARE" {
+        return encrypted_footer(&cx, input, tail_span, len).await;
     }
     let meta_start = file
         .len
@@ -1061,20 +1102,73 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         )
         .await,
     );
+    cx.emit(length_node(tail_span.sub(0, 4), len));
+    cx.emit(magic_node(tail_span.sub(4, 4), tail_magic));
+    Ok(())
+}
+
+/// A file whose footer is encrypted (`PARE`): the column chunks, then the
+/// plaintext `FileCryptoMetaData` followed by the encrypted
+/// `FileMetaData` (length, nonce, ciphertext, tag), its length and `PARE`.
+async fn encrypted_footer(cx: &Cx, input: Input, tail_span: Span, len: u64) -> Result<()> {
+    let file = input.span;
+    cx.annotate("Parquet (encrypted footer)");
+    let meta_start = file
+        .len
+        .saturating_sub(8)
+        .checked_sub(len)
+        .filter(|&s| s >= 4)
+        .ok_or_else(|| {
+            Diagnostic::malformed(format!("footer length {len} does not fit"))
+                .at(tail_span.sub(0, 4))
+        })?;
+    if len > MAX_FOOTER {
+        return Err(Diagnostic::limit("footer larger than 64 MiB").at(tail_span.sub(0, 4)));
+    }
     cx.emit(
-        Node::new("Metadata length")
-            .span(tail_span.sub(0, 4))
-            .value(Value::UInt {
-                value: len,
-                bits: 32,
-                radix: Radix::Dec,
-            }),
+        Node::new("Column chunks")
+            .span(file.sub(4, meta_start.saturating_sub(4)))
+            .summary(crate::formats::util::fmt::size(
+                meta_start.saturating_sub(4),
+            ))
+            .diag(Diagnostic::unsupported(
+                "row groups listed in the encrypted footer",
+            )),
     );
+    let meta_span = file.sub(meta_start, len);
+    let data = Arc::new(cx.read(meta_span).await?);
+    let buf = Buf::new(data.clone(), meta_span);
+    let crypto_end = buf.skip(cx, 0, 12).await;
+    let tstate = ThriftState {
+        buf: buf.clone(),
+        at: 0,
+        def: &FILE_CRYPTO_META_DATA,
+        depth: 0,
+        file: input,
+        phys: None,
+    };
     cx.emit(
-        Node::new("Magic")
-            .span(tail_span.sub(4, 4))
-            .value(Value::Text("PAR1".to_owned())),
+        value_node(
+            cx,
+            "FileCryptoMetaData".to_owned(),
+            &tstate,
+            0,
+            12,
+            Kind::Struct(&FILE_CRYPTO_META_DATA),
+        )
+        .await,
     );
+    if let Some(end) = crypto_end {
+        let rest = buf.sub(end, data.len());
+        cx.emit(
+            Node::new("Encrypted FileMetaData")
+                .span(rest)
+                .summary(crate::formats::util::fmt::size(rest.len))
+                .diag(Diagnostic::unsupported("encrypted footer")),
+        );
+    }
+    cx.emit(length_node(tail_span.sub(0, 4), len));
+    cx.emit(magic_node(tail_span.sub(4, 4), b"PARE"));
     Ok(())
 }
 

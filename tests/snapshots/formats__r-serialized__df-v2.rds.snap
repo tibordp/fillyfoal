@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ df-v2.rds — R object (RDS) (serialization v2, R 4.4.1), top level list  [0x0+0xd8]
+    Format (XDR): "X\n"  [0x0+0x2]
+    Serialization version: 2  [0x2+0x4]
+    Written by R: 263169  [0x6+0x4]
+    Minimum reader R: 131840  [0xa+0x4]
+    Top-level object: list (0x13) — flags 0x313  [0xe+0xca]

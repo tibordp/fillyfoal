@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ structured.npy — NumPy array [('id', '<i2'), ('v', '<f4'), ('tag', '|…, shape (3), C order  [0x0+0xdb]
+    Magic: 93 4e 55 4d 50 59  |.NUMPY|  [0x0+0x6]
+    Major version: 1  [0x6+0x1]
+    Minor version: 0  [0x7+0x1]
+    Header length: 182  [0x8+0x2]
+    Header: "{'descr': [('id', '<i2'), ('v', '<f4'), ('tag', '|S3')], 'fortran_order': False, 'shape': (3,), }"  [0xa+0xb6]
+    dtype: "[('id', '<i2'), ('v', '<f4'), ('tag', '|S3')]"
+    Fortran order: false
+    Shape: "(3)"
+    Data  [0xc0+0x1b]

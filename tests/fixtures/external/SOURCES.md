@@ -743,3 +743,28 @@ time zone.
 | `ese/fillyfoal.edb` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | esent.dll database (format 0x620, update 300, 4 KiB pages, clean shutdown) with table `Fixtures` (400 rows; every column type: Bit, UnsignedByte, Short, Long autoincrement, Currency, IEEESingle, IEEEDouble, DateTime, Binary, Text in UTF-16 and Windows-1252, LongBinary and LongText (20 000-byte and 6 000-character separated long values every 50th row), UnsignedLong, LongLong, GUID, UnsignedShort, a tagged multi-valued Text column), a primary index and a two-column secondary index, and table `Small` (3 rows). Checked against dissect.esedb 3.18 (catalog, column types, every row value of both tables; dissect cannot reassemble one of the 20 000-byte long values) and our page checksums (ECC + XOR, every page valid) |
 | `minidump/ping-normal.dmp` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | `MiniDumpWriteDump(MiniDumpNormal)` of a running `PING.EXE` on ARM64: thread list (6 threads, ARM64 contexts), module list (12 modules with RSDS CodeView records), function table, memory list, system info, misc info (version 5), system memory info, process VM counters. The skelsec `minidump` package rejects ARM64 dumps, so the streams were checked with a short `struct` script against dbghelp's documented layouts |
 | `minidump/ping-info.dmp` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | the same process with `MiniDumpWithUnloadedModules \| MiniDumpWithFullMemoryInfo \| MiniDumpWithThreadInfo` (0x1820): adds the thread info list and the memory info list (240 regions); no module had been unloaded, so there is no unloaded-module stream |
+
+## Scientific and columnar data writers
+
+Generated in `/tmp/fixtures/<format>` with the scripts named below
+(`uv run --with <pinned package>`, or Docker for Octave and R).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `mat/compressed.mat` | SciPy 1.16.2 (`scipy.io.savemat`, NumPy 2.3.3) | `tests/data/mat/make_scipy.py`: every variable (double, uint8 with zeros, logical, char, struct, cell, sparse) in its own miCOMPRESSED element, written back to back without padding; the creation time in the header text is replaced by a fixed one of the same length; reproduced byte-for-byte |
+| `mat/plain.mat` | SciPy 1.16.2 (`scipy.io.savemat`, NumPy 2.3.3) | same script, `do_compression=False`: the same variables as plain miMATRIX elements; same header edit; reproduced byte-for-byte |
+| `mat/octave-v7.mat` | GNU Octave 9.4.0 (Debian trixie, `debian:trixie-slim` + `apt-get install octave`) | `tests/data/mat/make_octave.sh` running `make_octave.m`: `save -v7` (compressed) of double, uint8 with zeros, logical, char (miUTF16), struct, cell, sparse; the creation time in the header text is replaced by `2026-01-01 00:00:00` (same length); reproduced byte-for-byte |
+| `mat/octave-v6.mat` | GNU Octave 9.4.0 | same script, `save -v6` (uncompressed); same header edit; reproduced byte-for-byte |
+| `parquet/encrypted-footer.parquet` | pyarrow 26.0.0 (parquet-cpp-arrow 26.0.0) | `tests/data/parquet/make_encrypted.py`: modular encryption with an encrypted footer (`PARE` at both ends), AES-GCM, one encrypted and one plaintext column, throwaway keys from a toy in-memory KMS; data keys and nonces are random, so not byte-reproducible; read back with pyarrow |
+| `parquet/delta.parquet` | pyarrow 26.0.0 (parquet-cpp-arrow 26.0.0) | `tests/data/parquet/make_fixtures.py`: DELTA_BINARY_PACKED, DELTA_BYTE_ARRAY and DELTA_LENGTH_BYTE_ARRAY columns (300 rows) and an INT96 timestamp column, uncompressed; reproduced byte-for-byte |
+| `parquet/duckdb.parquet` | DuckDB 1.4.1 (Python package; `created_by` "DuckDB version v1.4.1") | `tests/data/parquet/make_duckdb.py`: DuckDB's own writer, one row group, Snappy, dictionary strings, nulls, a list and a struct column; reproduced byte-for-byte |
+| `npy/f8-2d.npy` | NumPy 2.3.3 (`numpy.save`) | `tests/data/npy/make_numpy.py`: `<f8`, shape (3, 4); reproduced byte-for-byte |
+| `npy/fortran.npy` | NumPy 2.3.3 | same script: `>i4`, `fortran_order: True`; reproduced byte-for-byte |
+| `npy/structured.npy` | NumPy 2.3.3 | same script: structured dtype (`<i2`, `<f4`, `S3`); reproduced byte-for-byte |
+| `npy/unicode.npy` | NumPy 2.3.3 | same script: `<U5`; reproduced byte-for-byte |
+| `npy/object.npy` | NumPy 2.3.3 | same script: object array, the data is a pickle stream; reproduced byte-for-byte |
+| `r-serialized/workspace.RData` | R 4.4.1 (`r-base:4.4.1` Docker image) | `tests/data/r-serialized/make_r.R`: `save(..., compress = FALSE)` (RDX3) of a double vector with NA, a named list, a factor and a data frame; reproduced byte-for-byte |
+| `r-serialized/altrep-v3.rds` | R 4.4.1 | same script: `saveRDS(1:10, compress = FALSE)`, version 3 with an ALTREP compact sequence; reproduced byte-for-byte |
+| `r-serialized/df-v2.rds` | R 4.4.1 | same script: a data frame, serialization version 2; reproduced byte-for-byte |
+| `avro/events.avro` | fastavro 1.12.1 | `tests/data/avro/make_fastavro.py`: record schema with an enum, a nullable union, a three-branch union, a map, an array and a fixed; 12 records in 4 blocks, null codec, fixed sync marker; reproduced byte-for-byte |
+| `avro/events-deflate.avro` | fastavro 1.12.1 | same script, deflate codec; reproduced byte-for-byte |

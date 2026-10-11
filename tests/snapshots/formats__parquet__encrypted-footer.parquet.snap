@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ encrypted-footer.parquet — Parquet (encrypted footer)  [0x0+0x50c]
+    Magic: "PARE"  [0x0+0x4]
+    Column chunks — 302 bytes  [0x4+0x12e]
+      ! unsupported: row groups listed in the encrypted footer
+  ▾ FileCryptoMetaData  [0x132+0xe3]
+    ▾ encryption_algorithm — EncryptionAlgorithm  [0x132+0xf]
+      ▾ AES_GCM_V1 — AesGcm  [0x133+0xd]
+          aad_file_unique: 9d af 47 5a 3f 9f 71 66  |..GZ?.qf|  [0x134+0xa]
+          supply_aad_prefix: false  [0x13e+0x1]
+          Stop: 0x0  [0x13f+0x1]
+        Stop: 0x0  [0x140+0x1]
+      key_metadata: "{\"keyMaterialType\":\"PKMT1\",\"internalStorage\":true,\"isFooterKey\":true,\"kmsInstanceID\":\"DEFAULT\",\"kmsInstanceURL\":\"DEFAULT\",\"masterKeyID\":\"footer\",\"wrappedDEK\":\"Ze53essDRlASZt9FZWppfw==\",\"doubleWrapping\":false}"  [0x141+0xd3]
+      Stop: 0x0  [0x214+0x1]
+    Encrypted FileMetaData — 751 bytes  [0x215+0x2ef]
+      ! unsupported: encrypted footer
+    Metadata length: 978  [0x504+0x4]
+    Magic: "PARE"  [0x508+0x4]

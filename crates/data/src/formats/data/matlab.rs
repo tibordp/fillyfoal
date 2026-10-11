@@ -94,6 +94,20 @@ fn tag(data: &[u8], endian: Endian) -> Option<(u32, u64, u64)> {
     Some((first, u64::from(get::<u32>(data, 4, endian)?), 8))
 }
 
+/// Bytes an element's data occupies after its tag: small elements hold 4
+/// bytes, others are padded to 8, except `miCOMPRESSED`, whose zlib
+/// stream is followed directly by the next element (MATLAB, SciPy and
+/// matio write them back to back).
+fn padded_size(kind: u32, size: u64, header: u64) -> u64 {
+    if header == 4 {
+        4
+    } else if kind == 15 {
+        size
+    } else {
+        size.checked_next_multiple_of(8).unwrap_or(u64::MAX)
+    }
+}
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 128)).await?;
@@ -196,11 +210,7 @@ async fn elements(cx: Cx, level: Level) -> Result<()> {
                 .await;
             break;
         };
-        let padded = if header == 4 {
-            4
-        } else {
-            size.checked_next_multiple_of(8).unwrap_or(u64::MAX)
-        };
+        let padded = padded_size(kind, size, header);
         let whole = level.span.sub(pos, header.saturating_add(padded));
         let data = level.span.sub(pos.saturating_add(header), size);
         let name = match level.matrix {
@@ -327,7 +337,18 @@ async fn element(cx: &Cx, level: &Level, node: Node, kind: u32, data: Span) -> R
                 node.summary(set.join(", "))
             })
         }
-        1 | 2 if level.matrix.is_some() => {
+        1..=4 if level.matrix == Some(4) && typed.name == "Real part" => {
+            // Character data: one code unit per element, 8 or 16 bits
+            // (MATLAB and matio write miUINT16, SciPy miUTF8).
+            let raw = cx.read_avail(data.sub(0, 4096)).await?;
+            let text = if kind <= 2 {
+                crate::text::latin1(&raw)
+            } else {
+                crate::text::utf16(&raw, level.endian)
+            };
+            Ok(typed.value(Value::Text(text)))
+        }
+        1 | 2 if matches!(&*typed.name, "Array name" | "Field names" | "Class name") => {
             // Names: NUL-padded fixed-length strings.
             let text = cx.read_avail(data.sub(0, 4096)).await?;
             let names: Vec<String> = text
@@ -387,11 +408,7 @@ fn matrix_summary(data: &[u8], endian: Endian) -> (String, u8) {
                 }
             }
         }
-        let padded = if header == 4 {
-            4
-        } else {
-            size.checked_next_multiple_of(8).unwrap_or(u64::MAX)
-        };
+        let padded = padded_size(kind, size, header);
         at = at.saturating_add(to_usize(header.saturating_add(padded)));
     }
     let (set, _) = crate::value::decode_flags(ARRAY_FLAGS, u64::from(flags >> 8 & 0xff));
