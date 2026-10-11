@@ -514,14 +514,106 @@ record! {
     }
 }
 
+/// The fields LAS 1.3 and 1.4 append to the public header block: the
+/// waveform data start (1.3, offset 227), the extended VLRs and the 64-bit
+/// point counts (1.4, offsets 235-375).
+#[derive(Clone, Copy, Default)]
+pub(crate) struct LasExtra {
+    pub(crate) evlr_start: u64,
+    pub(crate) evlrs: u32,
+    pub(crate) points: Option<u64>,
+}
+
+pub(crate) async fn las_extra(cx: &Cx, file: Span, h: &LasHeader) -> Result<LasExtra> {
+    let v14 = (h.major, h.minor) >= (1, 4) && h.header_size >= 375;
+    if !v14 {
+        return Ok(LasExtra::default());
+    }
+    let b = cx.read(file.sub(235, 20)).await?;
+    Ok(LasExtra {
+        evlr_start: crate::bytes::u64_le(&b, 0).unwrap_or(0),
+        evlrs: u32_le(&b, 8).unwrap_or(0),
+        points: crate::bytes::u64_le(&b, 12),
+    })
+}
+
+/// The extended VLRs of a LAS 1.4 file (60-byte headers with 64-bit
+/// lengths), after the point data.
+pub(crate) async fn las_evlrs(cx: &Cx, file: Span, extra: LasExtra) -> Result<()> {
+    if extra.evlrs > 0 && extra.evlr_start > 0 {
+        let mut cur = Cursor::new(cx, file, LE);
+        cur.seek(extra.evlr_start);
+        for _ in 0..extra.evlrs.min(10_000) {
+            if cur.remaining() < 60 {
+                break;
+            }
+            let start = cur.pos();
+            cur.skip(2);
+            let user = crate::text::until_nul(&cur.bytes(16).await?);
+            let record = cur.u16().await?;
+            let len = cur.u64().await?;
+            let description = crate::text::until_nul(&cur.bytes(32).await?);
+            cur.skip(len);
+            cx.push(
+                Node::new(format!("Extended VLR {user}/{record}"))
+                    .span(cur.since(start))
+                    .summary(description),
+            )
+            .await;
+        }
+    }
+    Ok(())
+}
+
+pub(crate) async fn las_header(cx: Cx, (span, major, minor): (Span, u8, u8)) -> Result<()> {
+    let b = cx.block(span).await?;
+    let mut f = crate::fields::Fields::emitting(&cx, &b, LE);
+    LasHeader::read(&mut f)?;
+    let len = span.len;
+    if (major, minor) >= (1, 3) && len >= 235 {
+        f.u64("Start of waveform data").hex().emit()?;
+    }
+    if (major, minor) >= (1, 4) && len >= 375 {
+        f.u64("Start of first extended VLR").hex().emit()?;
+        f.u32("Extended VLRs").emit()?;
+        f.u64("Number of point records").emit()?;
+        const BY_RETURN: [&str; 15] = [
+            "Points by return 1",
+            "Points by return 2",
+            "Points by return 3",
+            "Points by return 4",
+            "Points by return 5",
+            "Points by return 6",
+            "Points by return 7",
+            "Points by return 8",
+            "Points by return 9",
+            "Points by return 10",
+            "Points by return 11",
+            "Points by return 12",
+            "Points by return 13",
+            "Points by return 14",
+            "Points by return 15",
+        ];
+        for name in BY_RETURN {
+            f.u64(name).emit()?;
+        }
+    }
+    Ok(())
+}
+
 async fn las(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: LasHeader = read_record(&cx, file.sub(0, LasHeader::SIZE), LE).await?;
-    cx.emit(LasHeader::node(
-        "Public header block",
-        file.sub(0, h.header_size.into()),
-        LE,
-    ));
+    let header = file.sub(0, h.header_size.into());
+    cx.emit(
+        Node::new("Public header block")
+            .span(header)
+            .lazy(las_header, (header, h.major, h.minor)),
+    );
+    let extra = las_extra(&cx, file, &h).await?;
+    // LAS 1.4 keeps the 32-bit count only for formats 0-5 (and as 0 when
+    // the count does not fit); the 64-bit count is authoritative.
+    let points = extra.points.unwrap_or(h.points.into());
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(h.header_size.into());
     for _ in 0..h.vlrs.min(10_000) {
@@ -539,19 +631,30 @@ async fn las(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
+    // Points run from their offset for count × record length, before the
+    // extended VLRs (which follow them in LAS 1.4).
+    let offset = u64::from(h.points_offset);
+    let mut end = file.len;
+    if extra.evlrs > 0 && extra.evlr_start >= offset {
+        end = end.min(extra.evlr_start);
+    }
+    let len = points
+        .saturating_mul(h.point_length.into())
+        .min(end.saturating_sub(offset));
     cx.emit(
         Node::new("Point records")
-            .span(file.tail(h.points_offset.into()))
+            .span(file.sub(offset, len))
             .summary(format!(
-                "{} points × {} bytes (format {})",
-                h.points, h.point_length, h.point_format
+                "{points} points × {} bytes (format {})",
+                h.point_length,
+                h.point_format & 0x3f
             )),
     );
+    las_evlrs(&cx, file, extra).await?;
     cx.annotate(format!(
-        "LAS {}.{}, {} points, by {}",
+        "LAS {}.{}, {points} points, by {}",
         h.major,
         h.minor,
-        h.points,
         h.software.trim_end()
     ));
     Ok(())

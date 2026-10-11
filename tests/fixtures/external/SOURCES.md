@@ -311,6 +311,9 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `bed/windows.bed` | bedtools 2.30.0 (Debian bookworm) | same script, byte for byte: `bedtools makewindows -w 1000`, three-column BED with no track line |
 | `pdb-structure/ethanol.pdb` | Open Babel 3.1.1 (Debian bookworm) | reproduced byte-for-byte by `tests/data/pdb-structure/make_obabel.sh` in `debian:bookworm-slim`: `obabel -ixyz -opdb` of our XYZ coordinates of ethanol; starts with COMPND and AUTHOR records (no HEADER), HETATM and CONECT records |
 | `vector-blf/straddle.blf` | python-can 4.6.1 (`can.BLFWriter`) | reproduced byte-for-byte: `uv run --with python-can==4.6.1 python tests/data/vector-blf/make_python_can.py OUT.blf`; 120 CAN frames in six zlib LOG_CONTAINERs cut at 1000 uncompressed bytes (`max_container_size`), so frames straddle containers; `can.BLFReader` reads all 120 back |
+| `las/las14.las` | laspy 2.6.1 (numpy 2.3.4) | reproduced byte-for-byte: `uv run --with laspy==2.6.1 --with lazrs==0.7.0 --with numpy==2.3.4 python tests/data/las/make_laspy.py OUTDIR`; LAS 1.4, point format 6, five points (legacy 32-bit count 0, 64-bit count 5), one VLR and one extended VLR after the points |
+| `las/las12.las` | laspy 2.6.1 (numpy 2.3.4) | same script, byte for byte: LAS 1.2, point format 1, the same points and VLR |
+| `laz/las14.laz` | laspy 2.6.1 with lazrs 0.7.0 | same script, byte for byte: `las14.las` compressed (layered chunked LASzip), the extended VLR after the chunk table |
 
 ## Binary value encodings
 
