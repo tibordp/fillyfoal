@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ altrep-v3.rds — R object (RDS) (serialization v3, R 4.4.1), top level unknown type  [0x0+0x85]
+    Format (XDR): "X\n"  [0x0+0x2]
+    Serialization version: 3  [0x2+0x4]
+    Written by R: 263169  [0x6+0x4]
+    Minimum reader R: 197888  [0xa+0x4]
+    Native encoding: "UTF-8"  [0xe+0x9]
+    Top-level object: 0xee (unknown) — flags 0xee  [0x17+0x6e]
