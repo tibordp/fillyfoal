@@ -314,6 +314,7 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `las/las14.las` | laspy 2.6.1 (numpy 2.3.4) | reproduced byte-for-byte: `uv run --with laspy==2.6.1 --with lazrs==0.7.0 --with numpy==2.3.4 python tests/data/las/make_laspy.py OUTDIR`; LAS 1.4, point format 6, five points (legacy 32-bit count 0, 64-bit count 5), one VLR and one extended VLR after the points |
 | `las/las12.las` | laspy 2.6.1 (numpy 2.3.4) | same script, byte for byte: LAS 1.2, point format 1, the same points and VLR |
 | `laz/las14.laz` | laspy 2.6.1 with lazrs 0.7.0 | same script, byte for byte: `las14.las` compressed (layered chunked LASzip), the extended VLR after the chunk table |
+| `3ds/pyramid.3ds` | Assimp 5.2.5 (Debian bookworm `assimp-utils`) | reproduced byte-for-byte by `tests/data/3ds/make_assimp.sh` in `debian:bookworm-slim` (`assimp export pyramid.obj pyramid.3ds -f3ds` of our OBJ/MTL): two meshes whose face arrays (0x4120) carry material groups (0x4130), three materials, a keyframer section |
 
 ## Binary value encodings
 
