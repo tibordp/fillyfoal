@@ -3,9 +3,11 @@
 //! The 512-byte `koly` trailer at the end locates the data fork and an XML
 //! property list. The plist's `blkx` entries are base64-encoded `mish`
 //! tables, one per partition, mapping sector ranges to chunks of the data
-//! fork (zero fill, raw, zlib, bzip2, ADC, LZFSE, LZMA). zlib chunks are
-//! decompressed on expansion; raw, bzip2 and LZMA (.xz) chunks are dissected
-//! in place, which decompresses them; ADC and LZFSE are unsupported.
+//! fork (zero fill, raw, zlib, bzip2, ADC, LZFSE, LZMA). Each partition's
+//! chunks are assembled into one piecewise source (compressed chunks are
+//! decoded lazily, only when a read reaches them), and so are all partitions
+//! placed at their sectors: the "Disk" node, whose partition map and file
+//! systems are dissected in turn. Chunks are also listed one by one.
 
 use std::sync::Arc;
 
@@ -14,6 +16,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::disk::PieceList;
 use crate::formats::text::decode::{Decoded, base64};
 use crate::formats::text::scan::Owned;
 use crate::formats::text::xml::{Kind, Lexer, Mode, token_text};
@@ -21,7 +24,9 @@ use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::fmt;
 use crate::formats::util::fmt::count;
 use crate::formats::util::val::{hex, uint};
-use crate::formats::{Codec, Format, Head, Input, Probe, content, embedded, embedded_named};
+use crate::formats::{
+    Codec, Format, Head, Input, Probe, content, dissect_or_data, embedded, embedded_named,
+};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
@@ -132,6 +137,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let xml = file.sub(koly.xml_offset, koly.xml_length);
     if koly.xml_length > 0 {
+        cx.emit(
+            Node::new("Disk")
+                .summary(fmt::size(koly.sectors.saturating_mul(512)))
+                .lazy(disk, (input, xml, data)),
+        );
         cx.emit(
             Node::new("Partitions")
                 .span(xml)
@@ -282,8 +292,132 @@ async fn partitions(cx: Cx, (input, xml_span, data_fork): (Input, Span, Span)) -
     Ok(())
 }
 
+/// The decoded `mish` tables of all partitions, as derived sources.
+async fn mish_tables(cx: &Cx, xml: Span) -> Result<Vec<Span>> {
+    let mut out = Vec::new();
+    for e in blkx_entries(cx, xml).await? {
+        cx.checkpoint().await;
+        let b64_span = e.data.span;
+        if let Decoded { bytes, error: None } = base64(&e.data.bytes)
+            && bytes.starts_with(b"mish")
+        {
+            let origin = Origin {
+                parent: b64_span,
+                transform: "base64",
+            };
+            out.push(cx.add_derived(origin, bytes, b64_span.len, None)?.span);
+        }
+    }
+    Ok(out)
+}
+
+/// The codec of a compressed chunk type.
+fn chunk_codec(kind: u32) -> Option<Codec> {
+    match kind {
+        0x8000_0004 => Some(Codec::Adc),
+        0x8000_0005 => Some(Codec::Zlib),
+        0x8000_0006 => Some(Codec::Bzip2),
+        0x8000_0007 => Some(Codec::Lzfse),
+        // libcompression's LZMA (ULMO) is an .xz stream.
+        0x8000_0008 => Some(Codec::Xz),
+        _ => None,
+    }
+}
+
+/// Appends the chunks of one partition's `mish` table to `list`: at the
+/// partition's first sector (`on_disk`, for the whole disk) or at 0 (for the
+/// partition alone). Chunk sectors are relative to the partition. Returns
+/// false if the partition overlaps what is already in the list.
+async fn add_chunks(
+    cx: &Cx,
+    mish: Span,
+    data_fork: Span,
+    list: &mut PieceList,
+    on_disk: bool,
+) -> Result<bool> {
+    let header = crate::fields::parse(cx, mish.sub(0, MISH_HEADER), BE, &(), Mish::layout).await?;
+    let start = if on_disk {
+        header.first_sector.saturating_mul(512)
+    } else {
+        0
+    };
+    let end = start.saturating_add(header.sectors.saturating_mul(512));
+    if start < list.len() {
+        return Ok(false);
+    }
+    list.hole(cx, start.saturating_sub(list.len()))?;
+    let table = mish.sub_exact(MISH_HEADER, u64::from(header.chunks).saturating_mul(CHUNK))?;
+    let raw = cx.read(table).await?;
+    for i in 0..header.chunks {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
+        let at = to_usize(u64::from(i).saturating_mul(CHUNK));
+        let kind = u32_be(&raw, at).unwrap_or(0);
+        let first = u64_be(&raw, at.saturating_add(8)).unwrap_or(0);
+        let sectors = u64_be(&raw, at.saturating_add(16)).unwrap_or(0);
+        let offset = u64_be(&raw, at.saturating_add(24)).unwrap_or(0);
+        let length = u64_be(&raw, at.saturating_add(32)).unwrap_or(0);
+        if matches!(kind, 0x7fff_fffe | 0xffff_ffff) {
+            continue;
+        }
+        let at_byte = start.saturating_add(first.saturating_mul(512));
+        let size = sectors.saturating_mul(512).min(end.saturating_sub(at_byte));
+        if at_byte < list.len() || size == 0 {
+            continue;
+        }
+        list.hole(cx, at_byte.saturating_sub(list.len()))?;
+        let data = data_fork.sub(header.data_offset.saturating_add(offset), length);
+        match kind {
+            0x0000_0001 => {
+                list.data(data.sub(0, size));
+                list.hole(cx, size.saturating_sub(data.len.min(size)))?;
+            }
+            _ => match chunk_codec(kind) {
+                Some(codec) => list.data(cx.decode_lazy(data, &codec, size)?),
+                None => list.hole(cx, size)?,
+            },
+        }
+    }
+    list.hole(cx, end.saturating_sub(list.len()))?;
+    Ok(true)
+}
+
+/// The whole disk: every partition's chunks at their sectors.
+async fn disk(cx: Cx, (input, xml, data_fork): (Input, Span, Span)) -> Result<()> {
+    let mut tables = Vec::new();
+    for mish in mish_tables(&cx, xml).await? {
+        let first = u64_be(&cx.read(mish.sub(8, 8)).await?, 0).unwrap_or(0);
+        tables.push((first, mish));
+    }
+    tables.sort_by_key(|&(first, _)| first);
+    let mut list = PieceList::new(xml);
+    for (_, mish) in tables {
+        if !add_chunks(&cx, mish, data_fork, &mut list, true).await? {
+            cx.diag(Diagnostic::malformed(
+                "partitions overlap; later ones are left out",
+            ));
+        }
+    }
+    let span = list.finish(&cx, "udif-disk").await?;
+    dissect_or_data(cx, input.nested(span)).await
+}
+
+/// One partition's contents, assembled from its chunks.
+async fn partition_contents(cx: Cx, (input, mish, data_fork): (Input, Span, Span)) -> Result<()> {
+    let mut list = PieceList::new(mish);
+    add_chunks(&cx, mish, data_fork, &mut list, false).await?;
+    let span = list.finish(&cx, "udif-partition").await?;
+    dissect_or_data(cx, input.nested(span)).await
+}
+
 async fn partition(cx: Cx, (input, mish, data_fork): (Input, Span, Span)) -> Result<()> {
     let header = crate::fields::parse(&cx, mish.sub(0, MISH_HEADER), BE, &(), Mish::layout).await?;
+    cx.emit(
+        Node::new("Contents")
+            .summary(fmt::size(header.sectors.saturating_mul(512)))
+            .lazy(partition_contents, (input, mish, data_fork)),
+    );
     cx.emit(Mish::node(
         "Block table header (mish)",
         mish.sub(0, MISH_HEADER),
@@ -326,15 +460,12 @@ async fn partition(cx: Cx, (input, mish, data_fork): (Input, Span, Span)) -> Res
                 .value(uint(length, 64)),
         ];
         match kind {
-            0x8000_0005 => fields.push(content("Data", input, data, Codec::Zlib, Some(size))),
-            // bzip2 streams and (ULMO) libcompression's LZMA, which is an
-            // .xz stream: their dissectors show the structure and content.
-            0x0000_0001 | 0x8000_0006 | 0x8000_0008 => {
-                fields.push(embedded("Data", input.nested(data)))
+            0x0000_0001 => fields.push(content("Data", input, data, Codec::Stored, Some(size))),
+            _ => {
+                if let Some(codec) = chunk_codec(kind) {
+                    fields.push(content("Data", input, data, codec, Some(size)));
+                }
             }
-            0x8000_0004 => fields.push(content("Data", input, data, Codec::Adc, Some(size))),
-            0x8000_0007 => fields.push(content("Data", input, data, Codec::Lzfse, Some(size))),
-            _ => {}
         }
         let mut summary = format!(
             "{kind_name}, sectors {first}..+{sectors} ({})",
