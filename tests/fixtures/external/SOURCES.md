@@ -748,6 +748,8 @@ time zone.
 
 | File | Producer | Evidence |
 |---|---|---|
+| `journald/compact.journal.gz` | systemd-journal-remote, systemd 257 (257.13-1~deb13u1, Debian trixie) | `sh tests/data/journald/make.sh` (Docker `debian:trixie`, `inside.sh`): three entries from a fixed export-format stream (fixed boot/machine IDs, timestamps, hostname `fillyfoal`) with `SYSTEMD_JOURNAL_COMPACT=1` and `MaxFileSize=1M` (minimum hash tables). Edited: cut after the tail object and `arena_size` set to match (`trim.py`; the rest was fallocated zeros), then `gzip -9 -n`. The trimmed file passes `journalctl --verify`; header and entries checked against `journalctl --header` / `-o export`. File and seqnum IDs are random per run |
+| `journald/regular.journal.gz` | same | same script, `SYSTEMD_JOURNAL_COMPACT=0` (regular layout, DATA payload at +64) |
 | `onnx/minimal.onnx` | onnx 1.19.1 (`onnx.helper`, `onnx.save`) | reproduced byte for byte by `uv run --with onnx==1.19.1 python3 -I tests/data/onnx/make.py OUTDIR`; passes `onnx.checker`. No producer fields: the graph follows `ir_version` |
 | `onnx/named.onnx` | onnx 1.19.1 | same script: producer, domain, model version, doc string, two opset imports and metadata; passes `onnx.checker` |
 | `protobuf/person.pb` | protoc (libprotoc 34.1) | reproduced byte for byte by `sh tests/data/protobuf/lookalike.sh` (`protoc --encode=demo.Person lookalike.proto`): a generic message that starts like an ONNX model (`08 03 12 05 alice`); negative for the ONNX probe |
