@@ -94,14 +94,14 @@ fn id3_tag(len: usize) -> Vec<u8> {
 #[test]
 fn audio_behind_a_long_id3_tag_is_dissected_as_itself() {
     let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    for (path, annotation) in [
-        ("external/flac/tone.flac", "FLAC, "),
-        ("external/aac/tone.aac", "AAC LC, "),
-        ("external/tta/tone.tta", "TTA 16-bit"),
-        ("external/wavpack/tone.wv", "WavPack 16-bit"),
-        ("synthetic/ape/tone.ape", "Monkey's Audio"),
-        ("synthetic/musepack/tone.mpc", "Musepack SV8"),
-        ("external/mp3/layer2.mp2", "MPEG-2 Layer II"),
+    for (path, annotation, format) in [
+        ("external/flac/tone.flac", "FLAC, ", "flac"),
+        ("external/aac/tone.aac", "AAC LC, ", "aac"),
+        ("external/tta/tone.tta", "TTA 16-bit", "tta"),
+        ("external/wavpack/tone.wv", "WavPack 16-bit", "wavpack"),
+        ("synthetic/ape/tone.ape", "Monkey's Audio", "ape"),
+        ("synthetic/musepack/tone.mpc", "Musepack SV8", "musepack"),
+        ("external/mp3/layer2.mp2", "MPEG-2 Layer II", "mp3"),
     ] {
         // Longer than the probes' head, as cover art often makes it.
         let mut data = id3_tag(100_000);
@@ -119,7 +119,37 @@ fn audio_behind_a_long_id3_tag_is_dissected_as_itself() {
             "{path}: {:?}",
             common::diagnostics(&host)
         );
+        // The probes claimed it as MP3; the MP3 dissector handed it off, so
+        // the host sees the real format.
+        let interpretation = host.session.interpretation(root).unwrap();
+        assert_eq!(
+            interpretation.format.map(|f| f.name),
+            Some(format),
+            "{path}"
+        );
+        assert!(!interpretation.forced);
     }
+}
+
+#[test]
+fn a_forced_mp3_is_not_handed_off() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/external/flac/tone.flac");
+    let mut data = id3_tag(100_000);
+    data.extend(std::fs::read(path).unwrap());
+    let mp3 = fillyfoal::formats::by_name("mp3").unwrap();
+    // "Inspect as MP3" after identification.
+    let mut host = Host::named("tagged", data, Limits::default());
+    host.explore(host.root, 1, 100);
+    let flac = host.session.interpretation(host.root).unwrap();
+    assert_eq!(flac.format.map(|f| f.name), Some("flac"));
+    assert!(host.session.reinterpret(host.root, Some(mp3)));
+    host.explore(host.root, 1, 100);
+    let forced = host.session.interpretation(host.root).unwrap();
+    assert_eq!(forced.format.map(|f| f.name), Some("mp3"));
+    assert!(forced.forced);
+    // The MP3 dissector ran: it looked for frames after the tag.
+    assert!(host.child(host.root, "Data").is_some(), "{}", host.render());
 }
 
 /// One Ogg page holding `packet` whole (it must be under 64 KiB).

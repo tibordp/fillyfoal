@@ -13,7 +13,7 @@
 
 mod common;
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use common::Host;
 use fillyfoal::{ChildState, Limits, NodeId, Progress};
@@ -78,8 +78,7 @@ fn poll(host: &mut Host, id: NodeId, children: usize) -> usize {
     for _ in 0..100_000 {
         let start = Instant::now();
         let progress = host.session.poll_node(id, 200);
-        // 200 units are a fraction of a millisecond; allow for a slow machine.
-        assert!(start.elapsed() < Duration::from_millis(500));
+        assert!(start.elapsed() < common::POLL_CEILING);
         match progress {
             Progress::Yielded => yields += 1,
             Progress::NeedBytes(requests) => {

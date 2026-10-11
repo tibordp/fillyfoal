@@ -48,7 +48,8 @@ pub static FORMAT: Format = Format {
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> { ... }
 ```
 
-Probes see the first `HEAD_LEN` (36 KiB) and last `TAIL_LEN` (1 KiB) bytes
+Probes see the first `HEAD_LEN` (0x10800 bytes, 66 KiB: enough for the
+btrfs and UFS2 superblocks at 64 KiB) and last `TAIL_LEN` (1 KiB) bytes
 and the total length. Make them cheap and specific: check more than two magic
 bytes when you can (versions, sizes that must be sane), because a false
 positive hides the right format. Weak magics (one or two bytes) need a
@@ -57,6 +58,36 @@ all (schemaless protobuf, Thrift) gets `Probe::Never`: it is offered by
 `formats::by_extension` and dissected through `Session::open_as`, and the
 test harness dissects its fixtures as the format their directory names
 (and checks that no probe claims them).
+
+**Second phase.** Identification runs on every file the host opens, maybe
+over remote storage where each range read costs, so the first phase reads
+only the head and the 1 KiB tail. A few formats need more: md RAID 1.0 and
+0.90 superblocks sit 8 to 128 KiB before the end of the device, and a bare
+768-byte Photoshop colour table has nothing to check but its `.act` name.
+Such a format adds a `DeepProbe` next to its `Format` and lists it in
+`DEEP` in `src/formats.rs`:
+
+```rust
+pub static DEEP: DeepProbe = DeepProbe {
+    format: &FORMAT,
+    tail: true,                 // wants Deep::tail, the last DEEP_TAIL_LEN (128 KiB)
+    over: &["ext", "xfs", ...], // first-phase answers it may override; empty: none
+    probe: deep_probe,          // fn(&Deep) -> bool
+};
+```
+
+The second phase runs at a node's detection step only when the first
+phase matched nothing, or matched a format some candidate lists in
+`over`, so files identified otherwise never pay for it; the deeper tail
+is read once, only if a candidate that runs asks for it (and not for
+content decoded on demand). Candidates are tried in `DEEP` order and the
+first match wins. `Deep::bytes(offset, n)` reads from the head or the
+deep tail by absolute offset. `Deep::name` is the node's name (the file
+name the host opened it under, an archive member's path) at the node's
+own detection step only; names lie, so use it as a tie-breaker for a
+signature too weak to stand alone (`Deep::extension_is`), never instead
+of one, and never in `over` probes. `fixtures_are_identified_correctly`
+runs both phases with each fixture's name.
 
 A family of related formats (RIFF → WAV/AVI/WebP, ISO BMFF → MP4/HEIC/AVIF,
 ZIP → DOCX/EPUB/APK) shares one dissector and registers one `Format` per
@@ -268,6 +299,20 @@ an input a thousand times larger than the fixture.
   (`Session::reinterpret`) takes effect. The first detection step an
   expansion reaches is the node's own; later ones are content nested inside
   it and are identified as usual.
+- **Handing off.** A dissector that finds the content it was given is
+  really another format (the MP3 probe claims files whose long ID3v2 tag
+  hides FLAC or WavPack from the probes) hands it over instead of
+  dissecting it as itself:
+  `if cx.hand_off(&input, format) { return (format.dissect)(cx, input).await; }`.
+  When `input` is what the node's own detection step settled, the node's
+  interpretation becomes `format`, so the host shows (and "inspect as"
+  starts from) the real format. `hand_off` returns `false` when the host
+  forced the node's format with `Session::reinterpret`; the dissector then
+  carries on as itself. Hand off only to a format that will not hand back,
+  and only content you were given; content found inside is embedded. (A
+  family sharing one dissector, like ZIP's, needs no hand-off: the probes
+  already picked the member, and `zip.rs` only refines its label when it
+  was asked for plain ZIP.)
 - **Writing a codec:** implement `codec::pipeline::Decode` (decode from all
   input so far into all output so far, a bounded step at a time; running
   out of input is just an error) and add a `Codec` variant. `Streaming`
@@ -429,7 +474,15 @@ the harness (`common::fixture_bytes`) decompresses them, so the dissector
 sees the raw image, and their snapshots keep the stored file name. Other
 `.zst` and `.gz` fixtures (and everything in `gzip/`) are genuine tests of
 those formats. Robustness sweeps over images larger than 4 MiB truncate
-mostly within the first 4 MiB and run fewer mutation rounds. Each fixture's `<format>` directory names the format
+mostly within the first 4 MiB and run fewer mutation rounds. A fixture
+whose one exploration costs more than `common::HEAVY_WORK` units
+(measured with `Session::work_done`, so the same on every machine; today
+two key derivations a tool fixes) gets truncations and mutations in
+inverse proportion to its work, at least 30 of each; fixtures whose time
+is not charged in units are listed with a reason in `common::SLOW_SWEEPS`
+until it is. `SWEEP_TIMES=20 cargo test --test formats --
+fixtures_are_robust --nocapture` prints the slowest sweeps and every
+scaled-down one. Each fixture's `<format>` directory names the format
 it must be identified as (`fixtures_are_identified_correctly`).
 
 Review the snapshot by eye: it is the best check that values and spans are

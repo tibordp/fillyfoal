@@ -14,6 +14,15 @@ use fillyfoal::{
 /// `tests/unsized.rs`.
 pub const LARGE_FIXTURE: usize = 4 << 20;
 
+/// The wall-clock ceiling for one small-budget poll in the step tests
+/// (`parse_budget`, `parser_steps`, `sync_parsers_budget`, `pdf_bounded`).
+/// Their deterministic guarantee is the yield count: the parse charges
+/// enough units that it must suspend many times. Uncharged work is
+/// invisible to units, so the ceiling remains, but only as a backstop for a
+/// whole input parsed in one step; it is generous (a poll is about a
+/// millisecond) so that a loaded machine cannot trip it.
+pub const POLL_CEILING: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Whether a fixture is stored compressed only for size: a whole disk image
 /// kept as `<name>.raw.zst` (`zstd -19`), or, outside `fixtures/gzip/`, as
 /// `<name>.gz` (`gzip -n`). Other `.zst`/`.gz` fixtures are genuine tests of
@@ -482,6 +491,67 @@ pub fn explore_as(name: &str, data: &[u8], format: Option<&'static formats::Form
     host.render()
 }
 
+/// Units of work one exploration of a fixture may cost before its
+/// robustness sweep is scaled down (see [`sweep_plan`]): about 0.2 s at
+/// the intended microsecond per unit. Measured over the corpus (2026-10),
+/// only two fixtures exceed it, both by key derivations the format or tool
+/// fixes: `pkcs12/nss-pk12util.p12` (3.0M units, NSS's 600,000 PBKDF2
+/// iterations) and `jks/keytool.jceks` (1.6M, JCEKS's 200,000 MD5
+/// iterations per key); the next is `fat/mkfs-fat32.img` at 158k.
+pub const HEAVY_WORK: u64 = 200_000;
+/// The fewest truncations and the fewest mutated copies a scaled-down sweep
+/// still runs.
+const MIN_VARIANTS: usize = 30;
+
+/// Fixtures whose exploration costs far more time than the units it is
+/// charged, so [`HEAVY_WORK`] cannot see it, with the reason. Each is swept
+/// as if heavy. Remove an entry once its cost is charged.
+pub const SLOW_SWEEPS: &[(&str, &str)] = &[(
+    "bam__many-blocks.bam",
+    "BGZF/BAM: about 7.7k units for 0.14 s per exploration (~20 us a unit); \
+     the sweep took 190-220 s",
+)];
+
+/// How many truncations and mutated copies the robustness sweep makes of
+/// a fixture of `len` bytes whose unmodified exploration costs `work`
+/// units (`listed`: it is in [`SLOW_SWEEPS`]). A sweep costs its variants
+/// times their work, so:
+///
+/// - Large images (whole disk images stored compressed) put their metadata
+///   up front: they are truncated mostly within the first
+///   [`LARGE_FIXTURE`] bytes (see `robustness_as`) and mutated fewer times.
+/// - Heavy fixtures, whose one exploration costs more than [`HEAVY_WORK`]
+///   units, get variants in inverse proportion to their work, so that
+///   their sweep costs about what one of `HEAVY_WORK` would, but never
+///   fewer than [`MIN_VARIANTS`] of each kind (evenly spread truncations,
+///   the first mutation rounds of the full sweep). The work is measured
+///   in budget units (`Session::work_done`), not time, so the choice is
+///   the same on every machine. Listed fixtures get [`MIN_VARIANTS`].
+///
+/// `SWEEP_TIMES=n cargo test --test formats -- fixtures_are_robust
+/// --nocapture` lists the slowest sweeps and every scaled-down one.
+pub fn sweep_plan(len: usize, work: u64, listed: bool) -> (usize, usize) {
+    let (truncations, mutations) = if len <= 600 {
+        (len, 300)
+    } else if len <= LARGE_FIXTURE {
+        (300, 300)
+    } else {
+        (240, 100)
+    };
+    let scale = |n: usize| {
+        let scaled = if listed {
+            0
+        } else {
+            (n as u64).saturating_mul(HEAVY_WORK) / work.max(1)
+        };
+        (scaled as usize).max(MIN_VARIANTS).min(n)
+    };
+    if work <= HEAVY_WORK && !listed {
+        return (truncations, mutations);
+    }
+    (scale(truncations), scale(mutations))
+}
+
 /// Truncates and mutates `data` many ways; every variant must settle without
 /// panics, hangs or internal errors.
 pub fn robustness(name: &str, data: &[u8]) {
@@ -489,8 +559,14 @@ pub fn robustness(name: &str, data: &[u8]) {
 }
 
 /// Like [`robustness`], dissecting every variant as `format` if given.
-pub fn robustness_as(name: &str, data: &[u8], format: Option<&'static formats::Format>) {
-    let settle = |variant: Vec<u8>, what: &str| {
+/// Returns the work the unmodified fixture's exploration measured and the
+/// sweep's size (see [`sweep_plan`]).
+pub fn robustness_as(
+    name: &str,
+    data: &[u8],
+    format: Option<&'static formats::Format>,
+) -> (u64, (usize, usize)) {
+    let settle = |variant: Vec<u8>, what: &str| -> u64 {
         let mut host = Host::open(
             "fixture.dll",
             variant,
@@ -516,19 +592,26 @@ pub fn robustness_as(name: &str, data: &[u8], format: Option<&'static formats::F
                 "{name}: runaway expansion after {what} (a loop that makes no progress?)"
             );
         }
+        host.session.work_done()
     };
-    // Large images (whole disk images stored compressed) put their
-    // metadata up front: truncate mostly within the first few MiB and
-    // sample the rest, and mutate fewer copies of them.
-    const LARGE: usize = LARGE_FIXTURE;
-    let lengths: Vec<usize> = if data.len() <= 600 {
-        (0..data.len()).collect()
-    } else if data.len() <= LARGE {
-        (0..300).map(|i| i * data.len() / 300).collect()
+    // The unmodified fixture: its work sizes the sweep.
+    let work = settle(data.to_vec(), "no change");
+    let listed = SLOW_SWEEPS.iter().any(|(n, _)| *n == name);
+    let plan = sweep_plan(data.len(), work, listed);
+    let (truncations, mutations) = plan;
+    let lengths: Vec<usize> = if data.len() <= LARGE_FIXTURE {
+        (0..truncations)
+            .map(|i| i * data.len() / truncations)
+            .collect()
     } else {
-        (0..200)
-            .map(|i| i * LARGE / 200)
-            .chain((0..40).map(|i| LARGE + i * (data.len() - LARGE) / 40))
+        // Large images: five in six within the first LARGE_FIXTURE bytes,
+        // the rest a sample of what follows.
+        let head = truncations * 5 / 6;
+        let tail = truncations - head;
+        let rest = data.len() - LARGE_FIXTURE;
+        (0..head)
+            .map(|i| i * LARGE_FIXTURE / head)
+            .chain((0..tail).map(|i| LARGE_FIXTURE + i * rest / tail))
             .collect()
     };
     for len in lengths {
@@ -536,8 +619,7 @@ pub fn robustness_as(name: &str, data: &[u8], format: Option<&'static formats::F
     }
     let mut rng = Rng(0x5eed ^ data.len() as u64);
     const INTERESTING: [u8; 6] = [0x00, 0xff, 0x7f, 0x80, 0x01, 0x10];
-    let rounds = if data.len() <= LARGE { 300 } else { 100 };
-    for round in 0..rounds {
+    for round in 0..mutations {
         let mut mutated = data.to_vec();
         if mutated.is_empty() {
             break;
@@ -557,4 +639,5 @@ pub fn robustness_as(name: &str, data: &[u8], format: Option<&'static formats::F
         }
         settle(mutated, &format!("mutation round {round}"));
     }
+    (work, plan)
 }

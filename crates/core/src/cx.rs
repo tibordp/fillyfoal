@@ -951,10 +951,15 @@ pub(crate) struct Output {
     pub forced: Option<&'static Format>,
     /// Whether a detection step has run (see [`Cx::claim_detection`]).
     pub claimed: bool,
+    /// The content the node's own detection step settled (see
+    /// [`Cx::hand_off`]).
+    pub detected: Option<Span>,
     /// What the node's own detection step settled on.
     pub interpretation: Option<Interpretation>,
     /// Progress the dissector reported: (done, total).
     pub progress: Option<(u64, u64)>,
+    /// The name of the node being expanded (see [`Cx::node_name`]).
+    pub name: std::borrow::Cow<'static, str>,
 }
 
 impl Output {
@@ -1003,13 +1008,43 @@ impl Cx {
     /// first decode it, as a "Decompressed" node does). Returns `None` to
     /// every later step, which belong to content nested inside; otherwise
     /// `Some` of the format the host forced, if any.
-    pub(crate) fn claim_detection(&self) -> Option<Option<&'static Format>> {
+    pub(crate) fn claim_detection(&self, span: Span) -> Option<Option<&'static Format>> {
         let mut out = lock(&self.out);
         if out.claimed {
             return None;
         }
         out.claimed = true;
+        out.detected = Some(span);
         Some(out.forced)
+    }
+
+    /// Hands `input` over to `format`, for a dissector that finds its
+    /// content is really another format (an MP3 claim on a file whose long
+    /// ID3v2 tag hid a FLAC stream from the probes). If `input` is the
+    /// content the node's own detection step settled, the node's
+    /// interpretation becomes `format` ([`crate::Session::interpretation`]),
+    /// so the host shows, and "inspect as" offers, the real format.
+    ///
+    /// Returns whether to hand off: `false`, changing nothing, when the
+    /// host forced this node's format ("inspect as"), which the dissector
+    /// then honours by carrying on as itself. On `true` the caller runs
+    /// `format.dissect` on `input` and returns its result. Use this only
+    /// for content the dissector was given, never for content it found
+    /// inside (that is embedded, see `formats::embedded`), and only to a
+    /// format that would not hand back.
+    pub fn hand_off(&self, input: &crate::formats::Input, format: &'static Format) -> bool {
+        let mut out = lock(&self.out);
+        if out.detected != Some(input.span) {
+            return true;
+        }
+        if out.forced.is_some() {
+            return false;
+        }
+        out.interpretation = Some(Interpretation {
+            format: Some(format),
+            forced: false,
+        });
+        true
     }
 
     /// The format the host forced for this node, if its detection step has
@@ -1017,6 +1052,15 @@ impl Cx {
     pub(crate) fn forced_format(&self) -> Option<&'static Format> {
         let out = lock(&self.out);
         if out.claimed { None } else { out.forced }
+    }
+
+    /// The name of the node being expanded: for a root, the name the host
+    /// opened it under (normally the file name); for an archive member or a
+    /// file in a file system, usually its name or path there. Names are
+    /// whatever the parent dissector chose, so treat this as a hint only
+    /// (see `formats::Deep::name`).
+    pub fn node_name(&self) -> std::borrow::Cow<'static, str> {
+        lock(&self.out).name.clone()
     }
 
     /// Records what the node's own detection step settled on.

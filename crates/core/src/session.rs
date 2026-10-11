@@ -162,6 +162,8 @@ pub struct Session<C> {
     /// Formats forced with [`Session::reinterpret`], by address so they
     /// outlive the nodes (see [`Session::trim`]).
     overrides: std::collections::HashMap<Address, &'static formats::Format>,
+    /// Work units charged by every expansion so far.
+    work_done: u64,
 }
 
 struct Slot {
@@ -268,6 +270,7 @@ impl<C: Catalog> Session<C> {
             live: 0,
             clock: 0,
             overrides: std::collections::HashMap::new(),
+            work_done: 0,
         }
     }
 
@@ -321,6 +324,13 @@ impl<C: Catalog> Session<C> {
             }
             self.collapse(id);
         }
+    }
+
+    /// Work units charged by every expansion since the session started:
+    /// what [`Session::poll`] budgets measure, independent of how they were
+    /// split. Tests use it to bound work deterministically.
+    pub fn work_done(&self) -> u64 {
+        self.work_done
     }
 
     pub fn limits(&self) -> Limits {
@@ -724,6 +734,7 @@ impl<C: Catalog> Session<C> {
             last_mark: from,
             resume,
             forced,
+            name: entry.node.name.clone(),
             ..Output::default()
         }));
         let cx = Cx {
@@ -968,6 +979,7 @@ impl<C: Catalog> Session<C> {
                 sh.limits.max_work,
             )
         };
+        self.work_done = self.work_done.saturating_add(used);
         let (nodes, count, summary, diagnostics, marks, emitted, interpretation) = {
             let mut out = lock(&run.out);
             (

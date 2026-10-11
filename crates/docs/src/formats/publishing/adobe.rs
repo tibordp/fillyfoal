@@ -774,8 +774,9 @@ async fn acb_colours(cx: Cx, (region, count, space): (Span, u16, u16)) -> Result
 // Colour tables (.act): weak, identified by size only. The classic file is
 // 768 bytes (256 RGB triples, no trailer); Photoshop CS2 and later append
 // a colour count and a transparent index (772 bytes). Only the longer form
-// has anything to check, so a bare 768-byte table is left to its extension
-// (or "inspect as").
+// has anything to check, so a bare 768-byte table is recognised only with
+// its `.act` name, by a second-phase probe that runs when nothing else
+// matched (see `formats::DeepProbe`).
 
 fn act_probe(h: &Head<'_>) -> bool {
     h.len_known
@@ -784,6 +785,14 @@ fn act_probe(h: &Head<'_>) -> bool {
         && u16_be(h.data, 770).is_some_and(|t| t <= 255 || t == 0xffff)
         && !crate::text::looks_like_text(h.data)
 }
+
+/// The second phase: an unrecognised 768-byte file named `*.act`.
+pub static ACT_DEEP: crate::formats::DeepProbe = crate::formats::DeepProbe {
+    format: &ACT,
+    tail: false,
+    over: &[],
+    probe: |d| d.head.len_known && d.head.len == 768 && d.extension_is("act"),
+};
 
 declare_format!(pub ACT = "photoshop-color-table", "Adobe Photoshop colour table", ["act"], "application/x-photoshop-color-table",
     Probe::Custom(act_probe), act);

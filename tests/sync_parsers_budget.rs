@@ -13,14 +13,14 @@
 
 mod common;
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use common::Host;
 use fillyfoal::{Limits, NodeId, Progress};
 
 /// Polls `id` with small budgets until it settles, answering byte
 /// requests; returns how many polls yielded. Every poll must return
-/// quickly.
+/// quickly (see `common::POLL_CEILING`).
 fn poll_stepped(host: &mut Host, id: NodeId) -> u32 {
     let mut yields = 0;
     for _ in 0..1_000_000 {
@@ -38,8 +38,7 @@ fn poll_stepped(host: &mut Host, id: NodeId) -> u32 {
                 }
             }
         }
-        // 2000 units are about a millisecond; allow for a slow machine.
-        assert!(start.elapsed() < Duration::from_millis(500));
+        assert!(start.elapsed() < common::POLL_CEILING);
     }
     panic!("did not settle");
 }

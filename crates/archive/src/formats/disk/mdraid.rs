@@ -1,17 +1,19 @@
 //! Linux software RAID (md) member devices. Version 1.1 and 1.2
 //! superblocks (at 0 or 4 KiB) are recognised by the probe; version 1.0
-//! and 0.90 superblocks sit near the end of the device, out of the
-//! probe's reach, and are found when the device is opened as this format
-//! ("inspect as"). The member's data area is embedded, which for RAID1
-//! members is the array's filesystem itself.
+//! and 0.90 superblocks sit 8 to 128 KiB before the end of the device, out
+//! of the probe's reach, and are recognised by a second-phase probe over
+//! the deeper tail ([`DEEP`]). That probe takes precedence over the file
+//! systems and partition tables a member's data starts with (a RAID1
+//! member's data is the array's file system itself). The member's data
+//! area is embedded.
 
-use crate::bytes::{to_u64, u32_le};
+use crate::bytes::{to_u64, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{size, text, uuid};
-use crate::formats::{Format, Head, Input, Probe, embedded};
+use crate::formats::{Deep, DeepProbe, Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -40,6 +42,63 @@ fn superblock_at(data: &[u8]) -> Option<u64> {
 
 fn probe(h: &Head<'_>) -> bool {
     superblock_at(h.data).is_some()
+}
+
+/// The second phase: a version 1.0 superblock (whose own offset field
+/// names where it is) or a version 0.90 one (magic, major 0, minor 90) at
+/// its place near the end of the device.
+pub static DEEP: DeepProbe = DeepProbe {
+    format: &FORMAT,
+    tail: true,
+    over: &[
+        "ext",
+        "xfs",
+        "btrfs",
+        "f2fs",
+        "jfs",
+        "ntfs",
+        "fat",
+        "exfat",
+        "hfsplus",
+        "nilfs2",
+        "ufs",
+        "minix",
+        "bfs",
+        "zfs",
+        "erofs",
+        "squashfs",
+        "cramfs",
+        "iso9660",
+        "udf",
+        "swap",
+        "luks",
+        "bitlocker",
+        "lvm2",
+        "mbr",
+        "gpt",
+        "apm",
+        "bsdlabel",
+    ],
+    probe: deep_probe,
+};
+
+fn deep_probe(d: &Deep<'_>) -> bool {
+    if !d.head.len_known {
+        return false;
+    }
+    let len = d.head.len;
+    let v10 = v10_offset(len).is_some_and(|at| {
+        d.bytes(at, 152).is_some_and(|b| {
+            u32_le(b, 0) == Some(MAGIC)
+                && u32_le(b, 4) == Some(1)
+                && u64_le(b, 144) == Some(at / 512)
+        })
+    });
+    v10 || v090_offset(len).is_some_and(|at| {
+        d.bytes(at, 12).is_some_and(|b| {
+            u32_le(b, 0) == Some(MAGIC) && u32_le(b, 4) == Some(0) && u32_le(b, 8) == Some(90)
+        })
+    })
 }
 
 /// Where a version 1.0 superblock is: 8 to 12 KiB before the end of the
