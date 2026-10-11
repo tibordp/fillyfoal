@@ -743,3 +743,19 @@ time zone.
 | `ese/fillyfoal.edb` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | esent.dll database (format 0x620, update 300, 4 KiB pages, clean shutdown) with table `Fixtures` (400 rows; every column type: Bit, UnsignedByte, Short, Long autoincrement, Currency, IEEESingle, IEEEDouble, DateTime, Binary, Text in UTF-16 and Windows-1252, LongBinary and LongText (20 000-byte and 6 000-character separated long values every 50th row), UnsignedLong, LongLong, GUID, UnsignedShort, a tagged multi-valued Text column), a primary index and a two-column secondary index, and table `Small` (3 rows). Checked against dissect.esedb 3.18 (catalog, column types, every row value of both tables; dissect cannot reassemble one of the 20 000-byte long values) and our page checksums (ECC + XOR, every page valid) |
 | `minidump/ping-normal.dmp` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | `MiniDumpWriteDump(MiniDumpNormal)` of a running `PING.EXE` on ARM64: thread list (6 threads, ARM64 contexts), module list (12 modules with RSDS CodeView records), function table, memory list, system info, misc info (version 5), system memory info, process VM counters. The skelsec `minidump` package rejects ARM64 dumps, so the streams were checked with a short `struct` script against dbghelp's documented layouts |
 | `minidump/ping-info.dmp` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | the same process with `MiniDumpWithUnloadedModules \| MiniDumpWithFullMemoryInfo \| MiniDumpWithThreadInfo` (0x1820): adds the thread info list and the memory info list (240 regions); no module had been unloaded, so there is no unloaded-module stream |
+
+## Disk images with mounted or loop-device writes (Linux), and UDRO
+
+`ntfs`, `lvm2` and `iso9660` rows: made by `sh tests/data/disk/make-volumes.sh`
+in a privileged Debian trixie container (host name `fillyfoal`) running
+`tests/data/disk/volumes-inner.sh`, whose commands are the evidence; tool
+versions are those it prints. Timestamps are those of the run and NTFS
+serials and LVM UUIDs are random, so the images are not byte-reproducible.
+Stored whole as `.raw.zst` (zstd -19).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `ntfs/ntfs3g-attrlist.img.raw.zst` | ntfs-3g 2022.10.3 mkntfs and FUSE driver, Linux 7.0 ntfs3 | 8 MiB, 4 KiB clusters: `ads.txt` with 30 named streams and `linked.txt` with 12 hard links (attributes in extension records through an $ATTRIBUTE_LIST); `big/` with 300 files of which 270 deleted (freed index records with stale entries); `sparse.bin` written through ntfs3 (`-o sparse`), 300 blocks each followed by a hole, its $DATA runlist split over three records (the VCN 0 part in an extension record) |
+| `lvm2/lvm-wrapped.img.raw.zst` | lvm2 2.03.31 | 8 MiB PV, `pvcreate --dataalignment 64k --metadatasize 40k`, VG `vgw` with four 1 MiB LVs, then `lvchange --addtag` until a commit's metadata text wraps around the 60 KiB circular buffer 512 bytes before its end |
+| `iso9660/xorriso-gpt.iso.raw.zst` | xorriso 1.5.6 | `xorriso -as mkisofs -R -J -append_partition 2 0xef efi.img -appended_part_as_gpt` (a hybrid image: GPT at 0x200, ISO 9660 at 0x8000) |
+| `dmg/hfs-udro.dmg.raw.zst` | macOS 26.5 hdiutil | `hdiutil create -size 1m -fs HFS+ -volname fillyfoal -layout GPTSPUD rw.dmg`, then `hdiutil convert rw.dmg -format UDRO -o hfs-udro.dmg` (a GPT at 0x200 and a koly trailer) |

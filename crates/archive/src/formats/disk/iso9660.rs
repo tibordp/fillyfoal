@@ -70,6 +70,104 @@ pub static UDF: Format = Format {
     dissect: crate::expander!(dissect: Input),
 };
 
+/// Raw CD images (`.bin` of a BIN/CUE pair, `.img` of CloneCD): every
+/// 2352-byte sector as read off the disc, a 2048-byte block of user data
+/// framed by sync, header (and for Mode 2 a subheader) and error
+/// correction.
+pub static RAW: Format = Format {
+    name: "iso9660-raw",
+    title: "Raw CD image (2352-byte sectors)",
+    extensions: &["bin", "img", "raw"],
+    mime: "application/x-cd-image",
+    probe: Probe::Custom(raw_probe),
+    dissect: crate::expander!(raw_dissect: Input),
+};
+
+/// Bytes per raw sector.
+const RAW_SECTOR: u64 = 2352;
+/// The 12-byte sync pattern that starts every data sector.
+const SYNC: [u8; 12] = [
+    0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0,
+];
+
+/// Where the user data starts in a raw sector of `head`, from sector 16
+/// (the first volume descriptor): 16 for Mode 1, 24 for Mode 2 Form 1
+/// (after the subheader).
+fn raw_user_offset(head: &[u8]) -> Option<u64> {
+    let at = to_usize(16 * RAW_SECTOR);
+    if head.get(at..at.saturating_add(12)) != Some(SYNC.as_slice()) {
+        return None;
+    }
+    let user = match head.get(at.saturating_add(15)) {
+        Some(1) => 16usize,
+        Some(2) => 24,
+        _ => return None,
+    };
+    let id = at.saturating_add(user).saturating_add(1);
+    (head.get(id..id.saturating_add(5)) == Some(b"CD001".as_slice())).then_some(to_u64(user))
+}
+
+fn raw_probe(h: &Head<'_>) -> bool {
+    // Sega discs (Sega CD, Saturn, Dreamcast) have their own dissectors,
+    // which handle raw sectors too.
+    raw_user_offset(h.data).is_some() && !h.at(0x10, b"SEGA") && !h.at(0x18, b"SEGA")
+}
+
+/// A raw CD image: its user data, 2048 bytes of each sector, as a
+/// piecewise source dissected as ISO 9660.
+async fn raw_dissect(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let head = cx.read_avail(file.sub(0, 17 * RAW_SECTOR)).await?;
+    let user = raw_user_offset(&head)
+        .ok_or_else(|| Diagnostic::malformed("no raw volume descriptor sector").at(file))?;
+    let sectors = file.len / RAW_SECTOR;
+    let mode = if user == 16 {
+        "Mode 1"
+    } else {
+        "Mode 2 Form 1"
+    };
+    cx.annotate(format!(
+        "Raw CD image, {mode}, {} of {RAW_SECTOR} bytes",
+        fmt::count(sectors, "sector", "sectors")
+    ));
+    let mut list = PieceList::new(file.sub(0, RAW_SECTOR));
+    for i in 0..sectors {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        list.data(file.sub(i.saturating_mul(RAW_SECTOR).saturating_add(user), SECTOR));
+    }
+    cx.emit(
+        Node::new("First sector")
+            .span(file.sub(0, RAW_SECTOR))
+            .summary(format!(
+                "sync and header (16 bytes){}, 2048 bytes of user data, error detection and correction",
+                if user == 24 { ", subheader (8 bytes)" } else { "" }
+            )),
+    );
+    let rest = file.len % RAW_SECTOR;
+    if rest != 0 {
+        cx.emit(
+            Node::new("Partial sector")
+                .span(file.tail(sectors.saturating_mul(RAW_SECTOR)))
+                .diag(Diagnostic::warning(format!(
+                    "{rest} bytes after the last whole sector"
+                ))),
+        );
+    }
+    let volume = list.finish(&cx, "cd-user-data").await?;
+    cx.emit(
+        crate::formats::embedded_as("ISO 9660 volume", input.nested(volume), &FORMAT).summary(
+            format!(
+                "user data of {}, {}",
+                fmt::count(sectors, "sector", "sectors"),
+                fmt::size(volume.len)
+            ),
+        ),
+    );
+    Ok(())
+}
+
 const DESCRIPTOR_TYPE: EnumTable = &[
     (0, "boot record"),
     (1, "primary volume descriptor"),
@@ -992,9 +1090,12 @@ struct Entry {
     joliet: bool,
     /// Extents of the directories on the path here, for cycle detection.
     path: Arc<Vec<u32>>,
+    /// The records of the further sections of a multi-extent file (flag
+    /// 0x80 on every record but the last), in order.
+    sections: Arc<Vec<Span>>,
 }
 
-fn entry_node(name: String, r: &Record, state: Entry) -> Node {
+fn entry_node(name: String, r: &Record, size: u64, state: Entry) -> Node {
     let mut summary = if r.child_link.is_some() {
         "directory (relocated)".to_owned()
     } else if r.is_dir() {
@@ -1014,8 +1115,14 @@ fn entry_node(name: String, r: &Record, state: Entry) -> Node {
             fmt::size(z.size.into()),
             fmt::size(r.size.into())
         )
+    } else if state.sections.is_empty() {
+        fmt::size(size)
     } else {
-        fmt::size(r.size.into())
+        format!(
+            "{} in {} sections",
+            fmt::size(size),
+            state.sections.len().saturating_add(1)
+        )
     };
     if let Some(m) = r.rr_mode {
         summary = format!("{summary}, {}", unix_mode(m.into()));
@@ -1080,6 +1187,9 @@ async fn entry(cx: Cx, e: Entry) -> Result<()> {
             );
             return Ok(());
         }
+        if !e.sections.is_empty() {
+            return multi_extent(&cx, &e, extent).await;
+        }
         let node = embedded("Content", e.input.nested(extent)).summary(fmt::size(r.size.into()));
         cx.emit(crate::formats::util::arcutil::check_len(
             node,
@@ -1104,13 +1214,57 @@ async fn entry(cx: Cx, e: Entry) -> Result<()> {
     list_directory(&cx, &e, extent, path).await
 }
 
+/// A file recorded in several sections (ISO 9660 level 3: files of 4 GiB
+/// and more): the records of the further sections, and the content
+/// assembled from all the extents in order.
+async fn multi_extent(cx: &Cx, e: &Entry, first: Span) -> Result<()> {
+    let file = e.input.span;
+    let mut pieces = vec![first];
+    for (i, &record) in e.sections.iter().enumerate() {
+        let bytes = cx.read(record).await?;
+        let ctx = RecCtx {
+            joliet: e.joliet,
+            file,
+            block: e.block_size,
+        };
+        cx.emit(struct_node(
+            format!("Directory record (section {})", i.saturating_add(2)),
+            record,
+            LE,
+            ctx,
+            record_layout_with,
+        ));
+        let extent = u64::from(u32_le(&bytes, 2).unwrap_or(0));
+        let size = u64::from(u32_le(&bytes, 10).unwrap_or(0));
+        let span = file.sub(extent.saturating_mul(e.block_size), size);
+        if span.len < size {
+            cx.diag(Diagnostic::truncated(span, span.len));
+        }
+        pieces.push(span);
+    }
+    let total = pieces.iter().map(|p| p.len).fold(0u64, u64::saturating_add);
+    let content = crate::formats::disk::assemble(cx, e.record, "iso9660-sections", &pieces).await?;
+    cx.emit(
+        embedded("Content", e.input.nested(content)).summary(format!(
+            "{} from {} extents",
+            fmt::size(total),
+            e.sections.len().saturating_add(1)
+        )),
+    );
+    Ok(())
+}
+
 /// Pushes a node per record in a directory extent (skipping `.` and `..`
-/// and directories relocated elsewhere), then the extent itself.
+/// and directories relocated elsewhere), then the extent itself. The
+/// records of a multi-extent file become one node.
 async fn list_directory(cx: &Cx, e: &Entry, extent: Span, path: Arc<Vec<u32>>) -> Result<()> {
     let file = e.input.span;
     let data = cx.read(extent.sub(0, cx.limits().max_read)).await?;
     let mut at = 0usize;
     let mut records = 0u64;
+    // A multi-extent file whose last section is still to come: its first
+    // record, the records after it, and the size so far.
+    let mut open: Option<(Record, Span, Vec<Span>, u64)> = None;
     while at < data.len() {
         let len = usize::from(data.get(at).copied().unwrap_or(0));
         if len == 0 {
@@ -1137,17 +1291,36 @@ async fn list_directory(cx: &Cx, e: &Entry, extent: Span, path: Arc<Vec<u32>>) -
         let record_span = extent.sub(to_u64(at), to_u64(len));
         let bytes = data.get(at..at.saturating_add(len)).unwrap_or_default();
         records = records.saturating_add(1);
-        match load_record(cx, file, e.block_size, bytes, e.joliet).await? {
+        let loaded = load_record(cx, file, e.block_size, bytes, e.joliet).await?;
+        // A section continuing an open multi-extent file (same name).
+        if let (Some(r), Some((first, _, more, size))) = (&loaded, &mut open)
+            && r.name == first.name
+            && !r.is_dir()
+        {
+            more.push(record_span);
+            *size = size.saturating_add(r.size.into());
+            if r.flags & 0x80 == 0
+                && let Some((first, span, more, size)) = open.take()
+            {
+                push_entry(cx, e, &path, first, span, more, size).await;
+            }
+            at = at.saturating_add(len);
+            continue;
+        }
+        if let Some((first, span, more, size)) = open.take() {
+            // The sections stopped before one without the flag.
+            cx.diag(Diagnostic::malformed("multi-extent file without a last section").at(span));
+            push_entry(cx, e, &path, first, span, more, size).await;
+        }
+        match loaded {
+            Some(r) if r.name != "." && r.name != ".." && r.flags & 0x80 != 0 && !r.is_dir() => {
+                let size = u64::from(r.size);
+                open = Some((r, record_span, Vec::new(), size));
+            }
             Some(r) if r.name != "." && r.name != ".." => {
-                let state = Entry {
-                    input: e.input,
-                    record: record_span,
-                    block_size: e.block_size,
-                    joliet: e.joliet,
-                    path: path.clone(),
-                };
                 cx.progress(to_u64(at), to_u64(data.len()));
-                cx.push(entry_node(r.display_name(), &r, state)).await;
+                let size = u64::from(r.size);
+                push_entry(cx, e, &path, r, record_span, Vec::new(), size).await;
             }
             // The root's "." record carries the SUSP indicator and the
             // extension references (in its continuation area).
@@ -1167,12 +1340,38 @@ async fn list_directory(cx: &Cx, e: &Entry, extent: Span, path: Arc<Vec<u32>>) -
         }
         at = at.saturating_add(len);
     }
+    if let Some((first, span, more, size)) = open.take() {
+        cx.diag(Diagnostic::malformed("multi-extent file without a last section").at(span));
+        push_entry(cx, e, &path, first, span, more, size).await;
+    }
     cx.push(Node::new("Directory extent").span(extent).summary(format!(
         "{}, {records} records (with . and ..), the rest padding",
         fmt::size(extent.len)
     )))
     .await;
     Ok(())
+}
+
+/// Pushes the node of a directory entry (`sections`: the records of a
+/// multi-extent file's further sections; `size`: the file's whole size).
+async fn push_entry(
+    cx: &Cx,
+    e: &Entry,
+    path: &Arc<Vec<u32>>,
+    r: Record,
+    record: Span,
+    sections: Vec<Span>,
+    size: u64,
+) {
+    let state = Entry {
+        input: e.input,
+        record,
+        block_size: e.block_size,
+        joliet: e.joliet,
+        path: path.clone(),
+        sections: Arc::new(sections),
+    };
+    cx.push(entry_node(r.display_name(), &r, size, state)).await;
 }
 
 /// A zisofs file: header, block pointers, compressed blocks, and the
@@ -1231,8 +1430,9 @@ async fn zisofs_node(cx: Cx, (input, extent, z): (Input, Span, Zf)) -> Result<()
             continue;
         }
         let span = extent.sub(a, b.saturating_sub(a));
-        match crate::codec::decode_span(&cx, span, &Codec::Zlib, Some(block_size)).await {
-            Ok(d) => list.data(d.span.sub(0, want)),
+        // Decoded only when a read reaches it.
+        match cx.decode_lazy(span, &Codec::Zlib, want) {
+            Ok(d) => list.data(d),
             Err(err) => {
                 cx.diag(err);
                 break;
@@ -1867,6 +2067,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             block_size,
             joliet: v.joliet,
             path: Arc::new(Vec::new()),
+            sections: Arc::new(Vec::new()),
         };
         let root_extent = file.sub(
             u64::from(r.extent).saturating_mul(block_size),
@@ -1892,7 +2093,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
             cx.emit(node);
         }
-        cx.emit(entry_node(name.to_owned(), &r, state).summary(fmt::size(r.size.into())));
+        cx.emit(
+            entry_node(name.to_owned(), &r, r.size.into(), state).summary(fmt::size(r.size.into())),
+        );
     }
     let block_size = primary.map_or(SECTOR, |(v, _)| u64::from(v.block_size.max(1)));
     let mut catalog_span = None;

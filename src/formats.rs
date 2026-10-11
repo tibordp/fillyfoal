@@ -785,6 +785,10 @@ pub static FORMATS: &[&Format] = &[
     &disk::vdi::FORMAT,
     #[cfg(feature = "archive")]
     &disk::parallels::FORMAT,
+    // A koly trailer is decisive: UDRO/UDRW-with-trailer images start with
+    // a GPT, APM or HFS volume.
+    #[cfg(feature = "archive")]
+    &disk::dmg::FORMAT,
     // Partition tables and volumes with distinctive signatures.
     #[cfg(feature = "archive")]
     &disk::gpt::FORMAT,
@@ -859,8 +863,6 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "archive")]
     &compression::gzip::FORMAT,
     #[cfg(feature = "archive")]
-    &disk::dmg::FORMAT,
-    #[cfg(feature = "archive")]
     &archive::tar::FORMAT,
     #[cfg(feature = "archive")]
     &compression::bzip2::FORMAT,
@@ -908,6 +910,8 @@ pub static FORMATS: &[&Format] = &[
     &disk::iso9660::FORMAT,
     #[cfg(feature = "archive")]
     &disk::iso9660::UDF,
+    #[cfg(feature = "archive")]
+    &disk::iso9660::RAW,
     #[cfg(feature = "system")]
     &system::firmware::ANDROID_SPARSE,
     #[cfg(feature = "system")]
