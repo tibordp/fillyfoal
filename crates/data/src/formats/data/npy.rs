@@ -95,7 +95,9 @@ fn npy_has_object(descr: &str) -> bool {
             .iter()
             .any(|t| descr.contains(t))
     } else {
-        descr.trim_start_matches(['<', '>', '|', '=']).starts_with('O')
+        descr
+            .trim_start_matches(['<', '>', '|', '='])
+            .starts_with('O')
     }
 }
 
