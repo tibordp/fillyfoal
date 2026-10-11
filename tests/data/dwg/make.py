@@ -6,7 +6,10 @@ No DWG writer was available (AutoCAD and the ODA File Converter are not
 installed, and ezdxf's `odafc` add-on needs the latter), so these files are
 built byte by byte from the Open Design Specification for .dwg files as
 remembered: they show that the dissector agrees with this script, not that
-either agrees with AutoCAD.
+either agrees with AutoCAD. (External fixtures written by GNU LibreDWG are
+made by make-libredwg.sh; LibreDWG compresses only the page map and the
+section map, so the compressed data sections here are still the only test
+of those.)
 
 - `r2000.dwg` (AC1015): file header with section locators, header
   variables, classes, objects, object map, preview (header data and BMP).
@@ -353,9 +356,12 @@ def header_vars(ver):
 
 
 def sentinel_section(start, end, data, high):
-    size = struct.pack("<I", len(data))
+    # The size counts every byte after it up to the CRC, the high size
+    # included (as LibreDWG writes it: the CRC is at 20 + size).
     if high:
-        size += struct.pack("<I", 0)
+        size = struct.pack("<II", len(data) + 4, 0)
+    else:
+        size = struct.pack("<I", len(data))
     crc = crc16(size + data)
     return start + size + data + struct.pack("<H", crc) + end
 

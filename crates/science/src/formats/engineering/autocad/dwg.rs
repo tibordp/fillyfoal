@@ -2,13 +2,16 @@
 //!
 //! The layouts follow the Open Design Alliance's "Open Design Specification
 //! for .dwg files" as remembered (it could not be consulted), so field
-//! names are the spec's where known and unknown fields are shown raw. No
-//! DWG writer was available (AutoCAD and the ODA File Converter are not
-//! installed; ezdxf only writes DXF), so the fixtures are synthetic, built
-//! from the same understanding: the snapshots show self-consistency, not
-//! conformance. The handle check in the object list (each object's own
-//! handle must match the object map) is the built-in sanity check on real
-//! files.
+//! names are the spec's where known and unknown fields are shown raw.
+//! AutoCAD and the ODA File Converter were not available; the external
+//! fixtures were written by GNU LibreDWG's `dwgwrite` (R13 to R2018 except
+//! R2007), and their classes and object lists (handles, types, sizes) match
+//! `dwgread -O JSON`. LibreDWG compresses only the page map and the
+//! section map and stores the data sections, so compressed data sections
+//! are covered only by the synthetic fixtures, built from the same
+//! understanding as this code. The handle check in the object list (each
+//! object's own handle must match the object map) is the built-in sanity
+//! check on real files.
 //!
 //! - **R13 to R2000** (`AC1012`, `AC1014`, `AC1015`): a file header with
 //!   section locator records (header variables, classes, object map, ...)
@@ -311,13 +314,26 @@ async fn r13(cx: Cx, input: Input, ver: Ver) -> Result<()> {
     }
     if preview != 0 && preview < file.len {
         let sentinel = cx.read_avail(file.sub(preview, 20)).await?;
-        let size = u64::from(u32_le(&sentinel, 16).unwrap_or(0));
-        let span = file.sub(preview, size.saturating_add(36));
-        cx.emit(
-            Node::new("Preview")
-                .span(span)
-                .lazy(preview_r13, (drawing.clone(), span)),
-        );
+        if sentinel.get(..16) == Some(&dwg_data::SENTINEL_PREVIEW[..]) {
+            let size = u64::from(u32_le(&sentinel, 16).unwrap_or(0));
+            let span = file.sub(preview, size.saturating_add(36));
+            cx.emit(
+                Node::new("Preview")
+                    .span(span)
+                    .lazy(preview_r13, (drawing.clone(), span)),
+            );
+        } else {
+            // LibreDWG writes a preview address without a preview (it
+            // points into the header variables).
+            cx.emit(
+                Node::new("Preview")
+                    .span(file.sub(preview, 16))
+                    .summary("none at the preview address")
+                    .diag(Diagnostic::warning(
+                        "the preview address does not point at a preview sentinel",
+                    )),
+            );
+        }
     }
     Ok(())
 }
