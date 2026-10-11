@@ -34,6 +34,7 @@ pub mod lznt1;
 pub mod lzo;
 pub mod lzx;
 pub mod meatpack;
+pub mod palmdoc;
 pub mod pbz;
 pub mod pipeline;
 pub mod psarc;
@@ -133,6 +134,8 @@ pub enum Codec {
     CabFolder(cab::Folder),
     /// Zstandard frames.
     Zstd,
+    /// The text records of a PalmDOC or Mobipocket book (see [`palmdoc`]).
+    PalmDoc(palmdoc::Book),
     /// Zstandard frames that may use this dictionary (see
     /// [`zstd::Dictionary`]).
     ZstdDict(zstd::Dict),
@@ -326,6 +329,7 @@ impl Codec {
             Codec::Zstd => "zstd",
             Codec::ZstdFrame => "zstd-frame",
             Codec::ZstdDict(_) => "zstd-dict",
+            Codec::PalmDoc(_) => "palmdoc",
             Codec::UnixCompress => "unix-compress",
             Codec::Lznt1 { .. } => "lznt1",
             Codec::Xpress { .. } => "xpress",
@@ -408,6 +412,7 @@ impl Codec {
             Codec::Zstd => "zstd (lazy)",
             Codec::ZstdFrame => "zstd-frame (lazy)",
             Codec::ZstdDict(_) => "zstd-dict (lazy)",
+            Codec::PalmDoc(_) => "palmdoc (lazy)",
             Codec::UnixCompress => "unix-compress (lazy)",
             Codec::Lznt1 { .. } => "lznt1 (lazy)",
             Codec::Xpress { .. } => "xpress (lazy)",
@@ -489,6 +494,7 @@ impl Codec {
             | Codec::Zstd
             | Codec::ZstdFrame
             | Codec::ZstdDict(_)
+            | Codec::PalmDoc(_)
             | Codec::UnixCompress
             | Codec::Lznt1 { .. }
             | Codec::Xpress { .. }
@@ -572,6 +578,8 @@ impl Codec {
             Codec::SasRdc => 1_400,
             // Each zero byte of a long length adds 255 bytes.
             Codec::DwgLz77 { .. } => 256,
+            // A two-byte back-reference copies up to 10 bytes.
+            Codec::PalmDoc(_) => 8,
             // A block of up to 900 kB can encode runs of 255-byte repeats.
             Codec::Bzip2 | Codec::NsisBzip2 => 50_000,
             // LZMA's longest match (273 bytes) costs a handful of bits.
@@ -694,6 +702,7 @@ impl Codec {
             Codec::Zstd => Box::new(Streaming(zstd::Zstd::new())),
             Codec::ZstdFrame => Box::new(Streaming(zstd::Zstd::single_frame())),
             Codec::ZstdDict(d) => Box::new(Streaming(zstd::Zstd::with_dictionary(d.clone()))),
+            Codec::PalmDoc(book) => Box::new(Streaming(palmdoc::Records::new(book.clone()))),
             Codec::Bzip2 => Box::new(Streaming(bzip2::Bzip2::default())),
             Codec::NsisBzip2 => Box::new(Streaming(bzip2::Bzip2::nsis())),
             Codec::Lz4Frame => Box::new(Streaming(lz::Lz4Frame::default())),

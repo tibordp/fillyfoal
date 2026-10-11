@@ -20,6 +20,6 @@ expression: "common::explore(&display_name(&path), &data)"
       Number of records: 2  [0x4c+0x2]
   ▾ Records — 2 records  [0x4e+0x10]
     ▾ Record 0 — 11 bytes  [0x60+0xb]
-        ! unsupported: unrecognized format [0x60+0xb]
+        Data  [0x60+0xb]
     ▾ Record 1 — 11 bytes  [0x6b+0xb]
-        ! unsupported: unrecognized format [0x6b+0xb]
+        Data  [0x6b+0xb]

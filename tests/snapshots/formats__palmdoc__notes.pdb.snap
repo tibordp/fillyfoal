@@ -20,7 +20,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Number of records: 2  [0x4c+0x2]
   ▾ Records — 2 records  [0x4e+0x10]
     ▾ Record 0 — 16 bytes  [0x60+0x10]
-        ! unsupported: unrecognized format [0x60+0x10]
+        Data  [0x60+0x10]
     ▾ Record 1 — UTF-8 text, 1 line  [0x70+0xb]
         Encoding: "UTF-8"
         Line endings: "none" — 0 LF, 0 CRLF, 0 CR
@@ -34,3 +34,8 @@ expression: "common::explore(&display_name(&path), &data)"
       Text record size: 4096  [0x6a+0x2]
       Encryption: none (0x0)  [0x6c+0x2]
       Unknown: 0  [0x6e+0x2]
+  ▾ Text — UTF-8 text, 1 line  [0x70+0xb]
+      Encoding: "UTF-8"
+      Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [#1:0x0+0xb]
+        Line 1: "Hello Palm!"  [#1:0x0+0xb]

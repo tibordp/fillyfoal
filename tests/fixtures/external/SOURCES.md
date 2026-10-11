@@ -854,6 +854,13 @@ data descriptor (general purpose bit 3).
 | `onnx/named.onnx` | onnx 1.19.1 | same script: producer, domain, model version, doc string, two opset imports and metadata; passes `onnx.checker` |
 | `protobuf/person.pb` | protoc (libprotoc 34.1) | reproduced byte for byte by `sh tests/data/protobuf/lookalike.sh` (`protoc --encode=demo.Person lookalike.proto`): a generic message that starts like an ONNX model (`08 03 12 05 alice`); negative for the ONNX probe |
 | `protobuf/client-config.pb` | protoc (libprotoc 34.1) | same script (`demo.ClientConfig`): `08 01 12 0b some-client 22 ...`; negative for the ONNX probe |
+## E-books (calibre)
+
+| Path | Producer | Evidence |
+|---|---|---|
+| `mobi/calibre.mobi` | calibre 6.13.0 `ebook-convert` (debian:bookworm) | `tests/data/mobi/calibre.sh`: `--mobi-file-type old` from generated text (MOBI 6, PalmDOC LZ77, trailing entries); calibre records the conversion time and a random UUID, so not byte-reproducible; unedited. The decoded text matches calibre's own `MobiReader.extract_text` (SHA-256 compared) |
+| `palmdoc/calibre.pdb` | calibre 6.13.0 `ebook-convert` | same script: `--format doc` (PalmDOC, LZ77); unedited. The decoded text matches calibre's `decompress_doc` over the text records |
+
 ## Printer languages, TeX output and fonts
 | `pcl/gs-cdj550.pcl` | Ghostscript 10.07.1 (`cdj550` device) | `tests/data/pcl/make.sh`: three small colour rectangles on a 2-inch page at 75 dpi; bare PCL 5 colour, starts with `ESC*rbC` (no reset), raster rows sent plane by plane (`ESC*b#V` / `#v` in combined sequences); reproduced byte-for-byte |
 | `pjl/gs-pjxl300.pcl` | Ghostscript 10.07.1 (`pjxl300` device) | `tests/data/pcl/make.sh`: the same page as PJL `ENTER LANGUAGE = PCL` around PCL 5 colour starting with `ESC*rbC`; reproduced byte-for-byte |
