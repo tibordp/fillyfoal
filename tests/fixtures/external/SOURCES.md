@@ -787,3 +787,18 @@ Generated in `/tmp/fixtures/<format>` with the scripts named below
 | `wiredtiger-btree/collection-items.wt` | MongoDB 7 (WiredTiger 11.2.0) | same run: the `fillyfoal.items` collection (Snappy row-store leaves, BSON values, every 50th document with a 6000-byte string), renamed from its random ident `collection-7-<n>.wt` |
 | `wiredtiger-btree/index-items-id.wt` | MongoDB 7 (WiredTiger 11.2.0) | same run: the collection's `_id_` index (`index-8-<n>.wt`) |
 | `wiredtiger-btree/index-items-n.wt` | MongoDB 7 (WiredTiger 11.2.0) | same run: the secondary index on `n` (`index-9-<n>.wt`). The run's journal, catalog, other tables and `diagnostic.data` are not kept; times and idents differ per run |
+## ZIP-based office documents, JAR and gzip members
+The office files are made by `sh tests/data/docx/make-office.sh` with
+LibreOffice 25.2.3.2 (Debian trixie `libreoffice-*-nogui` in Docker) in a
+throwaway profile whose user name is "fillyfoal", from the flat ODF sources
+`tests/data/doc/letter.fodt` and `tests/data/xls/budget.fods`. LibreOffice
+stamps the conversion time into the metadata, so they are not reproducible
+byte for byte. Its OOXML and ODF writers stream every deflated entry with a
+data descriptor (general purpose bit 3).
+| `docx/letter.docx` | LibreOffice 25.2.3.2 ("Office Open XML Text") | `soffice --convert-to docx`; all 12 entries have bit 3 set |
+| `docx/letter-zipfile.docx` | CPython 3.12 `zipfile` (python:3.12-slim) | `tests/data/docx/rewrite.py letter.docx letter-zipfile.docx`: the LibreOffice package rewritten entry by entry into a seekable file (same names, order, times and methods), so no entry has bit 3 |
+| `xlsx/budget.xlsx` | LibreOffice 25.2.3.2 ("Calc MS Excel 2007 XML") | `soffice --convert-to xlsx`; all 15 entries have bit 3 set |
+| `odt/letter.odt` | LibreOffice 25.2.3.2 (writer8) | `soffice --convert-to odt`; stored `mimetype` first, the deflated entries with bit 3 |
+| `epub/letter.epub` | LibreOffice 25.2.3.2 (EPUB export) | `soffice --convert-to epub` |
+| `jar/hello.jar` | Eclipse Temurin 21 JDK `javac` + `jar` (Docker `eclipse-temurin:21-jdk`) | `sh tests/data/jar/make.sh`: `jar --create --date=2026-01-01T00:00:00Z --main-class fillyfoal.Hello` of `tests/data/jar/Hello.java` compiled with `javac --release 11`; directories stored, files deflated with data descriptors |
+| `gzip/two-members.gz` | Apple gzip 479 | `sh tests/data/gzip/make-members.sh`: `gzip -9 -n -c a.txt b.txt` writes one member per file (13 + 28 bytes) |

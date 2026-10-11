@@ -3,7 +3,9 @@
 //! `!<arch>\n`, then members: a 60-byte text header and the data, padded to
 //! an even length. Long names are kept in a `//` member (GNU, referenced as
 //! `/offset`) or in front of the data (BSD, `#1/length`). Symbol tables are
-//! the `/` (GNU), `/SYM64/` and `__.SYMDEF` (BSD) members.
+//! the `/` (GNU), `/SYM64/` and `__.SYMDEF` (BSD) members. Microsoft
+//! libraries (`.lib`) follow the first `/` with a second one in their own
+//! little-endian layout (PE/COFF specification, "Second Linker Member").
 
 use std::sync::Arc;
 
@@ -55,6 +57,8 @@ enum Kind {
     },
     /// GNU `//`.
     Names,
+    /// Microsoft's second linker member: a `/` right after the first.
+    MsSymbols,
 }
 
 struct Member {
@@ -69,8 +73,14 @@ fn trim_name(raw: &str) -> &str {
     raw.trim_end_matches(' ')
 }
 
-/// Reads one member header at the cursor and resolves its name.
-async fn next_member(cx: &Cx, cur: &mut Cursor<'_>, names: Option<&[u8]>) -> Result<Member> {
+/// Reads one member header at the cursor and resolves its name. `prev` is
+/// the kind of the member before it, if any.
+async fn next_member(
+    cx: &Cx,
+    cur: &mut Cursor<'_>,
+    names: Option<&[u8]>,
+    prev: Option<Kind>,
+) -> Result<Member> {
     let start = cur.pos();
     let header = cur.bytes(HEADER).await?;
     if header.get(58..60) != Some(b"`\n") {
@@ -91,6 +101,15 @@ async fn next_member(cx: &Cx, cur: &mut Cursor<'_>, names: Option<&[u8]>) -> Res
         let bytes = cx.read_avail(body.sub(0, len.min(4096))).await?;
         data = body.tail(len);
         crate::text::until_nul(&bytes)
+    } else if raw_name == "/"
+        && prev
+            == Some(Kind::Symbols {
+                wide: false,
+                bsd: false,
+            })
+    {
+        kind = Kind::MsSymbols;
+        raw_name.clone()
     } else if raw_name == "/" || raw_name == "/SYM64/" {
         kind = Kind::Symbols {
             wide: raw_name == "/SYM64/",
@@ -146,11 +165,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut members = 0u64;
     let mut deb_version = None;
     let mut symbols = false;
+    let mut prev = None;
     while cur.remaining() >= HEADER {
-        let m = next_member(&cx, &mut cur, names.as_deref().map(Vec::as_slice)).await?;
+        let m = next_member(&cx, &mut cur, names.as_deref().map(Vec::as_slice), prev).await?;
+        prev = Some(m.kind);
         let mut node = Node::new(m.name.clone())
             .span(m.span)
-            .lazy(member, (input, m.span, m.name.clone()));
+            .lazy(member, (input, m.span, m.name.clone(), m.kind));
         node = crate::formats::util::arcutil::check_len(node, m.data, m.data.len);
         node = match m.kind {
             Kind::Names => {
@@ -163,6 +184,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 symbols = true;
                 node.summary("symbol table")
             }
+            Kind::MsSymbols => node.summary("symbol table (Microsoft second linker member)"),
             Kind::File => {
                 members = members.saturating_add(1);
                 if m.name == "debian-binary" {
@@ -217,7 +239,7 @@ fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     Ok(())
 }
 
-async fn member(cx: Cx, (input, span, name): (Input, Span, String)) -> Result<()> {
+async fn member(cx: Cx, (input, span, name, kind): (Input, Span, String, Kind)) -> Result<()> {
     cx.emit(struct_node(
         "Header",
         span.sub(0, HEADER),
@@ -226,7 +248,7 @@ async fn member(cx: Cx, (input, span, name): (Input, Span, String)) -> Result<()
         header_layout,
     ));
     let mut cur = Cursor::new(&cx, span, Endian::Little);
-    let m = next_member(&cx, &mut cur, None).await?;
+    let m = next_member(&cx, &mut cur, None, None).await?;
     let header_name = cx.read(span.sub(0, 16)).await?;
     let data = m.data;
     if header_name.starts_with(b"#1/") {
@@ -242,7 +264,14 @@ async fn member(cx: Cx, (input, span, name): (Input, Span, String)) -> Result<()
                 .value(text(name.clone())),
         );
     }
-    match m.kind {
+    match kind {
+        Kind::MsSymbols => {
+            cx.emit(
+                Node::new("Symbols")
+                    .span(data)
+                    .lazy(ms_symbol_table, (data, input.span)),
+            );
+        }
         Kind::Names => {
             cx.emit(Node::new("Names").span(data).lazy(long_names, data));
         }
@@ -366,6 +395,89 @@ async fn symbol_table(cx: Cx, (span, wide, bsd, file): (Span, bool, bool, Span))
             offset,
             file,
         ))
+        .await;
+    }
+    Ok(())
+}
+
+/// Microsoft's second linker member, little-endian: the member count, the
+/// member header offsets (ascending), the symbol count, one 16-bit 1-based
+/// index into the offsets per symbol, then the symbol names, NUL-terminated
+/// and sorted.
+async fn ms_symbol_table(cx: Cx, (span, file): (Span, Span)) -> Result<()> {
+    let data = cx.read(span.sub(0, cx.limits().max_read)).await?;
+    let bad = || Diagnostic::malformed("bad symbol table").at(span);
+    let members = to_usize(u32_le(&data, 0).ok_or_else(bad)?.into());
+    if members > data.len().checked_div(4).unwrap_or(0) {
+        return Err(bad());
+    }
+    let offsets_at = 4usize;
+    let count_at = offsets_at.saturating_add(members.saturating_mul(4));
+    let symbols = to_usize(u32_le(&data, count_at).ok_or_else(bad)?.into());
+    let index_at = count_at.saturating_add(4);
+    if symbols
+        > data
+            .len()
+            .saturating_sub(index_at)
+            .checked_div(2)
+            .unwrap_or(0)
+    {
+        return Err(bad());
+    }
+    let offsets_span = span.sub(to_u64(offsets_at), to_u64(members.saturating_mul(4)));
+    cx.emit(
+        Node::new("Member count")
+            .span(span.sub(0, 4))
+            .value(crate::formats::util::val::uint(to_u64(members), 32)),
+    );
+    cx.emit(
+        Node::new("Member offsets")
+            .span(offsets_span)
+            .summary(count(to_u64(members), "member", "members"))
+            .lazy(ms_offsets, (offsets_span, file)),
+    );
+    cx.emit(
+        Node::new("Symbol count")
+            .span(span.sub(to_u64(count_at), 4))
+            .value(crate::formats::util::val::uint(to_u64(symbols), 32)),
+    );
+    let mut name_at = index_at.saturating_add(symbols.saturating_mul(2));
+    for i in 0..symbols {
+        let at = index_at.saturating_add(i.saturating_mul(2));
+        let index = usize::from(crate::bytes::u16_le(&data, at).ok_or_else(bad)?);
+        let rest = data.get(name_at..).unwrap_or_default();
+        let rest = rest.get(..MAX_NAME).unwrap_or(rest);
+        let len = rest.iter().position(|&b| b == 0).unwrap_or(rest.len());
+        let name = String::from_utf8_lossy(rest.get(..len).unwrap_or_default()).into_owned();
+        name_at = name_at.saturating_add(len).saturating_add(1);
+        let node_span = span.sub(to_u64(at), 2);
+        let offset = index
+            .checked_sub(1)
+            .filter(|&i| i < members)
+            .and_then(|i| u32_le(&data, offsets_at.saturating_add(i.saturating_mul(4))));
+        cx.push(match offset {
+            Some(offset) => symbol(name, node_span, offset.into(), file),
+            None => Node::new(name)
+                .span(node_span)
+                .value(crate::formats::util::val::uint(to_u64(index), 16))
+                .diag(Diagnostic::malformed("member index out of range")),
+        })
+        .await;
+    }
+    Ok(())
+}
+
+async fn ms_offsets(cx: Cx, (span, file): (Span, Span)) -> Result<()> {
+    let data = cx.read(span).await?;
+    for (i, chunk) in data.as_chunks::<4>().0.iter().enumerate() {
+        let offset = u32::from_le_bytes(*chunk);
+        cx.push(
+            Node::new(format!("Member {}", i.saturating_add(1)))
+                .span(span.sub(to_u64(i.saturating_mul(4)), 4))
+                .value(hex(offset, 32))
+                .summary("member header offset")
+                .target(file.sub(offset.into(), HEADER)),
+        )
         .await;
     }
     Ok(())

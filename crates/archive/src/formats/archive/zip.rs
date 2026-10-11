@@ -305,7 +305,9 @@ zip_variant!(
     "Excel binary workbook",
     ["xlsb"],
     "application/vnd.ms-excel.sheet.binary.macroEnabled.12",
-    |h| ooxml(h, b"xl/") && has_entry_suffix(h, b".bin")
+    // The workbook part itself is binary; other `.bin` parts (VBA projects,
+    // printer settings) occur in ordinary .xlsx/.xlsm files too.
+    |h| ooxml(h, b"xl/") && has_entry(h, b"xl/workbook.bin")
 );
 zip_variant!(
     SNUPKG,
@@ -475,8 +477,12 @@ zip_variant!(
     "TorchScript module (ZIP)",
     ["pt", "pth", "ptl"],
     "application/x-torchscript",
+    // `torch.jit.save` writes `<name>/code/__torch__/…`, `constants.pkl` and
+    // `data.pkl`; a bare `code/` directory is common in any project zip.
     |h| has_entry_suffix(h, b"/constants.pkl")
-        || entry_names(h).any(|n| crate::bytes::contains(n, b"/code/"))
+        || entry_names(h).any(|n| crate::bytes::contains(n, b"/code/__torch__"))
+        || (has_entry_suffix(h, b"/data.pkl")
+            && entry_names(h).any(|n| crate::bytes::contains(n, b"/code/")))
 );
 zip_variant!(
     APEX,
@@ -572,20 +578,67 @@ fn entry_names<'a>(h: &'a Head<'_>) -> impl Iterator<Item = &'a [u8]> {
             let flags = u16_le(data, at.saturating_add(6))?;
             let name_start = at.saturating_add(30);
             let name = data.get(name_start..name_start.saturating_add(name_len))?;
-            // Entries with a data descriptor do not record their size here;
-            // stop walking after them.
+            let data_start = name_start
+                .saturating_add(name_len)
+                .saturating_add(extra_len);
             at = if flags & 0x08 != 0 {
-                data.len()
+                // Streaming writers (LibreOffice, Java's ZipOutputStream)
+                // record the size in a data descriptor after the data.
+                after_descriptor(data, data_start).unwrap_or(data.len())
             } else {
-                name_start
-                    .saturating_add(name_len)
-                    .saturating_add(extra_len)
-                    .saturating_add(usize::try_from(compressed).ok()?)
+                data_start.saturating_add(usize::try_from(compressed).ok()?)
             };
             return Some(name);
         }
         None
     })
+}
+
+/// The next header after an entry whose data starts at `data_start` and
+/// whose size is in a data descriptor: the first local or central header
+/// in the window that a descriptor recording exactly the bytes before it
+/// precedes (with or without its signature, 32- or 64-bit sizes). Requiring
+/// that match keeps a `PK\3\4` inside stored data (a nested archive) from
+/// being taken for the next entry. `None` when it lies beyond the window.
+fn after_descriptor(data: &[u8], data_start: usize) -> Option<usize> {
+    let mut from = data_start;
+    loop {
+        let q = crate::bytes::find(data, b"PK", from)?;
+        from = q.saturating_add(1);
+        let sig = data.get(q..q.saturating_add(4))?;
+        if sig != LOCAL && sig != CENTRAL.to_le_bytes() {
+            continue;
+        }
+        // [signature] CRC-32, compressed size, uncompressed size:
+        // (signature present, 64-bit sizes, length, offset of the
+        // compressed size).
+        let layouts = [
+            (true, false, 16, 8),
+            (false, false, 12, 4),
+            (true, true, 24, 8),
+            (false, true, 20, 4),
+        ];
+        let fits = layouts.iter().any(|&(signed, wide, len, size_at)| {
+            let Some(start) = q.checked_sub(len) else {
+                return false;
+            };
+            let Some(size) = start.checked_sub(data_start) else {
+                return false;
+            };
+            if signed && data.get(start..start.saturating_add(4)) != Some(b"PK\x07\x08") {
+                return false;
+            }
+            let recorded = if wide {
+                u64_le(data, start.saturating_add(size_at))
+            } else {
+                u32_le(data, start.saturating_add(size_at)).map(u64::from)
+            };
+            recorded == Some(to_u64(size))
+        });
+        if fits {
+            return Some(q);
+        }
+    }
 }
 
 fn is_zip(h: &Head<'_>) -> bool {
@@ -1001,8 +1054,10 @@ async fn central_directory(
                 Diagnostic::malformed("expected a central directory header").at(cur.span(4))
             );
         }
-        let name = decode_name(&cur.bytes(header.name_len.into()).await?, header.flags);
+        let name_bytes = cur.bytes(header.name_len.into()).await?;
+        let extra = cx.read_avail(cur.span(header.extra_len.into())).await?;
         cur.skip(u64::from(header.extra_len).saturating_add(header.comment_len.into()));
+        let name = decode_name(&name_bytes, header.flags, &extra);
         let entry_span = cur.since(start);
 
         let extra_span = entry_span.sub(
@@ -1096,9 +1151,19 @@ async fn zip64_sizes(cx: &Cx, extra: Span, h: &CentralHeader) -> Sizes {
     sizes
 }
 
-/// A name: UTF-8 if flagged or valid, else IBM code page 437 (the historical
-/// default for ZIP file names).
-fn decode_name(bytes: &[u8], flags: u16) -> String {
+/// A name: the Info-ZIP Unicode path (extra field 0x7075) when it is there
+/// and was made from these name bytes (its CRC-32 matches), else UTF-8 if
+/// flagged or valid, else IBM code page 437 (the historical default for ZIP
+/// file names; archivers on non-Latin systems write the OEM code page and
+/// add the Unicode path).
+fn decode_name(bytes: &[u8], flags: u16, extra: &[u8]) -> String {
+    if let Some(field) = extra_field(extra, 0x7075)
+        && field.first() == Some(&1)
+        && u32_le(field, 1) == Some(crate::codec::crc32(bytes))
+        && let Some(Ok(name)) = field.get(5..).map(std::str::from_utf8)
+    {
+        return name.to_owned();
+    }
     if flags & 0x0800 != 0 {
         return String::from_utf8_lossy(bytes).into_owned();
     }
@@ -1124,15 +1189,19 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
         LE,
     ));
     let name_span = span.sub(CentralHeader::SIZE, header.name_len.into());
-    let name = decode_name(&cx.read(name_span).await?, header.flags);
+    let extra = span.sub(
+        CentralHeader::SIZE.saturating_add(header.name_len.into()),
+        header.extra_len.into(),
+    );
+    let name = decode_name(
+        &cx.read(name_span).await?,
+        header.flags,
+        &cx.read_avail(extra).await?,
+    );
     cx.emit(
         Node::new("File name")
             .span(name_span)
             .value(Value::Text(name)),
-    );
-    let extra = span.sub(
-        CentralHeader::SIZE.saturating_add(header.name_len.into()),
-        header.extra_len.into(),
     );
     if header.extra_len > 0 {
         cx.emit(
@@ -1574,8 +1643,10 @@ async fn local_entries(cx: &Cx, input: Input) -> Result<()> {
         }
         found = true;
         let (header, header_span) = cur.record::<LocalHeader>().await?;
-        let name = decode_name(&cur.bytes(header.name_len.into()).await?, header.flags);
+        let name_bytes = cur.bytes(header.name_len.into()).await?;
+        let extra = cx.read_avail(cur.span(header.extra_len.into())).await?;
         cur.skip(header.extra_len.into());
+        let name = decode_name(&name_bytes, header.flags, &extra);
         let data = cur.span(header.compressed.into());
         cur.skip(header.compressed.into());
         cx.progress_in(input.span, input.span.offset.saturating_add(cur.pos()));
