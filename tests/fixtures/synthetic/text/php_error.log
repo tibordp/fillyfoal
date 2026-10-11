@@ -1,0 +1,8 @@
+[01-Jan-2024 12:00:01 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 1
+[01-Jan-2024 12:00:02 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 2
+[01-Jan-2024 12:00:03 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 3
+[01-Jan-2024 12:00:04 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 4
+[01-Jan-2024 12:00:05 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 5
+[01-Jan-2024 12:00:06 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 6
+[01-Jan-2024 12:00:07 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 7
+[01-Jan-2024 12:00:08 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 8

@@ -11,9 +11,9 @@ use crate::span::Span;
 use crate::value::Value;
 
 use super::decode::{Transform, decoded_node, preview};
-use super::encoding::windows_1252;
 use super::scan::Scanner;
 use super::{plural, text_node};
+use crate::codec::charset::{self, Charset, Label};
 
 pub static FORMAT: Format = Format {
     name: "rtf",
@@ -318,15 +318,16 @@ fn date(params: &[(String, i64)]) -> Option<String> {
 struct Group {
     input: Input,
     span: Span,
+    cs: Charset,
 }
 
-fn group_node(info: &GroupInfo, span: Span, input: Input) -> Node {
+fn group_node(info: &GroupInfo, span: Span, input: Input, cs: Charset) -> Node {
     let name = match (info.dest.as_str(), info.dest_param) {
         ("", _) => "{group}".to_owned(),
         (d, Some(p)) => format!("\\{d}{p}"),
         (d, None) => format!("\\{d}"),
     };
-    let text = windows_1252(&info.text);
+    let text = cs.decode(&info.text);
     let text = preview(text.trim_end_matches(';'), 60);
     let param = |n: &str| info.params.iter().find(|(k, _)| k == n).map(|(_, v)| *v);
     let mut summary = match date(&info.params) {
@@ -352,9 +353,10 @@ fn group_node(info: &GroupInfo, span: Span, input: Input) -> Node {
             format!("{summary} ({groups})")
         };
     }
-    let mut node = Node::new(name)
-        .span(span)
-        .lazy(crate::expander!(self::group: Group), Group { input, span });
+    let mut node = Node::new(name).span(span).lazy(
+        crate::expander!(self::group: Group),
+        Group { input, span, cs },
+    );
     if !summary.is_empty() {
         node = node.summary(summary);
     }
@@ -371,11 +373,11 @@ async fn group(cx: Cx, g: Group) -> Result<()> {
     if open.kind != Kind::Open {
         return Err(Diagnostic::malformed("expected '{'").at(lex.span(&open)));
     }
-    content(&cx, &mut lex, g.input).await
+    content(&cx, &mut lex, g.input, g.cs).await
 }
 
 /// Pushes tokens until the group's closing brace (or the end).
-async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input) -> Result<()> {
+async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input, cs: Charset) -> Result<()> {
     // Text runs (with \'hh escapes) merge into one node. Only the first
     // RUN_CAP bytes are kept (the rest are counted), and none where the
     // text is not shown.
@@ -391,14 +393,14 @@ async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input) -> Result<()> {
         let textual = matches!(t.kind, Kind::Text | Kind::Hex)
             || (t.kind == Kind::Symbol && !matches!(dest.as_str(), "pict" | "objdata"));
         if !textual && let Some((a, b, text)) = run.take() {
-            flush(cx, lex, (a, b), &text, &dest, &mut data).await;
+            flush(cx, lex, (a, b), &text, &dest, &mut data, cs).await;
         }
         match t.kind {
             Kind::Eof | Kind::Close => break,
             Kind::Open => {
                 let info = skip_group(lex, &t).await?;
                 let span = lex.scan.span(t.start, info.end);
-                cx.push(group_node(&info, span, input)).await;
+                cx.push(group_node(&info, span, input, cs)).await;
             }
             Kind::Text | Kind::Hex | Kind::Symbol if textual => {
                 let r = run.get_or_insert((t.start, t.end, Run::default()));
@@ -409,11 +411,11 @@ async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input) -> Result<()> {
                     match t.kind {
                         Kind::Text => {
                             let bytes = lex.scan.bytes(t.start, t.end, super::VALUE_CAP).await?;
-                            r.2.extend(&bytes);
+                            r.2.extend(&bytes, cs);
                         }
                         Kind::Hex => {
                             if let Some(b) = t.param.and_then(|p| u8::try_from(p).ok()) {
-                                r.2.extend(&[b]);
+                                r.2.extend(&[b], cs);
                             }
                         }
                         _ => {
@@ -422,11 +424,14 @@ async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input) -> Result<()> {
                                 .byte(t.start.saturating_add(1))
                                 .await?
                                 .unwrap_or(b' ');
-                            r.2.extend(&[match sym {
-                                b'~' => b' ',
-                                b'-' | b'*' => continue,
-                                other => other,
-                            }]);
+                            r.2.extend(
+                                &[match sym {
+                                    b'~' => b' ',
+                                    b'-' | b'*' => continue,
+                                    other => other,
+                                }],
+                                cs,
+                            );
                         }
                     }
                 }
@@ -494,7 +499,7 @@ async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input) -> Result<()> {
         }
     }
     if let Some((a, b, text)) = run.take() {
-        flush(cx, lex, (a, b), &text, &dest, &mut data).await;
+        flush(cx, lex, (a, b), &text, &dest, &mut data, cs).await;
     }
     if let Some((a, b)) = data {
         let span = lex.scan.span(a, b);
@@ -526,12 +531,12 @@ struct Run {
 }
 
 impl Run {
-    fn extend(&mut self, bytes: &[u8]) {
+    fn extend(&mut self, bytes: &[u8], cs: Charset) {
         let room = RUN_CAP.saturating_sub(self.bytes.len());
         let (keep, rest) = bytes.split_at(room.min(bytes.len()));
         self.bytes.extend_from_slice(keep);
         self.more = self.more.saturating_add(to_u64(rest.len()));
-        self.more_text |= windows_1252(rest).chars().any(|c| !c.is_whitespace());
+        self.more_text |= cs.decode(rest).chars().any(|c| !c.is_whitespace());
     }
 }
 
@@ -544,6 +549,7 @@ async fn flush(
     run: &Run,
     dest: &str,
     data: &mut Option<(u64, u64)>,
+    cs: Charset,
 ) {
     if dest == "colortbl" {
         return;
@@ -554,13 +560,13 @@ async fn flush(
         d.1 = d.1.max(end);
         return;
     }
-    let text = windows_1252(&run.bytes);
+    let text = cs.decode(&run.bytes);
     if text.trim().is_empty() && !run.more_text {
         return;
     }
     let mut node = text_node("Text", lex.scan.span(start, end), &text);
     if run.more > 0 {
-        // One character per Windows-1252 byte.
+        // One character per byte (single-byte code pages).
         let chars = to_u64(text.chars().count()).saturating_add(run.more);
         node = node.summary(format!("{chars} characters, truncated"));
     }
@@ -629,6 +635,7 @@ fn describe(word: &str) -> Option<&'static str> {
 #[derive(Clone, Debug)]
 struct Doc {
     span: Span,
+    cs: Charset,
 }
 
 /// Paragraphs of document text, skipping non-text destinations.
@@ -697,11 +704,11 @@ async fn paragraphs(cx: Cx, d: Doc) -> Result<()> {
             }
             Kind::Hex => {
                 let byte = t.param.and_then(|p| u8::try_from(p).ok()).unwrap_or(b'?');
-                emit(&windows_1252(&[byte]), &t, &mut text);
+                emit(&d.cs.decode(&[byte]), &t, &mut text);
             }
             Kind::Text => {
                 let bytes = lex.scan.bytes(t.start, t.end, 4096).await?;
-                for ch in windows_1252(&bytes).chars() {
+                for ch in d.cs.decode(&bytes).chars() {
                     emit(&ch.to_string(), &t, &mut text);
                 }
             }
@@ -771,13 +778,56 @@ async fn paragraphs(cx: Cx, d: Doc) -> Result<()> {
     Ok(())
 }
 
+/// The code page of `\'hh` escapes and 8-bit text: `\ansicpgN` in the
+/// header, else Windows-1252. A double-byte code page (932, 936, 949, 950)
+/// is reported and shown as Windows-1252.
+fn code_page(cx: &Cx, head: &[u8]) -> Charset {
+    let Some(at) = super::probe::find(head, b"\\ansicpg") else {
+        return Charset::Windows1252;
+    };
+    let digits: String = head
+        .get(at.saturating_add(8)..)
+        .unwrap_or_default()
+        .iter()
+        .take_while(|b| b.is_ascii_digit())
+        .take(5)
+        .map(|&b| char::from(b))
+        .collect();
+    let label = match digits.as_str() {
+        "" | "0" | "1252" => return Charset::Windows1252,
+        "932" => "shift_jis".to_owned(),
+        "936" => "gbk".to_owned(),
+        "949" => "euc-kr".to_owned(),
+        "950" => "big5".to_owned(),
+        "10000" => "macintosh".to_owned(),
+        n => format!("cp{n}"),
+    };
+    match charset::lookup(&label) {
+        Some(Label::Single(c)) => c,
+        Some(other) => {
+            cx.diag(Diagnostic::unsupported(format!(
+                "code page {} (\\ansicpg{digits}) is not decoded (shown as Windows-1252)",
+                other.name()
+            )));
+            Charset::Windows1252
+        }
+        None => {
+            cx.diag(Diagnostic::unsupported(format!(
+                "unknown code page \\ansicpg{digits} (shown as Windows-1252)"
+            )));
+            Charset::Windows1252
+        }
+    }
+}
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(input.span.sub(0, 64 * 1024)).await?;
+    let cs = code_page(&cx, &head);
     let find = |tag: &[u8]| {
         let at = super::probe::find(&head, tag)?;
         let rest = head.get(at.saturating_add(tag.len())..)?;
         let end = rest.iter().position(|&b| b == b'}' || b == b'\\')?;
-        let text = windows_1252(rest.get(..end)?);
+        let text = cs.decode(rest.get(..end)?);
         let text = text.trim().trim_end_matches(';').to_owned();
         (!text.is_empty()).then_some(text)
     };
@@ -796,7 +846,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Node::new("Document text")
             .span(input.span)
             .desc("The text of the document, by paragraph")
-            .lazy(paragraphs, Doc { span: input.span }),
+            .lazy(
+                paragraphs,
+                Doc {
+                    span: input.span,
+                    cs,
+                },
+            ),
     );
     // The outer group's content is the top level.
     let mut lex = Lexer::new(&cx, input.span);
@@ -804,7 +860,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if open.kind != Kind::Open {
         return Err(Diagnostic::malformed("expected '{\\rtf'").at(lex.span(&open)));
     }
-    content(&cx, &mut lex, input).await?;
+    content(&cx, &mut lex, input, cs).await?;
     let rest = lex.next().await?;
     if rest.kind == Kind::Eof && lex.pos < lex.scan.len() {
         return Ok(());

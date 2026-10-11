@@ -1,0 +1,2 @@
+[1] Smith, J. Some paper. 2001.
+[2] Doe, A. Another paper. 2003.

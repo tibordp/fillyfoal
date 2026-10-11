@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ hosts — UTF-8 text, LF line endings, 9 lines  [0x0+0xd5]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 9 LF, 0 CRLF, 0 CR
+  ▾ Lines — 9 lines  [0x0+0xd5]
+      Line 1: "##"  [0x0+0x2]
+      Line 2: "# Host Database"  [0x3+0xf]
+      Line 3: "#"  [0x13+0x1]
+      Line 4: "# localhost is used to configure the loopback interface"  [0x15+0x37]
+      Line 5: "# when the system is booting.  Do not change this entry."  [0x4d+0x38]
+      Line 6: "##"  [0x86+0x2]
+      Line 7: "127.0.0.1\tlocalhost"  [0x89+0x13]
+      Line 8: "255.255.255.255\tbroadcasthost"  [0x9d+0x1d]
+      Line 9: "::1             localhost"  [0xbb+0x19]

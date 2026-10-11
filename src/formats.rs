@@ -3034,11 +3034,19 @@ pub static FORMATS: &[&Format] = &[
     &text::ssh::KEYS,
     // Messages (header blocks look like YAML; keep them before it).
     #[cfg(feature = "text")]
+    &text::mime::EMLX,
+    #[cfg(feature = "text")]
     &text::mime::MBOX,
     #[cfg(feature = "text")]
     &text::mime::MHTML,
     #[cfg(feature = "text")]
     &text::mime::EML,
+    #[cfg(feature = "text")]
+    &text::stanza::MANIFEST,
+    #[cfg(feature = "text")]
+    &text::stanza::METADATA,
+    #[cfg(feature = "text")]
+    &text::stanza::DEB822,
     #[cfg(feature = "text")]
     &text::yenc::FORMAT,
     #[cfg(feature = "text")]

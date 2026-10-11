@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ table.tsv — TSV, 3 columns (id, value, label), ~4 records  [0x0+0x3d]
+▾ table.tsv — TSV, 3 columns (id, value, label), ~3 records  [0x0+0x3d]
     Delimiter: "tab"
   ▾ Header — id, value, label  [0x0+0xe]
       Column 1: "id"  [0x0+0x2]

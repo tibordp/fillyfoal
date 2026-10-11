@@ -93,21 +93,74 @@ fn probe_srt(h: &Head<'_>) -> bool {
         && timing(Piece::new(time, span)).is_some()
 }
 
+/// An LRC time tag's content: `mm:ss`, `mm:ss.xx` or `mm:ss:xx`.
+fn lrc_time(inner: &[u8]) -> bool {
+    let digits = |s: &[u8]| !s.is_empty() && s.iter().all(u8::is_ascii_digit);
+    let Some(colon) = inner.iter().position(|&b| b == b':') else {
+        return false;
+    };
+    let (min, rest) = (
+        inner.get(..colon).unwrap_or_default(),
+        inner.get(colon.saturating_add(1)..).unwrap_or_default(),
+    );
+    let sec = rest.get(..2).unwrap_or_default();
+    let frac = rest.get(2..).unwrap_or_default();
+    digits(min)
+        && min.len() <= 3
+        && sec.len() == 2
+        && digits(sec)
+        && (frac.is_empty()
+            || (matches!(frac.first(), Some(b'.' | b':'))
+                && digits(frac.get(1..).unwrap_or_default())))
+}
+
+/// ID tags of the LRC format (`[ar:Artist]`, `[offset:+100]`, ...).
+const LRC_IDS: &[&[u8]] = &[
+    b"ar", b"al", b"ti", b"au", b"by", b"re", b"ve", b"tool", b"length", b"offset", b"la", b"lr",
+    b"id", b"#",
+];
+
+/// Whether a line is an LRC line: one or more time or ID tags, then the
+/// lyric. Log lines (`[Mon Jan 01 12:00:01 2024] [core:error] …`,
+/// `[2024-01-01 12:00:01] app.INFO: …`) carry other bracketed stamps, and
+/// chat logs (`[12:34] <nick> hello`) a nick where a lyric would be (an
+/// enhanced-LRC word stamp `<00:12.34>` starts with a digit).
+fn lrc_line(line: &[u8]) -> Option<bool> {
+    let mut t = probe::trim(line);
+    let mut timed = false;
+    let mut tags = 0usize;
+    while t.first() == Some(&b'[') {
+        let end = t.iter().position(|&b| b == b']')?;
+        let inner = t.get(1..end).unwrap_or_default();
+        if lrc_time(inner) {
+            timed = true;
+        } else {
+            let colon = inner.iter().position(|&b| b == b':')?;
+            let key = probe::trim(inner.get(..colon).unwrap_or_default());
+            if !LRC_IDS.iter().any(|k| key.eq_ignore_ascii_case(k)) || inner.len() >= 200 {
+                return None;
+            }
+        }
+        tags = tags.saturating_add(1);
+        t = t.get(end.saturating_add(1)..).unwrap_or_default();
+    }
+    let lyric = probe::trim_start(t);
+    let nick = lyric.first() == Some(&b'<') && !lyric.get(1).is_some_and(u8::is_ascii_digit);
+    (tags > 0 && !nick).then_some(timed)
+}
+
 fn probe_lrc(h: &Head<'_>) -> bool {
     let head = probe::head(h);
-    let tagged = probe::significant(&head, &[])
-        .take(10)
-        .filter(|l| {
-            let t = probe::trim(l);
-            t.starts_with(b"[")
-                && t.iter().position(|&b| b == b']').is_some_and(|e| {
-                    let inner = t.get(1..e).unwrap_or_default();
-                    inner.contains(&b':') && inner.len() < 200
-                })
-        })
-        .count();
-    let total = probe::significant(&head, &[]).take(10).count();
-    tagged >= 2 && tagged == total && probe::is_text(h)
+    let mut total = 0usize;
+    let mut timed = 0usize;
+    for line in probe::significant(&head, &[]).take(10) {
+        let Some(t) = lrc_line(line) else {
+            return false;
+        };
+        total = total.saturating_add(1);
+        timed = timed.saturating_add(usize::from(t));
+    }
+    total >= 2 && (timed >= 1 || total >= 3) && probe::is_text(h)
 }
 
 fn time_node(name: &'static str, piece: Piece<'_>) -> Node {

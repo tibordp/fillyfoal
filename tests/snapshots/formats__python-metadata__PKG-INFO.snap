@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ PKG-INFO — Python package metadata: fillyfoal-demo 1.2.3  [0x0+0x243]
+    Metadata-Version: "2.4"  [0x0+0x15]
+    Name: "fillyfoal-demo"  [0x16+0x14]
+    Version: "1.2.3"  [0x2b+0xe]
+    Summary: "A sample package for metadata fixtures"  [0x3a+0x2f]
+    Author-email: "fillyfoal <fillyfoal@example.com>"  [0x6a+0x2f]
+    License-Expression: "MIT"  [0x9a+0x17]
+    Project-URL: "Homepage, https://example.com/fillyfoal-demo"  [0xb2+0x39]
+    Keywords: "sample,fixture"  [0xec+0x18]
+    Classifier: "Programming Language :: Python :: 3"  [0x105+0x2f]
+    Classifier: "Operating System :: OS Independent"  [0x135+0x2e]
+    Requires-Python: ">=3.9"  [0x164+0x16]
+    Description-Content-Type: "text/markdown"  [0x17b+0x27]
+    Requires-Dist: "requests>=2.31"  [0x1a3+0x1d]
+    Requires-Dist: "click>=8; python_version >= \"3.10\""  [0x1c1+0x31]
+    Description: "# fillyfoal demo\n\nA small package used to make a metadata sample.\n\n- one\n- two\n" — 0x4f bytes  [0x1f4+0x4f]

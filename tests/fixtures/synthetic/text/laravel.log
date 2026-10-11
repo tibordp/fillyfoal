@@ -1,0 +1,8 @@
+[2024-01-01 12:00:01] app.INFO: request handled {"id":1} []
+[2024-01-01 12:00:02] app.INFO: request handled {"id":2} []
+[2024-01-01 12:00:03] app.INFO: request handled {"id":3} []
+[2024-01-01 12:00:04] app.INFO: request handled {"id":4} []
+[2024-01-01 12:00:05] app.INFO: request handled {"id":5} []
+[2024-01-01 12:00:06] app.INFO: request handled {"id":6} []
+[2024-01-01 12:00:07] app.INFO: request handled {"id":7} []
+[2024-01-01 12:00:08] app.INFO: request handled {"id":8} []

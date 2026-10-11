@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ fragment.html — HTML document  [0x0+0x5d]
+  ▾ div — class="x" (3 elements)  [0x0+0x5c]
+      @class: "x"  [0xc+0x1]
+    ▾ p — 1 element  [0x10+0x23]
+        #text: "Para one"  [0x13+0x8]
+        br  [0x1b+0x4]
+        #text: "line \u{a0} two"  [0x1f+0x10]
+    ▾ img — src="a.png"  [0x34+0x11]
+        @src: "a.png"  [0x3e+0x5]
+      p: "Para two"  [0x46+0xf]

@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ colour.log — UTF-8 text, LF line endings, 12 lines  [0x0+0x27f]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 12 LF, 0 CRLF, 0 CR
+  ▾ Lines — 12 lines  [0x0+0x27f]
+      Line 1: "\u{1b}[32mINFO\u{1b}[0m  compiling crate number 1 of the build"  [0x0+0x34]
+      Line 2: "\u{1b}[32mINFO\u{1b}[0m  compiling crate number 2 of the build"  [0x35+0x34]
+      Line 3: "\u{1b}[32mINFO\u{1b}[0m  compiling crate number 3 of the build"  [0x6a+0x34]
+      Line 4: "\u{1b}[32mINFO\u{1b}[0m  compiling crate number 4 of the build"  [0x9f+0x34]
+      Line 5: "\u{1b}[32mINFO\u{1b}[0m  compiling crate number 5 of the build"  [0xd4+0x34]
+      Line 6: "\u{1b}[32mINFO\u{1b}[0m  compiling crate number 6 of the build"  [0x109+0x34]
+      Line 7: "\u{1b}[32mINFO\u{1b}[0m  compiling crate number 7 of the build"  [0x13e+0x34]
+      Line 8: "\u{1b}[32mINFO\u{1b}[0m  compiling crate number 8 of the build"  [0x173+0x34]
+      Line 9: "\u{1b}[32mINFO\u{1b}[0m  compiling crate number 9 of the build"  [0x1a8+0x34]
+      Line 10: "\u{1b}[32mINFO\u{1b}[0m  compiling crate number 10 of the build"  [0x1dd+0x35]
+      Line 11: "\u{1b}[32mINFO\u{1b}[0m  compiling crate number 11 of the build"  [0x213+0x35]
+      Line 12: "\u{1b}[32mINFO\u{1b}[0m  compiling crate number 12 of the build"  [0x249+0x35]

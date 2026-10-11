@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ls.man — UTF-8 text, LF line endings, 5 lines  [0x0+0x6f]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 5 LF, 0 CRLF, 0 CR
+  ▾ Lines — 5 lines  [0x0+0x6f]
+      Line 1: "N\u{8}NA\u{8}AM\u{8}ME\u{8}E"  [0x0+0xc]
+      Line 2: "     l\u{8}ls\u{8}s - list directory contents"  [0xd+0x25]
+      Line 3: ""  [0x33+0x0]
+      Line 4: "S\u{8}SY\u{8}YN\u{8}NO\u{8}OP\u{8}PS\u{8}SI\u{8}IS\u{8}S"  [0x34+0x18]
+      Line 5: "     l\u{8}ls\u{8}s [OPTION]... [FILE]..."  [0x4d+0x21]

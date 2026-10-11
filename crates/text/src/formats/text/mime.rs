@@ -22,7 +22,7 @@ use super::{parse_datetime, plural, probe, text_node};
 pub static EML: Format = Format {
     name: "eml",
     title: "E-mail message",
-    extensions: &["eml", "msg822", "mime", "emlx"],
+    extensions: &["eml", "msg822", "mime"],
     mime: "message/rfc822",
     probe: Probe::Custom(|h| probe_message(h) && !probe_mhtml(h)),
     dissect: crate::expander!(dissect_eml: Input),
@@ -35,6 +35,17 @@ pub static MHTML: Format = Format {
     mime: "multipart/related",
     probe: Probe::Custom(|h| probe_message(h) && probe_mhtml(h)),
     dissect: crate::expander!(dissect_mhtml: Input),
+};
+
+/// Apple Mail's message file: a line with the message's byte count, the
+/// RFC 822 message, then an XML property list of flags and dates.
+pub static EMLX: Format = Format {
+    name: "emlx",
+    title: "Apple Mail message",
+    extensions: &["emlx"],
+    mime: "message/rfc822",
+    probe: Probe::Custom(probe_emlx),
+    dissect: crate::expander!(dissect_emlx: Input),
 };
 
 pub static MBOX: Format = Format {
@@ -98,6 +109,40 @@ fn probe_message(h: &Head<'_>) -> bool {
         }
     }
     known >= 2
+}
+
+/// The byte count line of an `.emlx` file: (count, length of the line
+/// including its break).
+fn emlx_count(data: &[u8]) -> Option<(u64, usize)> {
+    let eol = data.iter().take(32).position(|&b| b == b'\n')?;
+    let line = data.get(..eol)?;
+    let digits = probe::trim(line);
+    if digits.is_empty()
+        || digits.len() > 12
+        || !digits.iter().all(u8::is_ascii_digit)
+        || line.first().is_some_and(u8::is_ascii_whitespace)
+    {
+        return None;
+    }
+    let count = std::str::from_utf8(digits).ok()?.parse().ok()?;
+    Some((count, eol.saturating_add(1)))
+}
+
+fn probe_emlx(h: &Head<'_>) -> bool {
+    let Some((count, skip)) = emlx_count(h.data) else {
+        return false;
+    };
+    let rest = h.data.get(skip..).unwrap_or_default();
+    let message = Head {
+        data: rest,
+        tail: h.tail,
+        len: h.len.saturating_sub(crate::bytes::to_u64(skip)),
+        len_known: h.len_known,
+    };
+    count > 0
+        && count <= message.len
+        && probe_message(&message)
+        && probe::contains(h.tail, b"</plist>")
 }
 
 fn probe_mhtml(h: &Head<'_>) -> bool {
@@ -687,6 +732,52 @@ pub async fn dissect_mhtml(cx: Cx, input: Input) -> Result<()> {
         },
     )
     .await
+}
+
+/// `.emlx`: the byte count, the message and the property list after it.
+pub async fn dissect_emlx(cx: Cx, input: Input) -> Result<()> {
+    let span = input.span;
+    let first = cx.read_avail(span.sub(0, 32)).await?;
+    let Some((count, skip)) = emlx_count(&first) else {
+        return Err(Diagnostic::malformed("no byte count line").at(span.sub(0, 0)));
+    };
+    let skip = crate::bytes::to_u64(skip);
+    let line = probe::trim(
+        first
+            .get(..usize::try_from(skip).unwrap_or(0))
+            .unwrap_or_default(),
+    );
+    let mut count_node = Node::new("Byte count")
+        .span(span.sub(0, crate::bytes::to_u64(line.len())))
+        .value(Value::UInt {
+            value: count,
+            bits: 64,
+            radix: crate::value::Radix::Dec,
+        })
+        .summary("length of the message");
+    let available = span.len.saturating_sub(skip);
+    if count > available {
+        count_node = count_node.diag(Diagnostic::malformed(format!(
+            "the message is cut short ({available} of {count} bytes)"
+        )));
+    }
+    cx.emit(count_node);
+    let message = span.sub(skip, count);
+    cx.emit(crate::formats::embedded_as(
+        "Message",
+        input.nested(message),
+        &EML,
+    ));
+    let rest = span.tail(skip.saturating_add(count));
+    if rest.len > 0 {
+        cx.emit(
+            crate::formats::embedded_as("Properties", input.nested(rest), &super::plist::FORMAT)
+                .summary("Apple Mail flags and dates"),
+        );
+    }
+    let (fields, _) = headers(&cx, message.sub(0, 256 * 1024)).await?;
+    cx.annotate(format!("Apple Mail message: {}", describe(&fields)));
+    Ok(())
 }
 
 /// mbox: messages separated by `From ` lines.

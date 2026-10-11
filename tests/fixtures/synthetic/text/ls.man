@@ -1,0 +1,5 @@
+NNAAMMEE
+     llss - list directory contents
+
+SSYYNNOOPPSSIISS
+     llss [OPTION]... [FILE]...

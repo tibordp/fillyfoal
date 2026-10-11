@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ people.csv — CSV, 4 columns (name, age, city, zip), ~7 records  [0x0+0x89]
+▾ people.csv — CSV, 4 columns (name, age, city, zip), ~4 records  [0x0+0x89]
     Delimiter: "comma"
   ▾ Header — name, age, city, zip  [0x0+0x11]
       Column 1: "name"  [0x0+0x4]

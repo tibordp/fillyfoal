@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ apache_error.log — UTF-8 text, LF line endings, 8 lines  [0x0+0x2c8]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 8 LF, 0 CRLF, 0 CR
+  ▾ Lines — 8 lines  [0x0+0x2c8]
+      Line 1: "[Mon Jan 01 12:00:01.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request"  [0x0+0x58]
+      Line 2: "[Mon Jan 01 12:00:02.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request"  [0x59+0x58]
+      Line 3: "[Mon Jan 01 12:00:03.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request"  [0xb2+0x58]
+      Line 4: "[Mon Jan 01 12:00:04.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request"  [0x10b+0x58]
+      Line 5: "[Mon Jan 01 12:00:05.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request"  [0x164+0x58]
+      Line 6: "[Mon Jan 01 12:00:06.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request"  [0x1bd+0x58]
+      Line 7: "[Mon Jan 01 12:00:07.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request"  [0x216+0x58]
+      Line 8: "[Mon Jan 01 12:00:08.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request"  [0x26f+0x58]

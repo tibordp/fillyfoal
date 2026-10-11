@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ references.txt — UTF-8 text, LF line endings, 2 lines  [0x0+0x41]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 2 LF, 0 CRLF, 0 CR
+  ▾ Lines — 2 lines  [0x0+0x41]
+      Line 1: "[1] Smith, J. Some paper. 2001."  [0x0+0x1f]
+      Line 2: "[2] Doe, A. Another paper. 2003."  [0x20+0x20]

@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ wrapped.MF — JAR manifest 1.0, main class com.example.Main  [0x0+0xa8]
+  ▾ Main attributes — Manifest-Version: 1.0  [0x0+0xa6]
+      Manifest-Version: "1.0"  [0x0+0x15]
+      Main-Class: "com.example.Main"  [0x17+0x1c]
+      Class-Path: "lib/aaaaaaaaaaaaaaaaaaaaaaaa.jar lib/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jar lib/cccccccccccccccc.jar"  [0x35+0x6f]

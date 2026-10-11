@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ 1.emlx — Apple Mail message: Hi — from a@example.com  [0x0+0x1a5]
+    Byte count: 123 — length of the message  [0x0+0x3]
+  ▾ Message — E-mail: Hi — from a@example.com  [0x4+0x7b]
+    ▾ Headers — 5 fields  [0x4+0x74]
+        From: "a@example.com"  [0x4+0x13]
+        To: "b@example.com"  [0x18+0x11]
+        Subject: "Hi"  [0x2a+0xb]
+        Date: 2024-01-01 12:00:00 UTC — Mon, 1 Jan 2024 12:00:00 +0000  [0x36+0x24]
+        Message-ID: "<1@example.com>"  [0x5b+0x1b]
+    ▾ Body — UTF-8 text, LF line endings, 1 line  [0x78+0x7]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x78+0x7]
+          Line 1: "Hello."  [0x78+0x6]
+  ▾ Properties — Property list (XML), dict with 2 keys  [0x7f+0x126]
+      XML declaration: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"  [0x7f+0x26]
+      DOCTYPE: "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">"  [0xa6+0x66]
+      <plist>: "1.0" — version  [0x10d+0x15]
+      <dict>  [0x123+0x6]
+      date-received: 1704110400  [0x12b+0x37]
+      flags: 8590195713  [0x164+0x2f]
+      </dict>  [0x194+0x7]
+      </plist>  [0x19c+0x8]

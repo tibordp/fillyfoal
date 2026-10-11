@@ -23,6 +23,60 @@ const LEADING: &[&[u8]] = &[
     b"html", b"head", b"body", b"meta", b"title", b"link", b"base", b"style", b"script",
 ];
 
+/// Body tags that start HTML fragments (saved snippets, mail bodies,
+/// templates). XML documents can have roots with these names too, so a
+/// fragment also needs markup only HTML has.
+const FRAGMENT: &[&[u8]] = &[
+    b"div", b"p", b"table", b"span", b"h1", b"h2", b"h3", b"h4", b"h5", b"h6", b"a", b"img", b"ul",
+    b"ol", b"form", b"br", b"section", b"article", b"nav", b"header", b"footer", b"main",
+    b"center", b"font", b"b", b"i",
+];
+
+/// Markup only HTML has: an unclosed void element or a named character
+/// reference beyond XML's five.
+fn html_only(head: &[u8]) -> bool {
+    let lower = head.to_ascii_lowercase();
+    let void = [
+        b"<br".as_slice(),
+        b"<img",
+        b"<hr",
+        b"<input",
+        b"<meta",
+        b"<link",
+    ]
+    .iter()
+    .any(|tag| {
+        let mut from = 0usize;
+        while let Some(at) = crate::bytes::find(&lower, tag, from) {
+            let after = at.saturating_add(tag.len());
+            // The rest of the tag (attributes are short in practice).
+            let rest = lower
+                .get(after..after.saturating_add(512).min(lower.len()))
+                .unwrap_or_default();
+            if matches!(rest.first(), Some(b'>' | b' ' | b'\t' | b'\r' | b'\n'))
+                && rest
+                    .iter()
+                    .position(|&b| b == b'>')
+                    .is_some_and(|end| end == 0 || rest.get(end.saturating_sub(1)) != Some(&b'/'))
+            {
+                return true;
+            }
+            from = after;
+        }
+        false
+    });
+    void || [
+        b"&nbsp;".as_slice(),
+        b"&copy;",
+        b"&mdash;",
+        b"&ndash;",
+        b"&hellip;",
+        b"&raquo;",
+    ]
+    .iter()
+    .any(|e| probe::contains(&lower, e))
+}
+
 fn probe_html(h: &Head<'_>) -> bool {
     let head = probe::head(h);
     let mut rest = probe::trim_start(&head);
@@ -41,7 +95,12 @@ fn probe_html(h: &Head<'_>) -> bool {
     };
     let n = tag.iter().take_while(|b| b.is_ascii_alphanumeric()).count();
     let name = tag.get(..n).unwrap_or_default().to_ascii_lowercase();
-    LEADING.contains(&name.as_slice()) && probe::is_text(h)
+    let delimited = tag
+        .get(n)
+        .is_some_and(|&b| matches!(b, b'>' | b'/' | b' ' | b'\t' | b'\r' | b'\n'));
+    (LEADING.contains(&name.as_slice())
+        || (delimited && FRAGMENT.contains(&name.as_slice()) && html_only(rest)))
+        && probe::is_text(h)
 }
 
 /// `charset` from `<meta charset=...>` or a `Content-Type` meta tag.

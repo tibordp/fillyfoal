@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ koi8r.txt — KOI8-R text, LF line endings, 2 lines  [0x0+0x42]
+    Encoding: "KOI8-R" — guessed from the letters
+    Line endings: "LF" — 2 LF, 0 CRLF, 0 CR
+  ▾ Lines — 2 lines  [0x0+0x42]
+      Line 1: "Привет, мир. Это проверка текста на русском языке."  [0x0+0x32]
+      Line 2: "Вторая строка."  [0x33+0xe]

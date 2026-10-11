@@ -109,6 +109,10 @@ fn sniff_head(h: &Head<'_>, candidates: &[u8]) -> Option<(u8, usize)> {
     if first.starts_with(b"#!") || first.starts_with(b"<") || first.starts_with(b"{") {
         return None;
     }
+    // Terminal colours (`ESC[1;32m`) put a `;` in every line of a log.
+    if probe::contains(&head, b"\x1b[") {
+        return None;
+    }
     let found = sniff(&head, candidates)?;
     probe::is_text(h).then_some(found)
 }
@@ -295,8 +299,23 @@ async fn dissect(cx: Cx, input: Input, candidates: &[u8]) -> Result<()> {
         b'|' => "pipe",
         _ => "other",
     };
-    let per_record = first.next.saturating_sub(first.start).max(1);
-    let estimate = span.len.checked_div(per_record).unwrap_or(0);
+    // Records in the head (quote-aware), extrapolated to the whole input;
+    // the first record alone (often a short header) is no measure.
+    let sampled = to_u64(sample_records(&head, delim, usize::MAX).len());
+    let head_len = to_u64(head.len());
+    let estimate = if head_len >= span.len {
+        let unterminated = head.last().is_some_and(|&b| b != b'\n' && b != b'\r');
+        sampled.saturating_add(u64::from(unterminated))
+    } else {
+        u64::try_from(
+            u128::from(sampled)
+                .saturating_mul(u128::from(span.len))
+                .checked_div(u128::from(head_len))
+                .unwrap_or(0),
+        )
+        .unwrap_or(u64::MAX)
+    }
+    .saturating_sub(u64::from(header));
     let names = if header {
         format!(" ({})", preview(&first_texts.join(", "), 60))
     } else {

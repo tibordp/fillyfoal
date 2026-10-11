@@ -1,0 +1,18 @@
+123
+From: a@example.com
+To: b@example.com
+Subject: Hi
+Date: Mon, 1 Jan 2024 12:00:00 +0000
+Message-ID: <1@example.com>
+
+Hello.
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>date-received</key>
+	<integer>1704110400</integer>
+	<key>flags</key>
+	<integer>8590195713</integer>
+</dict>
+</plist>

@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cp1251.txt — Windows-1251 text, LF line endings, 2 lines  [0x0+0x42]
+    Encoding: "Windows-1251" — guessed from the letters
+    Line endings: "LF" — 2 LF, 0 CRLF, 0 CR
+  ▾ Lines — 2 lines  [0x0+0x42]
+      Line 1: "Привет, мир. Это проверка текста на русском языке."  [0x0+0x32]
+      Line 2: "Вторая строка."  [0x33+0xe]

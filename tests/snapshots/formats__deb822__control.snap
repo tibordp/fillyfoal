@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ control — Debian control data: source hello  [0x0+0x14a]
+  ▾ Source hello — Source: hello  [0x0+0x9b]
+      Source: "hello"  [0x0+0xd]
+      Section: "devel"  [0xe+0xe]
+      Priority: "optional"  [0x1d+0x12]
+      Maintainer: "Example Person <a@example.com>"  [0x30+0x2a]
+      Build-Depends: "debhelper-compat (= 13)"  [0x5b+0x26]
+      Standards-Version: "4.6.0"  [0x82+0x18]
+  ▾ Package hello — Package: hello  [0x9c+0xae]
+      Package: "hello"  [0x9c+0xe]
+      Architecture: "any"  [0xab+0x11]
+      Depends: "${shlibs:Depends}, ${misc:Depends}"  [0xbd+0x2b]
+      Description: "example package\nThis is a long description\nspanning lines.\n\nAnother paragraph."  [0xe9+0x60]

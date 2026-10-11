@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ laravel.log — UTF-8 text, LF line endings, 8 lines  [0x0+0x1e0]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 8 LF, 0 CRLF, 0 CR
+  ▾ Lines — 8 lines  [0x0+0x1e0]
+      Line 1: "[2024-01-01 12:00:01] app.INFO: request handled {\"id\":1} []"  [0x0+0x3b]
+      Line 2: "[2024-01-01 12:00:02] app.INFO: request handled {\"id\":2} []"  [0x3c+0x3b]
+      Line 3: "[2024-01-01 12:00:03] app.INFO: request handled {\"id\":3} []"  [0x78+0x3b]
+      Line 4: "[2024-01-01 12:00:04] app.INFO: request handled {\"id\":4} []"  [0xb4+0x3b]
+      Line 5: "[2024-01-01 12:00:05] app.INFO: request handled {\"id\":5} []"  [0xf0+0x3b]
+      Line 6: "[2024-01-01 12:00:06] app.INFO: request handled {\"id\":6} []"  [0x12c+0x3b]
+      Line 7: "[2024-01-01 12:00:07] app.INFO: request handled {\"id\":7} []"  [0x168+0x3b]
+      Line 8: "[2024-01-01 12:00:08] app.INFO: request handled {\"id\":8} []"  [0x1a4+0x3b]
