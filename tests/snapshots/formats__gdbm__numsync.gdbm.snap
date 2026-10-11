@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ numsync.gdbm — GDBM (extended, 64-bit offsets), 512-byte blocks, 6 directory bits, 16 per bucket  [0x0+0x800]
+    Magic: 0x13579ad1  [0x0+0x4]
+    Block size: 512  [0x4+0x4]
+    Directory offset: 0x200  [0x8+0x8]
+    Directory size: 512  [0x10+0x4]
+    Directory bits: 6  [0x14+0x4]
+    Bucket size: 512  [0x18+0x4]
+    Bucket elements: 16  [0x1c+0x4]
+    Next block: 0x800  [0x20+0x8]
+    Extension version: 0  [0x28+0x4]
+    Sync count: 1  [0x2c+0x4]
+    Padding: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x30+0x18]
+    Avail table size: 26  [0x48+0x4]
+    Avail count: 0  [0x4c+0x4]
+    Avail next block: 0x0  [0x50+0x8]
+    Blocks  [0x200+0x600]
