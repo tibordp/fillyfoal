@@ -267,42 +267,40 @@ async fn blob(cx: Cx, (input, data): (Input, Span)) -> Result<()> {
     crate::formats::dissect_or_data(cx, input.nested(data)).await
 }
 
-/// Commit and tag objects: header lines, a blank line, the message.
+/// Commit and tag objects: header lines, a blank line, the message. A
+/// header value spans several lines when the following lines start with a
+/// space (`gpgsig`, `mergetag`): git strips that space and joins the lines
+/// with newlines (`commit.c`, `read_commit_extra_header_lines`).
 async fn commit_like(cx: &Cx, data: Span) -> Result<()> {
     let bytes = cx.read(data.sub(0, 0x10000)).await?;
     let mut at = 0usize;
     let mut message_at = None;
+    // The header being collected: key, value, start and end offsets.
+    let mut pending: Option<(String, String, usize, usize)> = None;
     for line in bytes.split(|&b| b == b'\n') {
         let len = line.len();
-        let span = data.sub(to_u64(at), to_u64(len));
+        let end = at.saturating_add(len);
         if line.is_empty() {
             message_at = Some(at.saturating_add(1));
             break;
         }
-        let text = String::from_utf8_lossy(line).into_owned();
-        let (key, value) = text.split_once(' ').unwrap_or((text.as_str(), ""));
-        let mut node = Node::new(key.to_owned()).span(span);
-        // author/committer/tagger: "Name <email> 1234567890 +0000"
-        if matches!(key, "author" | "committer" | "tagger")
-            && let Some((who, when)) = value.rsplit_once("> ")
+        if let (Some(rest), Some((_, value, _, last))) = (line.strip_prefix(b" "), pending.as_mut())
         {
-            let seconds = when
-                .split_whitespace()
-                .next()
-                .and_then(|s| s.parse::<i64>().ok());
-            node = node.value(Value::Text(format!("{who}>")));
-            if let Some(s) = seconds {
-                node = node.summary(format!(
-                    "{} {}",
-                    crate::render::value(&Value::Timestamp { unix_seconds: s }),
-                    when.split_whitespace().nth(1).unwrap_or_default()
-                ));
-            }
+            value.push('\n');
+            value.push_str(&String::from_utf8_lossy(rest));
+            *last = end;
         } else {
-            node = node.value(Value::Text(value.to_owned()));
+            if let Some((key, value, start, last)) = pending.take() {
+                cx.emit(commit_header(data, key, &value, start, last));
+            }
+            let text = String::from_utf8_lossy(line).into_owned();
+            let (key, value) = text.split_once(' ').unwrap_or((text.as_str(), ""));
+            pending = Some((key.to_owned(), value.to_owned(), at, end));
         }
-        cx.emit(node);
-        at = at.saturating_add(len).saturating_add(1);
+        at = end.saturating_add(1);
+    }
+    if let Some((key, value, start, last)) = pending.take() {
+        cx.emit(commit_header(data, key, &value, start, last));
     }
     if let Some(m) = message_at {
         let span = data.tail(to_u64(m));
@@ -314,6 +312,36 @@ async fn commit_like(cx: &Cx, data: Span) -> Result<()> {
         );
     }
     Ok(())
+}
+
+/// One commit or tag header (`start..end` in `data`, continuation lines
+/// included).
+fn commit_header(data: Span, key: String, value: &str, start: usize, end: usize) -> Node {
+    let span = data.sub(to_u64(start), to_u64(end.saturating_sub(start)));
+    let person = matches!(key.as_str(), "author" | "committer" | "tagger");
+    let mut node = Node::new(key).span(span);
+    // author/committer/tagger: "Name <email> 1234567890 +0000"
+    if person && let Some((who, when)) = value.rsplit_once("> ") {
+        let seconds = when
+            .split_whitespace()
+            .next()
+            .and_then(|s| s.parse::<i64>().ok());
+        node = node.value(Value::Text(format!("{who}>")));
+        if let Some(s) = seconds {
+            node = node.summary(format!(
+                "{} {}",
+                crate::render::value(&Value::Timestamp { unix_seconds: s }),
+                when.split_whitespace().nth(1).unwrap_or_default()
+            ));
+        }
+    } else {
+        node = node.value(Value::Text(clip(value, 4000)));
+        let lines = value.lines().count();
+        if lines > 1 {
+            node = node.summary(format!("{lines} lines"));
+        }
+    }
+    node
 }
 
 async fn tree_entries(cx: Cx, data: Span) -> Result<()> {
