@@ -318,6 +318,21 @@ fn le_int(b: &[u8], signed: bool) -> i64 {
 
 /// A run: cluster count and starting cluster (`None` for sparse runs).
 fn parse_runs(data: &[u8]) -> (Vec<(u64, Option<u64>)>, Option<Diagnostic>) {
+    let (runs, problem) = located_runs(data);
+    (runs.into_iter().map(|r| (r.count, r.lcn)).collect(), problem)
+}
+
+/// A decoded run and where its bytes are in the runlist.
+#[derive(Clone, Copy, Debug)]
+struct Run {
+    at: u64,
+    len: u64,
+    count: u64,
+    lcn: Option<u64>,
+}
+
+/// Decodes a runlist, keeping each run's position in it.
+fn located_runs(data: &[u8]) -> (Vec<Run>, Option<Diagnostic>) {
     let mut out = Vec::new();
     let mut at = 0usize;
     let mut lcn = 0i64;
@@ -353,11 +368,17 @@ fn parse_runs(data: &[u8]) -> (Vec<(u64, Option<u64>)>, Option<Diagnostic>) {
             lcn = lcn.saturating_add(le_int(off, true));
             u64::try_from(lcn).ok()
         };
-        out.push((count, start));
+        let end = off_at.saturating_add(off_bytes);
+        out.push(Run {
+            at: crate::bytes::to_u64(at),
+            len: crate::bytes::to_u64(end.saturating_sub(at)),
+            count,
+            lcn: start,
+        });
         if out.len() >= MAX_RUNS {
             return (out, Some(Diagnostic::limit("too many runs")));
         }
-        at = off_at.saturating_add(off_bytes);
+        at = end;
     }
     (
         out,
@@ -1079,13 +1100,15 @@ async fn attribute_fields(cx: Cx, (store, a, record): (Store, Arc<Attr>, u64)) -
     }
     let Some(runs) = a.runs else { return Ok(()) };
     let raw = cx.read_avail(runs).await?;
-    let (list, problem) = parse_runs(&raw);
+    let (located, problem) = located_runs(&raw);
     if let Some(d) = problem {
         cx.diag(d);
     }
+    let list: Vec<(u64, Option<u64>)> = located.iter().map(|r| (r.count, r.lcn)).collect();
     let mut vcn = a.lowest_vcn;
-    for (i, &(count, lcn)) in list.iter().enumerate() {
-        let node = Node::new(format!("Run {i}"));
+    for (i, run) in located.iter().enumerate() {
+        let (count, lcn) = (run.count, run.lcn);
+        let node = Node::new(format!("Run {i}")).span(runs.sub(run.at, run.len));
         let node = match lcn {
             Some(l) => {
                 let node = node.summary(format!("VCN {vcn}: {count} clusters at LCN {l}"));
