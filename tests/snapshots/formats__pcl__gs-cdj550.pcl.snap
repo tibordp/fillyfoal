@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ gs-cdj550.pcl — PCL 5 print job, 10 commands, 1 pages  [0x0+0xaf]
+    End raster graphics, End raster graphics: "b C"  [0x0+0x5]
+    Raster resolution: "75R"  [0x5+0x6]
+    Page size, Orientation, Perforation skip, Top margin: "80a o l E"  [0xb+0x9]
+    *oD, *oQ: "1d 2Q"  [0x14+0x7]
+    Vertical position (dots): "38Y"  [0x1b+0x6]
+    Raster width, Simple colour, Start raster graphics: "112s -4u 0A"  [0x21+0xc]
+    Compression method, Raster Y offset, Raster data (plane), Raster data (plane), Raster data (plane), Raster data, Raster data (plane), Raster data (plane), Raster data (plane), Raster data, Raster data, Raster data (plane), Raster data (plane), Raster data (plane), Raster data, Raster data (plane), Raster data (plane), Raster data (plane), Raster data, Raster data (plane), Raster data (plane), Raster data (plane), Raster data, Raster data (plane), Raster data (plane), Raster data (plane), Raster data, Compression method: "9m 68y v 3v 5v 4w v 3v 4v 4w w v 3v 2v 4w 4v 4v v 4w 4v 4v v 4w 3v 3v v 3w 0M"  [0x2d+0x76]
+    End raster graphics, End raster graphics: "b C"  [0xa3+0x5]
+    Reset  [0xa8+0x2]
+    Paper source: "0H"  [0xaa+0x5]

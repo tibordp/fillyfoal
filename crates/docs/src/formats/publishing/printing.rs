@@ -133,8 +133,61 @@ async fn pjl(cx: Cx, input: Input) -> Result<()> {
 // ---------------------------------------------------------------------------
 // PCL 5
 
+/// The length of the well-formed parameterized command (`ESC`, parameter
+/// character, group character, then `value` + terminator pairs, the last
+/// terminator upper case) at the start of `d`, if there is one; commands
+/// that carry data (`W`) end the check.
+fn pcl_command_len(d: &[u8]) -> Option<(usize, bool)> {
+    let (&esc, rest) = d.split_first()?;
+    let (&param, rest) = rest.split_first()?;
+    let (&group, _) = rest.split_first()?;
+    if esc != 0x1b || !matches!(param, b'*' | b'&' | b'(' | b')') || !(0x60..=0x7e).contains(&group)
+    {
+        return None;
+    }
+    let mut at = 3usize;
+    loop {
+        let digits = d
+            .get(at..)?
+            .iter()
+            .take(16)
+            .take_while(|b| b.is_ascii_digit() || matches!(b, b'+' | b'-' | b'.'))
+            .count();
+        at = at.saturating_add(digits);
+        let term = *d.get(at)?;
+        at = at.saturating_add(1);
+        match term {
+            b'W' => return Some((at, true)),
+            0x40..=0x5e => return Some((at, false)),
+            0x60..=0x7e if at < 64 => {}
+            _ => return None,
+        }
+    }
+}
+
+/// A job starting with `ESC E` (reset), or with a run of well-formed
+/// parameterized commands: Ghostscript's colour drivers (`cdj550`,
+/// `pjxl300`) start with `ESC*rbC` and never send a reset.
+fn pcl_probe(h: &Head<'_>) -> bool {
+    if h.starts_with(b"\x1bE\x1b") || h.starts_with(b"\x1bE\r\n\x1b") {
+        return true;
+    }
+    let mut at = 0usize;
+    for seen in 1..=3 {
+        let Some((len, data)) = h.data.get(at..).and_then(pcl_command_len) else {
+            return false;
+        };
+        at = at.saturating_add(len);
+        if data {
+            // Its data hides what follows.
+            return seen >= 2;
+        }
+    }
+    true
+}
+
 declare_format!(pub PCL = "pcl", "HP Printer Command Language (PCL 5)", ["pcl", "prn"], "application/vnd.hp-pcl",
-    Probe::Custom(|h| h.starts_with(b"\x1bE\x1b") || (h.starts_with(b"\x1bE\r\n\x1b"))), pcl);
+    Probe::Custom(pcl_probe), pcl);
 
 /// Names of parameterized commands by group character and terminator
 /// (upper-cased); the parameter character is the first byte.
@@ -318,8 +371,13 @@ async fn pcl_command(scan: &mut Scanner<'_>, pos: u64) -> Result<(u64, String, V
             str::to_owned,
         ));
         parts.push(format!("{value}{}", char::from(term)));
-        // Commands that carry binary data: W terminators and &p#X.
-        if up == b'W' || (param == b'&' && group == b'p' && up == b'X') {
+        // Commands that carry binary data: W terminators, &p#X and *b#V
+        // (raster data by plane, also lower case inside a combined
+        // sequence: `*b16v<16 bytes>16v<16 bytes>16W<16 bytes>`).
+        if up == b'W'
+            || (param == b'&' && group == b'p' && up == b'X')
+            || (param == b'*' && group == b'b' && up == b'V')
+        {
             let n: u64 = value.trim_start_matches('+').parse().unwrap_or(0);
             at = at.saturating_add(n).min(scan.len());
         }
@@ -400,6 +458,8 @@ fn pclxl_probe(h: &Head<'_>) -> bool {
 declare_format!(pub PCLXL = "pcl-xl", "HP PCL XL (PCL 6) print stream", ["pxl", "pcl"], "application/vnd.hp-pclxl",
     Probe::Custom(pclxl_probe), pclxl);
 
+/// Operator tags, as in the PCL XL Feature Reference (protocol class 3.0)
+/// and Ghostscript's `pxptable.c`; the gaps are reserved.
 const XL_OPERATORS: &[(u8, &str)] = &[
     (0x41, "BeginSession"),
     (0x42, "EndSession"),
@@ -409,6 +469,9 @@ const XL_OPERATORS: &[(u8, &str)] = &[
     (0x47, "Comment"),
     (0x48, "OpenDataSource"),
     (0x49, "CloseDataSource"),
+    (0x4a, "EchoComment"),
+    (0x4b, "Query"),
+    (0x4c, "Diagnostic3"),
     (0x4f, "BeginFontHeader"),
     (0x50, "ReadFontHeader"),
     (0x51, "EndFontHeader"),
@@ -417,50 +480,69 @@ const XL_OPERATORS: &[(u8, &str)] = &[
     (0x54, "EndChar"),
     (0x55, "RemoveFont"),
     (0x56, "SetCharAttributes"),
+    (0x57, "SetDefaultGS"),
+    (0x58, "SetColorTreatment"),
     (0x5b, "BeginStream"),
     (0x5c, "ReadStream"),
     (0x5d, "EndStream"),
     (0x5e, "ExecStream"),
+    (0x5f, "RemoveStream"),
     (0x60, "PopGS"),
     (0x61, "PushGS"),
+    (0x62, "SetClipReplace"),
+    (0x63, "SetBrushSource"),
+    (0x64, "SetCharAngle"),
+    (0x65, "SetCharScale"),
+    (0x66, "SetCharShear"),
+    (0x67, "SetClipIntersect"),
+    (0x68, "SetClipRectangle"),
+    (0x69, "SetClipToPage"),
     (0x6a, "SetColorSpace"),
     (0x6b, "SetCursor"),
-    (0x6d, "SetFont"),
-    (0x6e, "SetLineDash"),
-    (0x6f, "SetLineCap"),
-    (0x70, "SetLineJoin"),
-    (0x71, "SetMiterLimit"),
+    (0x6c, "SetCursorRel"),
+    (0x6d, "SetHalftoneMethod"),
+    (0x6e, "SetFillMode"),
+    (0x6f, "SetFont"),
+    (0x70, "SetLineDash"),
+    (0x71, "SetLineCap"),
+    (0x72, "SetLineJoin"),
+    (0x73, "SetMiterLimit"),
     (0x74, "SetPageDefaultCTM"),
     (0x75, "SetPageOrigin"),
     (0x76, "SetPageRotation"),
     (0x77, "SetPageScale"),
-    (0x78, "SetPaintTxMode"),
-    (0x79, "SetPenWidth"),
-    (0x7a, "SetROP"),
-    (0x7b, "SetSourceTxMode"),
-    (0x7c, "SetCharBoldValue"),
-    (0x7e, "SetClipMode"),
-    (0x7f, "SetPathToClip"),
-    (0x80, "SetCharShear"),
-    (0x81, "SetCharScale"),
-    (0x82, "SetCharAngle"),
-    (0x84, "NewPath"),
-    (0x85, "PaintPath"),
-    (0x86, "ArcPath"),
-    (0x88, "BezierPath"),
-    (0x8a, "BezierRelPath"),
-    (0x8b, "Chord"),
-    (0x8c, "ChordPath"),
-    (0x8d, "Ellipse"),
-    (0x8e, "EllipsePath"),
-    (0x91, "LinePath"),
-    (0x93, "LineRelPath"),
-    (0x94, "Pie"),
-    (0x95, "PiePath"),
-    (0x96, "Rectangle"),
-    (0x97, "RectanglePath"),
-    (0x98, "RoundRectangle"),
-    (0x99, "RoundRectanglePath"),
+    (0x78, "SetPatternTxMode"),
+    (0x79, "SetPenSource"),
+    (0x7a, "SetPenWidth"),
+    (0x7b, "SetROP"),
+    (0x7c, "SetSourceTxMode"),
+    (0x7d, "SetCharBoldValue"),
+    (0x7e, "SetNeutralAxis"),
+    (0x7f, "SetClipMode"),
+    (0x80, "SetPathToClip"),
+    (0x81, "SetCharSubMode"),
+    (0x82, "BeginUserDefinedLineCap"),
+    (0x83, "EndUserDefinedLineCap"),
+    (0x84, "CloseSubPath"),
+    (0x85, "NewPath"),
+    (0x86, "PaintPath"),
+    (0x91, "ArcPath"),
+    (0x92, "SetColorTrapping"),
+    (0x93, "BezierPath"),
+    (0x94, "SetAdaptiveHalftoning"),
+    (0x95, "BezierRelPath"),
+    (0x96, "Chord"),
+    (0x97, "ChordPath"),
+    (0x98, "Ellipse"),
+    (0x99, "EllipsePath"),
+    (0x9b, "LinePath"),
+    (0x9d, "LineRelPath"),
+    (0x9e, "Pie"),
+    (0x9f, "PiePath"),
+    (0xa0, "Rectangle"),
+    (0xa1, "RectanglePath"),
+    (0xa2, "RoundRectangle"),
+    (0xa3, "RoundRectanglePath"),
     (0xa8, "Text"),
     (0xa9, "TextPath"),
     (0xb0, "BeginImage"),
@@ -472,6 +554,7 @@ const XL_OPERATORS: &[(u8, &str)] = &[
     (0xb6, "BeginScan"),
     (0xb8, "EndScan"),
     (0xb9, "ScanLineRel"),
+    (0xba, "PassThrough"),
 ];
 
 /// Element size of a PCL XL data type, and how many elements a scalar,
