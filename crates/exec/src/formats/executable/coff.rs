@@ -641,20 +641,52 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         );
     }
     if h.symptr != 0 {
-        cx.emit(
-            Node::new("Symbol Table")
-                .span(symbols)
-                .summary(format!("{} records", c.nsyms))
-                .lazy(symbol_list, c.clone()),
-        );
-        let strtab = file.sub(strings_at, to_u64(c.strings.len()));
-        cx.emit(
-            Node::new("String Table")
-                .span(strtab)
-                .lazy(cstrings, strtab.tail(4)),
-        );
+        for node in symbol_nodes(&c) {
+            cx.emit(node);
+        }
     }
     Ok(())
+}
+
+/// The "Symbol Table" and "String Table" nodes (the string table follows
+/// the symbols).
+fn symbol_nodes(c: &Coff) -> [Node; 2] {
+    let strtab = c
+        .file
+        .sub(c.symbols.end().saturating_sub(c.file.offset), to_u64(c.strings.len()));
+    [
+        Node::new("Symbol Table")
+            .span(c.symbols)
+            .summary(format!("{} records", c.nsyms))
+            .lazy(symbol_list, c.clone()),
+        Node::new("String Table")
+            .span(strtab)
+            .lazy(cstrings, strtab.tail(4)),
+    ]
+}
+
+/// The COFF symbol table of an image (MinGW's PE images keep one after the
+/// last section), with `strings` the string table already loaded for the
+/// section names.
+pub(super) fn image_symbols(
+    file: Span,
+    machine: u16,
+    sections: Vec<Section>,
+    symptr: u32,
+    nsyms: u32,
+    strings: Vec<u8>,
+) -> [Node; 2] {
+    let symbols = file.sub(symptr.into(), u64::from(nsyms).saturating_mul(18));
+    let info = CoffInfo {
+        file,
+        big: false,
+        machine,
+        sections,
+        symbols,
+        nsyms: u32::try_from(symbols.len / 18).unwrap_or(0),
+        strings,
+    };
+    symbol_nodes(&Arc::new(info))
 }
 
 /// `IMAGE_SCN_LNK_NRELOC_OVFL`: the section has more than 65,535

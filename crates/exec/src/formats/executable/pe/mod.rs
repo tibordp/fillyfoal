@@ -196,6 +196,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         );
     }
 
+    if let Some(nodes) = pe.symbol_table() {
+        for node in nodes {
+            cx.emit(node);
+        }
+    }
+
     let end = pe.image_end();
     if end < file.len {
         // The certificate table is appended after the image; anything
@@ -321,6 +327,7 @@ async fn load(cx: &Cx, input: Input, lfanew: u64) -> Result<Pe> {
         section_table: table,
         sections,
         strings,
+        symbols: (header.symptr, header.nsyms),
         rva_index,
         directories,
     }))
@@ -416,6 +423,8 @@ struct PeInfo {
     sections: Vec<Section>,
     /// The COFF string table, if the image has a symbol table.
     strings: Vec<u8>,
+    /// `PointerToSymbolTable` and `NumberOfSymbols`.
+    symbols: (u32, u32),
     /// The sections' RVA ranges, for [`PeInfo::rva_offset`].
     rva_index: RangeIndex,
     directories: [(u32, u32); 16],
@@ -467,15 +476,48 @@ impl PeInfo {
         self.directories.get(index).copied().unwrap_or((0, 0))
     }
 
-    /// The end of the image in the file: the furthest section or header byte.
+    /// The end of the image in the file: the furthest section or header
+    /// byte, or the end of the COFF symbol and string tables.
     fn image_end(&self) -> u64 {
         self.sections
             .iter()
             .filter(|s| s.raw_size > 0)
             .map(|s| u64::from(s.raw_pointer).saturating_add(s.raw_size.into()))
             .chain([u64::from(self.size_of_headers)])
+            .chain(self.symbol_table_end())
             .max()
             .unwrap_or(0)
+    }
+
+    fn has_symbol_table(&self) -> bool {
+        self.symbols.0 != 0 && u64::from(self.symbols.0) < self.file().len
+    }
+
+    /// Where the COFF symbol and string tables end, if the image has them.
+    fn symbol_table_end(&self) -> Option<u64> {
+        let (symptr, nsyms) = self.symbols;
+        self.has_symbol_table().then(|| {
+            u64::from(symptr)
+                .saturating_add(u64::from(nsyms).saturating_mul(18))
+                .saturating_add(to_u64(self.strings.len()))
+                .min(self.file().len)
+        })
+    }
+
+    /// The nodes of the COFF symbol and string tables, if the image has
+    /// them (MinGW images do, unless stripped).
+    fn symbol_table(&self) -> Option<[Node; 2]> {
+        let (symptr, nsyms) = self.symbols;
+        self.has_symbol_table().then(|| {
+            super::coff::image_symbols(
+                self.file(),
+                self.machine,
+                self.sections.clone(),
+                symptr,
+                nsyms,
+                self.strings.clone(),
+            )
+        })
     }
 
     fn section_of(&self, rva: u32) -> Option<&Section> {
