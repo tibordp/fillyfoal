@@ -372,6 +372,9 @@ struct Fs {
     inodes_per_group: u64,
     inode_size: u64,
     desc_size: u64,
+    /// The contiguous descriptor table after the superblock: every group's
+    /// descriptor, or with META_BG those of the first `first_meta_bg`
+    /// meta groups.
     gdt: Span,
     groups: u64,
     wide: bool,
@@ -385,6 +388,9 @@ struct Fs {
     backup_bgs: Option<[u64; 2]>,
     reserved_gdt: u64,
     meta_bg: bool,
+    /// META_BG: the first meta group (in descriptor blocks) whose
+    /// descriptors live in its own groups rather than in `gdt`.
+    first_meta_bg: u64,
 }
 
 type FsRef = Arc<Fs>;
@@ -406,11 +412,56 @@ impl Fs {
         if g >= self.groups {
             return Err(Diagnostic::malformed(format!("group {g} does not exist")));
         }
-        let span = self
-            .gdt
-            .sub(g.saturating_mul(self.desc_size), self.desc_size);
+        let span = self.desc_span(g);
         let raw = cx.read(span).await?;
         Ok((span, gd_parse(&raw, self.wide && self.desc_size >= 64), raw))
+    }
+
+    /// Descriptors per descriptor block (the groups in a meta group).
+    fn descs_per_block(&self) -> u64 {
+        self.block.checked_div(self.desc_size).unwrap_or(1).max(1)
+    }
+
+    /// Whether group `g` is in a META_BG meta group, whose descriptor block
+    /// is stored in the meta group itself rather than in `gdt`.
+    fn in_meta_group(&self, g: u64) -> bool {
+        self.meta_bg && g.checked_div(self.descs_per_block()).unwrap_or(0) >= self.first_meta_bg
+    }
+
+    /// The block holding meta group `m`'s descriptors: in the meta group's
+    /// first group, after its superblock backup if it has one (as
+    /// `descriptor_loc` in the kernel's ext4/super.c).
+    fn meta_desc_block(&self, m: u64) -> u64 {
+        let first = m.saturating_mul(self.descs_per_block());
+        let mut skip = u64::from(self.has_super(first));
+        if self.block == 1024 && m == 0 && self.first_data_block == 0 {
+            skip = skip.saturating_add(1);
+        }
+        self.group_start(first).saturating_add(skip)
+    }
+
+    /// Where group `g`'s descriptor is stored.
+    fn desc_span(&self, g: u64) -> Span {
+        if self.in_meta_group(g) {
+            let per = self.descs_per_block();
+            let at = self
+                .meta_desc_block(g.checked_div(per).unwrap_or(0))
+                .saturating_mul(self.block)
+                .saturating_add(
+                    g.checked_rem(per)
+                        .unwrap_or(0)
+                        .saturating_mul(self.desc_size),
+                );
+            self.vol.sub(at, self.desc_size)
+        } else {
+            self.gdt
+                .sub(g.saturating_mul(self.desc_size), self.desc_size)
+        }
+    }
+
+    /// Descriptor blocks in the contiguous table (and in each backup of it).
+    fn gdt_blocks(&self) -> u64 {
+        self.gdt.len.div_ceil(self.block)
     }
 
     /// The span of inode `ino`'s record.
@@ -564,7 +615,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     } else {
         u64::from(sb.inode_size).clamp(128, block)
     };
-    let gdt_block = u64::from(sb.first_data_block).saturating_add(1);
+    // The table starts in the block after the superblock's.
+    let gdt_block = SUPER.checked_div(block).unwrap_or(0).saturating_add(1);
+    let meta_bg = sb.incompat & 0x10 != 0;
+    let first_meta_bg = u64::from(sb.first_meta_bg);
+    let contiguous = if meta_bg {
+        groups.min(first_meta_bg.saturating_mul(block.checked_div(desc_size).unwrap_or(1)))
+    } else {
+        groups
+    };
     let csum = (sb.ro_compat & 0x400 != 0).then(|| {
         if sb.incompat & 0x2000 != 0 {
             sb.checksum_seed
@@ -590,7 +649,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         desc_size,
         gdt: vol.sub(
             gdt_block.saturating_mul(block),
-            groups.saturating_mul(desc_size),
+            contiguous.saturating_mul(desc_size),
         ),
         groups,
         wide,
@@ -601,7 +660,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         sparse_super: sb.ro_compat & 0x1 != 0,
         backup_bgs,
         reserved_gdt: sb.reserved_gdt_blocks.into(),
-        meta_bg: sb.incompat & 0x10 != 0,
+        meta_bg,
+        first_meta_bg,
     });
     if block > SUPER.saturating_mul(2) || sb.first_data_block == 0 {
         cx.emit(
@@ -616,12 +676,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .summary("block 0, left for a boot loader"),
         );
     }
-    cx.emit(
-        Node::new("Block group descriptors")
-            .span(fs.gdt)
-            .summary(format!("{groups} groups of {} blocks", sb.blocks_per_group))
-            .lazy(group_descriptors, fs.clone()),
-    );
+    let mut descs = Node::new("Block group descriptors")
+        .summary(if meta_bg && contiguous < groups {
+            format!(
+                "{groups} groups of {} blocks; META_BG from group {contiguous}",
+                sb.blocks_per_group
+            )
+        } else {
+            format!("{groups} groups of {} blocks", sb.blocks_per_group)
+        })
+        .lazy(group_descriptors, fs.clone());
+    if fs.gdt.len > 0 {
+        descs = descs.span(fs.gdt);
+    }
+    cx.emit(descs);
     cx.emit(
         Node::new("Block groups")
             .summary(format!("{groups} groups"))
@@ -709,10 +777,12 @@ async fn group_descriptors(cx: Cx, fs: FsRef) -> Result<()> {
         }
         cx.push(node).await;
     }
-    let used = fs.groups.saturating_mul(fs.desc_size);
-    let gdt_blocks = used.div_ceil(fs.block);
-    let tail = fs.blocks_span(fs.first_data_block.saturating_add(1), gdt_blocks);
-    if tail.len > used {
+    let used = fs.gdt.len;
+    let tail = fs.vol.sub(
+        fs.gdt.offset.saturating_sub(fs.vol.offset),
+        fs.gdt_blocks().saturating_mul(fs.block),
+    );
+    if used > 0 && tail.len > used {
         cx.emit(
             Node::new("Unused")
                 .span(tail.tail(used))
@@ -746,17 +816,14 @@ async fn group(cx: Cx, (fs, g): (FsRef, u64)) -> Result<()> {
     let (dspan, gd, raw) = fs.desc(&cx, g).await?;
     let wide = fs.wide && fs.desc_size >= 64;
     let first = fs.group_start(g);
-    let gdt_blocks = fs.groups.saturating_mul(fs.desc_size).div_ceil(fs.block);
-    if fs.has_super(g) && !fs.meta_bg {
+    let gdt_blocks = fs.gdt_blocks();
+    let per = fs.descs_per_block();
+    let has_super = fs.has_super(g);
+    if has_super {
         if g == 0 {
             cx.emit(
                 Node::new("Superblock (primary)")
                     .span(fs.vol.sub(SUPER, 1024))
-                    .summary("shown at the top level"),
-            );
-            cx.emit(
-                Node::new("Group descriptors (primary)")
-                    .span(fs.gdt)
                     .summary("shown at the top level"),
             );
         } else {
@@ -765,6 +832,44 @@ async fn group(cx: Cx, (fs, g): (FsRef, u64)) -> Result<()> {
                 fs.vol.sub(first.saturating_mul(fs.block), 1024),
                 LE,
             ));
+        }
+    }
+    if fs.in_meta_group(g) {
+        // A META_BG meta group keeps its descriptor block in its first
+        // group, with backups in its second and last groups.
+        let m = g.checked_div(per).unwrap_or(0);
+        let within = g.checked_rem(per).unwrap_or(0);
+        if within == 0 || within == 1 || within == per.saturating_sub(1) {
+            let start = m.saturating_mul(per);
+            let end = start.saturating_add(per).min(fs.groups).saturating_sub(1);
+            let (name, note) = if within == 0 {
+                ("Group descriptors (meta group)", ", shown at the top level")
+            } else {
+                ("Group descriptors (meta group backup)", "")
+            };
+            cx.emit(
+                Node::new(name)
+                    .span(fs.block_span(if within == 0 {
+                        fs.meta_desc_block(m)
+                    } else {
+                        first.saturating_add(u64::from(has_super))
+                    }))
+                    .summary(format!("meta group {m}: groups {start}–{end}{note}")),
+            );
+        }
+    } else if has_super {
+        // Other groups with a superblock copy also hold the contiguous
+        // descriptor table and the reserved GDT blocks (as the kernel's
+        // `ext4_num_base_meta_blocks`).
+        if g == 0 {
+            if gdt_blocks > 0 {
+                cx.emit(
+                    Node::new("Group descriptors (primary)")
+                        .span(fs.gdt)
+                        .summary("shown at the top level"),
+                );
+            }
+        } else if gdt_blocks > 0 {
             cx.emit(
                 Node::new("Group descriptors (backup)")
                     .span(fs.blocks_span(first.saturating_add(1), gdt_blocks))
