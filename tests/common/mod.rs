@@ -14,6 +14,15 @@ use fillyfoal::{
 /// `tests/unsized.rs`.
 pub const LARGE_FIXTURE: usize = 4 << 20;
 
+/// The wall-clock ceiling for one small-budget poll in the step tests
+/// (`parse_budget`, `parser_steps`, `sync_parsers_budget`, `pdf_bounded`).
+/// Their deterministic guarantee is the yield count: the parse charges
+/// enough units that it must suspend many times. Uncharged work is
+/// invisible to units, so the ceiling remains, but only as a backstop for a
+/// whole input parsed in one step; it is generous (a poll is about a
+/// millisecond) so that a loaded machine cannot trip it.
+pub const POLL_CEILING: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Whether a fixture is stored compressed only for size: a whole disk image
 /// kept as `<name>.raw.zst` (`zstd -19`), or, outside `fixtures/gzip/`, as
 /// `<name>.gz` (`gzip -n`). Other `.zst`/`.gz` fixtures are genuine tests of

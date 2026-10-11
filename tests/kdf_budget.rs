@@ -12,32 +12,64 @@
 
 mod common;
 
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use common::Host;
-use fillyfoal::codec::crypto::{self, Pbkdf2, Sha1};
+use fillyfoal::codec::crypto::{self, Pbkdf2, Sha1, Stepped};
 use fillyfoal::{ChildState, Cx, Limits, Node, Progress, Result, Value};
 
-/// PBKDF2-HMAC-SHA1 with the largest iteration count a file can ask for.
-async fn huge_pbkdf2(cx: Cx, (): ()) -> Result<()> {
-    let mut kdf = Pbkdf2::<Sha1>::new(b"fillyfoal", b"salt", u32::MAX, 20);
+/// A key derivation that counts the units of work it has done (for
+/// PBKDF2, HMAC iterations), so a test can bound the work of each poll
+/// deterministically instead of timing it.
+struct Counted<K> {
+    kdf: K,
+    done: Arc<AtomicU64>,
+}
+
+impl<K: Stepped> Stepped for Counted<K> {
+    fn advance(&mut self, units: u32) -> u32 {
+        let used = self.kdf.advance(units);
+        self.done.fetch_add(u64::from(used), Ordering::Relaxed);
+        used
+    }
+
+    fn done(&self) -> bool {
+        self.kdf.done()
+    }
+}
+
+/// PBKDF2-HMAC-SHA1 with the largest iteration count a file can ask for;
+/// the iterations done so far are counted in `done`.
+async fn huge_pbkdf2(cx: Cx, done: Arc<AtomicU64>) -> Result<()> {
+    let mut kdf = Counted {
+        kdf: Pbkdf2::<Sha1>::new(b"fillyfoal", b"salt", u32::MAX, 20),
+        done,
+    };
     crypto::run(&cx, &mut kdf).await;
-    cx.emit(Node::new("key").value(Value::Bytes(kdf.finish())));
+    cx.emit(Node::new("key").value(Value::Bytes(kdf.kdf.finish())));
     Ok(())
 }
 
 #[test]
 fn huge_pbkdf2_yields_in_bounded_steps() {
+    let done = Arc::new(AtomicU64::new(0));
     let mut host = Host::new(Vec::new(), Limits::default());
     let root = host
         .session
-        .add_root(Node::new("kdf").lazy(huge_pbkdf2, ()));
+        .add_root(Node::new("kdf").lazy(huge_pbkdf2, Arc::clone(&done)));
     host.session.expand(root, 10);
+    let budget = 2_000;
     for _ in 0..20 {
-        let start = Instant::now();
-        assert_eq!(host.session.poll_node(root, 2_000), Progress::Yielded);
-        // 2000 units are about a millisecond; allow for a slow machine.
-        assert!(start.elapsed() < Duration::from_millis(500));
+        let before = done.load(Ordering::Relaxed);
+        assert_eq!(host.session.poll_node(root, budget), Progress::Yielded);
+        // Each poll does about its budget of iterations: at most one more
+        // chunk than the budget allows, and some progress.
+        let used = done.load(Ordering::Relaxed) - before;
+        assert!(
+            used > 0 && used <= budget + u64::from(crypto::CHUNK),
+            "{used} iterations in one poll"
+        );
     }
     let children = host.session.children(root).unwrap();
     assert!(children.ids.is_empty());
@@ -58,7 +90,7 @@ fn huge_pbkdf2_stops_at_the_work_limit() {
     host.budget = 10_000;
     let root = host
         .session
-        .add_root(Node::new("kdf").lazy(huge_pbkdf2, ()));
+        .add_root(Node::new("kdf").lazy(huge_pbkdf2, Arc::new(AtomicU64::new(0))));
     host.session.expand(root, 10);
     host.run();
     let children = host.session.children(root).unwrap();
@@ -101,9 +133,12 @@ fn pkcs8_with_ten_million_iterations_yields_while_deriving() {
         .child(host.root, "Decrypted key")
         .expect("a Decrypted key node");
     host.session.expand(key, 100);
+    // Deriving the key takes ten million HMAC iterations, each charged as
+    // a unit of work: if the derivation were not budgeted, the first polls
+    // would finish it. Instead every poll yields and 50 polls of 2000
+    // units (about 100k iterations) leave it running.
     let mut yields = 0;
     for _ in 0..50 {
-        let start = Instant::now();
         match host.session.poll_node(key, 2_000) {
             Progress::Yielded => yields += 1,
             Progress::NeedBytes(requests) => {
@@ -116,7 +151,6 @@ fn pkcs8_with_ten_million_iterations_yields_while_deriving() {
             }
             other => panic!("unexpected {other:?}"),
         }
-        assert!(start.elapsed() < Duration::from_millis(500));
     }
     assert!(yields >= 40, "{yields} yields");
     assert!(matches!(
