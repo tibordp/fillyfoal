@@ -261,7 +261,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     pos = pos.saturating_add(whole.len);
 
     let (whole, data) = section(&cx, file, pos, psb).await?;
-    let layers = layer_count(&cx, data, psb).await;
+    let mut layers = layer_count(&cx, data, psb).await;
+    if matches!(layers, None | Some(0)) {
+        // 16- and 32-bit documents keep their layers in a global Lr16/Lr32
+        // block and leave the layer info section empty.
+        let (info, _) = section(&cx, data, 0, psb).await?;
+        let after = data.tail(info.len);
+        if after.len >= 4 {
+            let (mask, _) = section(&cx, after, 0, false).await?;
+            if let Some(n) = tagged_layer_count(&cx, after.tail(mask.len), psb).await? {
+                layers = Some(n);
+            }
+        }
+    }
     let mut node = Node::new("Layer and Mask Information").span(whole);
     if let Some(n) = layers {
         node = node.summary(format!("{} layers", n.unsigned_abs()));
@@ -332,7 +344,7 @@ async fn layer_and_mask(cx: Cx, (whole, psb): (Span, bool)) -> Result<()> {
             cx.emit(
                 Node::new("Additional Layer Information")
                     .span(rest)
-                    .lazy(tagged_blocks, (rest, psb)),
+                    .lazy(tagged_blocks, (rest, psb, GLOBAL_ALIGN)),
             );
         }
     }
@@ -453,7 +465,7 @@ async fn layer_record_node(cx: Cx, (span, psb): (Span, bool)) -> Result<()> {
         cx.emit(
             Node::new("Additional Layer Information")
                 .span(blocks)
-                .lazy(tagged_blocks, (blocks, psb)),
+                .lazy(tagged_blocks, (blocks, psb, RECORD_ALIGN)),
         );
     }
     Ok(())
@@ -465,43 +477,145 @@ const WIDE_KEYS: &[&[u8]] = &[
     b"FEid", b"FXid", b"PxSD",
 ];
 
-async fn tagged_blocks(cx: Cx, (span, psb): (Span, bool)) -> Result<()> {
-    let mut cur = Cursor::new(&cx, span, BE);
-    while cur.remaining() >= 12 {
-        let start = cur.pos();
-        let sig = cur.bytes(4).await?;
-        if sig != b"8BIM" && sig != b"8B64" {
-            break;
+/// Keys of global tagged blocks that hold a layer info section (without its
+/// length prefix): 16- and 32-bit documents keep their layers there.
+const LAYER_KEYS: &[&[u8]] = &[b"Lr16", b"Lr32", b"Layr"];
+
+/// Alignment of tagged blocks after the global layer mask info; blocks in a
+/// layer record are aligned to 2 at most.
+const GLOBAL_ALIGN: u64 = 4;
+const RECORD_ALIGN: u64 = 2;
+
+/// One tagged block header in a run of blocks.
+struct Block {
+    key: Vec<u8>,
+    /// Length field.
+    len: u64,
+    /// Header and body (the body clamped to the run).
+    span: Span,
+    body: Span,
+}
+
+async fn has_signature(cx: &Cx, run: Span, at: u64) -> Result<bool> {
+    let sig = cx.read_avail(run.sub(at, 4)).await?;
+    Ok(sig == b"8BIM" || sig == b"8B64")
+}
+
+/// Reads the tagged block at `pos` of `run`, if a signature is there.
+async fn read_block(cx: &Cx, run: Span, pos: u64, psb: bool) -> Result<Option<Block>> {
+    let head = cx.read_avail(run.sub(pos, 12)).await?;
+    if head.len() < 12 || !matches!(head.get(..4), Some(b"8BIM" | b"8B64")) {
+        return Ok(None);
+    }
+    let key = head.get(4..8).unwrap_or_default().to_vec();
+    let wide = psb && WIDE_KEYS.contains(&key.as_slice());
+    let (len, header) = if wide {
+        let len = cx.read_avail(run.sub(pos.saturating_add(8), 8)).await?;
+        (u64_be(&len, 0).unwrap_or(0), 16)
+    } else {
+        (u32_be(&head, 8).map(u64::from).unwrap_or(0), 12)
+    };
+    let span = run.sub(pos, len.saturating_add(header));
+    Ok(Some(Block {
+        key,
+        len,
+        body: span.tail(header),
+        span,
+    }))
+}
+
+/// Where the block after `block` starts. Photoshop counts padding in the
+/// length; psd-tools pads global blocks to 4 bytes and layer blocks to 2
+/// without counting it (and skips it when reading), so if no signature
+/// follows the stated length, try the padded ends up to `align`.
+async fn next_block(cx: &Cx, run: Span, block: &Block, align: u64) -> Result<u64> {
+    let header = block.body.offset.saturating_sub(block.span.offset);
+    let start = block.span.offset.saturating_sub(run.offset);
+    let body = start.saturating_add(header);
+    let end = body.saturating_add(block.len);
+    if run.len.saturating_sub(end) < 12 || has_signature(cx, run, end).await? {
+        return Ok(end);
+    }
+    let mut pad = 2;
+    while pad <= align {
+        let at = body.saturating_add(block.len.next_multiple_of(pad));
+        if at != end && has_signature(cx, run, at).await? {
+            return Ok(at);
         }
-        let key = cur.bytes(4).await?;
-        let wide = psb && WIDE_KEYS.contains(&key.as_slice());
-        let len = if wide {
-            cur.u64().await?
-        } else {
-            cur.u32().await?.into()
+        pad = pad.saturating_mul(2);
+    }
+    Ok(end)
+}
+
+async fn tagged_blocks(cx: Cx, (span, psb, align): (Span, bool, u64)) -> Result<()> {
+    let mut pos = 0u64;
+    while span.len.saturating_sub(pos) >= 12 {
+        let Some(block) = read_block(&cx, span, pos, psb).await? else {
+            cx.diag(
+                Diagnostic::malformed("no tagged block signature (8BIM or 8B64)")
+                    .at(span.tail(pos)),
+            );
+            break;
         };
-        cur.skip(len);
-        let span = cur.since(start);
-        let body = span.tail(if wide { 16 } else { 12 });
-        let node = Node::new(crate::text::latin1(&key))
-            .span(span)
-            .summary(format!("{len:#x} bytes"));
-        let node = match crate::bytes::array::<4>(&key, 0) {
-            Some(key) => block_node(node, key, body),
+        let mut summary = format!("{:#x} bytes", block.len);
+        if LAYER_KEYS.contains(&block.key.as_slice()) {
+            let count = cx.read_avail(block.body.sub(0, 2)).await?;
+            if let Some(n) = u16_be(&count, 0) {
+                let n = i16::from_be_bytes(n.to_be_bytes());
+                summary = format!("{} layers, {summary}", n.unsigned_abs());
+            }
+        }
+        let node = Node::new(crate::text::latin1(&block.key))
+            .span(block.span)
+            .summary(summary);
+        let node = match crate::bytes::array::<4>(&block.key, 0) {
+            Some(key) => block_node(node, key, block.body, psb),
             None => node,
         };
         cx.push(node).await;
+        let next = next_block(&cx, span, &block, align).await?;
+        if next <= pos {
+            break;
+        }
+        pos = next;
     }
     Ok(())
 }
 
-/// What a tagged block holds that is shown on expansion: patterns, or
-/// action descriptors after a small header.
-fn block_node(node: Node, key: [u8; 4], body: Span) -> Node {
+/// The layer count of the first global `Lr16`/`Lr32`/`Layr` block in `run`.
+async fn tagged_layer_count(cx: &Cx, run: Span, psb: bool) -> Result<Option<i16>> {
+    let mut pos = 0u64;
+    // Global blocks are few; the count is only a summary, so stop early.
+    for _ in 0..64 {
+        let Some(block) = read_block(cx, run, pos, psb).await? else {
+            break;
+        };
+        if LAYER_KEYS.contains(&block.key.as_slice()) {
+            let count = cx.read_avail(block.body.sub(0, 2)).await?;
+            return Ok(u16_be(&count, 0).map(|v| i16::from_be_bytes(v.to_be_bytes())));
+        }
+        let next = next_block(cx, run, &block, GLOBAL_ALIGN).await?;
+        if next <= pos {
+            break;
+        }
+        pos = next;
+    }
+    Ok(None)
+}
+
+/// What a tagged block holds that is shown on expansion: patterns, layers,
+/// or action descriptors after a small header.
+fn block_node(node: Node, key: [u8; 4], body: Span, psb: bool) -> Node {
     match &key {
         b"Patt" | b"Pat2" | b"Pat3" => node
             .desc("Patterns used by the document's layers and effects")
             .lazy(descriptor::patterns, body),
+        b"Lr16" | b"Lr32" | b"Layr" => node
+            .desc("Layer info of a 16-bit, 32-bit or large document")
+            .lazy(
+                crate::expander!(self::layer_info: (Span, bool)),
+                (body, psb),
+            ),
         b"lfx2" | b"SoCo" | b"GdFl" | b"PtFl" | b"vscg" | b"vstk" | b"artb" | b"artd" | b"abdd"
         | b"cinf" | b"pths" | b"anFX" | b"SoLd" | b"SoLE" | b"PlLd" | b"TySh" => {
             node.lazy(tagged_block, (key, body))
@@ -677,7 +791,7 @@ async fn document_data(cx: Cx, span: Span) -> Result<()> {
             .span(span.sub(0, n))
             .value(text(crate::text::until_nul(&head))),
     );
-    tagged_blocks(cx, (span.tail(n), false)).await
+    tagged_blocks(cx, (span.tail(n), false, GLOBAL_ALIGN)).await
 }
 
 /// A lazy node listing image resource blocks (`8BIM`, id, name, data) in
