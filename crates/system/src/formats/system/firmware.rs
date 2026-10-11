@@ -187,6 +187,9 @@ struct Boot {
     dtbo: u64,
     dtb: u64,
     signature: u64,
+    /// Qualcomm (CAF) v0 images: the device-tree blob size at offset 40,
+    /// where AOSP has the header version.
+    qcdt: Option<u64>,
 }
 
 fn os_version(v: u32) -> String {
@@ -207,8 +210,13 @@ fn boot_layout(f: &mut Fields<'_>, _: &()) -> Result<Boot> {
             .and_then(|b| b.try_into().ok())
             .unwrap_or([0; 4]),
     );
+    // CAF's `boot_img_hdr` has `dt_size` where AOSP later put
+    // `header_version`; no AOSP version is above 4, so a larger value is
+    // a Qualcomm v0 header with a device-tree blob (QCDT) after the
+    // second stage.
+    let qcdt = version > 4;
     let mut b = Boot {
-        version,
+        version: if qcdt { 0 } else { version },
         ..Boot::default()
     };
     let size = |f: &mut Fields<'_>, name: &'static str| -> Result<u64> {
@@ -217,7 +225,7 @@ fn boot_layout(f: &mut Fields<'_>, _: &()) -> Result<Boot> {
             .emit()?
             .into())
     };
-    if version >= 3 {
+    if b.version >= 3 {
         b.page = 4096;
         b.kernel = size(f, "Kernel size")?;
         b.ramdisk = size(f, "Ramdisk size")?;
@@ -228,7 +236,7 @@ fn boot_layout(f: &mut Fields<'_>, _: &()) -> Result<Boot> {
         f.bytes("Reserved", 16).emit()?;
         f.u32("Header version").emit()?;
         f.ascii("Command line", 1536).emit()?;
-        if version >= 4 {
+        if b.version >= 4 {
             b.signature = size(f, "Boot signature size")?;
         }
         return Ok(b);
@@ -241,20 +249,25 @@ fn boot_layout(f: &mut Fields<'_>, _: &()) -> Result<Boot> {
     f.u32("Second stage load address").hex().emit()?;
     f.u32("Tags address").hex().emit()?;
     b.page = f.u32("Page size").emit()?.into();
-    f.u32("Header version").emit()?;
-    f.u32("OS version")
-        .with(|&v, n| n.summary(os_version(v)))
-        .emit()?;
+    if qcdt {
+        b.qcdt = Some(size(f, "DT size")?);
+        f.u32("Unused").emit()?;
+    } else {
+        f.u32("Header version").emit()?;
+        f.u32("OS version")
+            .with(|&v, n| n.summary(os_version(v)))
+            .emit()?;
+    }
     f.ascii("Product name", 16).emit()?;
     f.ascii("Command line", 512).emit()?;
     f.bytes("ID (digest)", 32).emit()?;
     f.ascii("Extra command line", 1024).emit()?;
-    if version >= 1 {
+    if b.version >= 1 {
         b.dtbo = size(f, "Recovery DTBO size")?;
         f.u64("Recovery DTBO offset").hex().emit()?;
         f.u32("Header size").emit()?;
     }
-    if version >= 2 {
+    if b.version >= 2 {
         b.dtb = size(f, "DTB size")?;
         f.u64("DTB load address").hex().emit()?;
     }
@@ -278,8 +291,13 @@ pub async fn dissect_boot(cx: Cx, input: Input) -> Result<()> {
         _ => 1584,
     };
     cx.emit(
-        struct_node("Header", file.sub(0, header_size), LE, (), boot_layout)
-            .summary(format!("version {}", b.version)),
+        struct_node("Header", file.sub(0, header_size), LE, (), boot_layout).summary(
+            if b.qcdt.is_some() {
+                "version 0, Qualcomm device tree".to_owned()
+            } else {
+                format!("version {}", b.version)
+            },
+        ),
     );
     let mut at = header_size.div_ceil(page).saturating_mul(page);
     padding(&cx, file, header_size, at, "Header padding");
@@ -288,6 +306,7 @@ pub async fn dissect_boot(cx: Cx, input: Input) -> Result<()> {
         ("Kernel", b.kernel),
         ("Ramdisk", b.ramdisk),
         ("Second stage", b.second),
+        ("Device tree", b.qcdt.unwrap_or(0)),
         ("Recovery DTBO", b.dtbo),
         ("DTB", b.dtb),
         ("Boot signature", b.signature),
@@ -308,8 +327,9 @@ pub async fn dissect_boot(cx: Cx, input: Input) -> Result<()> {
         cx.emit(embedded("Trailing data", input.nested(rest)).summary(human_size(rest.len)));
     }
     cx.annotate(format!(
-        "Android boot image v{}, {}",
+        "Android boot image v{}{}, {}",
         b.version,
+        if b.qcdt.is_some() { " (Qualcomm)" } else { "" },
         parts.join(", ")
     ));
     Ok(())

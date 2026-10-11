@@ -165,32 +165,77 @@ async fn value(
             Ok((Some(Value::Text(clip(&s, 400))), String::new(), end))
         }
         9 => {
-            let elem = u32::try_from(r.le(at, 4).await?).unwrap_or(u32::MAX);
-            let count = r.le(at.saturating_add(4), g.len_size()).await?;
-            let mut pos = at.saturating_add(4).saturating_add(g.len_size());
+            let (elem, count, _) = array_header(r, g, at).await?;
             let elem_name = lookup(VALUE_TYPES, elem.into()).unwrap_or("?");
-            if let Some(n) = scalar_size(elem) {
-                let total = count.saturating_mul(n);
-                r.region().sub_exact(pos, total)?;
-                pos = pos.saturating_add(total);
-            } else if elem == 8 {
-                for _ in 0..count {
-                    r.cx().checkpoint().await;
-                    let len = r.le(pos, g.len_size()).await?;
-                    pos = pos.saturating_add(g.len_size()).saturating_add(len);
-                    if pos > r.region().len {
-                        return Err(Diagnostic::truncated(r.span(at, 1), 0));
-                    }
-                }
-            } else {
-                return Err(
-                    Diagnostic::unsupported(format!("array of {elem_name}")).at(r.span(at, 4))
-                );
-            }
-            Ok((None, format!("array of {count} {elem_name}"), pos))
+            let end = skip_array(r, g, at).await?;
+            Ok((None, format!("array of {count} {elem_name}"), end))
         }
         _ => Err(Diagnostic::malformed(format!("value type {kind}")).at(r.span(at, 4))),
     }
+}
+
+/// Nesting limit for arrays of arrays.
+const MAX_ARRAY_DEPTH: usize = 8;
+
+/// An array's element type and count at `at`, and where its elements start.
+async fn array_header(r: &mut ByteReader<'_>, g: &Gguf, at: u64) -> Result<(u32, u64, u64)> {
+    let elem = u32::try_from(r.le(at, 4).await?).unwrap_or(u32::MAX);
+    let count = r.le(at.saturating_add(4), g.len_size()).await?;
+    Ok((
+        elem,
+        count,
+        at.saturating_add(4).saturating_add(g.len_size()),
+    ))
+}
+
+/// The end of the array at `at`. Arrays of arrays nest (each inner array
+/// has its own type and count, as gguf-py's `_pack_val` writes them); they
+/// are walked with an explicit stack, up to `MAX_ARRAY_DEPTH`.
+async fn skip_array(r: &mut ByteReader<'_>, g: &Gguf, at: u64) -> Result<u64> {
+    let (elem, count, mut pos) = array_header(r, g, at).await?;
+    // (element type, elements left) per open array.
+    let mut stack = vec![(elem, count)];
+    while let Some(top) = stack.last_mut() {
+        let (elem, left) = *top;
+        if left == 0 {
+            stack.pop();
+            continue;
+        }
+        r.cx().checkpoint().await;
+        if let Some(n) = scalar_size(elem) {
+            let total = left.saturating_mul(n);
+            r.region().sub_exact(pos, total)?;
+            pos = pos.saturating_add(total);
+            top.1 = 0;
+            continue;
+        }
+        top.1 = left.saturating_sub(1);
+        match elem {
+            8 => {
+                let len = r.le(pos, g.len_size()).await?;
+                pos = pos.saturating_add(g.len_size()).saturating_add(len);
+                if pos > r.region().len {
+                    return Err(Diagnostic::truncated(r.span(at, 1), 0));
+                }
+            }
+            9 => {
+                if stack.len() >= MAX_ARRAY_DEPTH {
+                    return Err(Diagnostic::limit(format!(
+                        "arrays nested deeper than {MAX_ARRAY_DEPTH}"
+                    ))
+                    .at(r.span(pos, 4)));
+                }
+                let (inner, n, body) = array_header(r, g, pos).await?;
+                pos = body;
+                stack.push((inner, n));
+            }
+            _ => {
+                let name = lookup(VALUE_TYPES, elem.into()).unwrap_or("?");
+                return Err(Diagnostic::unsupported(format!("array of {name}")).at(r.span(at, 4)));
+            }
+        }
+    }
+    Ok(pos)
 }
 
 /// Walks the metadata; returns the offset of the tensor descriptors.
@@ -317,10 +362,15 @@ async fn array(cx: Cx, (g, at): (Gguf, u64)) -> Result<()> {
     }
     cx.set_count(Count::Exact(count));
     for i in 0..count {
-        let (v, _, end) = value(&mut r, &g, elem, pos).await?;
+        let (v, summary, end) = value(&mut r, &g, elem, pos).await?;
         let mut node = Node::new(format!("[{i}]")).span(g.file.sub(pos, end.saturating_sub(pos)));
         if let Some(v) = v {
             node = node.value(v);
+        }
+        if elem == 9 {
+            node = node
+                .summary(summary)
+                .lazy(crate::expander!(self::array: (Gguf, u64)), (g, pos));
         }
         cx.push(node).await;
         pos = end;

@@ -249,36 +249,102 @@ static ONNX_MODEL: Msg = Msg {
     title: &[],
 };
 
+/// A plausible `GraphProto` prefix (`len` bytes at `body`, possibly cut by
+/// the head): its first field is a node, the name, an initializer or a
+/// value list; a leading node must itself start with a `NodeProto` field.
+fn onnx_graph_start(d: &[u8], body: usize, len: usize) -> bool {
+    if len < 2 {
+        return false;
+    }
+    match d.get(body) {
+        Some(0x0a) => delimited_at(d, body, 0x0a).is_some_and(|(node, node_len)| {
+            node_len >= 2
+                && node_len < len
+                && matches!(
+                    d.get(node),
+                    Some(0x0a | 0x12 | 0x1a | 0x22 | 0x2a | 0x32 | 0x3a)
+                )
+        }),
+        Some(0x12 | 0x2a | 0x52 | 0x5a | 0x62 | 0x6a | 0x72 | 0x7a) => true,
+        _ => false,
+    }
+}
+
+/// A plausible `OperatorSetIdProto`: an identifier domain (possibly empty)
+/// and/or a small version, nothing else.
+fn onnx_opset(body: &[u8]) -> bool {
+    proto::all_fields(body).is_some_and(|fields| {
+        !fields.is_empty()
+            && fields.iter().all(|fld| match (fld.number, fld.wire) {
+                (1, 2) => {
+                    let s = fld.payload(body);
+                    s.len() <= 128 && (s.is_empty() || is_identifier(s))
+                }
+                (2, 0) => (1..=1000).contains(&fld.value),
+                _ => false,
+            })
+    })
+}
+
+/// ONNX `ModelProto`: an IR version, then only `ModelProto` fields with
+/// their wire types and in number order (as serialisers write them), up to
+/// a graph (7) or opset import (8) whose body looks like one. A generic
+/// protobuf that merely starts `08 <n> 12 <string>` (a person record, a
+/// client config) has no such field.
 fn onnx_probe(h: &Head<'_>) -> bool {
     let d = h.data;
-    let Some((version, at)) = leading_version(d) else {
+    let Some((version, mut at)) = leading_version(d) else {
         return false;
     };
     if !(1..=15).contains(&version) {
         return false;
     }
-    if let Some((body, len)) = delimited_at(d, at, 0x12) {
-        // producer_name, then producer_version, domain, model_version,
-        // doc_string, graph or opset_import.
-        let Some(name) = body.checked_add(len).and_then(|end| d.get(body..end)) else {
+    let mut last = 1u64;
+    loop {
+        let Some(key) = proto::varint(d, &mut at) else {
             return false;
         };
-        let next = body.saturating_add(len);
-        return (1..=64).contains(&len)
-            && is_label(name)
-            && matches!(
-                d.get(next),
-                Some(0x1a | 0x22 | 0x28 | 0x32 | 0x3a | 0x42 | 0x72) | None
-            );
+        let (number, wire) = (key >> 3, key & 7);
+        if number <= last {
+            return false;
+        }
+        last = number;
+        if (number, wire) == (5, 0) {
+            // model_version
+            if proto::varint(d, &mut at).is_none() {
+                return false;
+            }
+            continue;
+        }
+        if wire != 2 {
+            return false;
+        }
+        let Some(len) = proto::varint(d, &mut at).and_then(|l| usize::try_from(l).ok()) else {
+            return false;
+        };
+        let body = at;
+        let end = body.saturating_add(len);
+        match number {
+            // producer_name, producer_version, domain, doc_string
+            2..=4 | 6 => {
+                let Some(s) = d.get(body..end) else {
+                    return false;
+                };
+                let ok = if number == 6 {
+                    std::str::from_utf8(s).is_ok()
+                } else {
+                    len <= 256 && (s.is_empty() || is_label(s))
+                };
+                if !ok {
+                    return false;
+                }
+                at = end;
+            }
+            7 => return to_u64(end) <= h.len && onnx_graph_start(d, body, len),
+            8 => return d.get(body..end).is_some_and(onnx_opset),
+            _ => return false,
+        }
     }
-    // No producer: the graph follows, starting with a node or its name.
-    delimited_at(d, at, 0x3a).is_some_and(|(body, len)| {
-        to_u64(body.saturating_add(len)) <= h.len
-            && d.get(body).is_some_and(|&b| b == 0x0a || b == 0x12)
-            && delimited_at(d, body, 0x0a)
-                .or_else(|| delimited_at(d, body, 0x12))
-                .is_some()
-    })
 }
 
 declare_format!(pub ONNX = "onnx", "ONNX model", ["onnx"], "application/x-onnx",

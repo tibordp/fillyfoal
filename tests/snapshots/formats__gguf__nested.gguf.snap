@@ -1,0 +1,36 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ nested.gguf — llama fillyfoal nested test, GGUF v3, 2 tensors, 6 metadata entries  [0x0+0x220]
+    Magic: "GGUF"  [0x0+0x4]
+    Version: 3  [0x4+0x4]
+    Tensor count: 2  [0x8+0x8]
+    Metadata count: 6  [0x10+0x8]
+  ▾ Metadata — 6 entries
+      general.architecture: "llama" — string  [0x18+0x2d]
+      general.name: "fillyfoal nested test" — string  [0x45+0x35]
+      test.answer: 42 — uint32  [0x7a+0x1b]
+    ▾ test.nested — array of 2 array  [0x95+0x4f]
+      ▾ [0] — array of 2 int32  [0xb8+0x14]
+          [0]: 1  [0xc4+0x4]
+          [1]: 2  [0xc8+0x4]
+      ▾ [1] — array of 3 int32  [0xcc+0x18]
+          [0]: 3  [0xd8+0x4]
+          [1]: 4  [0xdc+0x4]
+          [2]: 5  [0xe0+0x4]
+    ▾ test.deep — array of 2 array  [0xe4+0x6c]
+      ▾ [0] — array of 1 array  [0x105+0x2a]
+        ▾ [0] — array of 2 string  [0x111+0x1e]
+            [0]: "a"  [0x11d+0x9]
+            [1]: "b"  [0x126+0x9]
+      ▾ [1] — array of 1 array  [0x12f+0x21]
+        ▾ [0] — array of 1 string  [0x13b+0x15]
+            [0]: "c"  [0x147+0x9]
+    ▾ test.after — array of 2 string  [0x150+0x3b]
+        [0]: "still"  [0x172+0xd]
+        [1]: "here"  [0x17f+0xc]
+  ▾ Tensors — 2 tensors
+      Tensor data — 64 bytes, aligned to 32  [0x1e0+0x40]
+      weight: F32 (0x0) — [4, 2] F32, at data+0x0  [0x18b+0x2e] → 0x1e0+0x1
+      bias: F16 (0x1) — [4] F16, at data+0x20  [0x1b9+0x24] → 0x200+0x1

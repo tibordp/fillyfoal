@@ -428,6 +428,13 @@ const JOURNAL_INCOMPATIBLE: FlagTable = &[
     flag(16, "COMPACT"),
 ];
 
+/// An `sd_id128_t` (machine, boot, file ID) as systemd prints it: the 16
+/// bytes in order as 32 lowercase hex digits (`journalctl --header`).
+#[allow(clippy::ptr_arg)] // used as a `Field::with` decorator
+fn sd_id128(b: &Vec<u8>, node: Node) -> Node {
+    node.value(text(crate::formats::util::fmt::hex_lower(b)))
+}
+
 record! {
     pub struct JournalHeader {
         signature: ascii[8] "Signature",
@@ -435,10 +442,10 @@ record! {
         incompatible: u32 "Incompatible flags" .flags(JOURNAL_INCOMPATIBLE),
         state: u8 "State" .enumeration(JOURNAL_STATES),
         _reserved: bytes[7] "Reserved",
-        file_id: guid "File ID",
-        machine_id: guid "Machine ID",
-        tail_boot_id: guid "Tail entry boot ID",
-        seqnum_id: guid "Sequence number ID",
+        file_id: bytes[16] "File ID" .with(sd_id128),
+        machine_id: bytes[16] "Machine ID" .with(sd_id128),
+        tail_boot_id: bytes[16] "Tail entry boot ID" .with(sd_id128),
+        seqnum_id: bytes[16] "Sequence number ID" .with(sd_id128),
         header_size: u64 "Header size",
         arena_size: u64 "Arena size",
         data_hash_offset: u64 "Data hash table offset" .hex(),
@@ -466,11 +473,14 @@ async fn journal(cx: Cx, input: Input) -> Result<()> {
         LE,
     ));
     let arena = file.sub(h.header_size, h.arena_size);
+    // Compact journals (systemd 252+) put two u32 tail-entry-array fields
+    // before the DATA payload (`journal-def.h`, `DataObject.compact`).
+    let compact = h.incompatible & 16 != 0;
     cx.emit(
         Node::new("Objects")
             .span(arena)
             .summary(format!("{} objects", h.objects))
-            .lazy(journal_objects, arena),
+            .lazy(journal_objects, (arena, compact)),
     );
     let state = lookup(JOURNAL_STATES, h.state.into()).unwrap_or("unknown");
     let first = crate::render::value(&Value::Timestamp {
@@ -494,7 +504,8 @@ const JOURNAL_OBJECTS: EnumTable = &[
     (7, "TAG"),
 ];
 
-async fn journal_objects(cx: Cx, arena: Span) -> Result<()> {
+async fn journal_objects(cx: Cx, (arena, compact): (Span, bool)) -> Result<()> {
+    let payload_at = if compact { 72 } else { 64 };
     let mut cur = Cursor::new(&cx, arena, LE);
     while cur.remaining() >= 16 {
         let start = cur.pos();
@@ -512,8 +523,9 @@ async fn journal_objects(cx: Cx, arena: Span) -> Result<()> {
         )
         .span(span);
         if kind == 1 {
-            // DATA: payload is "FIELD=value" after a 64-byte header.
-            let payload = cx.read_avail(span.sub(64, 200)).await?;
+            // DATA: payload is "FIELD=value" after a 64-byte header (72 in
+            // compact journals).
+            let payload = cx.read_avail(span.sub(payload_at, 200)).await?;
             node = node.summary(String::from_utf8_lossy(&payload).into_owned());
         } else {
             node = node.summary(format!("{size} bytes"));

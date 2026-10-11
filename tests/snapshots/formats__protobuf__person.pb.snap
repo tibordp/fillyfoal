@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ person.pb — Protocol Buffers message (no schema), 3 top-level fields  [0x0+0x20]
+    field 1: 3 — VARINT, sint64 -2  [0x0+0x2]
+    field 2: "alice" — LEN  [0x2+0x7]
+    field 3: "alice@example.invalid" — LEN  [0x9+0x17]
