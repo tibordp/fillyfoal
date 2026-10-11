@@ -221,15 +221,53 @@ fn describe(kind: u8, data: &[u8]) -> String {
     }
 }
 
+/// The walk's state, kept in resume marks.
+#[derive(Clone)]
+struct Walk {
+    pos: u64,
+    records: u32,
+    library_page: u64,
+    module: Option<String>,
+}
+
+fn file_summary(walk: &Walk, done: bool) -> String {
+    format!(
+        "OMF {}{}{}",
+        if walk.library_page > 0 {
+            "library"
+        } else {
+            "object module"
+        },
+        walk.module
+            .as_ref()
+            .map(|m| format!(" {m}"))
+            .unwrap_or_default(),
+        if done {
+            format!(", {} records", walk.records)
+        } else {
+            String::new()
+        }
+    )
+}
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut cur = Cursor::new(&cx, file, Endian::Little);
-    let mut module = None;
-    let mut records = 0u32;
-    let mut library_page = 0u64;
-    let mut nodes = Vec::new();
+    // Records are pushed as they are walked; the record count is added to
+    // the summary at the end.
+    let mut walk = cx.resume::<Walk>().unwrap_or(Walk {
+        pos: 0,
+        records: 0,
+        library_page: 0,
+        module: None,
+    });
+    cur.seek(walk.pos);
+    // A resumed walk keeps the summary it had until it reaches the end.
+    let mut announced = walk.records > 0;
     while cur.remaining() >= 3 {
         let start = cur.pos();
+        walk.pos = start;
+        cx.mark(|| walk.clone());
         let head = cur.bytes(3).await?;
         let kind = head.first().copied().unwrap_or(0);
         let len = u64::from(u16_le(&head, 1).unwrap_or(0));
@@ -247,20 +285,25 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if stored != 0 && sum != 0 && kind != 0xf0 && kind != 0xf1 {
             node = node.diag(Diagnostic::warning("checksum mismatch"));
         }
-        if matches!(kind, 0x80 | 0x82) && module.is_none() {
-            module = Some(describe(kind, &data));
+        if matches!(kind, 0x80 | 0x82) && walk.module.is_none() {
+            walk.module = Some(describe(kind, &data));
+            announced = false;
         }
         if kind == 0xf0 {
-            library_page = len.saturating_add(3);
+            walk.library_page = len.saturating_add(3);
         }
-        nodes.push(node);
-        records = records.saturating_add(1);
+        if !announced {
+            cx.annotate(file_summary(&walk, false));
+            announced = true;
+        }
+        cx.push(node).await;
+        walk.records = walk.records.saturating_add(1);
         cur.seek(start.saturating_add(len).saturating_add(3));
         // Library members start on page boundaries.
-        if library_page > 0 && matches!(kind, 0x8a | 0x8b | 0xf0) {
+        if walk.library_page > 0 && matches!(kind, 0x8a | 0x8b | 0xf0) {
             let p = cur
                 .pos()
-                .checked_next_multiple_of(library_page)
+                .checked_next_multiple_of(walk.library_page)
                 .unwrap_or(u64::MAX);
             cur.seek(p);
         }
@@ -270,18 +313,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.checkpoint().await;
     }
-    cx.annotate(format!(
-        "OMF {}{}, {records} records",
-        if library_page > 0 {
-            "library"
-        } else {
-            "object module"
-        },
-        module.map(|m| format!(" {m}")).unwrap_or_default()
-    ));
-    for n in nodes {
-        cx.push(n).await;
-    }
+    cx.annotate(file_summary(&walk, true));
     Ok(())
 }
 
