@@ -94,11 +94,11 @@ record! {
 /// from W3C eot-utils 1.1 does). Little-endian text of that shape would be
 /// all characters U+xx00.
 fn big_endian_text(bytes: &[u8]) -> bool {
-    let pairs = bytes.chunks_exact(2);
-    !bytes.is_empty()
-        && bytes.len().is_multiple_of(2)
-        && pairs.clone().all(|p| p.first() == Some(&0))
-        && pairs.clone().any(|p| p.get(1).is_some_and(|&b| b != 0))
+    let (pairs, rest) = bytes.as_chunks::<2>();
+    !pairs.is_empty()
+        && rest.is_empty()
+        && pairs.iter().all(|&[high, _]| high == 0)
+        && pairs.iter().any(|&[_, low]| low != 0)
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
