@@ -1310,6 +1310,22 @@ fn chm_finds_its_compressed_section_once() {
     assert!(polls[2] * 10 < polls[0], "{polls:?}");
 }
 
+/// The classic 768-byte Photoshop colour table (256 colours, no count or
+/// transparency trailer) is too weak to identify by size, but opens as a
+/// colour table by hand.
+#[test]
+fn bare_photoshop_colour_tables_open_by_hand() {
+    let data: Vec<u8> = (0..768u32).map(|i| (i / 3) as u8).collect();
+    let format = formats::by_name("photoshop-color-table").unwrap();
+    let tree = common::explore_as("classic.act", &data, Some(format));
+    assert!(
+        tree.contains("Photoshop colour table, 256 colours"),
+        "{tree}"
+    );
+    assert!(tree.contains("[255]: \"#ffffff\""), "{tree}");
+    assert!(!tree.contains("! "), "{tree}");
+}
+
 /// Corrupted and truncated folders fail (or decode to something) without
 /// panicking or looping.
 #[test]
