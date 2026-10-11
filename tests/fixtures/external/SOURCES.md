@@ -754,3 +754,4 @@ time zone.
 | --- | --- | --- |
 | `gdbm/dbm-gnu.gdbm` | GNU dbm 1.23 via Python 3.12 `dbm.gnu` (python:3.12-slim, Debian) | `tests/data/gdbm/make.sh`: 5 keys, 64-bit offsets (magic 0x13579acf), 4 KiB blocks; reproduced byte-for-byte |
 | `gdbm/numsync.gdbm` | GNU dbm 1.23 `gdbmtool -n -x -b 512` (debian:bookworm-slim) | same script: extended (numsync) header, magic 0x13579ad1, 512-byte blocks, 3 keys; reproduced byte-for-byte |
+| `bdb/` | Berkeley DB 4.7.25 `db_load` (macOS /usr/bin) | `tests/data/bdb/make.sh`: `btree47.db` (512-byte pages, 41 pairs, one value on overflow pages), `hash47.db` (the same pairs), `chksum47.db` (B-tree with `-c chksum=1`), `recno47.db` (300 records, 512-byte pages, internal and leaf pages). Not byte-for-byte reproducible: the file ID is per file, and unused page bytes are whatever db_load's buffers held (checked: only the test data) |
