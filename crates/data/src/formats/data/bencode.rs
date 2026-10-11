@@ -5,9 +5,10 @@
 //! one means scanning it; each container is scanned only when expanded.
 
 use crate::bytes::{to_u64, to_usize};
+use crate::codec::crypto::Sha256;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::util::datakit::hex_string;
+use crate::formats::util::datakit::{digest_paced, hex_string};
 use crate::formats::util::fmt::{clip, size};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -253,20 +254,40 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let node = item_node(&mut scan, input.span, "Root".into(), &root, None).await?;
     cx.emit(node);
-    // The info hash identifies the torrent: SHA-1 of the bencoded info dict.
+    // The info hash identifies the torrent: SHA-1 of the bencoded info dict
+    // for v1 (and hybrid) torrents, SHA-256 for v2 (BEP 52) ones.
     if let Ok(Some(info)) = scan.lookup(&root, b"info").await {
         let span = input
             .span
             .sub(info.start, info.end.saturating_sub(info.start));
+        let v2 = matches!(
+            scan.lookup(&info, b"meta version").await,
+            Ok(Some(Item {
+                kind: Kind::Int(2),
+                ..
+            }))
+        );
+        let v1 = !v2 || matches!(scan.lookup(&info, b"pieces").await, Ok(Some(_)));
         if span.len <= cx.limits().max_read {
             let bytes = cx.read(span).await?;
-            let hash = crate::formats::util::datakit::sha1_paced(&cx, &bytes).await;
-            cx.emit(
-                Node::new("Info hash")
-                    .span(span)
-                    .value(Value::Text(hex_string(&hash)))
-                    .desc("SHA-1 of the bencoded info dictionary (BitTorrent v1)"),
-            );
+            if v1 {
+                let hash = crate::formats::util::datakit::sha1_paced(&cx, &bytes).await;
+                cx.emit(
+                    Node::new("Info hash")
+                        .span(span)
+                        .value(Value::Text(hex_string(&hash)))
+                        .desc("SHA-1 of the bencoded info dictionary (BitTorrent v1)"),
+                );
+            }
+            if v2 {
+                let hash = digest_paced::<Sha256>(&cx, &bytes).await;
+                cx.emit(
+                    Node::new("Info hash v2")
+                        .span(span)
+                        .value(Value::Text(hex_string(&hash)))
+                        .desc("SHA-256 of the bencoded info dictionary (BitTorrent v2)"),
+                );
+            }
         }
     }
     if root.end < input.span.len {
@@ -289,19 +310,34 @@ async fn torrent_summary(scan: &mut Scan<'_>, root: &Item) -> Result<String> {
         parts.push(format!("{:?}", clip(&String::from_utf8_lossy(&name), 60)));
     }
     if let Some(files) = scan.lookup(&info, b"files").await? {
+        // BEP 47 padding files (`attr` containing `p`) are not content.
         let mut total = 0u64;
+        let mut count = 0u64;
         let mut pos = files.start.saturating_add(1);
         while pos < files.end.saturating_sub(1) {
             let file = scan.item(pos).await?;
+            pos = file.end;
+            if let Some(attr) = scan.lookup(&file, b"attr").await?
+                && scan.string(&attr).await.is_ok_and(|a| a.contains(&b'p'))
+            {
+                continue;
+            }
+            count = count.saturating_add(1);
             if let Some(Item {
                 kind: Kind::Int(n), ..
             }) = scan.lookup(&file, b"length").await?
             {
                 total = total.saturating_add(u64::try_from(n).unwrap_or(0));
             }
-            pos = file.end;
         }
-        parts.push(format!("{} files, {}", files.count, size(total)));
+        parts.push(format!("{count} files, {}", size(total)));
+    } else if let Some(tree) = scan.lookup(&info, b"file tree").await? {
+        let (count, total) = file_tree(scan, &tree).await?;
+        if count == 1 {
+            parts.push(size(total));
+        } else {
+            parts.push(format!("{count} files, {}", size(total)));
+        }
     } else if let Some(Item {
         kind: Kind::Int(n), ..
     }) = scan.lookup(&info, b"length").await?
@@ -315,6 +351,38 @@ async fn torrent_summary(scan: &mut Scan<'_>, root: &Item) -> Result<String> {
         parts.push(format!("{} pieces", size(u64::try_from(n).unwrap_or(0))));
     }
     Ok(parts.join(", "))
+}
+
+/// Files and total length in a BEP 52 `file tree`: nested dictionaries keyed
+/// by path element, where a file is the dictionary under the empty key.
+async fn file_tree(scan: &mut Scan<'_>, tree: &Item) -> Result<(u64, u64)> {
+    let mut count = 0u64;
+    let mut total = 0u64;
+    let mut stack = vec![*tree];
+    while let Some(dict) = stack.pop() {
+        let mut pos = dict.start.saturating_add(1);
+        while pos < dict.end.saturating_sub(1) {
+            let k = scan.item(pos).await?;
+            let v = scan.item(k.end).await?;
+            pos = v.end;
+            if v.kind != Kind::Dict {
+                continue;
+            }
+            if matches!(k.kind, Kind::Str { len: 0, .. }) {
+                count = count.saturating_add(1);
+                if let Some(Item {
+                    kind: Kind::Int(n), ..
+                }) = scan.lookup(&v, b"length").await?
+                {
+                    total = total.saturating_add(u64::try_from(n).unwrap_or(0));
+                }
+            } else {
+                // Nesting is bounded by the scanner's MAX_DEPTH.
+                stack.push(v);
+            }
+        }
+    }
+    Ok((count, total))
 }
 
 /// A node for `item`, with containers expandable. `key` is the dictionary
@@ -341,7 +409,7 @@ async fn item_node(
             if key == Some(b"pieces") {
                 return Ok(node
                     .summary(format!("{} SHA-1 piece hashes", len / 20))
-                    .lazy(pieces, body));
+                    .lazy(pieces, (body, 20)));
             }
             let bytes = scan.string(item).await?;
             let utf8 = std::str::from_utf8(&bytes)
@@ -358,17 +426,19 @@ async fn item_node(
             }
         }
         Kind::List => node.summary(format!("list ({})", item.count)).lazy(
-            crate::expander!(self::members: (Span, u64)),
-            (region, item.start),
+            crate::expander!(self::members: (Span, u64, bool)),
+            (region, item.start, false),
         ),
         Kind::Dict => node.summary(format!("dict ({})", item.count)).lazy(
-            crate::expander!(self::members: (Span, u64)),
-            (region, item.start),
+            crate::expander!(self::members: (Span, u64, bool)),
+            (region, item.start, key == Some(b"piece layers")),
         ),
     })
 }
 
-async fn members(cx: Cx, (region, start): (Span, u64)) -> Result<()> {
+/// The members of the container at `start`. `layers`: it is a BEP 52
+/// `piece layers` dictionary (pieces roots to concatenated SHA-256 hashes).
+async fn members(cx: Cx, (region, start, layers): (Span, u64, bool)) -> Result<()> {
     let mut scan = Scan::new(&cx, region);
     let container = scan.item(start).await?;
     cx.set_count(Count::Exact(container.count));
@@ -380,8 +450,17 @@ async fn members(cx: Cx, (region, start): (Span, u64)) -> Result<()> {
             let v = scan.item(k.end).await?;
             let key = scan.string(&k).await?;
             pos = v.end;
-            let name = clip(&String::from_utf8_lossy(&key), 80);
-            item_node(&mut scan, region, name, &v, Some(&key)).await?
+            let name = match std::str::from_utf8(&key) {
+                Ok(s) if !layers && !s.chars().any(char::is_control) => clip(s, 80),
+                _ => clip(&hex_string(&key), 80),
+            };
+            match v.kind {
+                Kind::Str { data, len } if layers => Node::new(name)
+                    .span(region.sub(v.start, v.end.saturating_sub(v.start)))
+                    .summary(format!("{} SHA-256 piece hashes", len / 32))
+                    .lazy(pieces, (region.sub(data, len), 32)),
+                _ => item_node(&mut scan, region, name, &v, Some(&key)).await?,
+            }
         } else {
             let v = scan.item(pos).await?;
             pos = v.end;
@@ -393,11 +472,12 @@ async fn members(cx: Cx, (region, start): (Span, u64)) -> Result<()> {
     Ok(())
 }
 
-async fn pieces(cx: Cx, span: Span) -> Result<()> {
-    let n = span.len / 20;
+/// Piece hashes of `width` bytes each (20 for SHA-1, 32 for SHA-256).
+async fn pieces(cx: Cx, (span, width): (Span, u64)) -> Result<()> {
+    let n = span.len.checked_div(width).unwrap_or(0);
     cx.set_count(Count::Exact(n));
     for i in 0..n {
-        let at = span.sub(i.saturating_mul(20), 20);
+        let at = span.sub(i.saturating_mul(width), width);
         let hash = cx.read(at).await?;
         cx.push(
             Node::new(format!("Piece {i}"))
@@ -406,10 +486,10 @@ async fn pieces(cx: Cx, span: Span) -> Result<()> {
         )
         .await;
     }
-    if !span.len.is_multiple_of(20) {
-        cx.diag(Diagnostic::malformed(
-            "piece hashes are not a multiple of 20 bytes",
-        ));
+    if width == 0 || !span.len.is_multiple_of(width) {
+        cx.diag(Diagnostic::malformed(format!(
+            "piece hashes are not a multiple of {width} bytes"
+        )));
     }
     Ok(())
 }

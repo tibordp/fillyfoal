@@ -1,0 +1,28 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ v1.torrent — torrent, "payload", 2 files, 69.3 KiB, 16 KiB pieces  [0x0+0x12a]
+  ▾ Root — dict (3)  [0x0+0x12a]
+      created by: "fillyfoal"  [0xe+0xb]
+      creation date: 2023-11-14 22:13:20 UTC  [0x29+0xc]
+    ▾ info — dict (4)  [0x3b+0xee]
+      ▾ files — list (2)  [0x43+0x50]
+        ▾ [0] — dict (2)  [0x44+0x28]
+            length: 45000  [0x4d+0x7]
+          ▾ path — list (2)  [0x5a+0x11]
+              [0]: "sub"  [0x5b+0x5]
+              [1]: "data.bin"  [0x60+0xa]
+        ▾ [1] — dict (2)  [0x6c+0x26]
+            length: 26000  [0x75+0x7]
+          ▾ path — list (1)  [0x82+0xf]
+              [0]: "readme.txt"  [0x83+0xd]
+        name: "payload"  [0x99+0x9]
+        piece length: 16384  [0xb1+0x7]
+      ▾ pieces — 5 SHA-1 piece hashes  [0xc0+0x68]
+          Piece 0: "daedc8efce4ca7f311c9fb6b59298315279b2ac3"  [0xc4+0x14]
+          Piece 1: "1843dcb252972b3cb929229279a2425816d8980d"  [0xd8+0x14]
+          Piece 2: "7db1773159cafcbfffbb893eccf5c581754ed833"  [0xec+0x14]
+          Piece 3: "8736ab32950106cd5a78136af961860ed0df69fd"  [0x100+0x14]
+          Piece 4: "e530700d14ac68aa970426752fc069dbf5d5a5bd"  [0x114+0x14]
+    Info hash: "ef52ea823352df9066b098fd367b8e5a5b39cd50"  [0x3b+0xee]

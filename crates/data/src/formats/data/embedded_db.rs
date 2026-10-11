@@ -112,35 +112,101 @@ async fn kyoto(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
+/// GDBM header magics (gdbmconst.h): the original format (offsets as wide
+/// as the writer's `off_t`), 32- and 64-bit offsets, and the extended
+/// ("numsync", gdbm 1.21+) variants of those two.
+const GDBM_OMAGIC: u32 = 0x1357_9ace;
+const GDBM_MAGIC32: u32 = 0x1357_9acd;
+const GDBM_MAGIC64: u32 = 0x1357_9acf;
+const GDBM_NUMSYNC32: u32 = 0x1357_9ad0;
+const GDBM_NUMSYNC64: u32 = 0x1357_9ad1;
+
 fn gdbm_probe(h: &Head<'_>) -> bool {
-    let m = |v: u32| (0x1357_9acd..=0x1357_9acf).contains(&v);
+    let m = |v: u32| (GDBM_MAGIC32..=GDBM_NUMSYNC64).contains(&v);
     u32_le(h.data, 0).is_some_and(m) || u32_be(h.data, 0).is_some_and(m)
 }
 
 declare_format!(pub GDBM = "gdbm", "GNU dbm database", ["gdbm", "db"], "application/x-gdbm",
     Probe::Custom(gdbm_probe), gdbm);
 
+type ReadU32 = fn(&[u8], usize) -> Option<u32>;
+
+/// The directory size implied by `bits` for `off_t` of `width` bytes.
+fn gdbm_dir_size(bits: u32, width: u64) -> Option<u64> {
+    (bits < 31).then(|| (1u64 << bits).saturating_mul(width))
+}
+
+/// Whether the `dir_size`, `dir_bits` pair at `at` is consistent for `off_t`
+/// of `width` bytes.
+fn gdbm_dir_fits(head: &[u8], at: usize, width: u64, read: ReadU32) -> bool {
+    match (read(head, at), read(head, at.saturating_add(4))) {
+        (Some(size), Some(bits)) => gdbm_dir_size(bits, width) == Some(size.into()),
+        _ => false,
+    }
+}
+
+/// GDBM file header (gdbmdefs.h `gdbm_file_header`): `int` fields and two
+/// `off_t` offsets (`dir`, `next_block`), then for the numsync magics the
+/// extended header (`gdbm_ext_header`), then the header's avail block.
 async fn gdbm(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let head = cx.read(file.sub(0, 4)).await?;
-    let endian = if u32_le(&head, 0).is_some_and(|v| v >> 8 == 0x13_579a) {
-        LE
-    } else {
-        BE
+    let head = cx.read(file.sub(0, 32)).await?;
+    let little = u32_le(&head, 0).is_some_and(|v| v >> 12 == 0x1_3579);
+    let (endian, read): (Endian, ReadU32) = if little { (LE, u32_le) } else { (BE, u32_be) };
+    let magic = read(&head, 0).unwrap_or(0);
+    let wide = match magic {
+        GDBM_MAGIC64 | GDBM_NUMSYNC64 => true,
+        GDBM_MAGIC32 | GDBM_NUMSYNC32 => false,
+        // The original magic was written with the platform's `off_t`; take
+        // the layout whose directory size agrees with its directory bits.
+        _ => gdbm_dir_fits(&head, 16, 8, read) && !gdbm_dir_fits(&head, 12, 4, read),
     };
-    let block = cx.block(file.sub(0, 32)).await?;
+    let numsync = matches!(magic, GDBM_NUMSYNC32 | GDBM_NUMSYNC64);
+    let width: u64 = if wide { 8 } else { 4 };
+    let block = cx.block(file.sub(0, 96)).await?;
     let mut f = Fields::emitting(&cx, &block, endian);
-    let magic = f.u32("Magic").hex().emit()?;
+    f.u32("Magic").hex().emit()?;
     let block_size = f.u32("Block size").emit()?;
-    f.u32("Directory offset").hex().emit()?;
-    f.u32("Directory size").emit()?;
-    let bits = f.u32("Directory bits").emit()?;
+    f.uword("Directory offset", wide).hex().emit()?;
+    let bits_at = usize::try_from(f.pos().saturating_add(4)).unwrap_or(usize::MAX);
+    let bits = read(&head, bits_at).unwrap_or(0);
+    f.u32("Directory size")
+        .desc("Bytes in the hash directory (2^bits offsets)")
+        .check(|&v| {
+            (gdbm_dir_size(bits, width) != Some(v.into())).then(|| {
+                Diagnostic::warning(format!(
+                    "directory size {v} does not match {bits} directory bits"
+                ))
+            })
+        })
+        .emit()?;
+    f.u32("Directory bits").emit()?;
     f.u32("Bucket size").emit()?;
     let elems = f.u32("Bucket elements").emit()?;
-    f.u32("Next block").hex().emit()?;
-    let variant = match magic & 0xf {
-        0xe => "standard",
-        0xd => "32-bit offsets",
+    f.uword("Next block", wide)
+        .hex()
+        .desc("End of the allocated blocks")
+        .emit()?;
+    if numsync {
+        f.u32("Extension version").emit()?;
+        f.u32("Sync count")
+            .desc("Number of synchronizations (numsync)")
+            .emit()?;
+        f.bytes("Padding", 24).emit()?;
+    }
+    f.u32("Avail table size")
+        .desc("Capacity of the header's avail table")
+        .emit()?;
+    f.u32("Avail count")
+        .desc("Free areas listed in the header")
+        .emit()?;
+    f.uword("Avail next block", wide).hex().emit()?;
+    let variant = match magic {
+        GDBM_OMAGIC if wide => "original, 64-bit offsets",
+        GDBM_OMAGIC => "original, 32-bit offsets",
+        GDBM_MAGIC32 => "32-bit offsets",
+        GDBM_NUMSYNC32 => "extended, 32-bit offsets",
+        GDBM_NUMSYNC64 => "extended, 64-bit offsets",
         _ => "64-bit offsets",
     };
     cx.emit(Node::new("Blocks").span(file.tail(u64::from(block_size).min(file.len))));

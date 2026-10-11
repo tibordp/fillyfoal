@@ -25,12 +25,14 @@
 //! dissected; metadata values are configuration strings, shown as trees,
 //! with checkpoint address cookies decoded.
 //!
-//! Everything here is from memory of WiredTiger's sources (block_desc,
-//! page and block headers, `cell.h`, `intpack.i`, `block_addr.c`) and was
-//! **not** checked against files written by WiredTiger: the fixtures are
-//! synthetic, written by our own generator from the same memory. The
-//! allocation size is assumed to be 4 KiB (MongoDB's setting; the real
-//! one is in the metadata). Column-store pages are shown as cells only.
+//! The layouts are from memory of WiredTiger's sources (block_desc, page
+//! and block headers, `cell.h`, `intpack.i`, `block_addr.c`) and were
+//! checked against files written by MongoDB 7 (WiredTiger 11.2: metadata,
+//! a Snappy-compressed collection and its indexes decode with valid block
+//! checksums; see the external fixtures). The allocation size is assumed
+//! to be 4 KiB (MongoDB's setting; the real one is in the metadata, so a
+//! standalone WiredTiger table with another `allocation_size` is not
+//! walked correctly). Column-store pages are shown as cells only.
 
 use std::sync::Arc;
 

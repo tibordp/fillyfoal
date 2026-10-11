@@ -16,7 +16,7 @@ use crate::formats::util::binutil::get;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::{EnumTable, FlagTable, Radix, Value, decode_flags, flag, lookup};
 
 const BTREE: u32 = 0x0005_3162;
 const HASH: u32 = 0x0006_1561;
@@ -24,6 +24,14 @@ const QUEUE: u32 = 0x0004_2253;
 const HEAP: u32 = 0x0007_4582;
 /// Page header size.
 const HEADER: u64 = 26;
+/// `sizeof(PG_CHKSUM)`: 2 unused bytes and a 4-byte checksum after the page
+/// header when the database has checksums.
+const CHKSUM_SIZE: u64 = 6;
+/// `sizeof(PG_CRYPTO)`: 2 unused bytes, a 20-byte MAC and a 16-byte IV after
+/// the page header when the database is encrypted.
+const CRYPTO_SIZE: u64 = 38;
+/// `DBMETA_CHKSUM` in the metadata page's `metaflags`.
+const META_CHKSUM: u8 = 0x01;
 /// B-tree depth followed.
 const MAX_DEPTH: usize = 64;
 
@@ -71,6 +79,15 @@ const PAGE_TYPES: EnumTable = &[
     (16, "heap internal"),
 ];
 
+const ENCRYPT_ALGS: EnumTable = &[(0, "none"), (1, "AES")];
+
+/// `DBMETA_*` metadata flags (db_page.h).
+const META_FLAGS: FlagTable = &[
+    flag(0x01, "CHKSUM"),
+    flag(0x02, "PART_RANGE"),
+    flag(0x04, "PART_CALLBACK"),
+];
+
 const MAGICS: EnumTable = &[
     (0x0005_3162, "B-tree"),
     (0x0006_1561, "hash"),
@@ -83,6 +100,11 @@ struct Db {
     endian: Endian,
     pagesize: u64,
     last: u32,
+    /// Where a page's item index (or overflow data) starts: the page header
+    /// plus the checksum or encryption area (`P_OVERHEAD`).
+    inp: u64,
+    chksum: bool,
+    encrypted: bool,
 }
 
 type DbRef = Arc<Db>;
@@ -115,11 +137,25 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         0 => in_file,
         n => n.min(in_file),
     };
+    let encrypt_alg = head.get(24).copied().unwrap_or(0);
+    let metaflags = head.get(26).copied().unwrap_or(0);
+    let encrypted = encrypt_alg != 0;
+    let chksum = metaflags & META_CHKSUM != 0;
+    let inp = HEADER.saturating_add(if encrypted {
+        CRYPTO_SIZE
+    } else if chksum {
+        CHKSUM_SIZE
+    } else {
+        0
+    });
     let db: DbRef = Arc::new(Db {
         input,
         endian: e,
         pagesize,
         last,
+        inp,
+        chksum,
+        encrypted,
     });
     let meta = file.sub(0, 72);
     let num = |name: &'static str, at: u64, radix: Radix| {
@@ -143,10 +179,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         num("Page size", 20, Radix::Dec),
         Node::new("Encryption algorithm")
             .span(meta.sub(24, 1))
-            .value(Value::UInt {
-                value: head.get(24).copied().unwrap_or(0).into(),
+            .value(Value::Enum {
+                raw: encrypt_alg.into(),
                 bits: 8,
-                radix: Radix::Dec,
+                name: lookup(ENCRYPT_ALGS, encrypt_alg.into()),
             }),
         Node::new("Page type")
             .span(meta.sub(25, 1))
@@ -155,6 +191,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 bits: 8,
                 name: lookup(PAGE_TYPES, head.get(25).copied().unwrap_or(0).into()),
             }),
+        Node::new("Metadata flags").span(meta.sub(26, 1)).value({
+            let (set, unknown) = decode_flags(META_FLAGS, metaflags.into());
+            Value::Flags {
+                raw: metaflags.into(),
+                bits: 8,
+                set,
+                unknown,
+            }
+        }),
         num("Free list page", 28, Radix::Dec),
         num("Last page", 32, Radix::Dec),
         num("Partitions", 36, Radix::Dec).desc("Unused before 4.8"),
@@ -165,7 +210,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .span(meta.sub(52, 20))
             .value(Value::Bytes(head.get(52..72).unwrap_or_default().to_vec())),
     ];
-    let kind = lookup(MAGICS, magic.into()).unwrap_or("unknown");
+    // Recno databases are B-trees with BTM_RECNO (0x2) in the metadata flags.
+    let kind = if magic == BTREE && u32v(48) & 0x2 != 0 {
+        "recno"
+    } else {
+        lookup(MAGICS, magic.into()).unwrap_or("unknown")
+    };
     let mut root = None;
     if magic == BTREE {
         fields.push(num("Minimum keys per page", 76, Radix::Dec).span(file.sub(76, 4)));
@@ -234,7 +284,8 @@ struct Item {
     range: (usize, usize),
     kind: u8,
     data: (usize, usize),
-    /// Overflow: first page and total length. Internal: child page.
+    /// Overflow: first page and total length. Internal: child page and
+    /// records below it.
     page: Option<u32>,
     total: u32,
 }
@@ -247,7 +298,7 @@ fn items(db: &Db, page: &Page) -> Vec<Item> {
     for i in 0..usize::from(page.entries) {
         let Some(off) = get::<u16>(
             &page.data,
-            to_usize(HEADER).saturating_add(i.saturating_mul(2)),
+            to_usize(db.inp).saturating_add(i.saturating_mul(2)),
             e,
         ) else {
             break;
@@ -281,15 +332,23 @@ fn items(db: &Db, page: &Page) -> Vec<Item> {
                     }
                 }
             }
-            // Internal pages: BINTERNAL (length, type, unused, child, records, data).
-            3 | 4 => {
+            // Recno internal pages: RINTERNAL (child, records below it).
+            4 => {
+                let end = off.saturating_add(8).min(size);
+                Item {
+                    range: (off, end),
+                    kind: 1,
+                    data: (end, end),
+                    page: get::<u32>(&page.data, off, e),
+                    total: get::<u32>(&page.data, off.saturating_add(4), e).unwrap_or(0),
+                }
+            }
+            // B-tree internal pages: BINTERNAL (length, type, unused, child,
+            // records, data).
+            3 => {
                 let len = usize::from(get::<u16>(&page.data, off, e).unwrap_or(0));
                 let start = off.saturating_add(12);
-                let end = if page.kind == 4 {
-                    start
-                } else {
-                    start.saturating_add(len).min(size)
-                };
+                let end = start.saturating_add(len).min(size);
                 Item {
                     range: (off, end),
                     kind: page.data.get(off.saturating_add(2)).copied().unwrap_or(0) & 0x7f,
@@ -368,8 +427,8 @@ async fn item_value(
         let p = load(cx, db, next).await?;
         let len = u64::from(p.hf_offset)
             .min(remaining)
-            .min(db.pagesize.saturating_sub(HEADER));
-        pieces.push(p.span.sub(HEADER, len));
+            .min(db.pagesize.saturating_sub(db.inp));
+        pieces.push(p.span.sub(db.inp, len));
         remaining = remaining.saturating_sub(len);
         if len == 0 {
             break;
@@ -403,34 +462,54 @@ async fn value_node(
     let (key_span, _) = item_value(cx, db, page, key).await?;
     let key_bytes = cx.read_avail(key_span.sub(0, 256)).await?;
     let label = crate::render::value(&text(&key_bytes));
-    let mut node = Node::new(label).span(page.span.sub(
+    let node = Node::new(label).span(page.span.sub(
         to_u64(key.range.0),
         to_u64(key.range.1.saturating_sub(key.range.0)),
     ));
-    if let Some(v) = value {
-        let (span, diag) = item_value(cx, db, page, v).await?;
-        let bytes = cx.read_avail(span.sub(0, 256)).await?;
-        node = node.value(text(&bytes)).summary(format!(
-            "{} bytes{}",
-            span.len,
-            if v.kind == 3 { ", overflow" } else { "" }
-        ));
-        if let Some(d) = diag {
-            node = node.diag(d);
-        }
-        if span.len >= 16 {
-            node = node.lazy(crate::formats::dissect_or_data, db.input.nested(span));
-        }
+    match value {
+        Some(v) => with_value(cx, db, page, node, v).await,
+        None => Ok(node),
+    }
+}
+
+/// A recno leaf item: record number `recno`.
+async fn record_node(cx: &Cx, db: &Db, page: &Page, recno: u64, item: &Item) -> Result<Node> {
+    let node = Node::new(format!("Record {recno}")).span(page.span.sub(
+        to_u64(item.range.0),
+        to_u64(item.range.1.saturating_sub(item.range.0)),
+    ));
+    with_value(cx, db, page, node, item).await
+}
+
+/// Gives `node` the value of item `v`.
+async fn with_value(cx: &Cx, db: &Db, page: &Page, node: Node, v: &Item) -> Result<Node> {
+    let (span, diag) = item_value(cx, db, page, v).await?;
+    let bytes = cx.read_avail(span.sub(0, 256)).await?;
+    let mut node = node.value(text(&bytes)).summary(format!(
+        "{} bytes{}",
+        span.len,
+        if v.kind == 3 { ", overflow" } else { "" }
+    ));
+    if let Some(d) = diag {
+        node = node.diag(d);
+    }
+    if span.len >= 16 {
+        node = node.lazy(crate::formats::dissect_or_data, db.input.nested(span));
     }
     Ok(node)
 }
 
 async fn records(cx: Cx, (db, root): (DbRef, Option<u32>)) -> Result<()> {
+    if db.encrypted {
+        return Err(Diagnostic::unsupported("encrypted pages"));
+    }
     match root {
         Some(root) => {
-            // Depth-first from the root; leaves hold key/value pairs.
+            // Depth-first from the root; B-tree leaves hold key/value pairs,
+            // recno leaves one record each, numbered in order.
             let mut stack = vec![(root, 0usize)];
             let mut seen = BTreeSet::new();
+            let mut recno = 0u64;
             while let Some((no, depth)) = stack.pop() {
                 cx.checkpoint().await;
                 if no > db.last || !seen.insert(no) || depth > MAX_DEPTH {
@@ -456,6 +535,13 @@ async fn records(cx: Cx, (db, root): (DbRef, Option<u32>)) -> Result<()> {
                                 let node = value_node(&cx, &db, &page, key, pair.get(1)).await?;
                                 cx.push(node).await;
                             }
+                        }
+                    }
+                    6 => {
+                        for item in &list {
+                            recno = recno.saturating_add(1);
+                            let node = record_node(&cx, &db, &page, recno, item).await?;
+                            cx.push(node).await;
                         }
                     }
                     _ => {}
@@ -560,8 +646,27 @@ async fn page_contents(cx: Cx, (db, no): (DbRef, u32)) -> Result<()> {
         bits: 8,
         name: lookup(PAGE_TYPES, page.kind.into()),
     }));
+    if db.encrypted {
+        cx.emit(Node::new("MAC").span(h.sub(HEADER.saturating_add(2), 20)));
+        cx.emit(Node::new("IV").span(h.sub(HEADER.saturating_add(22), 16)));
+        cx.emit(
+            Node::new("Encrypted data")
+                .span(h.tail(db.inp))
+                .diag(Diagnostic::unsupported("encrypted page")),
+        );
+        return Ok(());
+    }
+    if db.chksum {
+        let at = HEADER.saturating_add(2);
+        let sum = get::<u32>(&page.data, to_usize(at), e).unwrap_or(0);
+        cx.emit(Node::new("Checksum").span(h.sub(at, 4)).value(Value::UInt {
+            value: sum.into(),
+            bits: 32,
+            radix: Radix::Hex,
+        }));
+    }
     if page.kind == 7 {
-        cx.emit(Node::new("Overflow data").span(h.sub(HEADER, u64::from(page.hf_offset))));
+        cx.emit(Node::new("Overflow data").span(h.sub(db.inp, u64::from(page.hf_offset))));
         return Ok(());
     }
     for (i, item) in items(&db, &page).iter().enumerate() {
@@ -572,7 +677,15 @@ async fn page_contents(cx: Cx, (db, no): (DbRef, u32)) -> Result<()> {
         let bytes = page.data.get(item.data.0..item.data.1).unwrap_or_default();
         let mut node = Node::new(format!("Item {i}")).span(span);
         node = match (page.kind, item.page) {
-            (3 | 4, Some(child)) => node
+            (4, Some(child)) => node
+                .value(Value::UInt {
+                    value: item.total.into(),
+                    bits: 32,
+                    radix: Radix::Dec,
+                })
+                .summary(format!("{} records in child page {child}", item.total))
+                .target(db.page(child)),
+            (3, Some(child)) => node
                 .value(text(bytes))
                 .summary(format!("child page {child}"))
                 .target(db.page(child)),

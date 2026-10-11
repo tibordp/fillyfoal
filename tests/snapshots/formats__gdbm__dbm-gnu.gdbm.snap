@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ dbm-gnu.gdbm — GDBM (64-bit offsets), 4096-byte blocks, 9 directory bits, 166 per bucket  [0x0+0x4000]
+    Magic: 0x13579acf  [0x0+0x4]
+    Block size: 4096  [0x4+0x4]
+    Directory offset: 0x1000  [0x8+0x8]
+    Directory size: 4096  [0x10+0x4]
+    Directory bits: 9  [0x14+0x4]
+    Bucket size: 4096  [0x18+0x4]
+    Bucket elements: 166  [0x1c+0x4]
+    Next block: 0x4000  [0x20+0x8]
+    Avail table size: 252  [0x28+0x4]
+    Avail count: 0  [0x2c+0x4]
+    Avail next block: 0x0  [0x30+0x8]
+    Blocks  [0x1000+0x3000]

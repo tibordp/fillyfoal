@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ snappy.sst — RocksDB table, 1 data block  [0x0+0x693]
+▾ snappy.sst — RocksDB table (format version 2), 1 data block  [0x0+0x693]
   ▾ Index block — 1 entries  [0x28c+0x21]
     ▾ Data block 0: 0x0 — 647 bytes, keys up to "key039"  [0x28c+0x14] → 0x0+0x287
         "key000": "value number 000, compressed with snappyvalue number 000, compressed with snappy" — seq 0, value  [#1:0x0+0x61]

@@ -66,7 +66,7 @@ pub static FORMAT: Format = Format {
     extensions: &["sqlite", "sqlite3", "db", "db3", "s3db", "sl3"],
     mime: "application/vnd.sqlite3",
     probe: Probe::Custom(|h| {
-        h.starts_with(MAGIC) && !matches!(app_id(h), Some(GPKG | GP10 | GP11 | MBTILES_ID))
+        h.starts_with(MAGIC) && !matches!(app_id(h), Some(GPKG | GP10 | GP11)) && !is_mbtiles(h)
     }),
     dissect: crate::expander!(dissect: Input),
 };
@@ -85,7 +85,7 @@ pub static MBTILES: Format = Format {
     title: "MBTiles tile set (SQLite)",
     extensions: &["mbtiles"],
     mime: "application/vnd.mapbox-vector-tile",
-    probe: Probe::Custom(|h| h.starts_with(MAGIC) && app_id(h) == Some(MBTILES_ID)),
+    probe: Probe::Custom(|h| h.starts_with(MAGIC) && is_mbtiles(h)),
     dissect: crate::expander!(dissect: Input),
 };
 
@@ -96,6 +96,20 @@ const MBTILES_ID: u32 = 0x4d50_4258;
 
 fn app_id(h: &Head<'_>) -> Option<u32> {
     u32_be(h.data, 68)
+}
+
+/// MBTiles: the registered application ID, or (as GDAL writes them,
+/// without one) a schema on the first page with the spec's `metadata` table
+/// and a `tiles` table or view (`zoom_level`, `tile_data`).
+fn is_mbtiles(h: &Head<'_>) -> bool {
+    match app_id(h) {
+        Some(MBTILES_ID) => true,
+        Some(0) => {
+            let has = |needle: &[u8]| crate::bytes::contains(h.data, needle);
+            has(b"TABLE metadata") && has(b"zoom_level") && has(b"tile_data")
+        }
+        _ => false,
+    }
 }
 
 /// Registered application IDs (SQLite's `magic.txt`).

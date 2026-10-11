@@ -243,8 +243,8 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `sqlite/wal.sqlite` | SQLite 3.50.4 (Python 3 `sqlite3`) | same script: the database file copied while a connection had a transaction open in WAL mode (`wal-copy.sqlite`); its WAL is `sqlite-wal/wal.sqlite-wal` |
 | `sqlite-wal/wal.sqlite-wal` | SQLite 3.50.4 (Python 3 `sqlite3`) | same script (`wal-copy.sqlite-wal`), copied while the last transaction was open: a restarted log (stale frames of the first generation after the new ones), committed frames, an open transaction's frames; salts are random, so not reproducible byte for byte |
 | `sqlite-journal/journal.sqlite-journal` | SQLite 3.50.4 (Python 3 `sqlite3`) | same script (`journal-copy.sqlite-journal`), copied during a transaction with a one-page cache: two segments (each spill syncs the journal); the nonces are random, so not reproducible byte for byte |
-| `gpkg/geo.gpkg` | SQLite 3.51.0 | header records SQLite version 3051000; GeoPackage tables created with SQL by us |
-| `mbtiles/tiles.mbtiles` | SQLite 3.51.0 | header records SQLite version 3051000; MBTiles tables created with SQL by us |
+| `gpkg/geo.gpkg` | GDAL 3.14.0dev-404da16b (ghcr.io/osgeo/gdal:alpine-small-latest, 2026-10-02) `ogr2ogr` | `tests/data/gpkg/make.sh`: a 4-feature GeoJSON (2 points, a line, a polygon) into layer `features`, 1 KiB pages, no spatial index; application ID `GPKG`. Not byte-for-byte reproducible (`gpkg_contents.last_change`) |
+| `mbtiles/tiles.mbtiles` | GDAL 3.14.0dev-404da16b (same image) `gdal_translate -of MBTILES` | same script: a 256×256 RGB GeoTIFF from `gdal_create` as zoom-12 PNG tiles (4 tiles) with the `metadata` table; GDAL sets no application ID |
 | `bgcode/` | libbgcode (pybgcode built from prusa3d/libbgcode commit d4da907) | reproduced byte-for-byte by `tests/data/bgcode/make_bgcode.py`: `from_ascii_to_binary` of our PrusaSlicer-style `synthetic/gcode/prusaslicer.gcode` (thumbnails made with Pillow 12.3), one file per compression (none, zlib, Heatshrink 11/4 and 12/4), G-code encoding (none, MeatPack, MeatPack with comments) and checksum type (none, CRC-32) |
 | `orc/lz4.orc` | pyarrow 25 (Apache ORC C++ 2.2.2) | reproduced byte-for-byte by re-writing the table with `pyarrow.orc.write_table(compression="lz4")` |
 | `orc/snappy.orc` | pyarrow 25 (Apache ORC C++ 2.2.2) | reproduced byte-for-byte (`compression="snappy"`) |
@@ -267,6 +267,10 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `rocksdb-sst/lz4.sst` | RocksDB via rocksdict | edit: identity properties overwritten with `x`; RocksDB still ingests the file |
 | `rocksdb-sst/snappy.sst` | RocksDB via rocksdict | edit: identity properties overwritten with `x`; RocksDB still ingests the file |
 | `rocksdb-sst/zstd.sst` | RocksDB via rocksdict | edit: identity properties overwritten with `x`; RocksDB still ingests the file |
+| `rocksdb-sst/default-v6.sst` | RocksDB via rocksdict 0.3.29 (`SstFileWriter`, python:3.12-slim, host name `fillyfoal`) | `tests/data/rocksdb-sst/make.sh`: 150 keys, default table options (format version 6, XXH3 checksums with context, Snappy) and 1 KiB blocks; unedited (host identity `fillyfoal`, db identity `SST Writer`, random session identity) |
+| `rocksdb-sst/v5-crc32c.sst` | RocksDB via rocksdict 0.3.29 | same script: format version 5, CRC-32C, no compression, 512-byte blocks, index restart interval 4 (delta-encoded index values after shared keys) |
+| `rocksdb-sst/v6-xxhash.sst` | RocksDB via rocksdict 0.3.29 | same script: format version 6, xxHash32 checksums, no compression |
+| `rocksdb-sst/v4-xxhash64.sst` | RocksDB via rocksdict 0.3.29 | same script: format version 4, xxHash64 checksums, no compression |
 | `bam/small.bam` | htslib (via pysam, inferred) | htslib BGZF block layout; `@PG ID:gen PN:python` in the header; indexed by bai/small.bam.bai |
 | `bam/many-blocks.bam` | samtools 1.16.1 (htslib, Debian bookworm) | `tests/data/bam/many-blocks.sh` in `debian:bookworm-slim`: `samtools view -b --no-PG` of 100 synthetic reads with 60000-byte array tags, 102 BGZF blocks (5.7 MiB of records, most spanning two blocks) ending in the EOF block; reproduced byte-for-byte |
 | `bai/small.bam.bai` | htslib (via pysam, inferred) | htslib index with metadata pseudo-bins (bin 37450) |
@@ -772,3 +776,14 @@ Generated in `/tmp/fixtures/<format>` with the scripts named below
 | `r-serialized/df-v2.rds` | R 4.4.1 | same script: a data frame, serialization version 2; reproduced byte-for-byte |
 | `avro/events.avro` | fastavro 1.12.1 | `tests/data/avro/make_fastavro.py`: record schema with an enum, a nullable union, a three-branch union, a map, an array and a fixed; 12 records in 4 blocks, null codec, fixed sync marker; reproduced byte-for-byte |
 | `avro/events-deflate.avro` | fastavro 1.12.1 | same script, deflate codec; reproduced byte-for-byte |
+## Embedded databases and torrents
+| `gdbm/dbm-gnu.gdbm` | GNU dbm 1.23 via Python 3.12 `dbm.gnu` (python:3.12-slim, Debian) | `tests/data/gdbm/make.sh`: 5 keys, 64-bit offsets (magic 0x13579acf), 4 KiB blocks; reproduced byte-for-byte |
+| `gdbm/numsync.gdbm` | GNU dbm 1.23 `gdbmtool -n -x -b 512` (debian:bookworm-slim) | same script: extended (numsync) header, magic 0x13579ad1, 512-byte blocks, 3 keys; reproduced byte-for-byte |
+| `bdb/` | Berkeley DB 4.7.25 `db_load` (macOS /usr/bin) | `tests/data/bdb/make.sh`: `btree47.db` (512-byte pages, 41 pairs, one value on overflow pages), `hash47.db` (the same pairs), `chksum47.db` (B-tree with `-c chksum=1`), `recno47.db` (300 records, 512-byte pages, internal and leaf pages). Not byte-for-byte reproducible: the file ID is per file, and unused page bytes are whatever db_load's buffers held (checked: only the test data) |
+| `torrent/` | libtorrent 2.1.1 (Python wheel via `uv run --with libtorrent==2.1.1`) | `tests/data/torrent/make.py`: a 2-file directory as `v1.torrent` (v1 only), `v2.torrent` (BEP 52 only) and `hybrid.torrent` (v1 + v2 with BEP 47 padding files), 16 KiB pieces, creator `fillyfoal`, creation date fixed; reproduced byte-for-byte |
+| `wiredtiger/mongod7-WiredTiger` | MongoDB 7 (WiredTiger 11.2.0), the official mongo:7 image, host name `fillyfoal` | `tests/data/wiredtiger/mongod.sh`: the `WiredTiger` marker of a fresh dbpath after inserting 300 documents and a clean shutdown; renamed with a `mongod7-` prefix |
+| `wiredtiger-turtle/mongod7-WiredTiger.turtle` | MongoDB 7 (WiredTiger 11.2.0) | same run: the turtle file; renamed with a `mongod7-` prefix |
+| `wiredtiger-btree/mongod7-WiredTiger.wt` | MongoDB 7 (WiredTiger 11.2.0) | same run: the metadata table; renamed with a `mongod7-` prefix |
+| `wiredtiger-btree/collection-items.wt` | MongoDB 7 (WiredTiger 11.2.0) | same run: the `fillyfoal.items` collection (Snappy row-store leaves, BSON values, every 50th document with a 6000-byte string), renamed from its random ident `collection-7-<n>.wt` |
+| `wiredtiger-btree/index-items-id.wt` | MongoDB 7 (WiredTiger 11.2.0) | same run: the collection's `_id_` index (`index-8-<n>.wt`) |
+| `wiredtiger-btree/index-items-n.wt` | MongoDB 7 (WiredTiger 11.2.0) | same run: the secondary index on `n` (`index-9-<n>.wt`). The run's journal, catalog, other tables and `diagnostic.data` are not kept; times and idents differ per run |

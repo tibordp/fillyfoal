@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ 000009.sst — RocksDB table, 2 data blocks  [0x0+0x164]
+▾ 000009.sst — RocksDB table (format version 5), 2 data blocks  [0x0+0x164]
   ▾ Index block — 2 entries  [0xfa+0x35]
     ▾ Data block 0: 0x0 — 71 bytes, keys up to "b"  [0xfa+0xe] → 0x0+0x47
         "apple": "red" — seq 5, value  [0x0+0x13]

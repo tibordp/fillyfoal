@@ -95,8 +95,12 @@ expression: "common::explore(&display_name(&path), &data)"
                       Marker: 0xd4 — dictionary, size nibble 4  [0x12c+0x1]
                       Key 0: 1 — #1: "epoch"  [0x12d+0x1] → 0x135+0x6
                       Key 1: 2 — #2: "flags"  [0x12e+0x1] → 0x13b+0x6
-                      Value 0: 3 — #3: "timescale"  [0x12f+0x1] → 0x141+0xa
-                      Value 1: 4 — #4: "value"  [0x130+0x1] → 0x14b+0x6
+                      Key 2: 3 — #3: "timescale"  [0x12f+0x1] → 0x141+0xa
+                      Key 3: 4 — #4: "value"  [0x130+0x1] → 0x14b+0x6
+                      Value 0: 5 — #5: integer  [0x131+0x1] → 0x151+0x2
+                      Value 1: 6 — #6: integer  [0x132+0x1] → 0x153+0x2
+                      Value 2: 7 — #7: integer  [0x133+0x1] → 0x155+0x5
+                      Value 3: 8 — #8: integer  [0x134+0x1] → 0x15a+0x5
                   ▾ #1: "epoch" — ASCII string  [0x135+0x6]
                       Marker: 0x55 — ASCII string, size nibble 5  [0x135+0x1]
                       Value: "epoch"  [0x136+0x5]
