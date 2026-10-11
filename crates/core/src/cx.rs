@@ -735,9 +735,26 @@ impl Shared {
             let pending = st.input.len().saturating_sub(st.decoder.consumed());
             if st.starved && !st.input_eof && pending >= max_pending {
                 st.done = true;
-                failure = Some(Diagnostic::malformed(format!(
-                    "undecodable: no progress over {pending:#x} bytes of encoded input"
-                )));
+                // More input has not helped, so the step's failure was not a
+                // shortage of it: ask the decoder what it is (a checksum
+                // mismatch, corrupt data), as if the input ended here. A
+                // decoder that would instead finish then (one waiting for
+                // all of its input) has its output discarded.
+                let LazyDecode {
+                    input,
+                    out,
+                    decoder,
+                    ..
+                } = &mut *st;
+                let mark = out.len();
+                let cap = mark.saturating_add(limit);
+                let probe = decoder.decode(input, true, out, LAZY_STEP, cap);
+                out.truncate(mark);
+                failure = Some(probe.err().unwrap_or_else(|| {
+                    Diagnostic::malformed(format!(
+                        "undecodable: no progress over {pending:#x} bytes of encoded input"
+                    ))
+                }));
                 continue;
             }
             if !st.input_eof && (st.starved || pending < LOOKAHEAD) {
