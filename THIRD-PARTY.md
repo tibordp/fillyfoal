@@ -365,6 +365,35 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Test fixtures: GNU FreeFont subsets
+
+The font fixtures `tests/fixtures/external/sfnt/freeserif-subset.ttf`,
+`sfnt/freeserif-subset.otf`, `woff/freeserif-subset.woff`,
+`woff2/freeserif-subset.woff2`, `ttc/freefont-subset.ttc` and
+`eot/freeserif-subset.eot` are subsets of GNU FreeFont 20120503
+(<https://savannah.gnu.org/projects/freefont/>; FreeSerif and FreeSans),
+made with fontTools (see `tests/fixtures/external/SOURCES.md`). They keep
+the fonts' name records, including this notice:
+
+```text
+Copyright 2002, 2003, 2005, 2008, 2009, 2010, 2012 GNU Freefont contributors.
+
+This computer font is part of GNU FreeFont.  It is free software: you can
+redistribute it and/or modify it under the terms of the GNU General Public
+License as published by the Free Software Foundation, either version 3 of
+the License, or (at your option) any later version.
+
+This font is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+details.
+
+As a special exception, if you create a document which uses this font, and
+embed this font or unaltered portions of this font into the document, this
+font does not by itself cause the resulting document to be covered by the
+GNU General Public License. [...]
+```
+
 ## Acknowledgements
 
 No notice is required for the following, but parts of fillyfoal follow them

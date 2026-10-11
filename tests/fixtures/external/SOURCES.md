@@ -744,3 +744,22 @@ time zone.
 | `ese/fillyfoal.edb` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | esent.dll database (format 0x620, update 300, 4 KiB pages, clean shutdown) with table `Fixtures` (400 rows; every column type: Bit, UnsignedByte, Short, Long autoincrement, Currency, IEEESingle, IEEEDouble, DateTime, Binary, Text in UTF-16 and Windows-1252, LongBinary and LongText (20 000-byte and 6 000-character separated long values every 50th row), UnsignedLong, LongLong, GUID, UnsignedShort, a tagged multi-valued Text column), a primary index and a two-column secondary index, and table `Small` (3 rows). Checked against dissect.esedb 3.18 (catalog, column types, every row value of both tables; dissect cannot reassemble one of the 20 000-byte long values) and our page checksums (ECC + XOR, every page valid) |
 | `minidump/ping-normal.dmp` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | `MiniDumpWriteDump(MiniDumpNormal)` of a running `PING.EXE` on ARM64: thread list (6 threads, ARM64 contexts), module list (12 modules with RSDS CodeView records), function table, memory list, system info, misc info (version 5), system memory info, process VM counters. The skelsec `minidump` package rejects ARM64 dumps, so the streams were checked with a short `struct` script against dbghelp's documented layouts |
 | `minidump/ping-info.dmp` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | the same process with `MiniDumpWithUnloadedModules \| MiniDumpWithFullMemoryInfo \| MiniDumpWithThreadInfo` (0x1820): adds the thread info list and the memory info list (240 regions); no module had been unloaded, so there is no unloaded-module stream |
+
+## Fonts (GNU FreeFont subsets)
+
+GNU FreeFont 20120503 (GPL-3.0-or-later with the GPL font exception; notice
+in THIRD-PARTY.md), taken from TeX Live 2026's `gnu-freefont` package, and
+subset with fontTools 4.66.1 (Brotli 1.2.0) by
+`uv run --with fonttools==4.66.1 --with brotli==1.2.0 python3 tests/data/sfnt/freefont_subsets.py FREEFONT_DIR OUTDIR`,
+which reproduces all five byte for byte. Each keeps the glyphs for
+"FreeFont fi fl 0123 ffi?!" plus layout closure (24 glyphs in FreeSerif),
+GSUB/GPOS/GDEF, hinting tables, and every name record.
+
+| File | Producer | Evidence |
+|---|---|---|
+| `sfnt/freeserif-subset.ttf` | fontTools 4.66.1 `subset` of FreeSerif.ttf (FontForge-built, `FFTM` dropped) | reproduced byte-for-byte; TrueType outlines |
+| `sfnt/freeserif-subset.otf` | fontTools 4.66.1 `subset` of FreeSerif.otf | reproduced byte-for-byte; CFF outlines |
+| `woff/freeserif-subset.woff` | fontTools 4.66.1 (`flavor=woff`, zlib) | reproduced byte-for-byte; the TrueType subset |
+| `woff2/freeserif-subset.woff2` | fontTools 4.66.1 (`flavor=woff2`, Brotli 1.2.0) | reproduced byte-for-byte; the TrueType subset with fontTools' default glyf/loca transform |
+| `ttc/freefont-subset.ttc` | fontTools 4.66.1 `TTCollection` | reproduced byte-for-byte; FreeSans and FreeSerif TrueType subsets, identical tables shared |
+| `eot/freeserif-subset.eot` | mkeot (W3C eot-utils 1.1, Debian bookworm `eot-utils 1.1-1+b1`, Docker `debian:bookworm-slim`) | reproduced byte-for-byte: `sh tests/data/eot/mkeot.sh DIR` (`mkeot sfnt/freeserif-subset.ttf https://example.org/`); EOT version 0x00020002, uncompressed, one root string. mkeot copies the four names from the name table unswapped, so they are UTF-16BE where the format has UTF-16LE (its own `eotinfo` shows them byte-swapped too) |
