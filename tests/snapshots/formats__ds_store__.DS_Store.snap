@@ -27,7 +27,9 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ #0 — dict (2)  [0x1026+0x5]
             Marker: 0xd2 — dictionary, size nibble 2  [0x1026+0x1]
             Key 0: 1 — #1: "ShowSidebar"  [0x1027+0x1] → 0x102b+0xc
-            Value 0: 2 — #2: "WindowBounds"  [0x1028+0x1] → 0x1037+0xd
+            Key 1: 2 — #2: "WindowBounds"  [0x1028+0x1] → 0x1037+0xd
+            Value 0: 3 — #3: boolean  [0x1029+0x1] → 0x1044+0x1
+            Value 1: 4 — #4: "{{100, 100}, {800, 600}}"  [0x102a+0x1] → 0x1045+0x1b
         ▾ #1: "ShowSidebar" — ASCII string  [0x102b+0xc]
             Marker: 0x5b — ASCII string, size nibble 11  [0x102b+0x1]
             Value: "ShowSidebar"  [0x102c+0xb]

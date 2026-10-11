@@ -78,7 +78,8 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Objects — 3 objects  [0x149+0x20]
       ▾ #0 — dict (1)  [0x149+0x3]
           Marker: 0xd1 — dictionary, size nibble 1  [0x149+0x1]
-          Value 0: 1 — #1: "NSHTTPCookieAcceptPolicy"  [0x14a+0x1] → 0x14c+0x1b
+          Key 0: 1 — #1: "NSHTTPCookieAcceptPolicy"  [0x14a+0x1] → 0x14c+0x1b
+          Value 0: 2 — #2: integer  [0x14b+0x1] → 0x167+0x2
       ▾ #1: "NSHTTPCookieAcceptPolicy" — ASCII string  [0x14c+0x1b]
           Marker: 0x5f — ASCII string, size nibble 15  [0x14c+0x1]
           Count: 24  [0x14d+0x2]
