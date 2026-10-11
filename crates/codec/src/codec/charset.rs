@@ -1,13 +1,18 @@
-//! Character sets: single-byte code pages decoded to text, and the lookup of
-//! charset names (`charset=` in MIME, `encoding=` in XML, `<meta charset>`)
-//! by the labels of the WHATWG Encoding Standard.
+//! Character sets: single-byte code pages and the double-byte East Asian
+//! code pages ([`MultiByte`]: Shift_JIS, GBK, EUC-KR/UHC, Big5) decoded to
+//! text, and the lookup of charset names (`charset=` in MIME, `encoding=`
+//! in XML, `<meta charset>`) by the labels of the WHATWG Encoding Standard.
 //!
 //! The tables in [`tables`] are generated with Python's `codecs` module and
-//! checked against it in the tests. Multi-byte East Asian encodings
-//! (Shift_JIS, EUC-JP, GBK, Big5, EUC-KR, ...) are recognised by name
-//! ([`Label::Unsupported`]) but not decoded.
+//! checked against it in the tests; so are the double-byte tables (see
+//! [`multi`]). Other multi-byte encodings (EUC-JP, ISO-2022, GB18030's
+//! four-byte sequences) are recognised by name ([`Label::Unsupported`]) but
+//! not decoded.
 
+pub mod multi;
 mod tables;
+
+pub use multi::MultiByte;
 
 macro_rules! charsets {
     ($($variant:ident => $name:literal, $table:ident, $transform:literal;)*) => {
@@ -104,6 +109,8 @@ pub enum Label {
     Utf16Le,
     Utf16Be,
     Single(Charset),
+    /// A double-byte East Asian code page.
+    Multi(MultiByte),
     /// A known encoding that is not decoded (multi-byte East Asian
     /// encodings, ISO-2022 variants), with its canonical name.
     Unsupported(&'static str),
@@ -116,6 +123,7 @@ impl Label {
             Label::Utf16Le => "UTF-16LE",
             Label::Utf16Be => "UTF-16BE",
             Label::Single(c) => c.name(),
+            Label::Multi(m) => m.name(),
             Label::Unsupported(name) => name,
         }
     }
@@ -128,6 +136,7 @@ impl Label {
             Label::Utf16Le => crate::text::utf16(bytes, crate::bytes::Endian::Little),
             Label::Utf16Be => crate::text::utf16(bytes, crate::bytes::Endian::Big),
             Label::Single(c) => c.decode(bytes),
+            Label::Multi(m) => m.decode(bytes),
             Label::Unsupported(_) => return None,
         })
     }
@@ -139,7 +148,8 @@ impl Label {
 /// code pages the standard leaves out (DOS code pages 437 and 850).
 const LABELS: &[(Label, &[&str])] = {
     use Charset::*;
-    use Label::{Single as S, Unsupported as U};
+    use Label::{Multi as M, Single as S, Unsupported as U};
+    use MultiByte::*;
     &[
         (
             Label::Utf8,
@@ -369,7 +379,7 @@ const LABELS: &[(Label, &[&str])] = {
         (S(Cp437), &["437", "cp437", "ibm437", "cspc8codepage437"]),
         (S(Cp850), &["850", "cp850", "ibm850", "cspc850multilingual"]),
         (
-            U("GBK"),
+            M(Cp936),
             &[
                 "chinese",
                 "csgb2312",
@@ -384,13 +394,13 @@ const LABELS: &[(Label, &[&str])] = {
         ),
         (U("gb18030"), &["gb18030"]),
         (
-            U("Big5"),
+            M(Cp950),
             &["big5", "big5-hkscs", "cn-big5", "csbig5", "x-x-big5"],
         ),
         (U("EUC-JP"), &["cseucpkdfmtjapanese", "euc-jp", "x-euc-jp"]),
         (U("ISO-2022-JP"), &["csiso2022jp", "iso-2022-jp"]),
         (
-            U("Shift_JIS"),
+            M(Cp932),
             &[
                 "csshiftjis",
                 "ms932",
@@ -403,7 +413,7 @@ const LABELS: &[(Label, &[&str])] = {
             ],
         ),
         (
-            U("EUC-KR"),
+            M(Cp949),
             &[
                 "cseuckr",
                 "csksc56011987",
@@ -461,6 +471,22 @@ const ALIASES: &[(&str, &str)] = &[
     ("utf-8-unix", "utf8"),
     ("utf-8-dos", "utf8"),
     ("utf-8-sig", "utf8"),
+    ("cp932", "shift_jis"),
+    ("windows-932", "shift_jis"),
+    ("shiftjis", "shift_jis"),
+    ("cp936", "gbk"),
+    ("windows-936", "gbk"),
+    ("ms936", "gbk"),
+    ("euc-cn", "gbk"),
+    ("euccn", "gbk"),
+    ("cp949", "euc-kr"),
+    ("ms949", "euc-kr"),
+    ("uhc", "euc-kr"),
+    ("euckr", "euc-kr"),
+    ("cp950", "big5"),
+    ("windows-950", "big5"),
+    ("ms950", "big5"),
+    ("x-windows-950", "big5"),
 ];
 
 /// The encoding a charset label names (ASCII case-insensitive, surrounding
@@ -508,7 +534,11 @@ mod tests {
         assert_eq!(lookup("KOI8-R"), Some(Label::Single(Charset::Koi8R)));
         assert_eq!(lookup("UTF8"), Some(Label::Utf8));
         assert_eq!(lookup("utf-16"), Some(Label::Utf16Le));
-        assert_eq!(lookup("Shift_JIS"), Some(Label::Unsupported("Shift_JIS")));
+        assert_eq!(lookup("Shift_JIS"), Some(Label::Multi(MultiByte::Cp932)));
+        assert_eq!(lookup("windows-949"), Some(Label::Multi(MultiByte::Cp949)));
+        assert_eq!(lookup("cp936"), Some(Label::Multi(MultiByte::Cp936)));
+        assert_eq!(lookup("big5-hkscs"), Some(Label::Multi(MultiByte::Cp950)));
+        assert_eq!(lookup("euc-jp"), Some(Label::Unsupported("EUC-JP")));
         assert_eq!(lookup("latin-1"), Some(Label::Single(Charset::Windows1252)));
         assert_eq!(lookup("ibm437"), Some(Label::Single(Charset::Cp437)));
         assert_eq!(lookup("klingon"), None);

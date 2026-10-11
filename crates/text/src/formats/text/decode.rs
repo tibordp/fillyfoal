@@ -18,8 +18,6 @@ use crate::node::Node;
 use crate::span::{Origin, Span};
 use crate::text::hex_digit;
 
-use super::encoding::Encoding;
-
 pub use crate::codec::filters::{XX_ALPHABET, xx_value};
 pub use crate::formats::util::fmt::preview;
 
@@ -406,7 +404,7 @@ async fn expand_decoded(
     if transform != Transform::Identity {
         cx.annotate(format!("{:#x} bytes decoded", decoded.len));
     }
-    if let Some(label @ Label::Single(_)) = charset {
+    if let Some(label @ (Label::Single(_) | Label::Multi(_))) = charset {
         let head = cx
             .read_avail(decoded.sub(0, crate::formats::HEAD_LEN))
             .await?;
@@ -419,7 +417,7 @@ async fn expand_decoded(
                 Some(found) => found.span,
                 None => {
                     let data = crate::codec::read_all(&cx, decoded).await?;
-                    let text = super::encoding::decode_stepped(&cx, Encoding::Single(c), &data)
+                    let text = super::encoding::decode_stepped(&cx, c, &data)
                         .await
                         .into_bytes();
                     let consumed = crate::bytes::to_u64(data.len());

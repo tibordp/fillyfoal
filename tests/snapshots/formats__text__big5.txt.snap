@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ big5.txt — Big5 text, LF line endings, 5 lines  [0x0+0xb9]
+    Encoding: "Big5" — recognised from the characters
+    Line endings: "LF" — 5 LF, 0 CRLF, 0 CR
+  ▾ Lines — 5 lines  [0x0+0xb9]
+      Line 1: "這是一個用繁體中文寫的文字檔案。"  [0x0+0x20]
+      Line 2: "檔案使用大五碼保存。"  [0x21+0x14]
+      Line 3: "今天天氣很好，我們打算下午去公園散步。"  [0x36+0x26]
+      Line 4: "學習一門新的語言需要時間和耐心，但是非常有意思。"  [0x5d+0x30]
+      Line 5: "這個檔案是為了測試字元編碼的識別而產生的。"  [0x8e+0x2a]

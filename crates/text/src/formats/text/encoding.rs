@@ -4,7 +4,7 @@
 use std::borrow::Cow;
 
 use crate::bytes::{to_u64, to_usize};
-use crate::codec::charset::{self, Charset, Label};
+use crate::codec::charset::{self, Charset, Label, MultiByte};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::formats::Input;
@@ -21,6 +21,11 @@ pub enum Encoding {
     /// A single-byte code page named by a declaration (XML `encoding=`,
     /// HTML `<meta charset>`, a coding cookie, MIME `charset=`).
     Single(Charset),
+    /// A double-byte East Asian code page (Shift_JIS, GBK, EUC-KR, Big5),
+    /// declared or recognised. Line breaks are single bytes, but other
+    /// ASCII bytes can be the second half of a character, so structured
+    /// parsers get it transcoded.
+    Multi(MultiByte),
     Utf16Le,
     Utf16Be,
     Utf32Le,
@@ -33,6 +38,7 @@ impl Encoding {
             Encoding::Utf8 => "UTF-8",
             Encoding::Windows1252 => "Windows-1252",
             Encoding::Single(c) => c.name(),
+            Encoding::Multi(m) => m.name(),
             Encoding::Utf16Le => "UTF-16LE",
             Encoding::Utf16Be => "UTF-16BE",
             Encoding::Utf32Le => "UTF-32LE",
@@ -43,23 +49,38 @@ impl Encoding {
     /// Bytes per code unit.
     pub fn unit(self) -> u64 {
         match self {
-            Encoding::Utf8 | Encoding::Windows1252 | Encoding::Single(_) => 1,
+            Encoding::Utf8 | Encoding::Windows1252 | Encoding::Single(_) | Encoding::Multi(_) => 1,
             Encoding::Utf16Le | Encoding::Utf16Be => 2,
             Encoding::Utf32Le | Encoding::Utf32Be => 4,
         }
     }
 
-    /// Whether ASCII characters are single bytes (so byte-oriented parsers
-    /// work directly on the source).
+    /// Whether ASCII bytes are always ASCII characters (so byte-oriented
+    /// parsers work directly on the source).
     pub fn ascii_compatible(self) -> bool {
-        self.unit() == 1
+        self.unit() == 1 && !matches!(self, Encoding::Multi(_))
+    }
+
+    /// The transform name of a source transcoded from this encoding into
+    /// UTF-8 (see [`Origin`]).
+    pub fn transform(self) -> &'static str {
+        match self {
+            Encoding::Utf8 => "utf-8",
+            Encoding::Windows1252 => Charset::Windows1252.transform(),
+            Encoding::Single(c) => c.transform(),
+            Encoding::Multi(m) => m.transform(),
+            Encoding::Utf16Le => "utf-16le",
+            Encoding::Utf16Be => "utf-16be",
+            Encoding::Utf32Le => "utf-32le",
+            Encoding::Utf32Be => "utf-32be",
+        }
     }
 
     /// The code unit at the start of `bytes`.
     pub fn code_unit(self, bytes: &[u8]) -> Option<u32> {
         use crate::bytes::{u16_be, u16_le, u32_be, u32_le};
         match self {
-            Encoding::Utf8 | Encoding::Windows1252 | Encoding::Single(_) => {
+            Encoding::Utf8 | Encoding::Windows1252 | Encoding::Single(_) | Encoding::Multi(_) => {
                 bytes.first().map(|&b| u32::from(b))
             }
             Encoding::Utf16Le => u16_le(bytes, 0).map(u32::from),
@@ -74,6 +95,7 @@ impl Encoding {
             Encoding::Utf8 => decode_8bit(bytes),
             Encoding::Windows1252 => windows_1252(bytes),
             Encoding::Single(c) => c.decode(bytes),
+            Encoding::Multi(m) => m.decode(bytes),
             Encoding::Utf16Le => crate::text::utf16(bytes, crate::fields::Endian::Little),
             Encoding::Utf16Be => crate::text::utf16(bytes, crate::fields::Endian::Big),
             Encoding::Utf32Le | Encoding::Utf32Be => bytes
@@ -188,6 +210,9 @@ pub fn classify(data: &[u8]) -> Option<Encoding> {
     if utf8 {
         return Some(Encoding::Utf8);
     }
+    if let Some(m) = guess_multi(data) {
+        return Some(Encoding::Multi(m));
+    }
     // 8-bit legacy text: mostly ASCII, or words in a non-Latin script.
     let high = data.iter().filter(|&&b| b >= 0x80).count();
     if high.saturating_mul(4) <= data.len() {
@@ -262,6 +287,114 @@ fn guess_single(data: &[u8]) -> Encoding {
     best.1
 }
 
+/// Most bytes of a double-byte code page that [`guess_multi`] looks at.
+const MULTI_SAMPLE: usize = 16 * 1024;
+
+/// Text in a double-byte East Asian code page, recognised conservatively:
+/// the sample must decode without a single invalid sequence, have at least
+/// a few double-byte characters, and nine in ten of them must be the
+/// common characters of the language the code page is for, as the code
+/// pages order them: the 2965 level-1 kanji, kana and punctuation of
+/// Shift_JIS (with at least some kana), the 3755 level-1 hanzi of GBK
+/// (GB 2312's first level), the 5401 frequent characters of Big5, and the
+/// 2350 hangul syllables of EUC-KR (with spaces between words, which
+/// Chinese lacks: Korean hangul bytes are also common GBK and Big5 hanzi).
+/// The best-scoring code page wins.
+fn guess_multi(data: &[u8]) -> Option<MultiByte> {
+    let sample = data.get(..data.len().min(MULTI_SAMPLE)).unwrap_or_default();
+    if !sample.iter().any(|&b| b >= 0x80) {
+        return None;
+    }
+    let mut best: Option<(u64, MultiByte)> = None;
+    for &m in MultiByte::ALL {
+        if let Some(score) = multi_score(m, sample)
+            && best.is_none_or(|(s, _)| score > s)
+        {
+            best = Some((score, m));
+        }
+    }
+    best.map(|(_, m)| m)
+}
+
+/// How well `data` reads as `m` (per mille of its non-ASCII characters
+/// that are common ones), or `None` if it does not.
+fn multi_score(m: MultiByte, data: &[u8]) -> Option<u64> {
+    let in_range = |code: u16, lead: (u8, u8), trail: (u8, u8)| {
+        let [l, t] = code.to_be_bytes();
+        (lead.0..=lead.1).contains(&l) && (trail.0..=trail.1).contains(&t)
+    };
+    let mut chars = 0u64;
+    let mut common = 0u64;
+    let mut kana = 0u64;
+    let mut hangul = 0u64;
+    // A space between two double-byte characters (a word break in Korean).
+    let mut spaced = 0u64;
+    let mut prev_wide = false;
+    let mut space_after_wide = false;
+    let mut pos = 0usize;
+    while let Some((c, n)) = m.next(data.get(pos..).unwrap_or_default()) {
+        let b0 = data.get(pos).copied().unwrap_or(0);
+        if b0 < 0x80 {
+            space_after_wide = b0 == b' ' && (prev_wide || space_after_wide);
+            prev_wide = false;
+            pos = pos.saturating_add(n);
+            continue;
+        }
+        c?;
+        chars = chars.saturating_add(1);
+        if n == 2 {
+            if space_after_wide {
+                spaced = spaced.saturating_add(1);
+            }
+            let code =
+                u16::from_be_bytes([b0, data.get(pos.saturating_add(1)).copied().unwrap_or(0)]);
+            let good = match m {
+                MultiByte::Cp932 => {
+                    let is_kana =
+                        (0x829f..=0x82f1).contains(&code) || (0x8340..=0x8396).contains(&code);
+                    if is_kana {
+                        kana = kana.saturating_add(1);
+                    }
+                    // Kana, punctuation and full-width letters, level-1 kanji.
+                    is_kana
+                        || (0x8140..=0x82f1).contains(&code)
+                        || (0x889f..=0x9872).contains(&code)
+                }
+                MultiByte::Cp936 => {
+                    in_range(code, (0xb0, 0xd7), (0xa1, 0xfe))
+                        || in_range(code, (0xa1, 0xa3), (0xa1, 0xfe))
+                }
+                MultiByte::Cp950 => {
+                    (0xa140..=0xa3bf).contains(&code) || (0xa440..=0xc67e).contains(&code)
+                }
+                MultiByte::Cp949 => {
+                    let is_hangul = in_range(code, (0xb0, 0xc8), (0xa1, 0xfe));
+                    if is_hangul {
+                        hangul = hangul.saturating_add(1);
+                    }
+                    is_hangul || in_range(code, (0xa1, 0xa3), (0xa1, 0xfe))
+                }
+            };
+            if good {
+                common = common.saturating_add(1);
+            }
+        }
+        prev_wide = n == 2;
+        space_after_wide = false;
+        pos = pos.saturating_add(n);
+    }
+    if chars < 8 || common.saturating_mul(10) < chars.saturating_mul(9) {
+        return None;
+    }
+    let spaced_out = spaced.saturating_mul(12) >= chars;
+    let plausible = match m {
+        MultiByte::Cp932 => kana.saturating_mul(10) >= chars,
+        MultiByte::Cp949 => hangul.saturating_mul(2) >= chars && spaced_out,
+        MultiByte::Cp936 | MultiByte::Cp950 => !spaced_out,
+    };
+    plausible.then(|| common.saturating_mul(1000).checked_div(chars).unwrap_or(0))
+}
+
 /// Bytes as UTF-8 when valid, otherwise as Windows-1252 (so legacy text
 /// keeps its accented letters instead of turning into replacement marks).
 pub fn decode_8bit(bytes: &[u8]) -> String {
@@ -327,18 +460,20 @@ fn is_utf8(data: &[u8]) -> bool {
     }
 }
 
-/// The single-byte charset a declaration names, if the head of the text
-/// needs it: a byte order mark or UTF-16 wins, and text that is valid UTF-8
-/// is taken as UTF-8 whatever it claims (mislabelled UTF-8 is far more
-/// common than legacy text that happens to be valid UTF-8). Declared but
-/// undecodable encodings are reported on `cx`.
-fn declared_single(cx: Option<&Cx>, head: &[u8], declared: Option<Label>) -> Option<Charset> {
+/// The legacy encoding (a single-byte or double-byte code page) a
+/// declaration names, if the head of the text needs it: a byte order mark
+/// or UTF-16 wins, and text that is valid UTF-8 is taken as UTF-8 whatever
+/// it claims (mislabelled UTF-8 is far more common than legacy text that
+/// happens to be valid UTF-8). Declared but undecodable encodings are
+/// reported on `cx`.
+fn declared_legacy(cx: Option<&Cx>, head: &[u8], declared: Option<Label>) -> Option<Encoding> {
     let declared = declared?;
     if bom(head).is_some() || sniff_utf16(head).is_some() || is_utf8(head) {
         return None;
     }
     match declared {
-        Label::Single(c) => Some(c),
+        Label::Single(c) => Some(Encoding::Single(c)),
+        Label::Multi(m) => Some(Encoding::Multi(m)),
         Label::Unsupported(name) => {
             if let Some(cx) = cx {
                 cx.diag(crate::error::Diagnostic::unsupported(format!(
@@ -368,15 +503,26 @@ pub async fn prepare_declared(cx: &Cx, input: Input, declared: Option<Label>) ->
             None => (Encoding::Utf8, 0),
         },
     };
-    let legacy = matches!(declared, Some(Label::Single(_) | Label::Unsupported(_)));
-    if legacy && encoding == Encoding::Utf8 && bom_len == 0 {
+    if encoding == Encoding::Utf8 && bom_len == 0 {
+        let legacy = matches!(
+            declared,
+            Some(Label::Single(_) | Label::Multi(_) | Label::Unsupported(_))
+        );
         let head = cx.read_avail(span.sub(0, crate::formats::HEAD_LEN)).await?;
+        // A declared code page, or else a recognised double-byte one.
         // Windows-1252 is what 8-bit text falls back to anyway: keeping
         // the original source keeps spans in the file.
-        if let Some(c) = declared_single(Some(cx), &head, declared)
-            && c != Charset::Windows1252
+        let found = if legacy {
+            declared_legacy(Some(cx), &head, declared)
+        } else if declared.is_none() && !is_utf8(&head) {
+            guess_multi(&head).map(Encoding::Multi)
+        } else {
+            None
+        };
+        if let Some(e) = found
+            && e != Encoding::Single(Charset::Windows1252)
         {
-            return transcode(cx, span, Encoding::Single(c), c.transform(), None).await;
+            return transcode(cx, span, e, e.transform(), None).await;
         }
     }
     let bom = (bom_len > 0).then(|| span.sub(0, bom_len));
@@ -395,13 +541,7 @@ pub async fn prepare_declared(cx: &Cx, input: Input, declared: Option<Label>) ->
             bom,
         });
     }
-    let transform = match encoding {
-        Encoding::Utf16Le => "utf-16le",
-        Encoding::Utf16Be => "utf-16be",
-        Encoding::Utf32Le => "utf-32le",
-        _ => "utf-32be",
-    };
-    transcode(cx, body, encoding, transform, bom).await
+    transcode(cx, body, encoding, encoding.transform(), bom).await
 }
 
 /// Transcodes `body` from `encoding` into a derived UTF-8 source.
@@ -445,6 +585,21 @@ pub(super) async fn decode_stepped(cx: &Cx, encoding: Encoding, data: &[u8]) -> 
     }
     let mut out = String::with_capacity(data.len());
     let mut rest = data;
+    if let Encoding::Multi(m) = encoding {
+        // A chunk ends before a lead byte whose trail is in the next one.
+        while !rest.is_empty() {
+            let chunk = rest.get(..CHUNK.min(rest.len())).unwrap_or_default();
+            let mut used = m.decode_partial(chunk, &mut out);
+            if used == 0 || chunk.len() == rest.len() {
+                // A lone lead byte at the very end.
+                out.push_str(&m.decode(chunk.get(used..).unwrap_or_default()));
+                used = chunk.len();
+            }
+            rest = rest.get(used..).unwrap_or_default();
+            cx.checkpoint().await;
+        }
+        return out;
+    }
     while !rest.is_empty() {
         let mut n = CHUNK.min(rest.len());
         if n < rest.len() {
@@ -526,15 +681,15 @@ pub fn coding_cookie(head: &[u8]) -> Option<String> {
     })
 }
 
-/// The single-byte charset that `declared` names for text starting with
+/// The legacy encoding that `declared` names for text starting with
 /// `head` (see [`prepare_declared`]), for code that decodes strings itself.
-pub fn declared_charset(head: &[u8], declared: Option<&str>) -> Option<Charset> {
-    declared_single(None, head, declared.and_then(charset::lookup))
+pub fn declared_charset(head: &[u8], declared: Option<&str>) -> Option<Encoding> {
+    declared_legacy(None, head, declared.and_then(charset::lookup))
 }
 
 /// [`declared_charset`] for an already looked-up label.
-pub fn declared_charset_label(head: &[u8], declared: Label) -> Option<Charset> {
-    declared_single(None, head, Some(declared))
+pub fn declared_charset_label(head: &[u8], declared: Label) -> Option<Encoding> {
+    declared_legacy(None, head, Some(declared))
 }
 
 /// The head of a probe as UTF-8-compatible bytes: without a byte order
@@ -571,6 +726,76 @@ mod tests {
             classify(b"Caf\xe9 cr\xe8me br\xfbl\xe9e\n"),
             Some(Encoding::Windows1252)
         );
+    }
+
+    /// `tests/data/text/cjk.py`.
+    const SJIS: &[u8] =
+        include_bytes!("../../../../../tests/fixtures/synthetic/text/shift_jis.txt");
+    const GBK: &[u8] = include_bytes!("../../../../../tests/fixtures/synthetic/text/gbk.txt");
+    const BIG5: &[u8] = include_bytes!("../../../../../tests/fixtures/synthetic/text/big5.txt");
+    const EUC_KR: &[u8] = include_bytes!("../../../../../tests/fixtures/synthetic/text/euc-kr.txt");
+
+    #[test]
+    fn double_byte_code_pages_are_recognised() {
+        use MultiByte::*;
+        for (data, m) in [(SJIS, Cp932), (GBK, Cp936), (BIG5, Cp950), (EUC_KR, Cp949)] {
+            assert_eq!(classify(data), Some(Encoding::Multi(m)), "{m:?}");
+            // Each reads as some other code page too, but not well.
+            for &other in MultiByte::ALL.iter().filter(|&&o| o != m) {
+                assert_eq!(multi_score(other, data), None, "{m:?} as {other:?}");
+            }
+        }
+        // Korean without its word spaces could be GBK or Big5 hanzi; with
+        // them it is not Chinese.
+        let unspaced: Vec<u8> = EUC_KR.iter().copied().filter(|&b| b != b' ').collect();
+        assert_eq!(multi_score(Cp949, &unspaced), None);
+        // Too few characters to tell.
+        assert_eq!(guess_multi(b"file \x93\xfa\x96\x7b\n"), None);
+        assert_eq!(guess_multi(SJIS.get(..12).unwrap_or_default()), None);
+        // A lead byte cut off at the end of the sample is fine.
+        assert_eq!(
+            guess_multi(SJIS.get(..SJIS.len().saturating_sub(2)).unwrap_or_default()),
+            Some(Cp932)
+        );
+    }
+
+    #[test]
+    fn single_byte_text_is_not_double_byte() {
+        let french = "Les élèves étudièrent à Genève pendant l'été; où était-ce? Déjà là-bas, \
+                      ils créèrent des chansons françaises très célèbres.\n";
+        let french = encode_1252(french);
+        assert_eq!(guess_multi(&french), None);
+        assert_eq!(classify(&french), Some(Encoding::Windows1252));
+        let cp1251 = b"\xcf\xf0\xe8\xe2\xe5\xf2, \xec\xe8\xf0. \xdd\xf2\xee \xef\xf0\xee\xe2\xe5\xf0\xea\xe0 \xf2\xe5\xea\xf1\xf2\xe0.\n";
+        assert_eq!(guess_multi(cp1251), None);
+        // Pseudo-random high bytes without controls or NULs (a compressed
+        // or encrypted run) decode in GBK and Big5, but not as common text.
+        let mut x = 0x1234_5678u32;
+        let noise: Vec<u8> = (0..4096)
+            .map(|_| {
+                x = x.wrapping_mul(1_103_515_245).wrapping_add(12345);
+                0x80 | (x >> 24) as u8
+            })
+            .collect();
+        assert_eq!(guess_multi(&noise), None);
+        // Private-use and half-width singles of CP932 (0xA0..=0xFF).
+        assert_eq!(guess_multi(&[0xfd, 0xfe, 0xff, 0xa0].repeat(64)), None);
+    }
+
+    fn encode_1252(s: &str) -> Vec<u8> {
+        s.chars()
+            .map(|c| {
+                let u = c as u32;
+                if u < 0x80 {
+                    u as u8
+                } else {
+                    let high = Charset::Windows1252.high();
+                    (0..128u8)
+                        .find(|&i| high.get(usize::from(i)).map(|&h| u32::from(h)) == Some(u))
+                        .map_or(b'?', |i| i | 0x80)
+                }
+            })
+            .collect()
     }
 
     #[test]
