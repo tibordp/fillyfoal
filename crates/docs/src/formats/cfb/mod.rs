@@ -19,6 +19,7 @@ mod msi;
 mod officeart;
 mod ppt;
 mod propset;
+pub mod propstore;
 mod ptg;
 mod rec;
 mod sprm;

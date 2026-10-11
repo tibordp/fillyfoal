@@ -22,6 +22,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::disk::{PieceList, content_node, fragments_node, size};
 use crate::formats::util::val::{name_or, text, uint};
+use crate::formats::util::winsec;
 use crate::formats::{Format, Input, Probe, embedded_named};
 use crate::node::{Count, Node};
 use crate::record;
@@ -82,24 +83,51 @@ const RECORD_FLAGS: FlagTable = &[
     flag(8, "VIEW_INDEX"),
 ];
 
-record! {
-    /// MFT record header (`FILE`).
-    pub struct RecordHeader {
-        magic: ascii[4] "Magic",
-        usa_offset: u16 "Update sequence offset",
-        usa_count: u16 "Update sequence entries",
-        lsn: u64 "Log sequence number",
-        sequence: u16 "Sequence number",
-        links: u16 "Hard links",
-        attrs_offset: u16 "First attribute offset",
-        flags: u16 "Flags" .hex() .flags(RECORD_FLAGS),
-        used: u32 "Bytes used",
-        allocated: u32 "Bytes allocated",
-        base: u64 "Base record" .hex(),
-        next_attr_id: u16 "Next attribute id",
-        _pad: u16 "Padding",
-        number: u32 "Record number",
+/// An MFT record header (`FILE`, or `BAAD` after a failed multi-sector
+/// write): the fields up to the first attribute, then the update sequence
+/// number and array. Records written by NT 3.x and 4.0 (update sequence at
+/// 0x2a) have no record number. Returns the first attribute's offset.
+pub fn record_header_layout(f: &mut Fields<'_>, _: &()) -> Result<u16> {
+    f.ascii("Magic", 4).emit()?;
+    let usa = f.u16("Update sequence offset").hex().emit()?;
+    let count = f.u16("Update sequence entries").emit()?;
+    f.u64("Log sequence number").emit()?;
+    f.u16("Sequence number").emit()?;
+    f.u16("Hard links").emit()?;
+    let first = f.u16("First attribute offset").hex().emit()?;
+    f.u16("Flags").hex().flags(RECORD_FLAGS).emit()?;
+    f.u32("Bytes used").emit()?;
+    f.u32("Bytes allocated").emit()?;
+    f.u64("Base record")
+        .hex()
+        .with(|&r, n| if r == 0 { n } else { n.summary(reference(r)) })
+        .emit()?;
+    f.u16("Next attribute id").emit()?;
+    if usa >= 0x30 {
+        f.u16("Padding").emit()?;
+        f.u32("Record number").emit()?;
     }
+    f.seek(usa.into());
+    f.u16("Update sequence number").hex().emit()?;
+    f.bytes(
+        "Update sequence array",
+        u64::from(count.saturating_sub(1)).saturating_mul(2),
+    )
+    .emit()?;
+    Ok(first)
+}
+
+/// The header node of a (fixed-up) MFT record.
+async fn record_header(cx: &Cx, rec: Span) -> Result<Node> {
+    let head = cx.read_avail(rec.sub(0, 24)).await?;
+    let first = u64::from(u16_le(&head, 20).unwrap_or(0)).max(0x2a);
+    Ok(struct_node(
+        "Header",
+        rec.sub(0, first),
+        LE,
+        (),
+        record_header_layout,
+    ))
 }
 
 /// NTFS attribute type codes (`$AttrDef`).
@@ -151,17 +179,29 @@ pub const FILE_ATTRIBUTES: FlagTable = &[
     flag(0x2000_0000, "DUP_VIEW_INDEX_PRESENT"),
 ];
 
-record! {
-    pub struct StandardInformation {
-        created: u64 "Created" .filetime(),
-        modified: u64 "Modified" .filetime(),
-        mft_modified: u64 "MFT record modified" .filetime(),
-        accessed: u64 "Accessed" .filetime(),
-        attributes: u32 "File attributes" .hex() .flags(FILE_ATTRIBUTES),
-        max_versions: u32 "Maximum versions",
-        version: u32 "Version",
-        class_id: u32 "Class id",
+/// A `$STANDARD_INFORMATION` value: 48 bytes, or 72 with the owner,
+/// security id, quota and USN that NTFS 3.0 (Windows 2000) added.
+fn standard_information_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.u64("Created").filetime().emit()?;
+    f.u64("Modified").filetime().emit()?;
+    f.u64("MFT record modified").filetime().emit()?;
+    f.u64("Accessed").filetime().emit()?;
+    f.u32("File attributes")
+        .hex()
+        .flags(FILE_ATTRIBUTES)
+        .emit()?;
+    f.u32("Maximum versions").emit()?;
+    f.u32("Version").emit()?;
+    f.u32("Class id").emit()?;
+    if f.remaining() >= 24 {
+        f.u32("Owner id").emit()?;
+        f.u32("Security id")
+            .desc("Key of the file's descriptor in $Secure")
+            .emit()?;
+        f.u64("Quota charged").emit()?;
+        f.u64("Update sequence number").hex().emit()?;
     }
+    Ok(())
 }
 
 /// `$FILE_NAME` namespaces.
@@ -169,7 +209,7 @@ pub const NAMESPACES: EnumTable = &[(0, "POSIX"), (1, "Win32"), (2, "DOS"), (3, 
 
 record! {
     pub struct FileName {
-        parent: u64 "Parent reference" .with(|&r, n| n.summary(reference(r))),
+        parent: u64 "Parent reference" .hex() .with(|&r, n| n.summary(reference(r))),
         created: u64 "Created" .filetime(),
         modified: u64 "Modified" .filetime(),
         mft_modified: u64 "MFT record modified" .filetime(),
@@ -181,6 +221,20 @@ record! {
         name_length: u8 "Name length",
         namespace: u8 "Namespace" .enumeration(NAMESPACES),
     }
+}
+
+/// The name, namespace and modification time of a `$FILE_NAME` value (an
+/// attribute's, or an index entry's key), from its first byte.
+pub fn file_name_of(raw: &[u8]) -> Option<(String, u8, u64)> {
+    let modified = u64_le(raw, 16)?;
+    let len = usize::from(*raw.get(64)?);
+    let namespace = *raw.get(65)?;
+    let name = crate::text::utf16(
+        raw.get(66..66usize.saturating_add(len.saturating_mul(2)))
+            .unwrap_or_default(),
+        LE,
+    );
+    Some((name, namespace, modified))
 }
 
 fn reference(r: u64) -> String {
@@ -211,6 +265,8 @@ struct Attr {
     kind: u32,
     name: String,
     span: Span,
+    /// The attribute's header and name.
+    header: Span,
     resident: Option<Span>,
     /// This instance's runlist (non-resident attributes).
     runs: Option<Span>,
@@ -463,10 +519,18 @@ async fn attributes(cx: &Cx, rec: Span, holder: u64) -> Result<Vec<Attr>> {
                 .await?,
             LE,
         );
+        // The header ends where the value or the runlist starts.
+        let (fixed, data_off) = if h.get(8) == Some(&0) {
+            (24, u16_le(&h, 20))
+        } else {
+            (64, u16_le(&h, 32))
+        };
+        let header_len = u64::from(data_off.unwrap_or(0)).max(fixed).min(len);
         let mut attr = Attr {
             kind,
             name,
             span,
+            header: span.sub(0, header_len),
             resident: None,
             runs: None,
             data_size: 0,
@@ -875,13 +939,9 @@ async fn best_name(cx: &Cx, attrs: &[Attr]) -> Result<Option<String>> {
     for a in attrs.iter().filter(|a| a.kind == 0x30) {
         let Some(value) = a.resident else { continue };
         let raw = cx.read_avail(value).await?;
-        let len = usize::from(raw.get(64).copied().unwrap_or(0));
-        let namespace = raw.get(65).copied().unwrap_or(0);
-        let name = crate::text::utf16(
-            raw.get(66..66usize.saturating_add(len.saturating_mul(2)))
-                .unwrap_or_default(),
-            LE,
-        );
+        let Some((name, namespace, _)) = file_name_of(&raw) else {
+            continue;
+        };
         let rank = if namespace == 2 { 0 } else { 1 };
         if best.as_ref().is_none_or(|(r, _)| rank > *r) {
             best = Some((rank, name));
@@ -896,14 +956,11 @@ async fn record_node(cx: Cx, (fs, n): (Vol, u64)) -> Result<()> {
         .record_span(n)
         .ok_or_else(|| Diagnostic::malformed(format!("record {n} is outside the MFT")))?;
     let rec = fixed_up(&cx, span, b"FILE").await?;
-    cx.emit(RecordHeader::node(
-        "Header",
-        rec.sub(0, RecordHeader::SIZE),
-        LE,
-    ));
+    cx.emit(record_header(&cx, rec).await?);
     let attrs = all_attributes(&cx, &fs, n, rec).await?;
+    let store = Store::Volume(fs.clone());
     for a in &attrs {
-        cx.emit(attribute_node(&fs, a, n));
+        cx.emit(attribute_node(&store, a, n));
     }
     if let Some(data) = find_attr(&attrs, 0x80, "") {
         let node = stream_content(&cx, &fs, data).await?;
@@ -955,7 +1012,26 @@ async fn system_content(cx: &Cx, fs: &Vol, n: u64, span: Span, node: Node) -> Re
     })
 }
 
-fn attribute_node(fs: &Vol, a: &Attr, record: u64) -> Node {
+/// Where a record's attributes are read from.
+#[derive(Clone, Debug)]
+enum Store {
+    /// A volume: runs map onto its clusters.
+    Volume(Vol),
+    /// A standalone copy of the MFT (`ntfs-mft`), dissected as this input:
+    /// runs name clusters of a volume that is not there.
+    Mft(Input),
+}
+
+impl Store {
+    fn input(&self) -> &Input {
+        match self {
+            Store::Volume(fs) => &fs.input,
+            Store::Mft(input) => input,
+        }
+    }
+}
+
+fn attribute_node(store: &Store, a: &Attr, record: u64) -> Node {
     let kind = name_or(ATTR_TYPES, a.kind.into(), "Attribute");
     let name = if a.name.is_empty() {
         kind
@@ -976,55 +1052,28 @@ fn attribute_node(fs: &Vol, a: &Attr, record: u64) -> Node {
     if a.holder != record {
         summary = format!("{summary}, in extension record {}", a.holder);
     }
-    node.summary(summary)
-        .lazy(attribute_fields, (fs.clone(), Arc::new(a.clone()), record))
+    node.summary(summary).lazy(
+        attribute_fields,
+        (store.clone(), Arc::new(a.clone()), record),
+    )
 }
 
-async fn attribute_fields(cx: Cx, (fs, a, record): (Vol, Arc<Attr>, u64)) -> Result<()> {
+async fn attribute_fields(cx: Cx, (store, a, record): (Store, Arc<Attr>, u64)) -> Result<()> {
+    cx.emit(struct_node(
+        "Header",
+        a.header,
+        LE,
+        (),
+        attribute_header_layout,
+    ));
     if let Some(value) = a.resident {
-        match a.kind {
-            0x10 => cx.emit(StandardInformation::node(
-                "Value",
-                value.sub(0, StandardInformation::SIZE),
-                LE,
-            )),
-            0x30 => {
-                cx.emit(FileName::node("Value", value.sub(0, FileName::SIZE), LE));
-                let raw = cx.read_avail(value).await?;
-                let len = u64::from(raw.get(64).copied().unwrap_or(0));
-                let name = value.sub(66, len.saturating_mul(2));
-                let text = crate::text::utf16(&cx.read_avail(name).await?, LE);
-                cx.emit(Node::new("Name").span(name).value(Value::Text(text)));
-            }
-            0x60 => {
-                let text = crate::text::utf16(&cx.read_avail(value).await?, LE);
-                cx.emit(
-                    Node::new("Volume name")
-                        .span(value)
-                        .value(Value::Text(text)),
-                );
-            }
-            0x70 => cx.emit(VolumeInformation::node(
-                "Value",
-                value.sub(0, VolumeInformation::SIZE),
-                LE,
-            )),
-            0x40 => cx.emit(struct_node("Value", value, LE, (), object_id_layout)),
-            0x50 => cx.emit(struct_node("Value", value, LE, (), sd_layout)),
-            0x90 => index_root(&cx, value).await?,
-            0xb0 => cx.emit(bitmap_node(
-                "Value",
-                value,
-                value.len.saturating_mul(8),
-                "bits",
-            )),
-            0x80 if record == 10 && a.name == "$Info" => cx.emit(UpcaseInfo::node(
-                "Value",
-                value.sub(0, UpcaseInfo::SIZE),
-                LE,
-            )),
-            0x80 if !a.name.is_empty() => cx.emit(content_node(&fs.input, value)),
-            _ => cx.emit(Node::new("Value").span(value).summary(size(value.len))),
+        // On a volume the unnamed $DATA stream's content is shown with its
+        // record.
+        let data = a.kind == 0x80 && a.name.is_empty();
+        if data && matches!(store, Store::Volume(_)) {
+            cx.emit(Node::new("Value").span(value).summary(size(value.len)));
+        } else {
+            resident_value(&cx, store.input(), &a, value, record).await?;
         }
         return Ok(());
     }
@@ -1038,9 +1087,13 @@ async fn attribute_fields(cx: Cx, (fs, a, record): (Vol, Arc<Attr>, u64)) -> Res
     for (i, &(count, lcn)) in list.iter().enumerate() {
         let node = Node::new(format!("Run {i}"));
         let node = match lcn {
-            Some(l) => node
-                .summary(format!("VCN {vcn}: {count} clusters at LCN {l}"))
-                .target(fs.cluster_span(l, count)),
+            Some(l) => {
+                let node = node.summary(format!("VCN {vcn}: {count} clusters at LCN {l}"));
+                match &store {
+                    Store::Volume(fs) => node.target(fs.cluster_span(l, count)),
+                    Store::Mft(_) => node,
+                }
+            }
             None => node.summary(format!("VCN {vcn}: {count} sparse clusters")),
         };
         cx.push(node).await;
@@ -1053,6 +1106,10 @@ async fn attribute_fields(cx: Cx, (fs, a, record): (Vol, Arc<Attr>, u64)) -> Res
         )));
         return Ok(());
     }
+    // Without the volume there is nothing more to show.
+    let Store::Volume(fs) = &store else {
+        return Ok(());
+    };
     // Allocated bytes past the end of the data, in the last run.
     if a.compression_unit == 0
         && a.extents.len() <= 1
@@ -1079,7 +1136,7 @@ async fn attribute_fields(cx: Cx, (fs, a, record): (Vol, Arc<Attr>, u64)) -> Res
     match a.kind {
         0x80 if a.name.is_empty() => {}
         0x80 => {
-            let node = stream_content(&cx, &fs, &a).await?;
+            let node = stream_content(&cx, fs, &a).await?;
             match (record, a.name.as_str(), node.span) {
                 (9, "$SDS", Some(span)) => cx.emit(
                     Node::new("Content")
@@ -1090,12 +1147,19 @@ async fn attribute_fields(cx: Cx, (fs, a, record): (Vol, Arc<Attr>, u64)) -> Res
                 _ => cx.emit(node),
             }
         }
+        0x20 => {
+            let span = fs
+                .runs_list(&cx, a.span, &list, a.data_size.min(MAX_LIST_BYTES))?
+                .finish(&cx, "ntfs-runs")
+                .await?;
+            cx.emit(attribute_list_node("Content", span));
+        }
         0x50 => {
             let span = fs
                 .runs_list(&cx, a.span, &list, a.data_size.min(MAX_INDEX_BYTES))?
                 .finish(&cx, "ntfs-runs")
                 .await?;
-            cx.emit(struct_node("Content", span, LE, (), sd_layout));
+            cx.emit(security_descriptor_node("Content", &cx, span).await?);
         }
         0xa0 | 0xb0 => {
             let span = fs
@@ -1753,40 +1817,39 @@ async fn sds(cx: Cx, span: Span) -> Result<()> {
 
 const SDS_HEADER: u64 = 20;
 
-/// An $SDS entry: its header, then the self-relative security descriptor
-/// (header fields; the SIDs and ACLs it points to are left as bytes).
+/// An $SDS entry's header.
 fn sds_entry_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u32("Hash").hex().emit()?;
     f.u32("Security id").emit()?;
     f.u64("Offset in stream").hex().emit()?;
-    let len = f.u32("Length").emit()?;
-    security_descriptor(f, u64::from(len).saturating_sub(SDS_HEADER))
-}
-
-/// A `$SECURITY_DESCRIPTOR` attribute value.
-fn sd_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
-    let len = f.remaining();
-    security_descriptor(f, len)
-}
-
-/// A self-relative security descriptor of `sd` bytes: its header; the SIDs
-/// and ACLs it points to are left as bytes.
-fn security_descriptor(f: &mut Fields<'_>, sd: u64) -> Result<()> {
-    if sd >= 20 {
-        f.u8("Revision").emit()?;
-        f.u8("Reserved").emit()?;
-        f.u16("Control").hex().emit()?;
-        f.u32("Owner offset").hex().emit()?;
-        f.u32("Group offset").hex().emit()?;
-        f.u32("SACL offset").hex().emit()?;
-        f.u32("DACL offset").hex().emit()?;
-        if sd > 20 {
-            f.bytes("SIDs and ACLs", sd.saturating_sub(20)).emit()?;
-        }
-    } else if sd > 0 {
-        f.bytes("Security descriptor", sd).emit()?;
-    }
+    f.u32("Length").emit()?;
     Ok(())
+}
+
+/// An $SDS entry: its header, then the self-relative security descriptor.
+async fn sds_entry(cx: Cx, entry: Span) -> Result<()> {
+    cx.emit(struct_node(
+        "Header",
+        entry.sub(0, SDS_HEADER),
+        LE,
+        (),
+        sds_entry_layout,
+    ));
+    cx.emit(security_descriptor_node("Security descriptor", &cx, entry.tail(SDS_HEADER)).await?);
+    Ok(())
+}
+
+/// The largest security descriptor read for a summary.
+const MAX_SD_BYTES: u64 = 1 << 16;
+
+/// A self-relative security descriptor (a `$SECURITY_DESCRIPTOR` value or
+/// an $SDS entry's), with its owner and ACLs.
+async fn security_descriptor_node(name: &'static str, cx: &Cx, span: Span) -> Result<Node> {
+    let raw = cx.read_avail(span.sub(0, MAX_SD_BYTES)).await?;
+    Ok(Node::new(name)
+        .span(span)
+        .summary(winsec::sd_summary(&raw))
+        .lazy(winsec::security_descriptor, (span, winsec::FILE_RIGHTS)))
 }
 
 async fn sds_block(cx: Cx, block: Span) -> Result<()> {
@@ -1798,15 +1861,12 @@ async fn sds_block(cx: Cx, block: Span) -> Result<()> {
         if len < SDS_HEADER || at.saturating_add(len) > block.len {
             break;
         }
+        let entry = block.sub(at, len);
         cx.push(
-            struct_node(
-                format!("Security id {id}"),
-                block.sub(at, len),
-                LE,
-                (),
-                sds_entry_layout,
-            )
-            .summary(format!("hash {:#010x}", u32_le(&head, 0).unwrap_or(0))),
+            Node::new(format!("Security id {id}"))
+                .span(entry)
+                .summary(format!("hash {:#010x}", u32_le(&head, 0).unwrap_or(0)))
+                .lazy(sds_entry, entry),
         )
         .await;
         at = at.saturating_add(len).next_multiple_of(16);
@@ -1844,7 +1904,7 @@ fn index_root_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
 
 /// An index entry: a file name entry of a directory (`$I30`), or a view
 /// index entry (`$SDH`, `$SII`, `$O`, `$Q`, `$R`) with its own key and data.
-fn index_entry_layout(f: &mut Fields<'_>, view: &bool) -> Result<()> {
+pub fn index_entry_layout(f: &mut Fields<'_>, view: &bool) -> Result<()> {
     let len;
     let flags;
     if *view {
@@ -1864,6 +1924,7 @@ fn index_entry_layout(f: &mut Fields<'_>, view: &bool) -> Result<()> {
         }
     } else {
         f.u64("File reference")
+            .hex()
             .with(|&r, n| n.summary(reference(r)))
             .emit()?;
         len = f.u16("Entry length").emit()?;
@@ -1913,12 +1974,9 @@ async fn index_root(cx: &Cx, value: Span) -> Result<()> {
             "end of node".to_owned()
         } else if !view && key >= FileName::SIZE {
             let raw = cx.read_avail(span).await?;
-            let n = usize::from(raw.get(80).copied().unwrap_or(0));
-            crate::text::utf16(
-                raw.get(82..82usize.saturating_add(n.saturating_mul(2)))
-                    .unwrap_or_default(),
-                LE,
-            )
+            file_name_of(raw.get(16..).unwrap_or_default())
+                .map(|(name, _, _)| name)
+                .unwrap_or_default()
         } else {
             format!("{key} key bytes")
         };
@@ -1948,4 +2006,389 @@ fn object_id_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
         f.guid(name).emit()?;
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Attribute headers and resident values
+
+/// Attribute header flags (the low byte is the compression method; 1 is
+/// LZNT1, the only one NTFS uses).
+const ATTRIBUTE_FLAGS: FlagTable = &[
+    flag(0x0001, "COMPRESSED"),
+    flag(0x4000, "ENCRYPTED"),
+    flag(0x8000, "SPARSE"),
+];
+
+/// An attribute's header: the common part, then the resident or
+/// non-resident part, then the name.
+pub fn attribute_header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.u32("Type").hex().enumeration(ATTR_TYPES).emit()?;
+    f.u32("Length").emit()?;
+    let non_resident = f.u8("Non-resident").emit()?;
+    let name_len = f.u8("Name length").emit()?;
+    let name_off = f.u16("Name offset").hex().emit()?;
+    f.u16("Flags").hex().flags(ATTRIBUTE_FLAGS).emit()?;
+    f.u16("Attribute id").emit()?;
+    if non_resident == 0 {
+        f.u32("Value length").emit()?;
+        f.u16("Value offset").hex().emit()?;
+        f.u8("Indexed").emit()?;
+        f.u8("Padding").emit()?;
+    } else {
+        f.u64("First VCN").emit()?;
+        f.u64("Last VCN").emit()?;
+        let runs = f.u16("Runlist offset").hex().emit()?;
+        f.u16("Compression unit")
+            .desc("Log2 of the clusters in a compression unit (0: not compressed)")
+            .emit()?;
+        f.u32("Padding").emit()?;
+        f.u64("Allocated size").emit()?;
+        f.u64("Data size").with(|&v, n| n.summary(size(v))).emit()?;
+        f.u64("Initialized size").emit()?;
+        if runs >= 72 {
+            f.u64("Compressed size")
+                .desc("Bytes of clusters allocated (compressed and sparse attributes)")
+                .emit()?;
+        }
+    }
+    if name_len > 0 {
+        f.seek(name_off.into());
+        f.utf16("Name", name_len.into()).emit()?;
+    }
+    Ok(())
+}
+
+/// Emits the decoded value of a resident attribute.
+async fn resident_value(cx: &Cx, input: &Input, a: &Attr, value: Span, record: u64) -> Result<()> {
+    match a.kind {
+        0x10 => cx.emit(struct_node(
+            "Value",
+            value,
+            LE,
+            (),
+            standard_information_layout,
+        )),
+        0x20 => cx.emit(attribute_list_node("Value", value)),
+        0x30 => {
+            cx.emit(FileName::node("Value", value.sub(0, FileName::SIZE), LE));
+            let raw = cx.read_avail(value).await?;
+            let len = u64::from(raw.get(64).copied().unwrap_or(0));
+            let name = value.sub(66, len.saturating_mul(2));
+            let text = crate::text::utf16(&cx.read_avail(name).await?, LE);
+            cx.emit(Node::new("Name").span(name).value(Value::Text(text)));
+        }
+        0x40 => cx.emit(struct_node("Value", value, LE, (), object_id_layout)),
+        0x50 => cx.emit(security_descriptor_node("Value", cx, value).await?),
+        0x60 => {
+            let text = crate::text::utf16(&cx.read_avail(value).await?, LE);
+            cx.emit(
+                Node::new("Volume name")
+                    .span(value)
+                    .value(Value::Text(text)),
+            );
+        }
+        0x70 => cx.emit(VolumeInformation::node(
+            "Value",
+            value.sub(0, VolumeInformation::SIZE),
+            LE,
+        )),
+        0x90 => index_root(cx, value).await?,
+        0xb0 => cx.emit(bitmap_node(
+            "Value",
+            value,
+            value.len.saturating_mul(8),
+            "bits",
+        )),
+        0xc0 => {
+            let raw = cx.read_avail(value.sub(0, 0x4000)).await?;
+            cx.emit(
+                struct_node("Value", value, LE, (), reparse_layout).summary(reparse_summary(&raw)),
+            );
+        }
+        0xd0 => cx.emit(struct_node("Value", value, LE, (), ea_information_layout)),
+        0xe0 => cx.emit(
+            Node::new("Value")
+                .span(value)
+                .summary(size(value.len))
+                .lazy(extended_attributes, value),
+        ),
+        0x80 if record == 10 && a.name == "$Info" => cx.emit(UpcaseInfo::node(
+            "Value",
+            value.sub(0, UpcaseInfo::SIZE),
+            LE,
+        )),
+        0x80 => cx.emit(content_node(input, value)),
+        _ => cx.emit(Node::new("Value").span(value).summary(size(value.len))),
+    }
+    Ok(())
+}
+
+/// An `$ATTRIBUTE_LIST` entry.
+fn attribute_list_entry_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.u32("Type").hex().enumeration(ATTR_TYPES).emit()?;
+    f.u16("Entry length").emit()?;
+    let name_len = f.u8("Name length").emit()?;
+    let name_off = f.u8("Name offset").hex().emit()?;
+    f.u64("First VCN").emit()?;
+    f.u64("Record")
+        .hex()
+        .with(|&r, n| n.summary(reference(r)))
+        .emit()?;
+    f.u16("Attribute id").emit()?;
+    if name_len > 0 {
+        f.seek(name_off.into());
+        f.utf16("Name", name_len.into()).emit()?;
+    }
+    Ok(())
+}
+
+fn attribute_list_node(name: &'static str, value: Span) -> Node {
+    Node::new(name)
+        .span(value)
+        .summary(size(value.len))
+        .lazy(attribute_list, value)
+}
+
+/// The entries of an `$ATTRIBUTE_LIST`: where each attribute of the file
+/// (or each part of a split one) is stored.
+async fn attribute_list(cx: Cx, value: Span) -> Result<()> {
+    let raw = cx.read_avail(value.sub(0, MAX_LIST_BYTES)).await?;
+    let mut at = 0usize;
+    let mut i = 0u32;
+    while let (Some(kind), Some(len)) = (u32_le(&raw, at), u16_le(&raw, at.saturating_add(4))) {
+        let len = usize::from(len);
+        if len < 26 {
+            break;
+        }
+        let name_len = usize::from(raw.get(at.saturating_add(6)).copied().unwrap_or(0));
+        let name_at = at.saturating_add(usize::from(
+            raw.get(at.saturating_add(7)).copied().unwrap_or(0),
+        ));
+        let name = crate::text::utf16(
+            raw.get(name_at..name_at.saturating_add(name_len.saturating_mul(2)))
+                .unwrap_or_default(),
+            LE,
+        );
+        let vcn = u64_le(&raw, at.saturating_add(8)).unwrap_or(0);
+        let holder = u64_le(&raw, at.saturating_add(16)).unwrap_or(0) & 0xffff_ffff_ffff;
+        let mut summary = name_or(ATTR_TYPES, kind.into(), "attribute");
+        if !name.is_empty() {
+            summary = format!("{summary}:{name}");
+        }
+        summary = format!("{summary} in record {holder}");
+        if vcn > 0 {
+            summary = format!("{summary}, from VCN {vcn}");
+        }
+        let entry = value.sub(crate::bytes::to_u64(at), crate::bytes::to_u64(len));
+        cx.push(
+            struct_node(
+                format!("Entry {i}"),
+                entry,
+                LE,
+                (),
+                attribute_list_entry_layout,
+            )
+            .summary(summary),
+        )
+        .await;
+        at = at.saturating_add(len);
+        i = i.saturating_add(1);
+    }
+    Ok(())
+}
+
+const IO_REPARSE_TAG_MOUNT_POINT: u32 = 0xa000_0003;
+const IO_REPARSE_TAG_SYMLINK: u32 = 0xa000_000c;
+const IO_REPARSE_TAG_LX_SYMLINK: u32 = 0xa000_001d;
+
+/// Reparse tags (`ntifs.h`, MS-FSCC 2.1.2.1).
+const REPARSE_TAGS: EnumTable = &[
+    (0xa000_0003, "IO_REPARSE_TAG_MOUNT_POINT"),
+    (0xc000_0004, "IO_REPARSE_TAG_HSM"),
+    (0x8000_0006, "IO_REPARSE_TAG_HSM2"),
+    (0x8000_0007, "IO_REPARSE_TAG_SIS"),
+    (0x8000_0008, "IO_REPARSE_TAG_WIM"),
+    (0x8000_0009, "IO_REPARSE_TAG_CSV"),
+    (0x8000_000a, "IO_REPARSE_TAG_DFS"),
+    (0xa000_000c, "IO_REPARSE_TAG_SYMLINK"),
+    (0x8000_0012, "IO_REPARSE_TAG_DFSR"),
+    (0x8000_0013, "IO_REPARSE_TAG_DEDUP"),
+    (0x8000_0014, "IO_REPARSE_TAG_NFS"),
+    (0x8000_0015, "IO_REPARSE_TAG_FILE_PLACEHOLDER"),
+    (0x8000_0017, "IO_REPARSE_TAG_WOF"),
+    (0x8000_0018, "IO_REPARSE_TAG_WCI"),
+    (0xa000_0019, "IO_REPARSE_TAG_GLOBAL_REPARSE"),
+    (0x9000_001a, "IO_REPARSE_TAG_CLOUD"),
+    (0x8000_001b, "IO_REPARSE_TAG_APPEXECLINK"),
+    (0x9000_001c, "IO_REPARSE_TAG_PROJFS"),
+    (0xa000_001d, "IO_REPARSE_TAG_LX_SYMLINK"),
+    (0x8000_001e, "IO_REPARSE_TAG_STORAGE_SYNC"),
+    (0xa000_001f, "IO_REPARSE_TAG_WCI_TOMBSTONE"),
+    (0x8000_0020, "IO_REPARSE_TAG_UNHANDLED"),
+    (0x8000_0021, "IO_REPARSE_TAG_ONEDRIVE"),
+    (0xa000_0022, "IO_REPARSE_TAG_PROJFS_TOMBSTONE"),
+    (0x8000_0023, "IO_REPARSE_TAG_AF_UNIX"),
+    (0x8000_0024, "IO_REPARSE_TAG_LX_FIFO"),
+    (0x8000_0025, "IO_REPARSE_TAG_LX_CHR"),
+    (0x8000_0026, "IO_REPARSE_TAG_LX_BLK"),
+];
+
+const SYMLINK_FLAGS: FlagTable = &[flag(1, "SYMLINK_FLAG_RELATIVE")];
+
+/// A `$REPARSE_POINT` value (`REPARSE_DATA_BUFFER`, or
+/// `REPARSE_GUID_DATA_BUFFER` for tags without the Microsoft bit): the
+/// tag, then the names of a junction or symbolic link, the target of a
+/// WSL symbolic link, or the data as bytes.
+fn reparse_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    let tag = f
+        .u32("Reparse tag")
+        .hex()
+        .enumeration(REPARSE_TAGS)
+        .emit()?;
+    let len = f.u16("Data length").emit()?;
+    f.u16("Reserved").emit()?;
+    if tag & 0x8000_0000 == 0 {
+        f.guid("Reparse GUID").emit()?;
+    }
+    match tag {
+        IO_REPARSE_TAG_MOUNT_POINT | IO_REPARSE_TAG_SYMLINK => {
+            let sub_off = f.u16("Substitute name offset").emit()?;
+            let sub_len = f.u16("Substitute name length").emit()?;
+            let print_off = f.u16("Print name offset").emit()?;
+            let print_len = f.u16("Print name length").emit()?;
+            if tag == IO_REPARSE_TAG_SYMLINK {
+                f.u32("Flags").hex().flags(SYMLINK_FLAGS).emit()?;
+            }
+            let names = f.pos();
+            f.seek(names.saturating_add(sub_off.into()));
+            f.utf16("Substitute name", u64::from(sub_len / 2)).emit()?;
+            f.seek(names.saturating_add(print_off.into()));
+            f.utf16("Print name", u64::from(print_len / 2)).emit()?;
+        }
+        IO_REPARSE_TAG_LX_SYMLINK => {
+            f.u32("Version").emit()?;
+            f.ascii("Target", u64::from(len).saturating_sub(4)).emit()?;
+        }
+        _ if len > 0 => {
+            f.bytes("Data", len.into()).emit()?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// A reparse point's kind and target ("IO_REPARSE_TAG_SYMLINK → a.txt").
+fn reparse_summary(raw: &[u8]) -> String {
+    let tag = u32_le(raw, 0).unwrap_or(0);
+    let kind = name_or(REPARSE_TAGS, tag.into(), "reparse tag");
+    let target = match tag {
+        IO_REPARSE_TAG_MOUNT_POINT | IO_REPARSE_TAG_SYMLINK => {
+            let names: usize = if tag == IO_REPARSE_TAG_SYMLINK {
+                20
+            } else {
+                16
+            };
+            let off = names.saturating_add(usize::from(u16_le(raw, 12).unwrap_or(0)));
+            let len = usize::from(u16_le(raw, 14).unwrap_or(0));
+            crate::text::utf16(
+                raw.get(off..off.saturating_add(len)).unwrap_or_default(),
+                LE,
+            )
+        }
+        IO_REPARSE_TAG_LX_SYMLINK => {
+            let len = usize::from(u16_le(raw, 4).unwrap_or(0));
+            String::from_utf8_lossy(raw.get(12..len.saturating_add(8)).unwrap_or_default())
+                .into_owned()
+        }
+        _ => String::new(),
+    };
+    if target.is_empty() {
+        kind
+    } else {
+        format!("{kind} → {target}")
+    }
+}
+
+/// An `$EA_INFORMATION` value.
+fn ea_information_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.u16("Packed EA size").emit()?;
+    f.u16("EAs with NEED_EA").emit()?;
+    f.u32("Unpacked EA size").emit()?;
+    Ok(())
+}
+
+const EA_FLAGS: FlagTable = &[flag(0x80, "NEED_EA")];
+
+/// An extended attribute (`FILE_FULL_EA_INFORMATION`).
+fn ea_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.u32("Next entry offset").hex().emit()?;
+    f.u8("Flags").hex().flags(EA_FLAGS).emit()?;
+    let name_len = f.u8("Name length").emit()?;
+    let value_len = f.u16("Value length").emit()?;
+    f.ascii("Name", name_len.into()).emit()?;
+    f.u8("Terminator").emit()?;
+    if value_len > 0 {
+        f.bytes("Value", value_len.into()).emit()?;
+    }
+    Ok(())
+}
+
+/// The extended attributes of an `$EA` value.
+async fn extended_attributes(cx: Cx, value: Span) -> Result<()> {
+    let raw = cx.read_avail(value.sub(0, MAX_LIST_BYTES)).await?;
+    let mut at = 0usize;
+    while let Some(next) = u32_le(&raw, at) {
+        let name_len = usize::from(raw.get(at.saturating_add(5)).copied().unwrap_or(0));
+        let value_len = usize::from(u16_le(&raw, at.saturating_add(6)).unwrap_or(0));
+        let len = 9usize.saturating_add(name_len).saturating_add(value_len);
+        let name_at = at.saturating_add(8);
+        let name = crate::text::latin1(
+            raw.get(name_at..name_at.saturating_add(name_len))
+                .unwrap_or_default(),
+        );
+        let entry = value.sub(crate::bytes::to_u64(at), crate::bytes::to_u64(len));
+        cx.push(
+            struct_node(name, entry, LE, (), ea_layout)
+                .summary(size(crate::bytes::to_u64(value_len))),
+        )
+        .await;
+        if next == 0 {
+            break;
+        }
+        at = at.saturating_add(crate::bytes::to_usize(next.into()));
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Standalone MFT records (the `ntfs-mft` format)
+
+/// Shows a record of a standalone MFT (an `$MFT` copied out of a volume),
+/// record `n` of the MFT dissected as `input`, fixed up as `rec` (see
+/// [`try_fixed_up`]): its header and attributes, decoded as on a volume.
+/// Non-resident attributes list their runs, which name clusters of a
+/// volume that is not there.
+pub async fn standalone_record(cx: &Cx, input: Input, rec: Span, n: u64) -> Result<()> {
+    cx.emit(record_header(cx, rec).await?);
+    let store = Store::Mft(input);
+    for a in &attributes(cx, rec, n).await? {
+        cx.push(attribute_node(&store, a, n)).await;
+    }
+    Ok(())
+}
+
+/// A (fixed-up) record's preferred file name (Win32 over DOS) and its
+/// `$STANDARD_INFORMATION` modification time, for listings.
+pub async fn record_summary(cx: &Cx, rec: Span) -> Result<(Option<String>, Option<u64>)> {
+    let attrs = attributes(cx, rec, 0).await?;
+    let name = best_name(cx, &attrs).await?;
+    let mut modified = None;
+    if let Some(value) = attrs
+        .iter()
+        .find(|a| a.kind == 0x10)
+        .and_then(|a| a.resident)
+    {
+        modified = u64_le(&cx.read_avail(value.sub(8, 8)).await?, 0);
+    }
+    Ok((name, modified))
 }

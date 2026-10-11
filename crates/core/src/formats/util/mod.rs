@@ -2,7 +2,8 @@
 //! summary formatting (`fmt`), calendar arithmetic (`civil`), unusual
 //! float encodings (`floats`), Mac Finder info (`finder`), Windows locale
 //! identifiers and their names (`lcid`), MAPI property tags shared by
-//! Outlook messages and PST files (`mapi`), pacing for synchronous work over
+//! Outlook messages and PST files (`mapi`), Windows SIDs and security
+//! descriptors shared by registry hives, event logs and NTFS (`winsec`), pacing for synchronous work over
 //! in-memory buffers (`pace`), line-oriented reading for text formats
 //! (`lines`), a small JSON reader for headers embedded in binary formats
 //! (`json`), and readers for schema-driven binary encodings (`wire`:
@@ -30,4 +31,5 @@ pub mod pace;
 pub mod sound;
 pub mod val;
 pub mod vidutil;
+pub mod winsec;
 pub mod wire;

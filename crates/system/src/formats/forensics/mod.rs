@@ -26,4 +26,5 @@ pub mod userdata;
 pub mod wab;
 pub mod windiag;
 pub mod windows;
-pub mod winsec;
+/// Windows SIDs and security descriptors, shared with NTFS in the core.
+pub use crate::formats::util::winsec;
