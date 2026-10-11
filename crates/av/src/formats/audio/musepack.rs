@@ -9,7 +9,7 @@ use crate::fields::{Endian, Fields};
 use crate::formats::audio::ape::trailing_tags;
 use crate::formats::util::sound::{Bits, channels, duration_of, leaf};
 use crate::formats::util::val::uint;
-use crate::formats::{Format, Input, Probe};
+use crate::formats::{Format, Input, Probe, audio::id3};
 use crate::node::Node;
 use crate::span::Span;
 
@@ -19,8 +19,9 @@ pub static FORMAT: Format = Format {
     extensions: &["mpc", "mp+", "mpp"],
     mime: "audio/x-musepack",
     probe: Probe::Custom(|h| {
-        h.starts_with(b"MPCK")
-            || (h.starts_with(b"MP+") && h.data.get(3).is_some_and(|v| v & 0xf == 7))
+        let data = id3::past_tag(h.data);
+        data.starts_with(b"MPCK")
+            || (data.starts_with(b"MP+") && data.get(3).is_some_and(|v| v & 0xf == 7))
     }),
     dissect: crate::expander!(dissect: Input),
 };
@@ -61,6 +62,7 @@ fn stream_header(data: &[u8]) -> Option<StreamHeader> {
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
+    let input = id3::leading_tag(&cx, input).await?;
     let file = input.span;
     let (end, tags) = trailing_tags(&cx, input).await?;
     let magic = cx.read(file.sub(0, 4)).await?;

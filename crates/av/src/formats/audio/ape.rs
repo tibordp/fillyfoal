@@ -20,8 +20,9 @@ pub static FORMAT: Format = Format {
     extensions: &["ape", "apl"],
     mime: "audio/x-ape",
     probe: Probe::Custom(|h| {
-        h.starts_with(b"MAC ")
-            && crate::bytes::u16_le(h.data, 4).is_some_and(|v| (3800..=4100).contains(&v))
+        let data = id3::past_tag(h.data);
+        data.starts_with(b"MAC ")
+            && crate::bytes::u16_le(data, 4).is_some_and(|v| (3800..=4100).contains(&v))
     }),
     dissect: crate::expander!(dissect: Input),
 };
@@ -103,6 +104,7 @@ struct Info {
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
+    let input = id3::leading_tag(&cx, input).await?;
     let file = input.span;
     let (end, tags) = trailing_tags(&cx, input).await?;
     let head = cx.read(file.sub(0, 6)).await?;

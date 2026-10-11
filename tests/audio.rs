@@ -1,5 +1,6 @@
-//! Audio dissectors charge for the checksums they compute: a large TTA
-//! frame is hashed in paced steps, not in one poll.
+//! Audio: checksums are charged (a large TTA frame is hashed in paced
+//! steps, not in one poll), and files behind an ID3v2 tag too long for the
+//! probes to see past are still dissected as their own format.
 
 #![allow(
     clippy::unwrap_used,
@@ -69,4 +70,54 @@ fn tta_frame_crc_is_hashed_in_steps() {
         host.session.node(crc).unwrap().summary.as_deref(),
         Some("valid")
     );
+}
+
+/// An ID3v2.3 tag of `len` bytes: a title frame, then padding.
+fn id3_tag(len: usize) -> Vec<u8> {
+    let mut frames = b"TIT2".to_vec();
+    frames.extend(5u32.to_be_bytes());
+    frames.extend([0, 0, 0]);
+    frames.extend(b"Tone");
+    frames.resize(len - 10, 0);
+    let n = frames.len() as u32;
+    let mut tag = b"ID3\x03\x00\x00".to_vec();
+    tag.extend([
+        (n >> 21) as u8 & 0x7f,
+        (n >> 14) as u8 & 0x7f,
+        (n >> 7) as u8 & 0x7f,
+        n as u8 & 0x7f,
+    ]);
+    tag.extend(frames);
+    tag
+}
+
+#[test]
+fn audio_behind_a_long_id3_tag_is_dissected_as_itself() {
+    let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    for (path, annotation) in [
+        ("external/flac/tone.flac", "FLAC, "),
+        ("external/aac/tone.aac", "AAC LC, "),
+        ("external/tta/tone.tta", "TTA 16-bit"),
+        ("external/wavpack/tone.wv", "WavPack 16-bit"),
+        ("synthetic/ape/tone.ape", "Monkey's Audio"),
+        ("synthetic/musepack/tone.mpc", "Musepack SV8"),
+        ("external/mp3/layer2.mp2", "MPEG-2 Layer II"),
+    ] {
+        // Longer than the probes' head, as cover art often makes it.
+        let mut data = id3_tag(100_000);
+        data.extend(std::fs::read(fixtures.join(path)).unwrap());
+        let mut host = Host::named("tagged", data, Limits::default());
+        let root = host.root;
+        host.explore(root, 1, 100);
+        let node = host.session.node(root).unwrap();
+        let summary = node.summary.clone().unwrap_or_default();
+        assert!(summary.starts_with(annotation), "{path}: {summary}");
+        assert!(host.child(root, "ID3v2 tag").is_some(), "{path}");
+        assert!(host.child(root, "Data").is_none(), "{path}");
+        assert!(
+            common::diagnostics(&host).is_empty(),
+            "{path}: {:?}",
+            common::diagnostics(&host)
+        );
+    }
 }

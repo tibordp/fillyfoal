@@ -13,7 +13,7 @@ use crate::formats::util::datakit::crc32_paced;
 use crate::formats::util::sound::{channels, duration_of, leaf, table};
 use crate::formats::util::val::hex;
 use crate::formats::util::vidutil::khz;
-use crate::formats::{Format, Input, Probe};
+use crate::formats::{Format, Input, Probe, audio::id3};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -26,7 +26,7 @@ pub static FORMAT: Format = Format {
     title: "True Audio",
     extensions: &["tta"],
     mime: "audio/x-tta",
-    probe: Probe::Magic(&[(0, b"TTA1")]),
+    probe: Probe::Custom(|h| id3::past_tag(h.data).starts_with(b"TTA1")),
     dissect: crate::expander!(dissect: Input),
 };
 
@@ -55,6 +55,7 @@ record! {
 const MAX_CHECKED: u64 = 1 << 20;
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
+    let input = id3::leading_tag(&cx, input).await?;
     let file = input.span;
     let (end, tags) = trailing_tags(&cx, input).await?;
     let hspan = file.sub(0, Header::SIZE);
