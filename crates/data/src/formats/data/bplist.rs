@@ -82,7 +82,7 @@ struct Obj {
     span: Span,
     value: Option<Value>,
     summary: String,
-    /// Members of a container.
+    /// Members of a container (key/value pairs for a dictionary).
     count: u64,
     /// Start of the reference list of a container (relative to the file).
     refs: u64,
@@ -650,8 +650,14 @@ async fn object_parts(cx: Cx, (pl, index): (Pl, u64)) -> Result<()> {
         }
         _ => {
             let size = u64::from(pl.ref_size);
-            let n = o.count;
-            let half = if o.kind == Kind::Dict { n / 2 } else { n };
+            // A dictionary's count is its number of pairs: `count` key
+            // references followed by `count` value references.
+            let half = o.count;
+            let n = if o.kind == Kind::Dict {
+                half.saturating_mul(2)
+            } else {
+                half
+            };
             for i in 0..n.min(1 << 20) {
                 let at = o.refs.saturating_add(i.saturating_mul(size));
                 let target = reference(&cx, &pl, at).await?;
