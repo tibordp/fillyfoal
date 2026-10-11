@@ -310,6 +310,7 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `bed/random.bed` | bedtools 2.30.0 (Debian bookworm) | reproduced byte-for-byte by `tests/data/bed/make_bedtools.sh` in `debian:bookworm-slim` (command in the script): `bedtools random -seed 42` piped to `bedtools sort`, six-column BED with no track line, on a two-chromosome genome of ours |
 | `bed/windows.bed` | bedtools 2.30.0 (Debian bookworm) | same script, byte for byte: `bedtools makewindows -w 1000`, three-column BED with no track line |
 | `pdb-structure/ethanol.pdb` | Open Babel 3.1.1 (Debian bookworm) | reproduced byte-for-byte by `tests/data/pdb-structure/make_obabel.sh` in `debian:bookworm-slim`: `obabel -ixyz -opdb` of our XYZ coordinates of ethanol; starts with COMPND and AUTHOR records (no HEADER), HETATM and CONECT records |
+| `vector-blf/straddle.blf` | python-can 4.6.1 (`can.BLFWriter`) | reproduced byte-for-byte: `uv run --with python-can==4.6.1 python tests/data/vector-blf/make_python_can.py OUT.blf`; 120 CAN frames in six zlib LOG_CONTAINERs cut at 1000 uncompressed bytes (`max_container_size`), so frames straddle containers; `can.BLFReader` reads all 120 back |
 
 ## Binary value encodings
 
