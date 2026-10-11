@@ -7,6 +7,10 @@
 - extras.wav: the less common WAVE chunks (cart, acid, PEAK, DISP, plst,
   smpl with sampler-specific data, inst, iXML, LIST INFO and adtl with a
   labelled-text and an embedded file), laid out as their specifications say.
+- streamed-zero.wav: what a streaming writer that cannot seek back leaves:
+  RIFF and data sizes 0, samples to the end of the file.
+- empty-data.wav: a data chunk that really is empty (size 0) followed by a
+  LIST chunk, which must not be read as samples.
 """
 
 import math
@@ -88,7 +92,19 @@ def extras():
     return b"RIFF" + struct.pack("<I", len(body)) + body
 
 
+def streamed_zero():
+    body = b"WAVE" + fmt_pcm(1, 8000, 16) + b"data" + struct.pack("<I", 0) + tone(400, 1)
+    return b"RIFF" + struct.pack("<I", 0) + body
+
+
+def empty_data():
+    info = b"INFO" + chunk(b"ISFT", b"fillyfoal\0")
+    body = b"WAVE" + fmt_pcm(1, 8000, 16) + chunk(b"data", b"") + chunk(b"LIST", info)
+    return b"RIFF" + struct.pack("<I", len(body)) + body
+
+
 OUT.mkdir(parents=True, exist_ok=True)
-for name, data in [("bw64-adm.wav", bw64()), ("extras.wav", extras())]:
+for name, data in [("bw64-adm.wav", bw64()), ("extras.wav", extras()),
+                   ("streamed-zero.wav", streamed_zero()), ("empty-data.wav", empty_data())]:
     (OUT / name).write_bytes(data)
     print(name, len(data))

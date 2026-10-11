@@ -39,3 +39,11 @@ ffmpeg $F $T testsrc=size=32x32:rate=25 $T sine=sample_rate=48000:duration=0.1 \
 ffmpeg $F $T testsrc=size=32x32:rate=25 -frames:v 2 -c:v libvpx-vp9 -bitexact -f flv "$OUT/flv/vp9.flv"
 ffmpeg $F $T testsrc=size=8x4:rate=30000/1001 -frames:v 2 -pix_fmt yuv420p10le \
   -vf setsar=10/11,setfield=tff -strict -1 -f yuv4mpegpipe "$OUT/y4m/420p10-tff.y4m"
+mkdir -p "$OUT"/{mpeg1video,wav}
+# Sample aspect 12:11 makes the MPEG-1 encoder write pel aspect code 8
+# (CCIR 601, 625 lines), what -aspect 4:3 gives at 352x288.
+ffmpeg $F $T testsrc=size=16x16:rate=25 -frames:v 2 -vf setsar=12/11 -c:v mpeg1video -bitexact \
+  -f mpeg1video "$OUT/mpeg1video/pel-aspect-625.m1v"
+# Written to a pipe, so the muxer cannot seek back: RIFF and data sizes stay 0xffffffff.
+ffmpeg $F $T sine=frequency=440:sample_rate=8000:duration=0.05 -c:a pcm_s16le -bitexact -f wav - \
+  | cat > "$OUT/wav/piped.wav"

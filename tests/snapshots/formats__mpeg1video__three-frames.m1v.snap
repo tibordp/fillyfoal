@@ -3,11 +3,11 @@ source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ three-frames.m1v — MPEG-1 video, 16×16, pel aspect 1.0 (square), 25 fps, variable bit rate  [0x0+0x203]
-  ▾ Sequence header — 16×16, 1:1 (square pixels), 25 fps, variable bit rate  [0x0+0xc]
+  ▾ Sequence header — 16×16, pel aspect 1.0 (square), 25 fps, variable bit rate  [0x0+0xc]
       Start code: 0x1b3  [0x0+0x4]
       horizontal_size_value: 16 — 16 pixels  [0x4+0x2]
       vertical_size_value: 16 — 16 pixels  [0x5+0x2]
-      aspect_ratio_information: 1 — 1:1 (square pixels) (MPEG-2) / pel aspect 1.0 (square) (MPEG-1)  [0x7+0x1]
+      aspect_ratio_information: 1 — pel aspect 1.0 (square)  [0x7+0x1]
       frame_rate_code: 3 — 25 fps  [0x7+0x1]
       bit_rate_value: 262143 — variable bit rate  [0x8+0x3]
       marker_bit: 1  [0xa+0x1]

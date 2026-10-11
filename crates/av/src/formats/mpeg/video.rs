@@ -41,18 +41,26 @@ fn sequence_header(h: &Head<'_>) -> Option<u8> {
         return None;
     }
     let info = SequenceHeader::parse(h.data.get(4..12)?)?;
-    if info.width == 0
-        || info.height == 0
-        || !(1..=4).contains(&info.aspect)
-        || !(1..=8).contains(&info.rate)
-    {
+    if info.width == 0 || info.height == 0 || !(1..=8).contains(&info.rate) {
         return None;
     }
-    let window = h.data.get(..h.data.len().min(512))?;
-    let ext = window.windows(5).any(|w| {
+    let mpeg2 = has_sequence_extension(h.data);
+    // MPEG-2 defines display aspect codes 1-4; MPEG-1 defines pel aspect
+    // codes 1-14 (code 8 is CCIR 601 625-line, what ffmpeg writes for 4:3
+    // at 352x288).
+    let aspects = if mpeg2 { 1..=4 } else { 1..=14 };
+    aspects
+        .contains(&info.aspect)
+        .then_some(if mpeg2 { 2 } else { 1 })
+}
+
+/// Whether a sequence extension (start code 0xB5, id 1) shows up in the
+/// first 512 bytes, which makes the stream MPEG-2.
+fn has_sequence_extension(d: &[u8]) -> bool {
+    let window = d.get(..d.len().min(512)).unwrap_or_default();
+    window.windows(5).any(|w| {
         w.get(..4) == Some(b"\x00\x00\x01\xb5".as_slice()) && w.get(4).is_some_and(|b| b >> 4 == 1)
-    });
-    Some(if ext { 2 } else { 1 })
+    })
 }
 
 const ASPECT: EnumTable = &[
@@ -259,6 +267,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if let Some(s) = es_summary(&head) {
         cx.annotate(s);
     }
+    let mpeg2 = has_sequence_extension(&head);
     let mut pos = match cx.resume::<u64>() {
         Some(p) => p,
         None => {
@@ -298,13 +307,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         let span = file.sub(pos, end.saturating_sub(pos));
         let d = cx.read_avail(span.sub(0, 256)).await?;
-        let summary = summary(code, &d, slices);
+        let summary = summary(code, &d, slices, mpeg2);
         let mut node = Node::new(unit_name(code)).span(span);
         if !summary.is_empty() {
             node = node.summary(summary);
         }
         if matches!(code, 0x00 | 0xb2 | 0xb3 | 0xb5 | 0xb8) {
-            node = node.lazy(expand_unit, (span, code));
+            node = node.lazy(expand_unit, (span, code, mpeg2));
         }
         let at = pos;
         cx.mark(move || at);
@@ -315,7 +324,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-fn summary(code: u8, d: &[u8], slices: u64) -> String {
+fn summary(code: u8, d: &[u8], slices: u64, mpeg2: bool) -> String {
     let body = d.get(4..).unwrap_or_default();
     match code {
         0x00 => {
@@ -331,7 +340,7 @@ fn summary(code: u8, d: &[u8], slices: u64) -> String {
         0xb2 => user_data_text(body)
             .map_or_else(|| format!("{} bytes", body.len()), |t| format!("“{t}”")),
         0xb3 => SequenceHeader::parse(body)
-            .map(|s| s.describe(true))
+            .map(|s| s.describe(mpeg2))
             .unwrap_or_default(),
         0xb5 => {
             let id = body.first().copied().unwrap_or(0) >> 4;
@@ -378,7 +387,7 @@ fn user_data_text(d: &[u8]) -> Option<String> {
     ok.then(|| t.chars().take(80).collect())
 }
 
-async fn expand_unit(cx: Cx, (span, code): (Span, u8)) -> Result<()> {
+async fn expand_unit(cx: Cx, (span, code, mpeg2): (Span, u8, bool)) -> Result<()> {
     let d = cx.read_avail(span.sub(0, 512)).await?;
     cx.emit(vidutil::hex(
         "Start code",
@@ -390,7 +399,7 @@ async fn expand_unit(cx: Cx, (span, code): (Span, u8)) -> Result<()> {
     let data = d.get(4..).unwrap_or_default();
     let mut w = Walker::new(data, body, false, true);
     let ok = match code {
-        0xb3 => sequence(&mut w),
+        0xb3 => sequence(&mut w, mpeg2),
         0xb5 => extension(&mut w),
         0xb8 => gop(&mut w),
         0x00 => picture(&mut w),
@@ -437,18 +446,18 @@ fn quant_matrix(w: &mut Walker, flag: &'static str, name: &'static str) -> Optio
 }
 
 /// `sequence_header()`.
-fn sequence(w: &mut Walker) -> Option<()> {
+fn sequence(w: &mut Walker, mpeg2: bool) -> Option<()> {
     let width = w.u("horizontal_size_value", 12)?;
     w.summary(|| format!("{width} pixels"));
     let height = w.u("vertical_size_value", 12)?;
     w.summary(|| format!("{height} pixels"));
     let aspect = w.u("aspect_ratio_information", 4)?;
     w.summary(|| {
-        format!(
-            "{} (MPEG-2) / pel aspect {} (MPEG-1)",
-            vidutil::lookup_or(ASPECT, aspect),
-            vidutil::lookup_or(ASPECT_MPEG1, aspect)
-        )
+        if mpeg2 {
+            vidutil::lookup_or(ASPECT, aspect)
+        } else {
+            format!("pel aspect {}", vidutil::lookup_or(ASPECT_MPEG1, aspect))
+        }
     });
     let rate = w.u("frame_rate_code", 4)?;
     w.summary(|| {

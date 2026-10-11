@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ streamed-zero.wav — WAV PCM 16-bit, 8 kHz, mono, 50 ms  [0x0+0x34c]
+    ! warning: container size 0 is too small for any chunk (left unset by a streaming writer?); chunks are read to the end of the file [0x4+0x4]
+  ▾ Header  [0x0+0xc]
+      Chunk ID: "RIFF"  [0x0+0x4]
+      Size: 0  [0x4+0x4]
+      Form type: "WAVE"  [0x8+0x4]
+  ▾ fmt — PCM 16-bit, 8 kHz, mono  [0xc+0x18]
+      Chunk ID: "fmt "  [0xc+0x4]
+      Chunk size: 16  [0x10+0x4]
+      Format tag: PCM (0x1)  [0x14+0x2]
+      Channels: 1  [0x16+0x2]
+      Sample rate: 8000  [0x18+0x4]
+      Average bytes per second: 16000 — 128 kb/s  [0x1c+0x4]
+      Block align: 2  [0x20+0x2]
+      Bits per sample: 16  [0x22+0x2]
+  ▾ data — 800 bytes, 50 ms  [0x24+0x328]
+      ! warning: chunk size is 0 (left unset by a streaming writer); taken to run to the end [0x28+0x4]
+      Chunk ID: "data"  [0x24+0x4]
+      Chunk size: 0 — unset (streaming writer): 800 bytes to the end  [0x28+0x4]
+      Samples — 400 frames, 50 ms  [0x2c+0x320]
