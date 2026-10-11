@@ -303,6 +303,10 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `dicom/implicit-defined-items.dcm` | pydicom 3.0.2 | same script, byte for byte: Implicit VR Little Endian, defined-length items in an undefined-length sequence |
 | `dicom/explicit-undefined-items.dcm` | pydicom 3.0.2 | same script, byte for byte: Explicit VR Little Endian, the nested undefined-length sequences and items of `implicit-nested.dcm` |
 | `dicom/rle-encapsulated.dcm` | pydicom 3.0.2 (numpy 2.3.4) | same script, byte for byte: `explicit-undefined-items.dcm` compressed by pydicom's own RLE Lossless encoder, so Pixel Data is encapsulated (Basic Offset Table, one fragment, Sequence Delimitation Item) |
+| `dbf/vfp.dbf` | `dbf` 0.99.11 (Python, Ethan Furman) | `uv run --with dbf==0.99.11 python tests/data/dbf/make_dbf.py OUTDIR`; reproduced except the last-update date (bytes 1-3). Visual FoxPro table (version 0x30, code page 0x03) with C, N, F, L, D, I, B, Y and T fields, the 263-byte database backlink, three records (one deleted); dbfread 2.0.7 reads the same values |
+| `dbf/db3.dbf` | `dbf` 0.99.11 (Python, Ethan Furman) | same script, same date caveat: dBase III table (code page 0x01) with C, N, L and D fields, two records |
+| `segy/big.sgy` | segyio 1.9.13 (numpy 2.3.4) | reproduced byte-for-byte: `uv run --with segyio==1.9.13 --with numpy==2.3.4 python tests/data/segy/make_segyio.py OUTDIR`; big-endian SEG-Y, four traces of ten IEEE float32 samples, our own EBCDIC textual header |
+| `segy/little.sgy` | segyio 1.9.13 (numpy 2.3.4) | same script, byte for byte: the same data with `spec.endian = "little"` (segyio writes no byte-order constant) |
 
 ## Binary value encodings
 
