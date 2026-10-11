@@ -3,6 +3,13 @@ recipients, a file attachment, an embedded message, named properties
 (numeric and string), multi-valued properties and a compressed RTF body.
 
     uv run --with compressed_rtf==1.0.6 python tests/data/msg/make.py <out.msg>
+
+With a second argument, writes ole.msg instead: a message whose attachment
+is an OLE object (PidTagAttachMethod 6, afOle) holding the streams of the
+given Word document (tests/fixtures/external/doc/letter.doc):
+
+    uv run --with compressed_rtf==1.0.6 --with olefile==0.47 \
+        python tests/data/msg/make.py ole.msg tests/fixtures/external/doc/letter.doc
 """
 
 import struct
@@ -22,6 +29,26 @@ FILETIME = 133_500_000_000_000_000  # 2024-01-21
 
 def tag(pid, ptype):
     return (pid << 16) | ptype
+
+
+class Ole:
+    """An attachment stored as an OLE object: the storage tree of a file."""
+
+    def __init__(self, name, tree):
+        self.name, self.tree = name, tree
+
+
+def read_storage(path):
+    import olefile
+
+    tree = {}
+    with olefile.OleFileIO(path) as ole:
+        for entry in ole.listdir(streams=True, storages=False):
+            node = tree
+            for part in entry[:-1]:
+                node = node.setdefault(part, {})
+            node[entry[-1]] = ole.openstream(entry).read()
+    return tree
 
 
 class Props:
@@ -115,6 +142,14 @@ def message(subject, body, embedded=False, recipients=(), attachments=()):
             a.add(0x3701, 0x0102, data)
             a.add(0x0E20, 0x0003, len(data))
             storage["__attach_version1.0_#%08X" % i] = a.storage(b"\0" * 8)
+        elif isinstance(att, Ole):
+            a.add(0x3705, 0x0003, 6)
+            a.add(0x3001, 0x001F, att.name)
+            a.add(0x3707, 0x001F, att.name)
+            a.add(0x3703, 0x001F, "." + att.name.rsplit(".", 1)[1])
+            st = a.storage(b"\0" * 8)
+            st["__substg1.0_3701000D"] = att.tree
+            storage["__attach_version1.0_#%08X" % i] = st
         else:
             a.add(0x3705, 0x0003, 5)
             a.add(0x3001, 0x001F, "Embedded message")
@@ -150,6 +185,17 @@ def nameid():
         "__substg1.0_00040102": strings,
     }
 
+
+if len(sys.argv) > 2:
+    msg = message(
+        "Fillyfoal OLE attachment",
+        "The attachment is a Word document stored as an OLE object.\r\n",
+        recipients=[("Alice Example", "alice@example.org", 1)],
+        attachments=[Ole("letter.doc", read_storage(sys.argv[2]))],
+    )
+    msg["__nameid_version1.0"] = nameid()
+    cfbwriter.write(sys.argv[1], msg)
+    sys.exit(0)
 
 inner = message("Forwarded note", "The embedded message body.", embedded=True,
                 recipients=[("Inner Recipient", "inner@example.org", 1)])
