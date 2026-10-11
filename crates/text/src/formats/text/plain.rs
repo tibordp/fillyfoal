@@ -95,6 +95,8 @@ fn units(data: &[u8], encoding: Encoding) -> impl Iterator<Item = u32> + '_ {
 /// What the top level shows about a text body.
 struct Overview {
     encoding: Encoding,
+    /// The code page was named by a coding comment (not guessed).
+    declared: bool,
     bom: u64,
     endings: Endings,
     /// Exact line count if the sample covers everything, else an estimate
@@ -107,13 +109,17 @@ struct Overview {
 
 async fn overview(cx: &Cx, span: Span) -> Result<Overview> {
     let head = cx.read_avail(span.sub(0, HEAD_LEN)).await?;
+    let mut declared = false;
     let (encoding, bom) = match encoding::bom(&head) {
         Some(found) => found,
         None => {
             // A coding cookie names the code page of legacy 8-bit text.
             let cookie = encoding::coding_cookie(&head);
             match encoding::declared_charset(&head, cookie.as_deref()) {
-                Some(c) => (Encoding::Single(c), 0),
+                Some(c) => {
+                    declared = true;
+                    (Encoding::Single(c), 0)
+                }
                 None => (encoding::classify(&head).unwrap_or(Encoding::Utf8), 0),
             }
         }
@@ -142,6 +148,7 @@ async fn overview(cx: &Cx, span: Span) -> Result<Overview> {
     }
     Ok(Overview {
         encoding,
+        declared,
         bom,
         endings,
         lines,
@@ -175,8 +182,10 @@ fn emit_overview(cx: &Cx, span: Span, o: &Overview) {
     let mut encoding = Node::new("Encoding").value(Value::Text(o.encoding.name().to_owned()));
     if o.bom > 0 {
         encoding = encoding.span(span.sub(0, o.bom)).summary("byte order mark");
-    } else if matches!(o.encoding, Encoding::Single(_)) {
+    } else if o.declared {
         encoding = encoding.summary("declared by a coding comment");
+    } else if matches!(o.encoding, Encoding::Single(_)) {
+        encoding = encoding.summary("guessed from the letters");
     }
     cx.emit(encoding);
     let e = &o.endings;

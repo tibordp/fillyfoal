@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ dmesg.txt — UTF-8 text, LF line endings, 3 lines  [0x0+0xaa]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
+  ▾ Lines — 3 lines  [0x0+0xaa]
+      Line 1: "[    0.000000] Linux version 6.1.0 (gcc 12) #1 SMP"  [0x0+0x32]
+      Line 2: "[    0.000000] Command line: BOOT_IMAGE=/vmlinuz root=/dev/sda1"  [0x33+0x3f]
+      Line 3: "[    0.000123] x86/fpu: Supporting XSAVE feature 0x001"  [0x73+0x36]

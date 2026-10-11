@@ -150,21 +150,116 @@ pub fn classify(data: &[u8]) -> Option<Encoding> {
     if let Some(encoding) = sniff_utf16(data) {
         return Some(encoding);
     }
-    // 8-bit text never contains NUL bytes; binary data usually does.
-    if data.is_empty() || data.contains(&0) {
+    if data.is_empty() {
         return None;
     }
-    if crate::text::looks_like_text(data) {
-        return Some(Encoding::Utf8);
-    }
-    // 8-bit legacy text: few control characters, mostly ASCII.
+    let utf8 = is_utf8(data);
+    // Control characters other than layout ones. A terminal escape
+    // (`ESC[32m` colours) and nroff overstrike (`N\bN`, `_\bx`) are text.
     let control = data
         .iter()
-        .filter(|&&b| (b < 0x20 && !matches!(b, b'\t' | b'\n' | b'\r' | 0x0c)) || b == 0x7f)
+        .enumerate()
+        .filter(|&(i, &b)| {
+            let next = data.get(i.saturating_add(1)).copied();
+            let escape = b == 0x1b && matches!(next, Some(b'[' | b']' | b'(' | b')'));
+            let overstrike = b == 0x08
+                && i.checked_sub(1)
+                    .and_then(|p| data.get(p))
+                    .zip(next)
+                    .is_some_and(|(&p, n)| p > 0x20 && p < 0x7f && (p == n || p == b'_'));
+            let layout = matches!(b, 0 | b'\t' | b'\n' | b'\r' | 0x0c);
+            (b < 0x20 && !layout && !escape && !overstrike) || (b == 0x7f && !utf8)
+        })
         .count();
+    if control.saturating_mul(100) > data.len() {
+        return None;
+    }
+    // 8-bit text rarely contains NUL bytes; binary data usually does. A
+    // few stray ones well inside otherwise clean text (a log written
+    // across a crash) are tolerated.
+    let nul = data.iter().filter(|&&b| b == 0).count();
+    if nul > 0
+        && (control > 0
+            || nul.saturating_mul(1000) > data.len()
+            || data.iter().take(256).any(|&b| b == 0))
+    {
+        return None;
+    }
+    if utf8 {
+        return Some(Encoding::Utf8);
+    }
+    // 8-bit legacy text: mostly ASCII, or words in a non-Latin script.
     let high = data.iter().filter(|&&b| b >= 0x80).count();
-    (control.saturating_mul(100) <= data.len() && high.saturating_mul(4) <= data.len())
-        .then_some(Encoding::Windows1252)
+    if high.saturating_mul(4) <= data.len() {
+        return Some(guess_single(data));
+    }
+    let script = guess_single(data);
+    (matches!(script, Encoding::Single(_)) && words(data)).then_some(script)
+}
+
+/// Whether mostly-high-byte data reads as words: separated by spaces or
+/// line breaks, and drawing on many different letters (not a few repeated
+/// byte values).
+fn words(data: &[u8]) -> bool {
+    let mut seen = [false; 128];
+    for &b in data {
+        if let Some(s) = b
+            .checked_sub(0x80)
+            .and_then(|i| seen.get_mut(usize::from(i)))
+        {
+            *s = true;
+        }
+    }
+    let distinct = seen.iter().filter(|&&s| s).count();
+    let gaps = data.iter().filter(|b| matches!(b, b' ' | b'\n')).count();
+    data.len() >= 32 && distinct >= 12 && gaps.saturating_mul(25) >= data.len()
+}
+
+/// The code page of 8-bit text, guessed from its letters: Windows-1252
+/// unless most letters are high bytes that read as lower-case Cyrillic
+/// (Windows-1251, KOI8-R) or Greek (Windows-1253) words.
+fn guess_single(data: &[u8]) -> Encoding {
+    let high = data.iter().filter(|&&b| b >= 0x80).count();
+    let latin = data.iter().filter(|b| b.is_ascii_alphabetic()).count();
+    if high.saturating_mul(2) < latin {
+        return Encoding::Windows1252;
+    }
+    // Lower-case letters score; capitals inside a word and non-letters
+    // count against a reading.
+    let score = |c: Charset| {
+        let mut score = 0i64;
+        let mut prev_letter = false;
+        for (i, &b) in data.iter().enumerate() {
+            let ch = c.char(b);
+            // Greek final sigma inside a word reads Cyrillic `т` (common
+            // anywhere) as Greek.
+            let medial_final = ch == 'ς'
+                && data
+                    .get(i.saturating_add(1))
+                    .is_some_and(|&n| c.char(n).is_alphabetic());
+            if b >= 0x80 {
+                score = score.saturating_add(if medial_final {
+                    -4
+                } else if ch.is_lowercase() {
+                    2
+                } else if ch.is_uppercase() {
+                    if prev_letter { -3 } else { 1 }
+                } else {
+                    -2
+                });
+            }
+            prev_letter = ch.is_alphabetic();
+        }
+        score
+    };
+    let mut best = (0i64, Encoding::Windows1252);
+    for c in [Charset::Windows1251, Charset::Koi8R, Charset::Windows1253] {
+        let s = score(c);
+        if s > best.0 {
+            best = (s, Encoding::Single(c));
+        }
+    }
+    best.1
 }
 
 /// Bytes as UTF-8 when valid, otherwise as Windows-1252 (so legacy text
@@ -455,5 +550,53 @@ pub fn probe_text<'a>(data: &'a [u8]) -> Cow<'a, [u8]> {
             Some(e) => Cow::Owned(e.decode(data).into_bytes()),
             None => Cow::Borrowed(data),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_code_pages_are_text() {
+        // "Привет, мир. Это проверка текста." in Windows-1251 and KOI8-R.
+        let cp1251 = b"\xcf\xf0\xe8\xe2\xe5\xf2, \xec\xe8\xf0. \xdd\xf2\xee \xef\xf0\xee\xe2\xe5\xf0\xea\xe0 \xf2\xe5\xea\xf1\xf2\xe0 \xed\xe0 \xf0\xf3\xf1\xf1\xea\xee\xec \xff\xe7\xfb\xea\xe5.\n";
+        assert_eq!(
+            classify(cp1251),
+            Some(Encoding::Single(Charset::Windows1251))
+        );
+        let koi8 = b"\xf0\xd2\xc9\xd7\xc5\xd4, \xcd\xc9\xd2. \xfc\xd4\xcf \xd0\xd2\xcf\xd7\xc5\xd2\xcb\xc1 \xd4\xc5\xcb\xd3\xd4\xc1 \xce\xc1 \xd2\xd5\xd3\xd3\xcb\xcf\xcd \xd1\xda\xd9\xcb\xc5.\n";
+        assert_eq!(classify(koi8), Some(Encoding::Single(Charset::Koi8R)));
+        assert_eq!(
+            classify(b"Caf\xe9 cr\xe8me br\xfbl\xe9e\n"),
+            Some(Encoding::Windows1252)
+        );
+    }
+
+    #[test]
+    fn colours_overstrike_and_stray_nuls_are_text() {
+        let colour = b"\x1b[32mINFO\x1b[0m compiling\n".repeat(20);
+        assert_eq!(classify(&colour), Some(Encoding::Utf8));
+        let man = b"N\x08NA\x08AM\x08ME\x08E\n     l\x08ls\x08s - list\n".repeat(4);
+        assert_eq!(classify(&man), Some(Encoding::Utf8));
+        let mut log = b"log line before the crash\n".repeat(20);
+        log.extend_from_slice(&[0; 4]);
+        log.extend_from_slice(&b"log line after the crash\n".repeat(200));
+        assert_eq!(classify(&log), Some(Encoding::Utf8));
+    }
+
+    #[test]
+    fn binary_stays_binary() {
+        // A NUL near the start (a binary header), a few high bytes, a few
+        // repeated byte values, and binary bytes before long runs of text.
+        let mut icc = b"\0\0\x010".to_vec();
+        icc.extend_from_slice(&[b'x'; 300]);
+        assert_eq!(classify(&icc), None);
+        assert_eq!(classify(b"\xec\xeb\xeb="), None);
+        let res = b"\xff\xff\xff\xff @\x80\xff\xff\xff\xff\xff @\x80\xff".repeat(4);
+        assert_eq!(classify(&res), None);
+        let mut runs = b"\x19f\x02\x7f/\x90BKEy\x9d\x17g\x0f\0\x81)\x05\x06\x10zC".to_vec();
+        runs.extend_from_slice(&[b'a'; 4000]);
+        assert_eq!(classify(&runs), None);
     }
 }

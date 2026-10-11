@@ -204,7 +204,14 @@ fn skip_space(mut data: &[u8]) -> &[u8] {
 fn probe_json(h: &Head<'_>) -> bool {
     let head = probe::head(h);
     let data = skip_space(&head);
-    matches!(data.first(), Some(b'{' | b'[')) && probe_tokens(data, 256).is_some()
+    // A value that closes inside the head must be the whole text (up to
+    // whitespace and comments): `[    0.000000] Linux …` (dmesg), `[1] A.
+    // Author …` (reference lists) and newline-delimited records are not
+    // one JSON document.
+    matches!(data.first(), Some(b'{' | b'['))
+        && probe_tokens(data, 256).is_some_and(|(depth, used)| {
+            depth > 0 || skip_space(data.get(used..).unwrap_or_default()).is_empty()
+        })
 }
 
 fn probe_ndjson(h: &Head<'_>) -> bool {

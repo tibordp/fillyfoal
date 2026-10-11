@@ -1,0 +1,8 @@
+[Mon Jan 01 12:00:01.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request
+[Mon Jan 01 12:00:02.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request
+[Mon Jan 01 12:00:03.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request
+[Mon Jan 01 12:00:04.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request
+[Mon Jan 01 12:00:05.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request
+[Mon Jan 01 12:00:06.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request
+[Mon Jan 01 12:00:07.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request
+[Mon Jan 01 12:00:08.123456 2024] [core:error] [pid 123] AH00126: Invalid URI in request

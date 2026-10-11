@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ rules.mk — UTF-8 text, LF line endings, 8 lines  [0x0+0x5a]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 8 LF, 0 CRLF, 0 CR
+  ▾ Lines — 8 lines  [0x0+0x5a]
+      Line 1: "# Makefile fragment"  [0x0+0x13]
+      Line 2: "# build rules"  [0x14+0xd]
+      Line 3: "CC = cc"  [0x22+0x7]
+      Line 4: "all: main"  [0x2a+0x9]
+      Line 5: ""  [0x34+0x0]
+      Line 6: "main: main.o"  [0x35+0xc]
+      Line 7: "\t$(CC) -o $@ $^"  [0x42+0xf]
+      Line 8: "# clean"  [0x52+0x7]

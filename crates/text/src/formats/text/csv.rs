@@ -109,6 +109,10 @@ fn sniff_head(h: &Head<'_>, candidates: &[u8]) -> Option<(u8, usize)> {
     if first.starts_with(b"#!") || first.starts_with(b"<") || first.starts_with(b"{") {
         return None;
     }
+    // Terminal colours (`ESC[1;32m`) put a `;` in every line of a log.
+    if probe::contains(&head, b"\x1b[") {
+        return None;
+    }
     let found = sniff(&head, candidates)?;
     probe::is_text(h).then_some(found)
 }

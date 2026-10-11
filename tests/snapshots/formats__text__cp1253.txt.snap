@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cp1253.txt — Windows-1253 text, LF line endings, 1 line  [0x0+0x34]
+    Encoding: "Windows-1253" — guessed from the letters
+    Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+  ▾ Lines — 1 line  [0x0+0x34]
+      Line 1: "Γειά σου κόσμε, αυτό είναι ένα δοκιμαστικό κείμενο."  [0x0+0x33]

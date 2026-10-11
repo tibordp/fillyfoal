@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ php_error.log — UTF-8 text, LF line endings, 8 lines  [0x0+0x2d8]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 8 LF, 0 CRLF, 0 CR
+  ▾ Lines — 8 lines  [0x0+0x2d8]
+      Line 1: "[01-Jan-2024 12:00:01 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 1"  [0x0+0x5a]
+      Line 2: "[01-Jan-2024 12:00:02 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 2"  [0x5b+0x5a]
+      Line 3: "[01-Jan-2024 12:00:03 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 3"  [0xb6+0x5a]
+      Line 4: "[01-Jan-2024 12:00:04 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 4"  [0x111+0x5a]
+      Line 5: "[01-Jan-2024 12:00:05 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 5"  [0x16c+0x5a]
+      Line 6: "[01-Jan-2024 12:00:06 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 6"  [0x1c7+0x5a]
+      Line 7: "[01-Jan-2024 12:00:07 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 7"  [0x222+0x5a]
+      Line 8: "[01-Jan-2024 12:00:08 UTC] PHP Warning:  Undefined variable $x in /var/www/a.php on line 8"  [0x27d+0x5a]

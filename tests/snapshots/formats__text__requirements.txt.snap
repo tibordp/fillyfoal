@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ requirements.txt — UTF-8 text, LF line endings, 4 lines  [0x0+0x39]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 4 LF, 0 CRLF, 0 CR
+  ▾ Lines — 4 lines  [0x0+0x39]
+      Line 1: "# Core dependencies"  [0x0+0x13]
+      Line 2: "requests==2.31.0"  [0x14+0x10]
+      Line 3: "# Testing"  [0x25+0x9]
+      Line 4: "pytest>=7"  [0x2f+0x9]

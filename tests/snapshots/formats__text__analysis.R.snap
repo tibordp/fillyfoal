@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ analysis.R — UTF-8 text, LF line endings, 6 lines  [0x0+0x48]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 6 LF, 0 CRLF, 0 CR
+  ▾ Lines — 6 lines  [0x0+0x48]
+      Line 1: "# R script"  [0x0+0xa]
+      Line 2: "# load data"  [0xb+0xb]
+      Line 3: "x <- read.csv(\"a.csv\")"  [0x17+0x16]
+      Line 4: "summary(x)"  [0x2e+0xa]
+      Line 5: "# plot"  [0x39+0x6]
+      Line 6: "plot(x)"  [0x40+0x7]

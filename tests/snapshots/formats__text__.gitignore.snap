@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ .gitignore — UTF-8 text, LF line endings, 8 lines  [0x0+0x69]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 8 LF, 0 CRLF, 0 CR
+  ▾ Lines — 8 lines  [0x0+0x69]
+      Line 1: "# Byte-compiled files"  [0x0+0x15]
+      Line 2: "__pycache__/"  [0x16+0xc]
+      Line 3: "*.py[cod]"  [0x23+0x9]
+      Line 4: "# Dependencies"  [0x2d+0xe]
+      Line 5: "**/node_modules/"  [0x3c+0x10]
+      Line 6: "# Distribution"  [0x4d+0xe]
+      Line 7: "build/"  [0x5c+0x6]
+      Line 8: "dist/"  [0x63+0x5]

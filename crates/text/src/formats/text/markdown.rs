@@ -63,6 +63,29 @@ fn fence(line: &[u8]) -> Option<&'static [u8]> {
     }
 }
 
+/// An ATX heading with a title (a bare `#` or `##` is a comment rule).
+fn heading(line: &[u8]) -> bool {
+    atx(line).is_some()
+        && probe::trim(line)
+            .iter()
+            .any(|&b| b != b'#' && !b.is_ascii_whitespace())
+}
+
+/// Strong emphasis: `**` right before a word, closed later in the
+/// line after a non-space (not a `**/` glob).
+fn strong(t: &[u8]) -> bool {
+    probe::find(t, b"**").is_some_and(|i| {
+        let rest = t.get(i.saturating_add(2)..).unwrap_or_default();
+        rest.first().is_some_and(u8::is_ascii_alphanumeric)
+            && probe::find(rest, b"**").is_some_and(|j| {
+                j > 0
+                    && rest
+                        .get(j.saturating_sub(1))
+                        .is_some_and(|b| !b.is_ascii_whitespace())
+            })
+    })
+}
+
 fn probe_markdown(h: &Head<'_>) -> bool {
     let head = probe::head(h);
     let mut lines = probe::lines(&head).peekable();
@@ -81,7 +104,6 @@ fn probe_markdown(h: &Head<'_>) -> bool {
             && next.is_some_and(|l| atx(l).is_some() || !l.contains(&b':'))
             && probe::is_text(h);
     }
-    let mut headings = 0usize;
     let mut signals = 0usize;
     let mut code_like = 0usize;
     let mut total = 0usize;
@@ -90,12 +112,42 @@ fn probe_markdown(h: &Head<'_>) -> bool {
     if head.starts_with(b"%YAML") {
         return false;
     }
-    for (i, line) in probe::significant(&head, &[]).take(200).enumerate() {
-        total = total.saturating_add(1);
+    // `#` starts a comment in shell, Python, R, Makefiles, `.gitignore`,
+    // `hosts` and `requirements.txt`: a heading counts only where Markdown
+    // puts one, and only a construct those files lack makes it Markdown.
+    let raw: Vec<&[u8]> = probe::lines(&head).take(400).collect();
+    let mut prev_blank = true;
+    for (i, &line) in raw.iter().enumerate() {
         let t = probe::trim(line);
-        if atx(line).is_some() {
-            headings = headings.saturating_add(1);
-            first_heading |= i == 0;
+        if t.is_empty() {
+            prev_blank = true;
+            continue;
+        }
+        let after_blank = std::mem::replace(&mut prev_blank, false);
+        let first = total == 0;
+        total = total.saturating_add(1);
+        if total > 200 {
+            break;
+        }
+        if t.first() == Some(&b'#') {
+            if first {
+                // Followed by a blank line, text, or a deeper heading (a
+                // run of `#` lines at one level is a comment block).
+                let next = raw.get(i.saturating_add(1)).copied().unwrap_or_default();
+                let next_ok = probe::trim_start(next).first() != Some(&b'#')
+                    || (heading(next) && atx(next) > atx(line));
+                first_heading = after_blank && heading(line) && next_ok;
+            }
+            if t.starts_with(b"#include") || t.starts_with(b"#!") {
+                code_like = code_like.saturating_add(1);
+            }
+            continue;
+        }
+        if raw.get(i.wrapping_sub(1)).is_some_and(|p| {
+            !probe::trim(p).is_empty() && atx(p).is_none() && setext(line).is_some()
+        }) && t.len() >= 3
+        {
+            signals = signals.saturating_add(1);
         }
         // `key: value` lines suggest YAML with `#` comments.
         if t.iter().position(|&b| b == b':').is_some_and(|c| {
@@ -110,24 +162,18 @@ fn probe_markdown(h: &Head<'_>) -> bool {
         }
         if fence(line).is_some()
             || probe::contains(t, b"](")
-            || t.starts_with(b"- ")
-            || t.starts_with(b"* ")
+            || is_item(t)
             || t.starts_with(b"> ")
-            || probe::contains(t, b"**")
+            || strong(t)
         {
             signals = signals.saturating_add(1);
         }
-        if t.ends_with(b";")
-            || t.ends_with(b"{")
-            || t.starts_with(b"#include")
-            || t.starts_with(b"#!")
-            || t.starts_with(b"import ")
-        {
+        if t.ends_with(b";") || t.ends_with(b"{") || t.starts_with(b"import ") {
             code_like = code_like.saturating_add(1);
         }
     }
     first_heading
-        && (headings >= 2 || signals >= 1)
+        && signals >= 1
         && mappings.saturating_mul(3) <= total
         && code_like.saturating_mul(10) <= total
         && probe::is_text(h)

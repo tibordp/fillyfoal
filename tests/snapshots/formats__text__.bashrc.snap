@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ .bashrc — UTF-8 text, LF line endings, 6 lines  [0x0+0x59]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 6 LF, 0 CRLF, 0 CR
+  ▾ Lines — 6 lines  [0x0+0x59]
+      Line 1: "# ~/.bashrc"  [0x0+0xb]
+      Line 2: "# aliases"  [0xc+0x9]
+      Line 3: "alias ll=\"ls -l\""  [0x16+0x10]
+      Line 4: "export PATH=$HOME/bin:$PATH"  [0x27+0x1b]
+      Line 5: "# prompt"  [0x43+0x8]
+      Line 6: "PS1=\"\\u@\\h \""  [0x4c+0xc]

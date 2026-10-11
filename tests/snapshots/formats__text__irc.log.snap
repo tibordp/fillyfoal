@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ irc.log — UTF-8 text, LF line endings, 8 lines  [0x0+0xd8]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 8 LF, 0 CRLF, 0 CR
+  ▾ Lines — 8 lines  [0x0+0xd8]
+      Line 1: "[12:01] <nick> hello there"  [0x0+0x1a]
+      Line 2: "[12:02] <nick> hello there"  [0x1b+0x1a]
+      Line 3: "[12:03] <nick> hello there"  [0x36+0x1a]
+      Line 4: "[12:04] <nick> hello there"  [0x51+0x1a]
+      Line 5: "[12:05] <nick> hello there"  [0x6c+0x1a]
+      Line 6: "[12:06] <nick> hello there"  [0x87+0x1a]
+      Line 7: "[12:07] <nick> hello there"  [0xa2+0x1a]
+      Line 8: "[12:08] <nick> hello there"  [0xbd+0x1a]
