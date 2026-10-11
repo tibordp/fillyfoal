@@ -86,6 +86,19 @@ fn npy_descr(text: &str) -> Option<String> {
     rest.get(1..)?.split(quote).next().map(str::to_owned)
 }
 
+/// Whether a dtype holds Python objects (`O`, alone or as a field of a
+/// structured dtype): numpy then writes the data as a pickle stream
+/// (`numpy.lib.format.write_array` calls `pickle.dump`).
+fn npy_has_object(descr: &str) -> bool {
+    if descr.starts_with('[') {
+        ["'O'", "'|O'", "\"O\"", "\"|O\""]
+            .iter()
+            .any(|t| descr.contains(t))
+    } else {
+        descr.trim_start_matches(['<', '>', '|', '=']).starts_with('O')
+    }
+}
+
 fn npy_shape(text: &str) -> Option<Vec<u64>> {
     let rest = dict_entry(text, "shape")?;
     let inner = rest.strip_prefix('(')?.split(')').next()?;
@@ -159,6 +172,12 @@ pub async fn npy(cx: Cx, input: Input) -> Result<()> {
                 )));
             }
         }
+    }
+    if descr.as_deref().is_some_and(npy_has_object) {
+        // Object arrays are pickled: the element count says nothing about
+        // the byte length, so no size check either.
+        node = embedded_as("Data", input.nested(data), &super::pickle::FORMAT)
+            .summary("pickled objects");
     }
     cx.annotate(summary);
     cx.emit(node);

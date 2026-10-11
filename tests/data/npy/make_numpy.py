@@ -26,3 +26,7 @@ np.save("unicode.npy", np.array(["hello", "žaba"], dtype="<U5"))
 
 # Object array: the data is a pickle stream.
 np.save("object.npy", np.array([1, "two", None, [3.0]], dtype=object), allow_pickle=True)
+
+# Structured dtype with an object field: also written as a pickle stream.
+mixed = np.array([(1, "one"), (2, {"k": 2})], dtype=[("n", "<i4"), ("obj", "O")])
+np.save("structured-object.npy", mixed, allow_pickle=True)

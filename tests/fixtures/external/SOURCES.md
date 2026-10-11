@@ -809,6 +809,7 @@ Generated in `/tmp/fixtures/<format>` with the scripts named below
 | `npy/structured.npy` | NumPy 2.3.3 | same script: structured dtype (`<i2`, `<f4`, `S3`); reproduced byte-for-byte |
 | `npy/unicode.npy` | NumPy 2.3.3 | same script: `<U5`; reproduced byte-for-byte |
 | `npy/object.npy` | NumPy 2.3.3 | same script: object array, the data is a pickle stream; reproduced byte-for-byte |
+| `npy/structured-object.npy` | NumPy 2.3.3 | same script: structured dtype with an `O` field, also pickled; reproduced byte-for-byte |
 | `r-serialized/workspace.RData` | R 4.4.1 (`r-base:4.4.1` Docker image) | `tests/data/r-serialized/make_r.R`: `save(..., compress = FALSE)` (RDX3) of a double vector with NA, a named list, a factor and a data frame; reproduced byte-for-byte |
 | `r-serialized/altrep-v3.rds` | R 4.4.1 | same script: `saveRDS(1:10, compress = FALSE)`, version 3 with an ALTREP compact sequence; reproduced byte-for-byte |
 | `r-serialized/df-v2.rds` | R 4.4.1 | same script: a data frame, serialization version 2; reproduced byte-for-byte |
