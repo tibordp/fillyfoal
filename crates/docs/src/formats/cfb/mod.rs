@@ -142,57 +142,130 @@ cfb_format!(
     |h| h.starts_with(MAGIC)
 );
 
-/// Byte offset of the first directory sector, as seen by a probe.
-fn probe_directory(h: &Head<'_>) -> Option<(usize, usize)> {
-    if !h.starts_with(MAGIC) {
-        return None;
-    }
-    let shift = u16_le(h.data, 30)?;
-    if shift != 9 && shift != 12 {
-        return None;
-    }
-    let size = 1usize << shift;
-    let first = usize::try_from(u32_le(h.data, 48)?).ok()?;
-    let offset = first.checked_add(1)?.checked_mul(size)?;
-    Some((offset, size))
+/// The sectors a probe can see: those inside the head window, and, when the
+/// input's length is known, those inside the tail window (LibreOffice and
+/// textutil write the directory and FAT at the end of the file).
+struct ProbeView<'h, 'a> {
+    head: &'h Head<'a>,
+    size: usize,
 }
 
-/// Names of the directory entries visible to a probe: the directory chain
-/// is followed through the first FAT sector while both lie in the window.
+impl<'h> ProbeView<'h, '_> {
+    fn new<'x, 'a>(h: &'x Head<'a>) -> Option<ProbeView<'x, 'a>> {
+        if !h.starts_with(MAGIC) {
+            return None;
+        }
+        let shift = u16_le(h.data, 30)?;
+        if shift != 9 && shift != 12 {
+            return None;
+        }
+        Some(ProbeView {
+            head: h,
+            size: 1usize << shift,
+        })
+    }
+
+    /// The bytes of regular sector `s`, if they lie entirely in a window.
+    fn sector(&self, s: u32) -> Option<&'h [u8]> {
+        if s >= MAX_REGULAR {
+            return None;
+        }
+        let at = usize::try_from(s)
+            .ok()?
+            .checked_add(1)?
+            .checked_mul(self.size)?;
+        let end = at.checked_add(self.size)?;
+        if let Some(data) = self.head.data.get(at..end) {
+            return Some(data);
+        }
+        if !self.head.len_known {
+            return None;
+        }
+        let tail = self.head.tail;
+        let start = usize::try_from(self.head.len)
+            .ok()?
+            .checked_sub(tail.len())?;
+        tail.get(at.checked_sub(start)?..end.checked_sub(start)?)
+    }
+
+    /// The FAT entry of sector `s` (the next sector of its chain), through
+    /// the header's DIFAT array.
+    fn next(&self, s: u32) -> Option<u32> {
+        let per = self.size.checked_div(4)?;
+        let s = usize::try_from(s).ok()?;
+        let index = s.checked_div(per)?;
+        if index >= 109 {
+            return None;
+        }
+        let fat = self.sector(u32_le(
+            self.head.data,
+            index.checked_mul(4)?.checked_add(76)?,
+        )?)?;
+        u32_le(fat, s.checked_rem(per)?.checked_mul(4)?)
+    }
+
+    /// The directory sectors of the chain, in order (`None` where a sector
+    /// lies outside both windows).
+    fn directory(&self) -> Vec<Option<&'h [u8]>> {
+        const MAX_SECTORS: usize = 64;
+        let mut sectors = Vec::new();
+        let mut sector = u32_le(self.head.data, 48);
+        while let Some(s) = sector.filter(|&s| s < MAX_REGULAR) {
+            if sectors.len() >= MAX_SECTORS {
+                break;
+            }
+            sectors.push(self.sector(s));
+            sector = self.next(s);
+        }
+        sectors
+    }
+}
+
+/// The directory entry `id`, from the visible directory sectors.
+fn probe_entry<'h>(dir: &[Option<&'h [u8]>], size: usize, id: u32) -> Option<&'h [u8]> {
+    let per = size.checked_div(128)?;
+    let id = usize::try_from(id).ok()?;
+    let sector = (*dir.get(id.checked_div(per)?)?)?;
+    let at = id.checked_rem(per)?.checked_mul(128)?;
+    sector.get(at..at.checked_add(128)?)
+}
+
+/// Names of the root storage's children visible to a probe. Only the root's
+/// own red-black tree is walked: a name deeper down (a Word document
+/// embedded in a workbook, an attachment of a message) says nothing about
+/// what the file is.
 fn probe_names(h: &Head<'_>) -> Vec<String> {
-    const MAX_SECTORS: usize = 64;
     let mut names = Vec::new();
-    let Some((_, size)) = probe_directory(h) else {
+    let Some(view) = ProbeView::new(h) else {
         return names;
     };
-    let fat = u32_le(h.data, 76)
-        .and_then(|s| usize::try_from(s).ok()?.checked_add(1)?.checked_mul(size))
-        .and_then(|at| h.data.get(at..at.checked_add(size)?));
-    let mut sector = u32_le(h.data, 48);
-    for _ in 0..MAX_SECTORS {
-        let Some(s) = sector.filter(|&s| s < MAX_REGULAR) else {
-            break;
+    let dir = view.directory();
+    let Some(root) = probe_entry(&dir, view.size, 0) else {
+        return names;
+    };
+    let mut seen = BTreeSet::new();
+    let mut stack: Vec<u32> = u32_le(root, 76).into_iter().collect();
+    while let Some(id) = stack.pop() {
+        if id == NO_STREAM || id == 0 || seen.len() >= MAX_ROOT_SCAN || !seen.insert(id) {
+            continue;
+        }
+        let Some(e) = probe_entry(&dir, view.size, id) else {
+            continue;
         };
-        let Some(data) = usize::try_from(s)
-            .ok()
-            .and_then(|s| s.checked_add(1)?.checked_mul(size))
-            .and_then(|at| h.data.get(at..at.checked_add(size)?))
-        else {
-            break;
-        };
-        names.extend(data.as_chunks::<128>().0.iter().filter_map(|e| {
-            let len = usize::from(u16_le(e, 64)?).min(64);
-            let name = e.get(..len.saturating_sub(2))?;
-            Some(crate::text::utf16(name, LE))
-        }));
-        sector = fat.and_then(|f| u32_le(f, usize::try_from(s).ok()?.checked_mul(4)?));
+        let len = usize::from(u16_le(e, 64).unwrap_or(0)).min(64);
+        if let Some(name) = e.get(..len.saturating_sub(2)) {
+            names.push(crate::text::utf16(name, LE));
+        }
+        stack.extend(u32_le(e, 68));
+        stack.extend(u32_le(e, 72));
     }
     names
 }
 
 fn probe_root_clsid(h: &Head<'_>) -> Option<[u8; 16]> {
-    let (offset, _) = probe_directory(h)?;
-    crate::bytes::array(h.data, offset.checked_add(80)?)
+    let view = ProbeView::new(h)?;
+    let first = view.sector(u32_le(h.data, 48)?)?;
+    crate::bytes::array(first, 80)
 }
 
 // ---------------------------------------------------------------------------
@@ -1021,10 +1094,31 @@ async fn storage(cx: Cx, state: StorageState) -> Result<()> {
     };
     let mut walk = TreeWalk::new(this.child);
     while let Some((id, entry)) = walk.next(&cx, cfb).await {
-        cx.push(child_node(cfb, &state, id, &entry, names.as_deref()))
+        let ole = ole_attachment(&cx, cfb, state.context, id, &entry).await;
+        cx.push(child_node(cfb, &state, id, &entry, names.as_deref(), ole))
             .await;
     }
     Ok(())
+}
+
+/// Whether `entry` is an Outlook attachment's data storage
+/// (PidTagAttachDataObject) that holds an OLE object rather than a message:
+/// the storage of an `afOle` attachment (attach method 6) is the object's
+/// own compound file, while an embedded message (method 5) carries
+/// `__properties_version1.0` (MS-OXMSG 2.2.2.1).
+async fn ole_attachment(
+    cx: &Cx,
+    cfb: &Cfb,
+    context: apps::Context,
+    id: u32,
+    entry: &DirEntry,
+) -> bool {
+    context.is_msg()
+        && entry.kind == 1
+        && entry_name(entry) == "__substg1.0_3701000D"
+        && find_child(cx, cfb, id, "__properties_version1.0")
+            .await
+            .is_none()
 }
 
 fn child_node(
@@ -1033,10 +1127,18 @@ fn child_node(
     id: u32,
     entry: &DirEntry,
     names: Option<&msg::NameMap>,
+    ole: bool,
 ) -> Node {
     let raw = entry_name(entry);
     let context = parent.context;
-    let (label, detail) = apps::label(&raw, context, names);
+    let (label, detail) = if ole {
+        (
+            "OLE attachment".to_owned(),
+            Some("attachment data storage (an embedded OLE object)".to_owned()),
+        )
+    } else {
+        apps::label(&raw, context, names)
+    };
     let mut node = Node::new(label).span(cfb.entry_span(id));
     match entry.kind {
         1 | 5 => {
@@ -1058,7 +1160,11 @@ fn child_node(
                 StorageState {
                     cfb: cfb.clone(),
                     id,
-                    context: apps::Context::child(context, &raw),
+                    context: if ole {
+                        apps::Context::Plain
+                    } else {
+                        apps::Context::child(context, &raw)
+                    },
                     path: Arc::new(path),
                 },
             )

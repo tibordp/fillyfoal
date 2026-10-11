@@ -1,0 +1,166 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ v4-nolength-rc4.pdf — PDF 1.5, 1 page, encrypted (RC4-128, R4), title "Fillyfoal V4 without Length", producer "fillyfoal"  [0x0+0x420]
+    Header: "1.5"  [0x0+0x8]
+    Binary marker: bf f7 a2 fe  |....|  [0x9+0x5]
+  ▾ Trailer — 5 entries  [0x384+0x87]
+      /Info: "2 0 R"  [0x38f+0xb] → 0x40+0x0
+      /Root: "1 0 R"  [0x39b+0xb] → 0xf+0x0
+      /Size: 7  [0x3a7+0x7]
+    ▾ /ID — [(¢GÌ½1KºyÝ/) (¢GÌ½1KºyÝ/)]  [0x3af+0x4a]
+        [0]: a2 47 cc 0e bd 0f 31 1f 4b ba 79 dd 86 8f 07 2f  |.G....1.K.y..../| — 16 bytes  [0x3b4+0x22]
+        [1]: a2 47 cc 0e bd 0f 31 1f 4b ba 79 dd 86 8f 07 2f  |.G....1.K.y..../| — 16 bytes  [0x3d6+0x22]
+      /Encrypt: "6 0 R"  [0x3fa+0xe] → 0x19f+0x0
+  ▾ Document Catalog: "1 0 R" — /Catalog, 2 entries  [0x3a1+0x5] → 0xf+0x0
+    ▾ /Pages: "3 0 R" — /Pages, 3 entries  [0x1a+0xc] → 0xb4+0x0
+        /Count: 1  [0xbf+0x8]
+      ▾ /Kids — [4 0 R]  [0xc8+0xf]
+        ▾ [0]: "4 0 R" — /Page, 5 entries  [0xd0+0x5] → 0xef+0x0
+          ▾ /Contents: "5 0 R" — stream, 2 entries, 0 bytes, /FlateDecode  [0xfa+0xf] → 0x159+0x0
+              /Length: 0  [0x164+0x9]
+              /Filter: "/FlateDecode"  [0x16e+0x14]
+            ▾ Stream data — 0 bytes, /FlateDecode, encrypted  [0x18d+0x0]
+                ! malformed: truncated zlib header [0x18d+0x0]
+            ▾ Operators
+                ! malformed: truncated zlib header [0x18d+0x0]
+          ▾ /MediaBox — [0 0 612 792]  [0x10a+0x19]
+              [0]: 0  [0x116+0x1]
+              [1]: 0  [0x118+0x1]
+              [2]: 612  [0x11a+0x3]
+              [3]: 792  [0x11e+0x3]
+            /Parent: "3 0 R"  [0x124+0xd] → 0xb4+0x0
+          ▾ /Resources — 0 entries  [0x132+0x10]
+            /Type: "/Page"  [0x143+0xb]
+        /Type: "/Pages"  [0xd8+0xc]
+      /Type: "/Catalog"  [0x27+0xe]
+  ▾ Document Information: "2 0 R" — 2 entries  [0x395+0x5] → 0x40+0x0
+      /Producer: "fillyfoal" — hex string  [0x4b+0x1e]
+      /Title: "Fillyfoal V4 without Length" — hex string  [0x6a+0x3f]
+  ▾ Encryption — RC4-128, R4
+      Object header: "6 0 obj"  [0x19f+0x8]
+    ▾ /CF — 1 entries  [0x1aa+0x3e]
+      ▾ /StdCF — 3 entries  [0x1b1+0x34]
+          /AuthEvent: "/DocOpen"  [0x1bb+0x13]
+          /CFM: "/V2"  [0x1cf+0x8]
+          /Length: 16  [0x1d8+0xa]
+      /EncryptMetadata: false  [0x1e9+0x16]
+      /Filter: "/Standard"  [0x200+0x11]
+      /O: a6 78 99 84 8d c7 82 b6 cc 8c 5b a9 6b 93 1b 13 …  |.x........[.k...| — 32 bytes  [0x21e+0x45]
+      /OE: "" — hex string  [0x264+0x6]
+      /P: 0xfffffbfc [print | modify | copy | annotate | fill forms | extract for accessibility | print high quality | (reserved bits)] — denies assemble  [0x26b+0x8]
+      /R: crypt filters (0x4)  [0x274+0x4]
+      /StmF: "/StdCF"  [0x279+0xc]
+      /StrF: "/StdCF"  [0x286+0xc]
+      /U: 1d f5 18 2d cd db 42 4b e7 d7 f6 55 65 a6 1d d3 …  |...-..BK...Ue...| — 32 bytes  [0x293+0x45]
+      /UE: "" — hex string  [0x2d9+0x6]
+      /V: crypt filters (RC4 or AES-128) (0x4)  [0x2e0+0x4]
+      Status: "unlocked: the empty user password (or the one entered) opens it" — RC4-128, R4
+  ▾ Pages — 1 page
+    ▾ Page 1 — /Page, 5 entries  [0xef+0x69]
+      ▾ /Contents: "5 0 R" — stream, 2 entries, 0 bytes, /FlateDecode  [0xfa+0xf] → 0x159+0x0
+          /Length: 0  [0x164+0x9]
+          /Filter: "/FlateDecode"  [0x16e+0x14]
+        ▾ Stream data — 0 bytes, /FlateDecode, encrypted  [0x18d+0x0]
+            ! malformed: truncated zlib header [0x18d+0x0]
+        ▾ Operators
+            ! malformed: truncated zlib header [0x18d+0x0]
+      ▾ /MediaBox — [0 0 612 792]  [0x10a+0x19]
+          [0]: 0  [0x116+0x1]
+          [1]: 0  [0x118+0x1]
+          [2]: 612  [0x11a+0x3]
+          [3]: 792  [0x11e+0x3]
+        /Parent: "3 0 R"  [0x124+0xd] → 0xb4+0x0
+      ▾ /Resources — 0 entries  [0x132+0x10]
+        /Type: "/Page"  [0x143+0xb]
+  ▾ Objects — 7 entries
+      Object 0: 0 — free, next free object 0, generation 65535
+      Object 1 0: 0xf — /Catalog, 2 entries (in use, generation 0) → 0xf+0x30
+      Object 2 0: 0x40 — 2 entries (in use, generation 0) → 0x40+0x73
+      Object 3 0: 0xb4 — /Pages, 3 entries (in use, generation 0) → 0xb4+0x3a
+      Object 4 0: 0xef — /Page, 5 entries (in use, generation 0) → 0xef+0x69
+      Object 5 0: 0x159 — stream, 2 entries, 0 bytes, /FlateDecode (in use, generation 0) → 0x159+0x45
+      Object 6 0: 0x19f — 12 entries (in use, generation 0) → 0x19f+0x14f
+  ▾ Revisions — 1 cross-reference section
+    ▾ Revision 1 — original: 6 objects, cross-reference table at 0x2ef with 7 entries  [0x0+0x420]
+      ▾ Body — 6 objects  [0x0+0x2ef]
+        ▾ Object 1 0 — /Catalog, 2 entries  [0xf+0x30]
+            Object header: "1 0 obj"  [0xf+0x8]
+            /Pages: "3 0 R"  [0x1a+0xc] → 0xb4+0x0
+            /Type: "/Catalog"  [0x27+0xe]
+            End keywords: "endobj"  [0x38+0x7]
+        ▾ Object 2 0 — 2 entries  [0x40+0x73]
+            Object header: "2 0 obj"  [0x40+0x8]
+            /Producer: "fillyfoal" — hex string  [0x4b+0x1e]
+            /Title: "Fillyfoal V4 without Length" — hex string  [0x6a+0x3f]
+            End keywords: "endobj"  [0xac+0x7]
+        ▾ Object 3 0 — /Pages, 3 entries  [0xb4+0x3a]
+            Object header: "3 0 obj"  [0xb4+0x8]
+            /Count: 1  [0xbf+0x8]
+          ▾ /Kids — [4 0 R]  [0xc8+0xf]
+              [0]: "4 0 R"  [0xd0+0x5] → 0xef+0x0
+            /Type: "/Pages"  [0xd8+0xc]
+            End keywords: "endobj"  [0xe7+0x7]
+        ▾ Object 4 0 — /Page, 5 entries  [0xef+0x69]
+            Object header: "4 0 obj"  [0xef+0x8]
+            /Contents: "5 0 R"  [0xfa+0xf] → 0x159+0x0
+          ▾ /MediaBox — [0 0 612 792]  [0x10a+0x19]
+              [0]: 0  [0x116+0x1]
+              [1]: 0  [0x118+0x1]
+              [2]: 612  [0x11a+0x3]
+              [3]: 792  [0x11e+0x3]
+            /Parent: "3 0 R"  [0x124+0xd] → 0xb4+0x0
+          ▾ /Resources — 0 entries  [0x132+0x10]
+            /Type: "/Page"  [0x143+0xb]
+            End keywords: "endobj"  [0x151+0x7]
+        ▾ Object 5 0 — stream, 2 entries, 0 bytes, /FlateDecode  [0x159+0x45]
+            Object header: "5 0 obj"  [0x159+0x8]
+            /Length: 0  [0x164+0x9]
+            /Filter: "/FlateDecode"  [0x16e+0x14]
+            Stream keyword: "stream"  [0x185+0x8]
+          ▾ Stream data — 0 bytes, /FlateDecode, encrypted  [0x18d+0x0]
+              ! malformed: truncated zlib header [0x18d+0x0]
+          ▾ Operators
+              ! malformed: truncated zlib header [0x18d+0x0]
+            End keywords: "endstream endobj"  [0x18d+0x11]
+        ▾ Object 6 0 — 12 entries  [0x19f+0x14f]
+            Object header: "6 0 obj"  [0x19f+0x8]
+          ▾ /CF — 1 entries  [0x1aa+0x3e]
+            ▾ /StdCF — 3 entries  [0x1b1+0x34]
+                /AuthEvent: "/DocOpen"  [0x1bb+0x13]
+                /CFM: "/V2"  [0x1cf+0x8]
+                /Length: 16  [0x1d8+0xa]
+            /EncryptMetadata: false  [0x1e9+0x16]
+            /Filter: "/Standard"  [0x200+0x11]
+            /O: a6 78 99 84 8d c7 82 b6 cc 8c 5b a9 6b 93 1b 13 …  |.x........[.k...| — 32 bytes  [0x21e+0x45]
+            /OE: "" — hex string  [0x264+0x6]
+            /P: -1028  [0x26b+0x8]
+            /R: 4  [0x274+0x4]
+            /StmF: "/StdCF"  [0x279+0xc]
+            /StrF: "/StdCF"  [0x286+0xc]
+            /U: 1d f5 18 2d cd db 42 4b e7 d7 f6 55 65 a6 1d d3 …  |...-..BK...Ue...| — 32 bytes  [0x293+0x45]
+            /UE: "" — hex string  [0x2d9+0x6]
+            /V: 4  [0x2e0+0x4]
+            End keywords: "endobj"  [0x2e7+0x7]
+      ▾ Cross-reference table — 7 entries in 1 subsection  [0x2ef+0x95]
+          Keyword: "xref"  [0x2ef+0x4]
+        ▾ Objects 0–6 — 7 entries  [0x2f4+0x90]
+            Header: "0 7"  [0x2f4+0x3]
+            Object 0: 0 — free, next free object 0, generation 65535  [0x2f8+0x14]
+            Object 1: 0xf — in use, generation 0  [0x30c+0x14] → 0xf+0x0
+            Object 2: 0x40 — in use, generation 0  [0x320+0x14] → 0x40+0x0
+            Object 3: 0xb4 — in use, generation 0  [0x334+0x14] → 0xb4+0x0
+            Object 4: 0xef — in use, generation 0  [0x348+0x14] → 0xef+0x0
+            Object 5: 0x159 — in use, generation 0  [0x35c+0x14] → 0x159+0x0
+            Object 6: 0x19f — in use, generation 0  [0x370+0x14] → 0x19f+0x0
+      ▾ Trailer — 5 entries  [0x384+0x87]
+          /Info: "2 0 R"  [0x38f+0xb] → 0x40+0x0
+          /Root: "1 0 R"  [0x39b+0xb] → 0xf+0x0
+          /Size: 7  [0x3a7+0x7]
+        ▾ /ID — [(¢GÌ½1KºyÝ/) (¢GÌ½1KºyÝ/)]  [0x3af+0x4a]
+            [0]: a2 47 cc 0e bd 0f 31 1f 4b ba 79 dd 86 8f 07 2f  |.G....1.K.y..../| — 16 bytes  [0x3b4+0x22]
+            [1]: a2 47 cc 0e bd 0f 31 1f 4b ba 79 dd 86 8f 07 2f  |.G....1.K.y..../| — 16 bytes  [0x3d6+0x22]
+          /Encrypt: "6 0 R"  [0x3fa+0xe] → 0x19f+0x0
+        startxref: 0x2ef  [0x40c+0xd] → 0x2ef+0x4
+        End-of-file marker: "%%EOF"  [0x41a+0x5]

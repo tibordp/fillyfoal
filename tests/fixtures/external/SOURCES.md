@@ -730,6 +730,9 @@ reproducible byte for byte.
 | `xls/xlwt.xls` | xlwt 1.3.0 | `uv run --with xlwt==1.3.0 python tests/data/xls/make_xlwt.py xlwt.xls`; reproduced byte-for-byte |
 | `ppt/deck.ppt` | LibreOffice 26.8.1.1 ("MS PowerPoint 97" filter) | `lo-convert.sh ppt tests/data/ppt/deck.fodp`: two slides with titles, bullets, notes, a rectangle and an ellipse |
 | `msi/hello.msi` | msitools 0.106 (`wixl`) | `wixl -o hello.msi tests/data/msi/hello.wxs` next to `tests/data/msi/readme.txt`; the package code and times differ on each run |
+| `doc/long.doc` | LibreOffice 26.8.1.1 ("MS Word 97" filter) | `python3 tests/data/doc/make_long.py long.fodt`, then `lo-convert.sh doc long.fodt <outdir>`: 400 plain paragraphs, 78,848 bytes; LibreOffice writes the directory in the last sectors (sector 151, inside the last 1 KiB), beyond the 66 KiB probe head |
+| `xls/embedded.xls` | LibreOffice 26.8.1.1 ("MS Excel 97" filter) | `soffice -env:UserInstallation=file:///tmp/fixtures/office-cfb/lo-profile --headless --infilter="OpenDocument Spreadsheet Flat XML" --convert-to xls --outdir <outdir> embedded.fods` (the nested document in `tests/data/xls/embedded.fods` defeats type detection, hence `--infilter`): a sheet with an embedded Writer object, exported as a Word document in a root-level `MBD…` storage |
+| `xls/encrypted-rc4.xls` | LibreOffice 26.8.1.1 ("MS Excel 97" filter with a password) | `sh tests/data/xls/encrypt.sh <profile> encrypted-rc4.xls`: runs `tests/data/xls/encrypt.bas` as a Basic macro in a throwaway profile (headless `--convert-to` ignores the password); password `fillyfoal`. FILEPASS with RC4 (version 1.1); msoffcrypto-tool 5.4.2 decrypts it with that password |
 
 ## Windows
 

@@ -78,6 +78,33 @@ fn method(dict: &Item, which: &str, v: i64) -> Method {
     }
 }
 
+/// The key length in bits for revisions 2-4. The top-level `/Length` applies
+/// only to V 2 and 3 (ISO 32000-1 Table 20). With crypt filters (V 4) it
+/// comes from the stream filter's `/Length`, which writers give in bytes
+/// (16) though the standard says bits, so values under 40 are bytes; AESV2
+/// always uses a 128-bit key. Without either, V 4 means 128 bits, as in
+/// pdf.js (`CipherTransformFactory`); qpdf also opens such files.
+fn key_bits(dict: &Item, v: i64, methods: [Method; 2]) -> i64 {
+    if v < 4 {
+        return dict.get("Length").and_then(Item::int).unwrap_or(40);
+    }
+    if methods.contains(&Method::AesV2) {
+        return 128;
+    }
+    let filter = ["StmF", "StrF"]
+        .into_iter()
+        .filter_map(|k| dict.get(k).and_then(Item::name))
+        .find(|&n| n != "Identity");
+    let length = filter
+        .and_then(|n| dict.get("CF")?.get(n)?.get("Length")?.int())
+        .or_else(|| dict.get("Length").and_then(Item::int));
+    match length {
+        Some(l @ 1..40) => l.saturating_mul(8),
+        Some(l @ 40..) => l,
+        _ => 128,
+    }
+}
+
 impl Security {
     /// Parses `/Encrypt`; `Err` names what is unsupported.
     pub fn parse(dict: &Item, id0: Vec<u8>, realm: Span) -> Result<Self, String> {
@@ -93,7 +120,9 @@ impl Security {
         if !(2..=6).contains(&revision) {
             return Err(format!("standard security handler revision {revision}"));
         }
-        let bits = dict.get("Length").and_then(Item::int).unwrap_or(40);
+        let streams = method(dict, "StmF", v);
+        let strings = method(dict, "StrF", v);
+        let bits = key_bits(dict, v, [streams, strings]);
         let key_len = match revision {
             2 => 5,
             5 | 6 => 32,
@@ -116,8 +145,8 @@ impl Security {
                 dict.get("EncryptMetadata").map(|i| &i.obj),
                 Some(Obj::Bool(false))
             ),
-            streams: method(dict, "StmF", v),
-            strings: method(dict, "StrF", v),
+            streams,
+            strings,
             realm,
         })
     }

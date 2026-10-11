@@ -959,9 +959,20 @@ pub struct Book {
     pub names: Names,
     pub codepage: u16,
     pub date1904: bool,
+    /// Where encryption starts: the stream offset just past FILEPASS.
+    pub encrypted: Option<u64>,
 }
 
 impl Book {
+    /// Whether the body of the record of type `kind` at stream offset `pos`
+    /// is encrypted: everything after FILEPASS except the records MS-XLS
+    /// 2.2.10 leaves in the clear (BOF, FILEPASS, UsrExcl, FileLock,
+    /// InterfaceHdr, RRDInfo, RRDHead; EOF has no body). Of BoundSheet8 only
+    /// lbPlyPos is in the clear.
+    fn encrypted_at(&self, pos: u64, kind: u16) -> bool {
+        self.encrypted.is_some_and(|from| pos >= from) && !clear_record(kind)
+    }
+
     /// A BIFF2–4 stream, whose records have their own layouts.
     fn early(&self) -> bool {
         matches!(self.version, 2..=4)
@@ -977,6 +988,24 @@ impl Book {
             None
         }
     }
+}
+
+/// Records whose bodies stay unencrypted after FILEPASS.
+fn clear_record(kind: u16) -> bool {
+    matches!(
+        kind,
+        0x0809
+            | 0x0409
+            | 0x0209
+            | 0x0009
+            | 0x002f
+            | 0x0194
+            | 0x0195
+            | 0x00e1
+            | 0x0196
+            | 0x0138
+            | 0x000a
+    )
 }
 
 /// One record header, as walked.
@@ -1075,6 +1104,11 @@ async fn load_book(cx: &Cx, stream: Span) -> Result<Book> {
                         .unwrap_or_default()
                 };
                 book.names.defined.push(name);
+            }
+            0x002f => {
+                // Nothing after FILEPASS can be read without the key.
+                book.encrypted = Some(pos.saturating_add(r.span.len));
+                break;
             }
             0x0042 => book.codepage = u16_le(&data, 0).unwrap_or(1252),
             0x0022 => book.date1904 = u16_le(&data, 0) == Some(1),
@@ -1257,10 +1291,11 @@ fn sst_string(
 /// A BIFF5 or BIFF8 workbook stream.
 pub async fn workbook(cx: &Cx, input: Input, stream: Span) -> Result<()> {
     let mut pos = 0u64;
-    let mut sheets: Vec<(u32, String, u8)> = Vec::new();
+    let mut sheets: Vec<(u32, Option<String>, u8)> = Vec::new();
     let mut count = 0usize;
     let mut biff8 = true;
     let mut summary_sheets = Vec::new();
+    let mut encrypted: Option<String> = None;
     loop {
         let Some(bof) = next_rec(cx, stream, pos).await? else {
             break;
@@ -1305,6 +1340,10 @@ pub async fn workbook(cx: &Cx, input: Input, stream: Span) -> Result<()> {
                         break;
                     }
                 }
+                0x002f if count == 0 && encrypted.is_none() => {
+                    let data = cx.read_avail(r.body().sub(0, 16)).await?;
+                    encrypted = Some(filepass_summary(&data, biff8));
+                }
                 0x0085 if count == 0 => {
                     let data = cx.read_avail(r.body().sub(0, 300)).await?;
                     let form = if biff8 {
@@ -1312,16 +1351,23 @@ pub async fn workbook(cx: &Cx, input: Input, stream: Span) -> Result<()> {
                     } else {
                         StrForm::Bytes8
                     };
-                    let name = xl_string(&data, 6, form)
-                        .map(|(s, _)| s)
-                        .unwrap_or_default();
+                    // Only lbPlyPos is in the clear in an encrypted workbook.
+                    let name = if encrypted.is_some() {
+                        None
+                    } else {
+                        Some(
+                            xl_string(&data, 6, form)
+                                .map(|(s, _)| s)
+                                .unwrap_or_default(),
+                        )
+                    };
                     sheets.push((
                         u32_le(&data, 0).unwrap_or(0),
                         name,
                         data.get(5).copied().unwrap_or(0),
                     ));
                 }
-                0x0200 if depth == 1 && dims.is_none() => {
+                0x0200 if depth == 1 && dims.is_none() && encrypted.is_none() => {
                     let data = cx.read_avail(r.body()).await?;
                     dims = dimensions(&data, biff8);
                 }
@@ -1334,10 +1380,11 @@ pub async fn workbook(cx: &Cx, input: Input, stream: Span) -> Result<()> {
             "Globals".to_owned()
         } else {
             match sheets.iter().find(|(at, ..)| u64::from(*at) == start) {
-                Some((_, n, _)) => {
+                Some((_, Some(n), _)) => {
                     summary_sheets.push(n.clone());
                     format!("Sheet {}", quoted(n, 64))
                 }
+                Some((_, None, _)) => format!("Sheet at {start:#x} (name encrypted)"),
                 None => format!("Substream at {start:#x}"),
             }
         };
@@ -1362,16 +1409,22 @@ pub async fn workbook(cx: &Cx, input: Input, stream: Span) -> Result<()> {
         .take(6)
         .map(|s| quoted(s, 32))
         .collect();
-    cx.annotate(format!(
-        "Excel {} workbook, {} sheets: {}",
-        if biff8 {
-            "97–2003 (BIFF8)"
-        } else {
-            "5.0/95 (BIFF5)"
-        },
-        sheets.len(),
-        shown.join(", ")
-    ));
+    let version = if biff8 {
+        "97–2003 (BIFF8)"
+    } else {
+        "5.0/95 (BIFF5)"
+    };
+    cx.annotate(match encrypted {
+        Some(cipher) => format!(
+            "Excel {version} workbook, encrypted ({cipher}), {}",
+            plural(to_u64(sheets.len()), "sheet")
+        ),
+        None => format!(
+            "Excel {version} workbook, {} sheets: {}",
+            sheets.len(),
+            shown.join(", ")
+        ),
+    });
     Ok(())
 }
 
@@ -1417,7 +1470,8 @@ async fn substream(cx: Cx, (input, stream, span): (Input, Span, Span)) -> Result
             }
             _ => vec![r.body()],
         };
-        if matches!(r.kind, 0x00ec | 0x00eb) {
+        let sealed = book.encrypted_at(pos, r.kind);
+        if matches!(r.kind, 0x00ec | 0x00eb) && !sealed {
             drawing.extend(parts.iter().copied());
         }
         if r.kind != 0x003c {
@@ -1427,7 +1481,11 @@ async fn substream(cx: Cx, (input, stream, span): (Input, Span, Span)) -> Result
         let name = record_name(r.kind, &book)
             .map_or_else(|| format!("Record {:#06x}", r.kind), str::to_owned);
         let mut node = Node::new(name).span(r.span).value(hex(r.kind, 16));
-        let summary = if r.kind == 0x003c {
+        let summary = if sealed && r.kind == 0x0085 {
+            u32_le(&data, 0).map(|at| format!("BOF at {at:#x}; name and flags encrypted"))
+        } else if sealed {
+            Some(format!("encrypted, {body_len} bytes"))
+        } else if r.kind == 0x003c {
             Some(format!(
                 "continues {}",
                 record_name(continued, &book).unwrap_or("the previous record")
@@ -1486,6 +1544,7 @@ async fn describe(cx: &Cx, kind: u16, data: &[u8], book: &Book, parts: &[Span]) 
             lookup(BIFF_VERSIONS, u16_le(data, 0)?.into()).unwrap_or("BIFF?"),
             lookup(BOF_TYPES, u16_le(data, 2)?.into()).unwrap_or("unknown type")
         ),
+        0x002f if !book.early() => filepass_summary(data, book.biff8),
         0x0085 => {
             let form = if book.biff8 {
                 StrForm::Wide8
@@ -1843,12 +1902,26 @@ async fn record(
     let block = cx.block(body).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
     let biff8 = book.biff8;
+    if book.encrypted_at(span.offset.saturating_sub(stream.offset), kind) {
+        if kind == 0x0085 {
+            f.u32("lbPlyPos")
+                .hex()
+                .desc("Stream offset of the sheet's BOF (not encrypted)")
+                .emit()?;
+        }
+        let rest = f.remaining();
+        f.bytes("Encrypted data", rest)
+            .desc("Encrypted with the key FILEPASS describes")
+            .emit()?;
+        return Ok(());
+    }
     // BIFF2–4 records with layouts of their own (and those without a
     // decoder) are done here; the rest share the BIFF5 layout.
     let early_done = book.early() && early_fields(&mut f, kind, &book)?;
     match kind {
         _ if early_done => {}
         0x0809 | 0x0409 => bof(&mut f)?,
+        0x002f if !book.early() => filepass(&mut f, biff8)?,
         0x00fc if biff8 => {
             f.u32("cstTotal")
                 .desc("References to shared strings in the workbook")
@@ -2207,6 +2280,102 @@ type Stream = Span;
 
 /// Decoded formula tokens: offset, length, name and detail.
 type Tokens = Arc<Vec<(usize, usize, &'static str, String)>>;
+
+const ENCRYPTION_TYPES: EnumTable = &[(0, "XOR obfuscation"), (1, "RC4")];
+const ALG_IDS: EnumTable = &[
+    (0x6801, "RC4"),
+    (0x660e, "AES-128"),
+    (0x660f, "AES-192"),
+    (0x6610, "AES-256"),
+];
+const HASH_IDS: EnumTable = &[(0x8004, "SHA-1")];
+const CRYPTO_FLAGS: FlagTable = &[
+    flag(0x04, "fCryptoAPI"),
+    flag(0x08, "fDocProps"),
+    flag(0x10, "fExternal"),
+    flag(0x20, "fAES"),
+];
+
+/// FILEPASS in one line: the scheme and, for RC4, the header version.
+fn filepass_summary(data: &[u8], biff8: bool) -> String {
+    if !biff8 {
+        return "XOR obfuscation".to_owned();
+    }
+    match u16_le(data, 0) {
+        Some(0) => "XOR obfuscation".to_owned(),
+        Some(1) => match (u16_le(data, 2), u16_le(data, 4)) {
+            (Some(1), Some(1)) => "RC4, version 1.1".to_owned(),
+            (Some(major @ 2..=4), Some(2)) => format!("RC4 CryptoAPI, version {major}.2"),
+            (Some(major), Some(minor)) => format!("RC4, unknown version {major}.{minor}"),
+            _ => "RC4".to_owned(),
+        },
+        Some(t) => format!("encryption type {t}"),
+        None => "encrypted".to_owned(),
+    }
+}
+
+/// FILEPASS (MS-XLS 2.4.117): XOR obfuscation (key and verifier), RC4
+/// (MS-OFFCRYPTO 2.3.6.1: salt and verifier) or RC4 CryptoAPI (2.3.5.1:
+/// EncryptionHeader and EncryptionVerifier). BIFF5 has only the XOR form.
+fn filepass(f: &mut Fields<'_>, biff8: bool) -> Result<()> {
+    let kind = if biff8 {
+        f.u16("wEncryptionType")
+            .enumeration(ENCRYPTION_TYPES)
+            .emit()?
+    } else {
+        0
+    };
+    if kind == 0 {
+        f.u16("key").hex().desc("XOR obfuscation key").emit()?;
+        f.u16("verificationBytes")
+            .hex()
+            .desc("Password verifier")
+            .emit()?;
+        return Ok(());
+    }
+    if kind != 1 {
+        return Ok(());
+    }
+    let major = f.u16("vMajor").emit()?;
+    let minor = f.u16("vMinor").emit()?;
+    if major == 1 && minor == 1 {
+        f.bytes("Salt", 16).emit()?;
+        f.bytes("EncryptedVerifier", 16).emit()?;
+        f.bytes("EncryptedVerifierHash", 16).desc("MD5").emit()?;
+        return Ok(());
+    }
+    if !(2..=4).contains(&major) || minor != 2 {
+        return Ok(());
+    }
+    f.u32("Flags").flags(CRYPTO_FLAGS).emit()?;
+    let size = f.u32("EncryptionHeaderSize").emit()?;
+    let header_end = f.pos().saturating_add(u64::from(size));
+    f.u32("Flags (header)").flags(CRYPTO_FLAGS).emit()?;
+    f.u32("SizeExtra").emit()?;
+    f.u32("AlgID").hex().enumeration(ALG_IDS).emit()?;
+    f.u32("AlgIDHash").hex().enumeration(HASH_IDS).emit()?;
+    f.u32("KeySize").desc("Bits; 0 means 40").emit()?;
+    f.u32("ProviderType").hex().emit()?;
+    f.u32("Reserved1").emit()?;
+    f.u32("Reserved2").emit()?;
+    let csp = header_end.saturating_sub(f.pos()).min(f.remaining()) / 2;
+    if csp > 0 {
+        f.utf16("CSPName", csp).emit()?;
+    }
+    if f.remaining() >= 4 {
+        let salt = f.u32("SaltSize").emit()?;
+        let n = u64::from(salt).min(f.remaining());
+        f.bytes("Salt", n).emit()?;
+        let n = f.remaining().min(16);
+        f.bytes("EncryptedVerifier", n).emit()?;
+        if f.remaining() >= 4 {
+            f.u32("VerifierHashSize").emit()?;
+            let n = f.remaining();
+            f.bytes("EncryptedVerifierHash", n).emit()?;
+        }
+    }
+    Ok(())
+}
 
 fn bof(f: &mut Fields<'_>) -> Result<()> {
     f.u16("vers").hex().enumeration(BIFF_VERSIONS).emit()?;
