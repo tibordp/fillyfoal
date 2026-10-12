@@ -98,15 +98,25 @@ const MAX_PADDING: usize = 4096;
 const PADDED_FRAMES: usize = 4;
 
 /// A valid frame header at `at`, followed by another one (if it is in
-/// `data`).
-fn plausible(data: &[u8], at: usize) -> bool {
+/// `data`). A free-format header costs a search of up to 16 KiB for the
+/// next two frames, so each one spends one of `free_budget`; with none
+/// left, free-format headers are not plausible.
+fn plausible(data: &[u8], at: usize, free_budget: &mut u32) -> bool {
     let Some(rest) = data.get(at..) else {
         return false;
     };
     let Some(h) = Header::parse(rest) else {
         return false;
     };
-    let Some(len) = h.frame_len().or_else(|| free_stream(rest)) else {
+    let len = match h.frame_len() {
+        Some(len) => Some(len),
+        None if *free_budget > 0 => {
+            *free_budget = free_budget.saturating_sub(1);
+            free_stream(rest)
+        }
+        None => None,
+    };
+    let Some(len) = len else {
         return false;
     };
     let next = at.saturating_add(to_usize(len));
@@ -124,7 +134,21 @@ fn plausible(data: &[u8], at: usize) -> bool {
 
 /// The first plausible frame within `limit` bytes of `data`.
 pub fn find_sync(data: &[u8], limit: usize) -> Option<usize> {
-    (0..data.len().min(limit)).find(|&i| data.get(i) == Some(&0xff) && plausible(data, i))
+    find_sync_counted(data, limit).0
+}
+
+/// Free-format candidates [`find_sync`] examines at most: junk full of
+/// free-format-looking headers whose next frame never turns up would
+/// otherwise cost a search of up to 16 KiB per byte of the window, in one
+/// step (and in the probe).
+const MAX_FREE_CANDIDATES: u32 = 16;
+
+/// [`find_sync`], and how many free-format candidates it examined.
+fn find_sync_counted(data: &[u8], limit: usize) -> (Option<usize>, u32) {
+    let mut budget = MAX_FREE_CANDIDATES;
+    let found = (0..data.len().min(limit))
+        .find(|&i| data.get(i) == Some(&0xff) && plausible(data, i, &mut budget));
+    (found, MAX_FREE_CANDIDATES.saturating_sub(budget))
 }
 
 /// The length of the free-format frame at the start of `data`: the
@@ -1632,4 +1656,61 @@ async fn frame(cx: Cx, (span, h, first): (Span, Header, bool)) -> Result<()> {
     };
     cx.emit(node.span(data).summary(human_size(data.len)));
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
+mod tests {
+    use super::*;
+
+    /// 64 KiB of free-format headers 100 bytes apart, cycling through 144
+    /// distinct stream keys (layer II/III, versions, CRC, rates, modes), so
+    /// none finds a next frame within 8 KiB; then three CBR frames.
+    fn junk_then_cbr() -> (Vec<u8>, usize) {
+        let mut keys = Vec::new();
+        for b1 in [
+            0xfb, 0xfa, 0xf3, 0xf2, 0xe3, 0xe2, 0xfd, 0xfc, 0xf5, 0xf4, 0xe5, 0xe4,
+        ] {
+            for rate in 0..3u8 {
+                for mode in 0..4u8 {
+                    keys.push([0xff, b1, rate << 2, mode << 6]);
+                }
+            }
+        }
+        let mut data = vec![0u8; 0x10000];
+        for (n, at) in (0..0x10000 - 4).step_by(100).enumerate() {
+            data[at..at + 4].copy_from_slice(&keys[n % keys.len()]);
+        }
+        let cbr = data.len();
+        // MPEG-1 Layer III, 128 kbps, 44.1 kHz: 417-byte frames.
+        for _ in 0..3 {
+            let mut frame = vec![0u8; 417];
+            frame[..4].copy_from_slice(&[0xff, 0xfb, 0x90, 0x00]);
+            data.extend_from_slice(&frame);
+        }
+        (data, cbr)
+    }
+
+    #[test]
+    fn free_format_junk_is_searched_a_bounded_number_of_times() {
+        let (data, cbr) = junk_then_cbr();
+        let (found, examined) = find_sync_counted(&data, data.len());
+        assert!(
+            examined <= MAX_FREE_CANDIDATES,
+            "{examined} free-format searches"
+        );
+        assert_eq!(found, Some(cbr));
+    }
+
+    #[test]
+    fn free_format_stream_is_still_found() {
+        // Layer III free format, MPEG-1 44.1 kHz: frames of 300 bytes.
+        let mut data = Vec::new();
+        for _ in 0..4 {
+            let mut frame = vec![0u8; 300];
+            frame[..4].copy_from_slice(&[0xff, 0xfb, 0x00, 0x00]);
+            data.extend_from_slice(&frame);
+        }
+        assert_eq!(find_sync_counted(&data, data.len()), (Some(0), 1));
+    }
 }
