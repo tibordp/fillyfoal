@@ -154,6 +154,9 @@ struct Unmarshal<'a> {
     tree: Tree,
     /// Short descriptions of objects flagged as references.
     refs: Vec<String>,
+    /// Python 2: the strings marshalled as interned (`'t'`), which `'R'`
+    /// refers back to by index.
+    interned: Vec<String>,
 }
 
 /// A decoded object: its node in the tree and a one-line description.
@@ -426,7 +429,11 @@ impl Unmarshal<'_> {
             }
             b't' | b'u' | b'a' | b'A' => {
                 let len = self.u32()?;
-                self.string(parent, label, start, len.into(), false)
+                let obj = self.string(parent, label, start, len.into(), false)?;
+                if code == b't' && self.version.0 < 3 {
+                    self.interned.push(obj.short.clone());
+                }
+                Ok(obj)
             }
             b'z' | b'Z' => {
                 let len = self.r.u8().ok_or_else(|| self.fail("string"))?;
@@ -434,8 +441,14 @@ impl Unmarshal<'_> {
             }
             b'R' | b'r' => {
                 let index = self.u32()?;
-                let target = self
-                    .refs
+                // Python 2's 'R' (TYPE_STRINGREF) names an interned string;
+                // from 3.4 'r' names an object flagged FLAG_REF.
+                let table = if code == b'R' && self.version.0 < 3 {
+                    &self.interned
+                } else {
+                    &self.refs
+                };
+                let target = table
                     .get(usize::try_from(index).unwrap_or(usize::MAX))
                     .cloned()
                     .unwrap_or_else(|| "?".to_owned());
@@ -631,6 +644,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         version: v,
         tree: Tree::default(),
         refs: Vec::new(),
+        interned: Vec::new(),
     };
     let root = u.tree.add(None, Node::new("root"));
     u.tree
