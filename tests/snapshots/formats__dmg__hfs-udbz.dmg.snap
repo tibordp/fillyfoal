@@ -77,6 +77,9 @@ expression: "common::explore(&display_name(&path), &data)"
           Key compare type: case folding (0xcf)  [#6:0xf2033+0x1]
           Attributes: 0x6 [BIG_KEYS | VARIABLE_INDEX_KEYS]  [#6:0xf2034+0x4]
     ▾ Root folder — T
+      ▾ Extended attributes — 1 attribute
+        ▾ com.apple.provenance — 11 bytes  [#6:0x18054+0xb]
+            Data  [#6:0x18054+0xb]
       ▾ .HFS+ Private Directory Data — folder, 0 items  [#6:0xf30c6+0x58]
         ▾ Catalog record  [#6:0xf30c6+0x58]
             Record type: 1  [#6:0xf30c6+0x2]
@@ -133,6 +136,9 @@ expression: "common::explore(&display_name(&path), &data)"
             Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
           ▾ Lines — 1 line  [#6:0x1ce000+0xa]
               Line 1: "hello dmg"  [#6:0x1ce000+0x9]
+        ▾ Extended attributes — 1 attribute
+          ▾ com.apple.provenance — 11 bytes  [#6:0x180a6+0xb]
+              Data  [#6:0x180a6+0xb]
       ▾ ␀␀␀␀HFS+ Private Data — folder, 0 items  [#6:0xf3262+0x58]
         ▾ Catalog record  [#6:0xf3262+0x58]
             Record type: 1  [#6:0xf3262+0x2]
@@ -228,6 +234,9 @@ expression: "common::explore(&display_name(&path), &data)"
               Key compare type: case folding (0xcf)  [#7:0xf2033+0x1]
               Attributes: 0x6 [BIG_KEYS | VARIABLE_INDEX_KEYS]  [#7:0xf2034+0x4]
         ▾ Root folder — T
+          ▾ Extended attributes — 1 attribute
+            ▾ com.apple.provenance — 11 bytes  [#7:0x18054+0xb]
+                Data  [#7:0x18054+0xb]
           ▾ .HFS+ Private Directory Data — folder, 0 items  [#7:0xf30c6+0x58]
             ▾ Catalog record  [#7:0xf30c6+0x58]
                 Record type: 1  [#7:0xf30c6+0x2]
@@ -284,6 +293,9 @@ expression: "common::explore(&display_name(&path), &data)"
                 Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
               ▾ Lines — 1 line  [#7:0x1ce000+0xa]
                   Line 1: "hello dmg"  [#7:0x1ce000+0x9]
+            ▾ Extended attributes — 1 attribute
+              ▾ com.apple.provenance — 11 bytes  [#7:0x180a6+0xb]
+                  Data  [#7:0x180a6+0xb]
           ▾ ␀␀␀␀HFS+ Private Data — folder, 0 items  [#7:0xf3262+0x58]
             ▾ Catalog record  [#7:0xf3262+0x58]
                 Record type: 1  [#7:0xf3262+0x2]

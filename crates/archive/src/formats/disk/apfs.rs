@@ -7,6 +7,7 @@
 //! physical blocks. Every object starts with a Fletcher-64 checksum, which
 //! is verified.
 
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -591,27 +592,44 @@ async fn volume(cx: Cx, (c, paddr): (Arc<Container>, u64)) -> Result<()> {
             .span(c.block_span(v.omap_oid))
             .lazy(object_map, (c.clone(), v.omap_oid)),
     );
-    let fs = FsTree {
+    let fs = Arc::new(FsTree {
         c: c.clone(),
         omap: tree,
         xid: v.xid,
-    };
+        root: v.root_tree_oid,
+        encrypted: v.fs_flags & FS_UNENCRYPTED == 0,
+    });
+    cx.emit(Node::new("Root directory").summary(v.name.clone()).lazy(
+        crate::expander!(self::directory: Dir),
+        Dir {
+            fs: fs.clone(),
+            id: ROOT_DIR,
+            ancestors: Arc::new(Vec::new()),
+        },
+    ));
     cx.emit(
         Node::new("File-system tree")
             .summary(format!("root object {}", v.root_tree_oid))
             .lazy(
                 crate::expander!(self::fs_node: (Arc<FsTree>, u64, u32)),
-                (Arc::new(fs), v.root_tree_oid, MAX_DEPTH),
+                (fs, v.root_tree_oid, MAX_DEPTH),
             ),
     );
     Ok(())
 }
+
+/// `APFS_FS_UNENCRYPTED` in the volume flags.
+const FS_UNENCRYPTED: u64 = 1;
 
 #[derive(Debug)]
 struct FsTree {
     c: Arc<Container>,
     omap: u64,
     xid: u64,
+    /// The tree's root (a virtual object id).
+    root: u64,
+    /// File extents are encrypted unless the volume says otherwise.
+    encrypted: bool,
 }
 
 const RECORD_TYPES: EnumTable = &[
@@ -698,24 +716,477 @@ async fn fs_node(cx: Cx, (fs, oid, depth): (Arc<FsTree>, u64, u32)) -> Result<()
                     let logical = u64_le(&node, k.saturating_add(8)).unwrap_or(0);
                     let len = u64_le(&node, v).unwrap_or(0) & 0x00ff_ffff_ffff_ffff;
                     let block = u64_le(&node, v.saturating_add(8)).unwrap_or(0);
-                    let data = c.vol.sub(block.saturating_mul(c.block), len);
-                    // The extent's bytes, dissected on expansion.
-                    item = crate::formats::content(
-                        format!("{id}: {kind_name}"),
-                        c.input,
-                        data,
-                        Codec::Stored,
-                        None,
-                    )
-                    .summary(format!(
-                        "offset {logical:#x}: {} at block {block}",
-                        size(len)
-                    ));
+                    let crypto = u64_le(&node, v.saturating_add(16)).unwrap_or(0);
+                    if block == 0 {
+                        item = item.summary(format!("offset {logical:#x}: {} hole", size(len)));
+                    } else if fs.encrypted && crypto != 0 {
+                        item = item
+                            .summary(format!(
+                                "offset {logical:#x}: {} at block {block}, encrypted",
+                                size(len)
+                            ))
+                            .diag(Diagnostic::unsupported("encrypted file extent"));
+                    } else {
+                        let data = c.vol.sub(block.saturating_mul(c.block), len);
+                        // The extent's bytes, dissected on expansion.
+                        item = crate::formats::content(
+                            format!("{id}: {kind_name}"),
+                            c.input,
+                            data,
+                            Codec::Stored,
+                            None,
+                        )
+                        .summary(format!(
+                            "offset {logical:#x}: {} at block {block}",
+                            size(len)
+                        ));
+                    }
                 }
                 _ => {}
             }
         }
         cx.push(item).await;
+    }
+    Ok(())
+}
+
+// The directory view: directory entries (`j_drec_hashed_key_t`) of a
+// directory's inode id, each file's inode (`j_inode_val_t`) and its data
+// stream assembled from the file extents keyed by the stream's private id,
+// with holes where no extent (or block 0) maps it. Extended attributes
+// (`j_xattr_val_t`) are embedded or kept in a data stream of their own;
+// `com.apple.decmpfs` and `com.apple.ResourceFork` give compressed files
+// their content (see `decmpfs`). Layouts from Apple's "APFS Reference".
+
+/// Inode number of the root directory.
+const ROOT_DIR: u64 = 2;
+/// Record types of the file-system tree.
+const INODE: u8 = 3;
+const XATTR: u8 = 4;
+const FILE_EXTENT: u8 = 8;
+const DIR_REC: u8 = 9;
+/// Tree nodes visited for one lookup at most, folder depth.
+const MAX_NODES: usize = 1 << 20;
+const MAX_DIR_DEPTH: usize = 64;
+
+/// A leaf record of the file-system tree.
+#[derive(Clone, Debug)]
+struct FsRec {
+    paddr: u64,
+    node: Arc<Vec<u8>>,
+    k: usize,
+    klen: usize,
+    v: usize,
+    vlen: usize,
+}
+
+impl FsRec {
+    fn value_span(&self, c: &Container) -> Span {
+        c.block_span(self.paddr)
+            .sub(to_u64(self.v), to_u64(self.vlen))
+    }
+
+    fn key_span(&self, c: &Container) -> Span {
+        c.block_span(self.paddr)
+            .sub(to_u64(self.k), to_u64(self.klen))
+    }
+
+    fn u64_at(&self, at: usize) -> u64 {
+        u64_le(&self.node, self.v.saturating_add(at)).unwrap_or(0)
+    }
+}
+
+/// The (object id, record type) of the key at `k`.
+fn key_of(node: &[u8], k: usize) -> (u64, u8) {
+    let header = u64_le(node, k).unwrap_or(0);
+    (
+        header & 0x0fff_ffff_ffff_ffff,
+        u8::try_from(header >> 60).unwrap_or(0),
+    )
+}
+
+/// The records of object `oid` of type `kind`, in key order: an in-order
+/// walk of the subtrees whose key range can hold them (APFS nodes have no
+/// sibling links).
+async fn fs_records(cx: &Cx, fs: &FsTree, oid: u64, kind: u8) -> Result<Vec<FsRec>> {
+    let want = (oid, kind);
+    let mut out = Vec::new();
+    let mut stack = vec![(fs.root, MAX_DEPTH)];
+    let mut seen = HashSet::new();
+    while let Some((vid, depth)) = stack.pop() {
+        let paddr = omap_lookup(cx, &fs.c, fs.omap, vid, fs.xid)
+            .await?
+            .ok_or_else(|| {
+                Diagnostic::malformed(format!("object {vid} is not in the volume's object map"))
+            })?;
+        if !seen.insert(paddr) || seen.len() > MAX_NODES {
+            return Err(Diagnostic::malformed(format!(
+                "file-system tree loops at block {paddr}"
+            )));
+        }
+        let (node, _) = fs.c.object(cx, paddr).await?;
+        let node = Arc::new(node);
+        let level = u32::from(u16_le(&node, 34).unwrap_or(0));
+        if level > depth {
+            return Err(
+                Diagnostic::malformed(format!("node level {level} does not decrease"))
+                    .at(fs.c.block_span(paddr)),
+            );
+        }
+        let entries = toc(&node, fs.c.block, (0, 0));
+        if level == 0 {
+            for &(k, klen, v, vlen) in &entries {
+                match key_of(&node, k).cmp(&want) {
+                    Ordering::Less => {}
+                    Ordering::Equal => out.push(FsRec {
+                        paddr,
+                        node: node.clone(),
+                        k,
+                        klen,
+                        v,
+                        vlen,
+                    }),
+                    Ordering::Greater => break,
+                }
+            }
+            continue;
+        }
+        // Child i holds keys from its own up to the next child's: it can
+        // hold `want` if its key is not above it and the next one not below.
+        let mut children = Vec::new();
+        for (i, &(k, _, v, _)) in entries.iter().enumerate() {
+            if key_of(&node, k) > want {
+                break;
+            }
+            let next_below = entries
+                .get(i.saturating_add(1))
+                .is_some_and(|&(nk, _, _, _)| key_of(&node, nk) < want);
+            if !next_below {
+                children.push(u64_le(&node, v).unwrap_or(0));
+            }
+        }
+        // Depth first, in key order.
+        for child in children.into_iter().rev() {
+            stack.push((child, level.saturating_sub(1)));
+        }
+        cx.checkpoint().await;
+    }
+    Ok(out)
+}
+
+#[derive(Clone)]
+struct Dir {
+    fs: Arc<FsTree>,
+    id: u64,
+    ancestors: Arc<Vec<u64>>,
+}
+
+/// `DT_*` file types in directory entry flags.
+const DT_DIR: u16 = 4;
+const DT_REG: u16 = 8;
+const DT_LNK: u16 = 10;
+
+async fn directory(cx: Cx, d: Dir) -> Result<()> {
+    let fs = d.fs.clone();
+    let c = &fs.c;
+    match inode(&cx, &fs, d.id).await {
+        Ok(Some((_, rec))) => cx.emit(InodeVal::node("Inode", rec.value_span(c), LE)),
+        Ok(None) => {}
+        Err(e) => cx.diag(e),
+    }
+    match xattrs(&cx, &fs, d.id).await {
+        Ok(attrs) if !attrs.is_empty() => cx.emit(xattrs_node(&fs, attrs)),
+        Ok(_) => {}
+        Err(e) => cx.diag(e),
+    }
+    let mut ancestors = (*d.ancestors).clone();
+    ancestors.push(d.id);
+    let ancestors = Arc::new(ancestors);
+    let entries = fs_records(&cx, &fs, d.id, DIR_REC).await?;
+    for e in entries {
+        let len = to_usize((u32_le(&e.node, e.k.saturating_add(8)).unwrap_or(0) & 0x3ff).into());
+        let name = crate::text::until_nul(
+            e.node
+                .get(e.k.saturating_add(12)..e.k.saturating_add(12).saturating_add(len))
+                .unwrap_or_default(),
+        );
+        let file = e.u64_at(0);
+        let dtype = u16_le(&e.node, e.v.saturating_add(16)).unwrap_or(0) & 0xf;
+        let node = Node::new(name).span(e.key_span(c));
+        let node = match dtype {
+            DT_DIR if ancestors.contains(&file) || ancestors.len() > MAX_DIR_DEPTH => node
+                .summary("directory")
+                .diag(Diagnostic::malformed(format!(
+                    "directory {file} contains itself; not followed"
+                ))),
+            DT_DIR => node.summary("directory").lazy(
+                crate::expander!(self::directory: Dir),
+                Dir {
+                    fs: fs.clone(),
+                    id: file,
+                    ancestors: ancestors.clone(),
+                },
+            ),
+            _ => node
+                .summary(match dtype {
+                    DT_REG => "file",
+                    DT_LNK => "symbolic link",
+                    1 => "FIFO",
+                    2 => "character device",
+                    6 => "block device",
+                    12 => "socket",
+                    _ => "other",
+                })
+                .lazy(file_node, (fs.clone(), file)),
+        };
+        cx.push(node).await;
+    }
+    Ok(())
+}
+
+record! {
+    /// `j_inode_val_t` up to its extended fields.
+    pub struct InodeVal {
+        parent: u64 "Parent id",
+        private_id: u64 "Data stream id",
+        created: u64 "Created" .with(ns_time),
+        modified: u64 "Content modified" .with(ns_time),
+        changed: u64 "Attributes modified" .with(ns_time),
+        accessed: u64 "Accessed" .with(ns_time),
+        internal_flags: u64 "Internal flags" .hex(),
+        links: u32 "Children / links",
+        protection_class: u32 "Protection class",
+        generation: u32 "Write generation",
+        bsd_flags: u32 "BSD flags" .hex(),
+        owner: u32 "Owner id",
+        group: u32 "Group id",
+        mode: u16 "Mode" .with(|&m, n| n.summary(crate::formats::disk::unix_mode(m.into()))),
+        _pad: u16 "Padding",
+        uncompressed_size: u64 "Uncompressed size",
+    }
+}
+
+/// An inode's fields that decide how to show it.
+#[derive(Clone, Debug, Default)]
+struct InodeInfo {
+    private_id: u64,
+    bsd_flags: u32,
+    mode: u16,
+    /// The data stream's logical size (`INO_EXT_TYPE_DSTREAM`).
+    size: Option<u64>,
+}
+
+/// `INO_EXT_TYPE_DSTREAM` in the inode's extended fields.
+const INO_EXT_DSTREAM: u8 = 8;
+
+/// The offset of the extended field of `kind` in the `xf_blob_t` at `at`.
+fn xfield(b: &[u8], at: usize, kind: u8) -> Option<usize> {
+    let count = usize::from(u16_le(b, at)?);
+    let mut data = at.saturating_add(4).saturating_add(count.saturating_mul(4));
+    for i in 0..count.min(64) {
+        let h = at.saturating_add(4).saturating_add(i.saturating_mul(4));
+        let t = *b.get(h)?;
+        let len = usize::from(u16_le(b, h.saturating_add(2))?);
+        if t == kind {
+            return Some(data);
+        }
+        data = data.saturating_add(len.div_ceil(8).saturating_mul(8));
+    }
+    None
+}
+
+async fn inode(cx: &Cx, fs: &FsTree, id: u64) -> Result<Option<(InodeInfo, FsRec)>> {
+    let Some(rec) = fs_records(cx, fs, id, INODE).await?.into_iter().next() else {
+        return Ok(None);
+    };
+    let b = rec
+        .node
+        .get(rec.v..rec.v.saturating_add(rec.vlen))
+        .unwrap_or_default();
+    let info = InodeInfo {
+        private_id: u64_le(b, 8).unwrap_or(0),
+        bsd_flags: u32_le(b, 68).unwrap_or(0),
+        mode: u16_le(b, 80).unwrap_or(0),
+        size: xfield(b, 92, INO_EXT_DSTREAM).and_then(|at| u64_le(b, at)),
+    };
+    Ok(Some((info, rec)))
+}
+
+/// A data stream (`private_id`, `size` bytes) assembled from its extents.
+async fn stream(cx: &Cx, fs: &FsTree, anchor: Span, private_id: u64, size: u64) -> Result<Span> {
+    let c = &fs.c;
+    let mut list = crate::formats::disk::PieceList::new(anchor);
+    let mut encrypted = false;
+    for (i, e) in fs_records(cx, fs, private_id, FILE_EXTENT)
+        .await?
+        .into_iter()
+        .enumerate()
+    {
+        if i % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
+        let logical = u64_le(&e.node, e.k.saturating_add(8)).unwrap_or(0);
+        let len = e.u64_at(0) & 0x00ff_ffff_ffff_ffff;
+        let phys = e.u64_at(8);
+        let crypto = e.u64_at(16);
+        if logical < list.len() || logical >= size {
+            continue;
+        }
+        list.hole(cx, logical.saturating_sub(list.len()))?;
+        let len = len.min(size.saturating_sub(logical));
+        if phys == 0 {
+            list.hole(cx, len)?;
+        } else if fs.encrypted && crypto != 0 {
+            encrypted = true;
+            list.hole(cx, len)?;
+        } else {
+            list.data(c.vol.sub(phys.saturating_mul(c.block), len));
+        }
+    }
+    list.hole(cx, size.saturating_sub(list.len()))?;
+    if encrypted {
+        cx.diag(Diagnostic::unsupported(
+            "encrypted file extents (read as zeros)",
+        ));
+    }
+    list.finish(cx, "apfs-extents").await
+}
+
+/// An extended attribute.
+#[derive(Clone, Debug)]
+struct Xattr {
+    name: String,
+    record: Span,
+    value: XattrValue,
+}
+
+#[derive(Clone, Debug)]
+enum XattrValue {
+    /// `XATTR_DATA_EMBEDDED`: the value in the record.
+    Embedded(Span),
+    /// `XATTR_DATA_STREAM`: a data stream of its own (id, size).
+    Stream(u64, u64),
+}
+
+impl Xattr {
+    fn size(&self) -> u64 {
+        match self.value {
+            XattrValue::Embedded(s) => s.len,
+            XattrValue::Stream(_, n) => n,
+        }
+    }
+
+    async fn data(&self, cx: &Cx, fs: &FsTree) -> Result<Span> {
+        match self.value {
+            XattrValue::Embedded(s) => Ok(s),
+            XattrValue::Stream(id, size) => stream(cx, fs, self.record, id, size).await,
+        }
+    }
+}
+
+async fn xattrs(cx: &Cx, fs: &FsTree, id: u64) -> Result<Vec<Xattr>> {
+    let mut out = Vec::new();
+    for r in fs_records(cx, fs, id, XATTR).await? {
+        let len = usize::from(u16_le(&r.node, r.k.saturating_add(8)).unwrap_or(0));
+        let name = crate::text::until_nul(
+            r.node
+                .get(r.k.saturating_add(10)..r.k.saturating_add(10).saturating_add(len))
+                .unwrap_or_default(),
+        );
+        let flags = u16_le(&r.node, r.v).unwrap_or(0);
+        let xlen = u16_le(&r.node, r.v.saturating_add(2)).unwrap_or(0);
+        let value = if flags & 1 != 0 {
+            // `j_xattr_dstream_t`: the stream's id, then its `j_dstream_t`.
+            XattrValue::Stream(r.u64_at(4), r.u64_at(12))
+        } else {
+            XattrValue::Embedded(r.value_span(&fs.c).sub(4, xlen.into()))
+        };
+        out.push(Xattr {
+            name,
+            record: r.key_span(&fs.c),
+            value,
+        });
+    }
+    Ok(out)
+}
+
+fn xattrs_node(fs: &Arc<FsTree>, attrs: Vec<Xattr>) -> Node {
+    Node::new("Extended attributes")
+        .summary(plural(to_u64(attrs.len()), "attribute"))
+        .lazy(xattrs_list, (fs.clone(), Arc::new(attrs)))
+}
+
+async fn xattrs_list(cx: Cx, (fs, attrs): (Arc<FsTree>, Arc<Vec<Xattr>>)) -> Result<()> {
+    for a in attrs.iter() {
+        let node = match a.data(&cx, &fs).await {
+            Ok(data) => {
+                crate::formats::content(a.name.clone(), fs.c.input, data, Codec::Stored, None)
+            }
+            Err(e) => Node::new(a.name.clone()).span(a.record).diag(e),
+        };
+        cx.push(node.summary(size(a.size()))).await;
+    }
+    Ok(())
+}
+
+/// A file: its inode, content (decompressed if need be), attributes.
+async fn file_node(cx: Cx, (fs, id): (Arc<FsTree>, u64)) -> Result<()> {
+    use crate::formats::disk::{content_node, decmpfs};
+    let c = &fs.c;
+    let (info, rec) = inode(&cx, &fs, id)
+        .await?
+        .ok_or_else(|| Diagnostic::malformed(format!("no inode {id}")))?;
+    let value = rec.value_span(c);
+    cx.emit(InodeVal::node("Inode", value, LE).summary(format!("inode {id}")));
+    let attrs = match xattrs(&cx, &fs, id).await {
+        Ok(a) => a,
+        Err(e) => {
+            cx.diag(e);
+            Vec::new()
+        }
+    };
+    let find = |name: &str| attrs.iter().find(|a| a.name == name);
+    if info.mode & 0o170_000 == 0o120_000
+        && let Some(a) = find("com.apple.fs.symlink")
+    {
+        let target = cx.read(a.data(&cx, &fs).await?).await?;
+        cx.emit(
+            Node::new("Target")
+                .span(a.data(&cx, &fs).await?)
+                .value(Value::Text(crate::text::until_nul(&target))),
+        );
+    }
+    if let Some(size) = info.size {
+        let span = stream(&cx, &fs, value, info.private_id, size).await?;
+        cx.emit(content_node(&c.input, span));
+    }
+    if info.bsd_flags & decmpfs::UF_COMPRESSED != 0 {
+        match find(decmpfs::XATTR) {
+            Some(a) => {
+                let attr = a.data(&cx, &fs).await?;
+                let rsrc = match find("com.apple.ResourceFork") {
+                    Some(r) => Some(r.data(&cx, &fs).await?),
+                    None => None,
+                };
+                match decmpfs::content(&cx, attr, rsrc).await {
+                    Ok((h, span)) => {
+                        cx.emit(decmpfs::header_node(attr, &h));
+                        cx.emit(content_node(&c.input, span).summary(format!(
+                            "{}, decompressed ({})",
+                            size(span.len),
+                            h.kind_name()
+                        )));
+                    }
+                    Err(e) => cx.diag(e),
+                }
+            }
+            None => cx.diag(Diagnostic::malformed(
+                "compressed, but there is no com.apple.decmpfs attribute",
+            )),
+        }
+    }
+    if !attrs.is_empty() {
+        cx.emit(xattrs_node(&fs, attrs));
     }
     Ok(())
 }

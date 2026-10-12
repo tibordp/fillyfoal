@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ makefs-ufs2.img — UFS2 filesystem, 1 MiB, 1 cylinder groups, 8192-byte blocks  [0x0+0x100000]
+  ▾ Superblock  [0x2000+0x560]
+      Unused (link): 0  [0x2000+0x4]
+      Unused (rlink): 0  [0x2004+0x4]
+      Superblock offset in group (fragments): 16  [0x2008+0x4]
+      Group block offset (fragments): 24  [0x200c+0x4]
+      Inode block offset (fragments): 32  [0x2010+0x4]
+      Data block offset (fragments): 40  [0x2014+0x4]
+      Group offset (UFS1): 0  [0x2018+0x4]
+      Group mask (UFS1): 0  [0x201c+0x4]
+      Written (UFS1): 1970-01-01 00:00:00 UTC  [0x2020+0x4]
+      Fragments (UFS1): 0  [0x2024+0x4]
+      Data fragments (UFS1): 0  [0x2028+0x4]
+      Cylinder groups: 1  [0x202c+0x4]
+      Block size: 8192  [0x2030+0x4]
+      Fragment size: 1024  [0x2034+0x4]
+      Fragments per block: 8  [0x2038+0x4]
+      Minimum free (%): 5  [0x203c+0x4]
+    Last mount point: ""  [0x20d4+0x1d4]
+    Volume name: ""  [0x22a8+0x20]
+    Magic: 0x19540119  [0x255c+0x4]
