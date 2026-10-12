@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ root.dirtree — OSTree directory tree, 0 files, 2 directories  [0x0+0x8f]
+    Files — 0 entries  [0x0+0x0]
+  ▾ Directories — 2 entries  [0x0+0x8e]
+    ▾ etc: "7aa76f99c38a43427b67ec537a63e05a0fe7aa05cc18a4b196855d55d12e22ea" — directory  [0x0+0x46]
+        Name: "etc"  [0x0+0x4]
+        Tree: "7aa76f99c38a43427b67ec537a63e05a0fe7aa05cc18a4b196855d55d12e22ea"  [0x4+0x20]
+        Metadata: "446a0ef11b7cc167f3b603e585c7eeeeb675faa412d5ec73f62988eb0b6c5488"  [0x24+0x20]
+    ▾ usr: "62260bcdb3873cc5343de1c824f0854b96c3dc9935717bb9f5ed2173f09147e4" — directory  [0x46+0x46]
+        Name: "usr"  [0x46+0x4]
+        Tree: "62260bcdb3873cc5343de1c824f0854b96c3dc9935717bb9f5ed2173f09147e4"  [0x4a+0x20]
+        Metadata: "446a0ef11b7cc167f3b603e585c7eeeeb675faa412d5ec73f62988eb0b6c5488"  [0x6a+0x20]

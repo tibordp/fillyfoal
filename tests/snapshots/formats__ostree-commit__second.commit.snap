@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ second.commit — OSTree commit, Second commit, 2024-02-03 04:05:06 UTC  [0x0+0xbe]
+  ▾ Metadata — 2 entries  [0x0+0x3b]
+      version: "1.1" — <s>  [0x0+0xf]
+    ▾ ostree.ref-binding — <as>, 1 element  [0x10+0x29]
+        [0]: "demo/stable"  [0x28+0xc]
+    Parent: "336b21f74a04049c652f099a04286629c43d0fb407dbc5e012b70bb8e1b35180"  [0x3b+0x20]
+    Related — a(say), 0 elements  [0x5b+0x0]
+    Subject: "Second commit"  [0x5b+0xe]
+    Body: ""  [0x69+0x1]
+    Timestamp: 2024-02-03 04:05:06 UTC  [0x70+0x8]
+    Root tree: "35487d5e80b0b1963aed9e66fddd18972ca67d1678f1aae04f4022d65ed8d6e1"  [0x78+0x20]
+    Root metadata: "446a0ef11b7cc167f3b603e585c7eeeeb675faa412d5ec73f62988eb0b6c5488"  [0x98+0x20]

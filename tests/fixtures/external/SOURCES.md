@@ -1056,3 +1056,16 @@ Made by `sh tests/data/audio-codecs/make.sh OUTDIR` (fedora:42, `tests/data/audi
 | `git-pack/sha256.pack` | git 2.47.3 (Debian trixie) | reproduced byte for byte by `sh tests/data/git-pack/sha256.sh` (Docker, `inside-sha256.sh`): a `git init --object-format=sha256` repository of three commits by `fillyfoal <test@example.com>` with fixed dates, `git repack -a -d -f` giving two ofs-deltas (checked against `git verify-pack -v`: the rebuilt blobs hash to the object IDs it lists, `tests/system_depth.rs`) |
 | `git-pack-index/sha256.idx` | git 2.47.3 | same script: the v2 index of `git-pack/sha256.pack` (32-byte object names) |
 | `git-index/sha256.index` | git 2.47.3 | same script: the repository's `.git/index` (32-byte object names; `git ls-files -s`). Its entries hold the container's stat data (times, device, inode), so it differs between runs |
+## GLib and OSTree (Alpine 3.22 in Docker)
+| `gresource/demo.gresource` | glib-compile-resources (GLib 2.84.4, Alpine 3.22 `glib-dev`) | reproduced byte for byte by `sh tests/data/gvdb/make.sh OUTDIR` (`gresource.sh`): three files under `/org/example/demo`, one aliased to `ui/window.ui`, one `compressed="true"` (zlib) |
+| `dconf/local` | dconf compile (dconf 0.40, Alpine 3.22 `dconf`) | same script (`dconf.sh`): a keyfile with boolean, integer, double, string, object path, array, tuple, maybe, dictionary, byte and int64 keys and one lock (the nested `.locks` table); reproduced byte for byte |
+| `gvdb/gschemas.compiled` | glib-compile-schemas (GLib 2.84.4) | same script (`gschemas.sh`): one schema with an enum key, a ranged key and a summary; reproduced byte for byte |
+| `ostree-commit/` | libostree 2025.2 (Alpine 3.22 `ostree`) | `sh tests/data/ostree/make.sh OUTDIR` (`ostree.sh`): an archive-mode repository holding two commits of a small tree with fixed times (`ostree commit --timestamp`, owner 0:0, no xattrs, metadata strings, a detached metadata string); its objects are copied out under short names (`demo.commit` for `<checksum>.commit`, ...). Objects reproduce byte for byte |
+| `ostree-commitmeta/` | libostree 2025.2 | same script: the first commit's detached metadata |
+| `ostree-dirtree/` | libostree 2025.2 | same script: the root tree (two directories) and `/etc` (a file and a symbolic link) |
+| `ostree-dirmeta/` | libostree 2025.2 | same script: the metadata shared by every directory (0755, 0:0) |
+| `ostree-filez/` | libostree 2025.2 | same script: a regular file (raw DEFLATE content) and a symbolic link |
+| `ostree-summary/` | libostree 2025.2 | same script, `ostree summary -u`: one ref; records the time it was written |
+| `ostree-delta/` | libostree 2025.2 | same script: the superblock of `ostree static-delta generate --empty --inline` (`inline.superblock`, its xz part inline in the metadata) and of the delta between the two commits (`superblock`); they record the time they were written |
+| `ostree-delta-part/` | libostree 2025.2 | same script: part `0` of the delta between the commits (xz) |
+| `flatpak/demo.flatpak` | flatpak 1.16.1 (Alpine 3.22 `flatpak`) | same script (`flatpak.sh`): `flatpak build-export` of a hand-made app directory (metadata keyfile, one shell script) with a fixed timestamp, then `flatpak build-bundle`; the superblock records the time it was written |

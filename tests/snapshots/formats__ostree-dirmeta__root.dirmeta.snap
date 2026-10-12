@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ root.dirmeta — OSTree directory metadata, drwxr-xr-x 0:0  [0x0+0xc]
+    Uid: 0  [0x0+0x4]
+    Gid: 0  [0x4+0x4]
+    Mode: "040755" — drwxr-xr-x  [0x8+0x4]
+    Extended attributes — none  [0xc+0x0]
