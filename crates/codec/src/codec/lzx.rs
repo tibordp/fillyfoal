@@ -338,6 +338,24 @@ impl Lzx {
         })
     }
 
+    /// A decoder that starts at frame `frame` of a CHM section, a multiple
+    /// of the reset interval, with its input at the compressed offset the
+    /// section's reset table records for that frame. State resets there
+    /// and E8 positions count from there, so it needs no history; as
+    /// libmspack's `chmd_init_decomp` and chmlib's `_chm_decompress_block`
+    /// do, matches are assumed not to reach back past the reset.
+    pub fn at_reset(params: Params, frame: u64) -> Result<Self> {
+        let interval = u64::from(params.reset_interval);
+        if interval == 0 || !frame.is_multiple_of(interval) {
+            return Err(bad("seed frame is not at a reset"));
+        }
+        let mut lzx = Lzx::new(params)?;
+        lzx.st.frame = frame;
+        lzx.st.offset = frame.saturating_mul(crate::bytes::to_u64(FRAME));
+        lzx.st.reset_offset = lzx.st.offset;
+        Ok(lzx)
+    }
+
     fn window(&self) -> usize {
         1usize << self.params.window_bits.min(21)
     }
@@ -547,8 +565,17 @@ impl Lzx {
     }
 
     /// Decodes up to `todo` bytes of the current block into `hist`.
-    /// `frame_start`: where the current frame starts in `hist`.
-    fn run(&mut self, input: &[u8], eof: bool, todo: usize, frame_start: usize) -> Result<()> {
+    /// `frame_start`: where the current frame starts in `hist`. `clip`:
+    /// these bytes end the stream, and a match running past them is cut
+    /// there (see [`Lzx::frame`]).
+    fn run(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        todo: usize,
+        frame_start: usize,
+        clip: bool,
+    ) -> Result<()> {
         let window = self.window();
         let st = &mut self.st;
         if st.block == Block::Uncompressed {
@@ -605,7 +632,10 @@ impl Lzx {
                 }
             };
             if length > left {
-                return Err(bad("match crosses a block or frame boundary"));
+                if !clip {
+                    return Err(bad("match crosses a block or frame boundary"));
+                }
+                length = left;
             }
             let distance = usize::try_from(offset).unwrap_or(usize::MAX);
             let produced = self.hist.len().saturating_sub(frame_start);
@@ -664,6 +694,12 @@ impl Lzx {
         }
         let start = self.hist.len();
         let mut produced = 0usize;
+        let last = self.params.len.is_some_and(|len| {
+            self.st
+                .offset
+                .saturating_add(crate::bytes::to_u64(frame_len))
+                >= len
+        });
         while produced < frame_len {
             if self.st.block_remaining == 0 {
                 if may_end && eof && self.st.bits.remaining(input) < 32 {
@@ -680,7 +716,12 @@ impl Lzx {
             if out.len().saturating_add(produced).saturating_add(todo) > limit {
                 return Err(Diagnostic::output_limit(limit));
             }
-            self.run(input, eof, todo, start)?;
+            // The stream's last bytes: the encoder may have coded a full
+            // frame there (chmcmd pads the last frame of a CHM section to
+            // 32 KiB, as chmlib decodes whole blocks), so a match running
+            // past the end is cut rather than refused.
+            let clip = last && produced.saturating_add(todo) == frame_len;
+            self.run(input, eof, todo, start, clip)?;
             produced = produced.saturating_add(todo);
             self.st.block_remaining = self
                 .st
@@ -754,6 +795,15 @@ impl LzxStream {
     pub fn new(params: Params) -> Self {
         LzxStream {
             core: Lzx::new(params),
+            params,
+        }
+    }
+
+    /// A stream decoder starting at reset frame `frame` (see
+    /// [`Lzx::at_reset`]): a seed for a lazily decoded CHM section.
+    pub fn at_reset(params: Params, frame: u64) -> Self {
+        LzxStream {
+            core: Lzx::at_reset(params, frame),
             params,
         }
     }
@@ -863,8 +913,9 @@ mod tests {
 
     /// The LZX section of `tests/data/cab/lzx.chm` (written by the test
     /// encoder there, checked with 7-Zip): its content stream, window bits,
-    /// reset interval in frames and decoded length.
-    fn chm_section(chm: &[u8]) -> (Vec<u8>, u8, u32, u64) {
+    /// reset interval in frames, decoded length and the reset table's
+    /// entries (the compressed offset of each frame).
+    fn chm_section(chm: &[u8]) -> (Vec<u8>, u8, u32, u64, Vec<u64>) {
         let u32le = |d: &[u8], o: usize| u32::from_le_bytes(d[o..o + 4].try_into().unwrap());
         let u64le = |d: &[u8], o: usize| u64::from_le_bytes(d[o..o + 8].try_into().unwrap());
         let content_at = u64le(chm, 0x58) as usize;
@@ -898,19 +949,96 @@ mod tests {
         let reset = sec0[&format!(
             "{base}Transform/{{7FC28940-9D31-11D0-9B27-00A0C91E9C7C}}/InstanceData/ResetTable"
         )];
+        // Entry count at 4, entries (8 bytes each) from the offset at 12.
+        let (n, table) = (u32le(reset, 4) as usize, u32le(reset, 12) as usize);
         (
             sec0[&format!("{base}Content")].to_vec(),
             (u32le(control, 16) * 32768).trailing_zeros() as u8,
             u32le(control, 12),
             u64le(reset, 16),
+            (0..n).map(|i| u64le(reset, table + i * 8)).collect(),
         )
+    }
+
+    #[test]
+    fn padded_last_frame_is_cut_at_the_length() {
+        // chmcmd (Free Pascal 3.2.2) codes the last frame of a section as
+        // a full 32 KiB frame, with matches running past the section's
+        // length (114888 bytes here).
+        let chm = std::fs::read(format!(
+            "{}/../../tests/fixtures/external/chm/chmcmd.chm",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap();
+        let (content, window_bits, reset_interval, len, entries) = chm_section(&chm);
+        let params = |len| Params {
+            window_bits,
+            reset_interval,
+            variant: Variant::Cab,
+            len,
+        };
+        let padded = crate::codec::pipeline::decode_all(
+            &mut LzxStream::new(params(Some(4 * FRAME as u64))),
+            &content,
+            1 << 30,
+        )
+        .unwrap();
+        let exact = crate::codec::pipeline::decode_all(
+            &mut LzxStream::new(params(Some(len))),
+            &content,
+            1 << 30,
+        )
+        .unwrap();
+        assert_eq!(len, 114_888);
+        assert_eq!(exact, padded[..len as usize]);
+        // And from the reset at frame 2.
+        let from = entries[2] as usize;
+        let seeded = crate::codec::pipeline::decode_all(
+            &mut LzxStream::at_reset(params(Some(len)), 2),
+            &content[from..],
+            1 << 30,
+        )
+        .unwrap();
+        assert_eq!(seeded, exact[2 * FRAME..]);
+    }
+
+    #[test]
+    fn decoding_starts_at_any_reset() {
+        let chm = read("lzx.chm");
+        let (content, window_bits, reset_interval, len, entries) = chm_section(&chm);
+        let params = Params {
+            window_bits,
+            reset_interval,
+            variant: Variant::Cab,
+            len: Some(len),
+        };
+        let all =
+            crate::codec::pipeline::decode_all(&mut LzxStream::new(params), &content, 1 << 30)
+                .unwrap();
+        let mut seeds = 0;
+        for frame in
+            (u64::from(reset_interval)..entries.len() as u64).step_by(reset_interval as usize)
+        {
+            let from = entries[frame as usize] as usize;
+            let out = crate::codec::pipeline::decode_all(
+                &mut LzxStream::at_reset(params, frame),
+                &content[from..],
+                1 << 30,
+            )
+            .unwrap();
+            assert_eq!(out, all[frame as usize * FRAME..], "frame {frame}");
+            seeds += 1;
+        }
+        assert!(seeds > 0);
+        // Not at a reset: refused.
+        assert!(Lzx::at_reset(params, 1).is_err());
     }
 
     #[test]
     fn checkpoints_resume_between_frames() {
         // A CHM section: 64 KiB window, resets every two frames, E8
         // translation; more output than the window.
-        let (content, window_bits, reset_interval, len) = chm_section(&read("lzx.chm"));
+        let (content, window_bits, reset_interval, len, _) = chm_section(&read("lzx.chm"));
         assert_eq!((window_bits, reset_interval), (16, 2));
         let params = Params {
             window_bits,
