@@ -674,6 +674,12 @@ pub static FORMATS: &[&Format] = &[
     &sqlite::WAL,
     #[cfg(feature = "data")]
     &sqlite::JOURNAL,
+    #[cfg(feature = "data")]
+    &sqlite::SHM,
+    #[cfg(feature = "data")]
+    &data::wkb::GPKG_GEOMETRY,
+    #[cfg(feature = "data")]
+    &data::wkb::WKB,
     #[cfg(feature = "docs")]
     &cfb::DOC,
     #[cfg(feature = "docs")]

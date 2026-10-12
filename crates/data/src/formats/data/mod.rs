@@ -37,3 +37,4 @@ pub mod ubjson;
 pub mod valuetree;
 pub mod wire;
 pub mod wiredtiger;
+pub mod wkb;
