@@ -22,7 +22,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Encoded entries  [0x1ed+0x30]
       Irregular entries: 0  [0x21d+0x4]
     ▾ Files — 3 files under "../../../"
-      ▾ Game/Config/DefaultGame.ini — INI configuration  [0xb3+0x4a]
+      ▾ Game/Config/DefaultGame.ini — INI configuration  [0x49+0x4a]
         ▾ [/Script/EngineSettings.GeneralProjectSettings] — 1 entry  [#1:0x0+0x46]
             ProjectName: "fillyfoal"  [#1:0x3c+0x9]
       ▾ Game/Content/readme.txt — UTF-8 text, LF line endings, 1 line  [0x146+0x39]
@@ -30,7 +30,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
         ▾ Lines — 1 line  [#2:0x0+0x30]
             Line 1: "A pak written by repak for the fillyfoal tests."  [#2:0x0+0x2f]
-      ▾ Game/Content/Maps/Level.txt — UTF-8 text, ~1 line  [0x49+0x21]
+      ▾ Game/Content/Maps/Level.txt — UTF-8 text, ~1 line  [0xdc+0x21]
           Encoding: "UTF-8"
           Line endings: "none" — 0 LF, 0 CRLF, 0 CR
         ▾ Lines — ~1 line (estimated from the first 0x10800 bytes)  [#3:0x0+0x14000]
@@ -42,7 +42,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Version: Fnv64BugFix (0xb)  [0x301+0x4]
       Index offset: 0x17f  [0x305+0x8]
       Index size: 162  [0x30d+0x8]
-      Index hash (SHA-1): 2e 51 34 57 34 c8 a8 ad 60 9c 92 9e 77 2c 30 28 …  |.Q4W4...`...w,0(|  [0x315+0x14]
+      Index hash (SHA-1): 48 e1 e6 4f 0c f0 fb 2a e5 c2 94 6b fa c4 35 b4 …  |H..O...*...k..5.|  [0x315+0x14]
       Compression method: "Zstd"  [0x329+0x20]
       Compression method: ""  [0x349+0x20]
       Compression method: ""  [0x369+0x20]

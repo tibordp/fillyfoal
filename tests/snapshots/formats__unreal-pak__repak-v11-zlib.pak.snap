@@ -25,12 +25,12 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ Game/Config/DefaultGame.ini — INI configuration  [0x49+0x49]
         ▾ [/Script/EngineSettings.GeneralProjectSettings] — 1 entry  [#1:0x0+0x46]
             ProjectName: "fillyfoal"  [#1:0x3c+0x9]
-      ▾ Game/Content/readme.txt — UTF-8 text, LF line endings, 1 line  [0xdb+0x3b]
+      ▾ Game/Content/readme.txt — UTF-8 text, LF line endings, 1 line  [0x340+0x3b]
           Encoding: "UTF-8"
           Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
         ▾ Lines — 1 line  [#2:0x0+0x30]
             Line 1: "A pak written by repak for the fillyfoal tests."  [#2:0x0+0x2f]
-      ▾ Game/Content/Maps/Level.txt — UTF-8 text, ~1 line  [0x15f+0x21c]
+      ▾ Game/Content/Maps/Level.txt — UTF-8 text, ~1 line  [0xdb+0x21c]
           Encoding: "UTF-8"
           Line endings: "none" — 0 LF, 0 CRLF, 0 CR
         ▾ Lines — ~1 line (estimated from the first 0x10800 bytes)  [#3:0x0+0x14000]
@@ -42,7 +42,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Version: Fnv64BugFix (0xb)  [0x4fd+0x4]
       Index offset: 0x37b  [0x501+0x8]
       Index size: 162  [0x509+0x8]
-      Index hash (SHA-1): ea 77 66 53 c3 20 e0 be 8a db c8 eb 0f 40 c0 21 …  |.wfS. .......@.!|  [0x511+0x14]
+      Index hash (SHA-1): 0d c0 23 94 f9 d2 12 51 d0 1f 0f e4 88 15 2c 69 …  |..#....Q......,i|  [0x511+0x14]
       Compression method: "Zlib"  [0x525+0x20]
       Compression method: ""  [0x545+0x20]
       Compression method: ""  [0x565+0x20]
