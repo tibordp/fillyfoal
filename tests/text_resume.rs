@@ -251,3 +251,30 @@ fn subtitles_resume() {
     // The header and its setting come before the cues.
     seeks_back_from_a_mark("big.vtt", vtt.as_bytes(), &[], &format!("Cue {}", BACK - 1));
 }
+
+#[test]
+fn markdown_resumes_in_sections() {
+    // Top level: front matter, then paragraphs, fenced code (with lines
+    // that would be headings outside the fence), lists and quotes.
+    let mut doc = String::from("---\ntitle: big\n---\n");
+    for i in 0..N {
+        match i % 4 {
+            0 => doc.push_str(&format!("Paragraph {i}\ncontinues here.\n\n")),
+            1 => doc.push_str(&format!("```\n# not a heading {i}\n```\n\n")),
+            2 => doc.push_str(&format!("- item {i}\n- item {i}b\n\n")),
+            _ => doc.push_str(&format!("> quote {i}\n\n")),
+        }
+    }
+    // The front matter comes before the blocks: child BACK is block
+    // BACK - 1, a quote.
+    seeks_back_from_a_mark("big.md", doc.as_bytes(), &[], "Quote");
+    // A section of subsections: each mark carries the open subsection.
+    let mut outline = String::from("# Doc\n\nIntro.\n\n");
+    for i in 0..N {
+        outline.push_str(&format!("## Part {i}\n\nText {i}.\n\n"));
+        if i % 1000 == 0 {
+            outline.push_str(&format!("Setext {i}\n---\n\nMore.\n\n"));
+        }
+    }
+    seeks_back_from_a_mark("outline.md", outline.as_bytes(), &["Doc"], "Part ");
+}
