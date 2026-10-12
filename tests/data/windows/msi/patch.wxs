@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Patch 1.0.0 -> 1.0.1 for fillyfoal test. Built by build.ps1 from the two .wixpdb files.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Patch AllowRemoval="yes"
+         Manufacturer="fillyfoal"
+         DisplayName="fillyfoal test 1.0.1 patch"
+         Description="fillyfoal test small update 1.0.0 to 1.0.1"
+         Classification="Update"
+         Id="{B7C8D9E0-1F2A-4B3C-8D4E-5F60718293A4}">
+    <Media Id="5000" Cabinet="patch.cab">
+      <PatchBaseline Id="RTM" BaselineFile="$(Target)" UpdateFile="$(Update)" />
+    </Media>
+    <PatchFamily Id="fillyfoalPatchFamily" Version="1.0.1.0" Supersede="yes">
+      <ComponentRef Id="ReadmeComp" />
+      <ComponentRef Id="RegComp" />
+    </PatchFamily>
+  </Patch>
+</Wix>

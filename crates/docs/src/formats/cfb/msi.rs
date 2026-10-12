@@ -6,6 +6,10 @@
 //! integers are stored with their sign bit flipped. A transform (.mst, or
 //! a transform storage in a package or patch) stores its tables row by
 //! row instead, each row a change with a mask of the columns it gives.
+//! A standalone transform carries no schema for the tables it changes, so
+//! the standard tables' schemas are assumed. Checked against a transform
+//! `MsiTran.exe` generated and a patch WiX 6 built: every change decodes to
+//! the difference between the two packages.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -255,6 +259,152 @@ fn col(name: &str, kind: u16) -> Column {
     }
 }
 
+/// Standard tables' schemas, for transforms that change a table without
+/// defining it (a standalone `.mst` carries no base schema). Taken from a
+/// package WiX 6 built (`tests/fixtures/external/msi/fillyfoal-test-1.0.0.msi`),
+/// whose `_Columns` follow the Windows Installer SDK schema.
+const STANDARD_TABLES: &[(&str, &[(&str, u16)])] = &[
+    (
+        "AdminExecuteSequence",
+        &[
+            ("Action", 0x2d48),
+            ("Condition", 0x1dff),
+            ("Sequence", 0x1502),
+        ],
+    ),
+    (
+        "AdminUISequence",
+        &[
+            ("Action", 0x2d48),
+            ("Condition", 0x1dff),
+            ("Sequence", 0x1502),
+        ],
+    ),
+    (
+        "AdvtExecuteSequence",
+        &[
+            ("Action", 0x2d48),
+            ("Condition", 0x1dff),
+            ("Sequence", 0x1502),
+        ],
+    ),
+    (
+        "Component",
+        &[
+            ("Component", 0x2d48),
+            ("ComponentId", 0x1d26),
+            ("Directory_", 0x0d48),
+            ("Attributes", 0x0502),
+            ("Condition", 0x1dff),
+            ("KeyPath", 0x1d48),
+        ],
+    ),
+    (
+        "Directory",
+        &[
+            ("Directory", 0x2d48),
+            ("Directory_Parent", 0x1d48),
+            ("DefaultDir", 0x0fff),
+        ],
+    ),
+    (
+        "Feature",
+        &[
+            ("Feature", 0x2d26),
+            ("Feature_Parent", 0x1d26),
+            ("Title", 0x1f40),
+            ("Description", 0x1fff),
+            ("Display", 0x1502),
+            ("Level", 0x0502),
+            ("Directory_", 0x1d48),
+            ("Attributes", 0x0502),
+        ],
+    ),
+    (
+        "FeatureComponents",
+        &[("Feature_", 0x2d26), ("Component_", 0x2d48)],
+    ),
+    (
+        "File",
+        &[
+            ("File", 0x2d48),
+            ("Component_", 0x0d48),
+            ("FileName", 0x0fff),
+            ("FileSize", 0x0104),
+            ("Version", 0x1d48),
+            ("Language", 0x1d14),
+            ("Attributes", 0x1502),
+            ("Sequence", 0x0104),
+        ],
+    ),
+    (
+        "InstallExecuteSequence",
+        &[
+            ("Action", 0x2d48),
+            ("Condition", 0x1dff),
+            ("Sequence", 0x1502),
+        ],
+    ),
+    (
+        "InstallUISequence",
+        &[
+            ("Action", 0x2d48),
+            ("Condition", 0x1dff),
+            ("Sequence", 0x1502),
+        ],
+    ),
+    (
+        "LaunchCondition",
+        &[("Condition", 0x2dff), ("Description", 0x0fff)],
+    ),
+    (
+        "Media",
+        &[
+            ("DiskId", 0x2502),
+            ("LastSequence", 0x0104),
+            ("DiskPrompt", 0x1f40),
+            ("Cabinet", 0x1dff),
+            ("VolumeLabel", 0x1d20),
+            ("Source", 0x1d48),
+        ],
+    ),
+    (
+        "MsiFileHash",
+        &[
+            ("File_", 0x2d48),
+            ("Options", 0x0502),
+            ("HashPart1", 0x0104),
+            ("HashPart2", 0x0104),
+            ("HashPart3", 0x0104),
+            ("HashPart4", 0x0104),
+        ],
+    ),
+    ("Property", &[("Property", 0x2d48), ("Value", 0x0f00)]),
+    (
+        "Registry",
+        &[
+            ("Registry", 0x2d48),
+            ("Root", 0x0502),
+            ("Key", 0x0fff),
+            ("Name", 0x1fff),
+            ("Value", 0x1f00),
+            ("Component_", 0x0d48),
+        ],
+    ),
+    (
+        "Upgrade",
+        &[
+            ("UpgradeCode", 0x2d26),
+            ("VersionMin", 0x3d14),
+            ("VersionMax", 0x3d14),
+            ("Language", 0x3dff),
+            ("Attributes", 0x2104),
+            ("Remove", 0x1dff),
+            ("ActionProperty", 0x0d48),
+        ],
+    ),
+];
+
 /// The catalog tables' own schemas.
 fn catalog(db: &mut Db) {
     db.tables.insert(
@@ -271,14 +421,16 @@ fn catalog(db: &mut Db) {
 }
 
 /// A transform's schema, added to the package's tables (when it is stored
-/// in a package): the standard Property table, the catalog, and the columns the
+/// in a package): the standard tables, the catalog, and the columns the
 /// transform's own `_Columns` inserts (in order; Wine's
 /// `msi_table_load_transform` numbers columns whose Number is null after
 /// the table's last one).
 async fn transform_schema(cx: &Cx, cfb: &CfbRef, storage: u32, db: &mut Db) {
-    db.tables
-        .entry("Property".to_owned())
-        .or_insert_with(|| vec![col("Property", 0x2d48), col("Value", 0x0f00)]);
+    for (name, columns) in STANDARD_TABLES {
+        db.tables
+            .entry((*name).to_owned())
+            .or_insert_with(|| columns.iter().map(|&(c, kind)| col(c, kind)).collect());
+    }
     catalog(db);
     let Some(span) = msi_stream(cx, cfb, storage, "_Columns").await else {
         return;
