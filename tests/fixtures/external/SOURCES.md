@@ -1317,3 +1317,9 @@ the same way locally (`TEMPLEOS_Z_DIRS`).
 | `templeos-z/FileLowLevel.DD.Z` | `/Doc/FileLowLevel.DD.Z` | `CT_8_BIT` (DolDoc with bytes above 0x7f) |
 | `templeos-z/FileSysRedSea.HC.Z` | `/Kernel/BlkDev/FileSysRedSea.HC.Z` | `CT_7_BIT`, long enough that string slots are recycled at 12 bits |
 | `templeos-z/StadiumBG.GR.Z` | `/Demo/Games/Stadium/StadiumBG.GR.Z` | `CT_NONE` (stored: LZW did not shrink it) |
+
+## TempleOS V5.03 in QEMU: a RedSea ISO written by TempleOS
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `iso9660/templeos-redseaiso.iso.gz` | TempleOS V5.03 (the distribution ISO above, booted as a live CD in QEMU 10.0.13 `qemu-system-x86_64 -accel tcg`, Debian 13 aarch64, in Docker, `-rtc base=2026-01-01T00:00:00`) | `tests/data/redsea/qemu_redseaiso.py` (its docstring has the `docker run` line) types, over QMP, `DirMk`/`Copy` of `/Demo/DateTime.HC.Z` and `/Doc/FileLowLevel.DD.Z` from the CD into `B:/Src` on the RAM drive, then `RedSeaISO("B:/Out","B:/Src");`, saves the guest's memory and carves `B:/Out.ISO.C` (contiguous) out of the RAM drive. Not reproducible byte for byte (the volume's `unique_id` mixes in the TSC, and creation times vary by seconds; two runs differed in 20 bytes). Apart from the slack after each file's last block (TempleOS writes from an uninitialised buffer, so it holds stale heap bytes), it is byte for byte what `tests/data/redsea/make_image.py` builds for the same tree, times and ID. Stored with `gzip -9 -n`. Public domain (TempleOS) |

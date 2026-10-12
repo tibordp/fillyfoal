@@ -19,6 +19,12 @@ writes
       with the RedSea volume at block 88 (no stage-2 loader, so the boot
       image sector stays empty)
 
+Checked against TempleOS itself: for the tree of
+tests/fixtures/external/iso9660/templeos-redseaiso.iso.gz (written by
+RedSeaISO in QEMU, see qemu_redseaiso.py), with its times and volume ID,
+iso() builds the same bytes except for the slack after each file's last
+block, which TempleOS fills from an uninitialised buffer.
+
 Not reproduced: what a TempleOS session would add besides these steps (the
 real ISO also has ARCHIVE attributes on some entries), and directory growth
 (RedSeaDirNew's reallocation is implemented but no directory here fills
@@ -256,15 +262,16 @@ def tree(repo):
     z = os.path.join(repo, 'tests/fixtures/external/templeos-z')
     data = os.path.join(repo, 'tests/data/templeos-z')
     rd = lambda p: open(p, 'rb').read()
-    # (name, contents or subtree, CDate); sorted as FilesFind lists them.
+    # (name, contents or subtree, CDate), directories first as FilesFind
+    # lists them (TempleOS's own RedSeaISO output and the V5.03 ISO agree).
     return [
-        (b'DateTime.HC', rd(os.path.join(data, 'DateTime.HC')), (0x877C048D, 0xB3D56)),
         (b'Demo', [
             (b'DateTime.HC.Z', rd(os.path.join(z, 'DateTime.HC.Z')), (0x877C048D, 0xB3D56)),
         ], NOW),
         (b'Doc', [
             (b'FileLowLevel.DD.Z', rd(os.path.join(z, 'FileLowLevel.DD.Z')), (0x22345678, 0xB3DCF)),
         ], NOW),
+        (b'DateTime.HC', rd(os.path.join(data, 'DateTime.HC')), (0x877C048D, 0xB3D56)),
     ]
 
 
@@ -295,15 +302,15 @@ def pass1(entries):
     return res + ceil((len(entries) + 3) * ENTRY, BLK) * BLK
 
 
-def volume(repo, drv_offset):
+def volume(entries, drv_offset):
     """A 64-block drive (one bitmap block, a one-block root) starting at
     `drv_offset`, with the tree, and one file written and then deleted (its
     entry stays, marked, and its blocks are free)."""
     vol = Vol(drv_offset, 64, 1)
     dirs = {}
-    entries = tree(repo)
     copy_tree(vol, [(vol.root, b'')], entries, dirs)
-    old = [b for n, b, _ in entries[2][1] if n == b'FileLowLevel.DD.Z'][0]
+    doc = [b for n, b, _ in entries if n == b'Doc'][0]
+    old = [b for n, b, _ in doc if n == b'FileLowLevel.DD.Z'][0]
     vol.file_write(dirs[b'Doc'], b'Old.DD.Z', old, (0x22345678, 0xB3DCF), COMPRESSED)
     vol.delete(dirs[b'Doc'], b'Old.DD.Z')
     return vol
@@ -318,8 +325,7 @@ def mbr(vol):
     return bytes(m) + bytes((vol.drv_offset - 1) * BLK) + bytes(vol.img)
 
 
-def iso(repo):
-    entries = tree(repo)
+def iso(entries):
     drv_offset = (19 << 2) + (2048 * 2 + 2048) // BLK
     root_dir_blks = ceil((len(entries) + 3) << 6, BLK)
     res = pass1(entries) // BLK
@@ -384,10 +390,12 @@ def save(path, data):
 def main():
     repo = sys.argv[1]
     fx = os.path.join(repo, 'tests/fixtures/synthetic')
-    save(os.path.join(fx, 'redsea/templeos.img.gz'), bytes(volume(repo, 0).img))
+    entries = tree(repo)
+    save(os.path.join(fx, 'redsea/templeos.img.gz'), bytes(volume(entries, 0).img))
     # DskPrt's first partition starts at DRV_HEADER (63).
-    save(os.path.join(fx, 'mbr/templeos-redsea.img.gz'), mbr(volume(repo, 63)))
-    save(os.path.join(fx, 'iso9660/templeos.iso.gz'), iso(repo))
+    save(os.path.join(fx, 'mbr/templeos-redsea.img.gz'), mbr(volume(entries, 63)))
+    save(os.path.join(fx, 'iso9660/templeos.iso.gz'), iso(entries))
 
 
-main()
+if __name__ == "__main__":
+    main()

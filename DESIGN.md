@@ -82,7 +82,8 @@ exploration pays for additional work only as needed.
   - format-specific: compressed RTF (LZFu), Guitar Pro 6 BCFZ, Heatshrink and
     MeatPack (Prusa binary G-code), DjVu BZZ, the DWG R2004+ LZ77 variant,
     SPSS bytecode and SAS7BDAT RLE/RDC row compression, Cap'n Proto packing,
-    the PDF/PostScript filters and predictors;
+    the PDF/PostScript filters and predictors, TempleOS `.Z` LZW (TOSZ as
+    oracle);
   - ciphers and KDFs that unlock content: ZipCrypto, AES (CBC, CTR, GCM), RC4,
     ChaCha20/Poly1305, Twofish, Type 1 eexec, MPQ; Argon2, BLAKE2b, bcrypt_pbkdf.
 

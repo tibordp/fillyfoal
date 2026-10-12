@@ -150,6 +150,24 @@ fn generated_images() {
     }
 }
 
+/// The ISO TempleOS wrote itself (`RedSeaISO` in QEMU).
+#[test]
+fn templeos_written_iso() {
+    let mut host = Host::named(
+        "t.iso",
+        fixture("external/iso9660/templeos-redseaiso.iso.gz"),
+        Limits::default(),
+    );
+    let entries = list(&mut host);
+    let paths: Vec<&str> = entries.iter().map(|(p, _, _)| p.as_str()).collect();
+    assert_eq!(paths, ["/Doc", "/Doc/FileLowLevel.DD.Z", "/DateTime.HC.Z"]);
+    for (path, id, dir) in &entries {
+        if !dir {
+            check_file(&mut host, path, *id);
+        }
+    }
+}
+
 fn put_i64(img: &mut [u8], at: usize, v: i64) {
     img[at..at + 8].copy_from_slice(&v.to_le_bytes());
 }
@@ -161,9 +179,9 @@ fn hostile_directories_are_bounded() {
     let mut img = fixture("synthetic/redsea/templeos.img.gz");
     // Root directory (block 2): "." claims 2^40 bytes.
     put_i64(&mut img, 2 * 512 + 48, 1 << 40);
-    // /Doc/FileLowLevel.DD.Z (Doc at block 6, third entry) becomes a
+    // /Doc/FileLowLevel.DD.Z (Doc at block 5, third entry) becomes a
     // directory pointing back at the root.
-    let e = 6 * 512 + 2 * 64;
+    let e = 5 * 512 + 2 * 64;
     img[e..e + 2].copy_from_slice(&0x810u16.to_le_bytes());
     put_i64(&mut img, e + 40, 2);
     let mut host = Host::named("t.img", img, Limits::default());
