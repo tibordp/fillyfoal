@@ -4,8 +4,9 @@
 //! macOS/iOS/Linux/Android
 //! (`unix`, bookmarks, `.DS_Store`), browsers, logs, user-profile text
 //! artifacts (`userdata`) and evidence containers and memory captures
-//! (`evidence`).
+//! (`evidence`, Expert Witness images in `ewf`, AFF4 in `aff4`).
 
+pub mod aff4;
 pub mod bookmark;
 pub mod browser;
 pub mod dsstore;
@@ -13,6 +14,7 @@ pub mod etl;
 pub mod evidence;
 pub mod evt;
 pub mod evtx;
+pub mod ewf;
 pub mod lnk;
 pub mod logs;
 pub mod minidump;
