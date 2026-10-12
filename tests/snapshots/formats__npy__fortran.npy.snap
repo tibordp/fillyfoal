@@ -11,4 +11,10 @@ expression: "common::explore(&display_name(&path), &data)"
     dtype: ">i4"
     Fortran order: true
     Shape: "(2, 3)"
-    Data — 6 elements, 24 bytes  [0x80+0x18]
+  ▾ Data — 6 elements, 24 bytes  [0x80+0x18]
+      [0, 0]: 0  [0x80+0x4]
+      [1, 0]: 3  [0x84+0x4]
+      [0, 1]: 1  [0x88+0x4]
+      [1, 1]: 4  [0x8c+0x4]
+      [0, 2]: 2  [0x90+0x4]
+      [1, 2]: 5  [0x94+0x4]

@@ -1,8 +1,8 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ bytes-v2.npy — NumPy array |u1, shape (16), Fortran order  [0x0+0x90]
+▾ bytes-v2.npy — NumPy array |u1, shape (16,), Fortran order  [0x0+0x90]
     Magic: 93 4e 55 4d 50 59  |.NUMPY|  [0x0+0x6]
     Major version: 2  [0x6+0x1]
     Minor version: 0  [0x7+0x1]
@@ -10,5 +10,21 @@ expression: "common::explore(&name, &data)"
     Header: "{'descr': '|u1', 'fortran_order': True, 'shape': (16,), }"  [0xc+0x74]
     dtype: "|u1"
     Fortran order: true
-    Shape: "(16)"
-    Data — 16 elements, 16 bytes  [0x80+0x10]
+    Shape: "(16,)"
+  ▾ Data — 16 elements, 16 bytes  [0x80+0x10]
+      [0]: 0  [0x80+0x1]
+      [1]: 1  [0x81+0x1]
+      [2]: 2  [0x82+0x1]
+      [3]: 3  [0x83+0x1]
+      [4]: 4  [0x84+0x1]
+      [5]: 5  [0x85+0x1]
+      [6]: 6  [0x86+0x1]
+      [7]: 7  [0x87+0x1]
+      [8]: 8  [0x88+0x1]
+      [9]: 9  [0x89+0x1]
+      [10]: 10  [0x8a+0x1]
+      [11]: 11  [0x8b+0x1]
+      [12]: 12  [0x8c+0x1]
+      [13]: 13  [0x8d+0x1]
+      [14]: 14  [0x8e+0x1]
+      [15]: 15  [0x8f+0x1]
