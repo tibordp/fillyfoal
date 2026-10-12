@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ fillyfoal-sans.ttf — "Fillyfoal Sans Regular", TrueType outlines, 5 glyphs, 11 tables  [0x0+0x418]
   ▾ Offset table  [0x0+0xc]
@@ -169,7 +169,23 @@ expression: "common::explore(&name, &data)"
         Instance 0 — name ID 258, coordinates (700, 100)  [0x1b8+0xc]
   ▾ 'glyf' — Glyph data, 36 bytes  [0x1c4+0x24]
       Checksum: 0x3be03c0 — valid
-      Data — 36 bytes  [0x1c4+0x24]
+      Glyph 0 — empty  [0x1c4+0x0]
+    ▾ Glyph 1 — 1 contours, (100, 0)–(500, 700)  [0x1c4+0x24]
+        Number of contours: 1  [0x1c4+0x2]
+        xMin: 100  [0x1c6+0x2]
+        yMin: 0  [0x1c8+0x2]
+        xMax: 500  [0x1ca+0x2]
+        yMax: 700  [0x1cc+0x2]
+        End points of contours — 1 contours, 4 points  [0x1ce+0x2]
+        Instruction length: 0  [0x1d0+0x2]
+        Instructions:   ||  [0x1d2+0x0]
+        Flags — 4 bytes  [0x1d2+0x4]
+        X coordinates — 8 bytes  [0x1d6+0x8]
+        Y coordinates — 8 bytes  [0x1de+0x8]
+        Padding  [0x1e6+0x2]
+      Glyph 2 — empty  [0x1e8+0x0]
+      Glyph 3 — empty  [0x1e8+0x0]
+      Glyph 4 — empty  [0x1e8+0x0]
   ▾ 'head' — Font header, 54 bytes, 1000 units/em  [0x1e8+0x36]
       Checksum: 0x2feeed21 — valid
       Major version: 1  [0x1e8+0x2]
@@ -209,10 +225,20 @@ expression: "common::explore(&name, &data)"
       Number of h metrics: 5  [0x242+0x2]
   ▾ 'hmtx' — Horizontal metrics, 20 bytes  [0x244+0x14]
       Checksum: 0xbb80000 — valid
-      Data — 20 bytes  [0x244+0x14]
+    ▾ Long metrics — 5 × (advance width, left side bearing)  [0x244+0x14]
+        Glyph 0 — advance 600, lsb 0  [0x244+0x4]
+        Glyph 1 — advance 600, lsb 0  [0x248+0x4]
+        Glyph 2 — advance 600, lsb 0  [0x24c+0x4]
+        Glyph 3 — advance 600, lsb 0  [0x250+0x4]
+        Glyph 4 — advance 600, lsb 0  [0x254+0x4]
   ▾ 'loca' — Index to location, 12 bytes  [0x258+0xc]
       Checksum: 0x240024 — valid
-      Data — 12 bytes  [0x258+0xc]
+      Glyph 0 — 0x0, empty  [0x258+0x2]
+      Glyph 1 — 0x0, 36 bytes  [0x25a+0x2]
+      Glyph 2 — 0x24, empty  [0x25c+0x2]
+      Glyph 3 — 0x24, empty  [0x25e+0x2]
+      Glyph 4 — 0x24, empty  [0x260+0x2]
+      End — 0x24, end  [0x262+0x2]
   ▾ 'maxp' — Maximum profile, 32 bytes, 5 glyphs  [0x264+0x20]
       Checksum: 0x47000a — valid
       Version: 0x10000 — 1.0 (TrueType)  [0x264+0x4]

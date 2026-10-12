@@ -4,7 +4,8 @@ reading of the layouts ExifTool and exiv2 document. Tag values are made up.
 
     python3 tests/data/tiff/makernotes.py tests/fixtures/synthetic/tiff
 
-Writes makernote-{canon,nikon,sony,fujifilm,olympus,panasonic,apple}.tif.
+Writes makernote-{canon,nikon,sony,fujifilm,olympus,panasonic,apple}.tif
+and makernote-{huawei,leica,casio,ricoh,sigma,dji}.tif.
 """
 
 import os
@@ -23,6 +24,7 @@ TYPES = {
     "l": (9, 4),
     "r": (10, 8),
     "I": (13, 4),
+    "f": (11, 4),
 }
 
 # An 8x8 baseline JPEG for previews: the repository's tiny.jpg fixture.
@@ -39,7 +41,7 @@ def encode(e, kind, values):
         fmt = "L" if kind == "R" else "l"
         raw = b"".join(struct.pack(e + fmt + fmt, n, d) for n, d in values)
         return code, len(values), raw
-    fmt = {"H": "H", "L": "L", "h": "h", "l": "l", "I": "L"}[kind]
+    fmt = {"H": "H", "L": "L", "h": "h", "l": "l", "I": "L", "f": "f"}[kind]
     return code, len(values), b"".join(struct.pack(e + fmt, v) for v in values)
 
 
@@ -219,6 +221,86 @@ def apple(at):
     return b"Apple iOS\0\0\x01MM" + ifd(e, 14, entries)[0]
 
 
+def huawei(at):
+    # "HUAWEI\0\0", then a TIFF header of the note's own; offsets are
+    # relative to it.
+    e = ">"
+    entries = [
+        (0x0200, "L", [1]),
+        (0x0201, "A", b"fillyfoal scene\0"),
+        (0x0202, "L", [0, 0, 0, 0]),
+    ]
+    return b"HUAWEI\0\0" + b"MM" + struct.pack(">HL", 42, 8) + ifd(e, 8, entries)[0]
+
+
+def leica(at):
+    # Leica Q-type: "LEICA\0\x08\0", the IFD after it, offsets relative to
+    # the Exif TIFF header.
+    e = "<"
+    head = b"LEICA\0\x08\0"
+    entries = [
+        (0x0300, "A", b"Leica Summilux 1:1.7/28 ASPH.\0"),
+        (0x0301, "L", [3]),
+        (0x0304, "L", [42]),
+    ]
+    return head + ifd(e, at + len(head), entries)[0]
+
+
+def casio(at):
+    # Casio type 2: "QVC\0\0\0", the IFD at +6, offsets relative to the
+    # Exif TIFF header.
+    e = ">"
+    head = b"QVC\0\0\0"
+    entries = [
+        (0x0008, "H", [2]),
+        (0x0009, "L", [8]),
+        (0x0014, "H", [100]),
+        (0x2001, "A", b"2024:05:01 12:00:00\0"),
+        (0x3006, "A", b"Reykjavik\0"),
+    ]
+    return head + ifd(e, at + len(head), entries)[0]
+
+
+def ricoh(at):
+    # Ricoh: "Ricoh\0\0\0", the IFD at +8, offsets relative to the Exif
+    # TIFF header.
+    e = "<"
+    head = b"Ricoh\0\0\0"
+    entries = [
+        (0x0001, "A", b"Rdc\0"),
+        (0x0002, "A", b"Rev1.00\0"),
+        (0x0005, "U", b"0123456789ABCDEF"),
+        (0x1307, "L", [5200]),
+    ]
+    return head + ifd(e, at + len(head), entries)[0]
+
+
+def sigma(at):
+    # Sigma: "SIGMA\0\0\0" and a version word, the IFD at +10.
+    e = "<"
+    head = b"SIGMA\0\0\0\x01\0"
+    entries = [
+        (0x0002, "A", b"9876543\0"),
+        (0x0003, "A", b"SINGLE\0"),
+        (0x0005, "A", b"AF-S\0"),
+        (0x0018, "A", b"SIGMA Photo Pro\0"),
+    ]
+    return head + ifd(e, at + len(head), entries)[0]
+
+
+def dji(at):
+    # DJI drones: a bare IFD (no header) of floats.
+    e = "<"
+    entries = [
+        (0x0001, "A", b"DJI\0"),
+        (0x0006, "f", [1.5]),
+        (0x0007, "f", [-120.25]),
+        (0x0008, "f", [0.75]),
+        (0x0009, "f", [-90.0]),
+    ]
+    return ifd(e, at, entries)[0]
+
+
 FILES = {
     "canon": ("<", b"Canon", b"Canon EOS R5", canon),
     "nikon": (">", b"NIKON CORPORATION", b"NIKON Z 6", nikon),
@@ -227,6 +309,12 @@ FILES = {
     "olympus": ("<", b"OM Digital Solutions", b"OM-1", olympus),
     "panasonic": ("<", b"Panasonic", b"DC-GH5", panasonic),
     "apple": (">", b"Apple", b"iPhone 15 Pro", apple),
+    "huawei": ("<", b"HUAWEI", b"ELS-NX9", huawei),
+    "leica": ("<", b"LEICA CAMERA AG", b"LEICA Q (Typ 116)", leica),
+    "casio": (">", b"CASIO COMPUTER CO.,LTD.", b"EX-ZR100", casio),
+    "ricoh": ("<", b"RICOH", b"Caplio GX100", ricoh),
+    "sigma": ("<", b"SIGMA", b"SIGMA DP2 Merrill", sigma),
+    "dji": ("<", b"DJI", b"FC3170", dji),
 }
 
 out = sys.argv[1]

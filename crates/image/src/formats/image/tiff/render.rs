@@ -88,7 +88,7 @@ impl Shown {
 
 pub(super) async fn describe(cx: &Cx, t: Tiff, dir: Dir, e: &Entry, refs: &Refs) -> Shown {
     let preview_len = match e.kind {
-        1 | 2 | 6 | 7 => e.size.min(TEXT_CAP),
+        1 | 2 | 6 | 7 | 129 => e.size.min(TEXT_CAP),
         _ => type_size(e.kind).saturating_mul(e.count.min(PREVIEW)),
     };
     let Ok(bytes) = cx.read_avail(e.data.sub(0, preview_len)).await else {
@@ -110,7 +110,7 @@ fn render(t: Tiff, ns: Ns, e: &Entry, bytes: &[u8], refs: &Refs) -> Shown {
     if let Some(shown) = special {
         return shown;
     }
-    if e.kind == 2 {
+    if super::is_text(e.kind) {
         return Shown::text(ascii_text(bytes), None);
     }
     generic(ns, e, bytes, &values)
@@ -742,7 +742,7 @@ fn gps(e: &Entry, bytes: &[u8], values: &[Num], refs: &Refs) -> Option<Shown> {
             Shown::text(text, Some(code.to_owned()))
         }
         0x1e if one => enumerated(u(values, 0)?, 16, GPS_DIFFERENTIAL),
-        _ if e.kind == 2 => {
+        _ if super::is_text(e.kind) => {
             let text = ascii_text(bytes);
             let meaning = match (e.tag, text.as_str()) {
                 (0x01 | 0x13, "N") => Some("North"),
@@ -776,7 +776,7 @@ fn unit_of(values: &[Num], unit: &str) -> Option<Shown> {
 
 fn interop(e: &Entry, bytes: &[u8]) -> Option<Shown> {
     Some(match e.tag {
-        0x0001 if e.kind == 2 => {
+        0x0001 if super::is_text(e.kind) => {
             let text = ascii_text(bytes);
             let meaning = match text.as_str() {
                 "R98" => Some("Exif R98: DCF basic file (sRGB)"),

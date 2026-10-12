@@ -1,0 +1,26 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cjxl-alpha-lossless.jxl — 40×40, 8-bit, sRGB, +Alpha, 8-bit, not XYB (lossless-capable)  [0x0+0xb4]
+    Signature — FF 0A  [0x0+0x2]
+  ▾ Size header — 40×40  [0x2+0x2]
+      Small (multiple of 8): true  [0x2+0x1]
+      Height / 8 − 1: 4  [0x2+0x1]
+      Aspect ratio: 1:1 (0x1)  [0x2+0x2]
+  ▾ Image metadata — 8-bit, sRGB, +Alpha, 8-bit, not XYB (lossless-capable)  [0x3+0x2]
+      All default: false  [0x3+0x1]
+      Has extra fields: false  [0x3+0x1]
+    ▾ Bit depth — 8-bit  [0x3+0x1]
+        Floating point: false  [0x3+0x1]
+        Bits per sample: 8  [0x3+0x1]
+      16-bit buffers sufficient: true  [0x3+0x1]
+      Extra channels: 1  [0x3+0x2]
+    ▾ Extra channel 0 — Alpha, 8-bit  [0x4+0x1]
+        All default (8-bit alpha): true  [0x4+0x1]
+      XYB encoded: false  [0x4+0x1]
+    ▾ Colour encoding — sRGB  [0x4+0x1]
+        All default (sRGB): true  [0x4+0x1]
+      Extensions: 0  [0x4+0x1]
+      Transform data: all default: true  [0x4+0x1]
+    Frames  [0x5+0xaf]

@@ -1,6 +1,6 @@
 //! Decoders for individual sfnt tables (`head`, `hhea`, `maxp`, `OS/2`,
-//! `post`, `name`, `cmap`, `fvar`), shared by TrueType/OpenType, collections
-//! and WOFF. Each works on the table's own span, which may lie in a derived
+//! `post`, `name`, `cmap`, `fvar`; those that need other tables are in
+//! `glyphs`), shared by TrueType/OpenType, collections and WOFF. Each works on the table's own span, which may lie in a derived
 //! (decompressed) source.
 
 use crate::bytes::{to_u64, u16_be, u32_be};
@@ -468,8 +468,16 @@ fn post(f: &mut Fields<'_>, _: &()) -> Result<()> {
     Ok(())
 }
 
-/// Emits the decoded fields of table `tag` at `span`, in the font `input`.
-pub async fn decode(cx: &Cx, input: Input, tag: &str, span: Span) -> Result<()> {
+/// Emits the decoded fields of table `tag` at `span`, in the font `input`
+/// whose other tables `ctx` locates.
+pub async fn decode(
+    cx: &Cx,
+    input: Input,
+    tag: &str,
+    span: Span,
+    ctx: &super::glyphs::FontCtx,
+) -> Result<()> {
+    use super::glyphs;
     let layout: Option<crate::fields::Layout<(), ()>> = match tag {
         "head" => Some(head),
         "hhea" | "vhea" => Some(hhea),
@@ -496,6 +504,14 @@ pub async fn decode(cx: &Cx, input: Input, tag: &str, span: Span) -> Result<()> 
         "GPOS" => super::opentype::layout(cx, span, true).await,
         "DSIG" => super::opentype::dsig(cx, input, span).await,
         "SVG " => super::opentype::svg(cx, input, span).await,
+        "hmtx" => glyphs::metrics(cx, span, ctx, false).await,
+        "vmtx" => glyphs::metrics(cx, span, ctx, true).await,
+        "loca" => glyphs::loca(cx, span, ctx).await,
+        "glyf" => glyphs::glyf(cx, span, ctx).await,
+        "sbix" => glyphs::sbix(cx, input, span, ctx).await,
+        "CBLC" | "EBLC" => glyphs::bitmap_locations(cx, span).await,
+        "CBDT" => glyphs::bitmap_data(cx, input, span, ctx, true).await,
+        "EBDT" => glyphs::bitmap_data(cx, input, span, ctx, false).await,
         _ => {
             cx.emit(
                 Node::new("Data")

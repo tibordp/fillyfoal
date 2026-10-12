@@ -23,6 +23,13 @@ pub enum Make {
     Apple,
     Pentax,
     Samsung,
+    Leica,
+    Casio,
+    Ricoh,
+    Sigma,
+    Dji,
+    Minolta,
+    Huawei,
 }
 
 pub fn make_of(make: &str) -> Make {
@@ -42,10 +49,24 @@ pub fn make_of(make: &str) -> Make {
         Make::Panasonic
     } else if starts("APPLE") {
         Make::Apple
-    } else if starts("PENTAX") || starts("RICOH") || starts("ASAHI") {
+    } else if starts("PENTAX") || starts("RICOH IMAGING") || starts("ASAHI") {
         Make::Pentax
+    } else if starts("RICOH") {
+        Make::Ricoh
     } else if starts("SAMSUNG") {
         Make::Samsung
+    } else if starts("LEICA") {
+        Make::Leica
+    } else if starts("CASIO") {
+        Make::Casio
+    } else if starts("SIGMA") || starts("FOVEON") {
+        Make::Sigma
+    } else if m == "DJI" {
+        Make::Dji
+    } else if starts("KONICA MINOLTA") || starts("MINOLTA") {
+        Make::Minolta
+    } else if starts("HUAWEI") {
+        Make::Huawei
     } else {
         Make::Unknown
     }
@@ -69,6 +90,14 @@ pub enum Note {
     Apple,
     Pentax,
     Samsung,
+    Leica,
+    Casio,
+    Casio2,
+    Ricoh,
+    Sigma,
+    Dji,
+    Minolta,
+    Huawei,
     Unknown,
 }
 
@@ -90,6 +119,13 @@ impl Note {
             Note::Apple => "Apple maker note",
             Note::Pentax => "Pentax maker note",
             Note::Samsung => "Samsung maker note",
+            Note::Leica => "Leica maker note",
+            Note::Casio | Note::Casio2 => "Casio maker note",
+            Note::Ricoh => "Ricoh maker note",
+            Note::Sigma => "Sigma maker note",
+            Note::Dji => "DJI maker note",
+            Note::Minolta => "Minolta maker note",
+            Note::Huawei => "Huawei maker note",
             Note::Unknown => "Maker note",
         }
     }
@@ -110,7 +146,13 @@ impl Note {
             Note::Apple => APPLE,
             Note::Pentax => PENTAX,
             Note::Samsung => SAMSUNG,
-            Note::Unknown => &[],
+            Note::Casio => CASIO,
+            Note::Casio2 => CASIO2,
+            Note::Ricoh => RICOH,
+            Note::Sigma => SIGMA,
+            Note::Dji => DJI,
+            Note::Minolta => MINOLTA,
+            Note::Leica | Note::Huawei | Note::Unknown => &[],
         }
     }
 
@@ -150,6 +192,26 @@ pub struct Layout {
     pub base: Base,
     /// The note's own byte order, if it has one.
     pub endian: Option<Endian>,
+}
+
+/// The byte order of a note that does not state one: the enclosing
+/// stream's, unless the IFD at `ifd` only has a plausible entry count the
+/// other way round (as ExifTool guesses for such notes).
+fn guess_order(head: &[u8], ifd: usize, outer: Endian) -> Endian {
+    let other = match outer {
+        Endian::Little => Endian::Big,
+        Endian::Big => Endian::Little,
+    };
+    let count = |e| {
+        head.get(ifd..ifd.saturating_add(2))
+            .and_then(|b| u16::decode(b, e))
+    };
+    let plausible = |c: Option<u16>| c.is_some_and(|c| (1..=512).contains(&c));
+    if !plausible(count(outer)) && plausible(count(other)) {
+        other
+    } else {
+        outer
+    }
 }
 
 fn order(b: &[u8]) -> Option<Endian> {
@@ -244,6 +306,82 @@ pub fn layout(head: &[u8], make: Make, outer: Endian) -> Option<Layout> {
         let endian = order(at(8, 10)?);
         return l(Note::Pentax, "Pentax", 10, 10, Base::Note(0), endian);
     }
+    // Huawei phones: a header, then a TIFF header of the note's own that
+    // gives the byte order and the first IFD, offsets relative to it.
+    if head.starts_with(b"HUAWEI\0\0") {
+        let endian = order(at(8, 10)?)?;
+        let first = u32::decode(at(12, 16)?, endian)?;
+        return l(
+            Note::Huawei,
+            "Huawei",
+            8,
+            8u64.saturating_add(first.into()),
+            Base::Note(8),
+            Some(endian),
+        );
+    }
+    // Leica: the variants ExifTool tells apart by the bytes after "LEICA".
+    if head.starts_with(b"LEICA CAMERA AG\0") {
+        let e = guess_order(head, 18, outer);
+        return l(
+            Note::Panasonic,
+            "Leica (Panasonic-made)",
+            18,
+            18,
+            Base::Outer,
+            Some(e),
+        );
+    }
+    if head.starts_with(b"LEICA") {
+        let e = guess_order(head, 8, outer);
+        return match at(5, 8)? {
+            // Panasonic-made models (Make "LEICA") use Panasonic's tags.
+            b"\0\0\0" => l(
+                Note::Panasonic,
+                "Leica (Panasonic-made)",
+                8,
+                8,
+                Base::Outer,
+                Some(e),
+            ),
+            [b'0', ..] => l(Note::Leica, "Leica M9", 8, 8, Base::Note(0), Some(e)),
+            [0, 0x01 | 0x04..=0x07 | 0x10 | 0x1a, 0] => {
+                l(Note::Leica, "Leica X/T", 8, 8, Base::Note(0), Some(e))
+            }
+            [0, 0x08..=0x0a, 0] => l(Note::Leica, "Leica Q/SL/CL", 8, 8, Base::Outer, Some(e)),
+            [0, 0x02, 0] => l(Note::Leica, "Leica M10/S", 8, 8, Base::Outer, Some(e)),
+            // The M Monochrom (Typ 246) uses absolute file offsets.
+            _ => None,
+        };
+    }
+    if head.starts_with(b"QVC\0") || head.starts_with(b"DCI\0") {
+        let e = guess_order(head, 6, outer);
+        return l(Note::Casio2, "Casio type 2", 6, 6, Base::Outer, Some(e));
+    }
+    if head.starts_with(b"RICOH\0II") || head.starts_with(b"RICOH\0MM") {
+        let endian = order(at(6, 8)?);
+        return l(
+            Note::Pentax,
+            "Ricoh (Pentax-made)",
+            8,
+            8,
+            Base::Note(0),
+            endian,
+        );
+    }
+    if make == Make::Ricoh
+        && (head
+            .get(..5)
+            .is_some_and(|h| h.eq_ignore_ascii_case(b"Ricoh"))
+            || head.starts_with(b"      "))
+    {
+        let e = guess_order(head, 8, outer);
+        return l(Note::Ricoh, "Ricoh", 8, 8, Base::Outer, Some(e));
+    }
+    if head.starts_with(b"SIGMA\0\0\0") || head.starts_with(b"FOVEON\0\0") {
+        let e = guess_order(head, 10, outer);
+        return l(Note::Sigma, "Sigma", 10, 10, Base::Outer, Some(e));
+    }
     // Headerless notes: an IFD at the start, offsets relative to the Exif
     // TIFF header.
     let note = match make {
@@ -253,6 +391,9 @@ pub fn layout(head: &[u8], make: Make, outer: Endian) -> Option<Layout> {
         Make::Samsung => Note::Samsung,
         Make::Pentax => Note::Pentax,
         Make::Panasonic => Note::Panasonic,
+        Make::Casio => Note::Casio,
+        Make::Dji => Note::Dji,
+        Make::Minolta => Note::Minolta,
         _ => Note::Unknown,
     };
     // Sanity: a plausible entry count and a known type in the first entry.
@@ -1457,4 +1598,238 @@ const SAMSUNG: EnumTable = &[
     (0xa041, "ToneCurveAdobeRGBDefault"),
     (0xa042, "ToneCurveSRGB"),
     (0xa043, "ToneCurveAdobeRGB"),
+];
+
+const CASIO: EnumTable = &[
+    (0x0001, "RecordingMode"),
+    (0x0002, "Quality"),
+    (0x0003, "FocusMode"),
+    (0x0004, "FlashMode"),
+    (0x0005, "FlashIntensity"),
+    (0x0006, "ObjectDistance"),
+    (0x0007, "WhiteBalance"),
+    (0x000a, "DigitalZoom"),
+    (0x000b, "Sharpness"),
+    (0x000c, "Contrast"),
+    (0x000d, "Saturation"),
+    (0x0014, "ISO"),
+    (0x0015, "FirmwareDate"),
+    (0x0016, "Enhancement"),
+    (0x0017, "ColorFilter"),
+    (0x0018, "AFPoint"),
+    (0x0019, "FlashIntensity"),
+    (0x0e00, "PrintIM"),
+];
+
+const CASIO2: EnumTable = &[
+    (0x0002, "PreviewImageSize"),
+    (0x0003, "PreviewImageLength"),
+    (0x0004, "PreviewImageStart"),
+    (0x0008, "QualityMode"),
+    (0x0009, "CasioImageSize"),
+    (0x000d, "FocusMode"),
+    (0x0014, "ISO"),
+    (0x0019, "WhiteBalance"),
+    (0x001d, "FocalLength"),
+    (0x001f, "Saturation"),
+    (0x0020, "Contrast"),
+    (0x0021, "Sharpness"),
+    (0x0e00, "PrintIM"),
+    (0x2000, "PreviewImage"),
+    (0x2001, "FirmwareDate"),
+    (0x2011, "WhiteBalanceBias"),
+    (0x2012, "WhiteBalance"),
+    (0x2021, "AFPointPosition"),
+    (0x2022, "ObjectDistance"),
+    (0x2034, "FlashDistance"),
+    (0x2076, "SpecialEffectMode"),
+    (0x2089, "FaceInfo1"),
+    (0x211c, "FacesDetected"),
+    (0x3000, "RecordMode"),
+    (0x3001, "ReleaseMode"),
+    (0x3002, "Quality"),
+    (0x3003, "FocusMode"),
+    (0x3006, "HometownCity"),
+    (0x3007, "BestShotMode"),
+    (0x3008, "AutoISO"),
+    (0x3009, "AFMode"),
+    (0x3011, "Sharpness"),
+    (0x3012, "Contrast"),
+    (0x3013, "Saturation"),
+    (0x3014, "ISO"),
+    (0x3015, "ColorMode"),
+    (0x3016, "Enhancement"),
+    (0x3017, "ColorFilter"),
+    (0x301b, "ArtMode"),
+    (0x301c, "SequenceNumber"),
+    (0x301d, "BracketSequence"),
+    (0x3020, "ImageStabilization"),
+    (0x302a, "LightingMode"),
+    (0x302b, "PortraitRefiner"),
+    (0x3030, "SpecialEffectLevel"),
+    (0x3031, "SpecialEffectSetting"),
+    (0x3103, "DriveMode"),
+    (0x310b, "ArtModeParameters"),
+    (0x4001, "CaptureFrameRate"),
+    (0x4003, "VideoQuality"),
+];
+
+const RICOH: EnumTable = &[
+    (0x0001, "MakerNoteType"),
+    (0x0002, "FirmwareVersion"),
+    (0x0005, "SerialNumber"),
+    (0x0e00, "PrintIM"),
+    (0x1000, "RecordingFormat"),
+    (0x1001, "ImageInfo"),
+    (0x1002, "DriveMode"),
+    (0x1003, "Sharpness"),
+    (0x1004, "WhiteBalanceFineTune"),
+    (0x1006, "FocusMode"),
+    (0x1007, "AutoBracketing"),
+    (0x1009, "MacroMode"),
+    (0x100a, "FlashMode"),
+    (0x100b, "FlashExposureComp"),
+    (0x100c, "ManualFlashOutput"),
+    (0x100d, "FullPressSnap"),
+    (0x100e, "DynamicRangeExpansion"),
+    (0x100f, "NoiseReduction"),
+    (0x1010, "ImageEffects"),
+    (0x1011, "Vignetting"),
+    (0x1012, "Contrast"),
+    (0x1013, "Saturation"),
+    (0x1014, "Sharpness"),
+    (0x1015, "ToningEffect"),
+    (0x1016, "HueAdjust"),
+    (0x1017, "WideAdapter"),
+    (0x1018, "CropMode"),
+    (0x1019, "NDFilter"),
+    (0x101a, "WBBracketShotNumber"),
+    (0x1200, "AFStatus"),
+    (0x1201, "AFAreaXPosition1"),
+    (0x1202, "AFAreaYPosition1"),
+    (0x1203, "AFAreaXPosition"),
+    (0x1204, "AFAreaYPosition"),
+    (0x1205, "AFAreaMode"),
+    (0x1307, "ColorTempKelvin"),
+    (0x1308, "ColorTemperature"),
+    (0x1500, "FocalLength"),
+    (0x1601, "SensorWidth"),
+    (0x1602, "SensorHeight"),
+    (0x1603, "CroppedImageWidth"),
+    (0x1604, "CroppedImageHeight"),
+    (0x2001, "RicohSubdir"),
+    (0x4001, "ThetaSubdir"),
+];
+
+const SIGMA: EnumTable = &[
+    (0x0002, "SerialNumber"),
+    (0x0003, "DriveMode"),
+    (0x0004, "ResolutionMode"),
+    (0x0005, "AFMode"),
+    (0x0006, "FocusSetting"),
+    (0x0007, "WhiteBalance"),
+    (0x0008, "ExposureMode"),
+    (0x0009, "MeteringMode"),
+    (0x000a, "LensFocalRange"),
+    (0x000b, "ColorSpace"),
+    (0x000c, "ExposureCompensation"),
+    (0x000d, "Contrast"),
+    (0x000e, "Shadow"),
+    (0x000f, "Highlight"),
+    (0x0010, "Saturation"),
+    (0x0011, "Sharpness"),
+    (0x0012, "X3FillLight"),
+    (0x0014, "ColorAdjustment"),
+    (0x0015, "AdjustmentMode"),
+    (0x0016, "Quality"),
+    (0x0017, "Firmware"),
+    (0x0018, "Software"),
+    (0x0019, "AutoBracket"),
+    (0x001a, "PreviewImageStart"),
+    (0x001b, "PreviewImageLength"),
+    (0x001c, "PreviewImageSize"),
+    (0x001d, "MakerNoteVersion"),
+    (0x001e, "PreviewImageSize"),
+    (0x001f, "AFPoint"),
+    (0x0022, "FileFormat"),
+    (0x0024, "Calibration"),
+    (0x0026, "FileFormat"),
+    (0x0027, "LensType"),
+    (0x002a, "LensFocalRange"),
+    (0x002b, "LensMaxApertureRange"),
+    (0x002c, "ColorMode"),
+    (0x0030, "LensApertureRange"),
+    (0x0031, "FNumber"),
+    (0x0032, "ExposureTime"),
+    (0x0033, "ExposureTime2"),
+    (0x0034, "BurstShot"),
+    (0x0035, "ExposureCompensation"),
+    (0x0039, "SensorTemperature"),
+    (0x003a, "FlashExposureComp"),
+    (0x003b, "Firmware"),
+    (0x003c, "WhiteBalance"),
+    (0x003d, "PictureMode"),
+    (0x0048, "LensApertureRange"),
+    (0x0049, "FNumber"),
+    (0x004a, "ExposureTime"),
+    (0x004b, "ExposureTime2"),
+    (0x004d, "ExposureCompensation"),
+    (0x0055, "SensorTemperature"),
+    (0x0056, "FlashExposureComp"),
+    (0x0057, "Firmware2"),
+    (0x0058, "WhiteBalance"),
+    (0x0059, "DigitalFilter"),
+    (0x0084, "Model"),
+    (0x0086, "ISO"),
+    (0x0087, "ResolutionMode"),
+    (0x0088, "WhiteBalance"),
+    (0x008c, "Firmware"),
+    (0x011f, "CameraCalibration"),
+    (0x0120, "WBSettings"),
+    (0x0121, "WBSettings2"),
+];
+
+const DJI: EnumTable = &[
+    (0x0001, "Make"),
+    (0x0003, "SpeedX"),
+    (0x0004, "SpeedY"),
+    (0x0005, "SpeedZ"),
+    (0x0006, "Pitch"),
+    (0x0007, "Yaw"),
+    (0x0008, "Roll"),
+    (0x0009, "CameraPitch"),
+    (0x000a, "CameraYaw"),
+    (0x000b, "CameraRoll"),
+];
+
+const MINOLTA: EnumTable = &[
+    (0x0000, "MakerNoteVersion"),
+    (0x0001, "MinoltaCameraSettingsOld"),
+    (0x0003, "MinoltaCameraSettings"),
+    (0x0004, "MinoltaCameraSettings7D"),
+    (0x0010, "CameraInfoA100"),
+    (0x0018, "ISInfoA100"),
+    (0x0020, "WBInfoA100"),
+    (0x0040, "CompressedImageSize"),
+    (0x0081, "PreviewImage"),
+    (0x0088, "PreviewImageStart"),
+    (0x0089, "PreviewImageLength"),
+    (0x0100, "SceneMode"),
+    (0x0101, "ColorMode"),
+    (0x0102, "MinoltaQuality"),
+    (0x0103, "MinoltaQuality"),
+    (0x0104, "FlashExposureComp"),
+    (0x0105, "Teleconverter"),
+    (0x0107, "ImageStabilization"),
+    (0x0109, "RawAndJpgRecording"),
+    (0x010a, "ZoneMatching"),
+    (0x010b, "ColorTemperature"),
+    (0x010c, "LensType"),
+    (0x0111, "ColorCompensationFilter"),
+    (0x0112, "WhiteBalanceFineTune"),
+    (0x0113, "ImageStabilization"),
+    (0x0114, "MinoltaCameraSettings5D"),
+    (0x0115, "WhiteBalance"),
+    (0x0e00, "PrintIM"),
+    (0x0f00, "MinoltaCameraSettings2"),
 ];
