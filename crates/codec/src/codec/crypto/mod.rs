@@ -12,6 +12,7 @@ pub mod cipher;
 pub mod gcm;
 pub mod hash;
 pub mod mpq;
+pub mod office;
 pub mod poly1305;
 pub mod stream;
 pub mod twofish;
