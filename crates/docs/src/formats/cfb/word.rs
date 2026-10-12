@@ -508,7 +508,13 @@ impl Doc {
 
 /// The WordDocument stream, with the `0Table` and `1Table` streams if they
 /// exist (the FIB says which one is in use).
-pub async fn word(cx: &Cx, input: Input, wd: Span, tables: [Option<Span>; 2]) -> Result<()> {
+pub async fn word(
+    cx: &Cx,
+    input: Input,
+    wd: Span,
+    tables: [Option<Span>; 2],
+    data: Option<Span>,
+) -> Result<()> {
     let base_span = wd.sub(0, FibBase::SIZE);
     let head = cx.read_avail(wd.sub(0, 4096)).await?;
     let base = crate::fields::parse(cx, base_span, LE, &(), FibBase::layout).await?;
@@ -555,7 +561,24 @@ pub async fn word(cx: &Cx, input: Input, wd: Span, tables: [Option<Span>; 2]) ->
     let main = fib.lw(3);
     cx.annotate(format!("Word document, {main} characters of main text"));
     if fib.encrypted() {
-        cx.emit(Node::new("Encryption").diag(Diagnostic::unsupported(
+        // RC4 and CryptoAPI encryption put their header (lKey bytes) at
+        // the start of the table stream; XOR obfuscation has none, lKey
+        // being the key.
+        let key = u32_le(&head, 14).unwrap_or(0);
+        let mut node = Node::new("Encryption");
+        if fib.flags & 0x8000 == 0
+            && let Some(table) = table
+        {
+            let span = table.sub(0, key.into());
+            let data = cx.read_avail(span.sub(0, 0x400)).await?;
+            node =
+                struct_node("Encryption", span, LE, (), super::offcrypto::header_layout).summary(
+                    super::offcrypto::summary(&data, span.sub(0, to_u64(data.len()))),
+                );
+        } else {
+            node = node.summary("XOR obfuscation");
+        }
+        cx.emit(node.diag(Diagnostic::unsupported(
             "the document is encrypted: the table stream and text are not readable",
         )));
         return Ok(());
@@ -639,7 +662,16 @@ pub async fn word(cx: &Cx, input: Input, wd: Span, tables: [Option<Span>; 2]) ->
             Node::new("Drawings")
                 .span(span)
                 .summary(format!("Office Art, {} bytes", span.len))
-                .lazy(super::officeart::records_at, (input, span)),
+                .lazy(super::officeart::records_with_delay, (input, span, doc.wd)),
+        );
+    }
+    if let Some(data) = data {
+        cx.emit(
+            Node::new("Pictures")
+                .span(data)
+                .summary("the Data stream's pictures that runs of text refer to")
+                .desc("Each run whose formatting carries sprmCPicLocation (and not sprmCFData) names a PICF and its Office Art data in the Data stream")
+                .lazy(pictures, (doc.clone(), input, data)),
         );
     }
     cx.emit(
@@ -2265,6 +2297,160 @@ async fn sttb_node(cx: Cx, (span, index): (Span, usize)) -> Result<()> {
 enum FkpKind {
     Chpx,
     Papx,
+}
+
+/// Pictures located (and listed) at most.
+const MAX_PICTURES: usize = 4096;
+
+/// The Data stream offsets that character runs name with sprmCPicLocation,
+/// in order: every CHPX of every character FKP is scanned. A run that also
+/// has sprmCFData set points at form-field data instead.
+async fn picture_locations(cx: &Cx, doc: &Doc) -> Result<Vec<u32>> {
+    let mut found = std::collections::BTreeSet::new();
+    let Some(span) = doc.table_span(pair::PLCF_BTE_CHPX) else {
+        return Ok(Vec::new());
+    };
+    let bte = cx.read(span).await?;
+    let n = plc_count(span.len, 4);
+    let fcs_len = n.saturating_add(1).saturating_mul(4);
+    for i in 0..n {
+        let at = fcs_len.saturating_add(i.saturating_mul(4));
+        let pn = u32_le(&bte, to_usize(at)).unwrap_or(0) & 0x003f_ffff;
+        let page = cx
+            .read_avail(doc.wd.sub(u64::from(pn).saturating_mul(PAGE), PAGE))
+            .await?;
+        let count = usize::from(page.get(511).copied().unwrap_or(0));
+        let rgb = count.saturating_add(1).saturating_mul(4);
+        for j in 0..count {
+            let offset = usize::from(page.get(rgb.saturating_add(j)).copied().unwrap_or(0))
+                .saturating_mul(2);
+            if offset == 0 {
+                continue;
+            }
+            let cb = usize::from(page.get(offset).copied().unwrap_or(0));
+            let start = offset.saturating_add(1);
+            let grpprl = page
+                .get(start..start.saturating_add(cb))
+                .unwrap_or_default();
+            let (sprms, _) = sprm::split(grpprl);
+            let mut location = None;
+            let mut form_data = false;
+            for s in &sprms {
+                let operand = s.at.saturating_add(2);
+                match u16_le(grpprl, s.at) {
+                    Some(0x6a03) => location = u32_le(grpprl, operand),
+                    Some(0x0806) => form_data = grpprl.get(operand) == Some(&1),
+                    _ => {}
+                }
+            }
+            if let Some(l) = location
+                && !form_data
+            {
+                found.insert(l);
+            }
+        }
+        if found.len() >= MAX_PICTURES {
+            break;
+        }
+    }
+    Ok(found.into_iter().take(MAX_PICTURES).collect())
+}
+
+async fn pictures(cx: Cx, (doc, input, data): (Doc, Input, Span)) -> Result<()> {
+    let locations = picture_locations(&cx, &doc).await?;
+    if locations.is_empty() {
+        cx.emit(Node::new("No pictures").summary("no run refers to the Data stream"));
+        return Ok(());
+    }
+    cx.set_count(Count::Exact(to_u64(locations.len())));
+    for at in locations {
+        let head = cx.read_avail(data.sub(at.into(), 8)).await?;
+        let lcb = u32_le(&head, 0).unwrap_or(0);
+        let span = data.sub(at.into(), lcb.into());
+        // A NilPICF (mm 0) heads the binary data of the field the run is
+        // in (a hyperlink's HFD), not a picture.
+        let what = if u16_le(&head, 6) == Some(0) {
+            "Field data"
+        } else {
+            "Picture"
+        };
+        let mut node = Node::new(format!("{what} at {at:#x}"))
+            .span(span)
+            .summary(format!("{lcb} bytes"));
+        node = if head.len() < 4 || u64::from(lcb) > span.len || lcb < 0x44 {
+            node.diag(Diagnostic::malformed(
+                "sprmCPicLocation points past the Data stream or at a bad PICF",
+            ))
+        } else {
+            node.lazy(picf, (input, span))
+        };
+        cx.push(node).await;
+    }
+    Ok(())
+}
+
+const PICTURE_MODES: EnumTable = &[
+    (0x0000, "NilPICF: field data follows"),
+    (0x0064, "MM_SHAPE: a shape"),
+    (0x0066, "MM_SHAPEFILE: a shape with a linked file name"),
+    (0x0008, "MM_ANISOTROPIC: a metafile"),
+];
+
+/// A PICFAndOfficeArtData (MS-DOC 2.9.192): the PICF header, the picture
+/// name for linked files, then an OfficeArtInlineSpContainer (the shape and
+/// the BLIPs it shows).
+async fn picf(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
+    let block = cx.block(span.sub(0, 0x44 + 256)).await?;
+    let mut f = Fields::emitting(&cx, &block, LE);
+    f.u32("lcb")
+        .desc("Size of the PICF and the picture data")
+        .emit()?;
+    let cb_header = f.u16("cbHeader").desc("Size of the PICF: 0x44").emit()?;
+    let mm = f.u16("mfpf.mm").hex().enumeration(PICTURE_MODES).emit()?;
+    f.u16("mfpf.xExt").emit()?;
+    f.u16("mfpf.yExt").emit()?;
+    f.u16("mfpf.swHMF").emit()?;
+    f.bytes("innerHeader", 14).emit()?;
+    f.int::<i16>("dxaGoal")
+        .desc("Width before cropping and scaling, in twips")
+        .emit()?;
+    f.int::<i16>("dyaGoal")
+        .desc("Height before cropping and scaling, in twips")
+        .emit()?;
+    f.u16("mx")
+        .desc("Horizontal scale, in tenths of a percent")
+        .emit()?;
+    f.u16("my")
+        .desc("Vertical scale, in tenths of a percent")
+        .emit()?;
+    f.bytes("Cropping, borders and reserved", 26).emit()?;
+    f.u16("cProps").emit()?;
+    if u64::from(cb_header) > f.pos() {
+        f.seek(cb_header.into());
+    }
+    if mm == 0x0066 {
+        let n = f.u8("cchPicName").emit()?;
+        f.ascii("stPicName", n.into()).emit()?;
+    }
+    let rest = span.tail(f.pos());
+    if rest.len > 0 {
+        let node = if mm == 0 {
+            Node::new("binData")
+                .span(rest)
+                .summary(format!("{} bytes", rest.len))
+                .desc("Data of the field the run belongs to (NilPICFAndBinData), such as a hyperlink's HFD")
+        } else if matches!(mm, 0x0064 | 0x0066) {
+            Node::new("OfficeArtInlineSpContainer")
+                .span(rest)
+                .summary(format!("the shape and its pictures, {} bytes", rest.len))
+                .lazy(super::officeart::records_at, (input, rest))
+        } else {
+            crate::formats::embedded("Picture", input.nested(rest))
+                .summary(format!("{} bytes", rest.len))
+        };
+        cx.emit(node);
+    }
+    Ok(())
 }
 
 async fn chpx_bins(cx: Cx, doc: Doc) -> Result<()> {

@@ -37,12 +37,22 @@ pub struct Column {
 }
 
 impl Column {
+    /// A binary column (`MSITYPE_STRING | MSITYPE_VALID`, possibly
+    /// nullable, nothing else): its data lives in a stream named after the
+    /// table and the row's key, and the cell is a 2-byte value whatever the
+    /// string reference width (Wine's `MSITYPE_IS_BINARY`).
+    fn is_binary(&self) -> bool {
+        self.kind & !0x1000 == 0x0900
+    }
+
     fn is_string(&self) -> bool {
-        self.kind & 0x0800 != 0
+        self.kind & 0x0800 != 0 && !self.is_binary()
     }
 
     fn width(&self, long_refs: bool) -> u64 {
-        if self.is_string() {
+        if self.is_binary() {
+            2
+        } else if self.is_string() {
             if long_refs { 3 } else { 2 }
         } else if self.kind & 0x00ff == 4 {
             4
@@ -52,7 +62,9 @@ impl Column {
     }
 
     fn describe(&self) -> String {
-        let base = if self.is_string() {
+        let base = if self.is_binary() {
+            "binary stream".to_owned()
+        } else if self.is_string() {
             format!("string({})", self.kind & 0xff)
         } else if self.kind & 0xff == 4 {
             "int32".to_owned()
@@ -443,4 +455,30 @@ pub async fn product(cx: &Cx, cfb: &CfbRef) -> Option<String> {
         (Some(n), None) => n,
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Column;
+
+    fn column(kind: u16) -> Column {
+        Column {
+            name: String::new(),
+            kind,
+        }
+    }
+
+    #[test]
+    fn binary_columns_are_two_bytes_with_long_string_refs() {
+        // Binary.Data ("v0") and a nullable binary column.
+        assert_eq!(column(0x0900).width(true), 2);
+        assert_eq!(column(0x1900).width(true), 2);
+        assert!(!column(0x0900).is_string());
+        // Strings follow the pool's reference width; a key string is not
+        // binary.
+        assert_eq!(column(0x0d48).width(true), 3);
+        assert_eq!(column(0x2900).width(true), 3);
+        assert_eq!(column(0x0d48).width(false), 2);
+        assert_eq!(column(0x0104).width(true), 4);
+    }
 }

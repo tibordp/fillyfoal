@@ -22,6 +22,11 @@ use super::rec::LE;
 pub enum Context {
     Plain,
     Msi,
+    /// A Windows Installer transform (the root of an .mst, or a storage
+    /// inside a package or patch): its tables are stored row by row, each
+    /// row with a mask of the columns it changes, against its own string
+    /// pool, so they are not decoded with the package's schema.
+    MsiTransform,
     /// The top level of an Outlook message.
     MsgRoot,
     /// A message embedded in an attachment.
@@ -47,6 +52,7 @@ impl Context {
                     Context::Msg
                 }
             }
+            Context::Msi | Context::MsiTransform => Context::MsiTransform,
             _ if name == "VBA" => Context::Vba,
             Context::Vba => Context::Plain,
             other => other,
@@ -85,7 +91,12 @@ pub async fn application(
             Some(p) => Some(p),
             None => summary_title(cx, cfb, root).await,
         };
-        return (Some(with_title(kind, title)), Context::Msi);
+        let context = if root.clsid.data1 == 0x000c_1082 {
+            Context::MsiTransform
+        } else {
+            Context::Msi
+        };
+        return (Some(with_title(kind, title)), context);
     }
     let mut names = Vec::new();
     let mut walk = TreeWalk::new(root.child);
@@ -124,6 +135,16 @@ pub async fn application(
         ("Publisher document", Context::Plain)
     } else if has("VBA") && has("PROJECT") {
         ("VBA project", Context::Plain)
+    } else if has("EncryptionInfo") && has("EncryptedPackage") {
+        let info = match names.iter().find(|(n, _)| n == "EncryptionInfo") {
+            Some((_, id)) => encryption_summary(cx, cfb, *id).await,
+            None => None,
+        };
+        let kind = match info {
+            Some(info) => format!("Encrypted Office Open XML document ({info})"),
+            None => "Encrypted Office Open XML document".to_owned(),
+        };
+        return (Some(kind), Context::Plain);
     } else if has("\u{1}Ole10Native") {
         ("OLE 1.0 embedded object", Context::Plain)
     } else {
@@ -165,6 +186,15 @@ async fn summary_title(cx: &Cx, cfb: &Cfb, root: &DirEntry) -> Option<String> {
         }
     }
     None
+}
+
+/// The scheme an `EncryptionInfo` stream names.
+async fn encryption_summary(cx: &Cx, cfb: &Cfb, id: u32) -> Option<String> {
+    let entry = read_entry(cx, cfb, id).await.ok()?;
+    let (span, _) = super::stream(cx, cfb, id, &entry).await.ok()?;
+    let head = span.sub(0, 0x1000);
+    let data = cx.read_avail(head).await.ok()?;
+    Some(super::offcrypto::summary(&data, head))
 }
 
 async fn stream_text(cx: &Cx, cfb: &Cfb, id: u32, wide: bool) -> Option<String> {
@@ -214,7 +244,7 @@ pub fn label(
     context: Context,
     names: Option<&msg::NameMap>,
 ) -> (String, Option<String>) {
-    if context == Context::Msi
+    if matches!(context, Context::Msi | Context::MsiTransform)
         && let Some(name) = msi_name(raw)
     {
         return match name.strip_prefix('!') {
@@ -261,6 +291,9 @@ pub fn label(
         "Catalog" => Some("thumbnail catalog"),
         "EscherStm" | "EscherDelayStm" => Some("Office Art drawing records"),
         "Contents" => Some("Publisher contents"),
+        "EncryptionInfo" => Some("encryption parameters and password verifier"),
+        "EncryptedPackage" => Some("the encrypted Office Open XML package"),
+        "\u{6}DataSpaces" => Some("data space definitions (how the package is transformed)"),
         _ => None,
     };
     if context == Context::Thumbs && !raw.is_empty() && raw.chars().all(|c| c.is_ascii_digit()) {
@@ -283,10 +316,12 @@ pub async fn content(cx: &Cx, state: &StreamState, span: Span) -> Result<()> {
         (_, n) if n.starts_with('\u{5}') => propset::emit(cx, input, span).await,
         (_, "\u{1}CompObj") => compobj(cx, span).await,
         (_, "\u{1}Ole") => ole_stream(cx, span).await,
+        (_, "\u{1}Ole10Native") => ole10_native(cx, input, span).await,
         (Context::Plain, "WordDocument") => {
             let t0 = super::child_stream(cx, cfb, state.parent, "0Table").await;
             let t1 = super::child_stream(cx, cfb, state.parent, "1Table").await;
-            super::word::word(cx, input, span, [t0, t1]).await
+            let data = super::child_stream(cx, cfb, state.parent, "Data").await;
+            super::word::word(cx, input, span, [t0, t1], data).await
         }
         (Context::Plain, "0Table" | "1Table") => {
             cx.emit(
@@ -295,13 +330,17 @@ pub async fn content(cx: &Cx, state: &StreamState, span: Span) -> Result<()> {
             );
             Ok(())
         }
+        (Context::Plain, "EncryptionInfo") => {
+            super::offcrypto::encryption_info(cx, input, span).await
+        }
+        (Context::Plain, "EncryptedPackage") => super::offcrypto::encrypted_package(cx, span).await,
         (Context::Plain, "Workbook" | "Book") => super::biff::workbook(cx, input, span).await,
         (Context::Plain, "PowerPoint Document") => {
             let current = super::child_stream(cx, cfb, state.parent, "Current User").await;
             super::ppt::document(cx, input, span, current).await
         }
         (Context::Plain, "Current User" | "Pictures" | "EscherStm" | "EscherDelayStm") => {
-            super::officeart::walk(cx.clone(), (input, span, 0)).await
+            super::officeart::walk(cx.clone(), (input, span, 0, None)).await
         }
         (Context::Plain, "PROJECT") => super::vba::project_stream(cx, span).await,
         (Context::Plain, "PROJECTwm") => super::vba::project_wm(cx, span).await,
@@ -339,6 +378,12 @@ pub async fn content(cx: &Cx, state: &StreamState, span: Span) -> Result<()> {
                 Ok(())
             }
         },
+        (Context::MsiTransform, _) => {
+            cx.emit(raw_content(input, span).desc(
+                "A transform's table: rows that each start with a mask of the columns they change, against the transform's own string pool (not decoded)",
+            ));
+            Ok(())
+        }
         (Context::Thumbs, "Catalog") => super::thumbs::catalog(cx, span).await,
         (Context::Thumbs, n) if n.chars().all(|c| c.is_ascii_digit()) => {
             super::thumbs::thumbnail(cx, input, span).await
@@ -475,6 +520,111 @@ async fn ole_stream(cx: &Cx, span: Span) -> Result<()> {
         f.bytes("Remaining data", rest)
             .desc("Relative and absolute moniker streams, local update time, check times (linked objects)")
             .emit()?;
+    }
+    Ok(())
+}
+
+const PACKAGE_TYPES: EnumTable = &[(1, "linked file"), (3, "embedded file")];
+
+/// Where the parts of an OLE Packager object lie, relative to the start of
+/// its native data.
+struct Package {
+    data_at: u64,
+    data_len: u64,
+}
+
+/// Recognises the Packager object layout (the class of files dropped into
+/// a document): signature 2, the label and source path as NUL-terminated
+/// ANSI strings, the type (3 = embedded), the temporary path with its
+/// length, then the file's size and bytes. `head` starts at the native
+/// data; the file must fit within `native_len`.
+fn package(head: &[u8], native_len: u64) -> Option<Package> {
+    if crate::bytes::u16_le(head, 0)? != 2 {
+        return None;
+    }
+    let mut at = 2usize;
+    for _ in 0..2 {
+        let n = head.get(at..)?.iter().position(|&b| b == 0)?;
+        at = at.checked_add(n)?.checked_add(1)?;
+    }
+    if u32_le(head, at)? != 0x0003_0000 {
+        return None;
+    }
+    let temp = usize::try_from(u32_le(head, at.checked_add(4)?)?).ok()?;
+    at = at.checked_add(8)?.checked_add(temp)?;
+    let data_len = u64::from(u32_le(head, at)?);
+    let data_at = crate::bytes::to_u64(at.checked_add(4)?);
+    (data_at.checked_add(data_len)? <= native_len).then_some(Package { data_at, data_len })
+}
+
+/// `\x01Ole10Native`: an OLE 1.0 object's native data, after its size.
+/// For a Packager object (an arbitrary file embedded in a document) the
+/// file is located and dissected; other classes' data is shown as is.
+async fn ole10_native(cx: &Cx, input: Input, span: Span) -> Result<()> {
+    let head = cx.block(span.sub(0, 0x2000)).await?;
+    let mut f = Fields::emitting(cx, &head, LE);
+    let size = f
+        .u32("NativeDataSize")
+        .desc("Bytes of native data that follow")
+        .emit()?;
+    let native = span.sub(4, u64::from(size));
+    if native.len < u64::from(size) {
+        cx.diag(crate::error::Diagnostic::truncated(native, native.len));
+    }
+    let Some(p) = package(head.data.get(4..).unwrap_or_default(), native.len) else {
+        cx.emit(
+            Node::new("Native data")
+                .span(native)
+                .summary(format!("{} bytes", native.len))
+                .desc("Data in the format of the object's OLE 1.0 class")
+                .lazy(crate::formats::dissect_or_data, input.nested(native)),
+        );
+        return Ok(());
+    };
+    f.u16("Signature").desc("2 for a Packager object").emit()?;
+    let label = f
+        .cstr("Label")
+        .desc("The name shown under the object's icon")
+        .emit()?;
+    f.cstr("Source path")
+        .desc("Where the file was packaged from")
+        .emit()?;
+    f.u16("Reserved").emit()?;
+    f.u16("Type").enumeration(PACKAGE_TYPES).emit()?;
+    let temp = f.u32("Temporary path length").emit()?;
+    f.ascii("Temporary path", u64::from(temp))
+        .desc("Where the file is extracted to when opened")
+        .emit()?;
+    f.u32("File size").emit()?;
+    let data = native.sub(p.data_at, p.data_len);
+    cx.emit(
+        Node::new("Embedded file")
+            .span(data)
+            .summary(format!("{label:?}, {} bytes", data.len))
+            .lazy(crate::formats::dissect_or_data, input.nested(data)),
+    );
+    // Newer packagers repeat the temporary path, label and source path in
+    // UTF-16 after the file.
+    let after = p.data_at.saturating_add(p.data_len);
+    let rest = native.len.saturating_sub(after);
+    if rest >= 4 {
+        let tail = cx.block(native.sub(after, rest.min(0x2000))).await?;
+        let mut t = Fields::emitting(cx, &tail, LE);
+        for name in [
+            "Temporary path (UTF-16)",
+            "Label (UTF-16)",
+            "Source path (UTF-16)",
+        ] {
+            if t.remaining() < 4 {
+                break;
+            }
+            let n = t.u32("Length (characters)").emit()?;
+            t.utf16(name, u64::from(n)).emit()?;
+        }
+        let left = t.remaining();
+        if left > 0 {
+            t.bytes("Remaining data", left).emit()?;
+        }
     }
     Ok(())
 }

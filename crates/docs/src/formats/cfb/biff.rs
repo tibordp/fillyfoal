@@ -11,6 +11,7 @@ use std::sync::Arc;
 use super::ptg::{self, Names};
 use super::rec::{self, K, LE, Spec, StrForm, cell_name, column_name, number, quoted, xl_string};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
+use crate::codec::crypto::office::Rc4Key;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
@@ -970,7 +971,8 @@ impl Book {
     /// InterfaceHdr, RRDInfo, RRDHead; EOF has no body). Of BoundSheet8 only
     /// lbPlyPos is in the clear.
     fn encrypted_at(&self, pos: u64, kind: u16) -> bool {
-        self.encrypted.is_some_and(|from| pos >= from) && !clear_record(kind)
+        self.encrypted.is_some_and(|from| pos >= from)
+            && !crate::codec::crypto::office::xls_clear_record(kind)
     }
 
     /// A BIFF2–4 stream, whose records have their own layouts.
@@ -988,24 +990,6 @@ impl Book {
             None
         }
     }
-}
-
-/// Records whose bodies stay unencrypted after FILEPASS.
-fn clear_record(kind: u16) -> bool {
-    matches!(
-        kind,
-        0x0809
-            | 0x0409
-            | 0x0209
-            | 0x0009
-            | 0x002f
-            | 0x0194
-            | 0x0195
-            | 0x00e1
-            | 0x0196
-            | 0x0138
-            | 0x000a
-    )
 }
 
 /// One record header, as walked.
@@ -1050,16 +1034,18 @@ async fn continues(cx: &Cx, stream: Span, mut pos: u64) -> Result<Vec<Span>> {
 }
 
 /// The workbook context, parsed once from the globals substream.
-async fn book(cx: &Cx, stream: Span) -> Arc<Book> {
+/// `decrypted`: the stream is a decrypted copy, whose records after
+/// FILEPASS are plaintext.
+async fn book(cx: &Cx, stream: Span, decrypted: bool) -> Arc<Book> {
     if let Some(found) = cx.cached::<Book>(stream, "biff-book") {
         return found;
     }
-    let book = Arc::new(load_book(cx, stream).await.unwrap_or_default());
+    let book = Arc::new(load_book(cx, stream, decrypted).await.unwrap_or_default());
     cx.cache(stream, "biff-book", book.clone());
     book
 }
 
-async fn load_book(cx: &Cx, stream: Span) -> Result<Book> {
+async fn load_book(cx: &Cx, stream: Span, decrypted: bool) -> Result<Book> {
     let mut book = Book {
         codepage: 1252,
         ..Book::default()
@@ -1105,7 +1091,7 @@ async fn load_book(cx: &Cx, stream: Span) -> Result<Book> {
                 };
                 book.names.defined.push(name);
             }
-            0x002f => {
+            0x002f if !decrypted => {
                 // Nothing after FILEPASS can be read without the key.
                 book.encrypted = Some(pos.saturating_add(r.span.len));
                 break;
@@ -1290,7 +1276,13 @@ fn sst_string(
 
 /// A BIFF5 or BIFF8 workbook stream.
 pub async fn workbook(cx: &Cx, input: Input, stream: Span) -> Result<()> {
+    walk_workbook(cx, input, stream, false).await
+}
+
+/// The workbook's substreams; `decrypted` for a decrypted copy.
+async fn walk_workbook(cx: &Cx, input: Input, stream: Span, decrypted: bool) -> Result<()> {
     let mut pos = 0u64;
+    let mut filepass = None;
     let mut sheets: Vec<(u32, Option<String>, u8)> = Vec::new();
     let mut count = 0usize;
     let mut biff8 = true;
@@ -1340,9 +1332,12 @@ pub async fn workbook(cx: &Cx, input: Input, stream: Span) -> Result<()> {
                         break;
                     }
                 }
-                0x002f if count == 0 && encrypted.is_none() => {
+                0x002f if count == 0 && encrypted.is_none() && filepass.is_none() => {
                     let data = cx.read_avail(r.body().sub(0, 16)).await?;
-                    encrypted = Some(filepass_summary(&data, biff8));
+                    filepass = Some((r.body(), filepass_summary(&data, biff8)));
+                    if !decrypted {
+                        encrypted = filepass.as_ref().map(|(_, s)| s.clone());
+                    }
                 }
                 0x0085 if count == 0 => {
                     let data = cx.read_avail(r.body().sub(0, 300)).await?;
@@ -1399,10 +1394,25 @@ pub async fn workbook(cx: &Cx, input: Input, stream: Span) -> Result<()> {
             Node::new(name)
                 .span(span)
                 .summary(summary)
-                .lazy(substream, (input, stream, span)),
+                .lazy(substream, (input, stream, span, decrypted)),
         )
         .await;
         count = count.saturating_add(1);
+    }
+    if let Some((body, _)) = filepass
+        && !decrypted
+        && biff8
+    {
+        cx.push(
+            Node::new("Decrypted workbook")
+                .span(stream)
+                .summary("the workbook stream decrypted with the password")
+                .lazy(
+                    crate::expander!(self::decrypted_workbook: (Input, Span, Span)),
+                    (input, stream, body),
+                ),
+        )
+        .await;
     }
     let shown: Vec<String> = summary_sheets
         .iter()
@@ -1414,12 +1424,17 @@ pub async fn workbook(cx: &Cx, input: Input, stream: Span) -> Result<()> {
     } else {
         "5.0/95 (BIFF5)"
     };
-    cx.annotate(match encrypted {
-        Some(cipher) => format!(
+    cx.annotate(match (encrypted, filepass) {
+        (Some(cipher), _) => format!(
             "Excel {version} workbook, encrypted ({cipher}), {}",
             plural(to_u64(sheets.len()), "sheet")
         ),
-        None => format!(
+        (None, Some((_, cipher))) => format!(
+            "Excel {version} workbook, decrypted ({cipher}), {} sheets: {}",
+            sheets.len(),
+            shown.join(", ")
+        ),
+        (None, None) => format!(
             "Excel {version} workbook, {} sheets: {}",
             sheets.len(),
             shown.join(", ")
@@ -1449,8 +1464,11 @@ fn dimensions(data: &[u8], biff8: bool) -> Option<String> {
 
 /// The records of one substream, paged; the Office Art drawing spread over
 /// its MSODRAWING records follows them.
-async fn substream(cx: Cx, (input, stream, span): (Input, Span, Span)) -> Result<()> {
-    let book = book(&cx, stream).await;
+async fn substream(
+    cx: Cx,
+    (input, stream, span, decrypted): (Input, Span, Span, bool),
+) -> Result<()> {
+    let book = book(&cx, stream, decrypted).await;
     let mut pos = span.offset.saturating_sub(stream.offset);
     let end = span.end().saturating_sub(stream.offset);
     let mut drawing: Vec<Span> = Vec::new();
@@ -1498,7 +1516,7 @@ async fn substream(cx: Cx, (input, stream, span): (Input, Span, Span)) -> Result
             node = node.diag(Diagnostic::truncated(r.span, r.span.len));
         }
         cx.progress_in(stream, r.span.offset);
-        cx.push(node.lazy(record, (stream, r.span, r.kind, Arc::new(parts))))
+        cx.push(node.lazy(record, (stream, r.span, r.kind, Arc::new(parts), decrypted)))
             .await;
         pos = next;
     }
@@ -1882,9 +1900,9 @@ async fn txo_text(cx: &Cx, parts: &[Span]) -> String {
 
 async fn record(
     cx: Cx,
-    (stream, span, kind, parts): (Stream, Span, u16, Arc<Vec<Span>>),
+    (stream, span, kind, parts, decrypted): (Stream, Span, u16, Arc<Vec<Span>>, bool),
 ) -> Result<()> {
-    let book = book(&cx, stream).await;
+    let book = book(&cx, stream, decrypted).await;
     cx.emit(Node::new("Type").span(span.sub(0, 2)).value(Value::Enum {
         raw: kind.into(),
         bits: 16,
@@ -2282,19 +2300,6 @@ type Stream = Span;
 type Tokens = Arc<Vec<(usize, usize, &'static str, String)>>;
 
 const ENCRYPTION_TYPES: EnumTable = &[(0, "XOR obfuscation"), (1, "RC4")];
-const ALG_IDS: EnumTable = &[
-    (0x6801, "RC4"),
-    (0x660e, "AES-128"),
-    (0x660f, "AES-192"),
-    (0x6610, "AES-256"),
-];
-const HASH_IDS: EnumTable = &[(0x8004, "SHA-1")];
-const CRYPTO_FLAGS: FlagTable = &[
-    flag(0x04, "fCryptoAPI"),
-    flag(0x08, "fDocProps"),
-    flag(0x10, "fExternal"),
-    flag(0x20, "fAES"),
-];
 
 /// FILEPASS in one line: the scheme and, for RC4, the header version.
 fn filepass_summary(data: &[u8], biff8: bool) -> String {
@@ -2306,7 +2311,9 @@ fn filepass_summary(data: &[u8], biff8: bool) -> String {
         Some(1) => match (u16_le(data, 2), u16_le(data, 4)) {
             (Some(1), Some(1)) => "RC4, version 1.1".to_owned(),
             (Some(major @ 2..=4), Some(2)) => format!("RC4 CryptoAPI, version {major}.2"),
-            (Some(major), Some(minor)) => format!("RC4, unknown version {major}.{minor}"),
+            (Some(major), Some(minor)) => {
+                format!("RC4, {}", super::offcrypto::version_name(major, minor))
+            }
             _ => "RC4".to_owned(),
         },
         Some(t) => format!("encryption type {t}"),
@@ -2336,45 +2343,7 @@ fn filepass(f: &mut Fields<'_>, biff8: bool) -> Result<()> {
     if kind != 1 {
         return Ok(());
     }
-    let major = f.u16("vMajor").emit()?;
-    let minor = f.u16("vMinor").emit()?;
-    if major == 1 && minor == 1 {
-        f.bytes("Salt", 16).emit()?;
-        f.bytes("EncryptedVerifier", 16).emit()?;
-        f.bytes("EncryptedVerifierHash", 16).desc("MD5").emit()?;
-        return Ok(());
-    }
-    if !(2..=4).contains(&major) || minor != 2 {
-        return Ok(());
-    }
-    f.u32("Flags").flags(CRYPTO_FLAGS).emit()?;
-    let size = f.u32("EncryptionHeaderSize").emit()?;
-    let header_end = f.pos().saturating_add(u64::from(size));
-    f.u32("Flags (header)").flags(CRYPTO_FLAGS).emit()?;
-    f.u32("SizeExtra").emit()?;
-    f.u32("AlgID").hex().enumeration(ALG_IDS).emit()?;
-    f.u32("AlgIDHash").hex().enumeration(HASH_IDS).emit()?;
-    f.u32("KeySize").desc("Bits; 0 means 40").emit()?;
-    f.u32("ProviderType").hex().emit()?;
-    f.u32("Reserved1").emit()?;
-    f.u32("Reserved2").emit()?;
-    let csp = header_end.saturating_sub(f.pos()).min(f.remaining()) / 2;
-    if csp > 0 {
-        f.utf16("CSPName", csp).emit()?;
-    }
-    if f.remaining() >= 4 {
-        let salt = f.u32("SaltSize").emit()?;
-        let n = u64::from(salt).min(f.remaining());
-        f.bytes("Salt", n).emit()?;
-        let n = f.remaining().min(16);
-        f.bytes("EncryptedVerifier", n).emit()?;
-        if f.remaining() >= 4 {
-            f.u32("VerifierHashSize").emit()?;
-            let n = f.remaining();
-            f.bytes("EncryptedVerifierHash", n).emit()?;
-        }
-    }
-    Ok(())
+    super::offcrypto::header(f)
 }
 
 fn bof(f: &mut Fields<'_>) -> Result<()> {
@@ -3417,7 +3386,7 @@ fn early_xf(f: &mut Fields<'_>, v4: bool) -> Result<()> {
 /// a BIFF5/8 substream's.
 pub async fn early_stream(cx: Cx, input: Input) -> Result<()> {
     let stream = input.span;
-    let book = book(&cx, stream).await;
+    let book = book(&cx, stream, false).await;
     let head = cx.read_avail(stream.sub(0, 8)).await?;
     let dt = u16_le(&head, 6).unwrap_or(0);
     let (mut records, mut cells, mut fonts) = (0u64, 0u64, 0u64);
@@ -3458,5 +3427,75 @@ pub async fn early_stream(cx: Cx, input: Input) -> Result<()> {
         summary = format!("{summary}, used range {d}");
     }
     cx.annotate(summary);
-    substream(cx, (input, stream, stream)).await
+    substream(cx, (input, stream, stream, false)).await
+}
+
+/// The password Excel encrypts with when the user set none (a workbook
+/// that is only write-protected).
+const DEFAULT_PASSWORD: &str = "VelvetSweatshop";
+
+/// The key FILEPASS describes, if it is RC4 or RC4 CryptoAPI: a function of
+/// the password, and the verifier check.
+fn filepass_key(data: &[u8], password: &str) -> Option<(Rc4Key, bool)> {
+    let utf16: Vec<u8> = password.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    if u16_le(data, 0)? != 1 {
+        return None;
+    }
+    match (u16_le(data, 2)?, u16_le(data, 4)?) {
+        (1, 1) => {
+            let salt = data.get(6..22)?;
+            let key = Rc4Key::rc4(&utf16, salt);
+            let ok = key.verify(data.get(22..38)?, data.get(38..54)?);
+            Some((key, ok))
+        }
+        (2..=4, 2) => {
+            // Flags, header size, then the header: KeySize at offset 16.
+            let header = to_usize(u32_le(data, 10)?.into());
+            let bits = u32_le(data, 14usize.saturating_add(16))?;
+            let verifier = 14usize.checked_add(header)?;
+            let salt_len = to_usize(u32_le(data, verifier)?.into());
+            let salt_at = verifier.saturating_add(4);
+            let salt = data.get(salt_at..salt_at.checked_add(salt_len)?)?;
+            let v_at = salt_at.saturating_add(salt_len);
+            let encrypted_verifier = data.get(v_at..v_at.saturating_add(16))?;
+            let hash_len = to_usize(u32_le(data, v_at.saturating_add(16))?.into());
+            let h_at = v_at.saturating_add(20);
+            let hash = data.get(h_at..h_at.checked_add(hash_len)?)?;
+            let key = Rc4Key::cryptoapi(&utf16, salt, bits);
+            let ok = key.verify(encrypted_verifier, hash);
+            Some((key, ok))
+        }
+        _ => None,
+    }
+}
+
+/// An RC4-encrypted workbook decrypted: Excel's default password is tried
+/// first, then the user is asked; the stream is decrypted lazily, as far as
+/// reads reach, and walked like any workbook.
+async fn decrypted_workbook(cx: Cx, (input, stream, filepass): (Input, Span, Span)) -> Result<()> {
+    let data = cx.read(filepass).await?;
+    let Some((default, ok)) = filepass_key(&data, DEFAULT_PASSWORD) else {
+        return Err(Diagnostic::unsupported(
+            "decrypting this workbook (XOR obfuscation or an unknown scheme)",
+        )
+        .at(filepass));
+    };
+    let key = if ok {
+        default
+    } else {
+        let check = |s: &crate::secret::Secret| {
+            filepass_key(&data, &String::from_utf8_lossy(s.expose())).is_some_and(|(_, ok)| ok)
+        };
+        match cx.unlock(stream, "Password for the workbook", check).await {
+            Some(secret) => match filepass_key(&data, &String::from_utf8_lossy(secret.expose())) {
+                Some((key, true)) => key,
+                _ => return Err(Diagnostic::unsupported("encrypted (wrong password)").at(filepass)),
+            },
+            None => {
+                return Err(Diagnostic::unsupported("encrypted (no password)").at(filepass));
+            }
+        }
+    };
+    let plain = cx.decode_lazy(stream, &crate::codec::Codec::XlsRc4(key), stream.len)?;
+    walk_workbook(&cx, input, plain, true).await
 }
