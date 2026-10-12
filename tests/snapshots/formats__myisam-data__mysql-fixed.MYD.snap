@@ -2,5 +2,5 @@
 source: tests/formats.rs
 expression: "common::explore_as(&display_name(&path), &data, Some(format))"
 ---
-▾ mysql-fixed.MYD — MyISAM data file, fixed-length or compressed rows, 42 bytes  [0x0+0x2a]
+▾ mysql-fixed.MYD — MyISAM data file, fixed-length rows, 42 bytes  [0x0+0x2a]
     Rows — 42 bytes  [0x0+0x2a]

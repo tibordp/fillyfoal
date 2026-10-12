@@ -5,7 +5,8 @@
 //! into a free list. Fixed-length rows have nothing to delimit them but
 //! the row length, which the table's `.MYI` index file records, so they
 //! are shown as one region. The format has no signature: it is offered by
-//! extension.
+//! extension. Files compressed by myisampack do have one and are
+//! `mypack`'s.
 
 use crate::bytes::{to_usize, u16_be, u32_be, u64_be};
 use crate::cx::Cx;
@@ -197,10 +198,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             Node::new("Rows")
                 .span(file)
                 .summary(size(file.len))
-                .desc("Fixed-length or compressed rows: their length is in the table's .MYI file. A deleted fixed-length row starts with a zero byte and the next deleted row's position"),
+                .desc("Fixed-length rows: their length is in the table's .MYI file. A deleted fixed-length row starts with a zero byte and the next deleted row's position"),
         );
         cx.annotate(format!(
-            "MyISAM data file, fixed-length or compressed rows, {}",
+            "MyISAM data file, fixed-length rows, {}",
             size(file.len)
         ));
     }
