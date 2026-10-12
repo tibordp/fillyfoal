@@ -48,3 +48,38 @@ for codec, name in (("null", "events.avro"), ("deflate", "events-deflate.avro"))
         fastavro.writer(
             out, schema, records(12), codec=codec, sync_interval=64, sync_marker=SYNC
         )
+
+# Logical types (timestamp-millis, timestamp-micros, date) and a
+# recursive record (a linked list through a nullable union).
+import datetime
+
+node = fastavro.parse_schema(
+    {
+        "type": "record",
+        "name": "Node",
+        "fields": [
+            {"name": "at", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+            {"name": "us", "type": {"type": "long", "logicalType": "timestamp-micros"}},
+            {"name": "day", "type": {"type": "int", "logicalType": "date"}},
+            {"name": "next", "type": ["null", "Node"]},
+        ],
+    }
+)
+utc = datetime.timezone.utc
+t0 = datetime.datetime(2024, 2, 29, 12, 30, 0, 125000, tzinfo=utc)
+
+
+def chain(depth):
+    rec = None
+    for i in range(depth):
+        rec = {
+            "at": t0 + datetime.timedelta(seconds=i),
+            "us": t0 + datetime.timedelta(microseconds=i),
+            "day": datetime.date(2024, 2, 29) + datetime.timedelta(days=i),
+            "next": rec,
+        }
+    return rec
+
+
+with open("logical.avro", "wb") as out:
+    fastavro.writer(out, node, [chain(3), chain(1)], codec="null", sync_marker=SYNC)
