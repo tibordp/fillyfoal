@@ -1653,40 +1653,45 @@ async fn expand_packet(cx: Cx, st: PacketState) -> Result<()> {
     Ok(())
 }
 
+/// The TOC of an Opus packet (RFC 6716 3.1) whose first bytes are `d`,
+/// then its frames (Ogg packets, MP4 and Matroska samples).
+pub fn opus_packet(cx: &Cx, span: Span, d: &[u8]) -> Result<()> {
+    let mut b = Bits::emitting(cx, d, span);
+    b.field("Configuration", 5)
+        .with(|v, n| {
+            n.summary(
+                opus_toc(u8::try_from(v << 3).unwrap_or(0), None)
+                    .and_then(|s| s.split(',').next().map(str::to_owned))
+                    .unwrap_or_default(),
+            )
+        })
+        .emit()?;
+    b.field("Stereo", 1).flag().emit()?;
+    let code = b
+        .field("Frame count code", 2)
+        .with(|v, n| {
+            n.summary(match v {
+                0 => "1 frame",
+                1 => "2 frames, equal size",
+                2 => "2 frames, different sizes",
+                _ => "arbitrary number of frames",
+            })
+        })
+        .emit()?;
+    if code == 3 {
+        b.field("VBR", 1).flag().emit()?;
+        b.field("Padding", 1).flag().emit()?;
+        b.field("Frame count", 6).emit()?;
+    }
+    let at = b.pos() / 8;
+    cx.emit(Node::new("Frames").span(span.tail(at)));
+    Ok(())
+}
+
 /// The fields of an audio or video packet's first bytes.
 fn data_packet(cx: &Cx, codec: Codec, span: Span, d: &[u8]) -> Result<()> {
     match codec {
-        Codec::Opus if !d.is_empty() => {
-            let mut b = Bits::emitting(cx, d, span);
-            b.field("Configuration", 5)
-                .with(|v, n| {
-                    n.summary(
-                        opus_toc(u8::try_from(v << 3).unwrap_or(0), None)
-                            .and_then(|s| s.split(',').next().map(str::to_owned))
-                            .unwrap_or_default(),
-                    )
-                })
-                .emit()?;
-            b.field("Stereo", 1).flag().emit()?;
-            let code = b
-                .field("Frame count code", 2)
-                .with(|v, n| {
-                    n.summary(match v {
-                        0 => "1 frame",
-                        1 => "2 frames, equal size",
-                        2 => "2 frames, different sizes",
-                        _ => "arbitrary number of frames",
-                    })
-                })
-                .emit()?;
-            if code == 3 {
-                b.field("VBR", 1).flag().emit()?;
-                b.field("Padding", 1).flag().emit()?;
-                b.field("Frame count", 6).emit()?;
-            }
-            let at = b.pos() / 8;
-            cx.emit(Node::new("Frames").span(span.tail(at)));
-        }
+        Codec::Opus if !d.is_empty() => opus_packet(cx, span, d)?,
         Codec::Flac if d.len() >= 2 => match flac::frame_node(d, span) {
             Some(node) => cx.emit(node),
             None => cx.emit(Node::new("Data").span(span).summary(human_size(span.len))),

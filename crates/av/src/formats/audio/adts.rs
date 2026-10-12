@@ -57,7 +57,7 @@ fn probe(h: &Head<'_>) -> bool {
 // ---------------------------------------------------------------------------
 // Shared tables and configuration structures
 
-const ELEMENT: EnumTable = &[
+pub const ELEMENT: EnumTable = &[
     (0, "SCE (single channel)"),
     (1, "CPE (channel pair)"),
     (2, "CCE (coupling channel)"),
@@ -93,7 +93,7 @@ fn first_element(d: &[u8]) -> Option<String> {
 }
 
 /// A raw data block node; a program config element in it is decoded.
-fn raw_block(span: Span, head: &[u8]) -> Node {
+pub fn raw_block(span: Span, head: &[u8]) -> Node {
     let mut node = Node::new("Raw data block")
         .span(span)
         .desc("Syntactic elements (channel elements, fill, end); the first is named");
