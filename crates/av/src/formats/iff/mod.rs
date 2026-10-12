@@ -46,6 +46,10 @@ pub struct Ctx {
     pub form: FourCc,
     /// RF64 `ds64` sizes for chunks whose 32-bit size is `0xffffffff`.
     pub sizes: Arc<[(FourCc, u64)]>,
+    /// The input is a header stored apart from its data (the original WAV
+    /// header Monkey's Audio keeps): chunks and the container may run past
+    /// its end by design, so that is not reported as truncation.
+    pub header_only: bool,
 }
 
 /// One chunk, as handed to the per-form decoders.
@@ -518,7 +522,7 @@ async fn chunk_node(cx: &Cx, chunk: Chunk) -> Node {
     if let Some(d) = describe_id(&chunk) {
         node = node.desc(d);
     }
-    if chunk.data.len < chunk.size {
+    if chunk.data.len < chunk.size && !chunk.ctx.header_only {
         node = node.diag(Diagnostic::truncated(
             Span::new(chunk.data.source, chunk.data.offset, chunk.size),
             chunk.data.len,
@@ -721,6 +725,17 @@ async fn describe(cx: &Cx, ctx: &Ctx, region: Span) -> Result<Option<String>> {
 // Entry point
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
+    dissect_file(cx, input, false).await
+}
+
+/// Expands a RIFF or IFF header stored without the data it describes,
+/// like the original WAV header in a Monkey's Audio file: the same view
+/// as [`dissect`], without reporting the absent data as truncation.
+pub async fn header_only(cx: Cx, input: Input) -> Result<()> {
+    dissect_file(cx, input, true).await
+}
+
+async fn dissect_file(cx: Cx, input: Input, header_only: bool) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 12)).await?;
     let magic = crate::bytes::array::<4>(&head, 0).unwrap_or_default();
@@ -767,6 +782,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         endian,
         form,
         sizes: sizes.into(),
+        header_only,
     };
     // Streaming writers that cannot seek back leave the size unset: FFmpeg
     // writes 0xffffffff, others 0 (FFmpeg's demuxer ignores it and reads to
@@ -790,7 +806,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         size = file.len.saturating_sub(8);
     }
     let region = file.sub(12, size.saturating_sub(4));
-    if file.len < size.saturating_add(8) {
+    if file.len < size.saturating_add(8) && !header_only {
         cx.diag(Diagnostic::truncated(
             Span::new(file.source, file.offset, size.saturating_add(8)),
             file.len,
