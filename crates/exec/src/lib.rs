@@ -35,4 +35,5 @@ pub mod formats {
     pub mod bytecode;
     pub mod executable;
     pub mod java;
+    pub mod profile;
 }

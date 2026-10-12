@@ -42,6 +42,8 @@ pub use fillyfoal_exec::formats::bytecode;
 pub use fillyfoal_exec::formats::executable;
 #[cfg(feature = "exec")]
 pub use fillyfoal_exec::formats::java;
+#[cfg(feature = "exec")]
+pub use fillyfoal_exec::formats::profile;
 #[cfg(feature = "games")]
 pub use fillyfoal_games::formats::games;
 #[cfg(feature = "games")]
@@ -215,6 +217,18 @@ pub static FORMATS: &[&Format] = &[
     &bytecode::bitcode::FORMAT,
     #[cfg(feature = "exec")]
     &bytecode::beam::FORMAT,
+    // Profiling and coverage data: JFR chunks, gcov notes and counts,
+    // LLVM raw and indexed profiles (long magics).
+    #[cfg(feature = "exec")]
+    &profile::jfr::FORMAT,
+    #[cfg(feature = "exec")]
+    &profile::gcov::GCNO,
+    #[cfg(feature = "exec")]
+    &profile::gcov::GCDA,
+    #[cfg(feature = "exec")]
+    &profile::llvm::PROFRAW,
+    #[cfg(feature = "exec")]
+    &profile::llvm::PROFDATA,
     // Weaker probes (sizes and machine numbers rather than long magics).
     #[cfg(feature = "exec")]
     &executable::coff::FORMAT,
