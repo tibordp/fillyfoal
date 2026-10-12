@@ -1,7 +1,7 @@
 """Writes hand-made text in the double-byte East Asian code pages (encoded
-with CPython's codecs): plain text in Shift_JIS, GBK, Big5 and EUC-KR,
-which must be recognised as text in that code page, and an HTML page that
-declares Shift_JIS.
+with CPython's codecs): plain text in Shift_JIS, GBK, Big5, EUC-KR and
+EUC-JP, which must be recognised as text in that code page, and HTML pages
+that declare Shift_JIS and EUC-JP.
 
 Usage: python3 -I cjk.py <repo>/tests/fixtures/synthetic
 """
@@ -48,6 +48,7 @@ write("text", "shift_jis.txt", JA.encode("cp932"))
 write("text", "gbk.txt", ZH_HANS.encode("gbk"))
 write("text", "big5.txt", ZH_HANT.encode("cp950"))
 write("text", "euc-kr.txt", KO.encode("cp949"))
+write("text", "euc-jp.txt", JA.replace("シフトJIS", "EUC-JP").encode("euc_jp"))
 write("html", "shift_jis.html", ("""<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -59,3 +60,15 @@ write("html", "shift_jis.html", ("""<!DOCTYPE html>
 </body>
 </html>
 """).encode("cp932"))
+write("html", "euc-jp.html", ("""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="EUC-JP">
+<title>日本語のページ（ＥＵＣ）</title>
+</head>
+<body>
+<p>""" + JA.replace("シフトJIS", "EUC-JP").replace("\n", "<br>\n") + """</p>
+<p>半角カナ：ｶﾀｶﾅ</p>
+</body>
+</html>
+""").encode("euc_jp"))

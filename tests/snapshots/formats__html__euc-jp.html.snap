@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ euc-jp.html — HTML document: 日本語のページ（ＥＵＣ） (euc-jp)  [0x0+0x1be]
+    DOCTYPE: "html"  [#1:0x0+0xf]
+  ▾ html — lang="ja" (2 elements)  [#1:0x10+0x23d]
+      @lang: "ja"  [#1:0x1c+0x2]
+    ▾ head — 2 elements  [#1:0x21+0x5a]
+      ▾ meta — charset="EUC-JP"  [#1:0x28+0x17]
+          @charset: "EUC-JP"  [#1:0x37+0x6]
+        title: "日本語のページ（ＥＵＣ）"  [#1:0x40+0x33]
+    ▾ body — 2 elements  [#1:0x7c+0x1c9]
+      ▾ p — 5 elements  [#1:0x83+0x197]
+          #text: "これは日本語のテキストファイルです。"  [#1:0x86+0x36]
+          br  [#1:0xbc+0x4]
+          #text: "文字コードはEUC-JPで保存されています。"  [#1:0xc0+0x37]
+          br  [#1:0xf7+0x4]
+          #text: "昨日は雨が降っていましたが、今日はとても良い天気です。"  [#1:0xfb+0x52]
+          br  [#1:0x14d+0x4]
+          #text: "駅の近くに新しい本屋ができたので、週末に行ってみようと思います。"  [#1:0x151+0x61]
+          br  [#1:0x1b2+0x4]
+          #text: "このファイルは文字コードの判定を確認するために作られました。"  [#1:0x1b6+0x5b]
+          br  [#1:0x211+0x4]
+        p: "半角カナ：ｶﾀｶﾅ"  [#1:0x21b+0x22]

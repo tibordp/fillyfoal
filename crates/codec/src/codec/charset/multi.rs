@@ -1,6 +1,15 @@
 //! Double-byte East Asian code pages: Windows code pages 932 (Shift_JIS),
 //! 936 (GBK), 949 (Unified Hangul Code, a superset of EUC-KR) and 950
-//! (Big5), the encodings browsers decode these labels as.
+//! (Big5), the encodings browsers decode these labels as; and EUC-JP, whose
+//! JIS X 0208 pairs are looked up in the code page 932 table (the WHATWG
+//! decoder uses one JIS X 0208 index for both). EUC-JP's three-byte JIS X
+//! 0212 sequences (`8F xx xx`) are not decoded (U+FFFD).
+//!
+//! WHATWG's `big5` is Big5-HKSCS; it is decoded here as code page 950, so
+//! HKSCS characters (4,912 pairs where CPython's `big5hkscs` differs from
+//! `cp950`) come out as U+FFFD. Adding them needs a different table
+//! layout: 1,693 of them are outside the BMP and 4 are two code points,
+//! while a table entry here is one `u16`.
 //!
 //! The tables (`cp9xx.bin`) are generated from CPython's codecs by
 //! `tests/data/charset/multibyte.py`, which documents their layout and
@@ -32,6 +41,9 @@ pub enum MultiByte {
     Cp949,
     /// Big5 (code page 950).
     Cp950,
+    /// EUC-JP: JIS X 0208 pairs (`A1..FE A1..FE`) and half-width katakana
+    /// (`8E A1..DF`).
+    EucJp,
 }
 
 impl MultiByte {
@@ -40,6 +52,7 @@ impl MultiByte {
         MultiByte::Cp936,
         MultiByte::Cp949,
         MultiByte::Cp950,
+        MultiByte::EucJp,
     ];
 
     /// The usual name, e.g. `"Shift_JIS"`.
@@ -49,6 +62,7 @@ impl MultiByte {
             MultiByte::Cp936 => "GBK",
             MultiByte::Cp949 => "EUC-KR",
             MultiByte::Cp950 => "Big5",
+            MultiByte::EucJp => "EUC-JP",
         }
     }
 
@@ -60,12 +74,13 @@ impl MultiByte {
             MultiByte::Cp936 => "from GBK",
             MultiByte::Cp949 => "from EUC-KR",
             MultiByte::Cp950 => "from Big5",
+            MultiByte::EucJp => "from EUC-JP",
         }
     }
 
     fn table(self) -> &'static [u8] {
         match self {
-            MultiByte::Cp932 => CP932,
+            MultiByte::Cp932 | MultiByte::EucJp => CP932,
             MultiByte::Cp936 => CP936,
             MultiByte::Cp949 => CP949,
             MultiByte::Cp950 => CP950,
@@ -79,13 +94,19 @@ impl MultiByte {
         u16_le(self.table(), SINGLE.saturating_add(i)).unwrap_or(0xfffe)
     }
 
-    /// Whether `b` starts a two-byte sequence.
+    /// Whether `b` starts a multi-byte sequence.
     pub fn is_lead(self, b: u8) -> bool {
+        if self == MultiByte::EucJp {
+            return matches!(b, 0x8e | 0x8f | 0xa1..=0xfe);
+        }
         b >= 0x80 && self.single(b) == LEAD
     }
 
     /// The character of the pair `lead`, `trail`, if mapped.
     pub fn pair(self, lead: u8, trail: u8) -> Option<char> {
+        if self == MultiByte::EucJp {
+            return euc_jp_pair(lead, trail);
+        }
         let t = self.table();
         let &[lead_min, lead_max, trail_min, trail_max, ..] = t else {
             return None;
@@ -149,6 +170,26 @@ impl MultiByte {
         if b < 0x80 {
             return Some((Some(char::from(b)), 1));
         }
+        if self == MultiByte::EucJp && b == 0x8f {
+            // JIS X 0212: three bytes, not decoded.
+            let &second = bytes.get(1)?;
+            if !(0xa1..=0xfe).contains(&second) {
+                return Some((None, if second < 0x80 { 1 } else { 2 }));
+            }
+            let &third = bytes.get(2)?;
+            return Some((None, if third < 0x80 { 2 } else { 3 }));
+        }
+        if self == MultiByte::EucJp {
+            if !self.is_lead(b) {
+                return Some((None, 1));
+            }
+            let &trail = bytes.get(1)?;
+            return Some(match euc_jp_pair(b, trail) {
+                Some(c) => (Some(c), 2),
+                None if trail < 0x80 => (None, 1),
+                None => (None, 2),
+            });
+        }
         match self.single(b) {
             LEAD => {
                 let &trail = bytes.get(1)?;
@@ -184,6 +225,32 @@ impl MultiByte {
         }
         out
     }
+}
+
+/// An EUC-JP pair: half-width katakana after 0x8E, or a JIS X 0208
+/// row and cell (0xA1 + 0..94 each), looked up at its Shift_JIS position
+/// in the code page 932 table.
+fn euc_jp_pair(lead: u8, trail: u8) -> Option<char> {
+    if lead == 0x8e {
+        return (0xa1..=0xdf)
+            .contains(&trail)
+            .then(|| {
+                char::from_u32(0xff61_u32.saturating_add(u32::from(trail.saturating_sub(0xa1))))
+            })
+            .flatten();
+    }
+    if !(0xa1..=0xfe).contains(&lead) || !(0xa1..=0xfe).contains(&trail) {
+        return None;
+    }
+    let row = lead.saturating_sub(0xa0); // 1..=94
+    let cell = trail.saturating_sub(0xa0);
+    let first = (row.saturating_add(1) / 2).saturating_add(if row <= 62 { 0x80 } else { 0xc0 });
+    let second = if row % 2 == 1 {
+        cell.saturating_add(if cell <= 63 { 0x3f } else { 0x40 })
+    } else {
+        cell.saturating_add(0x9e)
+    };
+    MultiByte::Cp932.pair(first, second)
 }
 
 #[cfg(test)]
@@ -226,6 +293,26 @@ mod tests {
         for (cs, bytes, text) in cases {
             assert_eq!(cs.decode(&hex(bytes)), text, "{cs:?}");
         }
+    }
+
+    /// EUC-JP as Node.js's `TextDecoder("euc-jp")` (the WHATWG decoder)
+    /// decodes it, except JIS X 0212 (`8F B0 A1`, 丂 there), which is not
+    /// decoded. Every pair `A1..FE A1..FE` and `8E A1..DF` was checked
+    /// against it the same way.
+    #[test]
+    fn euc_jp_decodes_like_whatwg() {
+        let euc = MultiByte::EucJp;
+        assert_eq!(
+            euc.decode(&hex(
+                "c6fccbdcb8eca4cea5c6a5ada5b9a5c8a1a28eb68ec08eb68ec5ada1a4a28fb0a1"
+            )),
+            "日本語のテキスト、ｶﾀｶﾅ①あ\u{fffd}"
+        );
+        // A lead byte at the end waits; an ASCII byte after a lead is kept.
+        let mut out = String::new();
+        assert_eq!(euc.decode_partial(b"\xa4\xa2\xa4", &mut out), 2);
+        assert_eq!(euc.decode(b"\xa4a\x8e\xe0"), "\u{fffd}a\u{fffd}");
+        assert_eq!(euc.decode(b"\x8f\xb0"), "\u{fffd}");
     }
 
     #[test]
