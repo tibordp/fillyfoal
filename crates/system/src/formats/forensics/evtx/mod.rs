@@ -22,7 +22,7 @@ use crate::fields::{Endian, Fields, parse};
 use crate::formats::util::binutil::Tree;
 use crate::formats::util::datakit::hex;
 use crate::formats::util::fmt::plural;
-use crate::formats::util::pace::{Pace, STEPS_PER_UNIT};
+use crate::formats::util::pace::Pace;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -32,6 +32,11 @@ use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 use binxml::{Facts, Parser, parse_record};
 
 const LE: Endian = Endian::Little;
+/// BinXML steps (a token, or a byte of a name or value) per unit of work.
+/// A token costs far more than the cheap steps of `pace::STEPS_PER_UNIT`:
+/// it allocates tree nodes and items, decodes UTF-16 names and formats
+/// values for the XML text.
+const BINXML_STEPS_PER_UNIT: u64 = 32;
 const HEADER_BLOCK: u64 = 0x1000;
 const CHUNK: u64 = 0x10000;
 const RECORDS_START: u64 = 0x200;
@@ -268,7 +273,7 @@ async fn chunk(cx: Cx, span: Span) -> Result<()> {
     cx.emit(crc_node);
 
     let mut parser = Parser::new(data.as_slice(), span);
-    let mut pace = Pace::new(&cx, STEPS_PER_UNIT);
+    let mut pace = Pace::new(&cx, BINXML_STEPS_PER_UNIT);
     let mut pos = RECORDS_START;
     while end.saturating_sub(pos) >= RecordHeader::SIZE {
         let at = to_usize(pos);
@@ -457,7 +462,9 @@ async fn record(cx: Cx, (chunk, pos, size): (Span, u64, u64)) -> Result<()> {
     let (root, items) = parse_record(&mut parser, at.saturating_add(24), body_end, true);
     let mut facts = Facts::default();
     let xml = items.as_ref().ok().map(|i| parser.render(i, &mut facts));
-    Pace::new(&cx, STEPS_PER_UNIT).add(parser.steps).await;
+    Pace::new(&cx, BINXML_STEPS_PER_UNIT)
+        .add(parser.steps)
+        .await;
     if let Some(xml) = xml {
         cx.emit(
             Node::new("Event XML")
