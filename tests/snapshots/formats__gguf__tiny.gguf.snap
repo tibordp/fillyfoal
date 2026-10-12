@@ -31,6 +31,5 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Tensors — 3 tensors
       token_embd.weight: F16 (0x1) — [8, 4] F16, at data+0x0, 64 bytes  [0x230+0x39] → 0x2e0+0x40
       output_norm.weight: F32 (0x0) — [8] F32, at data+0x40, 32 bytes  [0x269+0x32] → 0x320+0x20
-      blk.0.attn_q.weight: Q8_0 (0x8) — [8, 8] Q8_0, at data+0x60  [0x29b+0x3b] → 0x340+0x1
-        ! malformed: first dimension 8 is not a multiple of the block size 32
+      blk.0.attn_q.weight: Q8_0 (0x8) — [32, 2] Q8_0, at data+0x60, 68 bytes  [0x29b+0x3b] → 0x340+0x44
       Tensor data — 192 bytes, aligned to 32  [0x2e0+0xc0]
