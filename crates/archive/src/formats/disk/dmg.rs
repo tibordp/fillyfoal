@@ -408,6 +408,18 @@ async fn partition_contents(cx: Cx, (input, mish, data_fork): (Input, Span, Span
     let mut list = PieceList::new(mish);
     add_chunks(&cx, mish, data_fork, &mut list, false).await?;
     let span = list.finish(&cx, "udif-partition").await?;
+    // hdiutil lists a GPT disk's sector 0 as a one-sector partition. Its
+    // protective MBR covers the whole disk, so dissected alone it only
+    // reports the disk as truncated: it is shown with the whole disk.
+    let header = crate::fields::parse(&cx, mish.sub(0, MISH_HEADER), BE, &(), Mish::layout).await?;
+    if header.first_sector == 0 && header.sectors == 1 {
+        let mbr = cx.read_avail(span.sub(0, 512)).await?;
+        if mbr.get(0x1c2) == Some(&0xee) && mbr.get(0x1fe..) == Some(&[0x55, 0xaa][..]) {
+            cx.annotate("the disk's protective MBR: see the whole disk");
+            cx.emit(Node::new("Data").span(span).summary("protective MBR"));
+            return Ok(());
+        }
+    }
     dissect_or_data(cx, input.nested(span)).await
 }
 
