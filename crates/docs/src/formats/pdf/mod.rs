@@ -46,12 +46,14 @@ use objects::{Loc, Located, Section, SectionKind, Tail, Xref};
 use syntax::{Item, Obj};
 
 use crate::bytes::{to_u64, to_usize};
+use crate::codec::Codec;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::fmt::{self, plural};
 use crate::formats::{Format, Head, Input, Probe};
+use crate::formats::{content, embedded};
 use crate::node::{Count, Node};
-use crate::span::Span;
+use crate::span::{Origin, Span};
 use crate::value::{Radix, Value};
 
 /// References followed below one another.
@@ -291,6 +293,100 @@ async fn illustrator_data(cx: &Cx, doc: &Doc, catalog: &(Item, Span)) -> Option<
     let (piece, base) = deref_at(cx, doc, node.get("PieceInfo")?, base).await?;
     deref_at(cx, doc, piece.get("Illustrator")?, base).await
 }
+
+/// `AIPrivateData` blocks joined before giving up.
+const MAX_AI_BLOCKS: i64 = 4096;
+
+/// Illustrator's native artwork: the `/Private` dictionary's
+/// `AIPrivateData1` to `AIPrivateDataN` streams (`N` is `/NumBlock`),
+/// joined, start with a marker that says how the rest is encoded:
+/// `%AI12_CompressedData` (zlib, Illustrator CS and later) or
+/// `%AI24_ZStandard_Data` (Zstandard, Illustrator 2020 and later); without
+/// one, the data is the PostScript-like artwork itself.
+async fn illustrator_native(cx: Cx, (doc, item, base): (DocRef, Item, Span)) -> Result<()> {
+    let missing = || Diagnostic::malformed("no /Private dictionary").at(base);
+    let private = item.get("Private").ok_or_else(missing)?;
+    let (private, _) = deref_at(&cx, &doc, private, base)
+        .await
+        .ok_or_else(missing)?;
+    let declared = int_of(&cx, &doc, private.get("NumBlock")).await;
+    let mut blocks = Vec::new();
+    let mut n = 1i64;
+    while n <= declared.unwrap_or(MAX_AI_BLOCKS).min(MAX_AI_BLOCKS) {
+        let Some(entry) = private.get(&format!("AIPrivateData{n}")) else {
+            break;
+        };
+        let Some((num, _)) = entry.reference() else {
+            cx.diag(Diagnostic::malformed(format!(
+                "/AIPrivateData{n} is not a stream"
+            )));
+            break;
+        };
+        let located = resolve(&cx, &doc, num).await?;
+        blocks.push(objects::decode(&cx, &located, doc.security.as_ref()).await?);
+        n = n.saturating_add(1);
+    }
+    let found = to_u64(blocks.len());
+    if let Some(declared) = declared
+        && u64::try_from(declared).ok() != Some(found)
+    {
+        cx.diag(Diagnostic::malformed(format!(
+            "/NumBlock is {declared}, found {}",
+            plural(found, "AIPrivateData stream")
+        )));
+    }
+    let data = match blocks.as_slice() {
+        [] => return Err(Diagnostic::malformed("no AIPrivateData streams").at(base)),
+        [one] => *one,
+        [first, ..] => cx.add_pieces(
+            Origin {
+                parent: *first,
+                transform: "ai-private-data",
+            },
+            blocks.clone(),
+        )?,
+    };
+    let marker = cx.read(data.sub(0, AI_MARKER_LEN)).await?;
+    let codec = match marker.as_slice() {
+        b"%AI12_CompressedData" => Some(Codec::Zlib),
+        b"%AI24_ZStandard_Data" => Some(Codec::Zstd),
+        _ => None,
+    };
+    cx.emit(
+        Node::new("Native data")
+            .span(data)
+            .summary(format!(
+                "{}, {}",
+                plural(found, "block"),
+                fmt::size(data.len)
+            ))
+            .desc("The AIPrivateData streams, joined"),
+    );
+    match codec {
+        Some(codec) => {
+            let name = String::from_utf8_lossy(&marker).into_owned();
+            cx.emit(
+                Node::new("Marker")
+                    .span(data.sub(0, AI_MARKER_LEN))
+                    .value(Value::Text(name)),
+            );
+            cx.emit(content(
+                "Artwork",
+                doc.input,
+                data.tail(AI_MARKER_LEN),
+                codec,
+                None,
+            ));
+        }
+        None => {
+            cx.emit(embedded("Artwork", doc.input.nested(data)));
+        }
+    }
+    Ok(())
+}
+
+/// `%AI12_CompressedData` and `%AI24_ZStandard_Data` are both 20 bytes.
+const AI_MARKER_LEN: u64 = 20;
 
 /// An integer, directly or through a reference.
 async fn int_of(cx: &Cx, doc: &Doc, item: Option<&Item>) -> Option<i64> {
@@ -540,6 +636,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 &Walk::logical(),
             )
             .desc("The first page's /PieceInfo /Illustrator: Illustrator's native artwork (the /Private AIPrivateData streams) kept beside the PDF rendering"),
+        );
+        cx.emit(
+            Node::new("Illustrator artwork")
+                .desc("Illustrator's native data: the AIPrivateData streams joined and decoded")
+                .lazy(
+                    crate::expander!(self::illustrator_native: (DocRef, Item, Span)),
+                    (doc.clone(), item.clone(), *base),
+                ),
         );
     }
 
