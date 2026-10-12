@@ -4,13 +4,19 @@
 # built and run in Docker:
 #
 #   docker run --rm -v "$PWD/tools:/out" rust:1-bookworm \
-#     cargo install --git https://github.com/trumank/repak repak_cli --locked --root /out/repak
+#     cargo install --git https://github.com/trumank/repak repak_cli --locked \
+#       --rev 355b5f62 --root /out/repak
 #   docker run --rm -v "$PWD/tools:/tools" -v /tmp/fixtures/games-retro-pak:/w \
 #     rust:1-bookworm sh /w/make-repak.sh
 #
 # The input tree is made here: two small text files and one 80 KiB line that
 # zlib compresses in two 64 KiB blocks.
+#
+# repak compresses on a rayon thread pool: with several threads the files'
+# data came out in a different order from run to run; with one thread, four
+# runs (linux/arm64) wrote identical files.
 set -e
+export RAYON_NUM_THREADS=1
 cd /w
 rm -rf content out && mkdir -p content/Game/Config content/Game/Content/Maps out
 printf '[/Script/EngineSettings.GeneralProjectSettings]\nProjectName=fillyfoal\n' > content/Game/Config/DefaultGame.ini

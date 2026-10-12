@@ -788,11 +788,13 @@ impl<'a> Parser<'a> {
         Ok(t)
     }
 
-    /// The XML text of `items` (a record's fragment).
-    pub fn render(&self, items: &[Item], facts: &mut Facts) -> String {
+    /// The XML text of `items` (a record's fragment). Its steps are
+    /// added to [`Parser::steps`], for the caller to charge.
+    pub fn render(&mut self, items: &[Item], facts: &mut Facts) -> String {
         let mut out = Xml::default();
         let mut steps = 0u64;
         self.render_items(items, &[], &mut out, facts, &mut steps, 0);
+        self.steps = self.steps.saturating_add(steps);
         if out.full {
             out.text.push('…');
         }

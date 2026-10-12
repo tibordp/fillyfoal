@@ -314,9 +314,13 @@ fn usn_sparse_head(h: &Head<'_>) -> bool {
     };
     let tail_at = h.len.saturating_sub(to_u64(h.tail.len()));
     let first = to_usize(tail_at.wrapping_neg() & 7);
-    // At most 128 starts, each a chain of at most 128 steps.
+    // At most 128 starts, each a chain of at most 128 steps. A chain from
+    // a zero length field is the chain from 8 bytes on, so only starts at
+    // a record (a non-zero length) are tried: zeros before the data are
+    // then walked once, not once per start.
     (first..=data_end)
         .step_by(8)
+        .filter(|&start| u32_le(h.tail, start).is_some_and(|l| l != 0))
         .any(|start| usn_chain(h.tail, tail_at, start, data_end))
 }
 

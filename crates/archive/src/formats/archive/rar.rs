@@ -1155,7 +1155,16 @@ async fn block5(
             .span(header_span)
             .lazy(emit_nodes, r.into_nodes()),
     );
-    if c.flags & 0x02 != 0 {
+    // A directory has nothing to decode; RAR 5 writers may still flag an
+    // empty data area for it (and give it a compression version 0).
+    let directory = fields.as_ref().is_some_and(|f| f.flags & 0x01 != 0);
+    if directory && c.flags & 0x02 != 0 && c.data > 0 {
+        cx.emit(
+            Node::new("Data")
+                .span(span.sub(file_len, c.data))
+                .diag(Diagnostic::warning("data area of a directory")),
+        );
+    } else if c.flags & 0x02 != 0 && !directory {
         let data = span.sub(file_len, c.data);
         let part = fields
             .as_ref()

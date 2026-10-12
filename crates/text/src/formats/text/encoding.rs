@@ -784,6 +784,41 @@ pub fn declared_charset_label(head: &[u8], declared: Label) -> Option<Encoding> 
 /// The head of a probe as UTF-8-compatible bytes: without a byte order
 /// mark, and transcoded if it is UTF-16/32.
 pub fn probe_text<'a>(data: &'a [u8]) -> Cow<'a, [u8]> {
+    if data.len() < MEMO_MIN {
+        return probe_text_once(data);
+    }
+    if let Some(found) = TEXT_MEMO.with(|m| {
+        let m = m.borrow();
+        (m.0 == data).then(|| m.1.clone())
+    }) {
+        return match found {
+            Some(text) => Cow::Owned(text),
+            None => Cow::Borrowed(data),
+        };
+    }
+    let text = probe_text_once(data);
+    TEXT_MEMO.with(|m| {
+        let mut m = m.borrow_mut();
+        m.0.clear();
+        m.0.extend_from_slice(data);
+        m.1 = match &text {
+            Cow::Owned(t) => Some(t.clone()),
+            Cow::Borrowed(_) => None,
+        };
+    });
+    text
+}
+
+thread_local! {
+    /// The last large head [`probe_text`] transcoded on this thread and
+    /// the result (`None`: used as it is). Dozens of probes ask for the
+    /// same head, and transcoding a 66 KiB UTF-16 head costs far more than
+    /// comparing and copying it.
+    static TEXT_MEMO: std::cell::RefCell<(Vec<u8>, Option<Vec<u8>>)> =
+        const { std::cell::RefCell::new((Vec::new(), None)) };
+}
+
+fn probe_text_once(data: &[u8]) -> Cow<'_, [u8]> {
     match bom(data) {
         Some((Encoding::Utf8, n)) => Cow::Borrowed(data.get(to_usize(n)..).unwrap_or_default()),
         Some((e, n)) => Cow::Owned(
@@ -800,6 +835,29 @@ pub fn probe_text<'a>(data: &'a [u8]) -> Cow<'a, [u8]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The remembered transcoding is used only for the very same head.
+    #[test]
+    fn probe_text_memo_is_exact() {
+        let utf16: Vec<u8> = "key = value\n"
+            .repeat(1000)
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        assert!(utf16.len() >= MEMO_MIN);
+        let first = probe_text(&utf16).into_owned();
+        assert!(first.starts_with(b"key = value\n"));
+        assert_eq!(probe_text(&utf16).as_ref(), first.as_slice());
+        let mut other = utf16.clone();
+        if let Some(b) = other.get_mut(0) {
+            *b = b'K';
+        }
+        assert!(probe_text(&other).starts_with(b"Key = value\n"));
+        let ascii = "key = value\n".repeat(1000).into_bytes();
+        assert!(matches!(probe_text(&ascii), Cow::Borrowed(_)));
+        assert!(matches!(probe_text(&ascii), Cow::Borrowed(_)));
+        assert_eq!(probe_text(&utf16).as_ref(), first.as_slice());
+    }
 
     #[test]
     fn legacy_code_pages_are_text() {

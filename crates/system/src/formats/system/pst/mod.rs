@@ -328,8 +328,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         2 => description.push_str(", cyclic encryption"),
         other => description.push_str(&format!(", encoding {other:#04x}")),
     }
-    cx.emit(store::btree_node("Node B-tree", pst, pst.nbt));
-    cx.emit(store::btree_node("Block B-tree", pst, pst.bbt));
+    // The messaging view (store, named properties, folders) first: it is
+    // what a reader opens a PST for, and the B-tree views below it hold
+    // every node's blocks and heap, which runs long. A store that cannot
+    // be read still shows its B-trees.
     match store::top(&cx, &pst).await {
         Ok(name) => {
             if let Some(name) = name {
@@ -338,6 +340,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         Err(e) => cx.diag(e),
     }
+    cx.emit(store::btree_node("Node B-tree", pst, pst.nbt));
+    cx.emit(store::btree_node("Block B-tree", pst, pst.bbt));
     cx.annotate(description);
     Ok(())
 }

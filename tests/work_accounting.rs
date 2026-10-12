@@ -78,3 +78,21 @@ fn paced_hash_yields_in_bounded_steps() {
     let children = host.session.children(root).unwrap();
     assert_eq!(children.ids.len(), 1);
 }
+
+/// EVTX charges its Binary XML in proportion to the parsing and rendering
+/// it does (a token allocates and formats far more than a cheap step): the
+/// fixture's 600 records, each parsed for the listing and again when
+/// expanded, cost about 58k units here. Charged at the cheap-step rate
+/// they came to under 25k units for the same time.
+#[test]
+fn evtx_binary_xml_is_charged() {
+    let data = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/external/evtx/fillyfoal.evtx"
+    ))
+    .unwrap();
+    let mut host = Host::named("fillyfoal.evtx", data, Limits::default());
+    host.explore(host.root, 24, 1000);
+    let work = host.session.work_done();
+    assert!(work > 45_000, "{work}");
+}

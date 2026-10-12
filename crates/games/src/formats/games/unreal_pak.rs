@@ -284,6 +284,8 @@ struct PakLayout {
     /// v10+: the encoded entries, and where the irregular entries start.
     encoded: Span,
     irregular: u64,
+    /// v10+: how many irregular entries the index says it holds.
+    irregulars: u32,
 }
 
 /// An optional region of the v10+ index: a flag, then offset, size and
@@ -310,6 +312,7 @@ fn index_layout(f: &mut Fields<'_>, (footer, file): &(PakFooter, Span)) -> Resul
         directory: None,
         encoded: f.peek_span(0),
         irregular: 0,
+        irregulars: 0,
     };
     if footer.version < 10 {
         return Ok(l);
@@ -321,7 +324,7 @@ fn index_layout(f: &mut Fields<'_>, (footer, file): &(PakFooter, Span)) -> Resul
     l.encoded = f.peek_span(size.into());
     f.node(Node::new("Encoded entries").span(l.encoded));
     f.skip(size.into());
-    f.u32("Irregular entries").emit()?;
+    l.irregulars = f.u32("Irregular entries").emit()?;
     l.irregular = f.pos();
     Ok(l)
 }
@@ -344,21 +347,52 @@ async fn pak_index(cx: Cx, st: PakIndex) -> Result<()> {
     Ok(())
 }
 
+/// Where each irregular entry starts in the index, found once per index
+/// (entries vary in size, so finding the n-th means walking those before
+/// it): up to the count the index gives or the first entry that does not
+/// parse.
+async fn irregular_starts(
+    cx: &Cx,
+    st: &PakIndex,
+    index: &crate::cx::Block,
+    layout: &PakLayout,
+) -> Arc<Vec<u64>> {
+    if let Some(starts) = cx.cached::<Vec<u64>>(st.index, "pak-irregular") {
+        return starts;
+    }
+    let mut f = Fields::new(index, LE);
+    f.seek(layout.irregular);
+    let mut starts = Vec::new();
+    for _ in 0..layout.irregulars {
+        let at = f.pos();
+        if pak_entry(&mut f, &st.footer).is_err() {
+            break;
+        }
+        starts.push(at);
+        cx.checkpoint().await;
+    }
+    let starts = Arc::new(starts);
+    cx.cache(st.index, "pak-irregular", starts.clone());
+    starts
+}
+
 /// The irregular entry an encoded offset of `offset` (negative) names.
 fn irregular_entry(
     index: &crate::cx::Block,
-    layout: &PakLayout,
+    starts: &[u64],
     footer: &PakFooter,
     offset: i32,
 ) -> Result<PakEntry> {
     let wanted = offset.unsigned_abs().saturating_sub(1);
+    let Some(&at) = usize::try_from(wanted).ok().and_then(|i| starts.get(i)) else {
+        return Err(Diagnostic::malformed(format!(
+            "irregular entry {wanted} of {}",
+            starts.len()
+        )));
+    };
     let mut e = Fields::new(index, LE);
-    e.seek(layout.irregular);
-    let mut entry = pak_entry(&mut e, footer)?;
-    for _ in 0..wanted.min(0x1_0000) {
-        entry = pak_entry(&mut e, footer)?;
-    }
-    Ok(entry)
+    e.seek(at);
+    pak_entry(&mut e, footer)
 }
 
 /// The files: (path, entry) pairs before v10; from v10 the full directory
@@ -388,6 +422,7 @@ async fn pak_files(cx: Cx, (st, layout): (PakIndex, PakLayout)) -> Result<()> {
     };
     let dir = cx.block(directory).await?;
     let encoded = cx.block(layout.encoded).await?;
+    let mut starts: Option<Arc<Vec<u64>>> = None;
     let mut f = Fields::new(&dir, LE);
     let (pos, mut dir_name, mut files_left, mut dirs_left) =
         match cx.resume::<(u64, String, u32, u32)>() {
@@ -425,7 +460,15 @@ async fn pak_files(cx: Cx, (st, layout): (PakIndex, PakLayout)) -> Result<()> {
             e.seek(u64::try_from(offset).unwrap_or(0));
             encoded_entry(&mut e, footer)
         } else {
-            irregular_entry(&index, &layout, footer, offset)
+            let table = match &starts {
+                Some(t) => t.clone(),
+                None => {
+                    let t = irregular_starts(&cx, &st, &index, &layout).await;
+                    starts = Some(t.clone());
+                    t
+                }
+            };
+            irregular_entry(&index, &table, footer, offset)
         };
         let node = match entry {
             Ok(entry) => file_node(st.input, footer, path, &entry),
