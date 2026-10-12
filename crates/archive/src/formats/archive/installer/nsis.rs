@@ -35,9 +35,10 @@
 //! `fileform.h` and of 7-Zip's NSIS reader. Opcode names follow the default
 //! build; from opcode 58 on, Unicode builds of NSIS 3 number two extra file
 //! opcodes, which we account for, and only names up to `WriteUninstaller`
-//! are given. Our fixtures (synthetic, makensis is not available here) are
-//! listed and decompiled by 7-Zip with the same file names, paths and
-//! contents.
+//! are given. The synthetic fixtures (NSIS 2 bzip2, solid LZMA) are listed
+//! and decompiled by 7-Zip with the same file names, paths and contents;
+//! the external ones are installer data makensis 3.08 wrote (solid LZMA
+//! Unicode, zlib ANSI, bzip2 Unicode, each with an uninstaller).
 
 use std::sync::Arc;
 
