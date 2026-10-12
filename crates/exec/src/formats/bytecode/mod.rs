@@ -22,5 +22,7 @@ pub mod pyc;
 mod pyc_ops;
 pub mod qvm;
 pub mod spirv;
+#[rustfmt::skip]
+mod spirv_tables;
 pub mod wasm;
 pub mod yarb;
