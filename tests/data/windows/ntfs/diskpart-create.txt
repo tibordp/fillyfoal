@@ -1,0 +1,6 @@
+create vdisk file="__VHD__" maximum=16 type=fixed
+select vdisk file="__VHD__"
+attach vdisk
+create partition primary
+format fs=ntfs quick label=FILLYFOAL
+assign letter=__LETTER__

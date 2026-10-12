@@ -1,0 +1,2 @@
+select vdisk file="__VHD__"
+detach vdisk

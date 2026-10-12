@@ -943,14 +943,26 @@ async fn mft_listing(cx: Cx, (fs, count): (Vol, u64)) -> Result<()> {
         let name = match fixed_up(&cx, span, b"FILE").await {
             Ok(rec) => {
                 let attrs = attributes(&cx, rec, n).await.unwrap_or_default();
-                match best_name(&cx, &attrs).await? {
+                let name = match best_name(&cx, &attrs).await? {
                     // Many hard links move the names to extension records.
                     None if attrs.iter().any(|a| a.kind == 0x20) => {
                         let all = all_attributes(&cx, &fs, n, rec).await.unwrap_or_default();
                         best_name(&cx, &all).await?
                     }
                     name => name,
-                }
+                };
+                // An extension record holds attributes moved out of its
+                // base record; reserved records have no name.
+                let head = cx.read(rec.sub(0x16, 0x12)).await?;
+                let in_use = crate::bytes::u16_le(&head, 0).unwrap_or(0) & 1 != 0;
+                let base = crate::bytes::u64_le(&head, 0x0a).unwrap_or(0) & 0xffff_ffff_ffff;
+                Some(match (base, name) {
+                    (0, Some(name)) => name,
+                    (0, None) if !in_use => "not in use".to_owned(),
+                    (0, None) => "no file name".to_owned(),
+                    (base, Some(name)) => format!("{name} (extension of record {base})"),
+                    (base, None) => format!("extension of record {base}"),
+                })
             }
             Err(_) => None,
         };

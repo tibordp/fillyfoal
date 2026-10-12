@@ -1213,3 +1213,21 @@ droids embedding the VM's virtual NIC MAC). Unchanged; not reproducible
 | `lnk/recent-note.lnk` | Windows shell recent-documents tracking (`SHAddToRecentDocs`) | written by Windows into `%APPDATA%\Microsoft\Windows\Recent\note.lnk` by `jumplist.ps1`; a relative path climbing out of the profile |
 | `custom-destinations/6b16a059c2e70543.customDestinations-ms` | Windows `ICustomDestinationList` (windows.storage.dll) | `jumplist.ps1` with AppUserModelID `fillyfoal.test`: custom category "fillyfoal" (2 links with PKEY_Title), user tasks (1 link), known category Recent, 0xBABFFBAB footers |
 | `cfb/a61657a5e5dfbdc.automaticDestinations-ms` | Windows 11 jump-list machinery for Notepad 11.2607.14.0 | `Start-Process C:\fillyfoal\note.txt`, then `C:\fillyfoal\notes\readme.txt`, Notepad closed; copied from `AutomaticDestinations\`: compound file with a version 6 `DestList` (2 entries), link streams `1` and `2` (with a 0xBEEF001A ProgID extension block) and an empty `DestListPropertyStore` |
+
+## Windows VM fixtures: NTFS volumes
+
+Written on the same Windows 11 Pro 25H2 ARM64 VM (build 10.0.26200.9457) by
+`tests/data/windows/ntfs/build.ps1` (run elevated through `elevate.ps1`):
+DiskPart 10.0.26100.1 creates a 16 MiB fixed VHD (`diskpart-create.txt`:
+MBR, one primary partition at LBA 128, `format fs=ntfs quick
+label=FILLYFOAL`: NTFS 3.1, 4 KiB clusters, 1 KiB records), the script
+populates it with PowerShell, `compact.exe` and `fsutil.exe`, and
+`diskpart-detach.txt` detaches it; `mftdump.py` checked each detached image
+(output in the rows below). Unchanged, stored as `.raw.zst`; not
+reproducible (times, serial numbers, the VHD's random UUID).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `vhd/ntfs-attrlist.vhd.raw.zst` | Windows NTFS driver (DiskPart, PowerShell) | `$ATTRIBUTE_LIST` four ways: `attrlist-resident.txt` (6 named streams, resident list of 9 entries over records 38-39), `attrlist-nonresident.txt` (60 streams, non-resident list of 63 entries over records 40-54), `attrlist-resident-hardlinks\target.txt` (7 names over records 56-61) and `attrlist-nonresident-hardlinks\target.txt` (11 names over records 63-70); every stream, name and record matches `mftdump.py` and `fsutil file layout` |
+| `vhd/ntfs-wof.vhd.raw.zst` | Windows NTFS driver, `compact.exe` (wof.sys) | `compact /c /exe:xpress4k`, `xpress8k`, `xpress16k`, `lzx` on four 320 KiB text files (sparse unnamed `$DATA`, `WofCompressedData` stream, `IO_REPARSE_TAG_WOF` reparse point, algorithms 0/2/3/1) and an uncompressed control file; every decompressed file matches the text `build.ps1` wrote, line for line |
+| `vhd/ntfs-lznt1.vhd.raw.zst` | Windows NTFS driver, `compact.exe` | `compact /c` on a 320 KiB file and on a directory before a file was written into it (inherited compression): LZNT1, compression unit 2^4 clusters; both decompressed files match the text `build.ps1` wrote |
