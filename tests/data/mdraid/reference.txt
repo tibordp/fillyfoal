@@ -1,0 +1,144 @@
+# mdadm --examine (mdadm 4.5) of the committed members, each attached read-only as a loop device
+
+## r1-v090-a.img
+/dev/loop0:
+          Magic : a92b4efc
+        Version : 0.90.00
+           UUID : 0f1110f0:00000000:00000000:00000090
+  Creation Time : Mon Oct 12 19:54:06 2026
+     Raid Level : raid1
+  Used Dev Size : 8128 (7.94 MiB 8.32 MB)
+     Array Size : 8128 (7.94 MiB 8.32 MB)
+   Raid Devices : 2
+  Total Devices : 2
+Preferred Minor : 127
+
+    Update Time : Mon Oct 12 19:54:06 2026
+          State : clean
+ Active Devices : 2
+Working Devices : 2
+ Failed Devices : 0
+  Spare Devices : 0
+       Checksum : 8dd6f70c - correct
+         Events : 3
+
+
+      Number   Major   Minor   RaidDevice State
+this     0       7        0        0      active sync   /dev/loop0
+
+   0     0       7        0        0      active sync   /dev/loop0
+   1     1       7        1        1      active sync   /dev/loop1
+
+## r1-v10-a.img
+/dev/loop0:
+          Magic : a92b4efc
+        Version : 1.0
+    Feature Map : 0x0
+     Array UUID : 0f1110f0:00000000:00000000:00000100
+           Name : fillyfoal:r1-v10  (local to host fillyfoal)
+  Creation Time : Mon Oct 12 19:54:06 2026
+     Raid Level : raid1
+   Raid Devices : 2
+
+ Avail Dev Size : 16352 sectors (7.98 MiB 8.37 MB)
+     Array Size : 8128 KiB (7.94 MiB 8.32 MB)
+  Used Dev Size : 16256 sectors (7.94 MiB 8.32 MB)
+   Super Offset : 16368 sectors
+   Unused Space : before=0 sectors, after=104 sectors
+          State : clean
+    Device UUID : a7480045:a9b2abb9:2c93473b:e4196440
+
+    Update Time : Mon Oct 12 19:54:06 2026
+  Bad Block Log : 512 entries available at offset -8 sectors
+       Checksum : 18b7c073 - correct
+         Events : 2
+
+
+   Device Role : Active device 0
+   Array State : AA ('A' == active, '.' == missing, 'R' == replacing)
+
+## r1-v11-a.img
+/dev/loop0:
+          Magic : a92b4efc
+        Version : 1.1
+    Feature Map : 0x0
+     Array UUID : 0f1110f0:00000000:00000000:00000110
+           Name : fillyfoal:r1-v11  (local to host fillyfoal)
+  Creation Time : Mon Oct 12 19:54:06 2026
+     Raid Level : raid1
+   Raid Devices : 2
+
+ Avail Dev Size : 14336 sectors (7.00 MiB 7.34 MB)
+     Array Size : 7168 KiB (7.00 MiB 7.34 MB)
+    Data Offset : 2048 sectors
+   Super Offset : 0 sectors
+   Unused Space : before=1976 sectors, after=0 sectors
+          State : clean
+    Device UUID : 96095d59:92b62e5b:9f7422a6:6186f701
+
+    Update Time : Mon Oct 12 19:54:06 2026
+  Bad Block Log : 512 entries available at offset 16 sectors
+       Checksum : c058c02 - correct
+         Events : 2
+
+
+   Device Role : Active device 0
+   Array State : AA ('A' == active, '.' == missing, 'R' == replacing)
+
+## r1-v12-a.img
+/dev/loop0:
+          Magic : a92b4efc
+        Version : 1.2
+    Feature Map : 0x0
+     Array UUID : 0f1110f0:00000000:00000000:00000120
+           Name : fillyfoal:r1-v12  (local to host fillyfoal)
+  Creation Time : Mon Oct 12 19:54:06 2026
+     Raid Level : raid1
+   Raid Devices : 2
+
+ Avail Dev Size : 14336 sectors (7.00 MiB 7.34 MB)
+     Array Size : 7168 KiB (7.00 MiB 7.34 MB)
+    Data Offset : 2048 sectors
+   Super Offset : 8 sectors
+   Unused Space : before=1968 sectors, after=0 sectors
+          State : clean
+    Device UUID : 49d81a1c:e333a7d6:d4fcc936:77a3d93a
+
+    Update Time : Mon Oct 12 19:54:06 2026
+  Bad Block Log : 512 entries available at offset 16 sectors
+       Checksum : 24c57d59 - correct
+         Events : 2
+
+
+   Device Role : Active device 0
+   Array State : AA ('A' == active, '.' == missing, 'R' == replacing)
+
+## r5-a.img
+/dev/loop0:
+          Magic : a92b4efc
+        Version : 1.2
+    Feature Map : 0x0
+     Array UUID : 0f1110f0:00000000:00000000:00000500
+           Name : fillyfoal:r5  (local to host fillyfoal)
+  Creation Time : Mon Oct 12 19:54:06 2026
+     Raid Level : raid5
+   Raid Devices : 3
+
+ Avail Dev Size : 12288 sectors (6.00 MiB 6.29 MB)
+     Array Size : 12288 KiB (12.00 MiB 12.58 MB)
+    Data Offset : 4096 sectors
+   Super Offset : 8 sectors
+   Unused Space : before=4016 sectors, after=0 sectors
+          State : clean
+    Device UUID : a6554990:7bdd09a7:4798606e:ccd28c5a
+
+    Update Time : Mon Oct 12 19:54:06 2026
+  Bad Block Log : 512 entries available at offset 16 sectors
+       Checksum : 7271f4f3 - correct
+         Events : 2
+
+         Layout : left-symmetric
+     Chunk Size : 512K
+
+   Device Role : Active device 0
+   Array State : AAA ('A' == active, '.' == missing, 'R' == replacing)
