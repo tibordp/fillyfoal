@@ -10,6 +10,7 @@
 //! A codestream split over `jxlp` boxes is joined and dissected whole.
 
 use crate::bytes::{to_u64, u32_be, u64_be};
+use crate::codec::Codec;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
@@ -804,9 +805,35 @@ async fn jxl_box(
                     .desc("The parts are joined after the last box"),
             );
         }
+        b"Exif" | b"xml " | b"jumb" => metadata_payload(&cx, input, &kind, span, payload).await?,
+        b"brob" => {
+            let inner = cx.read_avail(payload.sub(0, 4)).await?;
+            cx.emit(
+                Node::new("Brotli-compressed box")
+                    .span(payload.tail(4))
+                    .value(text(crate::text::latin1(&inner)))
+                    .lazy(brob_content, (input, payload.tail(4), inner)),
+            );
+        }
+        b"jbrd" => cx.emit(Node::new("JPEG reconstruction data").span(payload)),
+        _ => cx.emit(Node::new("Data").span(payload)),
+    }
+    Ok(())
+}
+
+/// The content of an `Exif`, `xml ` or `jumb` box, stored or decoded from a
+/// `brob` box: `whole` is the box with its header when there is one.
+async fn metadata_payload(
+    cx: &Cx,
+    input: Input,
+    kind: &[u8],
+    whole: Span,
+    payload: Span,
+) -> Result<()> {
+    match kind {
         b"Exif" => {
             let block = cx.block(payload.sub(0, 4)).await?;
-            let offset = Fields::emitting(&cx, &block, BE)
+            let offset = Fields::emitting(cx, &block, BE)
                 .u32("TIFF header offset")
                 .emit()?;
             let tiff = payload.tail(4u64.saturating_add(offset.into()));
@@ -816,22 +843,37 @@ async fn jxl_box(
                 &super::tiff::FORMAT,
             ));
         }
-        b"xml " => cx.emit(embedded("XMP", input.nested(payload))),
-        b"brob" => {
-            let inner = cx.read_avail(payload.sub(0, 4)).await?;
-            cx.emit(
-                crate::formats::content(
-                    "Brotli-compressed box",
-                    input,
-                    payload.tail(4),
-                    crate::codec::Codec::Brotli,
-                    None,
-                )
-                .value(text(crate::text::latin1(&inner))),
-            );
-        }
-        b"jbrd" => cx.emit(Node::new("JPEG reconstruction data").span(payload)),
-        _ => cx.emit(Node::new("Data").span(payload)),
+        b"xml " => cx.emit(embedded_as(
+            "XMP",
+            input.nested(payload),
+            &super::xmp::FORMAT,
+        )),
+        // A JUMBF superbox (C2PA): the box itself is the stream's first box;
+        // decoded from `brob`, the payload is its description box and
+        // content boxes.
+        _ => cx.emit(embedded_as(
+            "JUMBF",
+            input.nested(whole),
+            &super::jpeg::JUMBF,
+        )),
     }
     Ok(())
+}
+
+/// A `brob` box's content: Brotli-decoded, then shown as the box type it
+/// wraps when that is one this dissector knows (ISO/IEC 18181-2 9.1).
+async fn brob_content(cx: Cx, (input, span, kind): (Input, Span, Vec<u8>)) -> Result<()> {
+    if !matches!(kind.as_slice(), b"Exif" | b"xml " | b"jumb") {
+        return crate::formats::expand_content(cx, (input, span, Codec::Brotli, None)).await;
+    }
+    let decoded = crate::codec::decode_span(&cx, span, &Codec::Brotli, None).await?;
+    cx.annotate(format!(
+        "{:#x} bytes {}",
+        decoded.span.len,
+        Codec::Brotli.verb()
+    ));
+    if let Some(e) = decoded.error {
+        cx.diag(e);
+    }
+    metadata_payload(&cx, input, &kind, decoded.span, decoded.span).await
 }
