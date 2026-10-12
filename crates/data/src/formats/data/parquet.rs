@@ -1997,6 +1997,8 @@ fn byte_stream_split_width(leaf: &Leaf) -> Option<u64> {
 
 /// Values decoded from one DELTA_BINARY_PACKED stream at most.
 const MAX_DELTA: u64 = 1 << 20;
+/// Values decoded between two checkpoints.
+const DELTA_STEPS: u64 = 1024;
 /// Bytes of a byte array value shown.
 const MAX_SHOWN: u64 = 4096;
 
@@ -2115,6 +2117,8 @@ async fn delta_decode(cx: &Cx, data: &[u8], span: Span) -> Delta {
         d.values.push(last);
     }
     let mut remaining = total.saturating_sub(1);
+    // Cheap steps (values, miniblocks) since the last checkpoint.
+    let mut steps = 0u64;
     while remaining > 0 {
         cx.checkpoint().await;
         let start = pos;
@@ -2136,24 +2140,28 @@ async fn delta_decode(cx: &Cx, data: &[u8], span: Span) -> Delta {
         };
         pos = pos.saturating_add(widths.len());
         let first_mini = d.minis.len();
-        for (m, &w) in widths.iter().enumerate() {
+        // A block cut short (by damage or the cap) still shows the
+        // miniblocks decoded so far.
+        let mut error = None;
+        'minis: for (m, &w) in widths.iter().enumerate() {
             if remaining == 0 {
                 break;
             }
             let width_at = widths_at.saturating_add(m);
             if w > 64 {
-                d.error = Some(Diagnostic::malformed(format!("bit width {w}")).at(at(width_at)));
-                return d;
+                error = Some(Diagnostic::malformed(format!("bit width {w}")).at(at(width_at)));
+                break;
             }
             let bytes = to_usize(per_mb.saturating_mul(u64::from(w)) / 8);
             let Some(packed) = pos.checked_add(bytes).and_then(|e| data.get(pos..e)) else {
-                d.error = Some(Diagnostic::truncated(
+                error = Some(Diagnostic::truncated(
                     span.sub(to_u64(pos), to_u64(bytes)),
                     to_u64(data.len().saturating_sub(pos)),
                 ));
-                return d;
+                break;
             };
             let n = per_mb.min(remaining);
+            let mini = d.minis.len();
             d.minis.push(Miniblock {
                 first: to_u64(d.values.len()),
                 width_at,
@@ -2162,30 +2170,48 @@ async fn delta_decode(cx: &Cx, data: &[u8], span: Span) -> Delta {
                 start: pos,
                 end: pos.saturating_add(bytes),
             });
+            // A miniblock costs about as much as a few values, even an
+            // empty one (bit width 0 reads nothing).
+            steps = steps.saturating_add(8);
             for j in 0..n {
                 if to_u64(d.values.len()) >= MAX_DELTA {
-                    d.error = Some(Diagnostic::limit(format!(
+                    if let Some(m) = d.minis.get_mut(mini) {
+                        m.count = j;
+                    }
+                    error = Some(Diagnostic::limit(format!(
                         "only the first {MAX_DELTA} of {total} values decoded"
                     )));
-                    return d;
+                    break 'minis;
                 }
-                if j % 4096 == 4095 {
+                steps = steps.saturating_add(1);
+                if steps >= DELTA_STEPS {
+                    steps = 0;
                     cx.checkpoint().await;
                 }
                 let v = unpack(packed, j.saturating_mul(u64::from(w)), w);
                 last = last.wrapping_add(min_delta.wrapping_add(v.cast_signed()));
                 d.values.push(last);
             }
+            if steps >= DELTA_STEPS {
+                steps = 0;
+                cx.checkpoint().await;
+            }
             pos = pos.saturating_add(bytes);
             remaining = remaining.saturating_sub(n);
         }
-        d.blocks.push(DeltaBlock {
-            start,
-            end: pos,
-            min_delta,
-            widths_at,
-            minis: first_mini..d.minis.len(),
-        });
+        if error.is_none() || d.minis.len() > first_mini {
+            d.blocks.push(DeltaBlock {
+                start,
+                end: pos,
+                min_delta,
+                widths_at,
+                minis: first_mini..d.minis.len(),
+            });
+        }
+        if error.is_some() {
+            d.error = error;
+            return d;
+        }
     }
     d.end = Some(pos.max(first_end));
     d

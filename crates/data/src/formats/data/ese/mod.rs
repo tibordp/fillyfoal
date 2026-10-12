@@ -712,9 +712,46 @@ fn column_summary(def: &ColDef) -> String {
     s
 }
 
+/// The `System` table flag (MSysObjects, MSysObjectsShadow, MSysObjids,
+/// MSysLocales, ...).
+const SYSTEM_TABLE: u32 = 0x8000_0000;
+
+/// The tables, user tables first; the system tables (the same in every
+/// database) are grouped after them.
 async fn catalog_view(cx: Cx, (db, cat): (D, C)) -> Result<()> {
-    cx.set_count(Count::Exact(to_u64(cat.tables.len())));
+    let system = cat
+        .tables
+        .iter()
+        .filter(|t| t.flags & SYSTEM_TABLE != 0)
+        .count();
+    let user = cat.tables.len().saturating_sub(system);
+    cx.set_count(Count::Exact(
+        to_u64(user).saturating_add(u64::from(system > 0)),
+    ));
+    push_tables(&cx, &db, &cat, false).await;
+    if system > 0 {
+        cx.push(
+            Node::new("System tables")
+                .summary(format!("{system}"))
+                .desc("The engine's own tables: the catalog, its shadow copy, object IDs, locales")
+                .lazy(system_tables_view, (db, cat)),
+        )
+        .await;
+    }
+    Ok(())
+}
+
+async fn system_tables_view(cx: Cx, (db, cat): (D, C)) -> Result<()> {
+    push_tables(&cx, &db, &cat, true).await;
+    Ok(())
+}
+
+/// Pushes the system tables or the others, in catalog order.
+async fn push_tables(cx: &Cx, db: &D, cat: &C, system: bool) {
     for (i, t) in cat.tables.iter().enumerate() {
+        if (t.flags & SYSTEM_TABLE != 0) != system {
+            continue;
+        }
         let mut summary = format!(
             "object {}, root page {}, {} columns, {} indexes",
             t.objid,
@@ -738,7 +775,6 @@ async fn catalog_view(cx: Cx, (db, cat): (D, C)) -> Result<()> {
         )
         .await;
     }
-    Ok(())
 }
 
 async fn table_view(cx: Cx, (db, cat, ti): (D, C, usize)) -> Result<()> {
