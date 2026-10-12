@@ -307,8 +307,9 @@ an input a thousand times larger than the fixture.
   When `input` is what the node's own detection step settled, the node's
   interpretation becomes `format`, so the host shows (and "inspect as"
   starts from) the real format. `hand_off` returns `false` when the host
-  forced the node's format with `Session::reinterpret`; the dissector then
-  carries on as itself. Hand off only to a format that will not hand back,
+  forced the node's format with `Session::reinterpret` (or opened it with
+  `Session::open_as`, which forces the root's format the same way); the
+  dissector then carries on as itself. Hand off only to a format that will not hand back,
   and only content you were given; content found inside is embedded. (A
   family sharing one dissector, like ZIP's, needs no hand-off: the probes
   already picked the member, and `zip.rs` only refines its label when it

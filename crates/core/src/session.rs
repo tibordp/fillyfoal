@@ -184,6 +184,10 @@ struct Entry {
     /// The node's own diagnostics (from its creator); expansions add more,
     /// which are dropped when the expansion restarts.
     own_diagnostics: usize,
+    /// The node's own summary (from its creator), kept once an expansion's
+    /// [`Cx::annotate`](crate::Cx::annotate) has replaced it, so that
+    /// [`Session::reinterpret`] can restore it.
+    own_summary: Option<Option<String>>,
     state: ChildState,
     count: Count,
     error: Option<Diagnostic>,
@@ -216,6 +220,7 @@ impl Entry {
         };
         Entry {
             own_diagnostics: node.diagnostics.len(),
+            own_summary: None,
             node,
             parent,
             index,
@@ -451,19 +456,22 @@ impl<C: Catalog> Session<C> {
     /// `formats::by_extension` to pick the format. On data that does not
     /// match, the dissector shows what it could parse and reports where it
     /// stopped.
+    ///
+    /// This is [`Session::open`] followed by [`Session::reinterpret`] of the
+    /// root: the format is forced, so the root's
+    /// [`Session::interpretation`] says `forced`, a dissector that would
+    /// hand the content to another format (`Cx::hand_off`) carries on as
+    /// `format`, and `reinterpret(root, None)` returns the root to
+    /// identification.
     pub fn open_as(
         &mut self,
         name: impl Into<Cow<'static, str>>,
         len: u64,
         format: &'static formats::Format,
     ) -> NodeId {
-        let source = self.add_source(len);
-        let span = Span::new(source, 0, len);
-        self.add_root(formats::embedded_as(
-            name,
-            formats::Input::root(span),
-            format,
-        ))
+        let root = self.open(name, len);
+        self.reinterpret_at(root, &[], Some(format));
+        root
     }
 
     pub fn node(&self, id: NodeId) -> Option<&Node> {
@@ -489,8 +497,10 @@ impl<C: Catalog> Session<C> {
     /// The format holds where identification would run, so a "Decompressed"
     /// node still decompresses first.
     ///
-    /// The node is collapsed (expand it again to see the result), and
-    /// formats forced below it are dropped. The choice survives
+    /// The node is collapsed (expand it again to see the result), its
+    /// summary goes back to the one its creator gave it (the summary an
+    /// expansion annotated described the old interpretation; the new one
+    /// annotates its own), and formats forced below it are dropped. The choice survives
     /// [`Session::trim`] and collapsing an ancestor. Returns `false` if the
     /// node is stale or has no children to produce.
     pub fn reinterpret(&mut self, id: NodeId, format: Option<&'static formats::Format>) -> bool {
@@ -529,6 +539,11 @@ impl<C: Catalog> Session<C> {
             && let Some(entry) = self.entry_mut(id)
         {
             entry.interpretation = None;
+            // The summary an expansion annotated described the old
+            // interpretation; the new one annotates its own.
+            if let Some(own) = entry.own_summary.take() {
+                entry.node.summary = own;
+            }
             // Resume marks belong to the dissector that recorded them; the
             // node may now run another (whose keys could even have the same
             // type).
@@ -1023,7 +1038,8 @@ impl<C: Catalog> Session<C> {
             entry.count = count;
         }
         if let Some(summary) = summary {
-            entry.node.summary = Some(summary);
+            let before = entry.node.summary.replace(summary);
+            entry.own_summary.get_or_insert(before);
         }
         entry.node.diagnostics.extend(diagnostics);
         entry.work = entry.work.saturating_add(used);
