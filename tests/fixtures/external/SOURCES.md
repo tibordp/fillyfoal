@@ -837,6 +837,8 @@ Generated in `/tmp/fixtures/<format>` with the scripts named below
 | `r-serialized/df-v2.rds` | R 4.4.1 | same script: a data frame, serialization version 2; reproduced byte-for-byte |
 | `avro/events.avro` | fastavro 1.12.1 | `tests/data/avro/make_fastavro.py`: record schema with an enum, a nullable union, a three-branch union, a map, an array and a fixed; 12 records in 4 blocks, null codec, fixed sync marker; reproduced byte-for-byte |
 | `avro/events-deflate.avro` | fastavro 1.12.1 | same script, deflate codec; reproduced byte-for-byte |
+| `parquet/_metadata` | pyarrow 26.0.0 (parquet-cpp-arrow 26.0.0) | `tests/data/parquet/make_fixtures.py`: `pq.write_metadata` summary file of a one-file dataset, column chunks pointing into `part0.parquet` (`ColumnChunk.file_path`; that file is written and deleted again); reproduced byte-for-byte |
+| `parquet/plaintext-footer.parquet` | pyarrow 26.0.0 (parquet-cpp-arrow 26.0.0) | `tests/data/parquet/make_plaintext_footer.py`: modular encryption with a plaintext (signed) footer, `PAR1` at both ends, AES-GCM, one encrypted column (its page headers encrypted too) and one plaintext column, throwaway keys from a toy in-memory KMS; data keys and nonces are random, so not byte-reproducible; read back with pyarrow |
 ## Embedded databases and torrents
 | `gdbm/dbm-gnu.gdbm` | GNU dbm 1.23 via Python 3.12 `dbm.gnu` (python:3.12-slim, Debian) | `tests/data/gdbm/make.sh`: 5 keys, 64-bit offsets (magic 0x13579acf), 4 KiB blocks; reproduced byte-for-byte |
 | `gdbm/numsync.gdbm` | GNU dbm 1.23 `gdbmtool -n -x -b 512` (debian:bookworm-slim) | same script: extended (numsync) header, magic 0x13579ad1, 512-byte blocks, 3 keys; reproduced byte-for-byte |
