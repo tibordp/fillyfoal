@@ -35,6 +35,9 @@ expression: "common::explore(&display_name(&path), &data)"
       GUID: {5d02926a-212e-11d0-9df9-00a0c922e6ec}  [0xac+0x10]
       Header length (again): 0x54  [0xbc+0x4]
       Unknown: ff ff ff ff ff ff ff ff ff ff ff ff  |............|  [0xc0+0xc]
+  ▾ System  [0x10cc+0x13]
+      Version: 3  [0x10cc+0x4]
+      Default topic: "index.html"  [0x10d0+0xf]
   ▾ Files  [0xcc+0x1000]
       /: 0 — section 0, offset 0x0  [0xe0+0x5]
     ▾ /#SYSTEM: 19 — section 0, offset 0x0  [0x10cc+0x13] → 0xe5+0xc

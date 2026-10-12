@@ -1011,3 +1011,20 @@ Made by `sh tests/data/audio-codecs/make.sh OUTDIR` (fedora:42, `tests/data/audi
 | `ape/mac-extra-high.ape` | Monkey's Audio 12.63 | `mac tone44.wav mac-extra-high.ape -c4000` |
 | `musepack/mpcenc.mpc` | mpcenc 1.30.1 (Fedora `musepack-tools-1.3.0^20110810svn475-3.fc42`) | `mpcenc --silent --standard tone44.wav mpcenc.mpc`: SV8 with stream header, replay gain, encoder info, seek table offset, one audio packet, seek table, stream end |
 | `speex/speexenc.spx` | speexenc (Fedora 42 `speex-tools`, libspeex 1.2.0 per the vendor string) | `speexenc --wideband --quality 6 tone16.wav speexenc.spx`: Ogg Speex, wideband mode; the Ogg serial number is random, so reruns differ in it and in the page CRCs |
+## Documents, e-books and printer rasters (Debian bookworm tools in Docker)
+| `pict/imagemagick-direct.pict` | ImageMagick 6.9.11-60 (Debian bookworm `imagemagick`) | `sh tests/data/pict/make.sh OUTDIR`: `convert -size 48x32 gradient:red-blue -depth 8 PICT:...`; version 2 PICT with a 512-byte header, DirectBitsRect (0x9A, packType 4); reproduced byte-for-byte |
+| `pict/imagemagick-packbits.pict` | ImageMagick 6.9.11-60 | same script, `-colors 4`: PackBitsRect (0x98) with a colour table; reproduced byte-for-byte |
+| `cups-raster/gs-pwgraster.ras` | Ghostscript 10.00.0 (Debian bookworm `ghostscript`) | `sh tests/data/cups-raster/make.sh OUTDIR`: `-sDEVICE=pwgraster -r72` on a 1 x 0.75 inch page with three bars; reproduced byte-for-byte |
+| `cups-raster/gs-cups.ras` | Ghostscript 10.00.0 | same script, `-sDEVICE=cups` (little-endian `3SaR`); reproduced byte-for-byte |
+| `urf/gs-urf.urf` | Ghostscript 10.00.0 | same script, `-sDEVICE=urf` (Apple raster, `UNIRAST`); reproduced byte-for-byte |
+| `djvu/c44.djvu` | DjVuLibre 3.5.28 (Debian bookworm `djvulibre-bin`) | `sh tests/data/djvu/make.sh OUTDIR`: `c44` of a generated 64x48 colour gradient (IW44 BG44 chunks); reproduced byte-for-byte |
+| `djvu/cjb2.djvu` | DjVuLibre 3.5.28 | same script: `cjb2` of a generated 64x48 checkerboard (JB2 Sjbz); reproduced byte-for-byte |
+| `djvu/djvm-bundled.djvu` | DjVuLibre 3.5.28 | same script: `djvm -c` of the two pages (bundled DJVM with DIRM); reproduced byte-for-byte |
+| `chm/chmcmd.chm` | chmcmd from Free Pascal 3.2.2 (Debian bookworm `fp-utils`) | `sh tests/data/chm/make.sh OUTDIR`: a project of 40 generated HTML pages (about 130 KB, several LZX reset intervals), a contents and an index file, title and default topic; the ITSF header and the `#SYSTEM` timestamp record take the time of the run, so a re-run differs in those bytes |
+| `cff/fonttools.cff` | fontTools 4.66.1 (`FontBuilder.setupCFF`) | `uv run --with fonttools==4.66.1 python3 tests/data/cff/cff1.py fonttools.cff`: the CFF table of a three-glyph OpenType font with a Private DICT (BlueValues, OtherBlues, StdHW/StdVW, StemSnapH, widths) and one local subroutine; reproduced byte-for-byte |
+| `mobi/calibre-kf8.azw3` | calibre 6.13 (Debian bookworm) | `sh tests/data/mobi/calibre-kf8.sh OUTDIR`: `ebook-convert book.txt x.azw3` on ~3 KB of generated sentences (KF8 only, MOBI header version 8); calibre records the conversion time and a random UUID, so a re-run differs in those bytes |
+| `mobi/calibre-both.mobi` | calibre 6.13 | same script, `--mobi-file-type both`: MOBI 6, a BOUNDARY record, then the KF8 half (EXTH 121 = 6); not byte-reproducible (time, UUID) |
+| `lrf/calibre.lrf` | calibre 6.13 | same script, `ebook-convert book.txt x.lrf`; not byte-reproducible (time, UUID) |
+| `palm-pdb/calibre-ereader.pdb` | calibre 6.13 | same script, `--format ereader` (calibre's zTXT writer fails on Python 3); not byte-reproducible (time) |
+| `tex-tfm/pltotf.tfm` | PLtoTF 3.6 (TeX Live 2026) | `sh tests/data/tex-tfm/make.sh OUTDIR`: a property list written by the script (three characters, a kern and a ligature, seven parameters, design size 10pt); reproduced byte-for-byte |
+| `tex-vf/vptovf.vf` | VPtoVF (TeX Live 2026) | same script: a virtual property list mapping two characters onto `pltotf` (a SETCHAR, a SETCHAR plus SETRULE); reproduced byte-for-byte |

@@ -6,12 +6,12 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
-use crate::fields::{Endian, Fields};
+use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 
 const BE: Endian = Endian::Big;
 
@@ -85,9 +85,9 @@ record! {
         name: ascii[32] "Name",
         attributes: u16 "Attributes" .hex(),
         version: u16 "Version",
-        created: u32 "Creation date" .mac_time(),
-        modified: u32 "Modification date" .mac_time(),
-        backed_up: u32 "Last backup date" .mac_time(),
+        created: u32 "Creation date" .with(palm_date),
+        modified: u32 "Modification date" .with(palm_date),
+        backed_up: u32 "Last backup date" .with(palm_date),
         modification: u32 "Modification number",
         app_info: u32 "App info offset" .hex(),
         sort_info: u32 "Sort info offset" .hex(),
@@ -97,6 +97,24 @@ record! {
         next_list: u32 "Next record list",
         records: u16 "Number of records",
     }
+}
+
+/// A Palm database date. Palm OS counts seconds from 1904 (unsigned), but
+/// many writers store Unix seconds (calibre 6.13's MOBI and PDB writers
+/// write `int(time.time())`: `ebooks/mobi/writer2/main.py`,
+/// `ebooks/pdb/header.py`). Following the MobileRead wiki's PDB page, a
+/// value with the top bit set counts from 1904 and anything else from
+/// 1970. Zero means "never" (an unset backup date).
+fn palm_date(&raw: &u32, node: Node) -> Node {
+    if raw == 0 {
+        return node.summary("not set");
+    }
+    let unix_seconds = if raw & 0x8000_0000 != 0 {
+        crate::text::mac_to_unix(raw.into())
+    } else {
+        raw.into()
+    };
+    node.value(Value::Timestamp { unix_seconds })
 }
 
 const PALMDOC_COMPRESSION: EnumTable = &[(1, "none"), (2, "PalmDOC (LZ77)"), (17480, "HUFF/CDIC")];
@@ -192,6 +210,36 @@ async fn palm(cx: Cx, input: Input) -> Result<()> {
         }
         cx.emit(node);
         cx.emit(book_text(&cx, input, record0, &offsets).await?);
+        // A combined MOBI 6 + KF8 file: EXTH 121 names the record 0 of the
+        // KF8 half (after a "BOUNDARY" record), which has its own headers,
+        // text records and record numbering.
+        if let Some(k) = kf8_boundary(&cx, record0).await?
+            && let Some(kf8) = offsets.get(k..).filter(|o| o.len() > 1)
+            && let Some(&start) = kf8.first()
+        {
+            let end = kf8.get(1).copied().unwrap_or(file.len);
+            let kf8_record0 = file.sub(start, end.saturating_sub(start));
+            let mut node = Node::new("KF8 book header")
+                .span(kf8_record0)
+                .summary(format!("record {k}"))
+                .lazy(book_header_node, kf8_record0);
+            let boundary = match k.checked_sub(1).and_then(|b| offsets.get(b)) {
+                Some(&b) => cx.read_avail(file.sub(b, 8)).await?,
+                None => Vec::new(),
+            };
+            if boundary != b"BOUNDARY" {
+                node = node.diag(Diagnostic::warning(
+                    "the record before the KF8 header is not BOUNDARY",
+                ));
+            }
+            cx.emit(node);
+            cx.emit(
+                book_text(&cx, input, kf8_record0, kf8)
+                    .await?
+                    .renamed("KF8 text"),
+            );
+            summary = format!("{summary}, with a KF8 part");
+        }
     }
     cx.annotate(summary);
     Ok(())
@@ -299,6 +347,49 @@ async fn mobi_title(cx: &Cx, record0: Span) -> Result<Option<String>> {
     Ok(Some(String::from_utf8_lossy(&title).into_owned()))
 }
 
+/// The value of EXTH 121 (the KF8 record 0's record number) in a MOBI 6
+/// record 0, if there is one and it is not the KF8 header itself.
+async fn kf8_boundary(cx: &Cx, record0: Span) -> Result<Option<usize>> {
+    let mobi = cx.read_avail(record0.sub(16, 0x18)).await?;
+    if !mobi.starts_with(b"MOBI") || u32_be(&mobi, 0x14).unwrap_or(0) >= 8 {
+        return Ok(None);
+    }
+    let flags = cx.read_avail(record0.sub(0x80, 4)).await?;
+    if u32_be(&flags, 0).unwrap_or(0) & 0x40 == 0 {
+        return Ok(None);
+    }
+    let header_len = u64::from(u32_be(&mobi, 4).unwrap_or(0));
+    // EXTH lives inside record 0, which stays small; 64 KiB is plenty.
+    let exth = cx
+        .read_avail(
+            record0
+                .tail(16u64.saturating_add(header_len))
+                .sub(0, 0x10000),
+        )
+        .await?;
+    if !exth.starts_with(b"EXTH") {
+        return Ok(None);
+    }
+    let count = u32_be(&exth, 8).unwrap_or(0);
+    let mut at = 12usize;
+    for _ in 0..count {
+        let (Some(kind), Some(len)) = (u32_be(&exth, at), u32_be(&exth, at.saturating_add(4)))
+        else {
+            break;
+        };
+        if kind == 121 && len == 12 {
+            return Ok(u32_be(&exth, at.saturating_add(8))
+                .filter(|&v| v != NULL_INDEX && v > 0)
+                .and_then(|v| usize::try_from(v).ok()));
+        }
+        if len < 8 {
+            break;
+        }
+        at = at.saturating_add(usize::try_from(len).unwrap_or(usize::MAX));
+    }
+    Ok(None)
+}
+
 async fn book_header_node(cx: Cx, record0: Span) -> Result<()> {
     book_header(&cx, record0).await.map(|_| ())
 }
@@ -334,15 +425,13 @@ async fn book_header(cx: &Cx, record0: Span) -> Result<Option<String>> {
     let title_offset = u64::from(u32_be(&mobi, 0x44).unwrap_or(0));
     let title_len = u64::from(u32_be(&mobi, 0x48).unwrap_or(0));
     let exth_flags = u32_be(&mobi, 0x70).unwrap_or(0);
-    cx.emit(Node::new("MOBI header").span(mobi_span).summary(format!(
-        "{}, version {version}, {}",
-        lookup(MOBI_TYPES, kind.into()).unwrap_or("unknown type"),
-        match encoding {
-            65001 => "UTF-8",
-            1252 => "CP1252",
-            _ => "unknown encoding",
-        }
-    )));
+    cx.emit(
+        struct_node("MOBI header", mobi_span, BE, header_len, mobi_header_layout).summary(format!(
+            "{}, version {version}, {}",
+            lookup(MOBI_TYPES, kind.into()).unwrap_or("unknown type"),
+            lookup(TEXT_ENCODINGS, encoding.into()).unwrap_or("unknown encoding"),
+        )),
+    );
     if exth_flags & 0x40 != 0 {
         let exth = record0.tail(16u64.saturating_add(header_len));
         cx.emit(
@@ -359,6 +448,117 @@ async fn book_header(cx: &Cx, record0: Span) -> Result<Option<String>> {
             .value(Value::Text(title.clone())),
     );
     Ok(Some(title))
+}
+
+const TEXT_ENCODINGS: EnumTable = &[(1252, "CP1252"), (65001, "UTF-8")];
+
+const EXTRA_DATA_FLAGS: FlagTable = &[
+    flag(0x1, "multibyte characters"),
+    flag(0x2, "TBS indexing"),
+    flag(0x4, "uncrossable breaks"),
+];
+
+const EXTH_FLAGS: FlagTable = &[flag(0x40, "EXTH present")];
+
+/// "No record" in the MOBI header's record numbers.
+const NULL_INDEX: u32 = u32::MAX;
+
+/// A record number in the MOBI header. In the KF8 half of a combined file
+/// they count from that half's record 0 (calibre's `relative_records`).
+fn record_index(&v: &u32, node: Node) -> Node {
+    if v == NULL_INDEX {
+        node.summary("none")
+    } else {
+        node
+    }
+}
+
+/// The MOBI header after the 16-byte PalmDOC header of record 0, field by
+/// field as calibre 6.13 reads it (`ebooks/mobi/debug/headers.py`,
+/// `MOBIHeader`, whose offsets count from record 0 and ours from "MOBI").
+/// Later groups are there only when the header is long enough for them.
+fn mobi_header_layout(f: &mut Fields<'_>, &header_len: &u64) -> Result<()> {
+    f.ascii("Identifier", 4).emit()?;
+    f.u32("Header length").emit()?;
+    f.u32("Type").enumeration(MOBI_TYPES).emit()?;
+    f.u32("Text encoding").enumeration(TEXT_ENCODINGS).emit()?;
+    f.u32("Unique ID").hex().emit()?;
+    let version = f.u32("File version").emit()?;
+    f.u32("Meta orthographic index")
+        .with(record_index)
+        .desc("In KF8: the fragment (section) index")
+        .emit()?;
+    f.u32("Meta inflection index").with(record_index).emit()?;
+    f.u32("Secondary index record").with(record_index).emit()?;
+    f.bytes("Reserved", 28).emit()?;
+    f.u32("First non-book record").with(record_index).emit()?;
+    f.u32("Full name offset").hex().emit()?;
+    f.u32("Full name length").emit()?;
+    f.u32("Locale")
+        .hex()
+        .desc("Language ID in the low byte, sublanguage in bits 10-17")
+        .emit()?;
+    f.u32("Input language").hex().emit()?;
+    f.u32("Output language").hex().emit()?;
+    f.u32("Minimum reader version").emit()?;
+    f.u32("First image record").with(record_index).emit()?;
+    f.u32("Huffman record").with(record_index).emit()?;
+    f.u32("Huffman record count").emit()?;
+    f.u32("Huffman table offset")
+        .with(record_index)
+        .desc("In KF8: the DATP record")
+        .emit()?;
+    f.u32("Huffman table length").emit()?;
+    f.u32("EXTH flags").hex().flags(EXTH_FLAGS).emit()?;
+    if header_len < 168 {
+        return Ok(());
+    }
+    f.bytes("Unknown", 36).emit()?;
+    f.u32("DRM offset").with(record_index).emit()?;
+    f.u32("DRM count").emit()?;
+    f.u32("DRM size").emit()?;
+    f.u32("DRM flags").hex().emit()?;
+    if header_len < 232 {
+        return Ok(());
+    }
+    f.bytes("Unknown", 8).emit()?;
+    if version < 8 {
+        f.u16("First text record").emit()?;
+        f.u16("Last text record").emit()?;
+        f.u32("Unknown").hex().emit()?;
+    } else {
+        f.u32("FDST record").with(record_index).emit()?;
+        f.u32("FDST count").emit()?;
+    }
+    f.u32("FCIS record").with(record_index).emit()?;
+    f.u32("FCIS count").emit()?;
+    f.u32("FLIS record").with(record_index).emit()?;
+    f.u32("FLIS count").emit()?;
+    f.bytes("Unknown", 8).emit()?;
+    f.u32("SRCS record").with(record_index).emit()?;
+    f.u32("SRCS count").emit()?;
+    f.bytes("Unknown", 8).emit()?;
+    f.u32("Extra data flags")
+        .hex()
+        .flags(EXTRA_DATA_FLAGS)
+        .desc("Trailing entries at the end of each text record")
+        .emit()?;
+    f.u32("Primary index record")
+        .with(record_index)
+        .desc("The NCX index (INDX)")
+        .emit()?;
+    if header_len < 248 {
+        return Ok(());
+    }
+    f.u32("Fragment index").with(record_index).emit()?;
+    f.u32("Skeleton index").with(record_index).emit()?;
+    f.u32("DATP record").with(record_index).emit()?;
+    f.u32("Guide index").with(record_index).emit()?;
+    let rest = header_len.saturating_sub(f.pos());
+    if rest > 0 {
+        f.bytes("Unknown", rest).emit()?;
+    }
+    Ok(())
 }
 
 async fn exth_records(cx: Cx, span: Span) -> Result<()> {

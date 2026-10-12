@@ -74,6 +74,10 @@ expression: "common::explore(&display_name(&path), &data)"
           FDArray: 40  [0x261+0x3]
           CharStrings: 14  [0x264+0x2]
         Global Subrs INDEX — 0 entries  [0x266+0x4]
+      ▾ FDArray INDEX — 1 Font DICTs  [0x284+0xa]
+        ▾ Font DICT 0  [0x28b+0x3]
+            Private: "0 50"  [0x28b+0x3]
+        ▾ Private DICT 0 — 0 bytes  [0x28e+0x0]
         CharStrings INDEX — 2 glyphs  [0x26a+0x1a]
   ▾ 'DSIG' — Digital signature, 856 bytes  [0x3c8+0x358]
       Checksum: 0x2be720b0 — valid

@@ -702,55 +702,319 @@ fn pict_start(h: &Head<'_>) -> Option<(u64, bool)> {
 declare_format!(pub PICT = "pict", "QuickDraw picture (PICT)", ["pict", "pct", "pic"], "image/x-pict",
     Probe::Custom(|h| pict_start(h).is_some()), pict);
 
-/// Opcodes with fixed data lengths (version 2).
-fn pict_fixed(op: u16) -> Option<(u64, &'static str)> {
-    Some(match op {
-        0x0000 => (0, "NOP"),
-        0x0002 => (8, "BkPat"),
-        0x0003 => (2, "TxFont"),
-        0x0004 => (1, "TxFace"),
-        0x0005 => (2, "TxMode"),
-        0x0006 => (4, "SpExtra"),
-        0x0007 => (4, "PnSize"),
-        0x0008 => (2, "PnMode"),
-        0x0009 => (8, "PnPat"),
-        0x000a => (8, "FillPat"),
-        0x000b => (4, "OvSize"),
-        0x000c => (4, "Origin"),
-        0x000d => (2, "TxSize"),
-        0x000e => (4, "FgColor"),
-        0x000f => (4, "BkColor"),
-        0x0010 => (8, "TxRatio"),
-        0x0011 => (2, "VersionOp"),
-        0x0015 => (2, "PnLocHFrac"),
-        0x0016 => (2, "ChExtra"),
-        0x001a => (6, "RGBFgCol"),
-        0x001b => (6, "RGBBkCol"),
-        0x001c => (0, "HiliteMode"),
-        0x001d => (6, "HiliteColor"),
-        0x001e => (0, "DefHilite"),
-        0x001f => (6, "OpColor"),
-        0x0020 => (8, "Line"),
-        0x0021 => (4, "LineFrom"),
-        0x0022 => (6, "ShortLine"),
-        0x0023 => (2, "ShortLineFrom"),
-        0x0030 => (8, "frameRect"),
-        0x0031 => (8, "paintRect"),
-        0x0032 => (8, "eraseRect"),
-        0x0033 => (8, "invertRect"),
-        0x0034 => (8, "fillRect"),
-        0x0038..=0x003c => (0, "sameRect"),
-        0x0040..=0x0044 => (8, "RRect"),
-        0x0048..=0x004c => (0, "sameRRect"),
-        0x0050..=0x0054 => (8, "Oval"),
-        0x0058..=0x005c => (0, "sameOval"),
-        0x0060..=0x0064 => (12, "Arc"),
-        0x0068..=0x006c => (4, "sameArc"),
-        0x00a0 => (2, "ShortComment"),
-        0x00ff => (0, "OpEndPic"),
-        0x0c00 => (24, "HeaderOp"),
-        _ => return None,
+/// How the data after a version 2 opcode is sized (Inside Macintosh:
+/// Imaging With QuickDraw, appendix A, table A-2).
+#[derive(Clone, Copy)]
+enum PictData {
+    /// A fixed number of bytes.
+    Fixed(u64),
+    /// A region or polygon: a size word that counts itself.
+    Sized,
+    /// A data length word followed by that many bytes.
+    Word,
+    /// A data length long followed by that many bytes.
+    Long,
+    /// LongText, DHText, DVText, DHDVText: fixed bytes, then a count byte
+    /// at the given offset and that many characters.
+    Text(u64, u64),
+    /// LongComment: kind word, length word, data.
+    Comment,
+    /// BkPixPat, PnPixPat, FillPixPat.
+    PixPat,
+    /// BitsRect, BitsRgn, PackBitsRect, PackBitsRgn, DirectBitsRect,
+    /// DirectBitsRgn.
+    Bits,
+}
+
+/// The name of a version 2 opcode and how its data is sized.
+fn pict_opcode(op: u16) -> (&'static str, PictData) {
+    use PictData::{Bits, Comment, Fixed, Long, PixPat, Sized, Text, Word};
+    match op {
+        0x0000 => ("NOP", Fixed(0)),
+        0x0001 => ("Clip", Sized),
+        0x0002 => ("BkPat", Fixed(8)),
+        0x0003 => ("TxFont", Fixed(2)),
+        0x0004 => ("TxFace", Fixed(1)),
+        0x0005 => ("TxMode", Fixed(2)),
+        0x0006 => ("SpExtra", Fixed(4)),
+        0x0007 => ("PnSize", Fixed(4)),
+        0x0008 => ("PnMode", Fixed(2)),
+        0x0009 => ("PnPat", Fixed(8)),
+        0x000a => ("FillPat", Fixed(8)),
+        0x000b => ("OvSize", Fixed(4)),
+        0x000c => ("Origin", Fixed(4)),
+        0x000d => ("TxSize", Fixed(2)),
+        0x000e => ("FgColor", Fixed(4)),
+        0x000f => ("BkColor", Fixed(4)),
+        0x0010 => ("TxRatio", Fixed(8)),
+        0x0011 => ("VersionOp", Fixed(2)),
+        0x0012 => ("BkPixPat", PixPat),
+        0x0013 => ("PnPixPat", PixPat),
+        0x0014 => ("FillPixPat", PixPat),
+        0x0015 => ("PnLocHFrac", Fixed(2)),
+        0x0016 => ("ChExtra", Fixed(2)),
+        0x0017..=0x0019 => ("Reserved", Fixed(0)),
+        0x001a => ("RGBFgCol", Fixed(6)),
+        0x001b => ("RGBBkCol", Fixed(6)),
+        0x001c => ("HiliteMode", Fixed(0)),
+        0x001d => ("HiliteColor", Fixed(6)),
+        0x001e => ("DefHilite", Fixed(0)),
+        0x001f => ("OpColor", Fixed(6)),
+        0x0020 => ("Line", Fixed(8)),
+        0x0021 => ("LineFrom", Fixed(4)),
+        0x0022 => ("ShortLine", Fixed(6)),
+        0x0023 => ("ShortLineFrom", Fixed(2)),
+        0x0024..=0x0027 => ("Reserved", Word),
+        0x0028 => ("LongText", Text(5, 4)),
+        0x0029 => ("DHText", Text(2, 1)),
+        0x002a => ("DVText", Text(2, 1)),
+        0x002b => ("DHDVText", Text(3, 2)),
+        0x002c => ("fontName", Word),
+        0x002d => ("lineJustify", Word),
+        0x002e => ("glyphState", Word),
+        0x002f => ("Reserved", Word),
+        0x0030 => ("frameRect", Fixed(8)),
+        0x0031 => ("paintRect", Fixed(8)),
+        0x0032 => ("eraseRect", Fixed(8)),
+        0x0033 => ("invertRect", Fixed(8)),
+        0x0034 => ("fillRect", Fixed(8)),
+        0x0035..=0x0037 => ("Reserved", Fixed(8)),
+        0x0038 => ("frameSameRect", Fixed(0)),
+        0x0039 => ("paintSameRect", Fixed(0)),
+        0x003a => ("eraseSameRect", Fixed(0)),
+        0x003b => ("invertSameRect", Fixed(0)),
+        0x003c => ("fillSameRect", Fixed(0)),
+        0x003d..=0x003f => ("Reserved", Fixed(0)),
+        0x0040 => ("frameRRect", Fixed(8)),
+        0x0041 => ("paintRRect", Fixed(8)),
+        0x0042 => ("eraseRRect", Fixed(8)),
+        0x0043 => ("invertRRect", Fixed(8)),
+        0x0044 => ("fillRRect", Fixed(8)),
+        0x0045..=0x0047 => ("Reserved", Fixed(8)),
+        0x0048..=0x004c => ("sameRRect", Fixed(0)),
+        0x004d..=0x004f => ("Reserved", Fixed(0)),
+        0x0050 => ("frameOval", Fixed(8)),
+        0x0051 => ("paintOval", Fixed(8)),
+        0x0052 => ("eraseOval", Fixed(8)),
+        0x0053 => ("invertOval", Fixed(8)),
+        0x0054 => ("fillOval", Fixed(8)),
+        0x0055..=0x0057 => ("Reserved", Fixed(8)),
+        0x0058..=0x005c => ("sameOval", Fixed(0)),
+        0x005d..=0x005f => ("Reserved", Fixed(0)),
+        0x0060..=0x0064 => ("Arc", Fixed(12)),
+        0x0065..=0x0067 => ("Reserved", Fixed(12)),
+        0x0068..=0x006c => ("sameArc", Fixed(4)),
+        0x006d..=0x006f => ("Reserved", Fixed(4)),
+        0x0070 => ("framePoly", Sized),
+        0x0071 => ("paintPoly", Sized),
+        0x0072 => ("erasePoly", Sized),
+        0x0073 => ("invertPoly", Sized),
+        0x0074 => ("fillPoly", Sized),
+        0x0075..=0x0077 => ("Reserved", Sized),
+        0x0078..=0x007c => ("samePoly", Fixed(0)),
+        0x007d..=0x007f => ("Reserved", Fixed(0)),
+        0x0080 => ("frameRgn", Sized),
+        0x0081 => ("paintRgn", Sized),
+        0x0082 => ("eraseRgn", Sized),
+        0x0083 => ("invertRgn", Sized),
+        0x0084 => ("fillRgn", Sized),
+        0x0085..=0x0087 => ("Reserved", Sized),
+        0x0088..=0x008c => ("sameRgn", Fixed(0)),
+        0x008d..=0x008f => ("Reserved", Fixed(0)),
+        0x0090 => ("BitsRect", Bits),
+        0x0091 => ("BitsRgn", Bits),
+        0x0092..=0x0097 => ("Reserved", Word),
+        0x0098 => ("PackBitsRect", Bits),
+        0x0099 => ("PackBitsRgn", Bits),
+        0x009a => ("DirectBitsRect", Bits),
+        0x009b => ("DirectBitsRgn", Bits),
+        0x009c..=0x009f => ("Reserved", Word),
+        0x00a0 => ("ShortComment", Fixed(2)),
+        0x00a1 => ("LongComment", Comment),
+        0x00a2..=0x00af => ("Reserved", Word),
+        0x00b0..=0x00cf => ("Reserved", Fixed(0)),
+        0x00d0..=0x00fe => ("Reserved", Long),
+        0x00ff => ("OpEndPic", Fixed(0)),
+        0x0c00 => ("HeaderOp", Fixed(24)),
+        // 0x0100-0x7fff: two bytes of data per unit of the high byte.
+        0x0100..=0x7fff => ("Reserved", Fixed(u64::from(op >> 8).saturating_mul(2))),
+        0x8000..=0x80ff => ("Reserved", Fixed(0)),
+        0x8200 => ("CompressedQuickTime", Long),
+        0x8201 => ("UncompressedQuickTime", Long),
+        0x8100..=0xffff => ("Reserved", Long),
+    }
+}
+
+/// The parts of a bitmap or pixel map opcode (0x90, 0x91, 0x98-0x9B, and
+/// a full-colour pixel pattern), as offsets into the file.
+struct PictBits {
+    /// BitMap or PixMap record (with DirectBits' baseAddr in front).
+    map: Span,
+    pixmap: bool,
+    width: i32,
+    height: i32,
+    depth: u16,
+    pack_type: u16,
+    /// Colour table and its number of entries.
+    ctable: Option<(Span, u64)>,
+    /// Source and destination rectangles and the transfer mode.
+    rects: Option<Span>,
+    mask: Option<Span>,
+    data: Span,
+    rows: u64,
+    /// Position just after the rows, relative to the file.
+    end: u64,
+}
+
+/// Walks one bitmap or pixel map at `at` (just after the opcode): its
+/// header, colour table, rectangles, mask region and packed rows
+/// (Inside Macintosh: Imaging With QuickDraw, appendix A, "PackBitsRect";
+/// row packing as ImageMagick's `coders/pict.c` reads it: rows of fewer
+/// than 8 bytes are stored unpacked, packType 2 drops the pad byte of
+/// 32-bit pixels, and otherwise each row has a byte count, a word when
+/// rowBytes exceeds 250).
+async fn pict_bits(cx: &Cx, file: Span, at: u64, op: u16, pattern: bool) -> Result<PictBits> {
+    let mut cur = Cursor::new(cx, file, BE);
+    cur.seek(at);
+    let direct = op == 0x9a || op == 0x9b;
+    let region = op & 1 == 1 && !pattern;
+    let start = cur.pos();
+    if direct {
+        cur.skip(4); // baseAddr
+    }
+    let row_bytes = cur.u16().await?;
+    let pixmap = direct || row_bytes & 0x8000 != 0;
+    let row_len = u64::from(row_bytes & 0x3fff);
+    let b = cur.bytes(8).await?;
+    let w = |i: usize| i16::from_ne_bytes(u16_be(&b, i).unwrap_or(0).to_ne_bytes());
+    let (top, left, bottom, right) = (w(0), w(2), w(4), w(6));
+    let (mut depth, mut pack_type) = (1u16, 0u16);
+    if pixmap {
+        // pmVersion, packType, packSize, hRes, vRes, pixelType, pixelSize,
+        // cmpCount, cmpSize, planeBytes, pmTable, pmReserved.
+        let pm = cur.bytes(36).await?;
+        pack_type = u16_be(&pm, 2).unwrap_or(0);
+        depth = u16_be(&pm, 18).unwrap_or(0);
+    }
+    let map = cur.since(start);
+    let mut ctable = None;
+    if pixmap && !direct {
+        let ct = cur.pos();
+        let h = cur.bytes(8).await?;
+        let entries = u64::from(u16_be(&h, 6).unwrap_or(0)).saturating_add(1);
+        cur.skip(entries.saturating_mul(8));
+        ctable = Some((cur.since(ct), entries));
+    }
+    let mut rects = None;
+    if !pattern {
+        rects = Some(cur.span(18));
+        cur.skip(18);
+    }
+    let mut mask = None;
+    if region {
+        let m = cur.pos();
+        let size = u64::from(cur.u16().await?);
+        cur.seek(m.saturating_add(size.max(2)));
+        mask = Some(cur.since(m));
+    }
+    let rows = u64::try_from(i32::from(bottom).saturating_sub(top.into())).unwrap_or(0);
+    let data = cur.pos();
+    let packed = row_len >= 8 && pack_type != 1 && !(direct && pack_type == 2);
+    if !packed {
+        let row = if direct && pack_type == 2 {
+            row_len.saturating_mul(3) / 4
+        } else {
+            row_len
+        };
+        cur.skip(rows.saturating_mul(row));
+    } else {
+        for _ in 0..rows {
+            let n = if row_len > 250 {
+                u64::from(cur.u16().await?)
+            } else {
+                u64::from(cur.u8().await?)
+            };
+            cur.skip(n);
+            if cur.pos() > file.len {
+                break;
+            }
+        }
+    }
+    if cur.pos() > file.len {
+        return Err(Diagnostic::truncated(
+            file.tail(start),
+            file.len.saturating_sub(start),
+        ));
+    }
+    Ok(PictBits {
+        map,
+        pixmap,
+        width: i32::from(right).saturating_sub(left.into()),
+        height: i32::from(bottom).saturating_sub(top.into()),
+        depth,
+        pack_type,
+        ctable,
+        rects,
+        mask,
+        data: cur.since(data),
+        rows,
+        end: cur.pos(),
     })
+}
+
+/// The end of a pixel pattern at `at`: patType, an 8-byte old pattern,
+/// then for patType 1 a pixel map with colour table and rows, for 2 an
+/// RGB colour.
+async fn pict_pixpat(cx: &Cx, file: Span, at: u64) -> Result<u64> {
+    let t = cx.read(file.sub_exact(at, 2)?).await?;
+    let pat_type = u16_be(&t, 0).unwrap_or(0);
+    let after = at.saturating_add(10);
+    Ok(match pat_type {
+        1 => pict_bits(cx, file, after, 0x98, true).await?.end,
+        2 => after.saturating_add(6),
+        _ => after,
+    })
+}
+
+#[derive(Clone)]
+struct BitsState {
+    file: Span,
+    at: u64,
+    op: u16,
+}
+
+async fn pict_bits_view(cx: Cx, s: BitsState) -> Result<()> {
+    let b = pict_bits(&cx, s.file, s.at, s.op, false).await?;
+    cx.emit(
+        Node::new(if b.pixmap { "PixMap" } else { "BitMap" })
+            .span(b.map)
+            .summary(format!("{}×{}, {}-bit", b.width, b.height, b.depth)),
+    );
+    if b.pixmap {
+        cx.emit(
+            Node::new("packType")
+                .span(
+                    b.map
+                        .sub(if s.op == 0x9a || s.op == 0x9b { 16 } else { 12 }, 2),
+                )
+                .value(uint(b.pack_type, 16)),
+        );
+    }
+    if let Some((span, n)) = b.ctable {
+        cx.emit(Node::new("Colour table").span(span).value(uint(n, 32)));
+    }
+    if let Some(r) = b.rects {
+        cx.emit(Node::new("Source and destination").span(r));
+    }
+    if let Some(m) = b.mask {
+        cx.emit(Node::new("Mask region").span(m));
+    }
+    cx.emit(
+        Node::new("Pixel data")
+            .span(b.data)
+            .summary(format!("{} rows", b.rows)),
+    );
+    Ok(())
 }
 
 async fn pict(cx: Cx, input: Input) -> Result<()> {
@@ -799,6 +1063,7 @@ async fn pict(cx: Cx, input: Input) -> Result<()> {
     let mut cur = Cursor::new(&cx, file, BE);
     cur.seek(at.saturating_add(10));
     let mut n = 0u32;
+    let mut images = 0u32;
     while !cur.at_end() {
         let start = cur.pos();
         // Version 2 opcodes are word-aligned.
@@ -808,93 +1073,44 @@ async fn pict(cx: Cx, input: Input) -> Result<()> {
         }
         let op = cur.u16().await?;
         n = n.saturating_add(1);
-        let (len, name): (u64, String) = if let Some((len, name)) = pict_fixed(op) {
-            (len, name.to_owned())
-        } else {
-            match op {
-                0x0001 | 0x0070..=0x0084 | 0x002c | 0x002e => {
-                    let l = u64::from(u16_be(&cx.read(cur.span(2)).await?, 0).unwrap_or(0));
-                    let name = match op {
-                        0x0001 => "Clip",
-                        0x002c => "fontName",
-                        0x002e => "glyphState",
-                        0x0070..=0x007f => "Poly",
-                        _ => "Rgn",
-                    };
-                    // Clip, polygon and region sizes include the size word.
-                    (
-                        if op == 0x002c || op == 0x002e {
-                            l.saturating_add(2)
-                        } else {
-                            l
-                        },
-                        name.to_owned(),
-                    )
-                }
-                0x0028 => {
-                    let t = cx.read(cur.span(5)).await?;
-                    (
-                        5u64.saturating_add(t.get(4).copied().unwrap_or(0).into()),
-                        "LongText".to_owned(),
-                    )
-                }
-                0x0029 | 0x002a => {
-                    let t = cx.read(cur.span(2)).await?;
-                    (
-                        2u64.saturating_add(t.get(1).copied().unwrap_or(0).into()),
-                        if op == 0x29 {
-                            "DHText".to_owned()
-                        } else {
-                            "DVText".to_owned()
-                        },
-                    )
-                }
-                0x002b => {
-                    let t = cx.read(cur.span(3)).await?;
-                    (
-                        3u64.saturating_add(t.get(2).copied().unwrap_or(0).into()),
-                        "DHDVText".to_owned(),
-                    )
-                }
-                0x00a1 => {
-                    let t = cx.read(cur.span(4)).await?;
-                    (
-                        4u64.saturating_add(u16_be(&t, 2).unwrap_or(0).into()),
-                        "LongComment".to_owned(),
-                    )
-                }
-                0x0100..=0x7fff => (
-                    u64::from(op >> 8).saturating_mul(2),
-                    format!("Reserved {op:#06x}"),
-                ),
-                0x8000..=0x80ff => (0, format!("Reserved {op:#06x}")),
-                0x8100..=0xffff => {
-                    let t = cx.read(cur.span(4)).await?;
-                    let l = u64::from(u32::from_be_bytes(
-                        t.get(..4)
-                            .and_then(|s| s.try_into().ok())
-                            .unwrap_or_default(),
-                    ));
-                    (
-                        l.saturating_add(4),
-                        if op == 0x8200 {
-                            "CompressedQuickTime".to_owned()
-                        } else {
-                            format!("Reserved {op:#06x}")
-                        },
-                    )
-                }
-                _ => {
-                    // Bitmap opcodes (0x90, 0x91, 0x98, 0x99, 0x9a, 0x9b) need a
-                    // pixel map walk to find their end.
-                    cx.push(
-                        Node::new(format!("Opcode {op:#06x}"))
-                            .span(file.tail(start))
-                            .diag(Diagnostic::unsupported("pixel map opcodes")),
-                    )
-                    .await;
-                    break;
-                }
+        let (name, data) = pict_opcode(op);
+        let body = cur.pos();
+        let mut summary = None;
+        let len = match data {
+            PictData::Fixed(l) => l,
+            PictData::Sized => {
+                u64::from(u16_be(&cx.read(cur.span(2)).await?, 0).unwrap_or(0)).max(2)
+            }
+            PictData::Word => {
+                u64::from(u16_be(&cx.read(cur.span(2)).await?, 0).unwrap_or(0)).saturating_add(2)
+            }
+            PictData::Long => {
+                let t = cx.read(cur.span(4)).await?;
+                u64::from(crate::bytes::u32_be(&t, 0).unwrap_or(0)).saturating_add(4)
+            }
+            PictData::Text(fixed, count) => {
+                let t = cx.read(cur.span(fixed)).await?;
+                let c = usize::try_from(count).unwrap_or(usize::MAX);
+                fixed.saturating_add(t.get(c).copied().unwrap_or(0).into())
+            }
+            PictData::Comment => {
+                let t = cx.read(cur.span(4)).await?;
+                4u64.saturating_add(u16_be(&t, 2).unwrap_or(0).into())
+            }
+            PictData::PixPat => pict_pixpat(&cx, file, body).await?.saturating_sub(body),
+            PictData::Bits => {
+                let b = pict_bits(&cx, file, body, op, false).await?;
+                images = images.saturating_add(1);
+                summary = Some(format!(
+                    "{}×{}, {}-bit{}",
+                    b.width,
+                    b.height,
+                    b.depth,
+                    b.ctable
+                        .map(|(_, n)| format!(", {n} colours"))
+                        .unwrap_or_default()
+                ));
+                b.end.saturating_sub(body)
             }
         };
         cur.skip(len);
@@ -905,11 +1121,14 @@ async fn pict(cx: Cx, input: Input) -> Result<()> {
             ));
         }
         let span = cur.since(start);
-        let node = Node::new(name).span(span).value(hex(op, 16));
-        let node = if op == 0x0c00 {
-            node.lazy(pict_header, span.tail(2))
-        } else {
-            node
+        let mut node = Node::new(name).span(span).value(hex(op, 16));
+        if let Some(s) = summary {
+            node = node.summary(s);
+        }
+        let node = match data {
+            _ if op == 0x0c00 => node.lazy(pict_header, span.tail(2)),
+            PictData::Bits => node.lazy(pict_bits_view, BitsState { file, at: body, op }),
+            _ => node,
         };
         cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.push(node).await;
@@ -917,7 +1136,14 @@ async fn pict(cx: Cx, input: Input) -> Result<()> {
             break;
         }
     }
-    cx.annotate(format!("QuickDraw PICT v2, {width}×{height}, {n} opcodes"));
+    cx.annotate(if images > 0 {
+        format!(
+            "QuickDraw PICT v2, {width}×{height}, {n} opcodes, {images} {}",
+            if images == 1 { "bitmap" } else { "bitmaps" }
+        )
+    } else {
+        format!("QuickDraw PICT v2, {width}×{height}, {n} opcodes")
+    });
     Ok(())
 }
 

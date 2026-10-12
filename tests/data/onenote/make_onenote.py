@@ -3,6 +3,7 @@
 
     tests/fixtures/synthetic/onenote/Notes.one
     tests/fixtures/synthetic/onetoc2/Notebook.onetoc2
+    tests/fixtures/synthetic/onenote/Online.one (FSSHTTPB packaging prefix)
 
 Layouts are from memory of [MS-ONESTORE] / [MS-ONE] (no OneNote writer was
 available), so these files show what our reader expects, not what OneNote
@@ -544,6 +545,21 @@ def make_toc():
     return bytes(w.buf)
 
 
+FSSHTTPB = uuid.UUID("{638DE92F-A6D4-4BC1-9A36-B3FC2511A5B7}")
+
+
+def make_fsshttpb():
+    """A section in the alternative packaging of [MS-ONESTORE] 2.8: the
+    fixed prefix (file type, file, zero legacy version, the FSSHTTPB file
+    format GUID, a reserved u32), then a 32-bit stream object header start
+    (type 0x7A OneNote Packaging Start, compound) and 48 placeholder bytes
+    standing in for the data element package, which we do not parse."""
+    head = ONE.bytes_le + g(0x500).bytes_le + b"\0" * 16 + FSSHTTPB.bytes_le
+    head += struct.pack("<I", 0)
+    start = 0x2 | (1 << 2) | (0x7A << 3) | (48 << 17)
+    return head + struct.pack("<I", start) + bytes(range(48))
+
+
 def check_with_pyonenote(path):
     from pyOneNote.OneDocument import OneDocment
 
@@ -570,6 +586,9 @@ def main():
         f.write(make_one())
     with open(toc, "wb") as f:
         f.write(make_toc())
+    alt = os.path.join(ROOT, "tests/fixtures/synthetic/onenote/Online.one")
+    with open(alt, "wb") as f:
+        f.write(make_fsshttpb())
     if "--check" in sys.argv:
         check_with_pyonenote(one)
 

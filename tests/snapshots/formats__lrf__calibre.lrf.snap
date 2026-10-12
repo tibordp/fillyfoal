@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ calibre.lrf — Sony BBeB e-book v1000, 12 objects  [0x0+0x7a2]
+    Signature: 4c 00 52 00 46 00 00 00  |L.R.F...|  [0x0+0x8]
+    Version: 1000  [0x8+0x2]
+    Pseudo-encryption key: 0xfe00  [0xa+0x2]
+    Root object ID: 2  [0xc+0x4]
+    Number of objects: 12  [0x10+0x8]
+    Object index offset: 0x6e2  [0x18+0x8]
+    Objects  [0x58+0x74a]

@@ -18,6 +18,7 @@ use crate::node::Node;
 use crate::record;
 use crate::span::Span;
 use crate::value::Value;
+use std::sync::Arc;
 
 use super::{Rd, tag_attr};
 
@@ -132,10 +133,26 @@ impl Index {
     }
 }
 
-/// Decoded DICT entries: operator, operands, byte range.
-async fn dict_entries(cx: &Cx, data: &[u8]) -> Vec<(u16, Vec<f64>, usize, usize)> {
+/// A decoded DICT entry: operator, operands, byte range, and for CFF2 the
+/// operands a `blend` among them produced (default and deltas, as text).
+struct DictEntry {
+    op: u16,
+    args: Vec<f64>,
+    start: usize,
+    end: usize,
+    blend: Vec<String>,
+}
+
+/// Decodes a DICT. `regions` (CFF2 only) holds the region count of each
+/// ItemVariationData of the variation store: `blend` takes `n * (k + 1) + 1`
+/// operands (`n` defaults, `n * k` deltas, `n`), with `k` the region count
+/// of the data the last `vsindex` selected (0 by default), and leaves the
+/// `n` defaults for the next operator (CFF2 specification, "blend").
+async fn dict_entries(cx: &Cx, data: &[u8], regions: Option<&[u16]>) -> Vec<DictEntry> {
     let mut out = Vec::new();
-    let mut ops = Vec::new();
+    let mut ops: Vec<f64> = Vec::new();
+    let mut blend = Vec::new();
+    let mut vsindex = 0usize;
     let mut start = 0usize;
     let mut i = 0usize;
     let mut steps = 0u32;
@@ -169,26 +186,32 @@ async fn dict_entries(cx: &Cx, data: &[u8]) -> Vec<(u16, Vec<f64>, usize, usize)
                 let (v, n) = real(data.get(i.saturating_add(1)..).unwrap_or_default());
                 (Some(v), n.saturating_add(1))
             }
-            12 => {
-                let op = 1200u16.saturating_add(b1.into());
-                out.push((op, std::mem::take(&mut ops), start, i.saturating_add(2)));
-                i = i.saturating_add(2);
-                start = i;
+            23 if regions.is_some_and(|r| apply_blend(&mut ops, r, vsindex, &mut blend)) => {
+                i = i.saturating_add(1);
                 continue;
             }
-            // 0-21 are CFF operators; CFF2 adds 22 vsindex, 23 blend,
-            // 24 vstore and 25 maxstack, and 26-27 are reserved one-byte
-            // operators in both. (Blend is shown as an entry of its own,
-            // holding its operands: splitting them needs the region
-            // counts of the variation store.)
             0..=27 => {
-                out.push((
-                    b0.into(),
-                    std::mem::take(&mut ops),
+                let (op, len) = if b0 == 12 {
+                    (1200u16.saturating_add(b1.into()), 2)
+                } else {
+                    (b0.into(), 1)
+                };
+                if op == 22
+                    && let [v] = ops.as_slice()
+                {
+                    vsindex = *v as usize;
+                }
+                // 0-21 are CFF operators; CFF2 adds 22 vsindex, 23
+                // blend, 24 vstore and 25 maxstack, which are reserved in
+                // CFF 1 (shown by number there), as are 26-27 in both.
+                out.push(DictEntry {
+                    op,
+                    args: std::mem::take(&mut ops),
                     start,
-                    i.saturating_add(1),
-                ));
-                i = i.saturating_add(1);
+                    end: i.saturating_add(len),
+                    blend: std::mem::take(&mut blend),
+                });
+                i = i.saturating_add(len);
                 start = i;
                 continue;
             }
@@ -202,6 +225,44 @@ async fn dict_entries(cx: &Cx, data: &[u8]) -> Vec<(u16, Vec<f64>, usize, usize)
         i = i.saturating_add(n);
     }
     out
+}
+
+/// Applies a CFF2 DICT `blend` to the operand stack: replaces its operands
+/// by the `n` default values and describes each blended value in `notes`.
+/// False (nothing changed) if the stack does not hold them.
+fn apply_blend(
+    ops: &mut Vec<f64>,
+    regions: &[u16],
+    vsindex: usize,
+    notes: &mut Vec<String>,
+) -> bool {
+    let Some(&last) = ops.last() else {
+        return false;
+    };
+    let k = usize::from(regions.get(vsindex).copied().unwrap_or(0));
+    let n = last as usize;
+    let total = n.saturating_mul(k.saturating_add(1));
+    let Some(base) = ops.len().checked_sub(1).and_then(|l| l.checked_sub(total)) else {
+        return false;
+    };
+    if n == 0 || last < 0.0 {
+        return false;
+    }
+    ops.pop();
+    let deltas = ops.split_off(base.saturating_add(n));
+    for (j, d) in ops.get(base..).unwrap_or_default().iter().enumerate() {
+        let from = j.saturating_mul(k);
+        let ds = deltas.get(from..from.saturating_add(k)).unwrap_or_default();
+        notes.push(format!(
+            "{} ({})",
+            num(*d),
+            ds.iter()
+                .map(|v| format!("{v:+}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        ));
+    }
+    true
 }
 
 /// A real number: packed decimal nibbles ending in 0xf.
@@ -236,8 +297,6 @@ const TOP_DICT: &[(u16, &str)] = &[
     (16, "Encoding"),
     (17, "CharStrings"),
     (18, "Private"),
-    (24, "vstore"),
-    (25, "maxstack"),
     (1200, "Copyright"),
     (1201, "isFixedPitch"),
     (1202, "ItalicAngle"),
@@ -270,8 +329,6 @@ const TOP_DICT: &[(u16, &str)] = &[
     (19, "Subrs"),
     (20, "defaultWidthX"),
     (21, "nominalWidthX"),
-    (22, "vsindex"),
-    (23, "blend"),
     (1209, "BlueScale"),
     (1210, "BlueShift"),
     (1211, "BlueFuzz"),
@@ -283,30 +340,52 @@ const TOP_DICT: &[(u16, &str)] = &[
     (1219, "initialRandomSeed"),
 ];
 
+/// CFF2-only DICT operators (reserved in CFF 1).
+const CFF2_DICT: &[(u16, &str)] = &[
+    (22, "vsindex"),
+    (23, "blend"),
+    (24, "vstore"),
+    (25, "maxstack"),
+];
+
 /// Operators whose single operand is a string ID.
 const SID_OPS: &[u16] = &[0, 1, 2, 3, 4, 1200, 1221, 1222, 1238];
 
-fn op_name(op: u16) -> String {
-    TOP_DICT.iter().find(|(k, _)| *k == op).map_or_else(
-        || {
-            if op >= 1200 {
-                format!("12 {}", op.saturating_sub(1200))
-            } else {
-                format!("op {op}")
-            }
-        },
-        |(_, v)| (*v).to_owned(),
-    )
+fn op_name(op: u16, cff2: bool) -> String {
+    let cff2_ops = if cff2 { CFF2_DICT } else { &[] };
+    TOP_DICT
+        .iter()
+        .chain(cff2_ops)
+        .find(|(k, _)| *k == op)
+        .map_or_else(
+            || {
+                if op >= 1200 {
+                    format!("12 {}", op.saturating_sub(1200))
+                } else {
+                    format!("op {op}")
+                }
+            },
+            |(_, v)| (*v).to_owned(),
+        )
 }
 
 fn num(v: f64) -> String {
     format!("{v}")
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct Cff {
     region: Span,
     strings: Option<Index>,
+    cff2: bool,
+    /// CFF2: region count of each ItemVariationData (see `dict_entries`).
+    regions: Arc<Vec<u16>>,
+}
+
+impl Cff {
+    fn blend(&self) -> Option<&[u16]> {
+        self.cff2.then_some(self.regions.as_slice())
+    }
 }
 
 async fn sid(cx: &Cx, cff: &Cff, sid: f64) -> Result<String> {
@@ -331,6 +410,35 @@ async fn sid(cx: &Cx, cff: &Cff, sid: f64) -> Result<String> {
     Ok(String::from_utf8_lossy(&cx.read(span.sub(0, 256)).await?).into_owned())
 }
 
+/// The region count of each ItemVariationData in the CFF2 variation store
+/// at `at` (a u16 length, then an ItemVariationStore: format, region list
+/// offset, data count, data offsets; each data starts with item count,
+/// short delta count and region index count). Empty if it cannot be read.
+async fn region_counts(cx: &Cx, region: Span, at: u64) -> Vec<u16> {
+    let store = at.saturating_add(2);
+    let Ok(h) = cx.read(region.sub(store, 8)).await else {
+        return Vec::new();
+    };
+    let count = u16_be(&h, 6).unwrap_or(0);
+    let Ok(offsets) = region.sub_exact(store.saturating_add(8), u64::from(count).saturating_mul(4))
+    else {
+        return Vec::new();
+    };
+    let Ok(offsets) = cx.read(offsets).await else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for i in 0..usize::from(count) {
+        let off = u64::from(u32_be(&offsets, i.saturating_mul(4)).unwrap_or(0));
+        let d = cx
+            .read(region.sub(store.saturating_add(off), 6))
+            .await
+            .unwrap_or_default();
+        out.push(u16_be(&d, 4).unwrap_or(0));
+    }
+    out
+}
+
 async fn cff(cx: Cx, input: Input) -> Result<()> {
     let region = input.span;
     let h = cx.read(region.sub(0, 5)).await?;
@@ -350,15 +458,26 @@ async fn cff(cx: Cx, input: Input) -> Result<()> {
     if cff2 {
         let len = u64::from(u16_be(&h, 3).unwrap_or(0));
         let top = region.sub_exact(hdr, len)?;
+        let top_data = cx.read(top).await?;
+        let plain = dict_entries(&cx, &top_data, Some(&[])).await;
+        let regions = match plain.iter().find(|e| e.op == 24).map(|e| e.args.as_slice()) {
+            Some([at]) => region_counts(&cx, region, *at as u64).await,
+            _ => Vec::new(),
+        };
         let cff = Cff {
             region,
             strings: None,
+            cff2,
+            regions: Arc::new(regions),
         };
-        cx.emit(Node::new("Top DICT").span(top).lazy(dict, (cff, top)));
+        cx.emit(
+            Node::new("Top DICT")
+                .span(top)
+                .lazy(dict, (cff.clone(), top)),
+        );
         let gsubrs = read_index(&cx, region, hdr.saturating_add(len), true).await?;
         cx.emit(index_node("Global Subrs INDEX", gsubrs));
-        let entries = dict_entries(&cx, &cx.read(top).await?).await;
-        let glyphs = charstrings(&cx, region, &entries, true).await?;
+        let glyphs = charstrings(&cx, &cff, &plain).await?;
         cx.annotate(format!("CFF2 font, {glyphs} glyphs"));
         return Ok(());
     }
@@ -374,6 +493,8 @@ async fn cff(cx: Cx, input: Input) -> Result<()> {
     let cff = Cff {
         region,
         strings: Some(strings),
+        cff2,
+        regions: Arc::new(Vec::new()),
     };
     let mut font_names = Vec::new();
     for i in 0..names.count.min(16) {
@@ -385,14 +506,14 @@ async fn cff(cx: Cx, input: Input) -> Result<()> {
             .value(text(font_names.join(", ")))
             .lazy(index_strings, (region, names)),
     );
-    cx.emit(index_node("Top DICT INDEX", top).lazy(top_dicts, (cff, top)));
+    cx.emit(index_node("Top DICT INDEX", top).lazy(top_dicts, (cff.clone(), top)));
     cx.emit(index_node("String INDEX", strings).lazy(index_strings, (region, strings)));
     cx.emit(index_node("Global Subrs INDEX", gsubrs));
     let mut glyphs = 0;
     if top.count > 0 {
         let span = top.entry(&cx, region, 0).await?;
-        let entries = dict_entries(&cx, &cx.read(span).await?).await;
-        glyphs = charstrings(&cx, region, &entries, false).await?;
+        let entries = dict_entries(&cx, &cx.read(span).await?, None).await;
+        glyphs = charstrings(&cx, &cff, &entries).await?;
     }
     cx.annotate(format!(
         "CFF font {}, {glyphs} glyphs",
@@ -401,44 +522,73 @@ async fn cff(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-/// Emits the CharStrings INDEX and Private DICT a Top DICT points to;
-/// returns the glyph count.
-async fn charstrings(
-    cx: &Cx,
-    region: Span,
-    entries: &[(u16, Vec<f64>, usize, usize)],
-    cff2: bool,
-) -> Result<u32> {
+/// Emits the CharStrings INDEX, the Private DICT and (CFF2, CID-keyed
+/// CFF) the FDArray a Top DICT points to; returns the glyph count.
+async fn charstrings(cx: &Cx, cff: &Cff, entries: &[DictEntry]) -> Result<u32> {
     let mut glyphs = 0;
-    for (n, (op, args, _, _)) in entries.iter().enumerate() {
+    for (n, e) in entries.iter().enumerate() {
         if n % 256 == 255 {
             cx.checkpoint().await;
         }
-        match (op, args.as_slice()) {
+        match (e.op, e.args.as_slice()) {
             (17, [at]) => {
-                let idx = read_index(cx, region, *at as u64, cff2).await?;
+                let idx = read_index(cx, cff.region, *at as u64, cff.cff2).await?;
                 glyphs = idx.count;
                 cx.emit(
                     index_node("CharStrings INDEX", idx).summary(format!("{} glyphs", idx.count)),
                 );
             }
             (18, [size, at]) => {
-                let span = region.sub_exact(*at as u64, *size as u64)?;
-                let cff = Cff {
-                    region,
-                    strings: None,
-                };
+                cx.emit(private_node(cff, *size, *at)?);
+            }
+            (1236, [at]) => {
+                let idx = read_index(cx, cff.region, *at as u64, cff.cff2).await?;
                 cx.emit(
-                    Node::new("Private DICT")
-                        .span(span)
-                        .summary(format!("{size} bytes"))
-                        .lazy(dict, (cff, span)),
+                    index_node("FDArray INDEX", idx)
+                        .summary(format!("{} Font DICTs", idx.count))
+                        .lazy(font_dicts, (cff.clone(), idx)),
                 );
             }
             _ => {}
         }
     }
     Ok(glyphs)
+}
+
+fn private_node(cff: &Cff, size: f64, at: f64) -> Result<Node> {
+    let span = cff.region.sub_exact(at as u64, size as u64)?;
+    let private = Cff {
+        strings: None,
+        ..cff.clone()
+    };
+    Ok(Node::new("Private DICT")
+        .span(span)
+        .summary(format!("{size} bytes"))
+        .lazy(dict, (private, span)))
+}
+
+/// The Font DICTs of an FDArray, each with its Private DICT.
+async fn font_dicts(cx: Cx, (cff, idx): (Cff, Index)) -> Result<()> {
+    for i in 0..idx.count {
+        let s = idx.entry(&cx, cff.region, i).await?;
+        let mut node = Node::new(format!("Font DICT {i}"))
+            .span(s)
+            .lazy(dict, (cff.clone(), s));
+        let entries = dict_entries(&cx, &cx.read(s).await?, cff.blend()).await;
+        if let Some(e) = entries.iter().find(|e| e.op == 18)
+            && let [size, at] = e.args.as_slice()
+        {
+            match private_node(&cff, *size, *at) {
+                Ok(p) => {
+                    cx.push(node).await;
+                    node = p.renamed(format!("Private DICT {i}"));
+                }
+                Err(d) => node = node.diag(d),
+            }
+        }
+        cx.push(node).await;
+    }
+    Ok(())
 }
 
 fn index_node(name: &'static str, idx: Index) -> Node {
@@ -463,7 +613,7 @@ async fn top_dicts(cx: Cx, (cff, idx): (Cff, Index)) -> Result<()> {
         cx.push(
             Node::new(format!("Top DICT {i}"))
                 .span(s)
-                .lazy(dict, (cff, s)),
+                .lazy(dict, (cff.clone(), s)),
         )
         .await;
     }
@@ -472,15 +622,19 @@ async fn top_dicts(cx: Cx, (cff, idx): (Cff, Index)) -> Result<()> {
 
 async fn dict(cx: Cx, (cff, span): (Cff, Span)) -> Result<()> {
     let data = cx.read(span).await?;
-    for (op, args, a, b) in dict_entries(&cx, &data).await {
-        let node = Node::new(op_name(op)).span(span.sub(to_u64(a), to_u64(b.saturating_sub(a))));
-        let node = match args.as_slice() {
-            [v] if SID_OPS.contains(&op) => node.value(text(sid(&cx, &cff, *v).await?)),
+    for e in dict_entries(&cx, &data, cff.blend()).await {
+        let node = Node::new(op_name(e.op, cff.cff2))
+            .span(span.sub(to_u64(e.start), to_u64(e.end.saturating_sub(e.start))));
+        let mut node = match e.args.as_slice() {
+            [v] if SID_OPS.contains(&e.op) => node.value(text(sid(&cx, &cff, *v).await?)),
             [v] => node.value(Value::Float(*v)),
             _ => node.value(text(
-                args.iter().map(|v| num(*v)).collect::<Vec<_>>().join(" "),
+                e.args.iter().map(|v| num(*v)).collect::<Vec<_>>().join(" "),
             )),
         };
+        if !e.blend.is_empty() {
+            node = node.summary(format!("blended: {}", e.blend.join(", ")));
+        }
         cx.push(node).await;
     }
     Ok(())
@@ -1672,4 +1826,32 @@ async fn designspace(cx: Cx, input: Input) -> Result<()> {
     xml::dissect(cx.clone(), input).await?;
     cx.annotate(format!("Font designspace document, format {format}"));
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod tests {
+    use super::apply_blend;
+
+    #[test]
+    fn blend_leaves_the_defaults() {
+        // BlueValues -12 0 blended over one region (deltas -2, 0): the
+        // stack holds -12 0 -2 0 2 when `blend` comes.
+        let mut ops = vec![-12.0, 0.0, -2.0, 0.0, 2.0];
+        let mut notes = Vec::new();
+        assert!(apply_blend(&mut ops, &[1], 0, &mut notes));
+        assert_eq!(ops, [-12.0, 0.0]);
+        assert_eq!(notes, ["-12 (-2)", "0 (+0)"]);
+        // Two regions, selected by vsindex 1: one value, two deltas, under
+        // two plain operands.
+        let mut ops = vec![5.0, 7.0, 100.0, 1.0, 3.0, 1.0];
+        let mut notes = Vec::new();
+        assert!(apply_blend(&mut ops, &[1, 2], 1, &mut notes));
+        assert_eq!(ops, [5.0, 7.0, 100.0]);
+        assert_eq!(notes, ["100 (+1 +3)"]);
+        // Too few operands: left alone.
+        let mut ops = vec![1.0, 2.0];
+        assert!(!apply_blend(&mut ops, &[1], 0, &mut Vec::new()));
+        assert_eq!(ops, [1.0, 2.0]);
+    }
 }
