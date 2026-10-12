@@ -709,5 +709,128 @@ async fn ba2_file_chunks(
         ));
         cx.emit(ba2_chunk_node(&ba2, title, raw));
     }
+    if &ba2.kind == b"DX10" && chunks > 0 {
+        cx.emit(ba2_texture(&cx, &ba2, record, &data, header, chunk_size)?);
+    }
     Ok(())
+}
+
+/// A DX10 texture as a DDS file, as Archive2 extracts it: a synthesized
+/// header (with the DX10 extension, which names any DXGI format) followed
+/// by the chunks' mips in order, as pieces of the archive (stored chunks)
+/// and of their lazily decoded contents.
+fn ba2_texture(
+    cx: &Cx,
+    ba2: &Ba2,
+    record: Span,
+    data: &[u8],
+    header: u64,
+    chunk_size: u64,
+) -> Result<Node> {
+    let file = ba2.input.span;
+    let height = u16_le(data, 16).unwrap_or(0);
+    let width = u16_le(data, 18).unwrap_or(0);
+    let mips = data.get(20).copied().unwrap_or(0);
+    let format = data.get(21).copied().unwrap_or(0);
+    let cubemap = data.get(22).is_some_and(|f| f & 1 != 0);
+    let dds = dds_header(width, height, mips, format, cubemap);
+    let dds_len = crate::bytes::to_u64(dds.len());
+    let head = cx.add_derived(
+        crate::span::Origin {
+            parent: record,
+            transform: "ba2 DDS header",
+        },
+        dds,
+        0,
+        None,
+    )?;
+    let mut pieces = vec![head.span.sub(0, dds_len)];
+    let chunks = record
+        .len
+        .saturating_sub(header)
+        .checked_div(chunk_size)
+        .unwrap_or(0);
+    let mut total = dds_len;
+    for c in 0..chunks {
+        let at = crate::bytes::to_usize(header.saturating_add(c.saturating_mul(chunk_size)));
+        let raw = data.get(at..).unwrap_or_default();
+        let offset = u64_le(raw, 0).unwrap_or(0);
+        let stored = u32_le(raw, 8).unwrap_or(0);
+        let size = u64::from(u32_le(raw, 12).unwrap_or(0));
+        let piece = if stored == 0 {
+            file.sub_exact(offset, size)?
+        } else {
+            let codec = if ba2.lz4 {
+                Codec::Lz4Block
+            } else {
+                Codec::Zlib
+            };
+            cx.decode_lazy(file.sub_exact(offset, stored.into())?, &codec, size)?
+        };
+        total = total.saturating_add(piece.len);
+        pieces.push(piece);
+    }
+    let span = cx.add_pieces(
+        crate::span::Origin {
+            parent: record,
+            transform: "ba2 DDS",
+        },
+        pieces,
+    )?;
+    Ok(
+        crate::formats::embedded_named("Texture", ba2.input.nested(span), "dds")
+            .summary(format!("rebuilt DDS file, {}", fmt::size(total))),
+    )
+}
+
+/// A DDS header for a BA2 texture: magic, `DDS_HEADER` with a "DX10" pixel
+/// format and `DDS_HEADER_DXT10`.
+fn dds_header(width: u16, height: u16, mips: u8, format: u8, cubemap: bool) -> Vec<u8> {
+    const CAPS: u32 = 0x1;
+    const HEIGHT: u32 = 0x2;
+    const WIDTH: u32 = 0x4;
+    const PIXELFORMAT: u32 = 0x1000;
+    const MIPMAPCOUNT: u32 = 0x2_0000;
+    const DDPF_FOURCC: u32 = 0x4;
+    const CAPS_COMPLEX: u32 = 0x8;
+    const CAPS_TEXTURE: u32 = 0x1000;
+    const CAPS_MIPMAP: u32 = 0x40_0000;
+    const CAPS2_CUBEMAP_ALL: u32 = 0xfe00;
+    let mut caps = CAPS_TEXTURE;
+    if mips > 1 {
+        caps |= CAPS_MIPMAP | CAPS_COMPLEX;
+    }
+    if cubemap {
+        caps |= CAPS_COMPLEX;
+    }
+    let mut out = Vec::with_capacity(148);
+    out.extend_from_slice(b"DDS ");
+    let words_before_pf = [
+        124,
+        CAPS | HEIGHT | WIDTH | PIXELFORMAT | MIPMAPCOUNT,
+        u32::from(height),
+        u32::from(width),
+        0,
+        0,
+        u32::from(mips),
+    ];
+    for w in words_before_pf {
+        out.extend_from_slice(&w.to_le_bytes());
+    }
+    out.extend_from_slice(&[0; 44]);
+    for w in [32, DDPF_FOURCC] {
+        out.extend_from_slice(&w.to_le_bytes());
+    }
+    out.extend_from_slice(b"DX10");
+    out.extend_from_slice(&[0; 20]);
+    let caps2 = if cubemap { CAPS2_CUBEMAP_ALL } else { 0 };
+    for w in [caps, caps2, 0, 0, 0] {
+        out.extend_from_slice(&w.to_le_bytes());
+    }
+    // DDS_HEADER_DXT10: format, TEXTURE2D, TEXTURECUBE flag, array size 1.
+    let misc = if cubemap { 0x4 } else { 0 };
+    for w in [u32::from(format), 3, misc, 1, 0] {
+        out.extend_from_slice(&w.to_le_bytes());
+    }
+    out
 }

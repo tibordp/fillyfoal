@@ -544,6 +544,24 @@ impl Unmarshal<'_> {
         }
     }
 
+    /// Makes a bytes object holding a line or exception table expandable
+    /// into its decoded entries.
+    fn table(&mut self, obj: &Obj, table: Table) {
+        let Some((at, len)) = obj.data.filter(|_| obj.text.is_none()) else {
+            return;
+        };
+        // An empty co_lnotab still says the code starts at co_firstlineno.
+        if len == 0 && (matches!(table, Table::Exceptions) || self.version >= (3, 10)) {
+            return;
+        }
+        let state = TableState {
+            span: self.span.sub(to_u64(at), to_u64(len)),
+            version: self.version,
+            table,
+        };
+        self.tree.update(obj.node, |n| n.lazy(decode_table, state));
+    }
+
     fn int_field(&mut self, node: usize, name: &str) -> Step<i32> {
         let start = self.r.pos();
         let v = self.i32()?;
@@ -633,19 +651,22 @@ impl Unmarshal<'_> {
             self.object(cx, node, "co_qualname", deeper).await?;
         }
         let line = self.int_field(node, "co_firstlineno")?;
-        self.object(
-            cx,
-            node,
-            if v >= (3, 10) {
-                "co_linetable"
-            } else {
-                "co_lnotab"
-            },
-            deeper,
-        )
-        .await?;
+        let lines = self
+            .object(
+                cx,
+                node,
+                if v >= (3, 10) {
+                    "co_linetable"
+                } else {
+                    "co_lnotab"
+                },
+                deeper,
+            )
+            .await?;
+        self.table(&lines, Table::Lines(line));
         if v >= (3, 11) {
-            self.object(cx, node, "co_exceptiontable", deeper).await?;
+            let exceptions = self.object(cx, node, "co_exceptiontable", deeper).await?;
+            self.table(&exceptions, Table::Exceptions);
         }
         let name = name.text.unwrap_or_else(|| name.short.clone());
         let filename = filename.text.unwrap_or_else(|| filename.short.clone());
@@ -891,4 +912,263 @@ async fn disassemble(cx: Cx, d: Arc<Disasm>) -> Result<()> {
         cx.push(node).await;
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Line and exception tables
+
+#[derive(Clone, Copy)]
+enum Table {
+    /// `co_lnotab` (before 3.10), the 3.10 line table or the 3.11+
+    /// location table; with `co_firstlineno`.
+    Lines(i32),
+    /// `co_exceptiontable` (3.11+).
+    Exceptions,
+}
+
+#[derive(Clone)]
+struct TableState {
+    span: Span,
+    version: (u8, u8),
+    table: Table,
+}
+
+/// Where a table walk stands: byte position, code offset, line, and the
+/// last line reported (`co_lnotab`).
+type TableMark = (usize, u64, i64, i64);
+
+/// Decodes a line or exception table into one node per entry, as CPython's
+/// `dis.findlinestarts` (before 3.10), `co_lines` (3.10), `co_positions`
+/// (3.11+) and `dis._parse_exception_table` read them (see
+/// `Objects/lnotab_notes.txt` and `Objects/exception_handling_notes.txt`).
+async fn decode_table(cx: Cx, s: TableState) -> Result<()> {
+    let data = cx.read(s.span).await?;
+    let v = s.version;
+    let first = match s.table {
+        Table::Lines(line) => i64::from(line),
+        Table::Exceptions => 0,
+    };
+    let (mut pos, mut addr, mut line, mut last) =
+        cx.resume::<TableMark>().unwrap_or((0, 0, first, i64::MIN));
+    let mut steps = 0u32;
+    while pos < data.len() {
+        steps = steps.wrapping_add(1);
+        if steps.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+        let mark: TableMark = (pos, addr, line, last);
+        let start = pos;
+        let node = match s.table {
+            Table::Exceptions => match exception_entry(&data, &mut pos) {
+                Some(node) => Some(node),
+                None => {
+                    pos = start;
+                    break;
+                }
+            },
+            Table::Lines(_) if v >= (3, 11) => {
+                match location_entry(&data, &mut pos, &mut addr, &mut line) {
+                    Some(node) => Some(node),
+                    None => {
+                        pos = start;
+                        break;
+                    }
+                }
+            }
+            Table::Lines(_) if v >= (3, 10) => {
+                let (Some(&sdelta), Some(&ldelta)) =
+                    (data.get(pos), data.get(pos.saturating_add(1)))
+                else {
+                    break;
+                };
+                pos = pos.saturating_add(2);
+                let begin = addr;
+                addr = addr.saturating_add(u64::from(sdelta));
+                let ldelta = i8::from_ne_bytes([ldelta]);
+                let shown = if ldelta == -128 {
+                    "no line".to_owned()
+                } else {
+                    line = line.saturating_add(i64::from(ldelta));
+                    format!("line {line}")
+                };
+                Some(Node::new(format!("{begin}..{addr}")).value(text(shown)))
+            }
+            Table::Lines(_) => {
+                // co_lnotab: (bytecode increment, line increment) pairs; a
+                // line starts where the offset moves on after a change.
+                let (Some(&bdelta), Some(&ldelta)) =
+                    (data.get(pos), data.get(pos.saturating_add(1)))
+                else {
+                    break;
+                };
+                pos = pos.saturating_add(2);
+                let mut out = None;
+                if bdelta != 0 {
+                    if line != last {
+                        out =
+                            Some(Node::new(format!("{addr}")).value(text(format!("line {line}"))));
+                        last = line;
+                    }
+                    addr = addr.saturating_add(u64::from(bdelta));
+                }
+                let ldelta = if v >= (3, 6) {
+                    i64::from(i8::from_ne_bytes([ldelta]))
+                } else {
+                    i64::from(ldelta)
+                };
+                line = line.saturating_add(ldelta);
+                out
+            }
+        };
+        let Some(node) = node else {
+            if pos == start {
+                break;
+            }
+            continue;
+        };
+        let span = s.span.sub(to_u64(start), to_u64(pos.saturating_sub(start)));
+        cx.mark(move || mark);
+        cx.push(node.span(span)).await;
+        if pos == start {
+            break;
+        }
+    }
+    // co_lnotab: the last line starts at the end if it changed there.
+    if matches!(s.table, Table::Lines(_)) && v < (3, 10) && line != last && pos >= data.len() {
+        cx.push(
+            Node::new(format!("{addr}"))
+                .span(s.span.sub(to_u64(data.len()), 0))
+                .value(text(format!("line {line}"))),
+        )
+        .await;
+    }
+    if pos < data.len() {
+        cx.diag(
+            Diagnostic::malformed("truncated or malformed table entry").at(s
+                .span
+                .sub(to_u64(pos), to_u64(data.len().saturating_sub(pos)))),
+        );
+    }
+    Ok(())
+}
+
+/// A location-table varint: 6-bit groups, least significant first, bit 6
+/// set while more follow.
+fn loc_varint(data: &[u8], pos: &mut usize) -> Option<u64> {
+    let mut value = 0u64;
+    let mut shift = 0u32;
+    loop {
+        let b = *data.get(*pos)?;
+        *pos = pos.saturating_add(1);
+        value |= u64::from(b & 0x3f).checked_shl(shift)?;
+        if b & 0x40 == 0 {
+            return Some(value);
+        }
+        shift = shift.saturating_add(6);
+        if shift > 60 {
+            return None;
+        }
+    }
+}
+
+fn loc_svarint(data: &[u8], pos: &mut usize) -> Option<i64> {
+    let v = loc_varint(data, pos)?;
+    let half = i64::try_from(v >> 1).ok()?;
+    Some(if v & 1 != 0 {
+        half.saturating_neg()
+    } else {
+        half
+    })
+}
+
+/// One 3.11+ location entry (`Objects/locations.md`): a header byte with
+/// the form and the length in code units, then the form's fields.
+fn location_entry(data: &[u8], pos: &mut usize, addr: &mut u64, line: &mut i64) -> Option<Node> {
+    let header = *data.get(*pos)?;
+    if header & 0x80 == 0 {
+        return None;
+    }
+    *pos = pos.saturating_add(1);
+    let code = (header >> 3) & 0xf;
+    let units = u64::from(header & 7).saturating_add(1);
+    let begin = *addr;
+    *addr = addr.saturating_add(units.saturating_mul(2));
+    let name = format!("{begin}..{}", *addr);
+    let shown = match code {
+        15 => "no location".to_owned(),
+        14 => {
+            *line = line.saturating_add(loc_svarint(data, pos)?);
+            let end = line.saturating_add(i64::try_from(loc_varint(data, pos)?).ok()?);
+            let col = loc_varint(data, pos)?;
+            let end_col = loc_varint(data, pos)?;
+            let cols = match (col.checked_sub(1), end_col.checked_sub(1)) {
+                (Some(c), Some(e)) => format!(", columns {c}..{e}"),
+                _ => String::new(),
+            };
+            if end == *line {
+                format!("line {line}{cols}")
+            } else {
+                format!("lines {line}..{end}{cols}")
+            }
+        }
+        13 => {
+            *line = line.saturating_add(loc_svarint(data, pos)?);
+            format!("line {line}")
+        }
+        10..=12 => {
+            *line = line.saturating_add(i64::from(code.saturating_sub(10)));
+            let col = *data.get(*pos)?;
+            let end_col = *data.get(pos.saturating_add(1))?;
+            *pos = pos.saturating_add(2);
+            format!("line {line}, columns {col}..{end_col}")
+        }
+        _ => {
+            let b = *data.get(*pos)?;
+            *pos = pos.saturating_add(1);
+            let col = u16::from(code)
+                .saturating_mul(8)
+                .saturating_add(u16::from(b >> 4));
+            let end_col = col.saturating_add(u16::from(b & 0xf));
+            format!("line {line}, columns {col}..{end_col}")
+        }
+    };
+    Some(Node::new(name).value(text(shown)))
+}
+
+/// An exception-table varint: 6-bit groups, most significant first, bit 6
+/// set while more follow (bit 7 marks an entry's first byte).
+fn exc_varint(data: &[u8], pos: &mut usize) -> Option<u64> {
+    let mut b = *data.get(*pos)?;
+    *pos = pos.saturating_add(1);
+    let mut value = u64::from(b & 0x3f);
+    let mut groups = 1u32;
+    while b & 0x40 != 0 {
+        b = *data.get(*pos)?;
+        *pos = pos.saturating_add(1);
+        value = value.checked_shl(6)? | u64::from(b & 0x3f);
+        groups = groups.saturating_add(1);
+        if groups > 10 {
+            return None;
+        }
+    }
+    Some(value)
+}
+
+/// One exception-table entry: start, length and target in code units, and
+/// the stack depth with the "push lasti" bit.
+fn exception_entry(data: &[u8], pos: &mut usize) -> Option<Node> {
+    if data.get(*pos)? & 0x80 == 0 {
+        return None;
+    }
+    let start = exc_varint(data, pos)?.saturating_mul(2);
+    let len = exc_varint(data, pos)?.saturating_mul(2);
+    let target = exc_varint(data, pos)?.saturating_mul(2);
+    let dl = exc_varint(data, pos)?;
+    let end = start.saturating_add(len);
+    let lasti = if dl & 1 != 0 { " lasti" } else { "" };
+    Some(
+        Node::new(format!("{start}..{end}"))
+            .value(text(format!("to {target}")))
+            .summary(format!("depth {}{lasti}", dl >> 1)),
+    )
 }

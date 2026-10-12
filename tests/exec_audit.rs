@@ -33,6 +33,46 @@ fn omf_comments(n: usize) -> Vec<u8> {
     out
 }
 
+/// A JKS key store of `n` trusted-certificate entries (version 2, tiny
+/// placeholder certificates) and a digest.
+fn jks_entries(n: usize) -> Vec<u8> {
+    let mut out = b"\xfe\xed\xfe\xed".to_vec();
+    out.extend_from_slice(&2u32.to_be_bytes());
+    out.extend_from_slice(&(n as u32).to_be_bytes());
+    for i in 0..n {
+        out.extend_from_slice(&2u32.to_be_bytes());
+        let alias = format!("cert{i}");
+        out.extend_from_slice(&(alias.len() as u16).to_be_bytes());
+        out.extend_from_slice(alias.as_bytes());
+        out.extend_from_slice(&0u64.to_be_bytes());
+        out.extend_from_slice(&5u16.to_be_bytes());
+        out.extend_from_slice(b"X.509");
+        out.extend_from_slice(&64u32.to_be_bytes());
+        out.extend_from_slice(&[0x30; 64]);
+    }
+    out.extend_from_slice(&[0; 20]);
+    out
+}
+
+/// The key store's entry walk reads each byte about once: it used to read
+/// a 1 MiB block per entry, quadratic in the number of entries.
+#[test]
+fn jks_entry_walk_reads_linearly() {
+    let data = jks_entries(5_000);
+    let len = data.len() as u64;
+    let mut host = Host::named("t.jks", data, Limits::default());
+    host.session.expand(host.root, 100);
+    host.run();
+    let summary = host.session.node(host.root).unwrap().summary.clone();
+    assert!(
+        summary.as_deref().unwrap_or("").contains("5000 entries"),
+        "{summary:?}"
+    );
+    let work = host.session.work_done();
+    // About one unit per 4 KiB read; the old walk spent over 100 000.
+    assert!(work < 5_000, "{work} units for {len} bytes");
+}
+
 #[test]
 fn omf_pushes_records_as_it_walks() {
     let data = omf_comments(200_000);

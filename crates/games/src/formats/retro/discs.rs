@@ -229,7 +229,7 @@ async fn chd(cx: Cx, input: Input) -> Result<()> {
             Node::new("Hunk map (compressed)")
                 .span(map)
                 .summary(format!("{} hunks", info.hunks))
-                .lazy(chd_v5_map, (file, map, info)),
+                .lazy(chd_v5_map, (input, map, info)),
         );
     } else if info.map != 0 {
         let map = file.sub(info.map, info.hunks.saturating_mul(map_entry));
@@ -237,7 +237,7 @@ async fn chd(cx: Cx, input: Input) -> Result<()> {
             Node::new("Hunk map")
                 .span(map)
                 .summary(format!("{} hunks", info.hunks))
-                .lazy(chd_map, (file, map, info.version, info.hunk_bytes)),
+                .lazy(chd_map, (input, map, info.version, info.hunk_bytes)),
         );
     }
     cx.annotate(format!(
@@ -301,7 +301,7 @@ fn chd_v5_map_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
     Ok(())
 }
 
-async fn chd_v5_map(cx: Cx, (file, map, info): (Span, Span, ChdInfo)) -> Result<()> {
+async fn chd_v5_map(cx: Cx, (input, map, info): (Input, Span, ChdInfo)) -> Result<()> {
     cx.emit(crate::fields::struct_node(
         "Map header",
         map.sub(0, 16),
@@ -316,7 +316,7 @@ async fn chd_v5_map(cx: Cx, (file, map, info): (Span, Span, ChdInfo)) -> Result<
                 "{} hunks, Huffman-coded types then bit-packed fields",
                 info.hunks
             ))
-            .lazy(chd_v5_hunks, (file, map, info)),
+            .lazy(chd_v5_hunks, (input, map, info)),
     );
     Ok(())
 }
@@ -507,7 +507,8 @@ const CRC16_CCITT_FALSE: crate::codec::crc::Crc =
     crate::codec::crc::Crc::new(16, 0x1021, 0xffff, false, 0);
 
 /// MAME `chd_file::decompress_v5_map`, one hunk per child.
-async fn chd_v5_hunks(cx: Cx, (file, map, info): (Span, Span, ChdInfo)) -> Result<()> {
+async fn chd_v5_hunks(cx: Cx, (input, map, info): (Input, Span, ChdInfo)) -> Result<()> {
+    let file = input.span;
     let header = cx.read(map.sub(0, 16)).await?;
     let first = header
         .get(4..10)
@@ -661,9 +662,14 @@ async fn chd_v5_hunks(cx: Cx, (file, map, info): (Span, Span, ChdInfo)) -> Resul
             V5_SELF => (format!("same as hunk {offset}"), None),
             _ => (format!("parent's unit {offset}"), None),
         };
-        let mut node = Node::new(format!("Hunk {}", w.hunk))
-            .value(hex(offset, 64))
-            .summary(summary);
+        let name = format!("Hunk {}", w.hunk);
+        let mut node = match (kind, target) {
+            (0..=3, Some(span)) => chd_hunk(input, name, span, &codec(kind), info.hunk_bytes),
+            (V5_NONE, Some(span)) => embedded(name, input.nested(span)),
+            _ => Node::new(name),
+        }
+        .value(hex(offset, 64))
+        .summary(summary);
         if let Some(target) = target {
             node = node.target(target);
         }
@@ -684,7 +690,8 @@ async fn chd_v5_hunks(cx: Cx, (file, map, info): (Span, Span, ChdInfo)) -> Resul
     Ok(())
 }
 
-async fn chd_map(cx: Cx, (file, map, version, hunk_bytes): (Span, Span, u32, u64)) -> Result<()> {
+async fn chd_map(cx: Cx, (input, map, version, hunk_bytes): (Input, Span, u32, u64)) -> Result<()> {
+    let file = input.span;
     let entry: u64 = match version {
         1 | 2 => 8,
         3 | 4 => 16,
@@ -695,6 +702,7 @@ async fn chd_map(cx: Cx, (file, map, version, hunk_bytes): (Span, Span, u32, u64
     for i in 0..count {
         let span = map.sub(i.saturating_mul(entry), entry);
         let raw = cx.read(span).await?;
+        let mut decode = None;
         let (summary, value, target) = match version {
             1 | 2 => {
                 let v = u64_be(&raw, 0).unwrap_or(0);
@@ -713,6 +721,7 @@ async fn chd_map(cx: Cx, (file, map, version, hunk_bytes): (Span, Span, u32, u64
                 let kind = raw.get(15).copied().unwrap_or(0);
                 let name = lookup(CHD_MAP_TYPES, u64::from(kind & 0x0f)).unwrap_or("unknown");
                 let crc = u32_be(&raw, 8).unwrap_or(0);
+                decode = Some(kind & 0x0f);
                 match kind & 0x0f {
                     1 | 2 | 6 => (
                         format!("{name}, {len} bytes at {offset:#x}, CRC {crc:#010x}"),
@@ -737,16 +746,255 @@ async fn chd_map(cx: Cx, (file, map, version, hunk_bytes): (Span, Span, u32, u64
                 }
             }
         };
-        let mut node = Node::new(format!("Hunk {i}"))
-            .span(span)
-            .value(hex(value, 64))
-            .summary(summary);
+        let name = format!("Hunk {i}");
+        let mut node = match decode {
+            // v3/v4 "zlib" hunks are raw deflate streams (MAME chd.cpp).
+            Some(1) if target.len > 0 => {
+                content(name, input, target, Codec::Deflate, Some(hunk_bytes))
+            }
+            Some(2) if target.len > 0 => embedded(name, input.nested(target)),
+            _ => Node::new(name),
+        }
+        .span(span)
+        .value(hex(value, 64))
+        .summary(summary);
         if target.len > 0 {
             node = node.target(target);
         }
         cx.push(node).await;
     }
     Ok(())
+}
+
+/// A v5 hunk compressed with `codec` (MAME `chdcodec.cpp`), decoded on
+/// expansion: zlib (raw deflate), LZMA (raw, MAME's properties) and the CD
+/// codecs built on them; Huffman and FLAC hunks are not decoded.
+fn chd_hunk(input: Input, name: String, span: Span, codec: &str, hunk_bytes: u64) -> Node {
+    match codec {
+        "zlib" => content(name, input, span, Codec::Deflate, Some(hunk_bytes)),
+        "lzma" => content(name, input, span, chd_lzma(hunk_bytes), Some(hunk_bytes)),
+        "cdzl" | "cdlz" => Node::new(name)
+            .span(span)
+            .lazy(chd_cd_hunk, (input, span, hunk_bytes, codec == "cdlz")),
+        _ => Node::new(name)
+            .span(span)
+            .diag(Diagnostic::unsupported(format!("CHD {codec} hunk")).at(span)),
+    }
+}
+
+/// MAME's LZMA hunks: raw LZMA (lc 3, lp 0, pb 2), with the dictionary
+/// LzmaEncProps_Normalize picks for level 9 and a hunk-sized input.
+fn chd_lzma(hunk_bytes: u64) -> Codec {
+    let mut dict: u64 = 1 << 26;
+    for i in 11..=30u32 {
+        let two = 2u64 << i;
+        let three = 3u64 << i;
+        if hunk_bytes <= two {
+            dict = two;
+            break;
+        }
+        if hunk_bytes <= three {
+            dict = three;
+            break;
+        }
+    }
+    Codec::LzmaRaw {
+        props: crate::codec::lzma::Props {
+            lc: 3,
+            lp: 0,
+            pb: 2,
+        },
+        size: usize::try_from(hunk_bytes).ok(),
+        dict: u32::try_from(dict.min(1 << 26)).ok(),
+    }
+}
+
+/// CD frames: 2352 bytes of sector data and 96 of subcode.
+const CD_SECTOR: u64 = 2352;
+const CD_SUBCODE: u64 = 96;
+const CD_FRAME: u64 = CD_SECTOR + CD_SUBCODE;
+/// Largest CD hunk rebuilt in memory.
+const MAX_CD_HUNK: u64 = 1 << 20;
+
+/// A `cdzl`/`cdlz` hunk (MAME `chd_cd_decompressor`): a bitmap of frames
+/// whose sync header and ECC were dropped, the base stream's length, the
+/// sector data (zlib or LZMA) and the subcode (zlib); the frames are
+/// interleaved again and the dropped parts regenerated.
+async fn chd_cd_hunk(
+    cx: Cx,
+    (input, span, hunk_bytes, lzma): (Input, Span, u64, bool),
+) -> Result<()> {
+    if hunk_bytes > MAX_CD_HUNK {
+        return Err(Diagnostic::limit("CD hunk too large to rebuild").at(span));
+    }
+    let src = cx.read(span).await?;
+    let frames = hunk_bytes / CD_FRAME;
+    let ecc_bytes = frames.div_ceil(8);
+    let length_bytes: u64 = if hunk_bytes < 65536 { 2 } else { 3 };
+    let header = ecc_bytes.saturating_add(length_bytes);
+    let at = |i: u64| {
+        src.get(crate::bytes::to_usize(i))
+            .copied()
+            .map(u64::from)
+            .unwrap_or(0)
+    };
+    let mut base_len = 0u64;
+    for k in 0..length_bytes {
+        base_len = (base_len << 8) | at(ecc_bytes.saturating_add(k));
+    }
+    let base = span.sub_exact(header, base_len)?;
+    let sub = span.tail(header.saturating_add(base_len));
+    let base_codec = if lzma {
+        chd_lzma(frames.saturating_mul(CD_SECTOR))
+    } else {
+        Codec::Deflate
+    };
+    let sectors = crate::codec::decode_span(
+        &cx,
+        base,
+        &base_codec,
+        Some(frames.saturating_mul(CD_SECTOR)),
+    )
+    .await?;
+    let subcode = crate::codec::decode_span(
+        &cx,
+        sub,
+        &Codec::Deflate,
+        Some(frames.saturating_mul(CD_SUBCODE)),
+    )
+    .await?;
+    let sectors_data = cx.read(sectors.span).await?;
+    let subcode_data = cx.read(subcode.span).await?;
+    let mut out = Vec::with_capacity(crate::bytes::to_usize(hunk_bytes));
+    for frame in 0..frames {
+        let start = out.len();
+        let s = crate::bytes::to_usize(frame.saturating_mul(CD_SECTOR));
+        let mut sector = [0u8; 2352];
+        if let Some(src) = sectors_data.get(s..s.saturating_add(2352)) {
+            sector.copy_from_slice(src);
+        }
+        if at(frame / 8) & (1 << (frame % 8)) != 0 {
+            if let Some(sync) = sector.get_mut(..12) {
+                sync.copy_from_slice(&CD_SYNC);
+            }
+            ecc_generate(&mut sector);
+        }
+        out.extend_from_slice(&sector);
+        let c = crate::bytes::to_usize(frame.saturating_mul(CD_SUBCODE));
+        out.extend_from_slice(
+            subcode_data
+                .get(c..c.saturating_add(96))
+                .unwrap_or(&[0; 96]),
+        );
+        out.resize(start.saturating_add(crate::bytes::to_usize(CD_FRAME)), 0);
+        if frame % 64 == 63 {
+            cx.checkpoint().await;
+        }
+    }
+    out.resize(crate::bytes::to_usize(hunk_bytes), 0);
+    let error = sectors.error.or(subcode.error);
+    let rebuilt = cx.add_derived(
+        crate::span::Origin {
+            parent: span,
+            transform: "CHD CD hunk",
+        },
+        out,
+        span.len,
+        error,
+    )?;
+    crate::formats::dissect_or_data(cx, input.nested(rebuilt.span)).await
+}
+
+const CD_SYNC: [u8; 12] = [
+    0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0,
+];
+
+/// GF(2^8) tables of the CD-ROM ECC (polynomial 0x11d): multiply by 2,
+/// and its "inverse" lookup (`b[i ^ f[i]] = i`).
+struct EccTables {
+    f: [u8; 256],
+    b: [u8; 256],
+}
+
+impl EccTables {
+    fn new() -> Self {
+        let mut t = EccTables {
+            f: [0; 256],
+            b: [0; 256],
+        };
+        for i in 0..=255u8 {
+            let j = (i << 1) ^ if i & 0x80 != 0 { 0x1d } else { 0 };
+            if let Some(slot) = t.f.get_mut(usize::from(i)) {
+                *slot = j;
+            }
+            if let Some(slot) = t.b.get_mut(usize::from(i ^ j)) {
+                *slot = i;
+            }
+        }
+        t
+    }
+}
+
+/// Computes one ECC block (ECMA-130 P or Q parity) over the 2236 bytes
+/// after the sync header: `major_count` pairs.
+fn ecc_block(
+    t: &EccTables,
+    src: &[u8],
+    (major_count, minor_count, mult, inc): (usize, usize, usize, usize),
+) -> Vec<u8> {
+    let (f, b) = (&t.f, &t.b);
+    let size = major_count.saturating_mul(minor_count);
+    let mut dest = vec![0u8; major_count.saturating_mul(2)];
+    for major in 0..major_count {
+        let mut index = (major >> 1).saturating_mul(mult).saturating_add(major & 1);
+        let (mut a, mut x) = (0u8, 0u8);
+        for _ in 0..minor_count {
+            let t = src.get(index).copied().unwrap_or(0);
+            index = index.saturating_add(inc);
+            if index >= size {
+                index = index.saturating_sub(size);
+            }
+            a ^= t;
+            x ^= t;
+            a = f.get(usize::from(a)).copied().unwrap_or(0);
+        }
+        let fa = f.get(usize::from(a)).copied().unwrap_or(0);
+        a = b.get(usize::from(fa ^ x)).copied().unwrap_or(0);
+        if let Some(d) = dest.get_mut(major) {
+            *d = a;
+        }
+        if let Some(d) = dest.get_mut(major.saturating_add(major_count)) {
+            *d = a ^ x;
+        }
+    }
+    dest
+}
+
+/// Regenerates a sector's P and Q parity (MAME `ecc_generate`; in mode 2
+/// the four header bytes count as zeros).
+fn ecc_generate(sector: &mut [u8; 2352]) {
+    let mode2 = sector.get(15) == Some(&2);
+    let mut src = [0u8; 2236];
+    if let Some(s) = sector.get(12..12 + 2236) {
+        src.copy_from_slice(s);
+    }
+    if mode2 {
+        src.get_mut(..4).into_iter().for_each(|h| h.fill(0));
+    }
+    // P: 86 columns of 24 bytes; it covers the first 2064 bytes.
+    let tables = EccTables::new();
+    let p = ecc_block(&tables, &src, (86, 24, 2, 86));
+    if let Some(d) = src.get_mut(2064..2064 + 172) {
+        d.copy_from_slice(&p);
+    }
+    // Q: 52 diagonals of 43 bytes over those and P.
+    let q = ecc_block(&tables, &src, (52, 43, 86, 88));
+    if let Some(d) = sector.get_mut(12 + 2064..12 + 2064 + 172) {
+        d.copy_from_slice(&p);
+    }
+    if let Some(d) = sector.get_mut(12 + 2236..12 + 2236 + 104) {
+        d.copy_from_slice(&q);
+    }
 }
 
 // ---------------------------------------------------------------------------

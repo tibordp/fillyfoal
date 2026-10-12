@@ -10,6 +10,9 @@
 //! Written from memory of the format as documented by the community
 //! tools; see `formats::games::archives`.
 //!
+//! Unreal paks split entries into blocks the same way, each one stream of
+//! the pak's codec ([`BlockCodec`]).
+//!
 //! [`Decoder`] waits for a whole block (its input) and then decodes it a
 //! step at a time: a stored block is copied `step` bytes per call, a
 //! compressed one runs through its own decoder a step per call. The block
@@ -37,6 +40,21 @@ pub struct Entry {
     /// The stored lengths of the entry's blocks (from the block-size
     /// table; 0 is a whole stored block).
     pub blocks: Arc<[u32]>,
+    /// How the blocks are compressed.
+    pub codec: BlockCodec,
+}
+
+/// The codec of an entry's blocks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlockCodec {
+    /// PSARC: each block is stored, zlib or LZMA, told apart by its length
+    /// and first bytes (see the module docs).
+    Sniff,
+    /// Every block is one stream of this codec (Unreal paks: zlib, gzip
+    /// or raw LZ4 blocks back to back).
+    Zlib,
+    Gzip,
+    Lz4Block,
 }
 
 /// How the current block decodes.
@@ -52,6 +70,9 @@ enum Kind {
 /// decoded size.
 struct Block {
     kind: Kind,
+    /// Bytes at the block's start the codec does not read (a gzip member
+    /// header: `Codec::Gzip` starts after it).
+    skip: usize,
     end: usize,
     want: usize,
 }
@@ -111,7 +132,20 @@ impl Decoder {
             return Err(Diagnostic::output_limit(limit));
         }
         let want = usize::try_from(want).unwrap_or(usize::MAX);
-        let kind = if stored == 0 || u64::from(stored) == crate::bytes::to_u64(want) {
+        let fixed = match self.entry.codec {
+            BlockCodec::Sniff => None,
+            BlockCodec::Zlib => Some(Codec::Zlib),
+            BlockCodec::Gzip => Some(Codec::Gzip),
+            BlockCodec::Lz4Block => Some(Codec::Lz4Block),
+        };
+        let skip = if self.entry.codec == BlockCodec::Gzip {
+            crate::codec::gzip::header_len(data)?
+        } else {
+            0
+        };
+        let kind = if let Some(codec) = fixed {
+            Kind::Nested(Nested::new(&codec)?)
+        } else if stored == 0 || u64::from(stored) == crate::bytes::to_u64(want) {
             Kind::Stored { copied: 0 }
         } else {
             let codec = match data {
@@ -126,7 +160,12 @@ impl Decoder {
             };
             Kind::Nested(Nested::new(&codec)?)
         };
-        self.current = Some(Block { kind, end, want });
+        self.current = Some(Block {
+            kind,
+            skip,
+            end,
+            want,
+        });
         Ok(None)
     }
 }
@@ -148,7 +187,9 @@ impl crate::codec::pipeline::Decoder for Decoder {
         let Some(cur) = self.current.as_mut() else {
             return Ok(Status::More);
         };
-        let data = input.get(self.at..cur.end).unwrap_or_default();
+        let data = input
+            .get(self.at.saturating_add(cur.skip)..cur.end)
+            .unwrap_or_default();
         let mark = out.len();
         let finished = match &mut cur.kind {
             Kind::Stored { copied } => {

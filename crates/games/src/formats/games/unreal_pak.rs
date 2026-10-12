@@ -191,6 +191,7 @@ fn encoded_entry(f: &mut Fields<'_>, footer: &PakFooter) -> Result<PakEntry> {
 /// The node for a file in the pak: its data, decoded where we can.
 fn file_node(input: Input, footer: &PakFooter, name: String, e: &PakEntry) -> Node {
     use crate::codec::Codec;
+    use crate::codec::psarc::{self, BlockCodec};
     let method = footer.method(e.method);
     let first = e.blocks.first().map_or(0, |b| b.0);
     let last = e.blocks.last().map_or(0, |b| b.1);
@@ -214,8 +215,12 @@ fn file_node(input: Input, footer: &PakFooter, name: String, e: &PakEntry) -> No
         "none" => Ok(None),
         _ if !contiguous => Err(format!("{method} blocks out of order")),
         "zlib" if e.blocks.len() == 1 => Ok(Some(Codec::Zlib)),
-        // zlib streams back to back, one per block: PSARC's block codec.
-        "zlib" => Ok(Some(Codec::Psarc(crate::codec::psarc::Entry {
+        "lz4" if e.blocks.len() == 1 => Ok(Some(Codec::Lz4Block)),
+        // Zstandard frames back to back decode as one stream.
+        "zstd" => Ok(Some(Codec::Zstd)),
+        // One stream per block, back to back: PSARC's block codec (also for
+        // a single gzip block, whose member header it skips).
+        "zlib" | "gzip" | "lz4" => Ok(Some(Codec::Psarc(psarc::Entry {
             block_size: e.block_size,
             size: e.size,
             blocks: e
@@ -223,10 +228,12 @@ fn file_node(input: Input, footer: &PakFooter, name: String, e: &PakEntry) -> No
                 .iter()
                 .map(|&(a, b)| u32::try_from(b.saturating_sub(a)).unwrap_or(u32::MAX))
                 .collect(),
+            codec: match lower.as_str() {
+                "zlib" => BlockCodec::Zlib,
+                "gzip" => BlockCodec::Gzip,
+                _ => BlockCodec::Lz4Block,
+            },
         }))),
-        // Zstandard frames back to back decode as one stream.
-        "zstd" => Ok(Some(Codec::Zstd)),
-        "lz4" if e.blocks.len() == 1 => Ok(Some(Codec::Lz4Block)),
         _ => Err(format!("{method} compression")),
     };
     let node = match codec {

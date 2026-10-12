@@ -10,6 +10,7 @@
 //! section walks its function-name map alongside the bodies, and the
 //! instruction listing looks names up in a sparse index of that map.
 
+mod component;
 mod ops;
 
 use std::cell::Cell;
@@ -896,8 +897,7 @@ async fn component_summary(cx: &Cx, m: &ModuleInfo, version: u16) -> String {
 }
 
 /// A component section: nested core modules and components are dissected
-/// as WebAssembly; imports and exports are listed; the other sections'
-/// entries are not decoded.
+/// as WebAssembly; the other sections' entries are decoded (`component.rs`).
 async fn component_section(
     cx: &Cx,
     m: &ModuleInfo,
@@ -922,22 +922,7 @@ async fn component_section(
         }
         6 => {
             vector(cx, body, resumed, 2, "alias", |r, i, _| {
-                let what = sort(r)?;
-                let target = match r.u8()? {
-                    0x00 => {
-                        let i = r.uleb()?;
-                        format!("export {:?} of instance {i}", name(r)?)
-                    }
-                    0x01 => {
-                        let i = r.uleb()?;
-                        format!("export {:?} of core instance {i}", name(r)?)
-                    }
-                    0x02 => {
-                        let up = r.uleb()?;
-                        format!("outer {up} index {}", r.uleb()?)
-                    }
-                    _ => return None,
-                };
+                let (what, target) = component::alias(r)?;
                 Some(Entry::new(
                     Node::new(format!("alias {i}"))
                         .value(text(what))
@@ -945,6 +930,44 @@ async fn component_section(
                 ))
             })
             .await
+        }
+        2 => {
+            vector(cx, body, resumed, 2, "core instance", |r, i, _| {
+                component::core_instance(r, i).map(Entry::new)
+            })
+            .await
+        }
+        3 => {
+            vector(cx, body, resumed, 2, "core type", |r, i, _| {
+                component::core_type(r, i).map(Entry::new)
+            })
+            .await
+        }
+        5 => {
+            vector(cx, body, resumed, 2, "instance", |r, i, _| {
+                component::instance(r, i).map(Entry::new)
+            })
+            .await
+        }
+        7 => {
+            vector(cx, body, resumed, 2, "type", |r, i, _| {
+                component::component_type(r, i).map(Entry::new)
+            })
+            .await
+        }
+        8 => {
+            vector(cx, body, resumed, 2, "canonical function", |r, i, _| {
+                component::canon(r, i).map(Entry::new)
+            })
+            .await
+        }
+        9 => {
+            let data = cx.read(body.sub(0, 64 << 10)).await?;
+            let mut r = Reader::new(&data);
+            let node = component::start(&mut r)
+                .ok_or_else(|| malformed(body.sub(0, 1), "start function"))?;
+            cx.emit(node.span(body.sub(0, to_u64(r.pos()))));
+            Ok(())
         }
         11 => {
             vector(cx, body, resumed, 2, "export", |r, _, _| {
@@ -1003,11 +1026,8 @@ fn extern_desc(r: &mut Reader<'_>) -> Option<String> {
             format!("core module (type {})", r.uleb()?)
         }
         0x01 => format!("func (type {})", r.uleb()?),
-        0x02 => match r.u8()? {
-            0x00 => format!("value (eq {})", r.uleb()?),
-            0x01 => format!("value ({})", value_type(r)?),
-            _ => return None,
-        },
+        // wasmparser reads a value bound as the value type itself.
+        0x02 => format!("value ({})", value_type(r)?),
         0x03 => match r.u8()? {
             0x00 => format!("type (eq {})", r.uleb()?),
             0x01 => "type (sub resource)".to_owned(),

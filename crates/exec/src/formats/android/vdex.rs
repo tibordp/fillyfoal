@@ -65,23 +65,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let version = f.ascii("version", 4).emit()?;
     let number: u32 = version.parse().unwrap_or(0);
     if number < 27 {
-        let rest = cx.block(file.sub(8, 20)).await?;
-        let mut f = Fields::emitting(&cx, &rest, LE);
-        f.ascii("dex_section_version", 4).emit()?;
-        let dexes = f.u32("number_of_dex_files").emit()?;
-        f.u32("verifier_deps_size").hex().emit()?;
-        f.u32("bootclasspath_checksums_size").hex().emit()?;
-        f.u32("class_loader_context_size").hex().emit()?;
-        cx.annotate(format!(
-            "Android VDEX v{version}, {}",
-            plural(dexes, "DEX file")
-        ));
-        cx.emit(data_node(
-            "Contents",
-            file.tail(28),
-            file.len.saturating_sub(28),
-        ));
-        return Ok(());
+        return legacy(&cx, input, &version, number).await;
     }
     let n_sections = f.u32("number_of_sections").emit()?;
     let table = file.sub(12, u64::from(n_sections).saturating_mul(Section::SIZE));
@@ -146,6 +130,85 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if end < file.len {
         let rest = file.tail(end);
         cx.emit(data_node("Trailing data", rest, rest.len));
+    }
+    Ok(())
+}
+
+/// Before version 027 (`vdex_file.h` of each release): Android 8 (006,
+/// 010) has one header with the DEX, verifier-deps and quickening sizes;
+/// Android 9 (019) splits it into a verifier-deps header (with a DEX
+/// section version, "000" for none) and an optional DEX section header
+/// after the checksums; Android 10 and 11 (021) add the boot class path
+/// checksums and class loader context sizes. The headers, the checksums
+/// and (Android 8) the DEX files are decoded; the rest is shown as data.
+async fn legacy(cx: &Cx, input: Input, version: &str, number: u32) -> Result<()> {
+    let file = input.span;
+    let head = cx.block(file.sub(8, 20)).await?;
+    let mut f = Fields::emitting(cx, &head, LE);
+    let mut dex_section = false;
+    let mut dex_size = 0;
+    let dexes = if number < 19 {
+        let dexes = f.u32("number_of_dex_files").emit()?;
+        dex_size = f.u32("dex_size").hex().emit()?;
+        f.u32("verifier_deps_size").hex().emit()?;
+        f.u32("quickening_info_size").hex().emit()?;
+        dexes
+    } else {
+        let section = f
+            .ascii("dex_section_version", 4)
+            .desc("\"000\": no DEX section")
+            .emit()?;
+        dex_section = section.trim_end_matches('\0') != "000";
+        let dexes = f.u32("number_of_dex_files").emit()?;
+        f.u32("verifier_deps_size").hex().emit()?;
+        if number >= 21 {
+            f.u32("bootclasspath_checksums_size").hex().emit()?;
+            f.u32("class_loader_context_size").hex().emit()?;
+        }
+        dexes
+    };
+    let header_len = 8u64.saturating_add(f.pos());
+    cx.annotate(format!(
+        "Android VDEX v{version}, {}",
+        plural(dexes, "DEX file")
+    ));
+    let sums = file.sub(header_len, u64::from(dexes).saturating_mul(4));
+    cx.emit(Node::new("Checksums").span(sums).lazy(checksums, sums));
+    let mut end = header_len.saturating_add(sums.len);
+    // Android 8: the DEX files follow the checksums.
+    if dex_size > 0 {
+        let span = file.sub(end, dex_size.into());
+        cx.emit(
+            Node::new("DEX Files")
+                .span(span)
+                .lazy(dex_files, (input, span)),
+        );
+        end = end.saturating_add(span.len);
+    }
+    if dex_section {
+        let span = file.sub(end, 12);
+        let block = cx.block(span).await?;
+        let mut f = Fields::new(&block, LE);
+        let mut node = Node::new("Dex section header").span(span);
+        let mut sizes = Vec::new();
+        for name in ["dex_size", "dex_shared_data_size", "quickening_info_size"] {
+            let at = f.peek_span(4);
+            let Ok(v) = f.u32(name).get() else { break };
+            sizes.push(Node::new(name).span(at).value(hex(v, 32)));
+        }
+        node = node.lazy(
+            crate::formats::util::arcutil::emit_nodes,
+            std::sync::Arc::new(sizes),
+        );
+        cx.emit(node);
+        end = end.saturating_add(span.len);
+    }
+    if end < file.len {
+        cx.emit(data_node(
+            "Contents",
+            file.tail(end),
+            file.len.saturating_sub(end),
+        ));
     }
     Ok(())
 }

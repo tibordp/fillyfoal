@@ -6,7 +6,9 @@
 //! nested prototypes and debug information, in an order and encoding each
 //! version changes (`lundump.c` of 5.0 to 5.5). Expanding the file decodes
 //! the whole chunk once, in budgeted steps, into an index of prototypes
-//! whose nodes are emitted as they are expanded.
+//! whose nodes are emitted as they are expanded. A prototype's code is
+//! disassembled when expanded, one instruction per node, as `luac -l` lists
+//! it (opcode tables in `lua_ops.rs`), with constants and jump targets.
 
 use std::sync::Arc;
 
@@ -16,7 +18,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::arcutil::{emit_nodes, push_nodes};
 use crate::formats::util::binutil::Reader;
-use crate::formats::util::fmt::plural;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
@@ -236,6 +238,11 @@ struct Proto {
     numparams: u8,
     instructions: u64,
     source: Option<String>,
+    /// Index in `fields` of the code node, and the instruction array
+    /// (offset in the chunk body, count).
+    code: Option<(usize, usize, u64)>,
+    /// Constants rendered for the disassembly's comments.
+    kstr: Vec<String>,
 }
 
 const SEEN_CONSTANTS: u8 = 1;
@@ -246,6 +253,8 @@ const SEEN_DEBUG: u8 = 8;
 /// All prototypes of a chunk, the main one first.
 struct Index {
     span: Span,
+    version: u8,
+    endian: Endian,
     protos: Vec<Proto>,
 }
 
@@ -589,12 +598,16 @@ fn code(p: &mut Parser<'_>, index: usize) -> Step<()> {
         p.align(size)?;
     }
     let len = usize::try_from(n.checked_mul(p.s.instruction.into())?).ok()?;
+    let array = p.r.pos();
     p.r.bytes(len)?;
     let node = Node::new("code")
         .span(p.at(start))
         .value(uint(n, 32))
         .summary(format!("{n} instructions of {} bytes", p.s.instruction));
     let proto = p.protos.get_mut(index)?;
+    if p.s.instruction == 4 && n > 0 {
+        proto.code = Some((proto.fields.len(), array, n));
+    }
     proto.fields.push(node);
     proto.instructions = n;
     Some(())
@@ -610,11 +623,13 @@ async fn constants(
     let start = p.r.pos();
     let n = p.count(1)?;
     let mut items = Vec::new();
+    let mut kstr = Vec::new();
     for i in 0..n {
         p.tick(cx).await;
         let at = p.r.pos();
         let tag = p.r.u8()?;
         let (kind, value) = constant(p, tag)?;
+        kstr.push(constant_text(kind, &value));
         items.push(
             Node::new(format!("[{i}]"))
                 .span(p.at(at))
@@ -625,6 +640,7 @@ async fn constants(
     let span = (start, p.r.pos().saturating_sub(start));
     if let Some(proto) = p.protos.get_mut(index) {
         proto.constants = (span.0, span.1, Arc::new(items));
+        proto.kstr = kstr;
         proto.seen |= SEEN_CONSTANTS;
     }
     // Before 5.3 the nested prototypes follow the constants.
@@ -830,8 +846,14 @@ async fn prototype_node(cx: Cx, (index, i): (Arc<Index>, usize)) -> Result<()> {
         .protos
         .get(i)
         .ok_or_else(|| Diagnostic::internal("prototype index out of range"))?;
-    for node in &proto.fields {
-        cx.emit(node.clone());
+    for (n, node) in proto.fields.iter().enumerate() {
+        cx.emit(match proto.code {
+            Some((at, _, _)) if at == n => node.clone().lazy(
+                crate::expander!(disassemble: (Arc<Index>, usize)),
+                (index.clone(), i),
+            ),
+            _ => node.clone(),
+        });
     }
     let span = |(start, len): (usize, usize)| index.span.sub(to_u64(start), to_u64(len));
     let (start, len, items) = &proto.constants;
@@ -942,6 +964,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let end = p.r.pos();
     let index = Arc::new(Index {
         span: body,
+        version: p.version,
+        endian: p.s.endian,
         protos: std::mem::take(&mut p.protos),
     });
     if let Some(main) = index.protos.first() {
@@ -977,6 +1001,213 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .span(body.tail(to_u64(end)))
                 .diag(Diagnostic::warning("data after the main function")),
         );
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Disassembly
+
+/// Instructions read per block.
+const DISASM_BLOCK: u64 = 1024;
+
+/// A constant as `luac -l` shows it in comments.
+fn constant_text(kind: &str, value: &Value) -> String {
+    match value {
+        Value::Text(s) if kind.ends_with("string") => format!("\"{}\"", clip(s, 40)),
+        Value::Text(s) => s.clone(),
+        Value::Float(f) => format!("{f:?}"),
+        Value::Int { value, .. } => value.to_string(),
+        _ => "?".to_owned(),
+    }
+}
+
+/// The fields of one instruction, decoded for every format of its version.
+struct Word {
+    op: u32,
+    a: u32,
+    b: u32,
+    c: u32,
+    k: u32,
+    bx: u32,
+    ax: u32,
+}
+
+fn fields(version: u8, i: u32) -> Word {
+    match version {
+        // 5.0: OP(6) C(9) B(9) A(8).
+        0x50 => Word {
+            op: i & 0x3f,
+            c: (i >> 6) & 0x1ff,
+            b: (i >> 15) & 0x1ff,
+            a: i >> 24,
+            k: 0,
+            bx: (i >> 6) & 0x3_ffff,
+            ax: 0,
+        },
+        // 5.1 to 5.3: OP(6) A(8) C(9) B(9).
+        0x51..=0x53 => Word {
+            op: i & 0x3f,
+            a: (i >> 6) & 0xff,
+            c: (i >> 14) & 0x1ff,
+            b: i >> 23,
+            k: 0,
+            bx: i >> 14,
+            ax: i >> 6,
+        },
+        // 5.4 and 5.5: OP(7) A(8) k(1) B(8) C(8).
+        _ => Word {
+            op: i & 0x7f,
+            a: (i >> 7) & 0xff,
+            k: (i >> 15) & 1,
+            b: (i >> 16) & 0xff,
+            c: i >> 24,
+            bx: i >> 15,
+            ax: i >> 7,
+        },
+    }
+}
+
+/// One instruction: opcode name, operands and a comment (constants, jump
+/// targets), as `luac -l` lists them; `pc` counts from 0.
+fn render(version: u8, pc: u64, word: u32, kstr: &[String]) -> (String, String, String) {
+    let f = fields(version, word);
+    let table = super::lua_ops::table(version);
+    let Some((name, pattern)) = usize::try_from(f.op).ok().and_then(|op| table.get(op)) else {
+        return (format!("opcode {}", f.op), String::new(), String::new());
+    };
+    let old = version <= 0x53;
+    // Excess-K biases.
+    let sbx = i64::from(f.bx).saturating_sub(if old { 0x1_ffff } else { 0xffff });
+    let sj = i64::from(f.ax).saturating_sub(0xff_ffff);
+    let signed8 = |v: u32| i64::from(v).saturating_sub(127);
+    let neg = |v: u32| (-1i64).saturating_sub(i64::from(v));
+    let mut notes: Vec<String> = Vec::new();
+    let mut constant = |index: i64| {
+        let s = usize::try_from(index)
+            .ok()
+            .and_then(|i| kstr.get(i))
+            .map_or("?", String::as_str);
+        notes.push(s.to_owned());
+    };
+    let mut ops: Vec<String> = Vec::new();
+    for token in pattern.split_whitespace() {
+        ops.push(match token {
+            "A" => f.a.to_string(),
+            "B" => f.b.to_string(),
+            "C" => f.c.to_string(),
+            "k" => f.k.to_string(),
+            "Bx" => f.bx.to_string(),
+            "Ax" => f.ax.to_string(),
+            "sBx" => sbx.to_string(),
+            "sJ" => sj.to_string(),
+            "sB" => signed8(f.b).to_string(),
+            "sC" => signed8(f.c).to_string(),
+            "vB" => (f.b & 0x3f).to_string(),
+            "vC" => (word >> 22).to_string(),
+            "rkB" | "rkC" => {
+                let v = if token == "rkB" { f.b } else { f.c };
+                if v & 0x100 != 0 {
+                    constant(i64::from(v & 0xff));
+                    neg(v & 0xff).to_string()
+                } else {
+                    v.to_string()
+                }
+            }
+            "NBx" => {
+                constant(i64::from(f.bx));
+                neg(f.bx).to_string()
+            }
+            "NAx" => neg(f.ax).to_string(),
+            "KB" => {
+                constant(i64::from(f.b));
+                f.b.to_string()
+            }
+            "KC" => {
+                constant(i64::from(f.c));
+                f.c.to_string()
+            }
+            "KBx" => {
+                constant(i64::from(f.bx));
+                f.bx.to_string()
+            }
+            "KBx1" => {
+                constant(i64::from(f.bx).saturating_sub(1));
+                f.bx.to_string()
+            }
+            "Ck" | "KCk" if f.k != 0 => {
+                if token == "KCk" {
+                    constant(i64::from(f.c));
+                }
+                format!("{}k", f.c)
+            }
+            "Ck" | "KCk" => f.c.to_string(),
+            _ => String::new(),
+        });
+    }
+    // Jump targets, counted from 1 like luac's listing.
+    let at = i64::try_from(pc).unwrap_or(i64::MAX);
+    let bx = i64::from(f.bx);
+    let target = match *name {
+        "JMP" if !old => Some(("to", at.saturating_add(2).saturating_add(sj))),
+        "JMP" | "FORLOOP" | "FORPREP" | "TFORLOOP" | "TFORPREP" if old => {
+            Some(("to", at.saturating_add(2).saturating_add(sbx)))
+        }
+        "FORLOOP" | "TFORLOOP" => Some(("to", at.saturating_add(2).saturating_sub(bx))),
+        "FORPREP" => Some(("exit to", at.saturating_add(3).saturating_add(bx))),
+        "TFORPREP" => Some(("to", at.saturating_add(2).saturating_add(bx))),
+        _ => None,
+    };
+    if let Some((word, to)) = target {
+        notes.push(format!("{word} {to}"));
+    }
+    ((*name).to_owned(), ops.join(" "), notes.join(" "))
+}
+
+/// The instructions of prototype `i`, one node each, read a block at a
+/// time.
+async fn disassemble(cx: Cx, (index, i): (Arc<Index>, usize)) -> Result<()> {
+    let proto = index
+        .protos
+        .get(i)
+        .ok_or_else(|| Diagnostic::internal("prototype index out of range"))?;
+    let Some((_, offset, count)) = proto.code else {
+        return Ok(());
+    };
+    let array = index
+        .span
+        .sub_exact(to_u64(offset), count.saturating_mul(4))?;
+    cx.set_count(Count::Exact(count));
+    let mut pc = cx.resume::<u64>().unwrap_or(0);
+    while pc < count {
+        let n = DISASM_BLOCK.min(count.saturating_sub(pc));
+        let block = cx
+            .read(array.sub(pc.saturating_mul(4), n.saturating_mul(4)))
+            .await?;
+        if block.len() < 4 {
+            break;
+        }
+        for bytes in block.as_chunks::<4>().0 {
+            let word = match index.endian {
+                Endian::Little => u32::from_le_bytes(*bytes),
+                Endian::Big => u32::from_be_bytes(*bytes),
+            };
+            let (name, ops, note) = render(index.version, pc, word, &proto.kstr);
+            let mut node = Node::new(format!("[{}]", pc.saturating_add(1)))
+                .span(array.sub(pc.saturating_mul(4), 4))
+                .value(text(if ops.is_empty() {
+                    name
+                } else {
+                    format!("{name} {ops}")
+                }));
+            if !note.is_empty() {
+                node = node.summary(note);
+            }
+            let at = pc;
+            cx.mark(move || at);
+            cx.push(node).await;
+            pc = pc.saturating_add(1);
+        }
     }
     Ok(())
 }

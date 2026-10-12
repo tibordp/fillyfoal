@@ -20,5 +20,6 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Metadata — 1 entries  [0xac+0x10]
       CHT2: CD-ROM track v2 (CHT2) (0x43485432) — TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:4 PREGAP:0 PGTYPE:MODE1 PGSUB:RW POSTGAP:0  [0xac+0x66] → 0xbc+0x56
   ▾ Hunk map — 2 hunks  [0x78+0x20]
-      Hunk 0: 0x98 — compressed, 20 bytes at 0x98, CRC 0xc71c0011  [0x78+0x10] → 0x98+0x14
+    ▾ Hunk 0: 0x98 — 0x1000 bytes decompressed  [0x78+0x10] → 0x98+0x14
+        Data  [#1:0x0+0x1000]
       Hunk 1: 0x1122334455667788 — mini (8 bytes inline): 1122334455667788  [0x88+0x10]

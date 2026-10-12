@@ -36,6 +36,10 @@ const MAX_STRING: u64 = 0x10000;
 const MAX_VERIFIED: u64 = 16 << 20;
 /// Sections larger than this are walked only as far as this.
 const MAX_SECTION: u64 = 64 << 20;
+/// Most bytes of one data item (its length is found by scanning it).
+const MAX_ITEM: usize = 1 << 20;
+/// Bytes of an item scanned per budget unit.
+const SCAN_BYTES_PER_UNIT: u64 = 64;
 /// Nesting limit for encoded values (arrays and annotations in arrays).
 const MAX_DEPTH: u32 = 16;
 
@@ -152,6 +156,10 @@ struct Table {
 #[derive(Clone, Copy, Debug)]
 struct Header {
     map_off: u32,
+    /// What data offsets (string data, type lists, class data, ...) count
+    /// from: the file start, or in compact DEX the data section
+    /// (`DexFile::DataBegin`).
+    data_base: u64,
     strings: Table,
     types: Table,
     protos: Table,
@@ -181,6 +189,11 @@ enum Piece {
 }
 
 impl DexInfo {
+    /// The file offset of data offset `off`.
+    fn data(&self, off: u32) -> u64 {
+        self.header.data_base.saturating_add(off.into())
+    }
+
     /// The span of a table of `width`-byte entries, clamped to the file.
     fn table(&self, t: Table, width: u64) -> Span {
         self.file
@@ -205,7 +218,7 @@ impl DexInfo {
 
     async fn string(&self, cx: &Cx, index: u32) -> Result<String> {
         let off = self.word(cx, self.header.strings, 4, index, 0).await?;
-        let data = self.file.tail(off.into());
+        let data = self.file.tail(self.data(off));
         let head = cx.read_avail(data.sub(0, 5)).await?;
         let (_, len) = crate::bytes::uleb128(&head)
             .ok_or_else(|| Diagnostic::malformed("bad string length").at(data.sub(0, 5)))?;
@@ -233,13 +246,13 @@ impl DexInfo {
         if off == 0 {
             return out;
         }
-        let Ok(head) = cx.read(self.file.sub(off.into(), 4)).await else {
+        let Ok(head) = cx.read(self.file.sub(self.data(off), 4)).await else {
             return out;
         };
         let n = u32_le(&head, 0).unwrap_or(0).min(256);
         let Ok(list) = cx
             .read_avail(self.file.sub(
-                u64::from(off).saturating_add(4),
+                self.data(off).saturating_add(4),
                 u64::from(n).saturating_mul(2),
             ))
             .await
@@ -438,7 +451,7 @@ fn header(f: &mut Fields<'_>, (file, checks): &(Span, Option<Checks>)) -> Result
     let fields = table(f, "field_ids_size", "field_ids_off", file, 8)?;
     let methods = table(f, "method_ids_size", "method_ids_off", file, 8)?;
     let classes = table(f, "class_defs_size", "class_defs_off", file, 32)?;
-    table(f, "data_size", "data_off", file, 1)?;
+    let data = table(f, "data_size", "data_off", file, 1)?;
     if compact {
         f.u32("feature_flags").hex().emit()?;
         f.u32("debug_info_offsets_pos").hex().emit()?;
@@ -452,6 +465,7 @@ fn header(f: &mut Fields<'_>, (file, checks): &(Span, Option<Checks>)) -> Result
     }
     Ok(Header {
         map_off,
+        data_base: if compact { data.off.into() } else { 0 },
         strings,
         types,
         protos,
@@ -871,7 +885,7 @@ async fn class_def(cx: Cx, (dex, at): (Dex, Span)) -> Result<()> {
             .await
             .unwrap_or_default()
     };
-    let target = |off: u32| (off != 0).then(|| dex.file.sub(off.into(), 0));
+    let target = |off: u32| (off != 0).then(|| dex.file.sub(dex.data(off), 0));
     f.u32("class_idx")
         .with(|_, n| n.summary(class.clone()))
         .emit()?;
@@ -903,7 +917,7 @@ async fn class_def(cx: Cx, (dex, at): (Dex, Span)) -> Result<()> {
             .emit()?;
     }
     if def.class_data_off != 0 {
-        let span = dex.file.tail(def.class_data_off.into());
+        let span = dex.file.tail(dex.data(def.class_data_off));
         cx.emit(
             Node::new("Members")
                 .target(span.sub(0, 0))
@@ -912,7 +926,7 @@ async fn class_def(cx: Cx, (dex, at): (Dex, Span)) -> Result<()> {
         );
     }
     if def.static_values_off != 0 {
-        let span = dex.file.tail(def.static_values_off.into());
+        let span = dex.file.tail(dex.data(def.static_values_off));
         let data = cx.read_avail(span.sub(0, 0x10000)).await?;
         if let Some((len, pieces)) = encoded_array_text(&data) {
             cx.emit(
@@ -925,10 +939,14 @@ async fn class_def(cx: Cx, (dex, at): (Dex, Span)) -> Result<()> {
     if def.annotations_off != 0 {
         cx.emit(
             Node::new("Annotations")
-                .target(dex.file.sub(def.annotations_off.into(), 16))
+                .target(dex.file.sub(dex.data(def.annotations_off), 16))
                 .lazy(
                     item_fields,
-                    (dex.clone(), TYPE_ANNOTATIONS_DIRECTORY, def.annotations_off),
+                    (
+                        dex.clone(),
+                        TYPE_ANNOTATIONS_DIRECTORY,
+                        u32::try_from(dex.data(def.annotations_off)).unwrap_or(u32::MAX),
+                    ),
                 ),
         );
     }
@@ -1482,8 +1500,14 @@ async fn section(cx: Cx, s: Section) -> Result<()> {
             }
             pos = next;
         }
+        // An item's length is found by scanning it (debug info and class
+        // data are streams), synchronously: bound the scan and charge it.
         let rest = data.get(pos..).unwrap_or_default();
-        let Some(len) = item_len(s.kind, rest) else {
+        let rest = rest.get(..MAX_ITEM).unwrap_or(rest);
+        let found = item_len(s.kind, rest);
+        cx.charge(to_u64(found.unwrap_or(rest.len())) / SCAN_BYTES_PER_UNIT)
+            .await;
+        let Some(len) = found else {
             cx.diag(
                 Diagnostic::malformed(format!("item {i} could not be parsed"))
                     .at(region.tail(to_u64(pos))),
@@ -1585,9 +1609,12 @@ async fn item_label(
 
 /// The fields of the data item of `kind` at file offset `offset`.
 async fn item_fields(cx: Cx, (dex, kind, offset): (Dex, u16, u32)) -> Result<()> {
-    let span = dex.file.tail(offset.into()).sub(0, 0x10_0000);
+    let span = dex.file.tail(offset.into()).sub(0, to_u64(MAX_ITEM));
     let data = cx.read_avail(span).await?;
-    let Some(len) = item_len(kind, &data) else {
+    let found = item_len(kind, &data);
+    cx.charge(to_u64(found.unwrap_or(data.len())) / SCAN_BYTES_PER_UNIT)
+        .await;
+    let Some(len) = found else {
         return Err(Diagnostic::malformed("item could not be parsed").at(span.sub(0, 1)));
     };
     let data = data.get(..len).unwrap_or_default();
