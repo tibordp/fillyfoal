@@ -3,7 +3,9 @@
 //! streams decoded row by row. Tables are stored column by column: all
 //! values of the first column, then the second, and so on; strings are
 //! references into the pool (2 bytes, or 3 when the pool says so) and
-//! integers are stored with their sign bit flipped.
+//! integers are stored with their sign bit flipped. A transform (.mst, or
+//! a transform storage in a package or patch) stores its tables row by
+//! row instead, each row a change with a mask of the columns it gives.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -13,6 +15,7 @@ use super::{CfbRef, TreeWalk, entry_name};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, uint};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -98,9 +101,9 @@ impl Db {
     }
 }
 
-/// The root's MSI streams by decoded name.
-async fn msi_stream(cx: &Cx, cfb: &CfbRef, name: &str) -> Option<Span> {
-    let root = super::read_entry(cx, cfb, 0).await.ok()?;
+/// The MSI streams of `storage` (0: the root) by decoded name.
+async fn msi_stream(cx: &Cx, cfb: &CfbRef, storage: u32, name: &str) -> Option<Span> {
+    let root = super::read_entry(cx, cfb, storage).await.ok()?;
     let mut walk = TreeWalk::new(root.child);
     while let Some((id, entry)) = walk.next(cx, cfb).await {
         let raw = entry_name(&entry);
@@ -118,19 +121,64 @@ async fn msi_stream(cx: &Cx, cfb: &CfbRef, name: &str) -> Option<Span> {
     None
 }
 
+/// The root package's database.
 pub async fn db(cx: &Cx, cfb: &CfbRef) -> Arc<Db> {
-    let key = cfb.input.span.sub(0, 0);
+    package_db(cx, cfb, 0).await
+}
+
+/// The cache key of `storage`'s database: its string pool, which every
+/// database has.
+async fn db_key(cx: &Cx, cfb: &CfbRef, storage: u32) -> Span {
+    msi_stream(cx, cfb, storage, "_StringPool")
+        .await
+        .unwrap_or_else(|| cfb.input.span.sub(0, 0))
+}
+
+/// A package's database in `storage` (0: the root).
+async fn package_db(cx: &Cx, cfb: &CfbRef, storage: u32) -> Arc<Db> {
+    let key = db_key(cx, cfb, storage).await;
     if let Some(found) = cx.cached::<Db>(key, "msi-db") {
         return found;
     }
-    let db = Arc::new(load(cx, cfb).await.unwrap_or_default());
+    let db = Arc::new(load(cx, cfb, storage, None).await.unwrap_or_default());
     cx.cache(key, "msi-db", db.clone());
     db
 }
 
-async fn load(cx: &Cx, cfb: &CfbRef) -> Option<Db> {
-    let pool = msi_stream(cx, cfb, "_StringPool").await?;
-    let data = msi_stream(cx, cfb, "_StringData").await?;
+/// The database of `storage` (0: the root), a package's, or with
+/// `transform` a transform's: its own string pool, and a schema made of
+/// the package's (for a transform stored in a package), the standard
+/// Property table, and the tables and columns the transform adds.
+pub async fn db_at(cx: &Cx, cfb: &CfbRef, storage: u32, transform: bool) -> Arc<Db> {
+    if !transform {
+        return package_db(cx, cfb, storage).await;
+    }
+    let key = db_key(cx, cfb, storage).await;
+    if let Some(found) = cx.cached::<Db>(key, "msi-transform-db") {
+        return found;
+    }
+    let mut base = BTreeMap::new();
+    if storage != 0
+        && let Ok(root) = super::read_entry(cx, cfb, 0).await
+        && root.clsid.data1 == 0x000c_1084
+    {
+        base = package_db(cx, cfb, 0).await.tables.clone();
+    }
+    let db = Arc::new(load(cx, cfb, storage, Some(base)).await.unwrap_or_default());
+    cx.cache(key, "msi-transform-db", db.clone());
+    db
+}
+
+/// `transform`: the tables of the package a transform is stored in (empty
+/// for a standalone one); `None` for a package.
+async fn load(
+    cx: &Cx,
+    cfb: &CfbRef,
+    storage: u32,
+    transform: Option<BTreeMap<String, Vec<Column>>>,
+) -> Option<Db> {
+    let pool = msi_stream(cx, cfb, storage, "_StringPool").await?;
+    let data = msi_stream(cx, cfb, storage, "_StringData").await?;
     let pool = cx.read(pool).await.ok()?;
     let data = cx.read(data).await.ok()?;
     let mut db = Db::default();
@@ -149,8 +197,13 @@ async fn load(cx: &Cx, cfb: &CfbRef) -> Option<Db> {
         db.strings.push(super::rec::codepage_text(codepage, raw));
         offset = end;
     }
+    if let Some(base) = transform {
+        db.tables = base;
+        transform_schema(cx, cfb, storage, &mut db).await;
+        return Some(db);
+    }
     // _Columns: Table, Number, Name, Type, column by column.
-    if let Some(cols) = msi_stream(cx, cfb, "_Columns").await {
+    if let Some(cols) = msi_stream(cx, cfb, storage, "_Columns").await {
         let cols = cx.read(cols).await.ok()?;
         let r = if db.long_refs { 3usize } else { 2 };
         let row = r.saturating_mul(2).saturating_add(4);
@@ -191,23 +244,137 @@ async fn load(cx: &Cx, cfb: &CfbRef) -> Option<Db> {
                 .push(Column { name, kind });
         }
     }
-    // The catalog tables' own schemas.
-    let s = |name: &str, kind| Column {
+    catalog(&mut db);
+    Some(db)
+}
+
+fn col(name: &str, kind: u16) -> Column {
+    Column {
         name: name.to_owned(),
         kind,
-    };
+    }
+}
+
+/// The catalog tables' own schemas.
+fn catalog(db: &mut Db) {
     db.tables.insert(
         "_Columns".to_owned(),
         vec![
-            s("Table", 0x2d40),
-            s("Number", 0x2502),
-            s("Name", 0x2d40),
-            s("Type", 0x0502),
+            col("Table", 0x2d40),
+            col("Number", 0x2502),
+            col("Name", 0x2d40),
+            col("Type", 0x0502),
         ],
     );
     db.tables
-        .insert("_Tables".to_owned(), vec![s("Name", 0x2d40)]);
-    Some(db)
+        .insert("_Tables".to_owned(), vec![col("Name", 0x2d40)]);
+}
+
+/// A transform's schema, added to the package's tables (when it is stored
+/// in a package): the standard Property table, the catalog, and the columns the
+/// transform's own `_Columns` inserts (in order; Wine's
+/// `msi_table_load_transform` numbers columns whose Number is null after
+/// the table's last one).
+async fn transform_schema(cx: &Cx, cfb: &CfbRef, storage: u32, db: &mut Db) {
+    db.tables
+        .entry("Property".to_owned())
+        .or_insert_with(|| vec![col("Property", 0x2d48), col("Value", 0x0f00)]);
+    catalog(db);
+    let Some(span) = msi_stream(cx, cfb, storage, "_Columns").await else {
+        return;
+    };
+    let Ok(data) = cx.read(span).await else {
+        return;
+    };
+    let schema = db.tables.get("_Columns").cloned().unwrap_or_default();
+    let mut at = 0usize;
+    let mut rows = 0u32;
+    while let Some(row) = transform_row(&data, at, &schema, db.long_refs) {
+        rows = rows.saturating_add(1);
+        if rows.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+        at = at.saturating_add(row.size);
+        if row.mask == 0 {
+            continue;
+        }
+        let value = |i: usize| row.cells.iter().find(|c| c.0 == i).map(|c| (c.1, c.2));
+        let text = |i: usize| {
+            value(i)
+                .map(|(off, w)| string_ref(&data, off, w))
+                .and_then(|r| db.string(r))
+                .map(str::to_owned)
+        };
+        let (Some(table), Some(name)) = (text(0), text(2)) else {
+            continue;
+        };
+        let Some(kind) = value(3).and_then(|(off, _)| u16_le(&data, off)) else {
+            continue;
+        };
+        let columns = db.tables.entry(table).or_default();
+        if !columns.iter().any(|c| c.name == name) {
+            columns.push(Column {
+                name,
+                kind: kind ^ 0x8000,
+            });
+        }
+    }
+}
+
+/// One row of a transform's table stream, as Wine's
+/// `msi_table_load_transform` reads it.
+struct TransformRow {
+    /// The column mask: 0 deletes the row with these keys; with bit 0 set,
+    /// the high byte counts the leading columns given (a whole row,
+    /// inserted or replaced); otherwise bit `i` marks column `i` as given
+    /// (keys always are), changing an existing row or inserting one.
+    mask: u16,
+    /// Bytes of the row, mask included.
+    size: usize,
+    /// The given columns: index, offset of the value, width.
+    cells: Vec<(usize, usize, usize)>,
+}
+
+/// The transform row at `at` in `data`, if a whole one is there and its
+/// mask fits the schema.
+fn transform_row(
+    data: &[u8],
+    at: usize,
+    columns: &[Column],
+    long_refs: bool,
+) -> Option<TransformRow> {
+    let mask = u16_le(data, at)?;
+    let given = if mask & 1 != 0 {
+        let n = usize::from(mask >> 8);
+        if n > columns.len() {
+            return None;
+        }
+        n
+    } else {
+        columns.len()
+    };
+    let mut cells = Vec::new();
+    let mut off = at.checked_add(2)?;
+    for (i, c) in columns.iter().enumerate().take(given) {
+        let bit = u32::try_from(i)
+            .ok()
+            .and_then(|i| 1u16.checked_shl(i))
+            .unwrap_or(0);
+        if mask & 1 == 0 && c.kind & 0x2000 == 0 && mask & bit == 0 {
+            continue;
+        }
+        let w = to_usize(c.width(long_refs));
+        cells.push((i, off, w));
+        off = off.checked_add(w)?;
+    }
+    if off > data.len() {
+        return None;
+    }
+    Some(TransformRow {
+        mask,
+        size: off.saturating_sub(at),
+        cells,
+    })
 }
 
 /// (length, reference count, size of the entry in bytes) for each string.
@@ -242,8 +409,13 @@ fn string_ref(data: &[u8], at: usize, width: usize) -> u32 {
 
 /// `_StringPool`: the header and the length and reference count of each
 /// string, with the string itself.
-pub async fn string_pool(cx: &Cx, cfb: &CfbRef, span: Span) -> Result<()> {
-    let db = db(cx, cfb).await;
+pub async fn string_pool(
+    cx: &Cx,
+    cfb: &CfbRef,
+    (storage, transform): (u32, bool),
+    span: Span,
+) -> Result<()> {
+    let db = db_at(cx, cfb, storage, transform).await;
     let pool = cx.read(span).await?;
     let header = u32_le(&pool, 0).unwrap_or(0);
     cx.emit(
@@ -279,9 +451,14 @@ pub async fn string_pool(cx: &Cx, cfb: &CfbRef, span: Span) -> Result<()> {
 }
 
 /// `_StringData`: the strings back to back, each pointing at its bytes.
-pub async fn string_data(cx: &Cx, cfb: &CfbRef, span: Span) -> Result<()> {
-    let db = db(cx, cfb).await;
-    let Some(pool) = msi_stream(cx, cfb, "_StringPool").await else {
+pub async fn string_data(
+    cx: &Cx,
+    cfb: &CfbRef,
+    (storage, transform): (u32, bool),
+    span: Span,
+) -> Result<()> {
+    let db = db_at(cx, cfb, storage, transform).await;
+    let Some(pool) = msi_stream(cx, cfb, storage, "_StringPool").await else {
         return Ok(());
     };
     let pool = cx.read(pool).await?;
@@ -346,33 +523,9 @@ pub async fn table(cx: &Cx, cfb: &CfbRef, name: &str, span: Span) -> Result<()> 
         for ((c, w), start) in columns.iter().zip(&widths).zip(&starts) {
             let at = start.saturating_add(r.saturating_mul(*w));
             let cell = span.sub(at, *w);
-            let a = to_usize(at);
-            let value = if c.is_string() {
-                let i = string_ref(&data, a, to_usize(*w));
-                if i == 0 {
-                    None
-                } else {
-                    Some(Value::Text(db.string(i).unwrap_or("?").to_owned()))
-                }
-            } else if *w == 4 {
-                let v = u32_le(&data, a).unwrap_or(0);
-                (v != 0).then(|| Value::Int {
-                    value: i64::from((v ^ 0x8000_0000).cast_signed()),
-                    bits: 32,
-                })
-            } else {
-                let v = u16_le(&data, a).unwrap_or(0);
-                (v != 0).then(|| Value::Int {
-                    value: i64::from((v ^ 0x8000).cast_signed()),
-                    bits: 16,
-                })
-            };
+            let value = cell_value(&db, c, &data, to_usize(at), to_usize(*w));
             if shown.len() < 4 {
-                shown.push(match &value {
-                    Some(Value::Text(t)) => quoted(t, 30),
-                    Some(Value::Int { value, .. }) => value.to_string(),
-                    _ => "null".to_owned(),
-                });
+                shown.push(show(&value));
             }
             cells.push((c.name.clone(), cell, value));
         }
@@ -396,7 +549,134 @@ pub async fn table(cx: &Cx, cfb: &CfbRef, name: &str, span: Span) -> Result<()> 
     Ok(())
 }
 
-async fn row_cells(cx: Cx, cells: Arc<Vec<(String, Span, Option<Value>)>>) -> Result<()> {
+/// A transform's table stream (`!Name` in a transform storage `storage`):
+/// row changes, each a column mask and the values it gives, against the
+/// transform's own string pool.
+pub async fn transform_table(
+    cx: &Cx,
+    cfb: &CfbRef,
+    storage: u32,
+    name: &str,
+    span: Span,
+) -> Result<()> {
+    let db = db_at(cx, cfb, storage, true).await;
+    let Some(columns) = db.tables.get(name) else {
+        cx.emit(
+            Node::new("Data")
+                .span(span)
+                .summary(format!("{} bytes of row changes", span.len))
+                .desc("The table's columns are defined by the package the transform applies to, which is not here"),
+        );
+        return Ok(());
+    };
+    cx.emit(
+        Node::new("Columns")
+            .summary(
+                columns
+                    .iter()
+                    .map(|c| c.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            )
+            .lazy(column_list, (Arc::new(columns.clone()), db.long_refs)),
+    );
+    let data = cx.read(span).await?;
+    let mut at = 0usize;
+    let mut n = 0u64;
+    while at < data.len() && n < MAX_ROWS {
+        if n.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+        let Some(row) = transform_row(&data, at, columns, db.long_refs) else {
+            break;
+        };
+        let mut cells = Vec::new();
+        let mut shown = Vec::new();
+        for &(i, off, w) in &row.cells {
+            let Some(c) = columns.get(i) else { continue };
+            let value = cell_value(&db, c, &data, off, w);
+            if shown.len() < 4 {
+                shown.push(show(&value));
+            }
+            cells.push((c.name.clone(), span.sub(to_u64(off), to_u64(w)), value));
+        }
+        let change = match row.mask {
+            0 => "delete".to_owned(),
+            m if m & 1 != 0 => format!("whole row ({})", plural(m >> 8, "column")),
+            m => {
+                let set: Vec<&str> = columns
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, c)| {
+                        c.kind & 0x2000 == 0
+                            && u32::try_from(*i)
+                                .ok()
+                                .and_then(|i| 1u16.checked_shl(i))
+                                .is_some_and(|b| m & b != 0)
+                    })
+                    .map(|(_, c)| c.name.as_str())
+                    .collect();
+                format!("set {}", set.join(", "))
+            }
+        };
+        let rspan = span.sub(to_u64(at), to_u64(row.size));
+        let mask_span = rspan.sub(0, 2);
+        cx.push(
+            Node::new(format!("Change {n}"))
+                .span(rspan)
+                .summary(format!("{change}: {}", shown.join(", ")))
+                .lazy(transform_cells, (mask_span, row.mask, Arc::new(cells))),
+        )
+        .await;
+        at = at.saturating_add(row.size);
+        n = n.saturating_add(1);
+    }
+    if at < data.len() {
+        cx.emit(Node::new("Trailing data").span(span.tail(to_u64(at))).diag(
+            Diagnostic::malformed("a row change does not fit the stream or the table's columns"),
+        ));
+    }
+    Ok(())
+}
+
+/// A cell's value: a string from the pool or an integer (stored with its
+/// sign bit flipped); `None` for null.
+fn cell_value(db: &Db, c: &Column, data: &[u8], at: usize, width: usize) -> Option<Value> {
+    if c.is_string() {
+        let i = string_ref(data, at, width);
+        (i != 0).then(|| Value::Text(db.string(i).unwrap_or("?").to_owned()))
+    } else if width == 4 {
+        let v = u32_le(data, at).unwrap_or(0);
+        (v != 0).then(|| Value::Int {
+            value: i64::from((v ^ 0x8000_0000).cast_signed()),
+            bits: 32,
+        })
+    } else {
+        let v = u16_le(data, at).unwrap_or(0);
+        (v != 0).then(|| Value::Int {
+            value: i64::from((v ^ 0x8000).cast_signed()),
+            bits: 16,
+        })
+    }
+}
+
+fn show(value: &Option<Value>) -> String {
+    match value {
+        Some(Value::Text(t)) => quoted(t, 30),
+        Some(Value::Int { value, .. }) => value.to_string(),
+        _ => "null".to_owned(),
+    }
+}
+
+async fn transform_cells(cx: Cx, (mask_span, mask, cells): (Span, u16, Cells)) -> Result<()> {
+    cx.emit(Node::new("Mask").span(mask_span).value(hex(mask, 16)));
+    row_cells(cx, cells).await
+}
+
+/// A row's cells: column name, span and value (`None`: null).
+type Cells = Arc<Vec<(String, Span, Option<Value>)>>;
+
+async fn row_cells(cx: Cx, cells: Cells) -> Result<()> {
     for (name, span, value) in cells.iter() {
         let mut node = Node::new(name.clone()).span(*span);
         node = match value {
@@ -431,7 +711,7 @@ pub async fn product(cx: &Cx, cfb: &CfbRef) -> Option<String> {
     if columns.len() != 2 {
         return None;
     }
-    let span = msi_stream(cx, cfb, "Property").await?;
+    let span = msi_stream(cx, cfb, 0, "Property").await?;
     let r = if db.long_refs { 3usize } else { 2 };
     let data = cx.read_avail(span.sub(0, 0x10000)).await.ok()?;
     let rows = data.len().checked_div(r.saturating_mul(2)).unwrap_or(0);

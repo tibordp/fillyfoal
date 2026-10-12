@@ -335,7 +335,7 @@ pub async fn walk(
         let len = u64::from(u32_le(&head, 4).unwrap_or(0));
         let whole = span.sub(pos, len.saturating_add(8));
         let body = whole.tail(8);
-        let container = ver_inst & 0xf == 0xf;
+        let container = ver_inst & 0xf == 0xf && kind != super::ppt::CRYPT_SESSION;
         let inst = ver_inst >> 4;
         let mut node = Node::new(name(kind)).span(whole).value(hex(kind, 16));
         if body.len < len {

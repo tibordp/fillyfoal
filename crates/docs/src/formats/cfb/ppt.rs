@@ -7,14 +7,15 @@ use std::collections::BTreeMap;
 
 use super::officeart;
 use super::rec::{K, quoted};
-use crate::bytes::{i32_le, to_u64, u16_le, u32_le};
+use crate::bytes::{i32_le, to_u64, to_usize, u16_le, u32_le};
+use crate::codec::crypto::Rc4State;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
 use crate::formats::Input;
 use crate::formats::util::val::{hex, uint};
 use crate::node::Node;
-use crate::span::Span;
+use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 
 pub const NAMES: EnumTable = &[
@@ -179,9 +180,10 @@ pub const NAMES: EnumTable = &[
     (0x2eee, "SlideFlags10Atom"),
     (0x2eef, "SlideTime10Atom"),
     (0x2ef1, "DiffTree10Container"),
-    (0x2f14, "TimeExtTimeNodeContainer"),
+    (0x2f14, "CryptSession10Container"),
     (0x36b0, "PhotoAlbumInfo10Atom"),
     (0x3714, "SmartTagStore11Container"),
+    (0xf144, "TimeExtTimeNodeContainer"),
 ];
 
 const TEXT_TYPES: EnumTable = &[
@@ -327,9 +329,27 @@ pub fn atom_summary(kind: u16, inst: u16, data: &[u8], len: u64) -> String {
         }),
         0x1772 => Some(format!("{} bytes of persist entries", len)),
         0x0ff6 => u32_le(data, 8).map(|o| format!("current edit at {o:#x}")),
+        CRYPT_SESSION => Some(encryption_summary(data)),
         _ => None,
     };
     s.unwrap_or_else(|| format!("atom, {len} bytes"))
+}
+
+/// CryptSession10Container: a container by its version, but its body is
+/// the RC4 CryptoAPI encryption header, not records (MS-PPT 2.3.7).
+pub const CRYPT_SESSION: u16 = 0x2f14;
+
+/// The scheme a CryptSession10Container's header names ("CryptoAPI,
+/// version 4.2, RC4").
+fn encryption_summary(data: &[u8]) -> String {
+    let (Some(major), Some(minor)) = (u16_le(data, 0), u16_le(data, 2)) else {
+        return "encryption header".to_owned();
+    };
+    let s = super::offcrypto::version_name(major, minor);
+    match u32_le(data, 20).and_then(|a| lookup(super::offcrypto::ALG_IDS, a.into())) {
+        Some(alg) if (2..=4).contains(&major) && minor == 2 => format!("{s}, {alg}"),
+        _ => s,
+    }
 }
 
 fn officeart_text16(data: &[u8], len: u64) -> String {
@@ -352,6 +372,7 @@ pub async fn atom_fields(
 ) -> Result<()> {
     let _ = (input, inst);
     match kind {
+        CRYPT_SESSION => super::offcrypto::header(f)?,
         0x0fa0 | 0x0fba => {
             let n = body.len / 2;
             f.utf16("Text", n).emit()?;
@@ -579,8 +600,29 @@ fn current_user(f: &mut Fields<'_>) -> Result<()> {
 }
 
 /// The `PowerPoint Document` stream: its records, then the edit chain
-/// located through the `Current User` stream (when present).
-pub async fn document(cx: &Cx, input: Input, span: Span, current_user: Option<Span>) -> Result<()> {
+/// located through the `Current User` stream (when present). `pictures`:
+/// the `Pictures` stream, where the drawing group's FBSE records point
+/// (foDelay) for the pictures' data.
+pub async fn document(
+    cx: &Cx,
+    input: Input,
+    span: Span,
+    current_user: Option<Span>,
+    pictures: Option<Span>,
+) -> Result<()> {
+    document_as(cx, input, span, current_user, pictures, false).await
+}
+
+/// [`document`]; `decrypted` for a decrypted copy, whose persist objects
+/// are plaintext although its edit still names a CryptSession10Container.
+async fn document_as(
+    cx: &Cx,
+    input: Input,
+    span: Span,
+    current_user: Option<Span>,
+    pictures: Option<Span>,
+    decrypted: bool,
+) -> Result<()> {
     // Top-level records.
     let mut pos = 0u64;
     let mut slides = 0u32;
@@ -604,26 +646,124 @@ pub async fn document(cx: &Cx, input: Input, span: Span, current_user: Option<Sp
         }
         None => last_edit,
     };
+    // An encrypted document's (single) edit names its CryptSession10Container.
+    let crypt = match edit {
+        Some(at) if !decrypted => crypt_session(cx, span, at).await?,
+        _ => None,
+    };
     if let Some(at) = edit {
         cx.emit(
             Node::new("Edit chain")
                 .summary("user edits, newest first, with their persist directories")
-                .lazy(edit_chain, (span, at)),
+                .lazy(edit_chain, (span, at, crypt.map(|(id, _)| id))),
+        );
+    }
+    let Some((_, session)) = crypt else {
+        let records = Node::new("Records")
+            .span(span)
+            .summary(format!("{slides} slides"));
+        cx.emit(match pictures {
+            Some(delay) => records.lazy(officeart::records_with_delay, (input, span, delay)),
+            None => records.lazy(officeart::records_at, (input, span)),
+        });
+        cx.annotate(format!("PowerPoint 97–2003 presentation, {slides} slides"));
+        return Ok(());
+    };
+    let info = cx.read_avail(session.tail(8).sub(0, 0x1000)).await?;
+    let scheme = encryption_summary(&info);
+    cx.emit(
+        crate::fields::struct_node(
+            "Encryption",
+            session.tail(8),
+            super::rec::LE,
+            (),
+            super::offcrypto::header_layout,
+        )
+        .summary(scheme.clone())
+        .desc("The CryptSession10Container's encryption header and password verifier"),
+    );
+    if let Some(at) = edit {
+        cx.emit(
+            Node::new("Decrypted document")
+                .span(span)
+                .summary("the persist objects decrypted with the password")
+                .lazy(
+                    crate::expander!(self::decrypted_document: (Input, Span, u64, Option<Span>)),
+                    (input, span, at, current_user),
+                ),
         );
     }
     cx.emit(
         Node::new("Records")
             .span(span)
-            .summary(format!("{slides} slides"))
+            .summary("encrypted persist objects; see the decrypted document")
             .lazy(officeart::records_at, (input, span)),
     );
-    cx.annotate(format!("PowerPoint 97–2003 presentation, {slides} slides"));
+    cx.annotate(format!(
+        "PowerPoint 97–2003 presentation, encrypted ({scheme})"
+    ));
     Ok(())
 }
 
+/// The persist ID and record of the CryptSession10Container the edit at
+/// `edit` names (its encryptSessionPersistIdRef), if any.
+async fn crypt_session(cx: &Cx, stream: Span, edit: u64) -> Result<Option<(u32, Span)>> {
+    let head = cx.read_avail(stream.sub(edit, 8)).await?;
+    let len = u64::from(u32_le(&head, 4).unwrap_or(0));
+    if u16_le(&head, 2) != Some(0x0ff5) || len < 32 {
+        return Ok(None);
+    }
+    let body = cx
+        .read_avail(stream.sub(edit.saturating_add(8), 32))
+        .await?;
+    let Some(id) = u32_le(&body, 28).filter(|&id| id != 0) else {
+        return Ok(None);
+    };
+    let table = persist_table(cx, stream, edit, false).await?;
+    let Some(&(off, _)) = table.get(&id) else {
+        return Ok(None);
+    };
+    let head = cx.read_avail(stream.sub(off.into(), 8)).await?;
+    if u16_le(&head, 2) != Some(CRYPT_SESSION) {
+        return Ok(None);
+    }
+    let len = u64::from(u32_le(&head, 4).unwrap_or(0));
+    Ok(Some((id, stream.sub(off.into(), len.saturating_add(8)))))
+}
+
 /// The chain of UserEditAtoms from the current one back to the first,
-/// and the persist object table they build (newer entries win).
-async fn edit_chain(cx: Cx, (stream, first): (Span, u64)) -> Result<()> {
+/// and the persist object table they build (newer entries win). `crypt`:
+/// the CryptSession10Container's persist ID in an encrypted document,
+/// whose other persist objects are encrypted.
+async fn edit_chain(cx: Cx, (stream, first, crypt): (Span, u64, Option<u32>)) -> Result<()> {
+    let table = persist_table(&cx, stream, first, true).await?;
+    for (id, (off, entry)) in table {
+        let head = cx.read_avail(stream.sub(off.into(), 8)).await?;
+        let kind = u16_le(&head, 2).unwrap_or(0);
+        let len = u64::from(u32_le(&head, 4).unwrap_or(0));
+        let node = Node::new(format!("Persist object {id}"))
+            .span(entry)
+            .value(hex(off, 32));
+        cx.push(if crypt.is_some_and(|c| c != id) {
+            node.summary("encrypted")
+        } else {
+            node.summary(officeart::name(kind))
+                .target(stream.sub(off.into(), len.saturating_add(8)))
+        })
+        .await;
+    }
+    Ok(())
+}
+
+/// Walks the UserEditAtoms from `first` back to the first edit (pushing a
+/// node for each when `push`) and returns the persist object table they
+/// build: persist ID to stream offset and directory entry.
+async fn persist_table(
+    cx: &Cx,
+    stream: Span,
+    first: u64,
+    push: bool,
+) -> Result<BTreeMap<u32, (u32, Span)>> {
     let mut at = first;
     let mut seen = std::collections::BTreeSet::new();
     let mut table: BTreeMap<u32, (u32, Span)> = BTreeMap::new();
@@ -632,7 +772,9 @@ async fn edit_chain(cx: Cx, (stream, first): (Span, u64)) -> Result<()> {
         n = n.saturating_add(1);
         let head = cx.read(stream.sub_exact(at, 8)?).await?;
         if u16_le(&head, 2) != Some(0x0ff5) {
-            cx.diag(Diagnostic::malformed(format!("no UserEditAtom at {at:#x}")));
+            if push {
+                cx.diag(Diagnostic::malformed(format!("no UserEditAtom at {at:#x}")));
+            }
             break;
         }
         let len = u64::from(u32_le(&head, 4).unwrap_or(0));
@@ -640,13 +782,15 @@ async fn edit_chain(cx: Cx, (stream, first): (Span, u64)) -> Result<()> {
         let body = cx.read_avail(rec.tail(8)).await?;
         let prev = u32_le(&body, 8).unwrap_or(0);
         let dir = u64::from(u32_le(&body, 12).unwrap_or(0));
-        cx.push(
-            Node::new(format!("Edit at {at:#x}"))
-                .span(rec)
-                .value(hex(at, 32))
-                .summary(atom_summary(0x0ff5, 0, &body, len)),
-        )
-        .await;
+        if push {
+            cx.push(
+                Node::new(format!("Edit at {at:#x}"))
+                    .span(rec)
+                    .value(hex(at, 32))
+                    .summary(atom_summary(0x0ff5, 0, &body, len)),
+            )
+            .await;
+        }
         // The persist directory of this edit.
         let dh = cx.read(stream.sub_exact(dir, 8)?).await?;
         if u16_le(&dh, 2) == Some(0x1772) {
@@ -679,18 +823,96 @@ async fn edit_chain(cx: Cx, (stream, first): (Span, u64)) -> Result<()> {
         }
         at = u64::from(prev);
     }
-    for (id, (off, entry)) in table {
-        let head = cx.read_avail(stream.sub(off.into(), 8)).await?;
-        let kind = u16_le(&head, 2).unwrap_or(0);
-        let len = u64::from(u32_le(&head, 4).unwrap_or(0));
-        cx.push(
-            Node::new(format!("Persist object {id}"))
-                .span(entry)
-                .value(hex(off, 32))
-                .summary(officeart::name(kind))
-                .target(stream.sub(off.into(), len.saturating_add(8))),
-        )
-        .await;
+    Ok(table)
+}
+
+/// The password PowerPoint encrypts with when the user set only a
+/// password to modify (per [MS-PPT]'s encryption section).
+const DEFAULT_PASSWORD: &str = "/01Hannes Ruescher/01";
+
+/// Bytes decrypted between two budget charges.
+const DECRYPT_CHUNK: usize = 0x1_0000;
+
+/// An encrypted document decrypted (MS-PPT 2.3.7): every persist object
+/// but the CryptSession10Container, header included, is RC4 CryptoAPI
+/// with a keystream started afresh with the block key of its persist ID.
+/// The default password is tried first, then the user is asked; the
+/// decrypted stream is walked like any document.
+async fn decrypted_document(
+    cx: Cx,
+    (input, stream, edit, current_user): (Input, Span, u64, Option<Span>),
+) -> Result<()> {
+    let Some((crypt, session)) = crypt_session(&cx, stream, edit).await? else {
+        return Ok(());
+    };
+    let info = cx.read_avail(session.tail(8).sub(0, 0x1000)).await?;
+    let key_for = |password: &str| super::offcrypto::cryptoapi_key(&info, password);
+    let key = match key_for(DEFAULT_PASSWORD) {
+        None => {
+            return Err(Diagnostic::unsupported(
+                "decrypting this presentation (an unknown scheme)",
+            )
+            .at(session));
+        }
+        Some((key, true)) => key,
+        Some(_) => {
+            let check = |s: &crate::secret::Secret| {
+                key_for(&String::from_utf8_lossy(s.expose())).is_some_and(|(_, ok)| ok)
+            };
+            match cx
+                .unlock(stream, "Password for the presentation", check)
+                .await
+            {
+                Some(secret) => match key_for(&String::from_utf8_lossy(secret.expose())) {
+                    Some((key, true)) => key,
+                    _ => {
+                        return Err(
+                            Diagnostic::unsupported("encrypted (wrong password)").at(session)
+                        );
+                    }
+                },
+                None => return Err(Diagnostic::unsupported("encrypted (no password)").at(session)),
+            }
+        }
+    };
+    let table = persist_table(&cx, stream, edit, false).await?;
+    let mut data = cx.read(stream).await?;
+    for (&id, &(off, _)) in &table {
+        if id == crypt {
+            continue;
+        }
+        let Some(object) = usize::try_from(off).ok().and_then(|o| data.get_mut(o..)) else {
+            continue;
+        };
+        let mut rc4 = Rc4State::new(&key.block_key(id));
+        // The header first, for the length of the rest.
+        let mut len = 8usize;
+        let mut done = 0usize;
+        while done < len {
+            let end = len.min(done.saturating_add(DECRYPT_CHUNK));
+            let Some(chunk) = object.get_mut(done..end.min(object.len())) else {
+                break;
+            };
+            if chunk.is_empty() {
+                break;
+            }
+            for b in chunk.iter_mut() {
+                *b = rc4.apply(*b);
+            }
+            let n = chunk.len();
+            done = done.saturating_add(n);
+            if done == 8 && len == 8 {
+                let body = u32_le(object, 4).map_or(0, |n| to_usize(n.into()));
+                len = body.saturating_add(8);
+            }
+            cx.charge(to_u64(n / 256).saturating_add(1)).await;
+        }
     }
-    Ok(())
+    let origin = Origin {
+        parent: stream,
+        transform: "ppt-rc4",
+    };
+    let plain = cx.add_derived(origin, data, stream.len, None)?.span;
+    // The Pictures stream is encrypted too (not decrypted here).
+    document_as(&cx, input, plain, current_user, None, true).await
 }

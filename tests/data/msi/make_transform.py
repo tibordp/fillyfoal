@@ -1,10 +1,17 @@
 """Writes tests/fixtures/synthetic/msi/transform.mst: a minimal Windows
 Installer transform (root CLSID {000C1082-0000-0000-C000-000000000046})
-with its own string pool and a Property table stream holding one changed
-row as transforms store it (a column mask, then the row's values), and an
-embedded transform storage the way patches carry them. The table data is
-plausible, not produced by Windows: it pins that transform tables are not
-decoded column by column with a package's schema.
+with its own string pool and table streams stored as transforms store
+them, row by row, each row a 16-bit column mask and the values it gives
+(Wine's msi_table_load_transform): with bit 0 set the high byte counts the
+leading columns of a whole row; otherwise bit i marks column i as given,
+keys always being given; mask 0 deletes the row with the given keys.
+
+It adds a table (a _Tables row, three _Columns rows with their numbers
+and types, two whole rows), changes ProductVersion in the Property table
+and deletes a property; an embedded transform storage carries the same
+streams, the way patches carry transforms. No tool at hand writes
+transforms (msitools only applies them), so the layout follows Wine's
+reader; the data is plausible, not produced by Windows.
 
     python3 tests/data/msi/make_transform.py <out>
 """
@@ -36,21 +43,48 @@ def msi_name(name, table=True):
     return out
 
 
-strings = [b"ProductVersion", b"2.0.0"]
+strings = [b"ProductVersion", b"2.0.0", b"Fillyfoal", b"Key", b"Count", b"Note",
+           b"first", b"second", b"a note", b"OldProperty"]
 pool = struct.pack("<I", 1252) + b"".join(struct.pack("<HH", len(s), 1) for s in strings)
 data = b"".join(strings)
-# One Property row: mask 0x3 (both columns), Property = string 1, Value = 2.
-row = struct.pack("<HHH", 0x0003, 1, 2)
+S = {s.decode(): i for i, s in enumerate(strings, start=1)}
+
+
+def i16(v):
+    return struct.pack("<H", (v + 0x8000) & 0xFFFF)
+
+
+def ref(name):
+    return struct.pack("<H", S[name])
+
+
+def whole(*cells):
+    """A whole row: bit 0 set, the number of columns in the high byte."""
+    return struct.pack("<H", (len(cells) << 8) | 1) + b"".join(cells)
+
+
+# _Tables: insert Fillyfoal. _Columns (Table, Number, Name, Type): its
+# columns, a key string(72), a non-null int16 and a nullable localizable
+# string(0).
+tables = whole(ref("Fillyfoal"))
+columns = (
+    whole(ref("Fillyfoal"), i16(1), ref("Key"), i16(0x2D48))
+    + whole(ref("Fillyfoal"), i16(2), ref("Count"), i16(0x0502))
+    + whole(ref("Fillyfoal"), i16(3), ref("Note"), i16(0x1F00))
+)
+rows = whole(ref("first"), i16(7), ref("a note")) + whole(ref("second"), i16(-3), b"\0\0")
+# Property: set Value of ProductVersion (mask bit 1; the key is implied),
+# then delete OldProperty (mask 0, the key only).
+prop = struct.pack("<H", 0x0002) + ref("ProductVersion") + ref("2.0.0")
+prop += struct.pack("<H", 0) + ref("OldProperty")
 
 TRANSFORM_CLSID = struct.pack("<IHH", 0x000C1082, 0, 0) + bytes([0xC0, 0, 0, 0, 0, 0, 0, 0x46])
-inner = {
+streams = {
     msi_name("_StringPool"): pool,
     msi_name("_StringData"): data,
-    msi_name("Property"): row,
+    msi_name("_Tables"): tables,
+    msi_name("_Columns"): columns,
+    msi_name("Fillyfoal"): rows,
+    msi_name("Property"): prop,
 }
-cfbwriter.write(sys.argv[1], {
-    msi_name("_StringPool"): pool,
-    msi_name("_StringData"): data,
-    msi_name("Property"): row,
-    "#Embedded": inner,
-}, root_clsid=TRANSFORM_CLSID)
+cfbwriter.write(sys.argv[1], {**streams, "#Embedded": dict(streams)}, root_clsid=TRANSFORM_CLSID)
