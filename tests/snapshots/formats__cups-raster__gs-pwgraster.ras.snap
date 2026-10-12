@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ gs-pwgraster.ras — PWG raster v2, 1 pages, 72×54, 72 dpi, 1-bit black  [0x0+0x7b5]
+▾ gs-pwgraster.ras — PWG raster v2, 1 page, 72×54, 72 dpi, 1-bit black  [0x0+0x7b5]
     Sync word: "RaS2" — version 2, big-endian  [0x0+0x4]
   ▾ Page 1 — 72×54, 72 dpi, 1-bit black  [0x4+0x7b1]
     ▾ Page header  [0x4+0x1a4]

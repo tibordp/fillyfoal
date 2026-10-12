@@ -15,6 +15,7 @@ use crate::dsl::{Cursor, Path};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::text::scan::{Lines, Scanner};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -894,7 +895,10 @@ fn gpmf_values(ty: u8, size: usize, data: &[u8]) -> Option<String> {
     let total = data.len().checked_div(width).unwrap_or(0);
     let per = size.checked_div(width).unwrap_or(1).max(1);
     let more = if total > out.len() {
-        format!(" … ({} samples)", total.checked_div(per).unwrap_or(0))
+        format!(
+            " … ({})",
+            plural(total.checked_div(per).unwrap_or(0), "sample")
+        )
     } else {
         String::new()
     };
@@ -1066,9 +1070,12 @@ async fn ros_records(cx: Cx, (region, path): (Span, Path)) -> Result<()> {
             }
             3 => {
                 node = node.summary(format!(
-                    "{} connections, {} chunks",
+                    "{} connections, {}",
                     get("conn_count").and_then(|v| u32_le(&v, 0)).unwrap_or(0),
-                    get("chunk_count").and_then(|v| u32_le(&v, 0)).unwrap_or(0)
+                    plural(
+                        get("chunk_count").and_then(|v| u32_le(&v, 0)).unwrap_or(0),
+                        "chunk"
+                    )
                 ))
             }
             _ => {}

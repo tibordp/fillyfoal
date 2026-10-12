@@ -7,6 +7,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{content_node, size, unix_mode, unix_time};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -96,14 +97,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let inodes_end = u64::from(sb.start);
     let count = inodes_end.saturating_sub(BLOCK) / INODE;
     cx.annotate(format!(
-        "BFS filesystem \"{}\", {}, {count} inodes",
+        "BFS filesystem \"{}\", {}, {count_inode}",
         crate::text::until_nul(&sb.volume),
-        size(u64::from(sb.end).saturating_add(1))
+        size(u64::from(sb.end).saturating_add(1)),
+        count_inode = plural(count, "inode")
     ));
     cx.emit(
         Node::new("Inode table")
             .span(vol.sub(BLOCK, inodes_end.saturating_sub(BLOCK)))
-            .summary(format!("{count} inodes")),
+            .summary(plural(count, "inode")),
     );
     let (root, dir, _) = inode_data(&cx, vol, ROOT, inodes_end).await?;
     cx.emit(Inode::node("Root inode", root, LE));
@@ -125,7 +127,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Root directory")
             .span(dir)
-            .summary(format!("{} files", entries.len()))
+            .summary(plural(entries.len(), "file"))
             .lazy(directory, (input, inodes_end, dir)),
     );
     Ok(())

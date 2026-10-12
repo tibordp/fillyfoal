@@ -9,6 +9,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::lines::{
     Lines, contains, head_lines, is_text, preview, summarize, text, uint,
 };
@@ -421,8 +422,8 @@ async fn keysight_bin(cx: Cx, input: Input) -> Result<()> {
                 LE,
             )
             .summary(format!(
-                "{} points, Δx {} s, {} {}",
-                w.points,
+                "{}, Δx {} s, {} {}",
+                plural(w.points, "point"),
                 w.x_increment,
                 w.date.trim_end_matches('\0'),
                 w.time.trim_end_matches('\0')

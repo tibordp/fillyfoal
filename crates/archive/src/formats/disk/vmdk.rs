@@ -18,6 +18,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::disk::qcow::{Regions, decoded_leaf};
 use crate::formats::disk::{PieceList, size};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{enumv, uint};
 use crate::formats::{Codec, Format, Input, Probe, dissect_or_data};
 use crate::node::Node;
@@ -566,7 +567,7 @@ async fn meta_marker(cx: Cx, (s, span, kind): (Arc<Sparse>, Span, u32)) -> Resul
         1 => cx.emit(
             Node::new("Grain table")
                 .span(body)
-                .summary(format!("{} entries", body.len / 4))
+                .summary(plural(body.len / 4, "entry"))
                 .lazy(
                     grain_table,
                     (

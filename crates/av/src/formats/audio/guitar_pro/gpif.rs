@@ -20,6 +20,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::text::probe;
 use crate::formats::text::xml::{self, Mode};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -589,7 +590,7 @@ async fn summary(cx: Cx, span: Span) -> Result<()> {
     }
     cx.emit(
         Node::new("Tracks")
-            .summary(format!("{} tracks", s.tracks.len()))
+            .summary(plural(s.tracks.len(), "track"))
             .lazy(tracks, span),
     );
     cx.emit(
@@ -637,9 +638,10 @@ fn bars_summary(bars: &[MasterBar]) -> String {
         .map(|(t, n)| format!("{t} ×{n}"))
         .collect();
     format!(
-        "{} bars ({}), {sections} sections",
+        "{} bars ({}), {sections_section}",
         bars.len(),
-        list.join(", ")
+        list.join(", "),
+        sections_section = plural(sections, "section")
     )
 }
 

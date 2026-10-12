@@ -98,7 +98,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Unused slots — slots 5–127  [0x614+0x1ec]
         Unused — rest of the AG header block  [0x800+0x800]
       ▾ Free space B+tree (by block) — root at AG block 1, 1 level
-        ▾ Header — level 0, 1 records  [0x1000+0x10]
+        ▾ Header — level 0, 1 record  [0x1000+0x10]
             Magic: "ABTB"  [0x1000+0x4]
             Level: 0  [0x1004+0x2]
             Records: 1  [0x1006+0x2]
@@ -110,7 +110,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Free space — 15.9 MiB  [0x13000+0xfed000]
           Unused — 4.0 KiB  [0x1018+0xfe8]
       ▾ Free space B+tree (by size) — root at AG block 2, 1 level
-        ▾ Header — level 0, 1 records  [0x2000+0x10]
+        ▾ Header — level 0, 1 record  [0x2000+0x10]
             Magic: "ABTC"  [0x2000+0x4]
             Level: 0  [0x2004+0x2]
             Records: 1  [0x2006+0x2]
@@ -121,7 +121,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Block count: 4077 — 15.9 MiB  [0x2014+0x4]
           Unused — 4.0 KiB  [0x2018+0xfe8]
       ▾ Inode B+tree — root at AG block 3, 1 level
-        ▾ Header — level 0, 1 records  [0x3000+0x10]
+        ▾ Header — level 0, 1 record  [0x3000+0x10]
             Magic: "IABT"  [0x3000+0x4]
             Level: 0  [0x3004+0x2]
             Records: 1  [0x3006+0x2]
@@ -371,7 +371,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Unused slots — slots 5–127  [0x1000614+0x1ec]
         Unused — rest of the AG header block  [0x1000800+0x800]
       ▾ Free space B+tree (by block) — root at AG block 1, 1 level
-        ▾ Header — level 0, 1 records  [0x1001000+0x10]
+        ▾ Header — level 0, 1 record  [0x1001000+0x10]
             Magic: "ABTB"  [0x1001000+0x4]
             Level: 0  [0x1001004+0x2]
             Records: 1  [0x1001006+0x2]
@@ -383,7 +383,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Free space — 12.6 MiB  [0x136f000+0xc91000]
           Unused — 4.0 KiB  [0x1001018+0xfe8]
       ▾ Free space B+tree (by size) — root at AG block 2, 1 level
-        ▾ Header — level 0, 1 records  [0x1002000+0x10]
+        ▾ Header — level 0, 1 record  [0x1002000+0x10]
             Magic: "ABTC"  [0x1002000+0x4]
             Level: 0  [0x1002004+0x2]
             Records: 1  [0x1002006+0x2]
@@ -394,7 +394,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Block count: 3217 — 12.6 MiB  [0x1002014+0x4]
           Unused — 4.0 KiB  [0x1002018+0xfe8]
       ▾ Inode B+tree — root at AG block 3, 1 level
-        ▾ Header — level 0, 1 records  [0x1003000+0x10]
+        ▾ Header — level 0, 1 record  [0x1003000+0x10]
             Magic: "IABT"  [0x1003000+0x4]
             Level: 0  [0x1003004+0x2]
             Records: 1  [0x1003006+0x2]

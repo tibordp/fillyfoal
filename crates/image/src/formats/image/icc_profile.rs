@@ -16,7 +16,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::arcutil::human_size;
 use crate::formats::util::datakit::digest_paced;
-use crate::formats::util::fmt::{clip, fourcc};
+use crate::formats::util::fmt::{clip, fourcc, plural};
 use crate::formats::util::vidutil::{
     COLOUR_PRIMARIES, MATRIX_COEFFICIENTS, TRANSFER_CHARACTERISTICS,
 };
@@ -633,8 +633,11 @@ fn short_value(head: &[u8]) -> Option<String> {
             let channels = u16_be(head, 8)?;
             let kind = u16_be(head, 10)?;
             Some(match lookup(PHOSPHORS, kind.into()) {
-                Some(p) if kind != 0 => format!("{channels} channels, {p}"),
-                _ => format!("{channels} channels"),
+                Some(p) if kind != 0 => format!(
+                    "{channels_channel}, {p}",
+                    channels_channel = plural(channels, "channel")
+                ),
+                _ => plural(channels, "channel"),
             })
         }
         b"cicp" => {
@@ -648,9 +651,11 @@ fn short_value(head: &[u8]) -> Option<String> {
                     .map_or_else(|| format!("transfer {t}"), str::to_owned)
             ))
         }
-        b"mft1" | b"mft2" | b"mAB " | b"mBA " => {
-            Some(format!("{} → {} channels", head.get(8)?, head.get(9)?))
-        }
+        b"mft1" | b"mft2" | b"mAB " | b"mBA " => Some(format!(
+            "{} → {}",
+            head.get(8)?,
+            plural(head.get(9)?, "channel")
+        )),
         _ => None,
     }
 }

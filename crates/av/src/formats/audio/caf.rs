@@ -16,6 +16,7 @@ use crate::dsl::{Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::iff::wav;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{channels, duration_of, fourcc, leaf, table};
 use crate::formats::util::val::{text, uint};
 use crate::formats::util::vidutil::{self, esds};
@@ -297,8 +298,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             b"pakt" => {
                 let p = cx.read_avail(span.tail(12).sub(0, 16)).await?;
                 format!(
-                    "{} packets, {} valid frames",
-                    u64_be(&p, 0).unwrap_or(0),
+                    "{}, {} valid frames",
+                    plural(u64_be(&p, 0).unwrap_or(0), "packet"),
                     u64_be(&p, 8).unwrap_or(0)
                 )
             }
@@ -383,7 +384,7 @@ async fn chunk(cx: Cx, st: ChunkState) -> Result<()> {
             cx.emit(
                 Node::new("Packet sizes")
                     .span(entries)
-                    .summary(format!("{packets} packets"))
+                    .summary(plural(packets, "packet"))
                     .desc("Variable-length integers: the size of each packet (and its frames, if variable)")
                     .lazy(
                         packet_table,
@@ -574,7 +575,7 @@ async fn packet_table(cx: Cx, t: PacketTable) -> Result<()> {
             offset = offset.saturating_add(s);
         }
         if let Some(fr) = frames {
-            parts.push(format!("{fr} frames"));
+            parts.push(plural(fr, "frame"));
             if size.is_none() {
                 node = node.value(uint(fr, 64));
             }
@@ -883,11 +884,11 @@ pub fn peek_alac(d: &[u8]) -> Option<AlacConfig> {
 /// "16-bit, 44.1 kHz, 2 ch, 4096 samples per frame".
 pub fn alac_summary(c: &AlacConfig) -> String {
     format!(
-        "{}-bit, {}, {}, {} samples per frame",
+        "{}-bit, {}, {}, {} per frame",
         c.bit_depth,
         vidutil::khz(c.sample_rate.into()),
         channels(c.channels),
-        c.frame_length
+        plural(c.frame_length, "sample")
     )
 }
 

@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ lzma.bundle — UnityFS v6, Unity 2018.4.36f1, LZMA, 1 files  [0x0+0x3b2]
+▾ lzma.bundle — UnityFS v6, Unity 2018.4.36f1, LZMA, 1 file  [0x0+0x3b2]
     Signature: "UnityFS"  [0x0+0x8]
     Format version: 6  [0x8+0x4]
     Player version: "5.x.x"  [0xc+0x6]
@@ -15,18 +15,18 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Blocks info — LZMA, 58 → 91 bytes  [0x32+0x3a]
       Uncompressed data hash: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [#1:0x0+0x10]
       Block count: 1  [#1:0x10+0x4]
-    ▾ Blocks — 1 blocks  [#1:0x14+0xa]
+    ▾ Blocks — 1 block  [#1:0x14+0xa]
       ▾ Block 0 — LZMA, 838 → 2800 bytes  [#1:0x14+0xa] → 0x6c+0x346
           Uncompressed size: 2800  [#1:0x14+0x4]
           Compressed size: 838  [#1:0x18+0x4] → 0x6c+0x346
           Flags: 0x1 [LZMA]  [#1:0x1c+0x2]
-    ▾ Directory — 1 nodes  [#1:0x1e+0x3d]
+    ▾ Directory — 1 node  [#1:0x1e+0x3d]
       ▾ CAB-0123456789abcdef0123456789abcdef — offset 0x0, 2800 bytes  [#1:0x22+0x39]
           Offset: 0x0  [#1:0x22+0x8]
           Size: 2800  [#1:0x2a+0x8]
           Flags: 0x4 [serialized file]  [#1:0x32+0x4]
           Path: "CAB-0123456789abcdef0123456789abcdef"  [#1:0x36+0x25]
-    Data — 1 blocks, LZMA, 838 → 2800 bytes  [0x6c+0x346]
+    Data — 1 block, LZMA, 838 → 2800 bytes  [0x6c+0x346]
   ▾ CAB-0123456789abcdef0123456789abcdef — Unity 2018.4.36f1 serialized file v17, StandaloneWindows64, 3 objects, 3 types  [#3:0x0+0xaf0]
     ▾ Header  [#3:0x0+0x14]
         Metadata size: 2530  [#3:0x0+0x4]
@@ -193,7 +193,7 @@ expression: "common::explore(&display_name(&path), &data)"
           m_Tag: 0  [#3:0xaec+0x2]
           m_IsActive: true  [#3:0xaee+0x1]
     ▾ Script types — 0 scripts  [#3:0x9b8+0x4]
-    ▾ Externals — 1 files  [#3:0x9bc+0x39]
+    ▾ Externals — 1 file  [#3:0x9bc+0x39]
         File 1: "Library/unity default resources" — non-asset  [#3:0x9c0+0x35]
       User information: ""  [#3:0x9f5+0x1]
       Object data — 240 bytes  [#3:0xa00+0xf0]

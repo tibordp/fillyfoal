@@ -9,7 +9,7 @@ use crate::declare_format;
 use crate::dsl::{Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{plural, size};
 use crate::formats::util::val::{hex, text};
 use crate::formats::{Head, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
@@ -313,7 +313,8 @@ async fn firm(cx: Cx, input: Input) -> Result<()> {
     }
     cx.emit(Node::new("RSA-2048 signature").span(file.sub(0x100, 0x100)));
     cx.annotate(format!(
-        "3DS FIRM, {sections} sections, ARM9 entry {arm9:#010x}, ARM11 entry {arm11:#010x}"
+        "3DS FIRM, {sections_section}, ARM9 entry {arm9:#010x}, ARM11 entry {arm11:#010x}",
+        sections_section = plural(sections, "section")
     ));
     Ok(())
 }

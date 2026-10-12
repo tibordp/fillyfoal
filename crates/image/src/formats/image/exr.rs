@@ -10,6 +10,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
@@ -181,7 +182,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new(name)
                 .span(span)
-                .summary(format!("{} attributes", attrs.len()))
+                .summary(plural(attrs.len(), "attribute"))
                 .lazy(
                     header,
                     attrs.iter().map(|(_, _, a)| a.span).collect::<Vec<_>>(),
@@ -251,7 +252,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new(name)
                 .span(table)
-                .summary(format!("{count} chunks"))
+                .summary(plural(count, "chunk"))
                 .lazy(offsets, (file, table, multipart)),
         );
         pos = pos.saturating_add(table.len);
@@ -371,7 +372,7 @@ async fn describe(cx: &Cx, kind: &str, span: Span) -> (Option<Value>, Option<Str
             let (Some(x), Some(y)) = (u32_le(&v, 0), u32_le(&v, 4)) else {
                 return (None, None);
             };
-            (None, Some(format!("{} tiles", dims(x, y))))
+            (None, Some(plural(dims(x, y), "tile")))
         }
         _ => (None, None),
     }

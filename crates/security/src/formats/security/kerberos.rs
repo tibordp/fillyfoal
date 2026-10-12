@@ -128,7 +128,10 @@ async fn keytab(cx: Cx, input: Input) -> Result<()> {
         .await;
         n = n.saturating_add(1);
     }
-    cx.annotate(format!("Kerberos keytab, {n} keys"));
+    cx.annotate(format!(
+        "Kerberos keytab, {n_key}",
+        n_key = crate::formats::util::fmt::plural(n, "key")
+    ));
     Ok(())
 }
 

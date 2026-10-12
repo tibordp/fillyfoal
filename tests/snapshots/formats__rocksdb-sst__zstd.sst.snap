@@ -3,7 +3,7 @@ source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ zstd.sst — RocksDB table (format version 2), 1 data block  [0x0+0x515]
-  ▾ Index block — 1 entries  [0x110+0x21]
+  ▾ Index block — 1 entry  [0x110+0x21]
     ▾ Data block 0: 0x0 — 267 bytes, keys up to "key039"  [0x110+0x14] → 0x0+0x10b
         "key000": "value number 000, compressed with zstdvalue number 000, compressed with zstd" — seq 0, value  [#1:0x0+0x5d]
         "key001": "value number 001, compressed with zstdvalue number 001, compressed with zstd" — seq 0, value  [#1:0x5d+0x58]

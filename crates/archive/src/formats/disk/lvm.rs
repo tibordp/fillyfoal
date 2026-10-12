@@ -14,6 +14,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{assemble, coalesce_stepped, size};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
@@ -304,8 +305,11 @@ async fn logical_volume(
     };
     match assemble(cx, anchor, "lvm-segments", &pieces).await {
         Ok(span) if count == 1 => embedded(title, input.nested(span)).summary(size(span.len)),
-        Ok(span) => embedded(title, input.nested(span))
-            .summary(format!("{}, {count} segments", size(span.len))),
+        Ok(span) => embedded(title, input.nested(span)).summary(format!(
+            "{}, {count_segment}",
+            size(span.len),
+            count_segment = plural(count, "segment")
+        )),
         Err(e) => Node::new(title).diag(e),
     }
 }

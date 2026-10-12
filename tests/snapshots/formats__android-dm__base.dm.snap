@@ -2,8 +2,8 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ base.dm — Android dex metadata (1 entries)  [0x0+0x85]
-  ▾ Central Directory — 1 entries  [0x35+0x3a]
+▾ base.dm — Android dex metadata (1 entry)  [0x0+0x85]
+  ▾ Central Directory — 1 entry  [0x35+0x3a]
     ▾ primary.prof — deflate, 11 → 17 bytes  [0x35+0x3a]
       ▾ Central Directory Header  [0x35+0x2e]
           Signature: 50 4b 01 02  |PK..|  [0x35+0x4]

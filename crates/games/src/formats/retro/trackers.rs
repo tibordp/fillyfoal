@@ -8,7 +8,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{plural, size};
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -129,9 +129,10 @@ async fn famitracker(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
     }
     cx.annotate(format!(
-        "FamiTracker module v{:x}.{:02x}, {title:?} by {author}, {chips}, {blocks} blocks",
+        "FamiTracker module v{:x}.{:02x}, {title:?} by {author}, {chips}, {blocks_block}",
         version >> 8,
-        version & 0xff
+        version & 0xff,
+        blocks_block = plural(blocks, "block")
     ));
     Ok(())
 }
@@ -225,11 +226,12 @@ async fn deflemask(cx: Cx, input: Input) -> Result<()> {
             .span(body.tail(cur.pos())),
     );
     cx.annotate(format!(
-        "DefleMask module v{version}{}, {:?} by {author}, {}, {} Hz, {matrix} orders of {rows} rows",
+        "DefleMask module v{version}{}, {:?} by {author}, {}, {} Hz, {matrix_order} of {rows} rows",
         if packed { " (zlib)" } else { "" },
         name,
         lookup(DMF_SYSTEMS, system.into()).unwrap_or("unknown system"),
-        if ntsc == 1 { 60 } else { 50 }
+        if ntsc == 1 { 60 } else { 50 },
+        matrix_order = plural(matrix, "order")
     ));
     Ok(())
 }
@@ -555,7 +557,10 @@ async fn gym(cx: Cx, input: Input) -> Result<()> {
                 _ => 1,
             });
         }
-        summary = format!("{n} frames, {writes} register writes");
+        summary = format!(
+            "{n_frame}, {writes} register writes",
+            n_frame = plural(n, "frame")
+        );
         frames = Some(n);
     }
     let node = Node::new("Commands").span(data).summary(summary);
@@ -569,9 +574,10 @@ async fn gym(cx: Cx, input: Input) -> Result<()> {
         clean(&h.song),
         clean(&h.game),
         frames.map_or_else(String::new, |n| format!(
-            ", {n} frames ({}:{:02} at 60 Hz)",
+            ", {n_frame} ({}:{:02} at 60 Hz)",
             n / 3600,
-            n / 60 % 60
+            n / 60 % 60,
+            n_frame = plural(n, "frame")
         ))
     ));
     Ok(())
@@ -625,8 +631,14 @@ async fn organya(cx: Cx, input: Input) -> Result<()> {
         );
     }
     cx.annotate(format!(
-        "Organya {}, {} ms/step, {}/{}, loop {}..{}, {used} tracks, {total} notes",
-        h.magic, h.wait, h.beats, h.steps, h.loop_start, h.loop_end
+        "Organya {}, {} ms/step, {}/{}, loop {}..{}, {used_track}, {total} notes",
+        h.magic,
+        h.wait,
+        h.beats,
+        h.steps,
+        h.loop_start,
+        h.loop_end,
+        used_track = plural(used, "track")
     ));
     Ok(())
 }
@@ -878,7 +890,10 @@ async fn psg(cx: Cx, input: Input) -> Result<()> {
                 }
             }
         }
-        summary = format!("{n} frames, {writes} register writes");
+        summary = format!(
+            "{n_frame}, {writes} register writes",
+            n_frame = plural(n, "frame")
+        );
         frames = Some(n);
     }
     cx.emit(Node::new("Register writes").span(data).summary(summary));
@@ -887,7 +902,12 @@ async fn psg(cx: Cx, input: Input) -> Result<()> {
         "PSG register dump v{version}, {hz} Hz{}",
         frames.map_or_else(String::new, |n| {
             let secs = n.checked_div(hz).unwrap_or(0);
-            format!(", {n} frames ({}:{:02})", secs / 60, secs % 60)
+            format!(
+                ", {n_frame} ({}:{:02})",
+                secs / 60,
+                secs % 60,
+                n_frame = plural(n, "frame")
+            )
         })
     ));
     Ok(())

@@ -174,7 +174,10 @@ fn line_count(o: &Overview) -> String {
     } else if o.unbounded {
         format!("at least {}", plural(o.lines, "line", "lines"))
     } else {
-        format!("~{} lines", count(o.lines))
+        format!(
+            "~{}",
+            crate::formats::util::fmt::plural(count(o.lines), "line")
+        )
     }
 }
 

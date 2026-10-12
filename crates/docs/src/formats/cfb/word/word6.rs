@@ -23,6 +23,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, uint};
 use crate::node::{Count, Node};
 use crate::record;
@@ -455,7 +456,7 @@ fn assoc_summary(data: &[u8], cp: u16) -> String {
         .take(3)
         .map(|(_, _, t)| quoted(t, 40))
         .collect();
-    format!("{} strings: {}", entries.len(), shown.join(", "))
+    format!("{}: {}", plural(entries.len(), "string"), shown.join(", "))
 }
 
 async fn assoc(cx: Cx, (span, cp): (Span, u16)) -> Result<()> {

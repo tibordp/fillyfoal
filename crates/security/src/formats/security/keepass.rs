@@ -34,7 +34,7 @@ use crate::dsl::{Cursor, Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::civil::days_from_civil;
-use crate::formats::util::fmt::{count, size};
+use crate::formats::util::fmt::{count, plural, size};
 use crate::formats::{Input, Probe, embedded, embedded_as};
 use crate::node::Node;
 use crate::record;
@@ -664,10 +664,8 @@ async fn kdbx(cx: Cx, input: Input) -> Result<()> {
                         Err(e) => node = node.diag(Diagnostic::malformed(e)),
                     }
                 } else {
-                    node = node.summary(format!(
-                        "{} items",
-                        parsed.as_ref().map_or(0, |(_, i)| i.len())
-                    ));
+                    node =
+                        node.summary(plural(parsed.as_ref().map_or(0, |(_, i)| i.len()), "item"));
                 }
                 node = node.lazy(variant_dict_node, data);
             }
@@ -851,8 +849,8 @@ async fn decrypt(cx: &Cx, cipher: Cipher, keys: &KdbxKeys, iv: &[u8], span: Span
 /// were built: the list is input-sized).
 fn blocks_node(name: &'static str, blocks: Vec<BlockInfo>, bad: usize, what: &'static str) -> Node {
     let mut node = Node::new(name).summary(format!(
-        "{} blocks{}",
-        blocks.len(),
+        "{}{}",
+        plural(blocks.len(), "block"),
         if bad == 0 {
             format!(", {what} verified")
         } else {
@@ -1841,9 +1839,9 @@ async fn kdb(cx: Cx, input: Input) -> Result<()> {
             .lazy(kdb_payload, (input, Arc::new(h.clone()))),
     );
     cx.annotate(format!(
-        "KeePass 1, {} groups, {} entries, {}, {} rounds",
-        h.groups,
-        h.entries,
+        "KeePass 1, {}, {}, {}, {} rounds",
+        plural(h.groups, "group"),
+        plural(h.entries, "entry"),
         cipher.map_or("unknown cipher", Cipher::name),
         h.rounds
     ));

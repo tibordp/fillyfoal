@@ -6,6 +6,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::disk::{fragments_node, size, uuid_value};
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, flag};
@@ -149,8 +150,8 @@ pub(super) async fn journal(cx: Cx, (fs, ino): (FsRef, u32)) -> Result<()> {
             superblock_layout,
         )
         .summary(format!(
-            "{} blocks of {}, {}",
-            maxlen,
+            "{} of {}, {}",
+            plural(maxlen, "block"),
             size(block),
             if start == 0 {
                 "clean"
@@ -374,8 +375,8 @@ async fn log_blocks(cx: Cx, log: Log) -> Result<()> {
                         descriptor_layout,
                     )
                     .summary(format!(
-                        "descriptor, transaction {seq}, {} blocks follow",
-                        pending.len()
+                        "descriptor, transaction {seq}, {} follow",
+                        plural(pending.len(), "block")
                     ))
                 }
                 2 => {
@@ -388,8 +389,11 @@ async fn log_blocks(cx: Cx, log: Log) -> Result<()> {
                     let record = if log.incompat & 0x02 != 0 { 8 } else { 4 };
                     struct_node(format!("Block {b}"), span, BE, log.incompat, revoke_layout)
                         .summary(format!(
-                            "revoke, transaction {seq}, {} blocks revoked",
-                            used.saturating_sub(16).checked_div(record).unwrap_or(0)
+                            "revoke, transaction {seq}, {} revoked",
+                            plural(
+                                used.saturating_sub(16).checked_div(record).unwrap_or(0),
+                                "block"
+                            )
                         ))
                 }
             };

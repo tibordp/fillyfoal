@@ -19,7 +19,7 @@ use super::serial::{
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::binutil::Tree;
-use crate::formats::util::fmt::grouped_count;
+use crate::formats::util::fmt::{grouped_count, plural};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Value, lookup};
@@ -1923,7 +1923,7 @@ fn sample(bs: &mut Bs<'_>, t: &mut Tree, g: usize) -> Result<()> {
             200 => {
                 let v = bs.uvar()?;
                 leaf(t, g, bs, at, "Sample count", uint(v, 64));
-                summarize(t, g, format!("{v} rows sampled"));
+                summarize(t, g, format!("{v_row} sampled", v_row = plural(v, "row")));
             }
             201 => {
                 return Err(

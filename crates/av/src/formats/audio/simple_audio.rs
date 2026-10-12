@@ -7,6 +7,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, Layout, parse, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{channels, duration, duration_of, hz, leaf, peek_text, u24};
 use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
@@ -463,7 +464,10 @@ pub async fn ilbc(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Frames")
             .span(data)
-            .summary(format!("{frames} frames of {frame} bytes"))
+            .summary(format!(
+                "{frames_frame} of {frame} bytes",
+                frames_frame = plural(frames, "frame")
+            ))
             .lazy(fixed_frames, (data, frame)),
     );
     Ok(())
@@ -534,8 +538,9 @@ async fn qoa_frames(cx: Cx, region: Span) -> Result<()> {
             Node::new(format!("Frame {index}"))
                 .span(span)
                 .summary(format!(
-                    "{samples} samples, {rate} Hz, {} ch, {size} bytes",
-                    ch
+                    "{samples_sample}, {rate} Hz, {} ch, {size} bytes",
+                    ch,
+                    samples_sample = plural(samples, "sample")
                 ))
                 .lazy(qoa_frame, (span, ch)),
         )

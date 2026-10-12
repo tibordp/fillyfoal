@@ -9,7 +9,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{plural, size};
 use crate::formats::util::val::{hex, text};
 use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
@@ -156,9 +156,10 @@ async fn snes9x(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
     }
     cx.annotate(format!(
-        "Snes9x snapshot v{}, {blocks} blocks{}",
+        "Snes9x snapshot v{}, {blocks_block}{}",
         version.trim_start_matches('0'),
-        rom.map_or_else(String::new, |r| format!(", ROM {r:?}"))
+        rom.map_or_else(String::new, |r| format!(", ROM {r:?}")),
+        blocks_block = plural(blocks, "block")
     ));
     Ok(())
 }
@@ -436,10 +437,10 @@ async fn dtm(cx: Cx, input: Input) -> Result<()> {
         .map(|b| format!("{b:02x}"))
         .collect();
     cx.annotate(format!(
-        "Dolphin movie of {} ({}), {} frames, {} rerecords, by {:?}, revision {rev}",
+        "Dolphin movie of {} ({}), {}, {} rerecords, by {:?}, revision {rev}",
         h.game_id,
         if h.wii != 0 { "Wii" } else { "GameCube" },
-        h.frames,
+        plural(h.frames, "frame"),
         h.rerecords,
         clean(&h.author)
     ));
@@ -530,14 +531,15 @@ async fn smv(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new(what).span(file.sub(state, u64::from(controller).saturating_sub(state))));
     cx.emit(Node::new("Controller data").span(file.tail(controller.into())));
     cx.annotate(format!(
-        "Snes9x movie{}, {frames} frames ({}), {rerecords} rerecords{}",
+        "Snes9x movie{}, {frames_frame} ({}), {rerecords} rerecords{}",
         rom.map_or_else(String::new, |r| format!(" of {r:?}")),
         if options & 2 != 0 { "PAL" } else { "NTSC" },
         if author.is_empty() {
             String::new()
         } else {
             format!(", by {author:?}")
-        }
+        },
+        frames_frame = plural(frames, "frame")
     ));
     Ok(())
 }
@@ -596,7 +598,7 @@ async fn vbm(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Controller data")
             .span(file.tail(h.controller.into()))
-            .summary(format!("{} frames", h.frames)),
+            .summary(plural(h.frames, "frame")),
     );
     let system = if h.system & 1 != 0 {
         "GBA"
@@ -606,9 +608,9 @@ async fn vbm(cx: Cx, input: Input) -> Result<()> {
         "GB"
     };
     cx.annotate(format!(
-        "VBA movie of {:?} ({system}), {} frames, {} rerecords, by {:?}",
+        "VBA movie of {:?} ({system}), {}, {} rerecords, by {:?}",
         clean(&h.title),
-        h.frames,
+        plural(h.frames, "frame"),
         h.rerecords,
         clean(&h.author)
     ));
@@ -667,7 +669,8 @@ async fn fcm(cx: Cx, input: Input) -> Result<()> {
     }
     cx.emit(Node::new("Controller data").span(file.sub(data.into(), data_len.into())));
     cx.annotate(format!(
-        "FCM movie of {rom:?}, {frames} frames, {rerecords} rerecords, by {author:?}"
+        "FCM movie of {rom:?}, {frames_frame}, {rerecords} rerecords, by {author:?}",
+        frames_frame = plural(frames, "frame")
     ));
     Ok(())
 }
@@ -714,12 +717,12 @@ async fn m64(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Input data")
             .span(file.tail(M64Header::SIZE))
-            .summary(format!("{} samples", h.samples)),
+            .summary(plural(h.samples, "sample")),
     );
     cx.annotate(format!(
-        "Mupen64 movie of {:?}, {} frames at {} Hz, {} rerecords, from {}, by {:?}",
+        "Mupen64 movie of {:?}, {} at {} Hz, {} rerecords, from {}, by {:?}",
         clean(&h.rom_name),
-        h.frames,
+        plural(h.frames, "frame"),
         h.fps,
         h.rerecords,
         lookup(M64_START, h.start.into()).unwrap_or("unknown start"),
@@ -756,12 +759,15 @@ async fn gmv(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Input frames")
             .span(file.tail(64))
-            .summary(format!("{frames} frames of 3 bytes")),
+            .summary(format!(
+                "{frames_frame} of 3 bytes",
+                frames_frame = plural(frames, "frame")
+            )),
     );
     cx.annotate(format!(
-        "Gens movie v{version}, {frames} frames ({}), {rerecords} rerecords, {p1}/{p2}-button pads, {:?}",
+        "Gens movie v{version}, {frames_frame} ({}), {rerecords} rerecords, {p1}/{p2}-button pads, {:?}",
         if flags & 0x80 != 0 { "PAL" } else { "NTSC" },
-        clean(&comment)
+        clean(&comment), frames_frame = plural(frames, "frame")
     ));
     Ok(())
 }
@@ -815,15 +821,16 @@ async fn fm2(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Input log")
                 .span(span)
-                .summary(format!("{count} frames"))
+                .summary(plural(count, "frame"))
                 .lazy(fm2_frames, frames.clone()),
         );
     }
     cx.annotate(format!(
-        "FCEUX movie of {:?}, {count} frames, {} rerecords{}",
+        "FCEUX movie of {:?}, {count_frame}, {} rerecords{}",
         get("romFilename"),
         get("rerecordCount"),
-        if get("palFlag") == "1" { ", PAL" } else { "" }
+        if get("palFlag") == "1" { ", PAL" } else { "" },
+        count_frame = plural(count, "frame")
     ));
     Ok(())
 }
@@ -1060,10 +1067,10 @@ async fn ps2_memcard(cx: Cx, input: Input) -> Result<()> {
         ),
     );
     cx.annotate(format!(
-        "PS2 memory card v{}, {} ({} clusters of {} bytes){}, root at cluster {}",
+        "PS2 memory card v{}, {} ({} of {} bytes){}, root at cluster {}",
         clean(&h.version),
         size(total),
-        h.clusters,
+        plural(h.clusters, "cluster"),
         cluster,
         if h.flags & 1 != 0 { ", with ECC" } else { "" },
         h.root
@@ -1137,14 +1144,14 @@ async fn gci(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Save data")
             .span(data)
-            .summary(format!("{} blocks", h.blocks)),
+            .summary(plural(h.blocks, "block")),
     );
     cx.annotate(format!(
-        "GameCube save {:?} for {}{}: {title}, {} blocks",
+        "GameCube save {:?} for {}{}: {title}, {}",
         clean(&h.name),
         h.game,
         h.maker,
-        h.blocks
+        plural(h.blocks, "block")
     ));
     Ok(())
 }

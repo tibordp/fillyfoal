@@ -11,6 +11,7 @@ use crate::declare_format;
 use crate::error::Result;
 use crate::formats::forensics::logs::{Lines, line_group, strip_bom, text_lines, tick};
 use crate::formats::util::datakit::{clip, text};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -122,8 +123,8 @@ async fn zsh_history(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "zsh history, {} commands{}",
-        times.len(),
+        "zsh history, {}{}",
+        plural(times.len(), "command"),
         time_range(&times)
     ));
     Ok(())
@@ -181,9 +182,10 @@ async fn bash_history(cx: Cx, input: Input) -> Result<()> {
             .await;
     }
     cx.annotate(format!(
-        "bash history, {count} commands, {} timestamped{}",
+        "bash history, {count_command}, {} timestamped{}",
         times.len(),
-        time_range(&times)
+        time_range(&times),
+        count_command = plural(count, "command")
     ));
     Ok(())
 }
@@ -231,8 +233,8 @@ async fn fish_history(cx: Cx, input: Input) -> Result<()> {
         cx.push(history_node(file, lines, t, &c, None)).await;
     }
     cx.annotate(format!(
-        "fish history, {} commands{}",
-        times.len(),
+        "fish history, {}{}",
+        plural(times.len(), "command"),
         time_range(&times)
     ));
     Ok(())
@@ -288,7 +290,10 @@ async fn libedit_history(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("libedit history, {count} entries"));
+    cx.annotate(format!(
+        "libedit history, {count_entry}",
+        count_entry = plural(count, "entry")
+    ));
     Ok(())
 }
 
@@ -308,10 +313,8 @@ async fn less_history(cx: Cx, input: Input) -> Result<()> {
         if let Some(name) = l.2.strip_prefix('.') {
             if let Some((n, lines)) = section.take() {
                 let count = lines.len();
-                cx.push(
-                    line_group(format!(".{n}"), file, lines).summary(format!("{count} entries")),
-                )
-                .await;
+                cx.push(line_group(format!(".{n}"), file, lines).summary(plural(count, "entry")))
+                    .await;
             }
             section = Some((name.to_owned(), Vec::new()));
             continue;
@@ -325,7 +328,7 @@ async fn less_history(cx: Cx, input: Input) -> Result<()> {
     }
     if let Some((n, lines)) = section.take() {
         let count = lines.len();
-        cx.push(line_group(format!(".{n}"), file, lines).summary(format!("{count} entries")))
+        cx.push(line_group(format!(".{n}"), file, lines).summary(plural(count, "entry")))
             .await;
     }
     cx.annotate(format!("less history, {searches} searches"));
@@ -588,7 +591,7 @@ fn bookmark_node(file: Span, tree: &BookmarkTree, i: usize) -> Option<Node> {
     Some(match &b.href {
         Some(h) => node.summary(clip(h, 160)),
         None => node
-            .summary(format!("folder, {} items", b.children.len()))
+            .summary(format!("folder, {}", plural(b.children.len(), "item")))
             .lazy(bookmark_folder, (file, i)),
     })
 }
@@ -604,7 +607,8 @@ async fn netscape_bookmarks(cx: Cx, input: Input) -> Result<()> {
     let links = tree.items.iter().filter(|b| b.href.is_some()).count();
     let folders = tree.items.len().saturating_sub(links);
     cx.annotate(format!(
-        "Netscape bookmarks, {links} links in {folders} folders"
+        "Netscape bookmarks, {links_link} in {folders} folders",
+        links_link = plural(links, "link")
     ));
     Ok(())
 }
@@ -933,8 +937,9 @@ async fn recently_used(cx: Cx, input: Input) -> Result<()> {
         at = end.max(start.saturating_add(1));
     }
     cx.annotate(format!(
-        "Recently used files, {count} entries from {} applications",
-        apps.len()
+        "Recently used files, {count_entry} from {} applications",
+        apps.len(),
+        count_entry = plural(count, "entry")
     ));
     Ok(())
 }

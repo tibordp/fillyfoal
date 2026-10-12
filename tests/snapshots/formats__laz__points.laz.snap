@@ -48,4 +48,4 @@ expression: "common::explore(&display_name(&path), &data)"
       Item 1: GPSTIME11 (0x7) — 8 bytes, version 2  [0x141+0x6]
     Chunk table offset: 0x177  [0x147+0x8]
     Compressed points — 10 points, chunks of 50000  [0x14f+0x28]
-    Chunk table — version 0, 1 chunks  [0x177+0x10]
+    Chunk table — version 0, 1 chunk  [0x177+0x10]

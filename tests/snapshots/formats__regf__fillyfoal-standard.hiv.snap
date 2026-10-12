@@ -1635,7 +1635,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ sub0307: 2026-10-09 23:07:27 UTC — 0 subkeys, 0 values  [0x18b20+0x58]  (+22 nodes elided)
       … 1791 more children elided (41193 nodes)
       ▾ sub2099: 2026-10-09 23:07:28 UTC — 0 subkeys, 0 values  [0x43668+0x58]  (+22 nodes elided)
-    ▾ Nested: 2026-10-09 23:07:28 UTC — 1 subkeys, 0 values  [0x436c0+0x58]
+    ▾ Nested: 2026-10-09 23:07:28 UTC — 1 subkey, 0 values  [0x436c0+0x58]
       ▾ Key node  [0x436c4+0x52]
           Signature: "nk"  [0x436c4+0x2]
           Flags: 0x20 [KEY_COMP_NAME]  [0x436c6+0x2]
@@ -1658,7 +1658,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Key name length: 6  [0x4370c+0x2]
           Class name length: 0  [0x4370e+0x2]
           Key name: "Nested"  [0x43710+0x6]
-      ▾ Deeper: 2026-10-09 23:07:28 UTC — 1 subkeys, 0 values  [0x43718+0x58]
+      ▾ Deeper: 2026-10-09 23:07:28 UTC — 1 subkey, 0 values  [0x43718+0x58]
         ▾ Key node  [0x4371c+0x52]
             Signature: "nk"  [0x4371c+0x2]
             Flags: 0x20 [KEY_COMP_NAME]  [0x4371e+0x2]
@@ -1681,7 +1681,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Key name length: 6  [0x43764+0x2]
             Class name length: 0  [0x43766+0x2]
             Key name: "Deeper"  [0x43768+0x6]
-        ▾ Deepest: 2026-10-09 23:07:28 UTC — 0 subkeys, 1 values  [0x43770+0x58]
+        ▾ Deepest: 2026-10-09 23:07:28 UTC — 0 subkeys, 1 value  [0x43770+0x58]
           ▾ Key node  [0x43774+0x53]
               Signature: "nk"  [0x43774+0x2]
               Flags: 0x20 [KEY_COMP_NAME]  [0x43776+0x2]

@@ -202,7 +202,7 @@ expression: "common::explore(&display_name(&path), &data)"
             DW_AT_decl_file: "DW_FORM_data1"
             DW_AT_decl_line: "DW_FORM_data1"
             DW_AT_location: "DW_FORM_exprloc"
-        ▾ [3]: "DW_TAG_volatile_type" — DW_CHILDREN_no, 1 attributes  [0x31b+0x7]
+        ▾ [3]: "DW_TAG_volatile_type" — DW_CHILDREN_no, 1 attribute  [0x31b+0x7]
             DW_AT_type: "DW_FORM_ref4"
         ▾ [4]: "DW_TAG_base_type" — DW_CHILDREN_no, 3 attributes  [0x322+0xb]
             DW_AT_name: "DW_FORM_strx1"
@@ -213,7 +213,7 @@ expression: "common::explore(&display_name(&path), &data)"
             DW_AT_decl_file: "DW_FORM_data1"
             DW_AT_decl_line: "DW_FORM_data1"
             DW_AT_location: "DW_FORM_exprloc"
-        ▾ [6]: "DW_TAG_array_type" — DW_CHILDREN_yes, 1 attributes  [0x33a+0x7]
+        ▾ [6]: "DW_TAG_array_type" — DW_CHILDREN_yes, 1 attribute  [0x33a+0x7]
             DW_AT_type: "DW_FORM_ref4"
         ▾ [7]: "DW_TAG_subrange_type" — DW_CHILDREN_no, 2 attributes  [0x341+0x9]
             DW_AT_type: "DW_FORM_ref4"
@@ -260,9 +260,9 @@ expression: "common::explore(&display_name(&path), &data)"
             DW_AT_byte_size: "DW_FORM_data1"
             DW_AT_decl_file: "DW_FORM_data1"
             DW_AT_decl_line: "DW_FORM_data1"
-        ▾ [16]: "DW_TAG_pointer_type" — DW_CHILDREN_no, 1 attributes  [0x3b6+0x7]
+        ▾ [16]: "DW_TAG_pointer_type" — DW_CHILDREN_no, 1 attribute  [0x3b6+0x7]
             DW_AT_type: "DW_FORM_ref4"
-        ▾ [17]: "DW_TAG_const_type" — DW_CHILDREN_no, 1 attributes  [0x3bd+0x7]
+        ▾ [17]: "DW_TAG_const_type" — DW_CHILDREN_no, 1 attribute  [0x3bd+0x7]
             DW_AT_type: "DW_FORM_ref4"
         ▾ [18]: "DW_TAG_typedef" — DW_CHILDREN_no, 4 attributes  [0x3c4+0xd]
             DW_AT_type: "DW_FORM_ref4"
@@ -313,7 +313,7 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ [25]: "DW_TAG_lexical_block" — DW_CHILDREN_yes, 2 attributes  [0x435+0x9]
             DW_AT_low_pc: "DW_FORM_addrx"
             DW_AT_high_pc: "DW_FORM_data4"
-        ▾ [26]: "DW_TAG_lexical_block" — DW_CHILDREN_yes, 1 attributes  [0x43e+0x7]
+        ▾ [26]: "DW_TAG_lexical_block" — DW_CHILDREN_yes, 1 attribute  [0x43e+0x7]
             DW_AT_ranges: "DW_FORM_rnglistx"
         ▾ [27]: "DW_TAG_inlined_subroutine" — DW_CHILDREN_yes, 5 attributes  [0x445+0xf]
             DW_AT_abstract_origin: "DW_FORM_ref4"
@@ -346,7 +346,7 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ [32]: "DW_TAG_subroutine_type" — DW_CHILDREN_yes, 2 attributes  [0x48d+0x9]
             DW_AT_type: "DW_FORM_ref4"
             DW_AT_prototyped: "DW_FORM_flag_present"
-        ▾ [33]: "DW_TAG_formal_parameter" — DW_CHILDREN_no, 1 attributes  [0x496+0x7]
+        ▾ [33]: "DW_TAG_formal_parameter" — DW_CHILDREN_no, 1 attribute  [0x496+0x7]
             DW_AT_type: "DW_FORM_ref4"
           Table end: 0  [0x49d+0x1]
     ▾ .debug_info — PROGBITS, ---, 0x21f bytes  [0xe28+0x40]

@@ -10,6 +10,7 @@ use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::datakit::{clip, hex, size, text};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Codec, Head, Input, Probe, content, embedded};
 use crate::node::Node;
 use crate::record;
@@ -114,10 +115,12 @@ async fn aff(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
     }
     cx.annotate(format!(
-        "AFF image, {segments} segments, {pages} pages{}",
+        "AFF image, {segments_segment}, {pages_page}{}",
         image
             .map(|i| format!(", {} image", size(i)))
-            .unwrap_or_default()
+            .unwrap_or_default(),
+        segments_segment = plural(segments, "segment"),
+        pages_page = plural(pages, "page")
     ));
     Ok(())
 }
@@ -319,7 +322,7 @@ async fn kdump(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("vmcoreinfo")
                 .span(info)
-                .summary(format!("{} entries", entries.len()))
+                .summary(plural(entries.len(), "entry"))
                 .lazy(kdump_info, entries),
         );
     }
@@ -342,9 +345,9 @@ async fn kdump(cx: Cx, input: Input) -> Result<()> {
         osrelease
     };
     cx.annotate(format!(
-        "Linux kernel dump of {}, kernel {release}, {} blocks",
+        "Linux kernel dump of {}, kernel {release}, {}",
         node.trim(),
-        size(bs)
+        plural(size(bs), "block")
     ));
     Ok(())
 }
@@ -398,8 +401,9 @@ async fn vmss(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "VMware saved state, {count} groups: {}",
-        clip(&names.join(", "), 120)
+        "VMware saved state, {count_group}: {}",
+        clip(&names.join(", "), 120),
+        count_group = plural(count, "group")
     ));
     Ok(())
 }

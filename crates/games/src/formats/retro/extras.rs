@@ -9,7 +9,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{plural, size};
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -520,7 +520,8 @@ async fn hxc_mfm(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "HxC MFM image, {tracks} tracks × {sides} sides, {rpm} RPM, {rate} kbit/s"
+        "HxC MFM image, {tracks_track} × {sides} sides, {rpm} RPM, {rate} kbit/s",
+        tracks_track = plural(tracks, "track")
     ));
     Ok(())
 }
@@ -574,14 +575,14 @@ async fn fdi(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Track descriptors")
             .span(table)
-            .summary(format!("{tracks} tracks")),
+            .summary(plural(tracks, "track")),
     );
     cx.annotate(format!(
-        "FDI v{}.{} {} disk, {} tracks × {} heads, {} RPM{}",
+        "FDI v{}.{} {} disk, {} × {} heads, {} RPM{}",
         h.version >> 8,
         h.version & 0xff,
         lookup(FDI_TYPES, h.kind.into()).unwrap_or("?"),
-        u32::from(h.last_track).saturating_add(1),
+        plural(u32::from(h.last_track).saturating_add(1), "track"),
         u32::from(h.last_head).saturating_add(1),
         u32::from(h.speed).saturating_add(128),
         if clean(&h.creator).is_empty() {

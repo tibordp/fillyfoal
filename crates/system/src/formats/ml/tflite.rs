@@ -7,6 +7,7 @@ use crate::bytes::u32_le;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -234,8 +235,9 @@ async fn tflite(cx: Cx, input: Input) -> Result<()> {
                 tensors.saturating_add(fb.vector(&g, 0, 4).await?.map_or(0, |t| t.len.into()));
         }
         stats = format!(
-            ", {} subgraph(s), {ops} operators, {tensors} tensors",
-            v.len
+            ", {} subgraph(s), {ops_operator}, {tensors} tensors",
+            v.len,
+            ops_operator = plural(ops, "operator")
         );
         cx.emit(
             Node::new("Subgraphs")
@@ -248,7 +250,7 @@ async fn tflite(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Buffers")
                 .span(fb.vector_span(v, 4))
-                .summary(format!("{} buffers", v.len))
+                .summary(plural(v.len, "buffer"))
                 .lazy(buffer_list, (input, model)),
         );
     }
@@ -256,7 +258,7 @@ async fn tflite(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Metadata")
                 .span(fb.vector_span(v, 4))
-                .summary(format!("{} entries", v.len))
+                .summary(plural(v.len, "entry"))
                 .lazy(metadata_list, state),
         );
     }
@@ -325,7 +327,10 @@ async fn subgraph_list(cx: Cx, (file, model): (Span, Table)) -> Result<()> {
             Node::new(format!("Subgraph {i}"))
                 .span(fb.table_span(&g))
                 .value(text(name))
-                .summary(format!("{tensors} tensors, {ops} operators"))
+                .summary(format!(
+                    "{tensors} tensors, {ops_operator}",
+                    ops_operator = plural(ops, "operator")
+                ))
                 .lazy(subgraph, (file, g, names.clone())),
         )
         .await;
@@ -358,7 +363,7 @@ async fn subgraph(cx: Cx, (file, g, names): (Span, Table, Arc<Vec<String>>)) -> 
         cx.emit(
             Node::new("Operators")
                 .span(fb.vector_span(v, 4))
-                .summary(format!("{} operators", v.len))
+                .summary(plural(v.len, "operator"))
                 .lazy(operators, (file, v, names)),
         );
     }
@@ -539,11 +544,11 @@ async fn ort(cx: Cx, input: Input) -> Result<()> {
         if let Some(gat) = fb.field(&model, 7).await? {
             let graph = fb.table(fb.deref(gat).await?).await?;
             if let Some(v) = fb.vector(&graph, 2, 4).await? {
-                parts.push(format!("{} nodes", v.len));
+                parts.push(plural(v.len, "node"));
                 cx.emit(
                     Node::new("Nodes")
                         .span(fb.vector_span(v, 4))
-                        .summary(format!("{} nodes", v.len))
+                        .summary(plural(v.len, "node"))
                         .lazy(ort_nodes, (file, v)),
                 );
             }
@@ -643,7 +648,7 @@ async fn executorch(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Segments")
                 .span(fb.vector_span(v, 4))
-                .summary(format!("{} segments", v.len)),
+                .summary(plural(v.len, "segment")),
         );
     }
     cx.emit(
@@ -680,7 +685,11 @@ async fn plans_list(cx: Cx, (file, v): (Span, Vector)) -> Result<()> {
             Node::new(format!("[{i}]"))
                 .span(fb.table_span(&p))
                 .value(text(name))
-                .summary(format!("{values} values, operators: {}", ops.join(", "))),
+                .summary(format!(
+                    "{values_value}, operators: {}",
+                    ops.join(", "),
+                    values_value = plural(values, "value")
+                )),
         )
         .await;
     }

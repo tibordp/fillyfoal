@@ -143,8 +143,8 @@ impl Db {
     fn offset(&self, pgid: u64) -> Result<u64> {
         if pgid >= self.pages {
             return Err(Diagnostic::malformed(format!(
-                "page {pgid} lies outside the file ({} pages)",
-                self.pages
+                "page {pgid} lies outside the file ({})",
+                plural(self.pages, "page")
             )));
         }
         Ok(pgid.saturating_mul(self.page_size))
@@ -392,13 +392,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Pages")
             .span(file)
-            .summary(format!("{} pages of {page_size} bytes", db.pages))
+            .summary(format!("{} of {page_size} bytes", plural(db.pages, "page")))
             .lazy(pages, db.clone()),
     );
 
     let mut summary = format!(
-        "bbolt v{}, {} pages of {page_size} bytes, txid {}",
-        meta.version, meta.high, meta.txid
+        "bbolt v{}, {} of {page_size} bytes, txid {}",
+        meta.version,
+        plural(meta.high, "page"),
+        meta.txid
     );
     if let Some(problem) = meta.problem() {
         summary.push_str(&format!(", meta {current}: {problem}"));

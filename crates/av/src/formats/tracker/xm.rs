@@ -13,6 +13,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::tracker::{Cell, Note, named, note_name, row_summary};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
@@ -124,7 +125,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let instruments_node = |span: Span| {
         Node::new("Instruments")
             .span(span)
-            .summary(format!("{} instruments", h.instruments))
+            .summary(plural(h.instruments, "instrument"))
     };
     // Old layout: instrument headers, then patterns, then sample data.
     let mut pos = first;
@@ -172,14 +173,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(instruments_node(ispan).lazy(list_instruments, (ispan, h.instruments)));
     }
     cx.annotate(format!(
-        "XM {}.{:02}, {}, {} channels, {} orders, {} patterns, {} instruments, {} BPM — {}",
+        "XM {}.{:02}, {}, {}, {}, {}, {}, {} BPM — {}",
         h.version >> 8,
         h.version & 0xff,
         h.tracker.trim(),
-        h.channels,
-        h.song_length,
-        h.patterns,
-        h.instruments,
+        plural(h.channels, "channel"),
+        plural(h.song_length, "order"),
+        plural(h.patterns, "pattern"),
+        plural(h.instruments, "instrument"),
         h.bpm,
         named(&h.name)
     ));
@@ -189,7 +190,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 fn patterns_node(span: Span, count: u16, patterns: Vec<Pattern>) -> Node {
     Node::new("Patterns")
         .span(span)
-        .summary(format!("{count} patterns"))
+        .summary(plural(count, "pattern"))
         .lazy(list_patterns, patterns)
 }
 
@@ -245,9 +246,9 @@ async fn list_patterns(cx: Cx, patterns: Vec<Pattern>) -> Result<()> {
             Node::new(format!("Pattern {i}"))
                 .span(p.span)
                 .summary(if packed == 0 {
-                    format!("{} rows, empty", p.rows)
+                    format!("{}, empty", plural(p.rows, "row"))
                 } else {
-                    format!("{} rows, {packed} bytes packed", p.rows)
+                    format!("{}, {packed} bytes packed", plural(p.rows, "row"))
                 })
                 .lazy(pattern, p),
         )
@@ -481,7 +482,11 @@ fn instrument_node(index: u16, i: Instrument) -> Node {
     };
     Node::new(format!("Instrument {}", index.saturating_add(1)))
         .span(span)
-        .summary(format!("{}, {} samples", named(&i.name), i.samples))
+        .summary(format!(
+            "{}, {}",
+            named(&i.name),
+            plural(i.samples, "sample")
+        ))
         .lazy(instrument, i)
 }
 

@@ -108,7 +108,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x684+0x178]
       Checksum: 0x0  [0x7fc+0x4]
     Boot block — block 0, left for a boot loader  [0x0+0x400]
-  ▾ Block group descriptors — 1 groups of 8192 blocks  [0x800+0x20]
+  ▾ Block group descriptors — 1 group of 8192 blocks  [0x800+0x20]
     ▾ Group 0 — blocks 1–2047, inode table at 12, 1691 free blocks, 22 free inodes  [0x800+0x20]
         Block bitmap: 10  [0x800+0x4]
         Inode bitmap: 11  [0x804+0x4]
@@ -123,7 +123,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Unused inodes: 0  [0x81c+0x2]
         Checksum: 0x0  [0x81e+0x2]
       Unused — rest of the descriptor table's last block  [0x820+0x3e0]
-  ▾ Block groups — 1 groups
+  ▾ Block groups — 1 group
     ▾ Group 0 — blocks 1–2047  [0x400+0x1ffc00]
         Superblock (primary) — shown at the top level  [0x400+0x400]
         Group descriptors (primary) — shown at the top level  [0x800+0x20]
@@ -2496,7 +2496,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ pipe: 40 — prw-r--r--, 0 bytes  [0x7094+0xc]  (+49 nodes elided)
     ▾ sparse.bin: 41 — -rw-r--r--, 195.3 KiB  [0x70a0+0x14]  (+58 nodes elided)
     ▾ tiny.txt: 42 — -rw-r--r--, 5 bytes  [0x70b4+0x34c]  (+77 nodes elided)
-  ▾ Special inodes — 1 inodes
+  ▾ Special inodes — 1 inode
     ▾ Resize inode — -rw-------, 64.3 MiB
       ▾ Inode 7 — -rw-------, 64.3 MiB  [0x3600+0x100]
           Mode: 0x8180 — -rw-------  [0x3600+0x2]

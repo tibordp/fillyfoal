@@ -99,7 +99,7 @@ expression: "common::explore(&display_name(&path), &data)"
           cbEnt: 32  [0x99ea+0x1]
           cLevel: 0  [0x99eb+0x1]
       ▾ NID 0x21 (message store) — data 0x74  [0x9800+0x20]
-        ▾ Data blocks — 1 blocks, 242 bytes
+        ▾ Data blocks — 1 block, 242 bytes
           ▾ BID 0x74 — 242 bytes  [0x51c0+0x140]
               Data (encoded)  [0x51c0+0xf2]
               Data  [#1:0x0+0xf2]
@@ -150,7 +150,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 rgibAlloc: 0xdc  [#1:0xf0+0x2]
           Data — property context  [#1:0x0+0xf2]
       ▾ NID 0x61 (name-to-ID map) — data 0x230, subnodes 0x22e  [0x9820+0x20]
-        ▾ Data blocks — 1 blocks, 3832 bytes
+        ▾ Data blocks — 1 block, 3832 bytes
           ▾ BID 0x230 — 3832 bytes  [0x1b580+0xf40]
               Data (encoded)  [0x1b580+0xef8]
               Data  [#2:0x0+0xef8]
@@ -601,7 +601,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 rgibAlloc: 0xdd8  [#2:0xef6+0x2]
           Data — property context  [#2:0x0+0xef8]
         ▾ Subnode NID 0x835f (ltp 1050) — data 0x228, subnodes 0x0  [0x4b48+0x18]
-          ▾ Data blocks — 1 blocks, 1336 bytes
+          ▾ Data blocks — 1 block, 1336 bytes
             ▾ BID 0x228 — 1336 bytes  [0x5dc0+0x580]
                 Data (encoded)  [0x5dc0+0x538]
                 Data  [#3:0x0+0x538]
@@ -612,7 +612,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   bid: 0x228  [0x6338+0x8]
             Data  [#3:0x0+0x538]
       ▾ NID 0x122 (root folder) — data 0x34, parent 0x122  [0x9840+0x20]
-        ▾ Data blocks — 1 blocks, 62 bytes
+        ▾ Data blocks — 1 block, 62 bytes
           ▾ BID 0x34 — 62 bytes  [0x4b80+0x80]
               Data (encoded)  [0x4b80+0x3e]
               Data  [#4:0x0+0x3e]
@@ -648,7 +648,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 rgibAlloc: 0x34  [#4:0x3c+0x2]
           Data — property context  [#4:0x0+0x3e]
       ▾ NID 0x12d (hierarchy table 9) — data 0x38  [0x9860+0x20]
-        ▾ Data blocks — 1 blocks, 464 bytes
+        ▾ Data blocks — 1 block, 464 bytes
           ▾ BID 0x38 — 464 bytes  [0x5600+0x200]
               Data (encoded)  [0x5600+0x1d0]
               Data  [#5:0x0+0x1d0]
@@ -789,7 +789,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x2223  [#5:0x184+0x4]
               PidTagLtpRowVer: 4  [#5:0x188+0x4]
       ▾ NID 0x12e (contents table 9) — data 0x8  [0x9880+0x20]
-        ▾ Data blocks — 1 blocks, 276 bytes
+        ▾ Data blocks — 1 block, 276 bytes
           ▾ BID 0x8 — 276 bytes  [0x4c00+0x140]
               Data (encoded)  [0x4c00+0x114]
               Data  [#6:0x0+0x114]
@@ -971,7 +971,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x67f20003 — PtypInteger32, 4 bytes at 0, existence bit 0  [#6:0xfa+0x8]
               PidTagLtpRowVer: 0x67f30003 — PtypInteger32, 4 bytes at 4, existence bit 1  [#6:0x102+0x8]
       ▾ NID 0x12f (assoc contents table 9) — data 0xc  [0x98a0+0x20]
-        ▾ Data blocks — 1 blocks, 172 bytes
+        ▾ Data blocks — 1 block, 172 bytes
           ▾ BID 0xc — 172 bytes  [0x4800+0xc0]
               Data (encoded)  [0x4800+0xac]
               Data  [#7:0x0+0xac]
@@ -1089,7 +1089,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Property 0x7007: 0x70070003 — PtypInteger32, 4 bytes at 40, existence bit 10  [#7:0x9a+0x8]
       ▾ NID 0x1e1 (search management queue) — data 0x0  [0x98c0+0x20]
       ▾ NID 0x201 (search activity list) — data 0x20  [0x98e0+0x20]
-        ▾ Data blocks — 1 blocks, 4 bytes
+        ▾ Data blocks — 1 block, 4 bytes
           ▾ BID 0x20 — 4 bytes  [0x4b00+0x40]
               Data (encoded)  [0x4b00+0x4]
               Data  [#8:0x0+0x4]
@@ -1112,7 +1112,7 @@ expression: "common::explore(&display_name(&path), &data)"
           cbEnt: 32  [0x7dea+0x1]
           cLevel: 0  [0x7deb+0x1]
       ▾ NID 0x60d (hierarchy table template) — data 0x4  [0x7c00+0x20]
-        ▾ Data blocks — 1 blocks, 156 bytes
+        ▾ Data blocks — 1 block, 156 bytes
           ▾ BID 0x4 — 156 bytes  [0x5000+0xc0]
               Data (encoded)  [0x5000+0x9c]
               Data  [#9:0x0+0x9c]
@@ -1219,7 +1219,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x67f20003 — PtypInteger32, 4 bytes at 0, existence bit 0  [#9:0x82+0x8]
               PidTagLtpRowVer: 0x67f30003 — PtypInteger32, 4 bytes at 4, existence bit 1  [#9:0x8a+0x8]
       ▾ NID 0x60e (contents table template) — data 0x8  [0x7c20+0x20]
-        ▾ Data blocks — 1 blocks, 276 bytes
+        ▾ Data blocks — 1 block, 276 bytes
           ▾ BID 0x8 — 276 bytes  [0x4c00+0x140]
               Data (encoded)  [0x4c00+0x114]
               Data  [#6:0x0+0x114]
@@ -1401,7 +1401,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x67f20003 — PtypInteger32, 4 bytes at 0, existence bit 0  [#6:0xfa+0x8]
               PidTagLtpRowVer: 0x67f30003 — PtypInteger32, 4 bytes at 4, existence bit 1  [#6:0x102+0x8]
       ▾ NID 0x60f (associated contents table template) — data 0xc  [0x7c40+0x20]
-        ▾ Data blocks — 1 blocks, 172 bytes
+        ▾ Data blocks — 1 block, 172 bytes
           ▾ BID 0xc — 172 bytes  [0x4800+0xc0]
               Data (encoded)  [0x4800+0xac]
               Data  [#7:0x0+0xac]
@@ -1518,7 +1518,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Property 0x7006: 0x7006001f — PtypString, 4 bytes at 36, existence bit 9  [#7:0x92+0x8]
               Property 0x7007: 0x70070003 — PtypInteger32, 4 bytes at 40, existence bit 10  [#7:0x9a+0x8]
       ▾ NID 0x610 (search contents table template) — data 0x10  [0x7c60+0x20]
-        ▾ Data blocks — 1 blocks, 204 bytes
+        ▾ Data blocks — 1 block, 204 bytes
           ▾ BID 0x10 — 204 bytes  [0x48c0+0x100]
               Data (encoded)  [0x48c0+0xcc]
               Data  [#10:0x0+0xcc]
@@ -1655,7 +1655,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x67f20003 — PtypInteger32, 4 bytes at 0, existence bit 0  [#10:0xb2+0x8]
               PidTagLtpRowVer: 0x67f30003 — PtypInteger32, 4 bytes at 4, existence bit 1  [#10:0xba+0x8]
       ▾ NID 0x62b (receive folder table 49) — data 0x64  [0x7c80+0x20]
-        ▾ Data blocks — 1 blocks, 226 bytes
+        ▾ Data blocks — 1 block, 226 bytes
           ▾ BID 0x64 — 226 bytes  [0x5300+0x100]
               Data (encoded)  [0x5300+0xe2]
               Data  [#11:0x0+0xe2]
@@ -1751,7 +1751,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x4  [#11:0x9d+0x4]
               PidTagLtpRowVer: 2  [#11:0xa1+0x4]
       ▾ NID 0x671 (attachment table) — data 0x18  [0x7ca0+0x20]
-        ▾ Data blocks — 1 blocks, 100 bytes
+        ▾ Data blocks — 1 block, 100 bytes
           ▾ BID 0x18 — 100 bytes  [0x49c0+0x80]
               Data (encoded)  [0x49c0+0x64]
               Data  [#12:0x0+0x64]
@@ -1823,7 +1823,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x67f20003 — PtypInteger32, 4 bytes at 0, existence bit 0  [#12:0x4a+0x8]
               PidTagLtpRowVer: 0x67f30003 — PtypInteger32, 4 bytes at 4, existence bit 1  [#12:0x52+0x8]
       ▾ NID 0x692 (recipient table) — data 0x14  [0x7cc0+0x20]
-        ▾ Data blocks — 1 blocks, 164 bytes
+        ▾ Data blocks — 1 block, 164 bytes
           ▾ BID 0x14 — 164 bytes  [0x4d40+0xc0]
               Data (encoded)  [0x4d40+0xa4]
               Data  [#13:0x0+0xa4]
@@ -1935,7 +1935,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x67f20003 — PtypInteger32, 4 bytes at 0, existence bit 0  [#13:0x8a+0x8]
               PidTagLtpRowVer: 0x67f30003 — PtypInteger32, 4 bytes at 4, existence bit 1  [#13:0x92+0x8]
       ▾ NID 0x2223 (search folder 273) — data 0x40, parent 0x122  [0x7ce0+0x20]
-        ▾ Data blocks — 1 blocks, 104 bytes
+        ▾ Data blocks — 1 block, 104 bytes
           ▾ BID 0x40 — 104 bytes  [0x4f40+0x80]
               Data (encoded)  [0x4f40+0x68]
               Data  [#14:0x0+0x68]
@@ -1990,7 +1990,7 @@ expression: "common::explore(&display_name(&path), &data)"
           cLevel: 0  [0xc5eb+0x1]
       ▾ NID 0x2226 (search update queue 273) — data 0x0  [0xc400+0x20]
       ▾ NID 0x2227 (search criteria object 273) — data 0x3c  [0xc420+0x20]
-        ▾ Data blocks — 1 blocks, 38 bytes
+        ▾ Data blocks — 1 block, 38 bytes
           ▾ BID 0x3c — 38 bytes  [0x4f00+0x40]
               Data (encoded)  [0x4f00+0x26]
               Data  [#15:0x0+0x26]
@@ -2024,7 +2024,7 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Data — property context  [#15:0x0+0x26]
             Property 0x660b: 0  [#15:0x18+0x4]
       ▾ NID 0x8022 (normal folder 1025) — data 0x44, parent 0x122  [0xc440+0x20]
-        ▾ Data blocks — 1 blocks, 110 bytes
+        ▾ Data blocks — 1 block, 110 bytes
           ▾ BID 0x44 — 110 bytes  [0x50c0+0x80]
               Data (encoded)  [0x50c0+0x6e]
               Data  [#16:0x0+0x6e]
@@ -2062,7 +2062,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 rgibAlloc: 0x62  [#16:0x6c+0x2]
           Data — property context  [#16:0x0+0x6e]
       ▾ NID 0x802d (hierarchy table 1025) — data 0x218, subnodes 0x216  [0xc460+0x20]
-        ▾ Data blocks — 1 blocks, 280 bytes
+        ▾ Data blocks — 1 block, 280 bytes
           ▾ BID 0x218 — 280 bytes  [0xa8c0+0x140]
               Data (encoded)  [0xa8c0+0x118]
               Data  [#17:0x0+0x118]
@@ -2207,7 +2207,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x80a2  [#18:0x6e+0x4]
               PidTagLtpRowVer: 11  [#18:0x72+0x4]
         ▾ Subnode NID 0x833f (ltp 1049) — data 0x210, subnodes 0x0  [0x4a48+0x18]
-          ▾ Data blocks — 1 blocks, 165 bytes
+          ▾ Data blocks — 1 block, 165 bytes
             ▾ BID 0x210 — 165 bytes  [0x70c0+0xc0]
                 Data (encoded)  [0x70c0+0xa5]
                 Data  [#18:0x0+0xa5]
@@ -2218,7 +2218,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   bid: 0x210  [0x7178+0x8]
             Data  [#18:0x0+0xa5]
       ▾ NID 0x802e (contents table 1025) — data 0x8  [0xc480+0x20]
-        ▾ Data blocks — 1 blocks, 276 bytes
+        ▾ Data blocks — 1 block, 276 bytes
           ▾ BID 0x8 — 276 bytes  [0x4c00+0x140]
               Data (encoded)  [0x4c00+0x114]
               Data  [#6:0x0+0x114]
@@ -2400,7 +2400,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x67f20003 — PtypInteger32, 4 bytes at 0, existence bit 0  [#6:0xfa+0x8]
               PidTagLtpRowVer: 0x67f30003 — PtypInteger32, 4 bytes at 4, existence bit 1  [#6:0x102+0x8]
       ▾ NID 0x802f (assoc contents table 1025) — data 0xc  [0xc4a0+0x20]
-        ▾ Data blocks — 1 blocks, 172 bytes
+        ▾ Data blocks — 1 block, 172 bytes
           ▾ BID 0xc — 172 bytes  [0x4800+0xc0]
               Data (encoded)  [0x4800+0xac]
               Data  [#7:0x0+0xac]
@@ -2517,7 +2517,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Property 0x7006: 0x7006001f — PtypString, 4 bytes at 36, existence bit 9  [#7:0x92+0x8]
               Property 0x7007: 0x70070003 — PtypInteger32, 4 bytes at 40, existence bit 10  [#7:0x9a+0x8]
       ▾ NID 0x8042 (normal folder 1026) — data 0x4c, parent 0x122  [0xc4c0+0x20]
-        ▾ Data blocks — 1 blocks, 86 bytes
+        ▾ Data blocks — 1 block, 86 bytes
           ▾ BID 0x4c — 86 bytes  [0x5140+0x80]
               Data (encoded)  [0x5140+0x56]
               Data  [#19:0x0+0x56]
@@ -2555,7 +2555,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 rgibAlloc: 0x4a  [#19:0x54+0x2]
           Data — property context  [#19:0x0+0x56]
       ▾ NID 0x804d (hierarchy table 1026) — data 0x4  [0xc4e0+0x20]
-        ▾ Data blocks — 1 blocks, 156 bytes
+        ▾ Data blocks — 1 block, 156 bytes
           ▾ BID 0x4 — 156 bytes  [0x5000+0xc0]
               Data (encoded)  [0x5000+0x9c]
               Data  [#9:0x0+0x9c]
@@ -2674,7 +2674,7 @@ expression: "common::explore(&display_name(&path), &data)"
           cbEnt: 32  [0xc3ea+0x1]
           cLevel: 0  [0xc3eb+0x1]
       ▾ NID 0x804e (contents table 1026) — data 0x8  [0xc200+0x20]
-        ▾ Data blocks — 1 blocks, 276 bytes
+        ▾ Data blocks — 1 block, 276 bytes
           ▾ BID 0x8 — 276 bytes  [0x4c00+0x140]
               Data (encoded)  [0x4c00+0x114]
               Data  [#6:0x0+0x114]
@@ -2856,7 +2856,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x67f20003 — PtypInteger32, 4 bytes at 0, existence bit 0  [#6:0xfa+0x8]
               PidTagLtpRowVer: 0x67f30003 — PtypInteger32, 4 bytes at 4, existence bit 1  [#6:0x102+0x8]
       ▾ NID 0x804f (assoc contents table 1026) — data 0xc  [0xc220+0x20]
-        ▾ Data blocks — 1 blocks, 172 bytes
+        ▾ Data blocks — 1 block, 172 bytes
           ▾ BID 0xc — 172 bytes  [0x4800+0xc0]
               Data (encoded)  [0x4800+0xac]
               Data  [#7:0x0+0xac]
@@ -2973,7 +2973,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Property 0x7006: 0x7006001f — PtypString, 4 bytes at 36, existence bit 9  [#7:0x92+0x8]
               Property 0x7007: 0x70070003 — PtypInteger32, 4 bytes at 40, existence bit 10  [#7:0x9a+0x8]
       ▾ NID 0x8062 (normal folder 1027) — data 0x50, parent 0x8022  [0xc240+0x20]
-        ▾ Data blocks — 1 blocks, 90 bytes
+        ▾ Data blocks — 1 block, 90 bytes
           ▾ BID 0x50 — 90 bytes  [0x5d40+0x80]
               Data (encoded)  [0x5d40+0x5a]
               Data  [#20:0x0+0x5a]
@@ -3011,7 +3011,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 rgibAlloc: 0x4e  [#20:0x58+0x2]
           Data — property context  [#20:0x0+0x5a]
       ▾ NID 0x806d (hierarchy table 1027) — data 0x4  [0xc260+0x20]
-        ▾ Data blocks — 1 blocks, 156 bytes
+        ▾ Data blocks — 1 block, 156 bytes
           ▾ BID 0x4 — 156 bytes  [0x5000+0xc0]
               Data (encoded)  [0x5000+0x9c]
               Data  [#9:0x0+0x9c]
@@ -3118,7 +3118,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x67f20003 — PtypInteger32, 4 bytes at 0, existence bit 0  [#9:0x82+0x8]
               PidTagLtpRowVer: 0x67f30003 — PtypInteger32, 4 bytes at 4, existence bit 1  [#9:0x8a+0x8]
       ▾ NID 0x806e (contents table 1027) — data 0x8  [0xc280+0x20]
-        ▾ Data blocks — 1 blocks, 276 bytes
+        ▾ Data blocks — 1 block, 276 bytes
           ▾ BID 0x8 — 276 bytes  [0x4c00+0x140]
               Data (encoded)  [0x4c00+0x114]
               Data  [#6:0x0+0x114]
@@ -3300,7 +3300,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x67f20003 — PtypInteger32, 4 bytes at 0, existence bit 0  [#6:0xfa+0x8]
               PidTagLtpRowVer: 0x67f30003 — PtypInteger32, 4 bytes at 4, existence bit 1  [#6:0x102+0x8]
       ▾ NID 0x806f (assoc contents table 1027) — data 0xc  [0xc2a0+0x20]
-        ▾ Data blocks — 1 blocks, 172 bytes
+        ▾ Data blocks — 1 block, 172 bytes
           ▾ BID 0xc — 172 bytes  [0x4800+0xc0]
               Data (encoded)  [0x4800+0xac]
               Data  [#7:0x0+0xac]
@@ -3417,7 +3417,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Property 0x7006: 0x7006001f — PtypString, 4 bytes at 36, existence bit 9  [#7:0x92+0x8]
               Property 0x7007: 0x70070003 — PtypInteger32, 4 bytes at 40, existence bit 10  [#7:0x9a+0x8]
       ▾ NID 0x8082 (normal folder 1028) — data 0x104, parent 0x8022  [0xc2c0+0x20]
-        ▾ Data blocks — 1 blocks, 100 bytes
+        ▾ Data blocks — 1 block, 100 bytes
           ▾ BID 0x104 — 100 bytes  [0x5800+0x80]
               Data (encoded)  [0x5800+0x64]
               Data  [#21:0x0+0x64]
@@ -3458,7 +3458,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 rgibAlloc: 0x56  [#21:0x62+0x2]
           Data — property context  [#21:0x0+0x64]
       ▾ NID 0x808d (hierarchy table 1028) — data 0x1dc, subnodes 0x1da  [0xc2e0+0x20]
-        ▾ Data blocks — 1 blocks, 202 bytes
+        ▾ Data blocks — 1 block, 202 bytes
           ▾ BID 0x1dc — 202 bytes  [0x84c0+0x100]
               Data (encoded)  [0x84c0+0xca]
               Data  [#22:0x0+0xca]
@@ -3580,7 +3580,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x80c2  [#23:0x0+0x4]
               PidTagLtpRowVer: 11  [#23:0x4+0x4]
         ▾ Subnode NID 0x82df (ltp 1046) — data 0x1d4, subnodes 0x0  [0x7fc8+0x18]
-          ▾ Data blocks — 1 blocks, 55 bytes
+          ▾ Data blocks — 1 block, 55 bytes
             ▾ BID 0x1d4 — 55 bytes  [0x6dc0+0x80]
                 Data (encoded)  [0x6dc0+0x37]
                 Data  [#23:0x0+0x37]
@@ -3603,7 +3603,7 @@ expression: "common::explore(&display_name(&path), &data)"
           cbEnt: 32  [0xd9ea+0x1]
           cLevel: 0  [0xd9eb+0x1]
       ▾ NID 0x808e (contents table 1028) — data 0x11c, subnodes 0xca  [0xd800+0x20]
-        ▾ Data blocks — 1 blocks, 772 bytes
+        ▾ Data blocks — 1 block, 772 bytes
           ▾ BID 0x11c — 772 bytes  [0x9c40+0x340]
               Data (encoded)  [0x9c40+0x304]
               Data  [#24:0x0+0x304]
@@ -3840,7 +3840,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x200044  [#25:0x7e+0x4]
               PidTagLtpRowVer: 11  [#25:0x82+0x4]
         ▾ Subnode NID 0x80ff (ltp 1031) — data 0x118, subnodes 0x0  [0x4ac8+0x18]
-          ▾ Data blocks — 1 blocks, 252 bytes
+          ▾ Data blocks — 1 block, 252 bytes
             ▾ BID 0x118 — 252 bytes  [0x5a00+0x140]
                 Data (encoded)  [0x5a00+0xfc]
                 Data  [#25:0x0+0xfc]
@@ -3851,7 +3851,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   bid: 0x118  [0x5b38+0x8]
             Data  [#25:0x0+0xfc]
       ▾ NID 0x808f (assoc contents table 1028) — data 0xc  [0xd820+0x20]
-        ▾ Data blocks — 1 blocks, 172 bytes
+        ▾ Data blocks — 1 block, 172 bytes
           ▾ BID 0xc — 172 bytes  [0x4800+0xc0]
               Data (encoded)  [0x4800+0xac]
               Data  [#7:0x0+0xac]
@@ -3968,7 +3968,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Property 0x7006: 0x7006001f — PtypString, 4 bytes at 36, existence bit 9  [#7:0x92+0x8]
               Property 0x7007: 0x70070003 — PtypInteger32, 4 bytes at 40, existence bit 10  [#7:0x9a+0x8]
       ▾ NID 0x80a2 (normal folder 1029) — data 0x208, parent 0x8022  [0xd840+0x20]
-        ▾ Data blocks — 1 blocks, 110 bytes
+        ▾ Data blocks — 1 block, 110 bytes
           ▾ BID 0x208 — 110 bytes  [0x6ec0+0x80]
               Data (encoded)  [0x6ec0+0x6e]
               Data  [#26:0x0+0x6e]
@@ -4009,7 +4009,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 rgibAlloc: 0x60  [#26:0x6c+0x2]
           Data — property context  [#26:0x0+0x6e]
       ▾ NID 0x80ad (hierarchy table 1029) — data 0x4  [0xd860+0x20]
-        ▾ Data blocks — 1 blocks, 156 bytes
+        ▾ Data blocks — 1 block, 156 bytes
           ▾ BID 0x4 — 156 bytes  [0x5000+0xc0]
               Data (encoded)  [0x5000+0x9c]
               Data  [#9:0x0+0x9c]
@@ -4116,7 +4116,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x67f20003 — PtypInteger32, 4 bytes at 0, existence bit 0  [#9:0x82+0x8]
               PidTagLtpRowVer: 0x67f30003 — PtypInteger32, 4 bytes at 4, existence bit 1  [#9:0x8a+0x8]
       ▾ NID 0x80ae (contents table 1029) — data 0x224, subnodes 0x222  [0xd880+0x20]
-        ▾ Data blocks — 1 blocks, 536 bytes
+        ▾ Data blocks — 1 block, 536 bytes
           ▾ BID 0x224 — 536 bytes  [0x1b340+0x240]
               Data (encoded)  [0x1b340+0x218]
               Data  [#27:0x0+0x218]
@@ -4325,7 +4325,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagLtpRowId: 0x2000c4  [#28:0x0+0x4]
               PidTagLtpRowVer: 11  [#28:0x4+0x4]
         ▾ Subnode NID 0x835f (ltp 1050) — data 0x21c, subnodes 0x0  [0x4a88+0x18]
-          ▾ Data blocks — 1 blocks, 126 bytes
+          ▾ Data blocks — 1 block, 126 bytes
             ▾ BID 0x21c — 126 bytes  [0x5940+0xc0]
                 Data (encoded)  [0x5940+0x7e]
                 Data  [#28:0x0+0x7e]
@@ -4336,7 +4336,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   bid: 0x21c  [0x59f8+0x8]
             Data  [#28:0x0+0x7e]
       ▾ NID 0x80af (assoc contents table 1029) — data 0xc  [0xd8a0+0x20]
-        ▾ Data blocks — 1 blocks, 172 bytes
+        ▾ Data blocks — 1 block, 172 bytes
           ▾ BID 0xc — 172 bytes  [0x4800+0xc0]
               Data (encoded)  [0x4800+0xac]
               Data  [#7:0x0+0xac]
@@ -4453,7 +4453,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Property 0x7006: 0x7006001f — PtypString, 4 bytes at 36, existence bit 9  [#7:0x92+0x8]
               Property 0x7007: 0x70070003 — PtypInteger32, 4 bytes at 40, existence bit 10  [#7:0x9a+0x8]
       ▾ NID 0x80c2 (normal folder 1030) — data 0x1cc, parent 0x8082  [0xd8c0+0x20]
-        ▾ Data blocks — 1 blocks, 106 bytes
+        ▾ Data blocks — 1 block, 106 bytes
           ▾ BID 0x1cc — 106 bytes  [0x8100+0x80]
               Data (encoded)  [0x8100+0x6a]
               Data  [#29:0x0+0x6a]

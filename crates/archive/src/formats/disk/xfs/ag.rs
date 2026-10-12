@@ -7,6 +7,7 @@ use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::disk::{size, unix_mode, uuid_value};
+use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::value::Value;
 
@@ -220,7 +221,10 @@ fn agi_layout(f: &mut Fields<'_>, ctx: &HdrCtx) -> Result<Agi> {
     } else {
         struct_node("Unlinked inode buckets", buckets, BE, (), unlinked_layout)
             .value(value)
-            .summary(format!("{in_use} buckets with unlinked inodes"))
+            .summary(format!(
+                "{in_use_bucket} with unlinked inodes",
+                in_use_bucket = plural(in_use, "bucket")
+            ))
             .desc("Heads of hashed lists of inodes unlinked while still open")
     });
     f.skip(256);
@@ -357,10 +361,10 @@ pub(super) async fn group(cx: Cx, (fs, ag): (FsRef, u64)) -> Result<()> {
     }
     if let Ok(a) = &agf {
         node = node.summary(format!(
-            "{} free blocks ({}), longest free extent {} blocks",
+            "{} free blocks ({}), longest free extent {}",
             a.free,
             size(u64::from(a.free).saturating_mul(fs.block)),
-            a.longest
+            plural(a.longest, "block")
         ));
     }
     cx.emit(node);
@@ -382,7 +386,11 @@ pub(super) async fn group(cx: Cx, (fs, ag): (FsRef, u64)) -> Result<()> {
         node = node.diag(d);
     }
     if let Ok(a) = &agi {
-        node = node.summary(format!("{} inodes, {} free", a.count, a.free_count));
+        node = node.summary(format!(
+            "{}, {} free",
+            plural(a.count, "inode"),
+            a.free_count
+        ));
     }
     cx.emit(node);
 
@@ -405,7 +413,10 @@ pub(super) async fn group(cx: Cx, (fs, ag): (FsRef, u64)) -> Result<()> {
         },
         agfl_layout,
     )
-    .summary(format!("{count} blocks reserved"));
+    .summary(format!(
+        "{count_block} reserved",
+        count_block = plural(count, "block")
+    ));
     if v5 && raw.get(..4) != Some(b"XAFL".as_slice()) {
         node = node.diag(Diagnostic::malformed("bad AGFL magic"));
     } else if let Some(d) = v5.then(|| crc_diag(&raw, 32, "AGFL")).flatten() {

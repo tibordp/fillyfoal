@@ -9,6 +9,7 @@ use crate::dsl::{ChunkLayout, Cursor, Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::text::scan::head_lines;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -166,7 +167,7 @@ async fn milkshape(cx: Cx, input: Input) -> Result<()> {
                 .summary(format!("{joints} joints")),
         );
     }
-    cx.annotate(format!("MilkShape 3D v{version}: {vertices} vertices, {triangles} triangles, {groups} groups, {materials} materials"));
+    cx.annotate(format!("MilkShape 3D v{version}: {vertices} vertices, {triangles_triangle}, {groups_group}, {materials} materials", triangles_triangle = plural(triangles, "triangle"), groups_group = plural(groups, "group")));
     Ok(())
 }
 
@@ -199,9 +200,9 @@ async fn cal3d(cx: Cx, input: Input) -> Result<()> {
         b'A' => (
             "animation",
             format!(
-                "{:.2} s, {} tracks",
+                "{:.2} s, {}",
                 f32::from_bits(u32_le(&head, 8).unwrap_or(0)),
-                u32_le(&head, 12).unwrap_or(0)
+                plural(u32_le(&head, 12).unwrap_or(0), "track")
             ),
         ),
         _ => ("material", "colours, shininess and maps".to_owned()),
@@ -398,7 +399,7 @@ async fn nif(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("String table and groups")
             .span(cur.since(at))
-            .summary(format!("{strings} strings")),
+            .summary(plural(strings, "string")),
     );
     let mut pos = cur.pos();
     for i in 0..usize::try_from(blocks).unwrap_or(0) {
@@ -417,12 +418,13 @@ async fn nif(cx: Cx, input: Input) -> Result<()> {
         pos = pos.saturating_add(size);
     }
     cx.annotate(format!(
-        "NIF {dotted}{}, {blocks} blocks",
+        "NIF {dotted}{}, {blocks_block}",
         if game.is_empty() {
             String::new()
         } else {
             format!(" ({game})")
-        }
+        },
+        blocks_block = plural(blocks, "block")
     ));
     Ok(())
 }
@@ -470,8 +472,9 @@ async fn quake_spr(cx: Cx, input: Input) -> Result<()> {
     let _ = kind;
     cx.emit(Node::new(if hl { "Palette and frames" } else { "Frames" }).span(file.tail(len)));
     cx.annotate(format!(
-        "{} sprite, {frames} frames, up to {w}×{h}",
-        if hl { "Half-Life" } else { "Quake" }
+        "{} sprite, {frames_frame}, up to {w}×{h}",
+        if hl { "Half-Life" } else { "Quake" },
+        frames_frame = plural(frames, "frame")
     ));
     Ok(())
 }
@@ -505,7 +508,10 @@ async fn sp2(cx: Cx, input: Input) -> Result<()> {
         )))
         .await;
     }
-    cx.annotate(format!("Quake II sprite, {frames} frames"));
+    cx.annotate(format!(
+        "Quake II sprite, {frames_frame}",
+        frames_frame = plural(frames, "frame")
+    ));
     Ok(())
 }
 
@@ -586,29 +592,39 @@ async fn rtcw_model(cx: Cx, input: Input) -> Result<()> {
         b"IDPC" => {
             let h: MdcHeader = emit_record(&cx, file.sub(0, MdcHeader::SIZE), LE).await?;
             format!(
-                "MDC compressed model {:?}: {} frames, {} surfaces, {} tags",
-                h.name, h.frames, h.surfaces, h.tags
+                "MDC compressed model {:?}: {}, {}, {} tags",
+                h.name,
+                plural(h.frames, "frame"),
+                plural(h.surfaces, "surface"),
+                h.tags
             )
         }
         b"MDSW" => {
             let h: MdsHeader = emit_record(&cx, file.sub(0, MdsHeader::SIZE), LE).await?;
             format!(
-                "MDS skeletal model {:?}: {} frames, {} bones, {} surfaces",
-                h.name, h.frames, h.bones, h.surfaces
+                "MDS skeletal model {:?}: {}, {} bones, {}",
+                h.name,
+                plural(h.frames, "frame"),
+                h.bones,
+                plural(h.surfaces, "surface")
             )
         }
         b"MDXW" => {
             let h: MdxHeader = emit_record(&cx, file.sub(0, MdxHeader::SIZE), LE).await?;
             format!(
-                "MDX skeletal animation {:?}: {} frames, {} bones",
-                h.name, h.frames, h.bones
+                "MDX skeletal animation {:?}: {}, {} bones",
+                h.name,
+                plural(h.frames, "frame"),
+                h.bones
             )
         }
         _ => {
             let h: MdmHeader = emit_record(&cx, file.sub(0, MdmHeader::SIZE), LE).await?;
             format!(
-                "MDM skeletal mesh {:?}: {} surfaces, {} tags",
-                h.name, h.surfaces, h.tags
+                "MDM skeletal mesh {:?}: {}, {} tags",
+                h.name,
+                plural(h.surfaces, "surface"),
+                h.tags
             )
         }
     };
@@ -646,8 +662,11 @@ async fn hexen2_mdl(cx: Cx, input: Input) -> Result<()> {
             .span(input.span.tail(Hexen2Header::SIZE)),
     );
     cx.annotate(format!(
-        "Hexen II model: {} vertices, {} triangles, {} frames, {} skins",
-        h.vertices, h.triangles, h.frames, h.skins
+        "Hexen II model: {} vertices, {}, {}, {} skins",
+        h.vertices,
+        plural(h.triangles, "triangle"),
+        plural(h.frames, "frame"),
+        h.skins
     ));
     Ok(())
 }

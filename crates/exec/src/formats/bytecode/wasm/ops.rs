@@ -2,6 +2,7 @@
 
 use super::{heap_type, val_type};
 use crate::formats::util::binutil::Reader;
+use crate::formats::util::fmt::plural;
 
 const NUMERIC: [&str; 128] = [
     "i32.eqz",
@@ -302,7 +303,7 @@ pub fn instruction(
             let default = r.uleb()?;
             let mut s = labels.join(" ");
             if s.len() > 120 {
-                s = format!("{n} labels");
+                s = plural(n, "label");
             }
             Some(("br_table".to_owned(), format!("{s} default {default}")))
         }

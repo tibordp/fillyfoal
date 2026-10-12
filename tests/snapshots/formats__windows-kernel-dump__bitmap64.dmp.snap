@@ -20,7 +20,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Bug check parameter 4: 0xfffff80012345678  [0x58+0x8]
     Version user: 66 69 6c 6c 79 66 6f 61 6c 00 00 00 00 00 00 00 …  |fillyfoal.......|  [0x60+0x20]
     KdDebuggerDataBlock: 0xfffff80000002000  [0x80+0x8]
-  ▾ Physical memory descriptor — 1 runs  [0x88+0x2c0]
+  ▾ Physical memory descriptor — 1 run  [0x88+0x2c0]
       Number of runs: 1  [0x88+0x4]
       Number of pages: 16  [0x90+0x8]
       Run 0 — page 0x0, 16 pages (physical 0x0)  [0x98+0x10]

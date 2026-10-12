@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ zstd.orc — ORC, ZSTD compression, 3 rows, 1 stripes, 3 types  [0x0+0x176]
+▾ zstd.orc — ORC, ZSTD compression, 3 rows, 1 stripe, 3 types  [0x0+0x176]
     Magic: "ORC"  [0x0+0x3]
   ▾ Metadata — stripe statistics  [0xb3+0x31]
     ▾ Compression chunks  [0xb3+0x31]

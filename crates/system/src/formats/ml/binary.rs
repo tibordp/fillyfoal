@@ -10,6 +10,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{int, text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -212,7 +213,7 @@ async fn ggml(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Vocabulary")
                 .span(vocab)
-                .summary(format!("{n_vocab} tokens"))
+                .summary(plural(n_vocab, "token"))
                 .lazy(ggml_vocab, layout),
         );
     }
@@ -232,7 +233,10 @@ async fn ggml(cx: Cx, input: Input) -> Result<()> {
     let vocab_part = if kind == Ggml::Ggla {
         String::new()
     } else {
-        format!("{n_vocab} tokens, ")
+        format!(
+            "{n_vocab_token}, ",
+            n_vocab_token = plural(n_vocab, "token")
+        )
     };
     cx.annotate(format!(
         "{what}, {vocab_part}{count} tensors ({} of weights)",
@@ -541,7 +545,10 @@ async fn ncnn_bin(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("ncnn binary param, {layers} layers, {blobs} blobs"));
+    cx.annotate(format!(
+        "ncnn binary param, {layers_layer}, {blobs} blobs",
+        layers_layer = plural(layers, "layer")
+    ));
     Ok(())
 }
 
@@ -875,7 +882,10 @@ async fn fasttext(cx: Cx, input: Input) -> Result<()> {
         Node::new("Dictionary")
             .span(dict)
             .summary(format!(
-                "{nwords} words, {nlabels} labels, {ntokens} tokens"
+                "{nwords_word}, {nlabels_label}, {ntokens_token}",
+                nwords_word = plural(nwords, "word"),
+                nlabels_label = plural(nlabels, "label"),
+                ntokens_token = plural(ntokens, "token")
             ))
             .lazy(
                 fasttext_dict,
@@ -923,7 +933,9 @@ async fn fasttext(cx: Cx, input: Input) -> Result<()> {
     )
     .unwrap_or("?");
     cx.annotate(format!(
-        "fastText {kind} model, dim {dim}, {nwords} words, {nlabels} labels"
+        "fastText {kind} model, dim {dim}, {nwords_word}, {nlabels_label}",
+        nwords_word = plural(nwords, "word"),
+        nlabels_label = plural(nlabels, "label")
     ));
     Ok(())
 }
@@ -1059,8 +1071,8 @@ async fn mlir(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "MLIR bytecode v{version} from \"{producer}\", {} sections",
-        sections.len()
+        "MLIR bytecode v{version} from \"{producer}\", {}",
+        plural(sections.len(), "section")
     ));
     Ok(())
 }

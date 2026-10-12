@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::{Chunk, ChunkLayout, Cursor, Record, emit_record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -195,7 +196,9 @@ async fn dpaint_anm(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{pages} × 64 KiB")),
     );
     cx.annotate(format!(
-        "Deluxe Paint animation, {w}×{h}, {frames} frames at {fps} fps, {records} records"
+        "Deluxe Paint animation, {w}×{h}, {frames_frame} at {fps} fps, {records_record}",
+        frames_frame = plural(frames, "frame"),
+        records_record = plural(records, "record")
     ));
     Ok(())
 }

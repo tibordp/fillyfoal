@@ -11,6 +11,7 @@ use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::datakit::{cf_time, clip, size, text};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -83,7 +84,7 @@ async fn ie_index(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Cache directories")
             .span(file.sub(IeHeader::SIZE, dirs.saturating_mul(12)))
-            .summary(format!("{dirs} directories"))
+            .summary(plural(dirs, "directory"))
             .lazy(ie_directories, (file, dirs)),
     );
     cx.emit(
@@ -97,8 +98,10 @@ async fn ie_index(cx: Cx, input: Input) -> Result<()> {
     );
     let records = ie_record_offsets(&cx, file, h.hash_table).await?.len();
     cx.annotate(format!(
-        "Internet Explorer 5.2 URL cache, {records} records, {} of {} blocks allocated",
-        h.allocated, h.blocks
+        "Internet Explorer 5.2 URL cache, {records_record}, {} of {} blocks allocated",
+        h.allocated,
+        h.blocks,
+        records_record = plural(records, "record")
     ));
     Ok(())
 }
@@ -349,7 +352,10 @@ async fn binarycookies(cx: Cx, input: Input) -> Result<()> {
             cx.emit(embedded("Metadata", input.nested(rest)));
         }
     }
-    cx.annotate(format!("Safari cookies, {pages} pages, {total} cookies"));
+    cx.annotate(format!(
+        "Safari cookies, {pages_page}, {total} cookies",
+        pages_page = plural(pages, "page")
+    ));
     Ok(())
 }
 
@@ -539,14 +545,14 @@ async fn chrome_index(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Index table")
             .span(table)
-            .summary(format!("{} buckets", table.len / 4))
+            .summary(plural(table.len / 4, "bucket"))
             .lazy(chrome_index_table, table),
     );
     cx.annotate(format!(
-        "Chromium disk cache index v{}.{}, {} entries, {}",
+        "Chromium disk cache index v{}.{}, {}, {}",
         h.version >> 16,
         h.version & 0xffff,
-        h.entries,
+        plural(h.entries, "entry"),
         size(u64::try_from(h.bytes).unwrap_or(0))
     ));
     Ok(())
@@ -889,8 +895,10 @@ async fn chrome_visited(cx: Cx, input: Input) -> Result<()> {
             .lazy(visited_table, table),
     );
     cx.annotate(format!(
-        "Chromium visited links v{}, {} links in {} slots",
-        h.version, h.used, h.length
+        "Chromium visited links v{}, {} in {}",
+        h.version,
+        plural(h.used, "link"),
+        plural(h.length, "slot")
     ));
     Ok(())
 }
@@ -981,7 +989,8 @@ async fn snss(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
     }
     cx.annotate(format!(
-        "Chromium session (SNSS v{version}), {count} commands, {urls} navigations"
+        "Chromium session (SNSS v{version}), {count_command}, {urls} navigations",
+        count_command = plural(count, "command")
     ));
     Ok(())
 }
@@ -1341,7 +1350,7 @@ async fn mork(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
     }
     let version = magic.split('"').nth(1).unwrap_or("?").to_owned();
-    cx.annotate(format!("Mork {version}, {dicts} dictionaries, {tables} tables, {rows} rows, {groups} transaction groups"));
+    cx.annotate(format!("Mork {version}, {dicts} dictionaries, {tables_table}, {rows_row}, {groups} transaction groups", tables_table = plural(tables, "table"), rows_row = plural(rows, "row")));
     Ok(())
 }
 
@@ -1383,7 +1392,7 @@ fn mork_node(
     let (name, summary) = match (kind, meta) {
         (MorkKind::Dict, false) => ("Dictionary".to_owned(), format!("{cells} cells")),
         (MorkKind::Dict, true) => ("Meta-dictionary".to_owned(), format!("{cells} cells")),
-        (MorkKind::Table, false) => (format!("Table {}", mork_id(slice)), format!("{rows} rows")),
+        (MorkKind::Table, false) => (format!("Table {}", mork_id(slice)), plural(rows, "row")),
         (MorkKind::Table, true) => ("Meta-table".to_owned(), format!("{cells} cells")),
         _ => (format!("Row {}", mork_id(slice)), format!("{cells} cells")),
     };
@@ -1515,7 +1524,7 @@ async fn firefox_cache2(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Chunk hashes")
             .span(file.sub(offset.saturating_add(4), chunks.saturating_mul(2)))
-            .summary(format!("{chunks} chunks")),
+            .summary(plural(chunks, "chunk")),
     );
     let header_at = cache2_header_at(offset);
     let header_span = file.sub(header_at, 32);
@@ -1562,7 +1571,7 @@ async fn firefox_cache2(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Elements")
             .span(elements)
-            .summary(format!("{} elements", list.len()))
+            .summary(plural(list.len(), "element"))
             .lazy(cache2_elements, list),
     );
     cx.emit(
@@ -1644,7 +1653,7 @@ async fn chrome_simple_index(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Entries")
             .span(list)
-            .summary(format!("{entries} entries"))
+            .summary(plural(entries, "entry"))
             .lazy(simple_index_entries, (list, version)),
     );
     let end = at.saturating_add(entries.saturating_mul(entry));
@@ -1657,8 +1666,9 @@ async fn chrome_simple_index(cx: Cx, input: Input) -> Result<()> {
         );
     }
     cx.annotate(format!(
-        "Chromium simple cache index v{version}, {entries} entries, {}",
-        size(bytes)
+        "Chromium simple cache index v{version}, {entries_entry}, {}",
+        size(bytes),
+        entries_entry = plural(entries, "entry")
     ));
     Ok(())
 }

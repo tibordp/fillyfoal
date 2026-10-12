@@ -74,7 +74,7 @@ fn delphi_form_with_a_huge_list_parses_in_steps() {
     let yields = open(&mut host, root, 10);
     assert!(yields >= 2, "{yields} yields");
     let form = host.child(root, "Form1: TForm1").expect("component");
-    assert!(host.render().contains("1 properties, 0 children"));
+    assert!(host.render().contains("1 property, 0 children"));
     open(&mut host, form, 10);
     let items = host.child(form, "Items").expect("property");
     open(&mut host, items, 10);

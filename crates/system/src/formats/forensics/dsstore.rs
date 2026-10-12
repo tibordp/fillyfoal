@@ -14,6 +14,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::util::datakit::{clip, fourcc};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -145,8 +146,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Node::new("Allocator")
             .span(root)
             .summary(format!(
-                "{} blocks, {} directory entries",
-                store.blocks.len(),
+                "{}, {} directory entries",
+                plural(store.blocks.len(), "block"),
                 directory.len()
             ))
             .lazy(allocator, store.clone()),
@@ -169,15 +170,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let m = cx.read(master.sub_exact(0, 20)?).await?;
         let root_node = u32_be(&m, 0).unwrap_or(0);
         let records = u32_be(&m, 8).unwrap_or(0);
-        summary = format!("{summary}, {records} records");
+        summary = format!(
+            "{summary}, {records_record}",
+            records_record = plural(records, "record")
+        );
         cx.emit(
             Node::new("DSDB")
                 .span(master.sub(0, 20))
                 .summary(format!(
-                    "B-tree: {} levels, {records} records, {} nodes, page size {:#x}",
-                    u32_be(&m, 4).unwrap_or(0),
-                    u32_be(&m, 12).unwrap_or(0),
-                    u32_be(&m, 16).unwrap_or(0)
+                    "B-tree: {}, {records_record}, {}, page size {:#x}",
+                    plural(u32_be(&m, 4).unwrap_or(0), "level"),
+                    plural(u32_be(&m, 12).unwrap_or(0), "node"),
+                    u32_be(&m, 16).unwrap_or(0),
+                    records_record = plural(records, "record")
                 ))
                 .lazy(
                     crate::expander!(self::tree_node: (St, u32, Vec<u32>)),

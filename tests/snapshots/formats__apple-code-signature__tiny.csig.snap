@@ -31,7 +31,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Special Slots — 2 hashes  [0x6c+0x40]
         -2 Requirements: "0000000000000000000000000000000000000000000000000000000000000000" — not present  [0x6c+0x20]
         -1 Info.plist: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"  [0x8c+0x20]
-    ▾ Code Slots — 1 hashes covering 0x1000 bytes  [0xac+0x20]
+    ▾ Code Slots — 1 hash covering 0x1000 bytes  [0xac+0x20]
         Page 0: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" — file 0x0..0x1000  [0xac+0x20]
   ▾ Entitlements — XML property list, 114 bytes  [0xcc+0x7a]
       magic: CSMAGIC_EMBEDDED_ENTITLEMENTS (0xfade7171)  [0xcc+0x4]

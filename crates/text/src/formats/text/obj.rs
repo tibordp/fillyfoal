@@ -205,7 +205,10 @@ pub async fn dissect_obj(cx: Cx, input: Input) -> Result<()> {
         plural(counts.f, "face", "faces")
     );
     if groups > 0 {
-        summary = format!("{summary}, {} objects/groups", count(groups));
+        summary = format!(
+            "{summary}, {}/groups",
+            crate::formats::util::fmt::plural(count(groups), "object")
+        );
     }
     if let Some(l) = library {
         summary = format!("{summary}, materials from {l}");

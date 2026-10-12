@@ -8,6 +8,7 @@ use crate::declare_format;
 use crate::dsl::{Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -78,8 +79,9 @@ async fn sarc(cx: Cx, input: Input) -> Result<()> {
             .await;
     }
     cx.annotate(format!(
-        "SARC, {count} files, {} endian",
-        if little { "little" } else { "big" }
+        "SARC, {count_file}, {} endian",
+        if little { "little" } else { "big" },
+        count_file = plural(count, "file")
     ));
     Ok(())
 }
@@ -133,7 +135,7 @@ async fn u8_archive(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Header")
             .span(file.sub(0, 32))
-            .summary(format!("{count} nodes")),
+            .summary(plural(count, "node")),
     );
     for i in 1..usize::try_from(count).unwrap_or(0) {
         let at = i.saturating_mul(12);
@@ -153,7 +155,10 @@ async fn u8_archive(cx: Cx, input: Input) -> Result<()> {
         };
         cx.push(node).await;
     }
-    cx.annotate(format!("U8 archive, {} entries", count.saturating_sub(1)));
+    cx.annotate(format!(
+        "U8 archive, {}",
+        plural(count.saturating_sub(1), "entry")
+    ));
     Ok(())
 }
 
@@ -190,7 +195,10 @@ async fn narc(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("NARC, {count} files"));
+    cx.annotate(format!(
+        "NARC, {count_file}",
+        count_file = plural(count, "file")
+    ));
     Ok(())
 }
 
@@ -275,8 +283,11 @@ async fn psarc(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: PsarcHeader = emit_record(&cx, file.sub(0, PsarcHeader::SIZE), BE).await?;
     let summary = format!(
-        "PSARC {}.{}, {} entries, {}",
-        h.major, h.minor, h.entries, h.compression
+        "PSARC {}.{}, {}, {}",
+        h.major,
+        h.minor,
+        plural(h.entries, "entry"),
+        h.compression
     );
     cx.annotate(summary.clone());
     let toc = file.sub(
@@ -304,7 +315,7 @@ async fn psarc(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Table of contents")
             .span(entries_span)
-            .summary(format!("{} entries", h.entries))
+            .summary(plural(h.entries, "entry"))
             .lazy(psarc_toc, (entries_span, entry_size, h.entries)),
     );
     // The block-size table fills the rest of the TOC, in the fewest bytes
@@ -325,11 +336,10 @@ async fn psarc(cx: Cx, input: Input) -> Result<()> {
         .chunks_exact(usize::try_from(width).unwrap_or(2))
         .map(|c| u32::try_from(be40(c)).unwrap_or(u32::MAX))
         .collect();
-    cx.emit(
-        Node::new("Block sizes")
-            .span(table_span)
-            .summary(format!("{} blocks, {width}-byte entries", sizes.len())),
-    );
+    cx.emit(Node::new("Block sizes").span(table_span).summary(format!(
+        "{}, {width}-byte entries",
+        plural(sizes.len(), "block")
+    )));
     let raw = cx.read(entries_span).await?;
     let entries: Vec<(u32, u64, u64)> = raw
         .chunks_exact(usize::try_from(entry_size).unwrap_or(30))
@@ -653,12 +663,12 @@ async fn mpq(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Hash table")
             .span(hash_span)
-            .summary(format!("{} entries, decrypted", h.hash_entries)),
+            .summary(format!("{}, decrypted", plural(h.hash_entries, "entry"))),
     );
     cx.emit(
         Node::new("Block table")
             .span(block_span)
-            .summary(format!("{} entries, decrypted", h.block_entries)),
+            .summary(format!("{}, decrypted", plural(h.block_entries, "entry"))),
     );
     let state = MpqState {
         input,
@@ -669,13 +679,13 @@ async fn mpq(cx: Cx, input: Input) -> Result<()> {
     };
     cx.emit(
         Node::new("Files")
-            .summary(format!("{} blocks", h.block_entries))
+            .summary(plural(h.block_entries, "block"))
             .lazy(mpq_files, state),
     );
     cx.annotate(format!(
-        "MPQ v{}, {} blocks, {sector}-byte sectors",
+        "MPQ v{}, {}, {sector}-byte sectors",
         u32::from(h.version).saturating_add(1),
-        h.block_entries,
+        plural(h.block_entries, "block"),
     ));
     Ok(())
 }

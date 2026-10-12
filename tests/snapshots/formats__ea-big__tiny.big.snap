@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tiny.big — EA BIG archive, 1 files  [0x0+0x34]
+▾ tiny.big — EA BIG archive, 1 file  [0x0+0x34]
     Signature: "BIGF"  [0x0+0x4]
     Archive size (little-endian): 52  [0x4+0x4]
     Entries: 1  [0x8+0x4]

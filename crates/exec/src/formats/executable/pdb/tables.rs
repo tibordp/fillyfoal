@@ -5,6 +5,7 @@ use crate::bytes::{u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, text, uint};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -40,7 +41,7 @@ pub(super) async fn names(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Hash buckets")
             .span(table)
-            .summary(format!("{buckets} buckets"))
+            .summary(plural(buckets, "bucket"))
             .lazy(words, (table.tail(4), "Bucket")),
     );
     let end = table.end().saturating_sub(span.offset);
@@ -120,7 +121,7 @@ async fn gsi(cx: &Cx, span: Span, symbols: Option<Span>) -> Result<u64> {
         cx.emit(
             Node::new("Bucket offsets")
                 .span(offsets)
-                .summary(format!("{} buckets", offsets.len / 4))
+                .summary(plural(offsets.len / 4, "bucket"))
                 .desc("Offsets into the hash records of the non-empty buckets")
                 .lazy(words, (offsets, "Bucket")),
         );
@@ -145,7 +146,10 @@ async fn hash_records(cx: Cx, (span, symbols): (Span, Option<Span>)) -> Result<(
             && !cx.skipping()
             && let Ok((kind, name)) = symbol_at(&cx, s, u64::from(off).saturating_sub(1)).await
         {
-            node = node.summary(format!("{kind} {name}, {refs} refs"));
+            node = node.summary(format!(
+                "{kind} {name}, {refs_ref}",
+                refs_ref = plural(refs, "ref")
+            ));
         }
         cx.push(node).await;
     }
@@ -276,9 +280,9 @@ pub(super) async fn type_hash(cx: Cx, (span, h): (Span, TypeHeader)) -> Result<(
         cx.emit(
             Node::new("Hash values")
                 .span(s)
-                .summary(format!(
-                    "{} values",
-                    s.len.checked_div(u64::from(h.hash_key_size)).unwrap_or(0)
+                .summary(plural(
+                    s.len.checked_div(u64::from(h.hash_key_size)).unwrap_or(0),
+                    "value",
                 ))
                 .lazy(hash_values, (s, h.first, h.hash_key_size)),
         );
@@ -289,7 +293,7 @@ pub(super) async fn type_hash(cx: Cx, (span, h): (Span, TypeHeader)) -> Result<(
         cx.emit(
             Node::new("Type index offsets")
                 .span(s)
-                .summary(format!("{} entries", s.len / 8))
+                .summary(plural(s.len / 8, "entry"))
                 .lazy(index_offsets, s),
         );
     }
@@ -299,7 +303,7 @@ pub(super) async fn type_hash(cx: Cx, (span, h): (Span, TypeHeader)) -> Result<(
         cx.emit(
             Node::new("Hash adjusters")
                 .span(s)
-                .summary(format!("{} entries", s.len / 8))
+                .summary(plural(s.len / 8, "entry"))
                 .lazy(adjusters, s),
         );
     }

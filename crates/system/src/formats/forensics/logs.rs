@@ -10,6 +10,7 @@ use crate::declare_format;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::datakit::{clip, text};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -164,12 +165,13 @@ async fn setupapi(cx: Cx, input: Input) -> Result<()> {
         cx.push(setup_section(name, file, list)).await;
     }
     cx.annotate(format!(
-        "SetupAPI device log{}, {boots} boot sessions, {sections} sections ({usb} USB devices)",
+        "SetupAPI device log{}, {boots} boot sessions, {sections_section} ({usb} USB devices)",
         if os.is_empty() {
             String::new()
         } else {
             format!(" (Windows {os})")
-        }
+        },
+        sections_section = plural(sections, "section")
     ));
     Ok(())
 }
@@ -278,12 +280,13 @@ async fn w3c(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
     }
     cx.annotate(format!(
-        "W3C extended log{}, {entries} entries",
+        "W3C extended log{}, {entries_entry}",
         if software.is_empty() {
             String::new()
         } else {
             format!(" from {software}")
-        }
+        },
+        entries_entry = plural(entries, "entry")
     ));
     Ok(())
 }
@@ -404,7 +407,7 @@ async fn transcript(cx: Cx, input: Input) -> Result<()> {
         cx.push(header_node(file, header)).await;
     }
     cx.annotate(format!(
-        "PowerShell transcript{}{}, {commands} commands",
+        "PowerShell transcript{}{}, {commands_command}",
         if user.is_empty() {
             String::new()
         } else {
@@ -414,7 +417,8 @@ async fn transcript(cx: Cx, input: Input) -> Result<()> {
             String::new()
         } else {
             format!(" on {machine}")
-        }
+        },
+        commands_command = plural(commands, "command")
     ));
     Ok(())
 }
@@ -725,8 +729,9 @@ async fn acct(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "process accounting, {count} records, {} distinct commands",
-        commands.len()
+        "process accounting, {count_record}, {} distinct commands",
+        commands.len(),
+        count_record = plural(count, "record")
     ));
     Ok(())
 }
@@ -774,8 +779,8 @@ async fn viminfo(cx: Cx, input: Input) -> Result<()> {
         cx.push(viminfo_section(name, file, list)).await;
     }
     cx.annotate(format!(
-        "viminfo, {commands} command-line entries, {} files with marks",
-        files.len()
+        "viminfo, {commands} command-line entries, {} with marks",
+        plural(files.len(), "file")
     ));
     Ok(())
 }
@@ -785,5 +790,5 @@ fn viminfo_section(name: String, file: Span, list: Lines) -> Node {
         .iter()
         .filter(|l| !l.2.starts_with('|') && !l.2.starts_with('\t'))
         .count();
-    line_group(name, file, list).summary(format!("{n} entries"))
+    line_group(name, file, list).summary(plural(n, "entry"))
 }

@@ -442,7 +442,10 @@ pub async fn string_pool(
             Node::new(format!("String {id}"))
                 .span(span.sub(at, to_u64(size)))
                 .value(Value::Text(text))
-                .summary(format!("{len} bytes, {refs} references")),
+                .summary(format!(
+                    "{len} bytes, {refs_reference}",
+                    refs_reference = plural(refs, "reference")
+                )),
         )
         .await;
         at = at.saturating_add(to_u64(size));

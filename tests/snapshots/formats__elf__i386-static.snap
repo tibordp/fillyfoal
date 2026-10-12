@@ -167,7 +167,7 @@ expression: "common::explore(&display_name(&path), &data)"
           table_enc: 0x3b — DW_EH_PE_sdata4 | datarel  [0x13b+0x1]
           eh_frame_ptr: 0x1014c — 0x1014c (.eh_frame)  [0x13c+0x4] → 0x14c+0x0
           fde_count: 1  [0x140+0x4]
-        ▾ Table — 1 entries  [0x144+0x8]
+        ▾ Table — 1 entry  [0x144+0x8]
             [0]: 0x10164 — 0x11184 (.text) → FDE  [0x144+0x8] → 0x164+0x0
     ▾ .eh_frame — PROGBITS, r--, 0x38 bytes at 0x1014c  [0x310+0x28]
         sh_name: 0x33 — ".eh_frame"  [0x310+0x4]
@@ -281,7 +281,7 @@ expression: "common::explore(&display_name(&path), &data)"
           0x43: ".note.stapsdt"  [0x24d+0xe]
           0x51: ".comment"  [0x25b+0x9]
           0x5a: ".shstrtab"  [0x264+0xa]
-  ▾ Notes — 1 regions, 0x44 bytes
+  ▾ Notes — 1 region, 0x44 bytes
     ▾ NT_GO_BUILD_ID — fillyfoal/gobuild  [0xf4+0x24]
         n_namesz: 3  [0xf4+0x4]
         n_descsz: 18  [0xf8+0x4]

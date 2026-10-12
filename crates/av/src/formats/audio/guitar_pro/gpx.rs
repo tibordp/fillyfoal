@@ -29,6 +29,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe, content, embedded_as};
 use crate::node::Node;
 use crate::span::{Origin, Span};
@@ -129,7 +130,11 @@ fn sector_list(sectors: &[u32]) -> String {
     } else {
         ""
     };
-    format!("{} sectors: {}{more}", sectors.len(), shown.join(", "))
+    format!(
+        "{}: {}{more}",
+        plural(sectors.len(), "sector"),
+        shown.join(", ")
+    )
 }
 
 async fn bcfs(cx: &Cx, input: Input) -> Result<()> {
@@ -203,7 +208,10 @@ async fn bcfs(cx: &Cx, input: Input) -> Result<()> {
         }
         cx.push(node).await;
     }
-    cx.annotate(format!("Guitar Pro 6 file system, {files} files"));
+    cx.annotate(format!(
+        "Guitar Pro 6 file system, {files_file}",
+        files_file = plural(files, "file")
+    ));
     Ok(())
 }
 

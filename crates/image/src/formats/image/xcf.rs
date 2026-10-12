@@ -10,6 +10,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
@@ -166,17 +167,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let wide = v >= 11;
     let (layers, layer_ptrs) = pointers(&mut cur, wide).await?;
     let (channels, channel_ptrs) = pointers(&mut cur, wide).await?;
-    cx.annotate(format!("{summary}, {} layers", layer_ptrs.len()));
+    cx.annotate(format!("{summary}, {}", plural(layer_ptrs.len(), "layer")));
     cx.emit(
         Node::new("Layers")
             .span(layers)
-            .summary(format!("{} layers", layer_ptrs.len()))
+            .summary(plural(layer_ptrs.len(), "layer"))
             .lazy(list_layers, (file, layers, wide)),
     );
     cx.emit(
         Node::new("Channels")
             .span(channels)
-            .summary(format!("{} channels", channel_ptrs.len())),
+            .summary(plural(channel_ptrs.len(), "channel")),
     );
     Ok(())
 }

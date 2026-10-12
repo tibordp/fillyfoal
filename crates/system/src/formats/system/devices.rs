@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -491,13 +492,14 @@ async fn ps3_pkg(cx: Cx, input: Input) -> Result<()> {
     let content_id = f.ascii("Content ID", 48).emit()?;
     cx.emit(Node::new("Encrypted data").span(file.sub(data_offset, data_size)));
     cx.annotate(format!(
-        "{} package {content_id}, {items} items, {total} bytes{}",
+        "{} package {content_id}, {items_item}, {total} bytes{}",
         if kind == 1 { "PS3" } else { "PSP/Vita" },
         if revision & 0x8000 != 0 {
             ", retail"
         } else {
             ", debug"
-        }
+        },
+        items_item = plural(items, "item")
     ));
     Ok(())
 }
@@ -520,7 +522,7 @@ async fn nsp(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Header")
             .span(file.sub(0, 16))
-            .summary(format!("{count} files")),
+            .summary(plural(count, "file")),
     );
     let entries = cx.read(table).await?;
     cx.set_count(Count::Exact(u64::from(count).saturating_add(1)));
@@ -544,7 +546,10 @@ async fn nsp(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("PFS0, {count} files"));
+    cx.annotate(format!(
+        "PFS0, {count_file}",
+        count_file = plural(count, "file")
+    ));
     Ok(())
 }
 
@@ -771,7 +776,7 @@ async fn kernel_dump(cx: Cx, input: Input) -> Result<()> {
     f.node(
         Node::new("Physical memory descriptor")
             .span(mem)
-            .summary(format!("{runs} runs"))
+            .summary(plural(runs, "run"))
             .lazy(memory_runs, (mem, wide)),
     );
     f.node(Node::new("Context record").span(file.sub(l.context, l.context_len)));
@@ -881,14 +886,21 @@ async fn memory_runs(cx: Cx, (span, wide): (Span, bool)) -> Result<()> {
             Node::new(format!("Run {i}"))
                 .span(f.peek_span(size))
                 .summary(format!(
-                    "page {base:#x}, {count} pages (physical {:#x})",
-                    base.saturating_mul(0x1000)
+                    "page {base:#x}, {count_page} (physical {:#x})",
+                    base.saturating_mul(0x1000),
+                    count_page = plural(count, "page")
                 )),
         );
         f.skip(size);
     }
     if u64::from(runs) > fits {
-        cx.diag(Diagnostic::malformed(format!("{runs} runs do not fit the descriptor")).at(span));
+        cx.diag(
+            Diagnostic::malformed(format!(
+                "{runs_run} do not fit the descriptor",
+                runs_run = plural(runs, "run")
+            ))
+            .at(span),
+        );
     }
     Ok(())
 }
@@ -983,12 +995,13 @@ async fn xpress_blocks(cx: Cx, input: Input) -> Result<()> {
             Node::new(format!("Xpress block {index}"))
                 .span(file.sub(at, total.saturating_add(0x20)))
                 .summary(format!(
-                    "{pages} pages, {}",
+                    "{pages_page}, {}",
                     if size >= decoded {
                         "stored".to_owned()
                     } else {
                         format!("{size} bytes compressed")
-                    }
+                    },
+                    pages_page = plural(pages, "page")
                 ))
                 .lazy(xpress_block, (input, at, data, codec, decoded)),
         )
@@ -1016,8 +1029,8 @@ async fn xpress_block(
         .hex()
         .with(|&w, n| {
             n.summary(format!(
-                "{} pages, {} bytes",
-                (w & 0x3ff).saturating_add(1),
+                "{}, {} bytes",
+                plural((w & 0x3ff).saturating_add(1), "page"),
                 (w >> 10).saturating_add(1)
             ))
         })
@@ -1141,6 +1154,9 @@ async fn btrfs_send(cx: Cx, input: Input) -> Result<()> {
             break;
         }
     }
-    cx.annotate(format!("btrfs send stream v{version}, {commands} commands"));
+    cx.annotate(format!(
+        "btrfs send stream v{version}, {commands_command}",
+        commands_command = plural(commands, "command")
+    ));
     Ok(())
 }

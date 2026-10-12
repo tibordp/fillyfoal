@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tiny.plm — Disorder Tracker v16 module "Tiny PLM": 4 channels, 1 patterns, 1 samples, 1 orders  [0x0+0x70]
+▾ tiny.plm — Disorder Tracker v16 module "Tiny PLM": 4 channels, 1 pattern, 1 sample, 1 order  [0x0+0x70]
     Signature: 50 4c 4d 1a  |PLM.|  [0x0+0x4]
     Header size: 96  [0x4+0x1]
     Version: 16  [0x5+0x1]

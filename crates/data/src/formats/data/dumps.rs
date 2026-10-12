@@ -9,6 +9,7 @@ use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::text::scan::head_lines;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -346,7 +347,11 @@ async fn myisam(cx: Cx, input: Input) -> Result<()> {
     f.u8("Sort key").emit()?;
     let records = f.u64("Records").emit()?;
     cx.emit(Node::new("State, base and key definitions").span(file.tail(36)));
-    cx.annotate(format!("MyISAM index, {keys} keys, {records} records"));
+    cx.annotate(format!(
+        "MyISAM index, {keys_key}, {records_record}",
+        keys_key = plural(keys, "key"),
+        records_record = plural(records, "record")
+    ));
     Ok(())
 }
 

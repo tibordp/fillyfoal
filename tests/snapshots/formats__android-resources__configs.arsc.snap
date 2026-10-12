@@ -70,7 +70,7 @@ expression: "common::explore(&display_name(&path), &data)"
         keyStrings: 0x150  [0x354+0x4]
         lastPublicKey: 0  [0x358+0x4]
         typeIdOffset: 0  [0x35c+0x4]
-    ▾ Type Strings — 1 strings, UTF-16  [0x360+0x30]
+    ▾ Type Strings — 1 string, UTF-16  [0x360+0x30]
       ▾ Header  [0x360+0x1c]
           type: RES_STRING_POOL_TYPE (0x1)  [0x360+0x2]
           headerSize: 28  [0x362+0x2]

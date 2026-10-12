@@ -11,7 +11,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, parse, struct_node};
 use crate::formats::util::binutil::{NodeExt, get_at};
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::{hex, name_or, text};
 use crate::node::{Count, Node};
 use crate::record;
@@ -144,7 +144,7 @@ pub(super) fn table_node(elf: &Elf, section: &Section) -> Node {
     };
     Node::new(format!("{label} ({})", section.label()))
         .span(t.span)
-        .summary(format!("{} symbols", t.count))
+        .summary(plural(t.count, "symbol"))
         .lazy(symbols, (elf.clone(), section.index))
 }
 
@@ -366,7 +366,7 @@ pub(super) fn relocations_node(elf: &Elf, section: &Section) -> Node {
     let t = table(elf, section, elf.class.rel_size(rela));
     Node::new("Relocations")
         .span(t.span)
-        .summary(format!("{} entries", t.count))
+        .summary(plural(t.count, "entry"))
         .lazy(relocations, (elf.clone(), section.index))
 }
 

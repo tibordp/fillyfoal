@@ -3,6 +3,7 @@
 //! each with its header counts and line information.
 
 use crate::bytes::to_u64;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use std::sync::Arc;
 
@@ -176,7 +177,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let mut node = Node::new(format!("Prototype {count}")).span(at(start, r.pos()));
         node = match decoded {
             Some((params, bc, line)) => {
-                let mut s = format!("{bc} instructions, {params} parameters");
+                let mut s = format!(
+                    "{bc} instructions, {params_parameter}",
+                    params_parameter = plural(params, "parameter")
+                );
                 if let Some(l) = line {
                     s.push_str(&format!(", line {l}"));
                 }

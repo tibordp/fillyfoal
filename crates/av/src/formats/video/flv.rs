@@ -1042,8 +1042,8 @@ fn amf_node(name: String, d: &[u8], pos: usize, span: Span, depth: u32) -> Node 
         }
         8 => node
             .summary(format!(
-                "ECMA array, {} entries",
-                u32_be(d, body).unwrap_or(0)
+                "ECMA array, {}",
+                plural(u32_be(d, body).unwrap_or(0), "entry")
             ))
             .lazy(
                 crate::expander!(self::amf_values: AmfList),
@@ -1051,7 +1051,11 @@ fn amf_node(name: String, d: &[u8], pos: usize, span: Span, depth: u32) -> Node 
             ),
         10 => {
             let n = u32_be(d, body).unwrap_or(0);
-            node.summary(format!("strict array, {n} items")).lazy(
+            node.summary(format!(
+                "strict array, {n_item}",
+                n_item = plural(n, "item")
+            ))
+            .lazy(
                 crate::expander!(self::amf_values: AmfList),
                 child(ListKind::Items(n), 5),
             )

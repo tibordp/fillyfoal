@@ -9,6 +9,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, parse, struct_node};
 use crate::formats::executable::pe::tables::DIR_EXPORT;
+use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::value::{Radix, Value};
 
@@ -97,14 +98,18 @@ pub(super) async fn exports(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
     let ed = parse(&cx, span, LE, &pe, export_directory).await?;
     match read_name(&cx, &pe, ed.name).await {
         Ok((name, at)) => {
-            cx.annotate(format!("{name}, {} functions", ed.functions));
+            cx.annotate(format!("{name}, {}", plural(ed.functions, "function")));
             cx.emit(name_node("Name", &name, at));
         }
         Err(e) => cx.diag(e),
     }
     cx.emit(
         Node::new("Functions")
-            .summary(format!("{} functions, {} by name", ed.functions, ed.names))
+            .summary(format!(
+                "{}, {} by name",
+                plural(ed.functions, "function"),
+                ed.names
+            ))
             .desc("Exports by name, then those exported by ordinal only")
             .lazy(export_functions, (pe.clone(), dir, ed)),
     );
@@ -112,7 +117,7 @@ pub(super) async fn exports(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
         Ok(table) if table.len > 0 => cx.emit(
             Node::new("Export Address Table")
                 .span(table)
-                .summary(format!("{} entries", ed.functions))
+                .summary(plural(ed.functions, "entry"))
                 .lazy(address_table, (pe.clone(), dir, ed)),
         ),
         Ok(_) => {}
@@ -123,7 +128,7 @@ pub(super) async fn exports(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
             Ok(table) => cx.emit(
                 Node::new("Name Pointer Table")
                     .span(table)
-                    .summary(format!("{} names", ed.names))
+                    .summary(plural(ed.names, "name"))
                     .desc("RVAs of the exported names, sorted for binary search")
                     .lazy(name_pointers, (pe.clone(), ed)),
             ),
@@ -133,7 +138,7 @@ pub(super) async fn exports(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
             Ok(table) => cx.emit(
                 Node::new("Ordinal Table")
                     .span(table)
-                    .summary(format!("{} entries", ed.names))
+                    .summary(plural(ed.names, "entry"))
                     .desc("For each name, its index in the export address table (ordinal − Base)")
                     .lazy(ordinal_table, (pe.clone(), ed)),
             ),

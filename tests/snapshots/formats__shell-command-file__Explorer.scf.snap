@@ -6,5 +6,5 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ [Shell] — 2 keys  [0x0+0x39]
       Command: "2"  [0x9+0xb]
       IconFile: "\\\\192.0.2.5\\share\\icon.ico"  [0x14+0x25]
-  ▾ [Taskbar] — 1 keys  [0x39+0x22]
+  ▾ [Taskbar] — 1 key  [0x39+0x22]
       Command: "ToggleDesktop"  [0x44+0x17]

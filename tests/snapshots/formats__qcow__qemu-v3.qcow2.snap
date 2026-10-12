@@ -122,7 +122,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Extra data size: 0  [0xf014+0x4]
         Name: "dirty0"  [0xf018+0x6]
         Padding: 00 00  |..|  [0xf01e+0x2]
-      ▾ Bitmap table — 1 entries, each covering 128 MiB of the guest  [0xe000+0x8]
+      ▾ Bitmap table — 1 entry, each covering 128 MiB of the guest  [0xe000+0x8]
           Bitmap table[0]: all bits clear (0x0) — guest 0x0–0x7ffffff: all bits clear  [0xe000+0x8]
   ▾ Host cluster map — what each cluster of the file holds  [0x0+0xf020]
       Header — 4 KiB  [0x0+0x1000]

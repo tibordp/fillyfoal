@@ -328,7 +328,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Font.Style: "[fsBold, fsItalic]" — set  [0xa37+0x1d]
             ParentFont: false  [0xa54+0xc]
             Hint: "Plašč"  [0xa60+0x11]
-          ▾ Label1: TLabel — 1 properties, 0 children, inherited  [0xa72+0x20]
+          ▾ Label1: TLabel — 1 property, 0 children, inherited  [0xa72+0x20]
               Filer flags: 0x1 — inherited  [0xa72+0x1]
               Class: "TLabel"  [0xa73+0x7]
               Name: "Label1"  [0xa7a+0x7]

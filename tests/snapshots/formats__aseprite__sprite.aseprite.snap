@@ -49,7 +49,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: "8×8"  [0x141+0x4]
       ▾ Pixels — 0x100 bytes decompressed  [0x145+0x92]
           Data  [#1:0x0+0x100]
-  ▾ Frame 1 — 120 ms, 1 chunks  [0x1d7+0x3a]
+  ▾ Frame 1 — 120 ms, 1 chunk  [0x1d7+0x3a]
     ▾ Frame header  [0x1d7+0x10]
         Frame size: 58  [0x1d7+0x4]
         Magic: 0xf1fa  [0x1db+0x2]

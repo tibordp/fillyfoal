@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tiny.mds — MDS skeletal model "tiny": 2 frames, 3 bones, 1 surfaces  [0x0+0x80]
+▾ tiny.mds — MDS skeletal model "tiny": 2 frames, 3 bones, 1 surface  [0x0+0x80]
     Signature: "MDSW"  [0x0+0x4]
     Version: 4  [0x4+0x4]
     Name: "tiny"  [0x8+0x40]

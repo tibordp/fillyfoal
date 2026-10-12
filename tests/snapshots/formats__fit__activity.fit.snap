@@ -26,7 +26,7 @@ expression: "common::explore(&display_name(&path), &data)"
         product: 2697  [0x27+0x2]
         serial_number: 123456789  [0x29+0x4]
         time_created: 2021-09-08 01:46:40 UTC  [0x2d+0x4]
-    ▾ Definition 1: file_creator — 1 fields, 2 bytes per message  [0x31+0x9]
+    ▾ Definition 1: file_creator — 1 field, 2 bytes per message  [0x31+0x9]
         Record header: 0x41 — local type 1  [0x31+0x1]
         Architecture: "little-endian"  [0x33+0x1]
         Global message number: file_creator (0x31)  [0x34+0x2]

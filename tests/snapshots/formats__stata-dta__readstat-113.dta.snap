@@ -109,7 +109,7 @@ expression: "common::explore(&display_name(&path), &data)"
         score: 10000000000  [0x5de+0x8]
         name: "Eve with a longer name"  [0x5e6+0x16]
         born: 2024-02-29 00:00:00 UTC — 2024-02-29  [0x5fc+0x8]
-  ▾ Value labels — 1 tables
+  ▾ Value labels — 1 table
     ▾ small0 — 1 = "one", 7 = "seven"  [0x604+0x4a]
         1: "one"
         7: "seven"

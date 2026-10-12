@@ -8,7 +8,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Illustrator data — 2 entries  [0x3bc+0x36]
       /LastModified: "D:20260101000000Z"  [0x3bf+0x21]
     ▾ /Private: "7 0 R" — 7 entries  [0x3e1+0xe] → 0x3fa+0x0
-      ▾ /AIMetaData: "8 0 R" — stream, 1 entries, 186 bytes  [0x405+0x11] → 0x497+0x0
+      ▾ /AIMetaData: "8 0 R" — stream, 1 entry, 186 bytes  [0x405+0x11] → 0x497+0x0
           /Length: 186  [0x4a2+0xb]
         ▾ Stream data — Adobe Illustrator artwork (PostScript): compat.ai, 200×100 pt (Adobe Illustrator(R) 24.0)  [0x4b8+0xba]
           ▾ Header  [0x4b8+0xba]
@@ -20,7 +20,7 @@ expression: "common::explore(&display_name(&path), &data)"
               CreationDate: "1/1/2026 12:00 AM"  [0x545+0x11]
               BoundingBox: "0 0 200 100" — 200×100 pt at (0, 0)  [0x566+0xb]
         ▾ Operators
-      ▾ /AIPrivateData1: "9 0 R" — stream, 1 entries, 133 bytes  [0x417+0x15] → 0x584+0x0
+      ▾ /AIPrivateData1: "9 0 R" — stream, 1 entry, 133 bytes  [0x417+0x15] → 0x584+0x0
           /Length: 133  [0x58f+0xb]
         ▾ Stream data — 133 bytes  [0x5a5+0x85]
             Data  [0x5a5+0x85]
@@ -48,7 +48,7 @@ expression: "common::explore(&display_name(&path), &data)"
               [1]: 0  [0x2fc+0x1]
               [2]: 200  [0x2fe+0x3]
               [3]: 100  [0x302+0x3]
-          ▾ /Contents: "5 0 R" — stream, 1 entries, 27 bytes  [0x307+0xf] → 0x367+0x0
+          ▾ /Contents: "5 0 R" — stream, 1 entry, 27 bytes  [0x307+0xf] → 0x367+0x0
               /Length: 27  [0x372+0xa]
             ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x387+0x1b]
                 Encoding: "UTF-8"
@@ -59,11 +59,11 @@ expression: "common::explore(&display_name(&path), &data)"
                 rg: "0 0 1" — set non-stroking RGB  [0x387+0x8]
                 re: "20 20 160 60" — rectangle  [0x390+0xf]
                 f — fill  [0x3a0+0x1]
-          ▾ /PieceInfo — 1 entries  [0x317+0x23]
+          ▾ /PieceInfo — 1 entry  [0x317+0x23]
             ▾ /Illustrator: "6 0 R" — 2 entries  [0x325+0x12] → 0x3b4+0x0
                 /LastModified: "D:20260101000000Z"  [0x3bf+0x21]
               ▾ /Private: "7 0 R" — 7 entries  [0x3e1+0xe] → 0x3fa+0x0
-                ▾ /AIMetaData: "8 0 R" — stream, 1 entries, 186 bytes  [0x405+0x11] → 0x497+0x0
+                ▾ /AIMetaData: "8 0 R" — stream, 1 entry, 186 bytes  [0x405+0x11] → 0x497+0x0
                     /Length: 186  [0x4a2+0xb]
                   ▾ Stream data — Adobe Illustrator artwork (PostScript): compat.ai, 200×100 pt (Adobe Illustrator(R) 24.0)  [0x4b8+0xba]
                     ▾ Header  [0x4b8+0xba]
@@ -75,7 +75,7 @@ expression: "common::explore(&display_name(&path), &data)"
                         CreationDate: "1/1/2026 12:00 AM"  [0x545+0x11]
                         BoundingBox: "0 0 200 100" — 200×100 pt at (0, 0)  [0x566+0xb]
                   ▾ Operators
-                ▾ /AIPrivateData1: "9 0 R" — stream, 1 entries, 133 bytes  [0x417+0x15] → 0x584+0x0
+                ▾ /AIPrivateData1: "9 0 R" — stream, 1 entry, 133 bytes  [0x417+0x15] → 0x584+0x0
                     /Length: 133  [0x58f+0xb]
                   ▾ Stream data — 133 bytes  [0x5a5+0x85]
                       Data  [0x5a5+0x85]
@@ -120,7 +120,7 @@ expression: "common::explore(&display_name(&path), &data)"
           [1]: 0  [0x2fc+0x1]
           [2]: 200  [0x2fe+0x3]
           [3]: 100  [0x302+0x3]
-      ▾ /Contents: "5 0 R" — stream, 1 entries, 27 bytes  [0x307+0xf] → 0x367+0x0
+      ▾ /Contents: "5 0 R" — stream, 1 entry, 27 bytes  [0x307+0xf] → 0x367+0x0
           /Length: 27  [0x372+0xa]
         ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x387+0x1b]
             Encoding: "UTF-8"
@@ -131,11 +131,11 @@ expression: "common::explore(&display_name(&path), &data)"
             rg: "0 0 1" — set non-stroking RGB  [0x387+0x8]
             re: "20 20 160 60" — rectangle  [0x390+0xf]
             f — fill  [0x3a0+0x1]
-      ▾ /PieceInfo — 1 entries  [0x317+0x23]
+      ▾ /PieceInfo — 1 entry  [0x317+0x23]
         ▾ /Illustrator: "6 0 R" — 2 entries  [0x325+0x12] → 0x3b4+0x0
             /LastModified: "D:20260101000000Z"  [0x3bf+0x21]
           ▾ /Private: "7 0 R" — 7 entries  [0x3e1+0xe] → 0x3fa+0x0
-            ▾ /AIMetaData: "8 0 R" — stream, 1 entries, 186 bytes  [0x405+0x11] → 0x497+0x0
+            ▾ /AIMetaData: "8 0 R" — stream, 1 entry, 186 bytes  [0x405+0x11] → 0x497+0x0
                 /Length: 186  [0x4a2+0xb]
               ▾ Stream data — Adobe Illustrator artwork (PostScript): compat.ai, 200×100 pt (Adobe Illustrator(R) 24.0)  [0x4b8+0xba]
                 ▾ Header  [0x4b8+0xba]
@@ -147,7 +147,7 @@ expression: "common::explore(&display_name(&path), &data)"
                     CreationDate: "1/1/2026 12:00 AM"  [0x545+0x11]
                     BoundingBox: "0 0 200 100" — 200×100 pt at (0, 0)  [0x566+0xb]
               ▾ Operators
-            ▾ /AIPrivateData1: "9 0 R" — stream, 1 entries, 133 bytes  [0x417+0x15] → 0x584+0x0
+            ▾ /AIPrivateData1: "9 0 R" — stream, 1 entry, 133 bytes  [0x417+0x15] → 0x584+0x0
                 /Length: 133  [0x58f+0xb]
               ▾ Stream data — 133 bytes  [0x5a5+0x85]
                   Data  [0x5a5+0x85]
@@ -166,11 +166,11 @@ expression: "common::explore(&display_name(&path), &data)"
       Object 2 0: 0x50 — stream, XMP metadata, /Metadata /XML, 3 entries, 496 bytes (in use, generation 0) → 0x50+0x240
       Object 3 0: 0x291 — /Pages, 3 entries (in use, generation 0) → 0x291+0x38
       Object 4 0: 0x2ca — /Page, 6 entries (in use, generation 0) → 0x2ca+0x9c
-      Object 5 0: 0x367 — stream, 1 entries, 27 bytes (in use, generation 0) → 0x367+0x4c
+      Object 5 0: 0x367 — stream, 1 entry, 27 bytes (in use, generation 0) → 0x367+0x4c
       Object 6 0: 0x3b4 — 2 entries (in use, generation 0) → 0x3b4+0x45
       Object 7 0: 0x3fa — 7 entries (in use, generation 0) → 0x3fa+0x9c
-      Object 8 0: 0x497 — stream, 1 entries, 186 bytes (in use, generation 0) → 0x497+0xec
-      Object 9 0: 0x584 — stream, 1 entries, 133 bytes (in use, generation 0) → 0x584+0xb7
+      Object 8 0: 0x497 — stream, 1 entry, 186 bytes (in use, generation 0) → 0x497+0xec
+      Object 9 0: 0x584 — stream, 1 entry, 133 bytes (in use, generation 0) → 0x584+0xb7
   ▾ Revisions — 1 cross-reference section
     ▾ Revision 1 — original: 9 objects, cross-reference table at 0x63c with 10 entries  [0x0+0x746]
       ▾ Body — 9 objects  [0x0+0x63c]
@@ -222,11 +222,11 @@ expression: "common::explore(&display_name(&path), &data)"
               [2]: 200  [0x2fe+0x3]
               [3]: 100  [0x302+0x3]
             /Contents: "5 0 R"  [0x307+0xf] → 0x367+0x0
-          ▾ /PieceInfo — 1 entries  [0x317+0x23]
+          ▾ /PieceInfo — 1 entry  [0x317+0x23]
               /Illustrator: "6 0 R"  [0x325+0x12] → 0x3b4+0x0
             /LastModified: "D:20260101000000Z"  [0x33b+0x21]
             End keywords: "endobj"  [0x35f+0x7]
-        ▾ Object 5 0 — stream, 1 entries, 27 bytes  [0x367+0x4c]
+        ▾ Object 5 0 — stream, 1 entry, 27 bytes  [0x367+0x4c]
             Object header: "5 0 obj"  [0x367+0x8]
             /Length: 27  [0x372+0xa]
             Stream keyword: "stream"  [0x37f+0x8]
@@ -255,7 +255,7 @@ expression: "common::explore(&display_name(&path), &data)"
             /RoundtripStreamType: 1  [0x461+0x16]
             /RoundtripVersion: 24  [0x478+0x14]
             End keywords: "endobj"  [0x48f+0x7]
-        ▾ Object 8 0 — stream, 1 entries, 186 bytes  [0x497+0xec]
+        ▾ Object 8 0 — stream, 1 entry, 186 bytes  [0x497+0xec]
             Object header: "8 0 obj"  [0x497+0x8]
             /Length: 186  [0x4a2+0xb]
             Stream keyword: "stream"  [0x4b0+0x8]
@@ -270,7 +270,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 BoundingBox: "0 0 200 100" — 200×100 pt at (0, 0)  [0x566+0xb]
           ▾ Operators
             End keywords: "endstream endobj"  [0x572+0x11]
-        ▾ Object 9 0 — stream, 1 entries, 133 bytes  [0x584+0xb7]
+        ▾ Object 9 0 — stream, 1 entry, 133 bytes  [0x584+0xb7]
             Object header: "9 0 obj"  [0x584+0x8]
             /Length: 133  [0x58f+0xb]
             Stream keyword: "stream"  [0x59d+0x8]

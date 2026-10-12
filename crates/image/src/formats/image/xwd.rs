@@ -6,6 +6,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -107,15 +108,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Colors")
                 .span(colors)
-                .summary(format!("{} entries", h.ncolors))
+                .summary(plural(h.ncolors, "entry"))
                 .lazy(color_table, colors),
         );
     }
     let start = colors_at.saturating_add(u64::from(h.ncolors).saturating_mul(12));
     let len = u64::from(h.bytes_per_line).saturating_mul(h.height.into());
     cx.emit(region("Image data", file, start, len).summary(format!(
-        "{} rows of {:#x} bytes",
-        h.height, h.bytes_per_line
+        "{} of {:#x} bytes",
+        plural(h.height, "row"),
+        h.bytes_per_line
     )));
     Ok(())
 }

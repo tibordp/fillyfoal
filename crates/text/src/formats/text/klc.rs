@@ -16,6 +16,7 @@
 
 use crate::cx::Cx;
 use crate::error::Result;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -171,9 +172,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             if kind == "DEADKEY" {
                 node = node.summary(format!("{}, {rows} compositions", code_point_summary(&arg)));
             } else if kind == "LAYOUT" {
-                node = node.summary(format!("{rows} rows"));
+                node = node.summary(plural(rows, "row"));
             } else if kind.starts_with("KEYNAME") {
-                node = node.summary(format!("{rows} names"));
+                node = node.summary(plural(rows, "name"));
             } else if kind == "SHIFTSTATE" {
                 let names: Vec<String> = states.iter().map(|&s| shift_state_name(s)).collect();
                 node = node.summary(names.join(", "));
@@ -250,9 +251,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         summary.push_str(&format!(" ({description})"));
     }
     summary.push_str(&format!(
-        ", {keys} keys, {} shift states, {dead} dead keys{}",
+        ", {keys_key}, {} shift states, {dead} dead keys{}",
         states.len(),
-        prepared.note()
+        prepared.note(),
+        keys_key = plural(keys, "key")
     ));
     cx.annotate(summary);
     if !ended {

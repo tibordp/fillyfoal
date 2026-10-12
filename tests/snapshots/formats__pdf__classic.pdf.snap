@@ -38,8 +38,8 @@ expression: "common::explore(&display_name(&path), &data)"
                 Td: "72 720" — move text position  [#1:0xd+0x9]
                 Tj: "(Hello, PDF!)" — show text  [#1:0x17+0x10]
                 ET — end text  [#1:0x28+0x2]
-          ▾ /Resources — 1 entries  [0xdf+0x26]
-            ▾ /Font — 1 entries  [0xed+0x15]
+          ▾ /Resources — 1 entry  [0xdf+0x26]
+            ▾ /Font — 1 entry  [0xed+0x15]
               ▾ /F1: "5 0 R" — /Font /Type1, 3 entries  [0xf6+0x9] → 0x18b+0x0
                   /Type: "/Font"  [0x196+0xb]
                   /Subtype: "/Type1"  [0x1a2+0xf]
@@ -52,7 +52,7 @@ expression: "common::explore(&display_name(&path), &data)"
               [1]: 0  [0x203+0x1]
               [2]: 595.28  [0x205+0x6]
               [3]: 841.89  [0x20c+0x6]
-          ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
+          ▾ /Contents: "8 0 R" — stream, 1 entry, 17 bytes  [0x214+0xf] → 0x240+0x0
               /Length: 17  [0x24b+0xa]
             ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
                 Encoding: "UTF-8"
@@ -93,8 +93,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Td: "72 720" — move text position  [#1:0xd+0x9]
             Tj: "(Hello, PDF!)" — show text  [#1:0x17+0x10]
             ET — end text  [#1:0x28+0x2]
-      ▾ /Resources — 1 entries  [0xdf+0x26]
-        ▾ /Font — 1 entries  [0xed+0x15]
+      ▾ /Resources — 1 entry  [0xdf+0x26]
+        ▾ /Font — 1 entry  [0xed+0x15]
           ▾ /F1: "5 0 R" — /Font /Type1, 3 entries  [0xf6+0x9] → 0x18b+0x0
               /Type: "/Font"  [0x196+0xb]
               /Subtype: "/Type1"  [0x1a2+0xf]
@@ -107,7 +107,7 @@ expression: "common::explore(&display_name(&path), &data)"
           [1]: 0  [0x203+0x1]
           [2]: 595.28  [0x205+0x6]
           [3]: 841.89  [0x20c+0x6]
-      ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
+      ▾ /Contents: "8 0 R" — stream, 1 entry, 17 bytes  [0x214+0xf] → 0x240+0x0
           /Length: 17  [0x24b+0xa]
         ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
             Encoding: "UTF-8"
@@ -127,7 +127,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Object 5 0: 0x18b — /Font /Type1, 3 entries (in use, generation 0) → 0x18b+0x45
       Object 6 0: 0x1d1 — /Page, 4 entries (in use, generation 0) → 0x1d1+0x5c
       Object 7 0: 0x22e — 49 (in use, generation 0) → 0x22e+0x11
-      Object 8 0: 0x240 — stream, 1 entries, 17 bytes (in use, generation 0) → 0x240+0x42
+      Object 8 0: 0x240 — stream, 1 entry, 17 bytes (in use, generation 0) → 0x240+0x42
       Object 9 0: 0x459 — 3 entries (in use, generation 0) → 0x459+0x62
       Object 10 0: 0x4bc — [10 items] (in use, generation 0) → 0x4bc+0x45
   ▾ Revisions — 2 cross-reference sections
@@ -157,8 +157,8 @@ expression: "common::explore(&display_name(&path), &data)"
               [2]: 612  [0xc6+0x3]
               [3]: 792  [0xca+0x3]
             /Contents: "4 0 R"  [0xcf+0xf] → 0x110+0x0
-          ▾ /Resources — 1 entries  [0xdf+0x26]
-            ▾ /Font — 1 entries  [0xed+0x15]
+          ▾ /Resources — 1 entry  [0xdf+0x26]
+            ▾ /Font — 1 entry  [0xed+0x15]
                 /F1: "5 0 R"  [0xf6+0x9] → 0x18b+0x0
             End keywords: "endobj"  [0x108+0x7]
         ▾ Object 4 0 — stream, 2 entries, 49 bytes, /FlateDecode  [0x110+0x7a]
@@ -199,7 +199,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Object header: "7 0 obj"  [0x22e+0x8]
             Value: 49  [0x236+0x2]
             End keywords: "endobj"  [0x238+0x7]
-        ▾ Object 8 0 — stream, 1 entries, 17 bytes  [0x240+0x42]
+        ▾ Object 8 0 — stream, 1 entry, 17 bytes  [0x240+0x42]
             Object header: "8 0 obj"  [0x240+0x8]
             /Length: 17  [0x24b+0xa]
             Stream keyword: "stream"  [0x258+0x8]

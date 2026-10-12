@@ -1386,8 +1386,9 @@ async fn walk_workbook(cx: &Cx, input: Input, stream: Span, decrypted: bool) -> 
             }
         };
         let mut summary = format!(
-            "{kind}, {}, {records} records",
-            lookup(BIFF_VERSIONS, version.into()).unwrap_or("BIFF?")
+            "{kind}, {}, {records_record}",
+            lookup(BIFF_VERSIONS, version.into()).unwrap_or("BIFF?"),
+            records_record = plural(records, "record")
         );
         if let Some(d) = dims {
             summary = format!("{summary}, cells {d}");
@@ -1431,13 +1432,13 @@ async fn walk_workbook(cx: &Cx, input: Input, stream: Span, decrypted: bool) -> 
             plural(to_u64(sheets.len()), "sheet")
         ),
         (None, Some((_, cipher))) => format!(
-            "Excel {version} workbook, decrypted ({cipher}), {} sheets: {}",
-            sheets.len(),
+            "Excel {version} workbook, decrypted ({cipher}), {}: {}",
+            plural(sheets.len(), "sheet"),
             shown.join(", ")
         ),
         (None, None) => format!(
-            "Excel {version} workbook, {} sheets: {}",
-            sheets.len(),
+            "Excel {version} workbook, {}: {}",
+            plural(sheets.len(), "sheet"),
             shown.join(", ")
         ),
     });
@@ -1579,11 +1580,11 @@ async fn describe(cx: &Cx, kind: u16, data: &[u8], book: &Book, parts: &[Span]) 
             )
         }
         0x00fc => format!(
-            "{} unique strings, {} references",
+            "{} unique strings, {}",
             u32_le(data, 4)?,
-            u32_le(data, 0)?
+            plural(u32_le(data, 0)?, "reference")
         ),
-        0x00ff => format!("index every {} strings", u16_le(data, 0)?),
+        0x00ff => format!("index every {}", plural(u16_le(data, 0)?, "string")),
         0x00fd => {
             let i = to_usize(u32_le(data, 6)?.into());
             match book.strings.get(i) {
@@ -1770,14 +1771,14 @@ async fn describe(cx: &Cx, kind: u16, data: &[u8], book: &Book, parts: &[Span]) 
             }
         }
         0x01ae => match u16_le(data, 2)? {
-            0x0401 => format!("this workbook, {} sheets", u16_le(data, 0)?),
+            0x0401 => format!("this workbook, {}", plural(u16_le(data, 0)?, "sheet")),
             0x3a01 => "add-in functions".to_owned(),
             _ => {
                 let (s, _) = xl_string(data, 2, StrForm::Wide16)?;
                 format!("external workbook {}", quoted(&s, 60))
             }
         },
-        0x0017 if book.biff8 => format!("{} references", u16_le(data, 0)?),
+        0x0017 if book.biff8 => plural(u16_le(data, 0)?, "reference"),
         0x0017 => extern_sheet(&xl_string(data, 0, StrForm::Bytes8)?.0),
         0x0016 => format!("{} EXTERNSHEET records", u16_le(data, 0)?),
         0x0018 if book.version == 5 => {
@@ -1950,7 +1951,7 @@ async fn record(
             cx.emit(
                 Node::new("Strings")
                     .lazy(sst_list, parts.clone())
-                    .summary(format!("spread over {} records", parts.len())),
+                    .summary(format!("spread over {}", plural(parts.len(), "record"))),
             );
         }
         0x00ff => {
@@ -2436,7 +2437,7 @@ fn rgce_tokens(f: &mut Fields<'_>, book: &Book, cce: u16, extra: bool) -> Result
     if let Some(t) = &text {
         node = node.value(Value::Text(format!("={t}")));
     }
-    node = node.summary(format!("{} tokens", tokens.len()));
+    node = node.summary(plural(tokens.len(), "token"));
     f.node(
         node.lazy(
             token_nodes,
@@ -2574,7 +2575,7 @@ fn name_record(f: &mut Fields<'_>, book: &Book) -> Result<()> {
     let span = f.peek_span(cce);
     let mut node = Node::new("rgce")
         .span(span)
-        .summary(format!("{} tokens", tokens.len()));
+        .summary(plural(tokens.len(), "token"));
     if let Some(t) = text {
         node = node.value(Value::Text(format!("={t}")));
     }
@@ -3415,14 +3416,15 @@ pub async fn early_stream(cx: Cx, input: Input) -> Result<()> {
         lookup(BOF_TYPES, dt.into()).unwrap_or("document")
     };
     let mut summary = format!(
-        "Excel {} {kind} (BIFF{}), {records} records, {cells} cells, {}",
+        "Excel {} {kind} (BIFF{}), {records_record}, {cells} cells, {}",
         match book.version {
             2 => "2.x",
             3 => "3.0",
             _ => "4.0",
         },
         book.version,
-        plural(fonts, "font")
+        plural(fonts, "font"),
+        records_record = plural(records, "record")
     );
     if let Some(d) = dims {
         summary = format!("{summary}, used range {d}");

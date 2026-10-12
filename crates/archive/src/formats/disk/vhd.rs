@@ -18,6 +18,7 @@ use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::disk::qcow::Regions;
 use crate::formats::disk::{PieceList, size, uuid_value};
 use crate::formats::util::civil::EPOCH_2000;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{enumv, uint};
 use crate::formats::{Format, Head, Input, Probe, dissect_or_data, embedded};
 use crate::node::Node;
@@ -318,9 +319,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!(
-        "VHD {kind} disk, {}, {} blocks (created by {app:?} {}.{} on {os:?}){}",
+        "VHD {kind} disk, {}, {} (created by {app:?} {}.{} on {os:?}){}",
         size(footer.current_size),
-        size(header.block_size.into()),
+        plural(size(header.block_size.into()), "block"),
         footer.creator_version >> 16,
         footer.creator_version & 0xffff,
         if differencing {
@@ -331,9 +332,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     ));
     let mut hnode =
         struct_node("Dynamic header", header_span, BE, (), header_layout).summary(format!(
-            "{} BAT entries, {} blocks",
+            "{} BAT entries, {}",
             header.max_entries,
-            size(header.block_size.into())
+            plural(size(header.block_size.into()), "block")
         ));
     if checksum(&raw, 36) != header.checksum {
         hnode = hnode.diag(Diagnostic::warning(format!(

@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tiny.mdl — Hexen II model: 3 vertices, 1 triangles, 1 frames, 1 skins  [0x0+0x98]
+▾ tiny.mdl — Hexen II model: 3 vertices, 1 triangle, 1 frame, 1 skins  [0x0+0x98]
     Signature: "RAPO"  [0x0+0x4]
     Version: 6  [0x4+0x4]
     Scale: 00 00 80 3f 00 00 80 3f 00 00 80 3f  |...?...?...?|  [0x8+0xc]

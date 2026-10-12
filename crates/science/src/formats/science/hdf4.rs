@@ -34,6 +34,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::Input;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, uint};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
@@ -744,7 +745,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .iter()
             .filter(|v| !is_internal_class(&v.class))
             .take(3)
-            .map(|v| format!("{} ({} records)", v.name, v.records))
+            .map(|v| format!("{} ({})", v.name, plural(v.records, "record")))
             .collect();
         summary.push_str(&format!(
             ", {} vdata(s): {}",
@@ -759,7 +760,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         summary.push_str(&format!(", {annotations} annotation(s)"));
     }
     if datasets.is_empty() && user_vdatas.is_empty() && rasters == 0 {
-        summary.push_str(&format!(", {used} objects"));
+        summary.push_str(&format!(
+            ", {used_object}",
+            used_object = plural(used, "object")
+        ));
     }
     cx.annotate(summary);
     Ok(())
@@ -1922,7 +1926,7 @@ async fn raster8(
         cx.emit(
             Node::new("Palette")
                 .span(p)
-                .summary(format!("{} entries", p.len / 3)),
+                .summary(plural(p.len / 3, "entry")),
         );
     }
     Ok(())

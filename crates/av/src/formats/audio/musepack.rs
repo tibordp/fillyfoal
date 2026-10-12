@@ -7,6 +7,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::audio::ape::trailing_tags;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{Bits, channels, duration_of, leaf};
 use crate::formats::util::val::uint;
 use crate::formats::{Format, Input, Probe, audio::id3};
@@ -170,9 +171,12 @@ async fn packet(cx: Cx, (span, header_len, key): (Span, u64, [u8; 2])) -> Result
             b.field("Audio block frames", 3)
                 .with(|v, n| {
                     n.summary(format!(
-                        "{} frames per packet",
-                        1u64.checked_shl(u32::try_from(v.saturating_mul(2)).unwrap_or(64))
-                            .unwrap_or(0)
+                        "{} per packet",
+                        plural(
+                            1u64.checked_shl(u32::try_from(v.saturating_mul(2)).unwrap_or(64))
+                                .unwrap_or(0),
+                            "frame"
+                        )
                     ))
                 })
                 .emit()?;
@@ -282,9 +286,9 @@ async fn sv7(cx: &Cx, file: Span) -> Result<()> {
         .hex()
         .with(|&v, n| {
             n.summary(format!(
-                "true gapless {}, last frame {} samples, fast seek {}",
+                "true gapless {}, last frame {}, fast seek {}",
                 v >> 31 != 0,
-                (v >> 20) & 0x7ff,
+                plural((v >> 20) & 0x7ff, "sample"),
                 (v >> 19) & 1 != 0
             ))
         })

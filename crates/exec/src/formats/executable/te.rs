@@ -12,6 +12,7 @@ use crate::error::Result;
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::executable::pe::tables::{MACHINE, SUBSYSTEM};
 use crate::formats::util::binutil::data_node;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::name_or;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -69,11 +70,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(TeHeader::node("TE Header", hspan, LE));
     let h = parse(&cx, hspan, LE, &(), TeHeader::layout).await?;
     cx.annotate(format!(
-        "UEFI TE image, {}, {}, entry {:#x}, {} sections",
+        "UEFI TE image, {}, {}, entry {:#x}, {}",
         lookup(MACHINE, h.machine.into()).unwrap_or("unknown machine"),
         name_or(SUBSYSTEM, h.subsystem.into(), "subsystem"),
         h.entry,
-        h.sections
+        plural(h.sections, "section")
     ));
     let delta = u64::from(h.stripped).saturating_sub(TeHeader::SIZE);
     let table = file.sub(
@@ -83,7 +84,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Section Table")
             .span(table)
-            .summary(format!("{} sections", h.sections))
+            .summary(plural(h.sections, "section"))
             .lazy(sections, (file, table, delta)),
     );
     Ok(())

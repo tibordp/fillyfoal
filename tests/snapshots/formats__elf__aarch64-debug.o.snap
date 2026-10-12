@@ -176,7 +176,7 @@ expression: "common::explore(&display_name(&path), &data)"
         sh_info: 4 — applies to .data  [0xebc+0x4]
         sh_addralign: 0x8  [0xec0+0x8]
         sh_entsize: 0x18  [0xec8+0x8]
-      ▾ Relocations — 1 entries  [0x910+0x18]
+      ▾ Relocations — 1 entry  [0x910+0x18]
         ▾ R_AARCH64_ABS64: 0x10 — .rodata.str1.1 + 0x0  [0x910+0x18]
             r_offset: 0x10  [0x910+0x8]
             r_info: 0x600000101 — symbol 6, type R_AARCH64_ABS64  [0x918+0x8]
@@ -265,7 +265,7 @@ expression: "common::explore(&display_name(&path), &data)"
               DW_AT_decl_file: "DW_FORM_data1"
               DW_AT_decl_line: "DW_FORM_data1"
               DW_AT_location: "DW_FORM_exprloc"
-          ▾ [3]: "DW_TAG_array_type" — DW_CHILDREN_yes, 1 attributes  [#1:0x2b+0x7]
+          ▾ [3]: "DW_TAG_array_type" — DW_CHILDREN_yes, 1 attribute  [#1:0x2b+0x7]
               DW_AT_type: "DW_FORM_ref4"
           ▾ [4]: "DW_TAG_subrange_type" — DW_CHILDREN_no, 2 attributes  [#1:0x32+0x9]
               DW_AT_type: "DW_FORM_ref4"
@@ -283,9 +283,9 @@ expression: "common::explore(&display_name(&path), &data)"
               DW_AT_decl_file: "DW_FORM_data1"
               DW_AT_decl_line: "DW_FORM_data1"
               DW_AT_location: "DW_FORM_exprloc"
-          ▾ [8]: "DW_TAG_pointer_type" — DW_CHILDREN_no, 1 attributes  [#1:0x5e+0x7]
+          ▾ [8]: "DW_TAG_pointer_type" — DW_CHILDREN_no, 1 attribute  [#1:0x5e+0x7]
               DW_AT_type: "DW_FORM_ref4"
-          ▾ [9]: "DW_TAG_const_type" — DW_CHILDREN_no, 1 attributes  [#1:0x65+0x7]
+          ▾ [9]: "DW_TAG_const_type" — DW_CHILDREN_no, 1 attribute  [#1:0x65+0x7]
               DW_AT_type: "DW_FORM_ref4"
           ▾ [10]: "DW_TAG_variable" — DW_CHILDREN_no, 5 attributes  [#1:0x6c+0xf]
               DW_AT_name: "DW_FORM_strx1"
@@ -343,7 +343,7 @@ expression: "common::explore(&display_name(&path), &data)"
               DW_AT_type: "DW_FORM_ref4"
               DW_AT_declaration: "DW_FORM_flag_present"
               DW_AT_external: "DW_FORM_flag_present"
-          ▾ [19]: "DW_TAG_formal_parameter" — DW_CHILDREN_no, 1 attributes  [#1:0xf8+0x7]
+          ▾ [19]: "DW_TAG_formal_parameter" — DW_CHILDREN_no, 1 attribute  [#1:0xf8+0x7]
               DW_AT_type: "DW_FORM_ref4"
             Table end: 0  [#1:0xff+0x1]
     ▾ .debug_info — PROGBITS, ---, 0xab bytes  [0xfd0+0x40]

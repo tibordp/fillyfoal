@@ -43,7 +43,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields, parse, struct_node};
 use crate::formats::util::binutil::RangeIndex;
-use crate::formats::util::fmt::count;
+use crate::formats::util::fmt::{count, plural};
 use crate::formats::util::val::name_or;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
@@ -140,7 +140,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Section Table")
             .span(table)
-            .summary(format!("{} sections", pe.sections.len()))
+            .summary(plural(pe.sections.len(), "section"))
             .lazy(section_table, pe.clone()),
     );
     let headers_end = u64::from(pe.size_of_headers).min(file.len);
@@ -1041,7 +1041,7 @@ fn optional_header(f: &mut Fields<'_>, ctx: &OptCtx) -> Result<OptionalHeader> {
     f.node(
         Node::new("Data Directories")
             .span(directories)
-            .summary(format!("{count} entries"))
+            .summary(plural(count, "entry"))
             .lazy(data_directories, (directories, ctx.pe.clone())),
     );
     Ok(OptionalHeader {

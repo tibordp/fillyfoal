@@ -75,7 +75,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Key compare type: case folding (0xcf)  [0xba033+0x1]
         Attributes: 0x6 [BIG_KEYS | VARIABLE_INDEX_KEYS]  [0xba034+0x4]
   ▾ Root folder — fillyfoal
-    ▾ .fseventsd — folder, 1 items  [0xbe0c0+0x58]
+    ▾ .fseventsd — folder, 1 item  [0xbe0c0+0x58]
       ▾ Catalog record  [0xbe0c0+0x58]
           Record type: 1  [0xbe0c0+0x2]
           Flags: 0x84  [0xbe0c2+0x2]
@@ -469,7 +469,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Line endings: "none" — 0 LF, 0 CRLF, 0 CR
           ▾ Lines — 1 line  [0xc37c+0x19]
               Line 1: "a neutral attribute value"  [0xc37c+0x19]
-    ▾ ␀␀␀␀HFS+ Private Data — folder, 1 items  [0xbb040+0x58]
+    ▾ ␀␀␀␀HFS+ Private Data — folder, 1 item  [0xbb040+0x58]
       ▾ Catalog record  [0xbb040+0x58]
           Record type: 1  [0xbb040+0x2]
           Flags: 0x10  [0xbb042+0x2]

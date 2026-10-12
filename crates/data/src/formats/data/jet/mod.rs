@@ -22,6 +22,7 @@ use std::sync::Arc;
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::{fmt as ufmt, val};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -168,8 +169,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         u16_le(&plain, 0x3c - 0x18)
     };
     let mut summary = format!(
-        "Access database, {}, {pages} pages of {page_size} bytes",
-        lookup(VERSIONS, version.into()).unwrap_or("unknown version")
+        "Access database, {}, {pages_page} of {page_size} bytes",
+        lookup(VERSIONS, version.into()).unwrap_or("unknown version"),
+        pages_page = plural(pages, "page")
     );
     if let Some(cp) = codepage.filter(|&c| c != 0) {
         summary = format!("{summary}, code page {cp}");

@@ -15,6 +15,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::text::scan::Lines;
 use crate::formats::util::datakit::{hex_string, size};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
@@ -605,7 +606,7 @@ async fn vendor_boot(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Ramdisk table")
                 .span(table)
-                .summary(format!("{} entries", b.entries))
+                .summary(plural(b.entries, "entry"))
                 .lazy(ramdisk_table, (table, b.entries, b.entry_size)),
         );
         pad(table_pad.0, table_pad.1, "Padding");
@@ -853,8 +854,9 @@ async fn pit(cx: Cx, input: Input) -> Result<()> {
         let blocks = u32_le(e, 24).unwrap_or(0);
         let flash = until_nul(e.get(68..100).unwrap_or_default());
         cx.push(struct_node(name, span, LE, (), pit_entry).summary(format!(
-            "id {}, {blocks} blocks, {flash}",
-            u32_le(e, 8).unwrap_or(0)
+            "id {}, {blocks_block}, {flash}",
+            u32_le(e, 8).unwrap_or(0),
+            blocks_block = plural(blocks, "block")
         )))
         .await;
     }
@@ -925,8 +927,9 @@ async fn qcdt(cx: Cx, input: Input) -> Result<()> {
         cx.push(node.summary(summary)).await;
     }
     cx.annotate(format!(
-        "Qualcomm DT table v{version}, {count} entries, {} DTBs",
-        seen.len()
+        "Qualcomm DT table v{version}, {count_entry}, {} DTBs",
+        seen.len(),
+        count_entry = plural(count, "entry")
     ));
     Ok(())
 }
@@ -1000,7 +1003,10 @@ async fn art_profile(cx: Cx, input: Input) -> Result<()> {
             };
             cx.push(node.summary(summary).target(cur.since(at))).await;
         }
-        cx.annotate(format!("ART profile v{version:03}, {sections} sections"));
+        cx.annotate(format!(
+            "ART profile v{version:03}, {sections_section}",
+            sections_section = plural(sections, "section")
+        ));
     } else if !metadata && version >= 9 {
         let at = cur.pos();
         let dex_files = cur.u8().await?;
@@ -1254,7 +1260,13 @@ async fn hprof(cx: Cx, input: Input) -> Result<()> {
         .copied()
         .unwrap_or(0)
         .saturating_add(counts.get(&0x0c).copied().unwrap_or(0));
-    cx.annotate(format!("{} heap dump, {n} records ({strings} strings, {classes} classes, {heap} heap dump segments)", version.trim_end_matches('\0')));
+    cx.annotate(format!(
+        "{} heap dump, {n_record} ({strings_string}, {classes_class}, {heap} heap dump segments)",
+        version.trim_end_matches('\0'),
+        n_record = plural(n, "record"),
+        strings_string = plural(strings, "string"),
+        classes_class = plural(classes, "class")
+    ));
     Ok(())
 }
 
@@ -1346,15 +1358,19 @@ async fn method_trace(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Records")
             .span(records)
-            .summary(format!("{count} records of {record} bytes"))
+            .summary(format!(
+                "{count_record} of {record} bytes",
+                count_record = plural(count, "record")
+            ))
             .lazy(
                 trace_records,
                 (records, version, record, Arc::new(methods.clone())),
             ),
     );
     cx.annotate(format!(
-        "Android method trace v{version}, {threads} threads, {} methods, {count} events",
-        methods.len()
+        "Android method trace v{version}, {threads_thread}, {}, {count} events",
+        plural(methods.len(), "method"),
+        threads_thread = plural(threads, "thread")
     ));
     Ok(())
 }
@@ -1513,8 +1529,9 @@ async fn logcat(cx: Cx, input: Input) -> Result<()> {
         .map(|(b, c)| format!("{} {c}", lookup(LOG_IDS, (*b).into()).unwrap_or("?")))
         .collect();
     cx.annotate(format!(
-        "Android binary logcat, {n} entries ({})",
-        parts.join(", ")
+        "Android binary logcat, {n_entry} ({})",
+        parts.join(", "),
+        n_entry = plural(n, "entry")
     ));
     Ok(())
 }

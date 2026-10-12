@@ -13,7 +13,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::binutil::Tree;
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{plural, size};
 use crate::formats::util::val::{hex, name_or, text, uint};
 use crate::formats::{Input, embedded_as};
 use crate::node::{Count, Node};
@@ -523,7 +523,7 @@ async fn code_directory(cx: Cx, blob: Span) -> Result<()> {
         cx.emit(
             Node::new("Special Slots")
                 .span(span)
-                .summary(format!("{} hashes", cd.special_slots))
+                .summary(plural(cd.special_slots, "hash"))
                 .desc("Hashes of the other blobs and of files outside the binary, slot -1 last")
                 .lazy(special_slots, (span, cd.special_slots, cd.hash_size)),
         );
@@ -536,8 +536,9 @@ async fn code_directory(cx: Cx, blob: Span) -> Result<()> {
         Node::new("Code Slots")
             .span(span)
             .summary(format!(
-                "{} hashes covering {:#x} bytes",
-                cd.code_slots, cd.code_limit
+                "{} covering {:#x} bytes",
+                plural(cd.code_slots, "hash"),
+                cd.code_limit
             ))
             .lazy(code_slots, (span, cd)),
     );

@@ -5,6 +5,7 @@
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
@@ -280,13 +281,14 @@ pub async fn dissect_flif(cx: Cx, input: Input) -> Result<()> {
             .span(file.sub(4, 1))
             .value(text(char::from(kind).to_string()))
             .summary(format!(
-                "{}{}, {channels} channels ({color})",
+                "{}{}, {channels_channel} ({color})",
                 if interlaced {
                     "interlaced"
                 } else {
                     "non-interlaced"
                 },
-                if animated { ", animated" } else { "" }
+                if animated { ", animated" } else { "" },
+                channels_channel = plural(channels, "channel")
             )),
     );
     let depth = match bpc {
@@ -317,7 +319,10 @@ pub async fn dissect_flif(cx: Cx, input: Input) -> Result<()> {
         summary.push_str(", interlaced");
     }
     if animated {
-        summary = format!("{summary}, {frames} frames");
+        summary = format!(
+            "{summary}, {frames_frame}",
+            frames_frame = plural(frames, "frame")
+        );
     }
     cx.annotate(summary);
     // Metadata chunks: four-letter name, varint length, deflated content.

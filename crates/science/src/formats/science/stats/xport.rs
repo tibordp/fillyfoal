@@ -20,6 +20,7 @@ use crate::error::{Diagnostic, Result};
 use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::civil::SAS_EPOCH;
 use crate::formats::util::floats::ibm;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -342,7 +343,7 @@ async fn member_nodes(cx: Cx, (m, fields): (Arc<Member>, Arc<[Node]>)) -> Result
     cx.emit(
         Node::new("Observations")
             .span(m.obs)
-            .summary(format!("{} rows × {} bytes", m.rows, m.row))
+            .summary(format!("{} × {} bytes", plural(m.rows, "row"), m.row))
             .lazy(observations, m.clone()),
     );
     Ok(())

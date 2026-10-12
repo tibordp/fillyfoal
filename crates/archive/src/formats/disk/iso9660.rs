@@ -27,8 +27,8 @@ use crate::formats::disk::qcow::Regions;
 use crate::formats::util::arcutil::{ByteReader, emit_nodes, unix_mode};
 use crate::formats::util::civil::days_from_civil;
 use crate::formats::util::fmt;
-use crate::formats::util::fmt::capitalize;
 use crate::formats::util::fmt::count;
+use crate::formats::util::fmt::{capitalize, plural};
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Codec, Format, Head, Input, Probe, embedded};
 use crate::node::Node;
@@ -1119,9 +1119,9 @@ fn entry_node(name: String, r: &Record, size: u64, state: Entry) -> Node {
         fmt::size(size)
     } else {
         format!(
-            "{} in {} sections",
+            "{} in {}",
             fmt::size(size),
-            state.sections.len().saturating_add(1)
+            plural(state.sections.len().saturating_add(1), "section")
         )
     };
     if let Some(m) = r.rr_mode {
@@ -1179,9 +1179,12 @@ async fn entry(cx: Cx, e: Entry) -> Result<()> {
                 Node::new("Compressed content")
                     .span(extent)
                     .summary(format!(
-                        "zisofs: {} in {} blocks",
+                        "zisofs: {} in {}",
                         fmt::size(extent.len),
-                        fmt::size(1u64.checked_shl(z.block_log2.into()).unwrap_or(0))
+                        plural(
+                            fmt::size(1u64.checked_shl(z.block_log2.into()).unwrap_or(0)),
+                            "block"
+                        )
                     ))
                     .lazy(zisofs_node, (e.input, extent, z)),
             );
@@ -1246,9 +1249,9 @@ async fn multi_extent(cx: &Cx, e: &Entry, first: Span) -> Result<()> {
     let content = crate::formats::disk::assemble(cx, e.record, "iso9660-sections", &pieces).await?;
     cx.emit(
         embedded("Content", e.input.nested(content)).summary(format!(
-            "{} from {} extents",
+            "{} from {}",
             fmt::size(total),
-            e.sections.len().saturating_add(1)
+            plural(e.sections.len().saturating_add(1), "extent")
         )),
     );
     Ok(())
@@ -1345,8 +1348,9 @@ async fn list_directory(cx: &Cx, e: &Entry, extent: Span, path: Arc<Vec<u32>>) -
         push_entry(cx, e, &path, first, span, more, size).await;
     }
     cx.push(Node::new("Directory extent").span(extent).summary(format!(
-        "{}, {records} records (with . and ..), the rest padding",
-        fmt::size(extent.len)
+        "{}, {records_record} (with . and ..), the rest padding",
+        fmt::size(extent.len),
+        records_record = plural(records, "record")
     )))
     .await;
     Ok(())
@@ -1411,8 +1415,9 @@ async fn zisofs_node(cx: Cx, (input, extent, z): (Input, Span, Zf)) -> Result<()
             .span(table)
             .value(Value::Bytes(pointers.iter().take(64).copied().collect()))
             .summary(format!(
-                "{} pointers for {blocks} blocks",
-                pointers.len() / 4
+                "{} pointers for {blocks_block}",
+                pointers.len() / 4,
+                blocks_block = plural(blocks, "block")
             )),
     );
     // Decompress block by block into a piecewise source.
@@ -1751,9 +1756,9 @@ async fn boot_catalog(cx: Cx, (input, span, block_size): (Input, Span, u64)) -> 
                         section_header_layout,
                     )
                     .summary(format!(
-                        "{}, {} entries{}",
+                        "{}, {}{}",
                         lookup(PLATFORM, p.into()).unwrap_or("unknown platform"),
-                        u16_le(entry, 2).unwrap_or(0),
+                        plural(u16_le(entry, 2).unwrap_or(0), "entry"),
                         if indicator == 0x91 { ", last" } else { "" }
                     )),
                 );

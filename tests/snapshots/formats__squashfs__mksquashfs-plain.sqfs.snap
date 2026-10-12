@@ -347,11 +347,11 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Directory table — 434 bytes  [0x206f+0x1b2]
     ▾ Metadata block 0: 0x81b0 — 432 bytes, uncompressed  [0x206f+0x1b2]
         Data — stored  [0x2071+0x1b0]
-  ▾ ID table — 1 entries  [0x2227+0x8]
+  ▾ ID table — 1 entry  [0x2227+0x8]
     ▾ Index 0: 0x2221 — metadata block at 0x2221  [0x2227+0x8]
       ▾ Metadata block — 4 bytes  [0x2221+0x6]
           Data  [0x2223+0x4]
-    ▾ Entries — 1 entries  [0x2223+0x4]
+    ▾ Entries — 1 entry  [0x2223+0x4]
         ID 0: 0  [0x2223+0x4]
   ▾ Root directory
     ▾ Inode — drwxr-xr-x, directory, 158 bytes  [0x204f+0x20]

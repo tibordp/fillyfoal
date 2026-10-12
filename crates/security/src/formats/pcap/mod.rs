@@ -28,6 +28,7 @@ use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::binutil::Tree;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -278,8 +279,8 @@ pub async fn emit_packet(
     }
     if b.overflow {
         cx.diag(Diagnostic::limit(format!(
-            "only the first {} fields of this packet are shown",
-            dec::MAX_NODES
+            "only the first {} of this packet are shown",
+            plural(dec::MAX_NODES, "field")
         )));
     }
     let tree = b.finish().unwrap_or_default();

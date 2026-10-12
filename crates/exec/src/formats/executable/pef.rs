@@ -8,7 +8,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
 use crate::formats::util::binutil::data_node;
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::name_or;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
@@ -114,13 +114,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!(
-        "PEF {} code fragment, {} sections{}",
+        "PEF {} code fragment, {}{}",
         if h.architecture == "pwpc" {
             "PowerPC"
         } else {
             "68k"
         },
-        h.sections,
+        plural(h.sections, "section"),
         if libraries.is_empty() {
             String::new()
         } else {
@@ -212,7 +212,7 @@ async fn section(cx: Cx, (at, data, kind): (Span, Span, u8)) -> Result<()> {
         cx.emit(
             Node::new("Imported Symbols")
                 .span(symbols)
-                .summary(format!("{} symbols", h.imports))
+                .summary(plural(h.imports, "symbol"))
                 .lazy(imported_symbols, (symbols, strings)),
         );
         cx.emit(data_node("Loader Strings", strings, strings.len));
@@ -236,8 +236,8 @@ async fn libraries(cx: Cx, (span, strings): (Span, Span)) -> Result<()> {
         .await
         .map_or_else(|_| format!("#{i}"), |(s, _)| s);
         cx.push(Node::new(name).span(at).summary(format!(
-            "{} symbols from {}, versions {:#x}..{:#x}",
-            u32_be(&data, 12).unwrap_or(0),
+            "{} from {}, versions {:#x}..{:#x}",
+            plural(u32_be(&data, 12).unwrap_or(0), "symbol"),
             u32_be(&data, 16).unwrap_or(0),
             u32_be(&data, 4).unwrap_or(0),
             u32_be(&data, 8).unwrap_or(0)

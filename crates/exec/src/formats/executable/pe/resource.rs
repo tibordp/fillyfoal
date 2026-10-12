@@ -146,14 +146,14 @@ async fn node(
         }
         Some(RT_ACCELERATOR) if win32 => Node::new("Accelerator table")
             .span(span)
-            .summary(format!("{} entries", span.len / 8))
+            .summary(plural(span.len / 8, "entry"))
             .lazy(accelerators, span),
         Some(RT_MESSAGETABLE) if win32 => {
             let head = cx.read_avail(span.sub(0, 4)).await?;
             let blocks = u32_le(&head, 0).unwrap_or(0);
             Node::new("Message table")
                 .span(span)
-                .summary(format!("{blocks} blocks"))
+                .summary(plural(blocks, "block"))
                 .lazy(messages, span)
         }
         Some(RT_DIALOG) if win32 => {

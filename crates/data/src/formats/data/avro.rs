@@ -101,7 +101,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let mut meta = Node::new("Metadata")
         .span(file.sub(map_start, pos.saturating_sub(map_start)))
-        .summary(format!("{} entries", entries.len()));
+        .summary(crate::formats::util::fmt::plural(entries.len(), "entry"));
     let codec = entries.iter().find(|e| e.key == "avro.codec").map_or_else(
         || "null".to_owned(),
         |e| String::from_utf8_lossy(&e.value).into_owned(),
@@ -188,7 +188,10 @@ async fn blocks(cx: Cx, (input, start, sync, codec, schema): Blocks) -> Result<(
         let whole = file.sub(block_start, pos.saturating_sub(block_start));
         let mut node = Node::new(format!("Block {index}"))
             .span(whole)
-            .summary(format!("{count} objects, {size} bytes"))
+            .summary(format!(
+                "{count_object}, {size} bytes",
+                count_object = crate::formats::util::fmt::plural(count, "object")
+            ))
             .lazy(
                 block,
                 (input, whole, data, count, codec.clone(), schema.clone()),

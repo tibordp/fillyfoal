@@ -10,6 +10,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::data::netcdf::coords;
 use crate::formats::util::fmt;
+use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{Radix, Value};
@@ -194,7 +195,7 @@ async fn element(
                     parts.push("…".to_owned());
                 }
                 node.value(Value::Text(format!("[{}]", parts.join(", "))))
-                    .summary(format!("{len} elements"))
+                    .summary(plural(len, "element"))
             }
         }
         Ty::Ref { kind: 0, .. } => {

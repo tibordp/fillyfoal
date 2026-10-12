@@ -723,8 +723,8 @@ async fn oat_data(cx: Cx, (span, base, l): (Span, u64, Layout)) -> Result<()> {
                 Node::new("Class offsets")
                     .span(cs)
                     .summary(format!(
-                        "{} classes of {}",
-                        d.class_count,
+                        "{} of {}",
+                        plural(d.class_count, "class"),
                         clip(&d.location, 60)
                     ))
                     .lazy(words, cs),

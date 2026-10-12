@@ -12,7 +12,7 @@ use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::fmt::{clip, size};
+use crate::formats::util::fmt::{clip, plural, size};
 use crate::formats::util::json::{self, Json};
 use crate::formats::{Format, Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
@@ -160,7 +160,11 @@ pub async fn npy(cx: Cx, input: Input) -> Result<()> {
         let dtype = descr.as_deref().and_then(Dtype::parse);
         if let Some(item) = dtype.as_ref().map(Dtype::itemsize) {
             let expected = count.saturating_mul(item);
-            node = node.summary(format!("{count} elements, {}", size(expected)));
+            node = node.summary(format!(
+                "{count_element}, {}",
+                size(expected),
+                count_element = plural(count, "element")
+            ));
             if expected != data.len {
                 node = node.diag(Diagnostic::warning(format!(
                     "expected {expected:#x} bytes of data, found {:#x}",
@@ -625,9 +629,10 @@ pub async fn safetensors(cx: Cx, input: Input) -> Result<()> {
         .map(|t| t.shape.iter().copied().fold(1u64, u64::saturating_mul))
         .fold(0, u64::saturating_add);
     cx.annotate(format!(
-        "safetensors, {} tensors, {params} parameters, {}",
+        "safetensors, {} tensors, {params_parameter}, {}",
         tensors.len(),
-        size(data.len)
+        size(data.len),
+        params_parameter = plural(params, "parameter")
     ));
     cx.emit(
         embedded_as(
@@ -640,7 +645,7 @@ pub async fn safetensors(cx: Cx, input: Input) -> Result<()> {
     if !metadata.is_empty() {
         cx.emit(
             Node::new("Metadata")
-                .summary(format!("{} entries", metadata.len()))
+                .summary(plural(metadata.len(), "entry"))
                 .lazy(json_members, metadata),
         );
     }

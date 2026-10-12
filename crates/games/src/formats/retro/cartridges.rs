@@ -9,7 +9,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{plural, size};
 use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::Node;
@@ -225,7 +225,10 @@ async fn smd(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Interleaved data")
             .span(file.tail(512))
-            .summary(format!("{blocks} blocks of 16 KiB")),
+            .summary(format!(
+                "{blocks_block} of 16 KiB",
+                blocks_block = plural(blocks, "block")
+            )),
     );
     cx.emit(embedded_as(
         "First block (de-interleaved)",
@@ -247,9 +250,10 @@ async fn smd(cx: Cx, input: Input) -> Result<()> {
     };
     let title: String = title.split_whitespace().collect::<Vec<_>>().join(" ");
     cx.annotate(format!(
-        "SMD dump of {title:?} ({}), {blocks} blocks{}",
+        "SMD dump of {title:?} ({}), {blocks_block}{}",
         clean(&g.serial),
-        if h.split == 0x40 { ", split" } else { "" }
+        if h.split == 0x40 { ", split" } else { "" },
+        blocks_block = plural(blocks, "block")
     ));
     Ok(())
 }
@@ -630,9 +634,10 @@ async fn intellivision(cx: Cx, input: Input) -> Result<()> {
                 .span(span)
                 .value(hex(lo << 8, 16))
                 .summary(format!(
-                    "${:04x}-${:04x}, {count} words",
+                    "${:04x}-${:04x}, {count_word}",
                     lo << 8,
-                    (hi << 8) | 0xff
+                    (hi << 8) | 0xff,
+                    count_word = plural(count, "word")
                 ))
                 .lazy(intv_segment, span),
         )

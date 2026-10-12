@@ -4,6 +4,7 @@
 
 use crate::cx::Cx;
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::uint;
 use crate::value::{EnumTable, Value, decode_flags, lookup};
 
@@ -643,11 +644,11 @@ fn main(t: Tiff, e: &Entry, bytes: &[u8], values: &[Num], refs: &Refs) -> Option
         0x87af if e.count >= 4 => Shown {
             value: None,
             summary: Some(format!(
-                "GeoTIFF {}.{}.{}, {} keys",
+                "GeoTIFF {}.{}.{}, {}",
                 u(values, 0)?,
                 u(values, 1)?,
                 u(values, 2)?,
-                u(values, 3)?
+                plural(u(values, 3)?, "key")
             )),
         },
         _ => return None,
@@ -844,7 +845,7 @@ fn generic(ns: Ns, e: &Entry, bytes: &[u8], values: &[Num]) -> Shown {
         })
         .collect();
     if e.count > PREVIEW {
-        list.push(format!("… ({} values)", e.count));
+        list.push(format!("… ({})", plural(e.count, "value")));
     }
     Shown {
         value: None,

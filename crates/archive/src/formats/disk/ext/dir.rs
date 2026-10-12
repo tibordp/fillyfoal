@@ -7,6 +7,7 @@ use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::disk::size;
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value, lookup};
@@ -411,7 +412,7 @@ fn dx(cx: &Cx, span: Span, data: &[u8], kind: BlockKind, seed: Option<u32>, file
         cx.emit(
             Node::new("Unused entries")
                 .span(span.sub(used, limit_end.saturating_sub(used)))
-                .summary(format!("{} slots", limit.saturating_sub(count))),
+                .summary(plural(limit.saturating_sub(count), "slot")),
         );
     }
     if seed.is_some() && limit_end.saturating_add(8) <= span.len {

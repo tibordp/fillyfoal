@@ -13,6 +13,7 @@ use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::disk::ntfs::{self, FILE_ATTRIBUTES};
 use crate::formats::image::bmp::CLIPBOARD_FORMATS;
 use crate::formats::util::datakit::{clip, hex, size, text, uint};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::mapi;
 use crate::formats::{Deep, DeepProbe, Head, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
@@ -138,7 +139,7 @@ async fn custom_destinations(cx: Cx, input: Input) -> Result<()> {
                 bits: 32,
                 name: lookup(CATEGORY_TYPES, kind.into()),
             })
-            .summary(format!("{} links", lnks.len()))
+            .summary(plural(lnks.len(), "link"))
             .lazy(destination_entries, (input, lnks));
         if footer != JUMPLIST_FOOTER {
             node = node.diag(Diagnostic::warning(format!(
@@ -148,7 +149,8 @@ async fn custom_destinations(cx: Cx, input: Input) -> Result<()> {
         cx.push(node.desc(format!("Category {i}"))).await;
     }
     cx.annotate(format!(
-        "Jump list (custom destinations), {categories} categories, {links} links"
+        "Jump list (custom destinations), {categories} categories, {links_link}",
+        links_link = plural(links, "link")
     ));
     Ok(())
 }
@@ -258,8 +260,9 @@ async fn info2(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
     }
     cx.annotate(format!(
-        "Recycle Bin INFO2 v{}, {count} records ({deleted} restored or purged)",
-        h.version
+        "Recycle Bin INFO2 v{}, {count_record} ({deleted} restored or purged)",
+        h.version,
+        count_record = plural(count, "record")
     ));
     Ok(())
 }
@@ -522,7 +525,10 @@ async fn usn_journal(cx: Cx, input: Input) -> Result<()> {
         .await;
         at = at.saturating_add(len);
     }
-    cx.annotate(format!("NTFS change journal, {count} records"));
+    cx.annotate(format!(
+        "NTFS change journal, {count_record}",
+        count_record = plural(count, "record")
+    ));
     Ok(())
 }
 
@@ -605,7 +611,9 @@ async fn mft(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
     }
     cx.annotate(format!(
-        "NTFS MFT, {count} records of {record} bytes, {used} in use ({dirs} directories)"
+        "NTFS MFT, {count_record} of {record} bytes, {used} in use ({dirs_directory})",
+        count_record = plural(count, "record"),
+        dirs_directory = plural(dirs, "directory")
     ));
     Ok(())
 }
@@ -709,12 +717,13 @@ async fn indx(cx: Cx, input: Input) -> Result<()> {
         let mut node = Node::new(format!("Buffer {i} (VCN {vcn})"))
             .span(span)
             .summary(format!(
-                "{live} entries{}",
+                "{live_entry}{}",
                 if carved > 0 {
                     format!(", {carved} recovered from slack")
                 } else {
                     String::new()
-                }
+                },
+                live_entry = plural(live, "entry")
             ))
             .lazy(indx_buffer, (span, list));
         if let Some(p) = problem {
@@ -722,7 +731,11 @@ async fn indx(cx: Cx, input: Input) -> Result<()> {
         }
         cx.push(node).await;
     }
-    cx.annotate(format!("NTFS index, {count} buffers, {entries} entries"));
+    cx.annotate(format!(
+        "NTFS index, {count_buffer}, {entries_entry}",
+        count_buffer = plural(count, "buffer"),
+        entries_entry = plural(entries, "entry")
+    ));
     Ok(())
 }
 
@@ -1218,8 +1231,9 @@ async fn nk2(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Node::new("Footer").span(file.tail(cur.pos())));
     }
     cx.annotate(format!(
-        "Outlook autocomplete cache, {rows} entries: {}",
-        clip(&names.join(", "), 120)
+        "Outlook autocomplete cache, {rows_entry}: {}",
+        clip(&names.join(", "), 120),
+        rows_entry = plural(rows, "entry")
     ));
     Ok(())
 }
@@ -1304,8 +1318,9 @@ async fn dbx(cx: Cx, input: Input) -> Result<()> {
         );
     }
     cx.annotate(format!(
-        "Outlook Express {} store, {items} items",
-        dbx_kind(&class)
+        "Outlook Express {} store, {items_item}",
+        dbx_kind(&class),
+        items_item = plural(items, "item")
     ));
     Ok(())
 }
@@ -1403,7 +1418,10 @@ async fn rdp_cache(cx: Cx, input: Input) -> Result<()> {
         .await;
         tiles = tiles.saturating_add(1);
     }
-    cx.annotate(format!("RDP bitmap cache v{version}, {tiles} tiles"));
+    cx.annotate(format!(
+        "RDP bitmap cache v{version}, {tiles_tile}",
+        tiles_tile = plural(tiles, "tile")
+    ));
     Ok(())
 }
 
@@ -1484,7 +1502,7 @@ async fn ini_file(cx: &Cx, file: Span) -> Result<Vec<(String, String, String)>> 
         cx.push(
             Node::new(format!("[{name}]"))
                 .span(file.sub(start, end.saturating_sub(start)))
-                .summary(format!("{} keys", keys.len()))
+                .summary(plural(keys.len(), "key"))
                 .lazy(ini_keys, keys),
         )
         .await;
@@ -2225,7 +2243,8 @@ async fn destlist(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!(
-        "Jump list DestList v{version}, {entries} entries ({pinned} pinned)"
+        "Jump list DestList v{version}, {entries_entry} ({pinned} pinned)",
+        entries_entry = plural(entries, "entry")
     ));
     Ok(())
 }
@@ -2309,9 +2328,10 @@ async fn odl(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "OneDrive log v{version}, {count} records, OneDrive {}, {}",
+        "OneDrive log v{version}, {count_record}, OneDrive {}, {}",
         app.trim(),
-        os.trim()
+        os.trim(),
+        count_record = plural(count, "record")
     ));
     Ok(())
 }

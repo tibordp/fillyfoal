@@ -10,6 +10,7 @@
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::arcutil::human_size;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
@@ -241,9 +242,10 @@ fn describe(hdu: &Hdu) -> String {
     let mut out = if is_table(hdu) {
         let rows = hdu.axes.get(1).copied().unwrap_or(0);
         format!(
-            "{kind}, {rows} rows × {} columns, {}",
+            "{kind}, {rows_row} × {} columns, {}",
             hdu.columns.len(),
-            human_size(hdu.data_len)
+            human_size(hdu.data_len),
+            rows_row = plural(rows, "row")
         )
     } else {
         let shape = match hdu.axes.as_slice() {
@@ -353,8 +355,11 @@ async fn hdu_node(cx: Cx, (span, hdu): (Span, Hdu)) -> Result<()> {
             let table = hdu.data_len.saturating_sub(hdu.pcount);
             let rows = hdu.axes.get(1).copied().unwrap_or(0);
             cx.emit(
-                region("Table", span, hdu.header_len, table)
-                    .summary(format!("{rows} rows, {}", human_size(table))),
+                region("Table", span, hdu.header_len, table).summary(format!(
+                    "{rows_row}, {}",
+                    human_size(table),
+                    rows_row = plural(rows, "row")
+                )),
             );
             cx.emit(
                 region(

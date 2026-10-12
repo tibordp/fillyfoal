@@ -5,6 +5,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe};
 use crate::record;
 
@@ -38,9 +39,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let len = u64::from(h.width)
         .saturating_mul(h.height.into())
         .saturating_mul(8);
-    cx.emit(
-        region("Pixels", file, Header::SIZE, len)
-            .summary(format!("{} rows of {} pixels", h.height, h.width)),
-    );
+    cx.emit(region("Pixels", file, Header::SIZE, len).summary(format!(
+        "{} of {} pixels",
+        plural(h.height, "row"),
+        h.width
+    )));
     Ok(())
 }

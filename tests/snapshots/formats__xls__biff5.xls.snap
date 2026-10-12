@@ -24,7 +24,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ DIFAT — 1 FAT sectors  [0x4c+0x1b4]
       FAT sector 0: 5  [0x4c+0x4] → 0xc00+0x200
       Unused entries: 0xffffffff — 108 × FREESECT  [0x50+0x1b0]
-  ▾ FAT — 1 sectors
+  ▾ FAT — 1 sector
     ▾ FAT sector 0 — sector 5: entries for sectors 0..128  [0xc00+0x200]
         Sector 0: 1 — next: 1  [0xc00+0x4]
         Sector 1: 2 — next: 2  [0xc04+0x4]
@@ -450,7 +450,7 @@ expression: "common::explore(&display_name(&path), &data)"
             cchHelptopic: 0  [#4:0x24c+0x1]
             cchStatustext: 0  [#4:0x24d+0x1]
             Name: "Rate"  [#4:0x24e+0x4]
-          ▾ rgce: "=Data!$B$1" — 1 tokens  [#4:0x252+0x12]
+          ▾ rgce: "=Data!$B$1" — 1 token  [#4:0x252+0x12]
               PtgRef3d: 0x3a — Data!$B$1 (reference)  [#4:0x252+0x12]
         ▾ BOUNDSHEET: 0x85 — "Data", worksheet or dialog sheet, BOF at 0x28d  [#4:0x264+0xf]
             Type: BOUNDSHEET (0x85)  [#4:0x264+0x2]
@@ -631,7 +631,7 @@ expression: "common::explore(&display_name(&path), &data)"
             cce: 25  [#4:0x442+0x2]
           ▾ rgce: "=SUM(Data!$A$1:$B$2)" — 2 tokens  [#4:0x444+0x19]
               PtgArea3d: 0x3b — Data!$A$1:$B$2 (reference)  [#4:0x444+0x15]
-              PtgFuncVar: 0x42 — SUM, 1 arguments (value)  [#4:0x459+0x4]
+              PtgFuncVar: 0x42 — SUM, 1 argument (value)  [#4:0x459+0x4]
         ▾ FORMULA: 0x6 — C1 = AVERAGE(A1:B1,3,-4) → 1  [#4:0x45d+0x2c]
             Type: FORMULA (0x6)  [#4:0x45d+0x2]
             Length: 40  [#4:0x45f+0x2]

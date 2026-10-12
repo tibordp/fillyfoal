@@ -16,6 +16,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::datakit::clip;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -210,7 +211,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Metrics")
             .span(metrics)
-            .summary(format!("{} entries", info.metrics_count))
+            .summary(plural(info.metrics_count, "entry"))
             .lazy(metrics_list, pf.clone()),
     );
     let trace_size: u64 = if header.version <= 26 { 12 } else { 8 };
@@ -220,7 +221,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 info.traces_offset.into(),
                 u64::from(info.traces_count).saturating_mul(trace_size),
             ))
-            .summary(format!("{} entries", info.traces_count)),
+            .summary(plural(info.traces_count, "entry")),
     );
     let names = file.sub(info.names_offset.into(), info.names_size.into());
     cx.emit(

@@ -792,7 +792,10 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("File blocks")
             .span(file.tail(layout.header))
-            .summary(format!("{} blocks", blend.blocks.len()))
+            .summary(crate::formats::util::fmt::plural(
+                blend.blocks.len(),
+                "block",
+            ))
             .lazy(file_blocks, blend.clone()),
     );
     if ids > 0 {
@@ -1391,10 +1394,10 @@ fn sdna_node(blend: &Shared, sdna: &Sdna) -> Node {
     Node::new("Structure DNA")
         .span(sdna.span)
         .summary(format!(
-            "{} structs, {} types, {} names",
+            "{} structs, {}, {}",
             sdna.structs.len(),
-            sdna.types.len(),
-            sdna.names.len()
+            crate::formats::util::fmt::plural(sdna.types.len(), "type"),
+            crate::formats::util::fmt::plural(sdna.names.len(), "name")
         ))
         .lazy(sdna_children, blend.clone())
 }
@@ -1483,7 +1486,10 @@ async fn sdna_structs(cx: Cx, blend: Shared) -> Result<()> {
                 bits: 32,
                 radix: Radix::Dec,
             })
-            .summary(format!("{size} bytes, {} fields", st.fields.len()))
+            .summary(format!(
+                "{size} bytes, {}",
+                crate::formats::util::fmt::plural(st.fields.len(), "field")
+            ))
             .lazy(sdna_struct, (blend.clone(), i));
         let sum = sdna
             .members(i)

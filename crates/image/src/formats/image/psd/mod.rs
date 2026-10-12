@@ -12,7 +12,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
-use crate::formats::util::fmt::fourcc;
+use crate::formats::util::fmt::{fourcc, plural};
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Input, Probe, embedded, embedded_as};
 use crate::node::Node;
@@ -231,10 +231,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let psb = header.version == 2;
     let mode = lookup(COLOR_MODES, header.mode.into()).unwrap_or("unknown mode");
     let mut summary = format!(
-        "{}, {mode}, {}-bit, {} channels",
+        "{}, {mode}, {}-bit, {}",
         dims(header.width, header.height),
         header.depth,
-        header.channels
+        plural(header.channels, "channel")
     );
     if psb {
         summary = format!("PSB, {summary}");
@@ -276,9 +276,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let mut node = Node::new("Layer and Mask Information").span(whole);
     if let Some(n) = layers {
-        node = node.summary(format!("{} layers", n.unsigned_abs()));
+        node = node.summary(plural(n.unsigned_abs(), "layer"));
         if n != 0 {
-            cx.annotate(format!("{summary}, {} layers", n.unsigned_abs()));
+            cx.annotate(format!("{summary}, {}", plural(n.unsigned_abs(), "layer")));
         }
     }
     cx.emit(node.lazy(layer_and_mask, (whole, psb)));
@@ -329,7 +329,7 @@ async fn layer_and_mask(cx: Cx, (whole, psb): (Span, bool)) -> Result<()> {
         cx.emit(
             Node::new("Layer Info")
                 .span(info)
-                .summary(format!("{} layers", count.unsigned_abs()))
+                .summary(plural(count.unsigned_abs(), "layer"))
                 .lazy(layer_info, (contents, psb)),
         );
     } else {
@@ -562,7 +562,7 @@ async fn tagged_blocks(cx: Cx, (span, psb, align): (Span, bool, u64)) -> Result<
             let count = cx.read_avail(block.body.sub(0, 2)).await?;
             if let Some(n) = u16_be(&count, 0) {
                 let n = i16::from_be_bytes(n.to_be_bytes());
-                summary = format!("{} layers, {summary}", n.unsigned_abs());
+                summary = format!("{}, {summary}", plural(n.unsigned_abs(), "layer"));
             }
         }
         let node = Node::new(crate::text::latin1(&block.key))

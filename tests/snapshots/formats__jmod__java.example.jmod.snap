@@ -4,8 +4,8 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ java.example.jmod — Java module  [0x0+0xa8]
     Header — JMOD 1.0  [0x0+0x4]
-  ▾ Module contents (ZIP) — ZIP archive, 1 entries  [0x4+0xa4]
-    ▾ Central Directory — 1 entries  [0x4b+0x47]
+  ▾ Module contents (ZIP) — ZIP archive, 1 entry  [0x4+0xa4]
+    ▾ Central Directory — 1 entry  [0x4b+0x47]
       ▾ classes/module-info.class — stored, 16 → 16 bytes  [0x4b+0x47]
         ▾ Central Directory Header  [0x4b+0x2e]
             Signature: 50 4b 01 02  |PK..|  [0x4b+0x4]

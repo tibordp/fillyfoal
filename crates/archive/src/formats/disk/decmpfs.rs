@@ -19,6 +19,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::Codec;
 use crate::formats::disk::PieceList;
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -198,7 +199,8 @@ async fn zlib_chunks(
     let want = chunks_for(size);
     if count != want {
         cx.diag(Diagnostic::malformed(format!(
-            "{count} chunks in the table, {want} expected for the size"
+            "{count_chunk} in the table, {want} expected for the size",
+            count_chunk = plural(count, "chunk")
         )));
     }
     let entries = cx
@@ -237,7 +239,8 @@ async fn table_chunks(
     let want = chunks_for(size);
     if count != want || first % 4 != 0 {
         cx.diag(Diagnostic::malformed(format!(
-            "{count} chunks in the table, {want} expected for the size"
+            "{count_chunk} in the table, {want} expected for the size",
+            count_chunk = plural(count, "chunk")
         )));
     }
     let n = count.min(want);

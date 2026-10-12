@@ -439,7 +439,7 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
                         .saturating_add(8),
                 ),
             )
-            .summary(format!("{count} tables"))
+            .summary(plural(count, "table"))
             .lazy(schema_header, base),
     );
     let s = schema(&cx, file, &h).await?;
@@ -971,7 +971,7 @@ async fn record(cx: Cx, r: RecordState) -> Result<()> {
         cx.emit(
             Node::new("Attribute offsets")
                 .span(r.record.sub(RecordHeader::SIZE, offsets_len))
-                .summary(format!("{} attributes", attrs.len()))
+                .summary(plural(attrs.len(), "attribute"))
                 .lazy(
                     attribute_offsets,
                     (

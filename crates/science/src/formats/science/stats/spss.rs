@@ -24,6 +24,7 @@ use crate::formats::Input;
 use crate::formats::Probe;
 use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::binutil::get;
+use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
@@ -575,7 +576,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     );
     let mut records = Node::new("Dictionary")
         .span(dict_span)
-        .summary(format!("{} records", dict.records.len()))
+        .summary(plural(dict.records.len(), "record"))
         .lazy(dictionary, dict.clone());
     if let Some(d) = problem {
         records = records.diag(d);
@@ -605,7 +606,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         cx.emit(
             Node::new("Documents")
-                .summary(format!("{} lines", lines.len()))
+                .summary(plural(lines.len(), "line"))
                 .lazy(emit_nodes, Arc::new(lines)),
         );
     }
@@ -638,8 +639,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         };
         let mut node = Node::new("Cases").span(data);
         node = match &dict.cases {
-            Some(n) => node.summary(format!("{n} cases × {} slots", dict.slots)),
-            None => node.summary(format!("{} slots per case", dict.slots)),
+            Some(n) => node.summary(format!("{n} cases × {}", plural(dict.slots, "slot"))),
+            None => node.summary(format!("{} per case", plural(dict.slots, "slot"))),
         };
         node = match source {
             Ok(span) => node.lazy(cases, (dict.clone(), span)),
@@ -740,7 +741,10 @@ async fn zsav(cx: &Cx, file: Span, data: Span, dict: &Dict, _: &Codec) -> Result
     cx.emit(
         Node::new("zlib trailer")
             .span(trailer)
-            .summary(format!("{blocks} blocks, {total} bytes uncompressed"))
+            .summary(format!(
+                "{blocks_block}, {total} bytes uncompressed",
+                blocks_block = plural(blocks, "block")
+            ))
             .lazy(emit_nodes, Arc::new(nodes)),
     );
     let span = cx
@@ -771,9 +775,9 @@ async fn dictionary(cx: Cx, dict: Arc<Dict>) -> Result<()> {
             Rec::Continuation => Node::new("Variable (string continuation)").span(span),
             Rec::Labels(i) => Node::new("Value labels")
                 .span(span)
-                .summary(format!(
-                    "{} labels",
-                    dict.sets.get(*i).map_or(0, |s| s.entries.len())
+                .summary(plural(
+                    dict.sets.get(*i).map_or(0, |s| s.entries.len()),
+                    "label",
                 ))
                 .lazy(label_entries, (dict.clone(), *i)),
             Rec::LabelVars(i) => Node::new("Value label variables").span(span).summary(
@@ -788,9 +792,7 @@ async fn dictionary(cx: Cx, dict: Arc<Dict>) -> Result<()> {
                     })
                     .unwrap_or_default(),
             ),
-            Rec::Document(n) => Node::new("Document")
-                .span(span)
-                .summary(format!("{n} lines")),
+            Rec::Document(n) => Node::new("Document").span(span).summary(plural(n, "line")),
             Rec::Ext {
                 subtype,
                 size,
@@ -1142,7 +1144,7 @@ async fn label_sets(cx: Cx, dict: Arc<Dict>) -> Result<()> {
             .collect();
         let summary = match set.vars.first().and_then(|v| dict.vars.get(*v)) {
             Some(var) => set_summary(&dict, var, set),
-            None => format!("{} labels", set.entries.len()),
+            None => plural(set.entries.len(), "label"),
         };
         cx.push(
             Node::new(format!(

@@ -11,6 +11,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::fmt;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -122,7 +123,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Architectures")
             .span(table)
-            .summary(format!("{count} entries"))
+            .summary(plural(count, "entry"))
             .lazy(arch_table, (table, wide, file)),
     );
     // The slices in file order, with the alignment padding before each.

@@ -47,11 +47,11 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Directory table — 27 bytes  [0xdd+0x1b]
     ▾ Metadata block 0: 0x8019 — 25 bytes, uncompressed  [0xdd+0x1b]
         Data — stored  [0xdf+0x19]
-  ▾ ID table — 1 entries  [0xfe+0x8]
+  ▾ ID table — 1 entry  [0xfe+0x8]
     ▾ Index 0: 0xf8 — metadata block at 0xf8  [0xfe+0x8]
       ▾ Metadata block — 4 bytes  [0xf8+0x6]
           Data  [0xfa+0x4]
-    ▾ Entries — 1 entries  [0xfa+0x4]
+    ▾ Entries — 1 entry  [0xfa+0x4]
         ID 0: 0  [0xfa+0x4]
   ▾ Root directory
       ! malformed: not a directory

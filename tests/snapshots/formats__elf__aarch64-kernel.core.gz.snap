@@ -278,7 +278,7 @@ expression: "common::explore(&display_name(&path), &data)"
         p_memsz: 0x21000  [0x1b8+0x8]
         p_align: 0x1000  [0x1c0+0x8]
         Contents  [0xa000+0x21000]
-  ▾ Notes — 1 regions, 0xc70 bytes
+  ▾ Notes — 1 region, 0xc70 bytes
     ▾ NT_PRSTATUS — pid 539, signal SIGSEGV  [0x1c8+0x19c]
         n_namesz: 5  [0x1c8+0x4]
         n_descsz: 392  [0x1cc+0x4]

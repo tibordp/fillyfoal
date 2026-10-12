@@ -6,7 +6,7 @@ use crate::bytes::{to_u64, u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::fmt::fourcc;
+use crate::formats::util::fmt::{fourcc, plural};
 use crate::formats::{Input, embedded, embedded_named};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -164,7 +164,7 @@ async fn lang_sys(cx: &Cx, name: String, span: Span) -> Result<Node> {
     if count > 64 {
         list.push("…".into());
     }
-    let mut summary = format!("{count} features");
+    let mut summary = plural(count, "feature");
     if required != 0xffff {
         summary = format!("{summary}, required feature {required}");
     }
@@ -199,7 +199,7 @@ async fn feature_list(cx: Cx, list: Span) -> Result<()> {
         }
         let mut node = Node::new(format!("[{i}] '{tag}'"))
             .span(table.sub(to_u64(i).saturating_mul(6), 6))
-            .summary(format!("{n} lookups"));
+            .summary(plural(n, "lookup"));
         if !lookups.is_empty() {
             node = node.value(Value::Text(format!(
                 "lookup indices {}",
@@ -229,7 +229,10 @@ async fn lookup_list(cx: Cx, (list, gpos): (Span, bool)) -> Result<()> {
         cx.push(
             Node::new(format!("Lookup {i}"))
                 .span(lspan)
-                .summary(format!("{name}, {subtables} subtables, flags {flags:#06x}"))
+                .summary(format!(
+                    "{name}, {subtables_subtable}, flags {flags:#06x}",
+                    subtables_subtable = plural(subtables, "subtable")
+                ))
                 .lazy(lookup_table, lspan),
         )
         .await;

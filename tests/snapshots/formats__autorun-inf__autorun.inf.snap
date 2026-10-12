@@ -7,5 +7,5 @@ expression: "common::explore(&display_name(&path), &data)"
       open: "setup.exe /auto"  [0x23+0x16]
       icon: "setup.exe,0"  [0x39+0x12]
       label: "Example Install Disc"  [0x4b+0x1c]
-  ▾ [Content] — 1 keys  [0x69+0x1d]
+  ▾ [Content] — 1 key  [0x69+0x1d]
       MusicFiles: "false"  [0x74+0x12]

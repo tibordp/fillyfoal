@@ -495,7 +495,7 @@ fn summarize(parsed: &Parsed) -> String {
     let count = if n == 1 {
         "1 property".to_owned()
     } else {
-        format!("{n} properties")
+        plural(n, "property")
     };
     if parts.is_empty() {
         format!("XMP metadata, {count}")
@@ -539,7 +539,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .summary(if n == 1 {
                 "1 property".to_owned()
             } else {
-                format!("{n} properties")
+                plural(n, "property")
             })
             .lazy(list, Arc::new(props));
         if !uri.is_empty() {

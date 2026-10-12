@@ -10,6 +10,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::iff::{Chunk, Ctx, FourCc, scan, walk};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{Bits, bits_node, parse_bits, u24};
 use crate::formats::{embedded, embedded_as};
 use crate::node::Node;
@@ -241,7 +242,7 @@ fn image_stream(b: &mut Bits<'_>) -> Result<()> {
         b.field("Color cache bits", 4)
             .with(|v, n| {
                 let size = 1u64.checked_shl(u32::try_from(v).unwrap_or(0)).unwrap_or(0);
-                n.summary(format!("{size} entries"))
+                n.summary(plural(size, "entry"))
             })
             .emit()?;
     }
@@ -567,7 +568,7 @@ pub async fn describe(cx: &Cx, ctx: &Ctx, region: Span) -> Result<Option<String>
         let flags = flags.first().copied().unwrap_or(0);
         if flags & 0x02 != 0 {
             let frames: Vec<_> = chunks.iter().filter(|c| &c.id == b"ANMF").collect();
-            line.push_str(&format!(", animated, {} frames", frames.len()));
+            line.push_str(&format!(", animated, {}", plural(frames.len(), "frame")));
             if frames.len() <= MAX_SUMMED_FRAMES {
                 let mut total = 0u64;
                 let (mut lossy, mut lossless) = (false, false);

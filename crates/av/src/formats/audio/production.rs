@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::Result;
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::video::containers::chunks;
 use crate::formats::{Head, Input, Probe};
@@ -107,7 +108,9 @@ async fn exs(cx: Cx, input: Input) -> Result<()> {
     }
     let [_, zones, groups, samples, ..] = counts;
     cx.annotate(format!(
-        "EXS24 instrument {name:?}: {zones} zones, {groups} groups, {samples} samples"
+        "EXS24 instrument {name:?}: {zones} zones, {groups_group}, {samples_sample}",
+        groups_group = plural(groups, "group"),
+        samples_sample = plural(samples, "sample")
     ));
     Ok(())
 }
@@ -129,8 +132,8 @@ async fn rex2(cx: Cx, input: Input) -> Result<()> {
     let found = chunks(&cx, file, 12, ChunkLayout::IFF).await?;
     let slices = found.iter().filter(|c| c.id == b"SLCE").count();
     cx.annotate(format!(
-        "REX2 loop, {} chunks, {slices} slices",
-        found.len()
+        "REX2 loop, {}, {slices} slices",
+        plural(found.len(), "chunk")
     ));
     Ok(())
 }

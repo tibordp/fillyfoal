@@ -6,6 +6,7 @@
 use super::bitwalk::Walker;
 use super::params::SpsInfo;
 use super::tables::{TRANSFER_CHARACTERISTICS, lookup_or};
+use crate::formats::util::fmt::plural;
 use crate::value::EnumTable;
 
 pub const H264_SEI_TYPES: EnumTable = &[
@@ -268,7 +269,7 @@ fn payload(
                 format!("POC {cnt}")
             } else {
                 let cnt = w.ue("recovery_frame_cnt")?;
-                format!("{cnt} frames")
+                plural(cnt, "frame")
             };
             let exact = w.flag("exact_match_flag")?;
             let broken = w.flag("broken_link_flag")?;
@@ -521,7 +522,10 @@ fn t35(w: &mut Walker, size: u64) -> Option<Option<String>> {
                     w.end_summary(|| format!("type {t}{}", if valid { "" } else { ", not valid" }));
                 }
                 w.end();
-                detail = format!("ATSC A/53 closed captions, {count} entries");
+                detail = format!(
+                    "ATSC A/53 closed captions, {count_entry}",
+                    count_entry = plural(count, "entry")
+                );
                 return Some(Some(detail));
             }
             detail = format!("ATSC {id_text} type {code}");

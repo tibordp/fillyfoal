@@ -3,6 +3,7 @@
 //! formula text.
 
 use crate::bytes::{u16_le, u32_le, u64_le};
+use crate::formats::util::fmt::plural;
 use crate::value::{EnumTable, lookup};
 
 use super::rec::{column_name, number};
@@ -643,7 +644,10 @@ pub fn tokens_for(rgce: &[u8], names: &Names, version: u8) -> (Vec<Token>, Optio
                 };
                 let fname = function(index)
                     .map_or_else(|| format!("function {index}"), |(n, _)| n.to_owned());
-                detail = format!("{fname}, {argc} arguments");
+                detail = format!(
+                    "{fname}, {argc_argument}",
+                    argc_argument = plural(argc, "argument")
+                );
                 match usize::try_from(argc) {
                     Ok(n) if n <= stack.len() => {
                         let args = stack.split_off(stack.len().saturating_sub(n));

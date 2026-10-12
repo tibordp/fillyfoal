@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ compact.cdex — Android compact DEX v001, 1 classes, 0 methods, 2 strings (net.fillyfoal.Compact)  [0x0+0xdc]
+▾ compact.cdex — Android compact DEX v001, 1 class, 0 methods, 2 strings (net.fillyfoal.Compact)  [0x0+0xdc]
   ▾ Header  [0x0+0x88]
       magic: "cdex001" — compact DEX  [0x0+0x8]
       checksum: 0x0  [0x8+0x4]
@@ -36,12 +36,12 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Strings — 2 entries  [0x88+0x8]
       #0: 0x0 — "Lnet/fillyfoal/Compact;"  [0x88+0x4] → 0x0+0x0
       #1: 0x19 — "Compact.java"  [0x8c+0x4] → 0x19+0x0
-  ▾ Types — 1 entries  [0x90+0x4]
+  ▾ Types — 1 entry  [0x90+0x4]
       #0: 0 — Lnet/fillyfoal/Compact; (net.fillyfoal.Compact)  [0x90+0x4]
   ▾ Prototypes — 0 entries  [0x0+0x0]
   ▾ Fields — 0 entries  [0x0+0x0]
   ▾ Methods — 0 entries  [0x0+0x0]
-  ▾ Classes — 1 entries  [0x94+0x20]
+  ▾ Classes — 1 entry  [0x94+0x20]
     ▾ net.fillyfoal.Compact — public, Compact.java  [0x94+0x20]
         class_idx: 0 — Lnet/fillyfoal/Compact;  [0x94+0x4]
         access_flags: 0x1 [PUBLIC]  [0x98+0x4]

@@ -77,7 +77,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Type: LONG (0x4)  [0xc2+0x2]
         Count: 1  [0xc4+0x4]
         Value: 0c 00 00 00  |....|  [0xc8+0x4]
-      ▾ Exif IFD — 1 entries  [0xc+0x12]
+      ▾ Exif IFD — 1 entry  [0xc+0x12]
           Entry count: 1  [0xc+0x2]
         ▾ CameraOwnerName: "Zoë Ångström"  [0xe+0xc] → 0x1e+0x10
             Tag: 0xa430 — CameraOwnerName  [0xe+0x2]

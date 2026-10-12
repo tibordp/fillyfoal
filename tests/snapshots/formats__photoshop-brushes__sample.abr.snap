@@ -27,7 +27,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Name: ""  [0x1a8+0x6]
         Class: "null"  [0x1ae+0x8]
         Items: 1  [0x1b6+0x4]
-      ▾ Brsh — list: 1 items  [0x1ba+0x110]
+      ▾ Brsh — list: 1 item  [0x1ba+0x110]
         ▾ [0] — descriptor: brushPreset, 3 items  [0x1ca+0x100]
             Name: ""  [0x1ce+0x6]
             Class: "brushPreset"  [0x1d4+0xf]

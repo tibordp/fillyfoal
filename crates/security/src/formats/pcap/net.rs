@@ -12,6 +12,7 @@ use super::app;
 use super::dec::{Dec, Ix, inet_sum, ipv4, ipv6, mac};
 use super::wlan;
 use crate::error::Diagnostic;
+use crate::formats::util::fmt::plural;
 use crate::value::{EnumTable, FlagTable, field, flag, lookup};
 
 pub const LINKTYPES: EnumTable = &[
@@ -1500,7 +1501,10 @@ fn ipv6_ext(b: &mut Dec, p: Ix, kind: u8, at: usize, end: usize) -> (u8, usize) 
             b.data(ix, "Type-specific data", a, hend);
             let rname = lookup(ROUTING_TYPES, rt).unwrap_or("unknown type");
             b.summary(ix, || {
-                let mut s = format!("{rname}, {left} segments left");
+                let mut s = format!(
+                    "{rname}, {left_segment} left",
+                    left_segment = plural(left, "segment")
+                );
                 if !addrs.is_empty() {
                     s.push_str(&format!(", {}", addrs.join(", ")));
                 }

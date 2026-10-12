@@ -98,7 +98,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ PadN  [0xcc+0x2]
           Type: PadN (0x1) — skip if unknown  [0xcc+0x1]
           Length: 0  [0xcd+0x1]
-    ▾ IPv6 routing header — Segment routing (SRH), 1 segments left, 2001:db8::30, 2001:db8::20  [0xce+0x28]
+    ▾ IPv6 routing header — Segment routing (SRH), 1 segment left, 2001:db8::30, 2001:db8::20  [0xce+0x28]
         Next header: IPv6 destination options (0x3c)  [0xce+0x1]
         Header extension length: 4  [0xcf+0x1]
         Routing type: Segment routing (SRH) (0x4)  [0xd0+0x1]

@@ -37,6 +37,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -518,7 +519,8 @@ async fn follow(
             return (
                 out,
                 Some(Diagnostic::warning(format!(
-                    "chain is longer than the {limit} sectors expected"
+                    "chain is longer than the {limit_sector} expected",
+                    limit_sector = plural(limit, "sector")
                 ))),
             );
         }
@@ -646,8 +648,8 @@ pub async fn stream(
 pub async fn read_entry(cx: &Cx, cfb: &Cfb, id: u32) -> Result<DirEntry> {
     if u64::from(id) >= cfb.entries() {
         return Err(Diagnostic::malformed(format!(
-            "directory entry {id} does not exist ({} entries)",
-            cfb.entries()
+            "directory entry {id} does not exist ({})",
+            plural(cfb.entries(), "entry")
         )));
     }
     crate::fields::parse(cx, cfb.entry_span(id), LE, &(), DirEntry::layout).await
@@ -844,7 +846,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
     cx.emit(
         Node::new("FAT")
-            .summary(format!("{} sectors", cfb.fat.len()))
+            .summary(plural(cfb.fat.len(), "sector"))
             .desc("Sector allocation table: the next sector of each chain")
             .lazy(fat_sectors, cfb.clone()),
     );
@@ -857,14 +859,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("MiniFAT")
                 .span(minifat)
-                .summary(format!("{} entries", minifat.len / 4))
+                .summary(plural(minifat.len / 4, "entry"))
                 .lazy(minifat_entries, minifat),
         );
     }
     cx.emit(
         Node::new("Directory")
             .span(cfb.dir)
-            .summary(format!("{} entries", cfb.entries()))
+            .summary(plural(cfb.entries(), "entry"))
             .desc("All directory entries in storage order")
             .lazy(directory, cfb.clone()),
     );

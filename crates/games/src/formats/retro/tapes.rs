@@ -8,7 +8,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{plural, size};
 use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -94,12 +94,13 @@ async fn zx_tap(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
     }
     cx.annotate(format!(
-        "ZX Spectrum tape, {blocks} blocks{}",
+        "ZX Spectrum tape, {blocks_block}{}",
         if names.is_empty() {
             String::new()
         } else {
             format!(": {}", names.join(", "))
-        }
+        },
+        blocks_block = plural(blocks, "block")
     ));
     Ok(())
 }
@@ -186,12 +187,13 @@ async fn pzx(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "PZX tape v{version}{}, {blocks} blocks",
+        "PZX tape v{version}{}, {blocks_block}",
         if title.is_empty() {
             String::new()
         } else {
             format!(" {title:?}")
-        }
+        },
+        blocks_block = plural(blocks, "block")
     ));
     Ok(())
 }
@@ -331,7 +333,7 @@ async fn g64(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{used} of {tracks} half-tracks present"))
             .lazy(g64_tracks, (file, offsets, speeds)),
     );
-    cx.annotate(format!("{magic} image, {used} tracks present of {tracks} half-track slots, max {max} bytes per track"));
+    cx.annotate(format!("{magic} image, {used_track} present of {tracks} half-track slots, max {max} bytes per track", used_track = plural(used, "track")));
     Ok(())
 }
 
@@ -439,7 +441,10 @@ async fn scl(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(name)
                 .span(dir.sub(to_u64(i).saturating_mul(14), 14))
-                .summary(format!("{detail}, {sectors} sectors"))
+                .summary(format!(
+                    "{detail}, {sectors_sector}",
+                    sectors_sector = plural(sectors, "sector")
+                ))
                 .target(data),
         )
         .await;
@@ -592,8 +597,8 @@ async fn msx_cas(cx: Cx, input: Input) -> Result<()> {
         cx.push(node.span(span)).await;
     }
     cx.annotate(format!(
-        "MSX cassette, {} blocks, {} file(s){}",
-        starts.len(),
+        "MSX cassette, {}, {} file(s){}",
+        plural(starts.len(), "block"),
         files.len(),
         if files.is_empty() {
             String::new()
@@ -808,7 +813,10 @@ async fn st_prg(cx: Cx, input: Input) -> Result<()> {
         size(h.data.into()),
         size(h.bss.into()),
         if h.absolute == 0 {
-            format!(", {fixups} relocations")
+            format!(
+                ", {fixups_relocation}",
+                fixups_relocation = plural(fixups, "relocation")
+            )
         } else {
             ", absolute".to_owned()
         }

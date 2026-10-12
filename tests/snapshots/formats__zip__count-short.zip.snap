@@ -2,9 +2,9 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ count-short.zip — ZIP archive, 1 entries  [0x0+0x11b]
+▾ count-short.zip — ZIP archive, 1 entry  [0x0+0x11b]
   ▾ Central Directory — 3 entries  [0x6c+0x99]
-      ! warning: the end record says 1 entries, the central directory holds 3
+      ! warning: the end record says 1 entry, the central directory holds 3
     ▾ a.txt — stored, 1 → 1 bytes  [0x6c+0x33]
       ▾ Central Directory Header  [0x6c+0x2e]
           Signature: 50 4b 01 02  |PK..|  [0x6c+0x4]

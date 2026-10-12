@@ -7,6 +7,7 @@ use crate::error::Result;
 use crate::fields::Fields;
 use crate::formats::embedded;
 use crate::formats::image::j2k::{MARKERS, PROGRESSION};
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::EnumTable;
@@ -110,7 +111,7 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
                 f.node(
                     Node::new("Palette")
                         .span(f.peek_span(rest))
-                        .summary(format!("{entries} entries")),
+                        .summary(plural(entries, "entry")),
                 );
                 Ok(())
             })
@@ -188,10 +189,10 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
     let d = small(cx, st.body().sub(0, 64)).await.ok()?;
     match kind {
         b"ihdr" => Some(format!(
-            "{}×{}, {} components, {}",
+            "{}×{}, {}, {}",
             u32_be(&d, 4)?,
             u32_be(&d, 0)?,
-            u16_be(&d, 8)?,
+            plural(u16_be(&d, 8)?, "component"),
             bpc(d.get(10).copied()?)
         )),
         b"colr" if d.first() == Some(&1) => {
@@ -213,7 +214,8 @@ pub fn siz_summary(d: &[u8]) -> Option<String> {
     let height = u32_be(d, 12)?.saturating_sub(u32_be(d, 20)?);
     let components = u16_be(d, 40)?;
     Some(format!(
-        "codestream {width}×{height}, {components} components"
+        "codestream {width}×{height}, {components_component}",
+        components_component = plural(components, "component")
     ))
 }
 

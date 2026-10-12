@@ -87,8 +87,8 @@ expression: "common::explore(&display_name(&path), &data)"
               [2]: 12  [0x2d4+0x2]
               [3]: 12  [0x2d7+0x2]
             /Parent: "1 0 R"  [0x2dc+0xd] → 0x590+0x0
-          ▾ /Resources — 1 entries  [0x2ea+0x2a]
-            ▾ /XObject — 1 entries  [0x2f8+0x19]
+          ▾ /Resources — 1 entry  [0x2ea+0x2a]
+            ▾ /XObject — 1 entry  [0x2f8+0x19]
               ▾ /Im0: "7 0 R" — stream, image 16×16, /DeviceRGB, 8-bit, /XObject /Image, 8 entries, 344 bytes, /JPXDecode  [0x304+0xa] → 0x32b+0x0
                   /BitsPerComponent: 8  [0x336+0x13]
                   /ColorSpace: "/DeviceRGB"  [0x34a+0x16]
@@ -220,8 +220,8 @@ expression: "common::explore(&display_name(&path), &data)"
           [2]: 12  [0x2d4+0x2]
           [3]: 12  [0x2d7+0x2]
         /Parent: "1 0 R"  [0x2dc+0xd] → 0x590+0x0
-      ▾ /Resources — 1 entries  [0x2ea+0x2a]
-        ▾ /XObject — 1 entries  [0x2f8+0x19]
+      ▾ /Resources — 1 entry  [0x2ea+0x2a]
+        ▾ /XObject — 1 entry  [0x2f8+0x19]
           ▾ /Im0: "7 0 R" — stream, image 16×16, /DeviceRGB, 8-bit, /XObject /Image, 8 entries, 344 bytes, /JPXDecode  [0x304+0xa] → 0x32b+0x0
               /BitsPerComponent: 8  [0x336+0x13]
               /ColorSpace: "/DeviceRGB"  [0x34a+0x16]
@@ -417,8 +417,8 @@ expression: "common::explore(&display_name(&path), &data)"
               [2]: 12  [0x2d4+0x2]
               [3]: 12  [0x2d7+0x2]
             /Parent: "1 0 R"  [0x2dc+0xd] → 0x590+0x0
-          ▾ /Resources — 1 entries  [0x2ea+0x2a]
-            ▾ /XObject — 1 entries  [0x2f8+0x19]
+          ▾ /Resources — 1 entry  [0x2ea+0x2a]
+            ▾ /XObject — 1 entry  [0x2f8+0x19]
                 /Im0: "7 0 R"  [0x304+0xa] → 0x32b+0x0
             /Type: "/Page"  [0x315+0xb]
             End keywords: "endobj"  [0x323+0x7]

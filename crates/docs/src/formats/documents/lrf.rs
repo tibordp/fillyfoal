@@ -4,6 +4,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Input, Probe};
 use crate::node::Node;
 
@@ -26,6 +27,9 @@ async fn lrf(cx: Cx, input: Input) -> Result<()> {
     let objects = f.u64("Number of objects").emit()?;
     f.u64("Object index offset").hex().emit()?;
     cx.emit(Node::new("Objects").span(file.tail(0x58)));
-    cx.annotate(format!("Sony BBeB e-book v{version}, {objects} objects"));
+    cx.annotate(format!(
+        "Sony BBeB e-book v{version}, {objects_object}",
+        objects_object = plural(objects, "object")
+    ));
     Ok(())
 }

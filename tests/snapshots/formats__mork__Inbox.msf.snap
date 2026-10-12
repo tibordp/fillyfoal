@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ Inbox.msf — Mork 1.4, 2 dictionaries, 1 tables, 1 rows, 1 transaction groups  [0x0+0x194]
+▾ Inbox.msf — Mork 1.4, 2 dictionaries, 1 table, 1 row, 1 transaction groups  [0x0+0x194]
     Magic: "// <!-- <mdb:mork:z v=\"1.4\"/> -->"  [0x0+0x21]
   ▾ Dictionary — 9 cells  [0x22+0x9c]
     ▾ Meta-dictionary — 1 cells  [0x24+0x7]

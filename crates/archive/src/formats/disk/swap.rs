@@ -7,6 +7,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{size, text, uuid_value};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -76,7 +77,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let label = crate::text::until_nul(&info.label);
     let pages = u64::from(info.last_page).saturating_add(1);
     cx.annotate(format!(
-        "Linux swap v{}{}, {} ({} pages of {})",
+        "Linux swap v{}{}, {} ({} of {})",
         info.version,
         if label.is_empty() {
             String::new()
@@ -84,7 +85,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             format!(" \"{label}\"")
         },
         size(pages.saturating_mul(page)),
-        pages,
+        plural(pages, "page"),
         size(page),
     ));
     cx.emit(Info::node("Header", info_span, LE));

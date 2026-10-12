@@ -81,7 +81,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Type: "IEND" — critical, public, unsafe to copy  [0x4a5+0x4]
             CRC: 0xae426082 — valid  [0x4a9+0x4]
   ▾ Object spaces: 2
-    ▾ Object space: "{0f111f0a-0000-4000-8000-0000000005ec}, 1" — section, 1 revisions  [0xc58+0x48]
+    ▾ Object space: "{0f111f0a-0000-4000-8000-0000000005ec}, 1" — section, 1 revision  [0xc58+0x48]
         gosid: "{0f111f0a-0000-4000-8000-0000000005ec}, 1"
       ▾ Object space manifest list: "0xc58 + 0x48"  [0xc58+0x48] → 0xc58+0x48
         ▾ Fragments: 1 — FileNodeListID 0x15
@@ -653,7 +653,7 @@ expression: "common::explore(&display_name(&path), &data)"
               OIDs: 0 — [OsidStreamNotPresent]  [0xaa8+0x4]
               cProperties: 1  [0xaac+0x2]
               SchemaRevisionInOrderToRead: 43  [0xab2+0x4]
-    ▾ Object space: "{0f111f0a-0000-4000-8000-000000009a61}, 1" — page “Shopping list”, 1 revisions  [0xca0+0x48]
+    ▾ Object space: "{0f111f0a-0000-4000-8000-000000009a61}, 1" — page “Shopping list”, 1 revision  [0xca0+0x48]
         gosid: "{0f111f0a-0000-4000-8000-000000009a61}, 1"
       ▾ Object space manifest list: "0xca0 + 0x48"  [0xca0+0x48] → 0xca0+0x48
         ▾ Fragments: 1 — FileNodeListID 0x16
@@ -2956,7 +2956,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   CRC: 0xae426082 — valid  [0x4a9+0x4]
               Padding  [0x4ad+0x3]
               guidFooter: {71fba722-0f79-4a0b-bb13-899256426b24}  [0x4b0+0x10]
-  ▾ Transaction log — 1 transactions, 10 entries, 9 lists  [0xe08+0x5c]
+  ▾ Transaction log — 1 transaction, 10 entries, 9 lists  [0xe08+0x5c]
     ▾ Transaction 1 — node counts: 0x10 → 1, 0x11 → 22, 0x12 → 7, 0x13 → 10, 0x14 → 6, 0x15 → 2, 0x16 → 2, 0x17 → 4, 0x18 …  [0xe08+0x50]
         List 0x10: 1 — file nodes committed  [0xe08+0x8]
         List 0x11: 22 — file nodes committed  [0xe10+0x8]

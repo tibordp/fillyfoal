@@ -14,6 +14,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::fmt;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
@@ -498,7 +499,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 fn header_node(name: &'static str, h: Header, signature: bool) -> Node {
     Node::new(name)
         .span(h.span)
-        .summary(format!("{} entries, {}", h.entries, fmt::size(h.store.len)))
+        .summary(format!(
+            "{}, {}",
+            plural(h.entries, "entry"),
+            fmt::size(h.store.len)
+        ))
         .lazy(header, (h, signature))
 }
 

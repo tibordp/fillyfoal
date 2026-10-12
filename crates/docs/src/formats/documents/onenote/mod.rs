@@ -55,7 +55,7 @@ use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::datakit::guid_le;
-use crate::formats::util::fmt::preview;
+use crate::formats::util::fmt::{plural, preview};
 use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Input, Probe, embedded};
 use crate::node::Node;
@@ -177,8 +177,9 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
             0 => format!("{annotation}, no pages"),
             1 => format!("{annotation}, 1 page: {}", preview(&titles.join(""), 60)),
             n => format!(
-                "{annotation}, {n} pages: {}",
-                preview(&titles.join(", "), 80)
+                "{annotation}, {n_page}: {}",
+                preview(&titles.join(", "), 80),
+                n_page = plural(n, "page")
             ),
         };
     }
@@ -209,9 +210,9 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let mut node = Node::new("Transaction log")
             .span(store.transaction_log.span(file))
             .summary(format!(
-                "{} transactions, {} entries, {} lists",
-                log.committed,
-                log.entries.len(),
+                "{}, {}, {} lists",
+                plural(log.committed, "transaction"),
+                plural(log.entries.len(), "entry"),
                 log.counts.len()
             ))
             .lazy(txlog_view, input);
@@ -244,7 +245,7 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .summary(if files == 1 {
                     "1 file".to_owned()
                 } else {
-                    format!("{files} files")
+                    plural(files, "file")
                 })
                 .lazy(files_view, input),
         );
@@ -759,7 +760,7 @@ async fn propset_view(cx: Cx, st: PropState) -> Result<()> {
                 cx.push(
                     Node::new(format!("Element {k}"))
                         .span(model::inner(span, s.at, s.len))
-                        .summary(format!("{} properties", s.props.len()))
+                        .summary(plural(s.props.len(), "property"))
                         .lazy(
                             crate::expander!(self::propset_view: PropState),
                             PropState {
@@ -923,7 +924,7 @@ fn prop_node(
         PValue::Set(s) => {
             let mut path = st.path.as_ref().clone();
             path.push((pi, 0));
-            node.summary(format!("{} properties", s.props.len())).lazy(
+            node.summary(plural(s.props.len(), "property")).lazy(
                 crate::expander!(self::propset_view: PropState),
                 PropState {
                     path: Arc::new(path),
@@ -988,7 +989,7 @@ async fn spaces_view(cx: Cx, input: Input) -> Result<()> {
     let by_space = pages.is_some().then_some(&by_space);
     for (i, space) in model.spaces.iter().enumerate() {
         let mut parts = vec![space_label(&model, by_space, i, space)];
-        parts.push(format!("{} revisions", space.revisions.len()));
+        parts.push(plural(space.revisions.len(), "revision"));
         if space.encrypted {
             parts.push("encrypted".to_owned());
         }
@@ -1042,7 +1043,7 @@ async fn space_view(cx: Cx, (input, si): (Input, usize)) -> Result<()> {
         if !r.dependent.is_nil() {
             parts.push(format!("depends on {}", r.dependent.label()));
         }
-        parts.push(format!("{} objects", r.objects.len()));
+        parts.push(plural(r.objects.len(), "object"));
         if current == Some(ri) {
             parts.push("current content".to_owned());
         }

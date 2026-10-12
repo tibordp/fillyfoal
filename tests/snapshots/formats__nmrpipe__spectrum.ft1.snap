@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ spectrum.ft1 — NMRPipe 1D spectrum (little endian), 16 × 1 points, F2 1H 600.13 MHz, frequency domain  [0x0+0x840]
+▾ spectrum.ft1 — NMRPipe 1D spectrum (little endian), 16 × 1 point, F2 1H 600.13 MHz, frequency domain  [0x0+0x840]
     FDFLTORDER: 2.345  [0x8+0x4]
     FDDIMCOUNT: 1  [0x24+0x4]
     FDDIMORDER1: 2  [0x60+0x4]

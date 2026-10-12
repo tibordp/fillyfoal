@@ -15,6 +15,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::disk::name_field;
 use crate::formats::disk::{size, uuid_value};
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value, lookup};
@@ -528,16 +529,26 @@ fn block_summary(fs: &Fs, kind: BlockKind, data: &[u8]) -> String {
                 })
                 .unwrap_or(0);
             if kind == BlockKind::Block {
-                format!("single-block directory, {used} entries")
+                format!(
+                    "single-block directory, {used_entry}",
+                    used_entry = plural(used, "entry")
+                )
             } else {
-                format!("data, {used} entries")
+                format!("data, {used_entry}", used_entry = plural(used, "entry"))
             }
         }
-        BlockKind::Leaf1 => format!("leaf (single), {count} hashes"),
-        BlockKind::LeafN => format!("leaf (node form), {count} hashes"),
+        BlockKind::Leaf1 => format!(
+            "leaf (single), {count_hash}",
+            count_hash = plural(count, "hash")
+        ),
+        BlockKind::LeafN => format!(
+            "leaf (node form), {count_hash}",
+            count_hash = plural(count, "hash")
+        ),
         BlockKind::Node => format!(
-            "DA B+tree node, level {}, {count} entries",
-            u16_be(data, leaf_hdr.saturating_add(2)).unwrap_or(0)
+            "DA B+tree node, level {}, {count_entry}",
+            u16_be(data, leaf_hdr.saturating_add(2)).unwrap_or(0),
+            count_entry = plural(count, "entry")
         ),
         BlockKind::Free => format!(
             "free index, {} data blocks",
@@ -796,7 +807,7 @@ async fn dir_block(cx: Cx, (fs, span): (FsRef, Span)) -> Result<()> {
                 cx.emit(
                     Node::new("Leaf entries")
                         .span(leaf)
-                        .summary(format!("{} hashes", leaf.len / 8))
+                        .summary(plural(leaf.len / 8, "hash"))
                         .lazy(pairs, (leaf, Pairs::Leaf)),
                 );
                 cx.emit(struct_node(
@@ -839,7 +850,7 @@ async fn dir_block(cx: Cx, (fs, span): (FsRef, Span)) -> Result<()> {
             cx.emit(
                 Node::new("Entries")
                     .span(entries)
-                    .summary(format!("{count} hashes"))
+                    .summary(plural(count, "hash"))
                     .lazy(pairs, (entries, Pairs::Leaf)),
             );
             let used = hdr.saturating_add(entries.len);

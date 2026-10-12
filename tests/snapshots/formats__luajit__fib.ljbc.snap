@@ -7,7 +7,7 @@ expression: "common::explore(&display_name(&path), &data)"
     version: 2  [0x3+0x1]
     flags: 0x0 []  [0x4+0x1]
     chunkname: "@fib.lua"  [0x5+0x9]
-  ▾ Prototype 0 — 2 instructions, 1 parameters, line 1  [0xe+0x19]
+  ▾ Prototype 0 — 2 instructions, 1 parameter, line 1  [0xe+0x19]
       flags: 0x0 []  [0xf+0x1]
       numparams: 1  [0x10+0x1]
       framesize: 3  [0x11+0x1]

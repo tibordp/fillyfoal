@@ -1944,6 +1944,6 @@ expression: "common::explore(&display_name(&path), &data)"
         Row 61 — empty  [0x4ec9+0x1]
         Row 62 — empty  [0x4eca+0x1]
         Row 63 — empty  [0x4ecb+0x1]
-  ▾ Edit history — 1 entries  [0x478+0xa]
+  ▾ Edit history — 1 entry  [0x478+0xa]
       Entries: 1  [0x478+0x2]
       Entry 0 — opened 2026-10-12 00:02:54, edited for 0:00:06  [0x47a+0x8]

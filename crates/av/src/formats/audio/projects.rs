@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -46,13 +47,14 @@ async fn fxp(cx: Cx, input: Input) -> Result<()> {
     };
     cx.emit(Node::new("Data").span(file.tail(f.pos())));
     cx.annotate(format!(
-        "{} for plugin '{plugin}', {count} entries{}",
+        "{} for plugin '{plugin}', {count_entry}{}",
         lookup(FXP_KINDS, kind.into()).unwrap_or("VST data"),
         if name.is_empty() {
             String::new()
         } else {
             format!(", {name:?}")
-        }
+        },
+        count_entry = plural(count, "entry")
     ));
     Ok(())
 }
@@ -77,7 +79,10 @@ async fn flp(cx: Cx, input: Input) -> Result<()> {
             .span(events)
             .lazy(flp_events, events),
     );
-    cx.annotate(format!("FL Studio project, {channels} channels, {ppq} PPQ"));
+    cx.annotate(format!(
+        "FL Studio project, {channels_channel}, {ppq} PPQ",
+        channels_channel = plural(channels, "channel")
+    ));
     Ok(())
 }
 

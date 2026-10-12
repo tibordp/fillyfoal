@@ -8,6 +8,7 @@ use crate::declare_format;
 use crate::dsl::{Chunk, ChunkLayout, Cursor, Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
@@ -100,7 +101,10 @@ async fn fsb(cx: Cx, input: Input) -> Result<()> {
             .iter()
             .find(|(k, _)| *k == u64::from(mode))
             .map_or("unknown codec", |(_, v)| v);
-        cx.annotate(format!("FMOD FSB5 bank, {samples} samples, {codec}"));
+        cx.annotate(format!(
+            "FMOD FSB5 bank, {samples_sample}, {codec}",
+            samples_sample = plural(samples, "sample")
+        ));
     } else {
         let v4 = magic == b"FSB4";
         let head = cx.block(file.sub(0, 24)).await?;
@@ -133,8 +137,9 @@ async fn fsb(cx: Cx, input: Input) -> Result<()> {
         }
         cx.emit(Node::new("Sample data").span(file.sub(end, data.into())));
         cx.annotate(format!(
-            "FMOD {} bank, {samples} samples",
-            if v4 { "FSB4" } else { "FSB3" }
+            "FMOD {} bank, {samples_sample}",
+            if v4 { "FSB4" } else { "FSB3" },
+            samples_sample = plural(samples, "sample")
         ));
     }
     Ok(())
@@ -195,7 +200,10 @@ async fn xwb(cx: Cx, input: Input) -> Result<()> {
             }
             .unwrap_or(0);
             bank = until_nul(b.get(8..72).unwrap_or_default());
-            node = node.summary(format!("{bank:?}, {count} entries"));
+            node = node.summary(format!(
+                "{bank:?}, {count_entry}",
+                count_entry = plural(count, "entry")
+            ));
         }
         cx.emit(node);
     }
@@ -247,11 +255,10 @@ async fn wwise_bnk(cx: Cx, input: Input) -> Result<()> {
                     ));
                 }
                 media = index.len();
-                cx.push(
-                    Node::new("DIDX")
-                        .span(span)
-                        .summary(format!("media index, {media} entries")),
-                )
+                cx.push(Node::new("DIDX").span(span).summary(format!(
+                    "media index, {media_entry}",
+                    media_entry = plural(media, "entry")
+                )))
                 .await;
             }
             "DATA" => {
@@ -324,7 +331,7 @@ async fn vag(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("ADPCM data")
             .span(file.sub(48, h.size.into()))
-            .summary(format!("{} frames of 16 bytes", h.size / 16)),
+            .summary(format!("{} of 16 bytes", plural(h.size / 16, "frame"))),
     );
     cx.annotate(format!(
         "Sony VAG {:?}, {} Hz, {} channel(s)",
@@ -447,7 +454,10 @@ async fn hca(cx: Cx, input: Input) -> Result<()> {
                 .iter()
                 .fold(0u32, |a, &b| a.wrapping_shl(8) | u32::from(b));
             let blocks = u32_be(&header, at.saturating_add(8)).unwrap_or(0);
-            summary = format!("{channels} channel(s), {rate} Hz, {blocks} blocks");
+            summary = format!(
+                "{channels} channel(s), {rate} Hz, {blocks_block}",
+                blocks_block = plural(blocks, "block")
+            );
             node = node.summary(summary.clone());
         } else if id == "ciph" {
             let kind = u16_be(&header, at.saturating_add(4)).unwrap_or(0);
@@ -509,7 +519,10 @@ async fn cpk(cx: Cx, input: Input) -> Result<()> {
             .cstr(table.sub(8u64.saturating_add(strings).saturating_add(name_at), 256))
             .await?;
         name = n;
-        node = node.summary(format!("{name:?}, {columns} columns × {rows} rows"));
+        node = node.summary(format!(
+            "{name:?}, {columns} columns × {rows_row}",
+            rows_row = plural(rows, "row")
+        ));
     }
     cx.emit(node);
     cx.emit(Node::new("Content").span(file.tail(16u64.saturating_add(size))));
@@ -564,7 +577,10 @@ async fn afs(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("CRI AFS archive, {count} files"));
+    cx.annotate(format!(
+        "CRI AFS archive, {count_file}",
+        count_file = plural(count, "file")
+    ));
     Ok(())
 }
 

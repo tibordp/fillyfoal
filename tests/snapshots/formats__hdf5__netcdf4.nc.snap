@@ -79,7 +79,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Signature: "FSSE"  [0x171d+0x4]
                 Version: 0  [0x1721+0x1]
                 Free-space manager address: 0x4a37  [0x1722+0x8]
-              ▾ 1 sections of 253 bytes  [0x172a+0x9]
+              ▾ 1 section of 253 bytes  [0x172a+0x9]
                   Sections of this size: 1  [0x172a+0x1]
                   Section size: 253  [0x172b+0x3]
                   Section offset: 259  [0x172e+0x4]

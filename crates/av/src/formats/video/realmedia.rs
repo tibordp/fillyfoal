@@ -7,6 +7,7 @@ use crate::bytes::{u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::vidutil::{self, fixed16, num};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
@@ -118,10 +119,10 @@ fn chunk_summary(id: &[u8; 4], d: &[u8]) -> Option<String> {
             let (name, mime) = stream_names(d)?;
             Some(format!("stream {}: {mime} \"{name}\"", u16_be(d, 10)?))
         }
-        b"DATA" => Some(format!("{} packets", u32_be(d, 10)?)),
+        b"DATA" => Some(plural(u32_be(d, 10)?, "packet")),
         b"INDX" => Some(format!(
-            "{} entries for stream {}",
-            u32_be(d, 10)?,
+            "{} for stream {}",
+            plural(u32_be(d, 10)?, "entry"),
             u16_be(d, 14)?
         )),
         b"CONT" => {
@@ -298,7 +299,7 @@ async fn expand_chunk(cx: Cx, chunk: Chunk) -> Result<()> {
             cx.emit(
                 Node::new("Packets")
                     .span(packets)
-                    .summary(format!("{n} packets"))
+                    .summary(plural(n, "packet"))
                     .lazy(expand_packets, (packets, n)),
             );
         }

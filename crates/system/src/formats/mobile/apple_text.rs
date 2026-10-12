@@ -10,6 +10,7 @@ use crate::formats::text::encoding::prepare;
 use crate::formats::text::probe::{self, contains, significant, trim_start};
 use crate::formats::text::scan::Lines;
 use crate::formats::text::{json, yaml};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::Node;
@@ -117,8 +118,9 @@ async fn strings(cx: Cx, input: Input) -> Result<()> {
         cx.push(node.span(line.span)).await;
     }
     cx.annotate(format!(
-        "Apple strings table ({}), {count} entries",
-        prepared.encoding.name()
+        "Apple strings table ({}), {count_entry}",
+        prepared.encoding.name(),
+        count_entry = plural(count, "entry")
     ));
     Ok(())
 }
@@ -219,7 +221,7 @@ async fn pbxproj(cx: Cx, input: Input) -> Result<()> {
                 cx.push(
                     Node::new(name.clone())
                         .span(span)
-                        .summary(format!("{n} objects"))
+                        .summary(plural(&n, "object"))
                         .lazy(pbx_section, span),
                 )
                 .await;
@@ -248,7 +250,9 @@ async fn pbxproj(cx: Cx, input: Input) -> Result<()> {
         cx.push(node.span(line.span)).await;
     }
     cx.annotate(format!(
-        "Xcode project, object version {archive}, {objects} objects in {sections} sections"
+        "Xcode project, object version {archive}, {objects_object} in {sections_section}",
+        objects_object = plural(objects, "object"),
+        sections_section = plural(sections, "section")
     ));
     Ok(())
 }
@@ -376,7 +380,7 @@ async fn crash(cx: Cx, input: Input) -> Result<()> {
             cx.push(
                 Node::new(name)
                     .span(span)
-                    .summary(format!("{n} lines"))
+                    .summary(plural(n, "line"))
                     .lazy(block_lines, span),
             )
             .await;
@@ -461,6 +465,9 @@ async fn bcsymbolmap(cx: Cx, input: Input) -> Result<()> {
         };
         cx.push(node.span(line.span)).await;
     }
-    cx.annotate(format!("Bitcode symbol map v{version}, {n} symbols"));
+    cx.annotate(format!(
+        "Bitcode symbol map v{version}, {n_symbol}",
+        n_symbol = plural(n, "symbol")
+    ));
     Ok(())
 }

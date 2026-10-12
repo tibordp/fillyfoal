@@ -6,6 +6,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
@@ -479,7 +480,7 @@ async fn journal(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Objects")
             .span(arena)
-            .summary(format!("{} objects", h.objects))
+            .summary(plural(h.objects, "object"))
             .lazy(journal_objects, (input, arena, compact)),
     );
     let state = lookup(JOURNAL_STATES, h.state.into()).unwrap_or("unknown");
@@ -489,7 +490,10 @@ async fn journal(cx: Cx, input: Input) -> Result<()> {
     let last = crate::render::value(&Value::Timestamp {
         unix_seconds: i64::try_from(h.tail_realtime / 1_000_000).unwrap_or(0),
     });
-    cx.annotate(format!("{} entries, {state}, {first} – {last}", h.entries));
+    cx.annotate(format!(
+        "{}, {state}, {first} – {last}",
+        plural(h.entries, "entry")
+    ));
     Ok(())
 }
 
@@ -642,7 +646,10 @@ async fn redis_rdb(cx: Cx, input: Input) -> Result<()> {
                 cx.push(
                     Node::new("RESIZEDB")
                         .span(cur.since(start))
-                        .summary(format!("{keys} keys, {expires} with expiry")),
+                        .summary(format!(
+                            "{keys_key}, {expires} with expiry",
+                            keys_key = plural(keys, "key")
+                        )),
                 )
                 .await;
                 // Key/value pairs follow; their encodings vary by type.

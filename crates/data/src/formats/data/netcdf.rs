@@ -16,6 +16,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -356,8 +357,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         lookup(VERSIONS, version.into()).unwrap_or("classic"),
         header.dims.len(),
         unlimited.as_ref().map_or_else(String::new, |u| format!(
-            " ({u} unlimited, {} records)",
-            header.numrecs
+            " ({u} unlimited, {})",
+            plural(header.numrecs, "record")
         )),
         header.vars.len(),
         header.attrs.len()
@@ -562,7 +563,7 @@ async fn dimensions(cx: Cx, header: Arc<Header>) -> Result<()> {
             .value(value)
             .lazy(dimension_fields, (header.clone(), i));
         if d.len == 0 {
-            node = node.summary(format!("{} records", header.numrecs));
+            node = node.summary(plural(header.numrecs, "record"));
         }
         cx.push(node).await;
     }
@@ -919,9 +920,9 @@ fn data_node(header: &Arc<Header>, v: &Var) -> Node {
     }
     Node::new(v.name.clone())
         .summary(format!(
-            "{}, {} records of {}",
+            "{}, {} of {}",
             signature(header, v),
-            header.numrecs,
+            plural(header.numrecs, "record"),
             crate::formats::util::fmt::size(slab)
         ))
         .target(file.sub(v.begin, slab))
@@ -1063,8 +1064,8 @@ async fn data(cx: Cx, header: Arc<Header>) -> Result<()> {
             Node::new("Records")
                 .span(span)
                 .summary(format!(
-                    "{} records of {}",
-                    header.numrecs,
+                    "{} of {}",
+                    plural(header.numrecs, "record"),
                     crate::formats::util::fmt::size(header.recsize)
                 ))
                 .lazy(records, header.clone()),

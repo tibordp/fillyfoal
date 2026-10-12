@@ -48,7 +48,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Name: ""  [0x80+0x6]
           Class: "null"  [0x86+0x8]
           Items: 1  [0x8e+0x4]
-        ▾ list — list: 1 items  [0x92+0x56]
+        ▾ list — list: 1 item  [0x92+0x56]
           ▾ [0] — descriptor: Comp, 2 items  [0xa2+0x46]
               Name: ""  [0xa6+0x6]
               Class: "Comp"  [0xac+0x8]

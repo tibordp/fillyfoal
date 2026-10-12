@@ -2,9 +2,9 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ testsrc.j2k — 16×8, 3 components, 8-bit, 1 tiles  [0x0+0x2a0]
+▾ testsrc.j2k — 16×8, 3 components, 8-bit, 1 tile  [0x0+0x2a0]
     SOC  [0x0+0x2]
-  ▾ SIZ — 16×8, 3 components, 8-bit, 1 tiles  [0x2+0x31]
+  ▾ SIZ — 16×8, 3 components, 8-bit, 1 tile  [0x2+0x31]
       Marker: 0xff51  [0x2+0x2]
       Lsiz: 47  [0x4+0x2]
       Rsiz: 0x0  [0x6+0x2]

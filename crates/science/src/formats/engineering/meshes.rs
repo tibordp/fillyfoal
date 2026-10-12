@@ -6,6 +6,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record};
 use crate::error::Result;
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -125,8 +126,8 @@ async fn md5mesh(cx: Cx, input: Input) -> Result<()> {
     let anim = kv.iter().any(|(k, _)| k == "numFrames");
     cx.annotate(if anim {
         format!(
-            "MD5 animation, {} frames at {} fps",
-            get("numFrames"),
+            "MD5 animation, {} at {} fps",
+            plural(get("numFrames"), "frame"),
             get("frameRate")
         )
     } else {
@@ -186,13 +187,13 @@ async fn psk(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "Unreal {} ({} chunks)",
+        "Unreal {} ({})",
         if chunks.first().is_some_and(|c| c == "ANIMHEAD") {
             "animation"
         } else {
             "skeletal mesh"
         },
-        chunks.len()
+        plural(chunks.len(), "chunk")
     ));
     Ok(())
 }

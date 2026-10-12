@@ -10,6 +10,7 @@ use crate::declare_format;
 use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded};
 use crate::node::Node;
@@ -71,8 +72,9 @@ async fn hkx(cx: Cx, input: Input) -> Result<()> {
     }
     let pointer = rules.first().copied().unwrap_or(0);
     cx.annotate(format!(
-        "Havok packfile v{version} ({}), {pointer}-byte pointers, {sections} sections",
-        sdk.trim()
+        "Havok packfile v{version} ({}), {pointer}-byte pointers, {sections_section}",
+        sdk.trim(),
+        sections_section = plural(sections, "section")
     ));
     Ok(())
 }
@@ -160,8 +162,9 @@ async fn wow_chunked(cx: Cx, input: Input) -> Result<()> {
         n = n.saturating_add(1);
     }
     cx.annotate(format!(
-        "World of Warcraft {}, {n} chunks",
-        kinds.first().copied().unwrap_or("chunked file")
+        "World of Warcraft {}, {n_chunk}",
+        kinds.first().copied().unwrap_or("chunked file"),
+        n_chunk = plural(n, "chunk")
     ));
     Ok(())
 }
@@ -212,7 +215,9 @@ async fn wow_db(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Node::new("Remaining header and sections").span(file.tail(24)));
     }
     cx.annotate(format!(
-        "WoW {magic} database: {records} records × {fields} fields"
+        "WoW {magic} database: {records_record} × {fields_field}",
+        records_record = plural(records, "record"),
+        fields_field = plural(fields, "field")
     ));
     Ok(())
 }
@@ -270,7 +275,7 @@ async fn utoc(cx: Cx, input: Input) -> Result<()> {
     f.u32("Partitions").emit()?;
     f.u64("Container ID").hex().emit()?;
     cx.emit(Node::new("Tables").span(file.tail(64)));
-    cx.annotate(format!("Unreal IoStore TOC v{version}: {entries} chunks, {blocks} compressed blocks of {block} bytes, {methods} methods"));
+    cx.annotate(format!("Unreal IoStore TOC v{version}: {entries_chunk}, {blocks} compressed blocks of {block} bytes, {methods_method}", entries_chunk = plural(entries, "chunk"), methods_method = plural(methods, "method")));
     Ok(())
 }
 
@@ -360,12 +365,15 @@ async fn xp3(cx: Cx, input: Input) -> Result<()> {
                     embedded(name.clone(), input.nested(data))
                 }
             }
-            _ => Node::new(name.clone()).summary(format!("{} segments", segments.len())),
+            _ => Node::new(name.clone()).summary(plural(segments.len(), "segment")),
         };
         cx.push(node).await;
         n = n.saturating_add(1);
     }
-    cx.annotate(format!("KiriKiri XP3 archive, {n} files"));
+    cx.annotate(format!(
+        "KiriKiri XP3 archive, {n_file}",
+        n_file = plural(n, "file")
+    ));
     Ok(())
 }
 
@@ -426,7 +434,10 @@ async fn allegro(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("Allegro datafile, {count} objects"));
+    cx.annotate(format!(
+        "Allegro datafile, {count_object}",
+        count_object = plural(count, "object")
+    ));
     Ok(())
 }
 
@@ -462,6 +473,9 @@ async fn rpyc(cx: Cx, input: Input) -> Result<()> {
         slots = slots.saturating_add(1);
         pos = pos.saturating_add(12);
     }
-    cx.annotate(format!("Ren'Py compiled script, {slots} slots"));
+    cx.annotate(format!(
+        "Ren'Py compiled script, {slots_slot}",
+        slots_slot = plural(slots, "slot")
+    ));
     Ok(())
 }

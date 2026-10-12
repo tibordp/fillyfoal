@@ -599,7 +599,7 @@ fn grid_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
         })
         .emit()?;
     f.u8("Rows minus one")
-        .with(|&v, n| n.summary(format!("{} rows", u16::from(v).saturating_add(1))))
+        .with(|&v, n| n.summary(plural(u16::from(v).saturating_add(1), "row")))
         .emit()?;
     f.u8("Columns minus one")
         .with(|&v, n| n.summary(format!("{} columns", u16::from(v).saturating_add(1))))

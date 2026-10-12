@@ -13,6 +13,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, parse, struct_node};
 use crate::formats::content;
+use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::text::hex_lower;
@@ -147,7 +148,7 @@ async fn debug_entry_node(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
         DEBUG_TYPE_MISC => Node::new("MISC").span(data).lazy(misc, data),
         DEBUG_TYPE_FPO => Node::new("FPO")
             .span(data)
-            .summary(format!("{} records", data.len / 16))
+            .summary(plural(data.len / 16, "record"))
             .lazy(fpo, data),
         DEBUG_TYPE_PDBCHECKSUM => Node::new("PDB Checksum")
             .span(data)

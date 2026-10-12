@@ -10,6 +10,6 @@ expression: "common::explore(&display_name(&path), &data)"
     Blocks: 2  [0x30+0x4]
     Bethesda header — BS version 83 (Skyrim), author "filly"  [0x34+0xf]
     Block types — 2: BSFadeNode, NiTriShape  [0x43+0x1e]
-    String table and groups — 1 strings  [0x6d+0x14]
+    String table and groups — 1 string  [0x6d+0x14]
     0: BSFadeNode — 16 bytes  [0x81+0x10]
     1: NiTriShape — 8 bytes  [0x91+0x8]

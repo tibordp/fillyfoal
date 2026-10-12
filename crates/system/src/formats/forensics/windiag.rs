@@ -8,6 +8,7 @@ use crate::dsl::{Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::datakit::{clip, size, text};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -86,7 +87,7 @@ async fn wer(cx: Cx, input: Input) -> Result<()> {
     if !app.is_empty() {
         summary.push_str(&format!(" in {app}"));
     }
-    summary.push_str(&format!(", {} entries", entries.len()));
+    summary.push_str(&format!(", {}", plural(entries.len(), "entry")));
     cx.annotate(summary);
     Ok(())
 }

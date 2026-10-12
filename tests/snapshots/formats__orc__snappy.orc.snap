@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ snappy.orc — ORC, SNAPPY compression, 3 rows, 1 stripes, 3 types  [0x0+0x16b]
+▾ snappy.orc — ORC, SNAPPY compression, 3 rows, 1 stripe, 3 types  [0x0+0x16b]
     Magic: "ORC"  [0x0+0x3]
   ▾ Metadata — stripe statistics  [0xaf+0x31]
     ▾ Compression chunks  [0xaf+0x31]

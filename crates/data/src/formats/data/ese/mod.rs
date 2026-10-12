@@ -23,7 +23,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::datakit::{hex, uint};
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -194,11 +194,11 @@ async fn ese(cx: Cx, input: Input) -> Result<()> {
     let state =
         lookup(ESE_STATES, u32_le(&head, 0x34).unwrap_or(0).into()).unwrap_or("unknown state");
     let mut summary = format!(
-        "ESE database {:#x} update {}, {} KiB pages, {} pages, {state}",
+        "ESE database {:#x} update {}, {} KiB pages, {}, {state}",
         u32_le(&head, 8).unwrap_or(0),
         u32_le(&head, 0xe8).unwrap_or(0),
         page_size / 1024,
-        db.pages
+        plural(db.pages, "page")
     );
     if pages > 0 {
         match catalog(&cx, &db).await {
@@ -214,7 +214,7 @@ async fn ese(cx: Cx, input: Input) -> Result<()> {
                 }
                 cx.emit(
                     Node::new("Catalog")
-                        .summary(format!("{} tables", cat.tables.len()))
+                        .summary(plural(cat.tables.len(), "table"))
                         .desc("MSysObjects: the tables with their columns, indexes and long values")
                         .lazy(catalog_view, (db.clone(), cat.clone())),
                 );
@@ -224,7 +224,7 @@ async fn ese(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Pages")
                 .span(file.tail(page_size.saturating_mul(2)))
-                .summary(format!("{} pages", db.pages))
+                .summary(plural(db.pages, "page"))
                 .lazy(pages_view, db.clone()),
         );
     }
@@ -753,11 +753,11 @@ async fn push_tables(cx: &Cx, db: &D, cat: &C, system: bool) {
             continue;
         }
         let mut summary = format!(
-            "object {}, root page {}, {} columns, {} indexes",
+            "object {}, root page {}, {} columns, {}",
             t.objid,
             t.fdp,
             t.columns.len(),
-            t.indexes.len()
+            plural(t.indexes.len(), "index")
         );
         if let Some((_, fdp, _)) = t.lv {
             summary.push_str(&format!(", long values at page {fdp}"));
@@ -808,7 +808,7 @@ async fn table_view(cx: Cx, (db, cat, ti): (D, C, usize)) -> Result<()> {
     );
     cx.emit(
         Node::new("Space")
-            .summary(format!("{} pages requested at creation", t.pages))
+            .summary(format!("{} requested at creation", plural(t.pages, "page")))
             .lazy(space_view, (db.clone(), t.fdp)),
     );
     Ok(())
@@ -945,7 +945,10 @@ async fn lv_view(cx: Cx, (db, cat, ti, at): (D, C, usize, At)) -> Result<()> {
                 let head = Node::new(format!("LID {lid:#x}"))
                     .span(span)
                     .value(uint(size, 32))
-                    .summary(format!("{size} bytes, {refs} references"));
+                    .summary(format!(
+                        "{size} bytes, {refs_reference}",
+                        refs_reference = plural(refs, "reference")
+                    ));
                 current = Some((key, head, Vec::new()));
             } else if let Some((lid, _, chunks)) = current.as_mut()
                 && key.starts_with(lid.as_slice())
@@ -1166,7 +1169,7 @@ async fn record_fields(cx: Cx, (db, cat, table, at): (D, C, Option<usize>, At)) 
             }
             n = n
                 .value(Value::Text(shown.join(" | ")))
-                .summary(format!("{tname}, {} values", parts.len()))
+                .summary(format!("{tname}, {}", plural(parts.len(), "value")))
                 .lazy(
                     crate::formats::util::arcutil::emit_nodes,
                     Arc::new(children),
@@ -1277,7 +1280,8 @@ async fn long_value(
         Ok((size, pieces, chunks)) => {
             let total: u64 = pieces.iter().map(|p| p.len).sum();
             let mut node = node.summary(format!(
-                "{tname}, long value {lid:#x}, {size} bytes in {chunks} chunks"
+                "{tname}, long value {lid:#x}, {size} bytes in {chunks_chunk}",
+                chunks_chunk = plural(chunks, "chunk")
             ));
             let data = if total == u64::from(size) {
                 cx.add_pieces(
@@ -1449,8 +1453,9 @@ async fn space_view(cx: Cx, (db, fdp): (D, u32)) -> Result<()> {
                 cx.emit(
                     Node::new(name)
                         .summary(format!(
-                            "{total} pages in {} extents, tree at page {pgno}",
-                            list.len()
+                            "{total_page} in {}, tree at page {pgno}",
+                            plural(list.len(), "extent"),
+                            total_page = plural(total, "page")
                         ))
                         .lazy(crate::formats::util::arcutil::emit_nodes, Arc::new(list)),
                 );
@@ -1511,7 +1516,10 @@ async fn pages_view(cx: Cx, db: D) -> Result<()> {
             (false, true) => "leaf",
             (false, false) => "branch",
         };
-        node = node.summary(format!("{owner}, {kind} {level}, {} nodes", page.nodes()));
+        node = node.summary(format!(
+            "{owner}, {kind} {level}, {}",
+            plural(page.nodes(), "node")
+        ));
         let c = page::check(&page);
         charge_check(&cx, &page).await;
         if let Some(computed) = c.computed

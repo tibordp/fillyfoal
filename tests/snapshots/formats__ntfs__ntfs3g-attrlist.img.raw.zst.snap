@@ -131,7 +131,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 4096  [#1:0x170+0x8]
             Data size: 16 — 16 bytes  [#1:0x178+0x8]
             Initialized size: 16  [#1:0x180+0x8]
-          Run 0 — VCN 0: 1 clusters at LCN 2  [#1:0x188+0x3] → 0x2000+0x1000
+          Run 0 — VCN 0: 1 cluster at LCN 2  [#1:0x188+0x3] → 0x2000+0x1000
           Slack — allocated past the end of the data  [0x2010+0xff0]
         ▾ Content — bitmap of 114 entries  [0x2000+0x10]
             Bits set: 51 — of 114  [0x2000+0xf]
@@ -226,7 +226,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 4096  [#3:0x130+0x8]
             Data size: 4096 — 4 KiB  [#3:0x138+0x8]
             Initialized size: 4096  [#3:0x140+0x8]
-          Run 0 — VCN 0: 1 clusters at LCN 1023  [#3:0x148+0x4] → 0x3ff000+0x1000
+          Run 0 — VCN 0: 1 cluster at LCN 1023  [#3:0x148+0x4] → 0x3ff000+0x1000
       ▾ Clusters — contiguous, 4 KiB
           Fragment 0 — file offset 0x0, 4 KiB  [0x3ff000+0x1000]
       ▾ Content — NTFS MFT, 4 records of 1024 bytes, 4 in use (0 directories)  [0x3ff000+0x1000]
@@ -335,7 +335,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Allocated size: 4096  [#115:0x170+0x8]
                 Data size: 16 — 16 bytes  [#115:0x178+0x8]
                 Initialized size: 16  [#115:0x180+0x8]
-              Run 0 — VCN 0: 1 clusters at LCN 2  [#115:0x188+0x3]
+              Run 0 — VCN 0: 1 cluster at LCN 2  [#115:0x188+0x3]
         ▾ Record 1: 2026-10-11 23:45:10 UTC — $MFTMirr — file  [0x3ff400+0x400]
           ▾ Header  [#116:0x0+0x38]
               Magic: "FILE"  [#116:0x0+0x4]
@@ -423,7 +423,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Allocated size: 4096  [#116:0x130+0x8]
                 Data size: 4096 — 4 KiB  [#116:0x138+0x8]
                 Initialized size: 4096  [#116:0x140+0x8]
-              Run 0 — VCN 0: 1 clusters at LCN 1023  [#116:0x148+0x4]
+              Run 0 — VCN 0: 1 cluster at LCN 1023  [#116:0x148+0x4]
         ▾ Record 2: 2026-10-11 23:45:10 UTC — $LogFile — file  [0x3ff800+0x400]
           ▾ Header  [#117:0x0+0x38]
               Magic: "FILE"  [#117:0x0+0x4]
@@ -1037,7 +1037,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 4096  [#5:0x198+0x8]
             Data size: 2560 — 2.5 KiB  [#5:0x1a0+0x8]
             Initialized size: 2560  [#5:0x1a8+0x8]
-          Run 0 — VCN 0: 1 clusters at LCN 262  [#5:0x1b0+0x4] → 0x106000+0x1000
+          Run 0 — VCN 0: 1 cluster at LCN 262  [#5:0x1b0+0x4] → 0x106000+0x1000
           Slack — allocated past the end of the data  [0x106a00+0x600]
       ▾ Clusters — contiguous, 2.5 KiB
           Fragment 0 — file offset 0x0, 2.5 KiB  [0x106000+0xa00]
@@ -1362,8 +1362,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Data size: 4096 — 4 KiB  [#6:0x1b0+0x8]
             Initialized size: 4096  [#6:0x1b8+0x8]
             Name: "$I30"  [#6:0x1c0+0x8]
-          Run 0 — VCN 0: 1 clusters at LCN 261  [#6:0x1c8+0x4] → 0x105000+0x1000
-        ▾ Index records — NTFS index, 1 buffers, 24 entries  [0x105000+0x1000]
+          Run 0 — VCN 0: 1 cluster at LCN 261  [#6:0x1c8+0x4] → 0x105000+0x1000
+        ▾ Index records — NTFS index, 1 buffer, 24 entries  [0x105000+0x1000]
           ▾ Buffer 0 (VCN 0) — 24 entries  [0x105000+0x1000]
             ▾ Header  [#119:0x0+0x28]
                 Signature: "INDX"  [#119:0x0+0x4]
@@ -2120,8 +2120,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Data size: 4096 — 4 KiB  [#6:0x1b0+0x8]
             Initialized size: 4096  [#6:0x1b8+0x8]
             Name: "$I30"  [#6:0x1c0+0x8]
-          Run 0 — VCN 0: 1 clusters at LCN 261  [#6:0x1c8+0x4] → 0x105000+0x1000
-        ▾ Index records — NTFS index, 1 buffers, 24 entries  [0x105000+0x1000]
+          Run 0 — VCN 0: 1 cluster at LCN 261  [#6:0x1c8+0x4] → 0x105000+0x1000
+        ▾ Index records — NTFS index, 1 buffer, 24 entries  [0x105000+0x1000]
           ▾ Buffer 0 (VCN 0) — 24 entries  [0x105000+0x1000]
             ▾ Header  [#119:0x0+0x28]
                 Signature: "INDX"  [#119:0x0+0x4]
@@ -2693,7 +2693,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 4096  [#5:0x198+0x8]
             Data size: 2560 — 2.5 KiB  [#5:0x1a0+0x8]
             Initialized size: 2560  [#5:0x1a8+0x8]
-          Run 0 — VCN 0: 1 clusters at LCN 262  [#5:0x1b0+0x4] → 0x106000+0x1000
+          Run 0 — VCN 0: 1 cluster at LCN 262  [#5:0x1b0+0x4] → 0x106000+0x1000
           Slack — allocated past the end of the data  [0x106a00+0x600]
       ▾ Clusters — contiguous, 2.5 KiB
           Fragment 0 — file offset 0x0, 2.5 KiB  [0x106000+0xa00]
@@ -3015,7 +3015,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 4096  [#7:0x128+0x8]
             Data size: 256 — 256 bytes  [#7:0x130+0x8]
             Initialized size: 256  [#7:0x138+0x8]
-          Run 0 — VCN 0: 1 clusters at LCN 263  [#7:0x140+0x4] → 0x107000+0x1000
+          Run 0 — VCN 0: 1 cluster at LCN 263  [#7:0x140+0x4] → 0x107000+0x1000
           Slack — allocated past the end of the data  [0x107100+0xf00]
       ▾ Clusters — contiguous, 256 bytes
           Fragment 0 — file offset 0x0, 256 bytes  [0x107000+0x100]

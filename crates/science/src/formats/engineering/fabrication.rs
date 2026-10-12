@@ -51,6 +51,7 @@ use crate::formats::text::probe;
 use crate::formats::text::scan::{LINE_CAP, Lines};
 use crate::formats::text::text_node;
 use crate::formats::util::datakit::{hex, text};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe, content, dissect_or_data};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
@@ -1738,7 +1739,7 @@ async fn block(cx: Cx, (input, pos, checksummed): (Input, u64, bool)) -> Result<
             let (decoded, entries) = metadata_entries(&cx, &b).await?;
             let mut node = Node::new("Entries")
                 .span(decoded)
-                .summary(format!("{} entries", entries.len()));
+                .summary(plural(entries.len(), "entry"));
             if decoded.source != b.data.source {
                 node = node.desc("Decompressed metadata (INI)");
             }

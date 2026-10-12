@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::syntax::{self, Error as ParseError, Item, Obj, Parser, Reader};
 use crate::bytes::{to_u64, to_usize};
+use crate::formats::util::fmt::plural;
 use std::sync::Arc;
 
 use super::crypt::Security;
@@ -389,7 +390,8 @@ pub async fn in_object_stream(
     let n = objstm.item.get("N").and_then(Item::int).unwrap_or(0);
     if i64::from(index) >= n {
         return Err(Diagnostic::malformed(format!(
-            "object stream {stream} has only {n} objects"
+            "object stream {stream} has only {n_object}",
+            n_object = plural(n, "object")
         )));
     }
     let index_of = object_stream_index_of(cx, decoded, first).await?;

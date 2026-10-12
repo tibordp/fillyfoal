@@ -8,6 +8,7 @@
 use super::bitwalk::Walker;
 use super::tables::lookup_or;
 use crate::error::Diagnostic;
+use crate::formats::util::fmt::plural;
 use crate::value::{EnumTable, Radix, Value};
 
 pub const AAC_SAMPLE_RATES: [u32; 13] = [
@@ -204,7 +205,7 @@ impl PceInfo {
             (n, l) if l > 0 => format!("{n}.{l}"),
             (1, _) => "mono".to_owned(),
             (2, _) => "stereo".to_owned(),
-            (n, _) => format!("{n} channels"),
+            (n, _) => plural(n, "channel"),
         }
     }
 }
@@ -279,7 +280,7 @@ pub fn audio_specific_config(w: &mut Walker) -> Option<AscInfo> {
                 (false, false) => 1024,
             };
             let samples = a.frame_length;
-            w.summary(|| format!("{samples} samples"));
+            w.summary(|| plural(samples, "sample"));
             if w.flag("dependsOnCoreCoder")? {
                 w.u("coreCoderDelay", 14)?;
             }
@@ -302,7 +303,12 @@ pub fn audio_specific_config(w: &mut Walker) -> Option<AscInfo> {
                 }
                 w.flag("extensionFlag3")?;
             }
-            w.end_summary(|| format!("{samples} samples per frame"));
+            w.end_summary(|| {
+                format!(
+                    "{samples_sample} per frame",
+                    samples_sample = plural(samples, "sample")
+                )
+            });
         }
         _ => return Some(a),
     }
@@ -769,10 +775,10 @@ fn dts(d: &[u8]) -> Option<String> {
     let lfe = lff == 1 || lff == 2;
     let layout = match (channels, lfe) {
         (5, true) => "5.1".to_owned(),
-        (n, true) => format!("{} channels", n.saturating_add(1)),
+        (n, true) => plural(n.saturating_add(1), "channel"),
         (1, false) => "mono".to_owned(),
         (2, false) => "stereo".to_owned(),
-        (n, false) => format!("{n} channels"),
+        (n, false) => plural(n, "channel"),
     };
     Some(format!("DTS, {rate} Hz, {layout}"))
 }

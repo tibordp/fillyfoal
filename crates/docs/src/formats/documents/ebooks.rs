@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -187,7 +188,7 @@ async fn palm(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Records")
             .span(list)
-            .summary(format!("{} records", h.records))
+            .summary(plural(h.records, "record"))
             .lazy(palm_records, (input, offsets.clone())),
     );
     let tag = format!("{}{}", h.kind, h.creator);
@@ -301,8 +302,10 @@ async fn book_text(cx: &Cx, input: Input, record0: Span, offsets: &[u64]) -> Res
         compressed,
     });
     Ok(
-        crate::formats::content("Text", input, span, codec, Some(length))
-            .summary(format!("{length} bytes in {count} records")),
+        crate::formats::content("Text", input, span, codec, Some(length)).summary(format!(
+            "{length} bytes in {count_record}",
+            count_record = plural(count, "record")
+        )),
     )
 }
 
@@ -636,8 +639,9 @@ async fn lit(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "Microsoft Reader, version {}, {} pieces",
-        h.version, h.pieces
+        "Microsoft Reader, version {}, {}",
+        h.version,
+        plural(h.pieces, "piece")
     ));
     Ok(())
 }

@@ -18,7 +18,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Name: ""  [0xa6+0x6]
         Class: "null"  [0xac+0x8]
         Items: 2  [0xb4+0x4]
-      ▾ As — descriptor: JPEG, 1 items  [0xb8+0x2e]
+      ▾ As — descriptor: JPEG, 1 item  [0xb8+0x2e]
           Name: ""  [0xc4+0x6]
           Class: "JPEG"  [0xca+0x8]
           Items: 1  [0xd2+0x4]

@@ -21,6 +21,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::util::binutil::Tree;
 use crate::formats::util::datakit::hex;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::pace::{Pace, STEPS_PER_UNIT};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
@@ -111,8 +112,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let computed = crc32(&bytes);
     node = if computed == header.checksum {
         node.summary(format!(
-            "version {}.{}, {} chunks, checksum valid",
-            header.major, header.minor, header.chunks
+            "version {}.{}, {}, checksum valid",
+            header.major,
+            header.minor,
+            plural(header.chunks, "chunk")
         ))
     } else {
         node.diag(Diagnostic::warning(format!(
@@ -151,8 +154,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         ));
     }
     let mut summary = format!(
-        "Windows event log {}.{}, {} chunks",
-        header.major, header.minor, header.chunks
+        "Windows event log {}.{}, {}",
+        header.major,
+        header.minor,
+        plural(header.chunks, "chunk")
     );
     if let Some((a, b)) = range {
         summary.push_str(&format!(

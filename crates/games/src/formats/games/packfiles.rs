@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Input, Probe, embedded};
 use crate::node::Node;
@@ -40,7 +41,10 @@ async fn gta_img(cx: Cx, input: Input) -> Result<()> {
         cx.push(embedded(name, input.nested(data)).target(file.sub(at, 32)))
             .await;
     }
-    cx.annotate(format!("GTA IMG v2 archive, {count} entries"));
+    cx.annotate(format!(
+        "GTA IMG v2 archive, {count_entry}",
+        count_entry = plural(count, "entry")
+    ));
     Ok(())
 }
 
@@ -62,7 +66,10 @@ async fn hog(cx: Cx, input: Input) -> Result<()> {
         n = n.saturating_add(1);
         pos = data.end().saturating_sub(file.offset);
     }
-    cx.annotate(format!("Descent HOG archive, {n} files"));
+    cx.annotate(format!(
+        "Descent HOG archive, {n_file}",
+        n_file = plural(n, "file")
+    ));
     Ok(())
 }
 
@@ -83,7 +90,10 @@ async fn grp(cx: Cx, input: Input) -> Result<()> {
             .await;
         data_at = data_at.saturating_add(size);
     }
-    cx.annotate(format!("Build engine GRP, {count} files"));
+    cx.annotate(format!(
+        "Build engine GRP, {count_file}",
+        count_file = plural(count, "file")
+    ));
     Ok(())
 }
 
@@ -114,7 +124,10 @@ async fn big(cx: Cx, input: Input) -> Result<()> {
         cx.push(embedded(name, input.nested(file.sub(offset, size))).target(cur.since(start)))
             .await;
     }
-    cx.annotate(format!("EA BIG archive, {count} files"));
+    cx.annotate(format!(
+        "EA BIG archive, {count_file}",
+        count_file = plural(count, "file")
+    ));
     Ok(())
 }
 
@@ -139,9 +152,10 @@ async fn rff(cx: Cx, input: Input) -> Result<()> {
     }
     cx.emit(node);
     cx.annotate(format!(
-        "Blood RFF v{}.{}, {count} entries",
+        "Blood RFF v{}.{}, {count_entry}",
         version >> 8,
-        version & 0xff
+        version & 0xff,
+        count_entry = plural(count, "entry")
     ));
     Ok(())
 }
@@ -185,8 +199,9 @@ async fn bnd(cx: Cx, input: Input) -> Result<()> {
     );
     cx.emit(Node::new("Body").span(file.tail(if v4 { 0x40 } else { 0x20 })));
     cx.annotate(format!(
-        "{} binder {version:?}, {count} files",
-        if v4 { "BND4" } else { "BND3" }
+        "{} binder {version:?}, {count_file}",
+        if v4 { "BND4" } else { "BND3" },
+        count_file = plural(count, "file")
     ));
     Ok(())
 }

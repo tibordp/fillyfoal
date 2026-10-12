@@ -7,6 +7,7 @@ use std::sync::Arc;
 use crate::bytes::{to_u64, to_usize, u16_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val;
 use crate::node::Node;
 use crate::span::Span;
@@ -1162,7 +1163,7 @@ fn body(rd: &mut Rd<'_>, kind: u16, ctx: &Ctx, summary: &mut Option<String>) -> 
                 rd.join(format!("Slot {i}"), start, sub);
                 ok?;
             }
-            *summary = Some(format!("{used} files"));
+            *summary = Some(plural(used, "file"));
             Info::External { heap }
         }
         0x08 => {
@@ -1330,7 +1331,7 @@ fn body(rd: &mut Rd<'_>, kind: u16, ctx: &Ctx, summary: &mut Option<String>) -> 
         0x16 => {
             rd.num("Version", 1)?;
             let n = rd.num("Reference count", 4)?;
-            *summary = Some(format!("{n} links"));
+            *summary = Some(plural(n, "link"));
             Info::None
         }
         0x17 => {

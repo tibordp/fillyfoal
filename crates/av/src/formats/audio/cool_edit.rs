@@ -44,6 +44,7 @@ use crate::declare_format;
 use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::lines::{float, uint};
 use crate::formats::{Input, Probe, embedded};
 use crate::node::Node;
@@ -123,7 +124,7 @@ async fn ses(cx: Cx, input: Input) -> Result<()> {
                     tracks = Some(count);
                 }
                 node = node
-                    .summary(format!("{count} tracks"))
+                    .summary(plural(count, "track"))
                     .lazy(track_list, (input, chunk.body));
             }
             b"tmpo" => {
@@ -150,7 +151,7 @@ async fn ses(cx: Cx, input: Input) -> Result<()> {
         summary = format!("{version} multitrack session");
     }
     if let Some(t) = tracks {
-        summary.push_str(&format!(", {t} tracks"));
+        summary.push_str(&format!(", {t_track}", t_track = plural(t, "track")));
     }
     if let Some(r) = rate {
         summary.push_str(&format!(", {r} Hz"));

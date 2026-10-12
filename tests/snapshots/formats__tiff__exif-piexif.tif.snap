@@ -294,7 +294,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Type: LONG (0x4)  [0x2c3+0x2]
             Count: 1  [0x2c5+0x4]
             Value: 00 00 04 d2  |....|  [0x2c9+0x4]
-          ▾ Interoperability IFD — 1 entries  [0x4d2+0x12]
+          ▾ Interoperability IFD — 1 entry  [0x4d2+0x12]
               Entry count: 1  [0x4d2+0x2]
             ▾ InteroperabilityIndex: "R98" — Exif R98: DCF basic file (sRGB)  [0x4d4+0xc]
                 Tag: 0x1 — InteroperabilityIndex  [0x4d4+0x2]

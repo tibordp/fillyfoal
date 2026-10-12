@@ -18,6 +18,7 @@ use crate::cx::Cx;
 use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::datakit::{ByteReader, be_uint};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -314,8 +315,8 @@ async fn end_of(r: &mut ByteReader<'_>, at: u64, typed: Option<u8>) -> Result<u6
         } else if matches!(h.kind, Kind::Array | Kind::Object) {
             if h.count.is_some_and(|n| n > len.saturating_sub(pos)) {
                 return Err(Diagnostic::malformed(format!(
-                    "{} entries do not fit in the remaining {} bytes",
-                    h.arg,
+                    "{} do not fit in the remaining {} bytes",
+                    plural(h.arg, "entry"),
                     len.saturating_sub(pos)
                 ))
                 .at(r.span(pos, 1)));

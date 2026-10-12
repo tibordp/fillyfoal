@@ -6,6 +6,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::record;
 use crate::value::EnumTable;
@@ -66,7 +67,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         1 => "grayscale".to_owned(),
         3 => "RGB".to_owned(),
         4 => "RGBA".to_owned(),
-        n => format!("{n} channels"),
+        n => plural(n, "channel"),
     };
     let storage = if h.storage == 1 { "RLE" } else { "verbatim" };
     let mut summary = format!(
@@ -82,8 +83,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if h.storage == 1 {
         let table = rows.saturating_mul(4);
         cx.emit(
-            region("Scanline offsets", file, Header::SIZE, table)
-                .summary(format!("{rows} entries")),
+            region("Scanline offsets", file, Header::SIZE, table).summary(plural(rows, "entry")),
         );
         cx.emit(
             region(
@@ -92,7 +92,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 Header::SIZE.saturating_add(table),
                 table,
             )
-            .summary(format!("{rows} entries")),
+            .summary(plural(rows, "entry")),
         );
         let start = Header::SIZE.saturating_add(table.saturating_mul(2));
         cx.emit(region(

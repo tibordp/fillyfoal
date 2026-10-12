@@ -1756,7 +1756,7 @@ async fn master_summary(cx: &Cx, el: &Element, tracks: Option<&[TrackBrief]>) ->
         }
         SEEK_HEAD => Some(match count(SEEK) {
             1 => "1 entry".to_owned(),
-            n => format!("{n} entries"),
+            n => plural(n, "entry"),
         }),
         SEEK => {
             let id = child(&d, SEEK_ID).map(|v| u32::try_from(be_uint(v)).unwrap_or(0))?;

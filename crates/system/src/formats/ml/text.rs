@@ -14,6 +14,7 @@ use crate::formats::text::piece::Piece;
 use crate::formats::text::probe::{self, contains, find, significant, trim_start};
 use crate::formats::text::scan::Lines;
 use crate::formats::text::{json, xml, yaml};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -106,8 +107,8 @@ async fn ncnn(cx: Cx, input: Input) -> Result<()> {
             2 => {
                 let mut p = t.split_whitespace();
                 Node::new("Counts").summary(format!(
-                    "{} layers, {} blobs",
-                    p.next().unwrap_or("?"),
+                    "{}, {} blobs",
+                    plural(p.next().unwrap_or("?"), "layer"),
                     p.next().unwrap_or("?")
                 ))
             }
@@ -154,8 +155,9 @@ async fn ncnn(cx: Cx, input: Input) -> Result<()> {
         .map(|(k, n)| format!("{k}×{n}"))
         .collect();
     cx.annotate(format!(
-        "ncnn param, {layers} layers ({})",
-        common.join(", ")
+        "ncnn param, {layers_layer} ({})",
+        common.join(", "),
+        layers_layer = plural(layers, "layer")
     ));
     Ok(())
 }
@@ -226,7 +228,10 @@ async fn caffe(cx: Cx, input: Input) -> Result<()> {
             count = count.saturating_add(1);
         }
     }
-    cx.annotate(format!("Caffe network \"{net}\", {count} layers"));
+    cx.annotate(format!(
+        "Caffe network \"{net}\", {count_layer}",
+        count_layer = plural(count, "layer")
+    ));
     Ok(())
 }
 
@@ -331,8 +336,9 @@ async fn darknet(cx: Cx, input: Input) -> Result<()> {
     }
     let kinds: Vec<String> = kinds.iter().map(|(k, n)| format!("{k}×{n}")).collect();
     cx.annotate(format!(
-        "Darknet configuration, {count} layers ({})",
-        kinds.join(", ")
+        "Darknet configuration, {count_layer} ({})",
+        kinds.join(", "),
+        count_layer = plural(count, "layer")
     ));
     Ok(())
 }
@@ -439,7 +445,7 @@ async fn header_then_rest(
             cx.push(
                 Node::new(rest_name)
                     .span(rest)
-                    .summary(format!("{count} lines"))
+                    .summary(plural(count, "line"))
                     .lazy(block_lines, rest),
             )
             .await;
@@ -463,10 +469,10 @@ fn get<'a>(header: &'a [(String, String)], key: &str) -> &'a str {
 async fn libsvm(cx: Cx, input: Input) -> Result<()> {
     let h = header_then_rest(&cx, input.span, "SV", "Support vectors").await?;
     cx.annotate(format!(
-        "LIBSVM model, {} with {} kernel, {} classes, {} support vectors",
+        "LIBSVM model, {} with {} kernel, {}, {} support vectors",
         get(&h, "svm_type"),
         get(&h, "kernel_type"),
-        get(&h, "nr_class"),
+        plural(get(&h, "nr_class"), "class"),
         get(&h, "total_sv")
     ));
     Ok(())
@@ -475,10 +481,10 @@ async fn libsvm(cx: Cx, input: Input) -> Result<()> {
 async fn liblinear(cx: Cx, input: Input) -> Result<()> {
     let h = header_then_rest(&cx, input.span, "w", "Weights").await?;
     cx.annotate(format!(
-        "LIBLINEAR model, {}, {} classes, {} features",
+        "LIBLINEAR model, {}, {}, {}",
         get(&h, "solver_type"),
-        get(&h, "nr_class"),
-        get(&h, "nr_feature")
+        plural(get(&h, "nr_class"), "class"),
+        plural(get(&h, "nr_feature"), "feature")
     ));
     Ok(())
 }
@@ -556,12 +562,15 @@ async fn lightgbm(cx: Cx, input: Input) -> Result<()> {
             .await;
     }
     cx.annotate(format!(
-        "LightGBM model {}, objective {}, {trees} trees, {} features",
+        "LightGBM model {}, objective {}, {trees} trees, {}",
         get(&header, "version"),
         get(&header, "objective"),
-        get(&header, "max_feature_idx")
-            .parse::<u64>()
-            .map_or_else(|_| "?".to_owned(), |n| n.saturating_add(1).to_string())
+        plural(
+            get(&header, "max_feature_idx")
+                .parse::<u64>()
+                .map_or_else(|_| "?".to_owned(), |n| n.saturating_add(1).to_string()),
+            "feature"
+        )
     ));
     Ok(())
 }
@@ -735,8 +744,8 @@ async fn mxnet_symbol(cx: Cx, input: Input) -> Result<()> {
     };
     json::dissect(cx.clone(), input).await?;
     cx.annotate(format!(
-        "MXNet symbol graph, {ops}{more} nodes ({} operators)",
-        ops.saturating_sub(nulls)
+        "MXNet symbol graph, {ops}{more} nodes ({})",
+        plural(ops.saturating_sub(nulls), "operator")
     ));
     Ok(())
 }

@@ -255,9 +255,9 @@ expression: "common::explore(&display_name(&path), &data)"
       Pack 2 unused — rest of the pack's segment  [0x406000+0x1fa000]
     Segment information table — block 1536, 2 segments: valid block counts and bitmaps of each segment, in two copies  [0x600000+0x400000]
     Node address table — block 2560, 2 segments: node id → block, in two copies  [0xa00000+0x400000]
-    Segment summary area — block 3584, 1 segments: the owner of each block of each main area segment  [0xe00000+0x200000]
+    Segment summary area — block 3584, 1 segment: the owner of each block of each main area segment  [0xe00000+0x200000]
     Main area — block 4096, 24 segments: node and data blocks  [0x1000000+0x3000000]
-  ▾ NAT journal — 1 entries
+  ▾ NAT journal — 1 entry
       Node 3: 4096 — block 4096
   ▾ Root directory — inode 3
     ▾ Inode 3 — drwxr-xr-x, 4 KiB  [0x1000000+0x1000]

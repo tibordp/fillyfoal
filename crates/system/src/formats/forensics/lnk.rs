@@ -11,6 +11,7 @@ use crate::dsl::{Cursor, Record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::datakit::{clip, name_or};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe, embedded_named};
 use crate::node::Node;
 use crate::record;
@@ -211,7 +212,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("LinkTargetIDList")
                 .span(cur.since(start))
-                .summary(format!("{items} items"))
+                .summary(plural(items, "item"))
                 .lazy(id_list, list),
         );
     }

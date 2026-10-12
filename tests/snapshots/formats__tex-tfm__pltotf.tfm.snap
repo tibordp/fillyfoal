@@ -13,7 +13,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Depths — 2 words  [0x100+0x8]
     Italic corrections — 2 words  [0x108+0x8]
     Lig/kern program — 2 words  [0x110+0x8]
-    Kerns — 1 words  [0x118+0x4]
+    Kerns — 1 word  [0x118+0x4]
     Extensible recipes — 0 words  [0x11c+0x0]
   ▾ Parameters — 7 words  [0x11c+0x1c]
       slant: 0  [0x11c+0x4]

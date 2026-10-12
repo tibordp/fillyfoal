@@ -8,6 +8,7 @@ use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
 use crate::formats::text::scan::head_lines;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 
@@ -49,7 +50,8 @@ async fn smush(cx: Cx, input: Input) -> Result<()> {
         cx.push(chunk.node()).await;
     }
     cx.annotate(format!(
-        "SMUSH animation v{version}, {declared} frames declared, {frames} present"
+        "SMUSH animation v{version}, {declared_frame} declared, {frames} present",
+        declared_frame = plural(declared, "frame")
     ));
     Ok(())
 }
@@ -90,7 +92,8 @@ async fn dxa(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{frames} FRAM/NULL records")),
     );
     cx.annotate(format!(
-        "DXA video, {w}×{h}, {frames} frames at {fps:.2} fps"
+        "DXA video, {w}×{h}, {frames_frame} at {fps:.2} fps",
+        frames_frame = plural(frames, "frame")
     ));
     Ok(())
 }

@@ -1064,7 +1064,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   value: "{Lorg/example/fillyfoal/R$styleable;, Lorg/example/fillyfoal/R$style;, Lorg/example/fillyfoal/R$string;, Lorg/example/fillyfoal/R$plurals;, Lorg/example/fillyfoal/R$layout;, Lorg/example/fillyfoal/R$integer;, Lorg/example/fillyfoal/R$id;, Lorg/example/fillyfoal/R$drawable;, Lorg/example/fillyfoal/R$dimen;, Lorg/example/fillyfoal/R$color;, Lorg/example/fillyfoal/R$bool;, Lorg/example/fillyfoal/R$attr;, Lorg/example/fillyfoal/R$array;}"  [0xd33+0x1d]
       ▾ Map List — 17 sections  [0x1030+0xd0]
           size: 17  [0x1030+0x4]
-        ▾ TYPE_HEADER_ITEM — 1 items at 0x0  [0x1034+0xc] → 0x40+0x0
+        ▾ TYPE_HEADER_ITEM — 1 item at 0x0  [0x1034+0xc] → 0x40+0x0
             type: TYPE_HEADER_ITEM (0x0)  [0x1034+0x2]
             unused: 0  [0x1036+0x2]
             size: 1  [0x1038+0x4]
@@ -2098,7 +2098,7 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ TYPE_ENCODED_ARRAY_ITEM — 13 items at 0xde4  [0x10d0+0xc] → 0xe24+0x0  (+56 nodes elided)
         ▾ TYPE_ANNOTATION_SET_ITEM — 14 items at 0xe6c  [0x10dc+0xc] → 0xeac+0x0  (+180 nodes elided)
         ▾ TYPE_ANNOTATIONS_DIRECTORY_ITEM — 14 items at 0xf10  [0x10e8+0xc] → 0xf50+0x0  (+250 nodes elided)
-        ▾ TYPE_MAP_LIST — 1 items at 0xff0  [0x10f4+0xc] → 0x1030+0x0  (+4 nodes elided)
+        ▾ TYPE_MAP_LIST — 1 item at 0xff0  [0x10f4+0xc] → 0x1030+0x0  (+4 nodes elided)
   ▾ kVerifierDepsSection — 0x4c bytes at 0x1100  [0x24+0xc] → 0x1100+0x4c  (+3 nodes elided)
   ▾ Verifier dependencies — 1 DEX file  [0x1100+0x4c]  (+24 nodes elided)
   ▾ kTypeLookupTableSection — 0x84 bytes at 0x114c  [0x30+0xc] → 0x114c+0x84  (+3 nodes elided)

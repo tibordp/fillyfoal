@@ -25,6 +25,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -163,7 +164,10 @@ fn frame_header_layout(f: &mut Fields<'_>, ctx: &FrameCtx) -> Result<()> {
             if v == 0 {
                 n.summary("not a commit frame")
             } else {
-                n.summary(format!("commit frame: the database is {v} pages"))
+                n.summary(format!(
+                    "commit frame: the database is {v_page}",
+                    v_page = plural(v, "page")
+                ))
             }
         })
         .desc("Non-zero for the last frame of a transaction")
@@ -536,7 +540,10 @@ async fn wal_frames(cx: Cx, (wal, header_ok): (Wal, bool)) -> Result<()> {
         let commit = u32_be(&head, 4).unwrap_or(0);
         let mut summary = format!("page {page}");
         if status == Status::Valid && commit != 0 {
-            summary = format!("{summary}, commit (database is {commit} pages)");
+            summary = format!(
+                "{summary}, commit (database is {commit_page})",
+                commit_page = plural(commit, "page")
+            );
         }
         let note = match (status, &scanned) {
             (Status::Valid, Some(s)) if s.last_commit.is_some_and(|c| i <= c) => {
@@ -738,14 +745,14 @@ async fn dissect_journal(cx: Cx, input: Input) -> Result<()> {
         crate::formats::util::fmt::grouped_count(total, "page record", "page records")
     );
     if segments.len() > 1 {
-        summary = format!("{summary} in {} segments", segments.len());
+        summary = format!("{summary} in {}", plural(segments.len(), "segment"));
     }
     if segments.last().is_some_and(|s| s.declared == 0) {
         summary.push_str(" (the last segment is not yet synced)");
     }
     cx.annotate(format!(
-        "{summary}, {page_size}-byte pages, database was {} pages",
-        header.initial_size
+        "{summary}, {page_size}-byte pages, database was {}",
+        plural(header.initial_size, "page")
     ));
     let stored = limit
         .saturating_sub(sector)

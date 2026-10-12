@@ -12,6 +12,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -383,7 +384,10 @@ async fn onnx(cx: Cx, input: Input) -> Result<()> {
         let fields = proto::scan(&cx, graph, 200_000).await?;
         let nodes = fields.iter().filter(|r| r.num == 1).count();
         let inits = fields.iter().filter(|r| r.num == 5).count();
-        parts.push(format!("{nodes} nodes, {inits} initializers"));
+        parts.push(format!(
+            "{nodes_node}, {inits} initializers",
+            nodes_node = plural(nodes, "node")
+        ));
     }
     proto::message(cx.clone(), (file, &ONNX_MODEL, 0)).await?;
     cx.annotate(format!("ONNX model, {}", parts.join(", ")));
@@ -919,8 +923,9 @@ async fn graphdef(cx: Cx, input: Input) -> Result<()> {
         .collect();
     proto::message(cx.clone(), (file, &TF_GRAPH, 0)).await?;
     cx.annotate(format!(
-        "TensorFlow GraphDef, {nodes} nodes ({})",
-        common.join(", ")
+        "TensorFlow GraphDef, {nodes_node} ({})",
+        common.join(", "),
+        nodes_node = plural(nodes, "node")
     ));
     Ok(())
 }
@@ -1028,7 +1033,10 @@ async fn sentencepiece(cx: Cx, input: Input) -> Result<()> {
         }
     }
     proto::message(cx.clone(), (file, &SP_MODEL, 0)).await?;
-    cx.annotate(format!("SentencePiece model, {pieces} pieces{kind}"));
+    cx.annotate(format!(
+        "SentencePiece model, {pieces_piece}{kind}",
+        pieces_piece = plural(pieces, "piece")
+    ));
     Ok(())
 }
 
@@ -1193,7 +1201,10 @@ async fn tfrecord(cx: Cx, input: Input) -> Result<()> {
         (_, 0) => "examples",
         _ => "mixed records",
     };
-    cx.annotate(format!("TFRecord, {n} records ({what})"));
+    cx.annotate(format!(
+        "TFRecord, {n_record} ({what})",
+        n_record = plural(n, "record")
+    ));
     Ok(())
 }
 

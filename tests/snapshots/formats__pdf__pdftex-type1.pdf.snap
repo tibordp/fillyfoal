@@ -34,7 +34,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 TJ: "[(ABC) -500 (CAB)]" — show text with positioning  [#1:0x24+0x12]
                 ET — end text  [#1:0x37+0x2]
           ▾ /Resources: "1 0 R" — 2 entries  [0xc7+0x10] → 0x10f+0x0
-            ▾ /Font — 1 entries  [0x11a+0x16]
+            ▾ /Font — 1 entry  [0x11a+0x16]
               ▾ /F51: "4 0 R" — /Font /Type1, 7 entries  [0x123+0xa] → 0x69d+0x0
                   /Type: "/Font"  [0x6a8+0xb]
                   /Subtype: "/Type1"  [0x6b4+0xf]
@@ -121,7 +121,7 @@ expression: "common::explore(&display_name(&path), &data)"
             TJ: "[(ABC) -500 (CAB)]" — show text with positioning  [#1:0x24+0x12]
             ET — end text  [#1:0x37+0x2]
       ▾ /Resources: "1 0 R" — 2 entries  [0xc7+0x10] → 0x10f+0x0
-        ▾ /Font — 1 entries  [0x11a+0x16]
+        ▾ /Font — 1 entry  [0x11a+0x16]
           ▾ /F51: "4 0 R" — /Font /Type1, 7 entries  [0x123+0xa] → 0x69d+0x0
               /Type: "/Font"  [0x6a8+0xb]
               /Subtype: "/Type1"  [0x6b4+0xf]
@@ -230,7 +230,7 @@ expression: "common::explore(&display_name(&path), &data)"
             End keywords: "endobj"  [0x107+0x7]
         ▾ Object 1 0 — 2 entries  [0x10f+0x43]
             Object header: "1 0 obj"  [0x10f+0x8]
-          ▾ /Font — 1 entries  [0x11a+0x16]
+          ▾ /Font — 1 entry  [0x11a+0x16]
               /F51: "4 0 R"  [0x123+0xa] → 0x69d+0x0
           ▾ /ProcSet — [/PDF /Text]  [0x131+0x17]
               [0]: "/PDF"  [0x13c+0x4]

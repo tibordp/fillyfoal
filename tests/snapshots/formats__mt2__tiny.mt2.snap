@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tiny.mt2 — MadTracker 2.50 module "Tiny MT2" (MadTracker 2.0): 2 positions, 1 patterns, 4 tracks, 1 instruments  [0x0+0xbc]
+▾ tiny.mt2 — MadTracker 2.50 module "Tiny MT2" (MadTracker 2.0): 2 positions, 1 pattern, 4 tracks, 1 instrument  [0x0+0xbc]
     Signature: "MT20"  [0x0+0x4]
     User ID: 0x0  [0x4+0x4]
     Version: 0x250  [0x8+0x2]

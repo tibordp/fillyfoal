@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tune.it — IT 2.14, Impulse Tracker 2.14, 2 channels, 2 orders, 1 patterns, 1 samples, 1 instruments — fillyfoal it  [0x0+0x376]
+▾ tune.it — IT 2.14, Impulse Tracker 2.14, 2 channels, 2 orders, 1 pattern, 1 sample, 1 instrument — fillyfoal it  [0x0+0x376]
   ▾ Header  [0x0+0xc0]
       Signature: "IMPM"  [0x0+0x4]
       Song name: "fillyfoal it"  [0x4+0x1a]
@@ -27,8 +27,8 @@ expression: "common::explore(&display_name(&path), &data)"
       Channel panning: 20 20 a0 a0 a0 a0 a0 a0 a0 a0 a0 a0 a0 a0 a0 a0 …  |  ..............|  [0x40+0x40]
       Channel volume: 40 40 40 40 40 40 40 40 40 40 40 40 40 40 40 40 …  |@@@@@@@@@@@@@@@@|  [0x80+0x40]
     Orders: "0" — 2 entries  [0xc0+0x2]
-  ▾ Instruments — 1 entries  [0xc2+0x4]
-    ▾ Instrument 1 — Lead, 1 samples  [0xce+0x130]
+  ▾ Instruments — 1 entry  [0xc2+0x4]
+    ▾ Instrument 1 — Lead, 1 sample  [0xce+0x130]
         Signature: "IMPI"  [0xce+0x4]
         File name: "lead.iti"  [0xd2+0xc]
         Reserved: 0  [0xde+0x1]
@@ -52,7 +52,7 @@ expression: "common::explore(&display_name(&path), &data)"
         MIDI program: 0  [0x10b+0x1]
         MIDI bank: 0  [0x10c+0x2]
         Note-sample table: 00 01 01 01 02 01 03 01 04 01 05 01 06 01 07 01 …  |................|  [0x10e+0xf0]
-  ▾ Samples — 1 entries  [0xc6+0x4]
+  ▾ Samples — 1 entry  [0xc6+0x4]
     ▾ Sample 1 — Saw, 16 samples at 8363 Hz  [0x2f8+0x50]
         Signature: "IMPS"  [0x2f8+0x4]
         File name: "saw.its"  [0x2fc+0xc]
@@ -75,7 +75,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Vibrato rate: 0  [0x346+0x1]
         Vibrato waveform: 0  [0x347+0x1]
         Sample data — 16 bytes, 8-bit signed PCM  [0x366+0x10]
-  ▾ Patterns — 1 patterns  [0xca+0x4]
+  ▾ Patterns — 1 pattern  [0xca+0x4]
     ▾ Pattern 0 — 32 rows, 4 bytes packed  [0x348+0xc]
         ! malformed: packed data ends after 4 of 32 rows
       ▾ Header  [0x348+0x8]

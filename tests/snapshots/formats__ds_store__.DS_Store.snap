@@ -15,7 +15,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Block 1: 0x25 — 0x20 bytes at 0x24 → 0x24+0x20
       Block 2: 0x100c — 0x1000 bytes at 0x1004 → 0x1004+0x1000
     Directory entry "DSDB": 1  [0xc10+0x9]
-  ▾ DSDB — B-tree: 0 levels, 8 records, 1 nodes, page size 0x1000  [0x24+0x14]
+  ▾ DSDB — B-tree: 0 levels, 8 records, 1 node, page size 0x1000  [0x24+0x14]
     ▾ (this folder) — binary plist, 5 objects, root dict (2)  [0x101e+0x67]
       ▾ Header  [0x101e+0x8]
           Magic: "bplist"  [0x101e+0x6]

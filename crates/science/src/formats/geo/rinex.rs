@@ -16,6 +16,7 @@ use crate::declare_format;
 use crate::error::Result;
 use crate::formats::text::piece::Piece;
 use crate::formats::text::scan::Lines;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -266,7 +267,7 @@ async fn rinex(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Header")
             .span(hspan)
-            .summary(format!("{} lines", values.len()))
+            .summary(plural(values.len(), "line"))
             .lazy(header_lines, hspan),
     );
     let vt = find(&values, "RINEX VERSION / TYPE").unwrap_or_default();
@@ -310,7 +311,7 @@ async fn crinex(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Header")
             .span(hspan)
-            .summary(format!("{} lines", values.len()))
+            .summary(plural(values.len(), "line"))
             .lazy(header_lines, hspan),
     );
     let version = find(&values, "CRINEX VERS   / TYPE")
@@ -357,7 +358,7 @@ async fn labelled_blocks(
     cx.emit(
         Node::new("Header")
             .span(hspan)
-            .summary(format!("{} lines", values.len()))
+            .summary(plural(values.len(), "line"))
             .lazy(header_lines, hspan),
     );
     let version = find(&values, version_label)
@@ -395,7 +396,7 @@ async fn sp3(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Header")
             .span(hspan)
-            .summary(format!("{count} lines"))
+            .summary(plural(count, "line"))
             .lazy(sp3_header, hspan),
     );
     let epochs = first.get(32..39).unwrap_or_default().trim().to_owned();

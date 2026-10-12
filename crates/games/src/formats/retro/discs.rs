@@ -10,8 +10,8 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::fmt::fourcc;
 use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{fourcc, plural};
 use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
@@ -212,7 +212,7 @@ async fn chd(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Metadata")
                 .span(file.sub(info.meta, 16))
-                .summary(format!("{} entries", entries.len()))
+                .summary(plural(entries.len(), "entry"))
                 .lazy(chd_metadata, (file, entries.clone())),
         );
     }
@@ -1087,22 +1087,20 @@ async fn nrg(cx: Cx, input: Input) -> Result<()> {
                 let per = if wide { 42u64 } else { 30 };
                 let n = data.len.saturating_sub(22).checked_div(per).unwrap_or(0);
                 tracks = tracks.saturating_add(n);
-                node = node
-                    .summary(format!("{n} tracks"))
-                    .lazy(nrg_dao, (data, wide));
+                node = node.summary(plural(n, "track")).lazy(nrg_dao, (data, wide));
             }
             "ETN2" | "ETNF" => {
                 let per = if tag == "ETN2" { 32u64 } else { 20 };
                 let n = data.len.checked_div(per).unwrap_or(0);
                 tracks = tracks.saturating_add(n);
-                node = node.summary(format!("{n} tracks"));
+                node = node.summary(plural(n, "track"));
             }
             "SINF" => {
                 sessions = sessions.saturating_add(1);
                 let raw = cx.read_avail(data.sub(0, 4)).await?;
                 node = node.summary(format!(
-                    "{} tracks in session",
-                    u32_be(&raw, 0).unwrap_or(0)
+                    "{} in session",
+                    plural(u32_be(&raw, 0).unwrap_or(0), "track")
                 ));
             }
             "MTYP" => {
@@ -1113,7 +1111,7 @@ async fn nrg(cx: Cx, input: Input) -> Result<()> {
             }
             "CUEX" | "CUES" => {
                 node = node
-                    .summary(format!("{} entries", data.len / 8))
+                    .summary(plural(data.len / 8, "entry"))
                     .lazy(nrg_cue, (data, tag == "CUEX"));
             }
             _ => {}
@@ -1124,9 +1122,9 @@ async fn nrg(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!(
-        "Nero image (v{version}), {} of data, {sessions} session(s), {tracks} track(s), {chunks} chunks{}",
+        "Nero image (v{version}), {} of data, {sessions} session(s), {tracks} track(s), {chunks_chunk}{}",
         size(start),
-        media.map_or_else(String::new, |m| format!(", media type {m:#x}"))
+        media.map_or_else(String::new, |m| format!(", media type {m:#x}")), chunks_chunk = plural(chunks, "chunk")
     ));
     Ok(())
 }
@@ -1314,7 +1312,7 @@ async fn mds(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new(format!("Session {} track blocks", sess.number))
                 .span(tspan)
-                .summary(format!("{} blocks", sess.blocks))
+                .summary(plural(sess.blocks, "block"))
                 .lazy(mds_tracks, tspan),
         );
     }
@@ -1497,7 +1495,7 @@ async fn ccd(cx: Cx, input: Input) -> Result<()> {
                 .map(|x| format!("{}={}", x.0, x.1))
                 .collect::<Vec<_>>()
                 .join(", "),
-            _ => format!("{} keys", entries.len()),
+            _ => plural(entries.len(), "key"),
         };
         cx.push(
             Node::new(format!("[{name}]"))
@@ -1598,8 +1596,8 @@ async fn gdi(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "GD-ROM track list, {} tracks{}",
-        count.trim(),
+        "GD-ROM track list, {}{}",
+        plural(count.trim(), "track"),
         if high { ", with high-density area" } else { "" }
     ));
     Ok(())
@@ -1679,8 +1677,9 @@ async fn ecm(cx: Cx, input: Input) -> Result<()> {
     }
     let [_, m1, f1, f2] = sectors;
     cx.annotate(format!(
-        "ECM image, {runs} runs ({m1} Mode 1, {f1} Mode 2/1, {f2} Mode 2/2 sectors), decodes to {}",
-        size(decoded)
+        "ECM image, {runs_run} ({m1} Mode 1, {f1} Mode 2/1, {f2} Mode 2/2 sectors), decodes to {}",
+        size(decoded),
+        runs_run = plural(runs, "run")
     ));
     Ok(())
 }
@@ -1720,7 +1719,7 @@ async fn cso(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Blocks")
             .span(index)
-            .summary(format!("{blocks} blocks"))
+            .summary(plural(blocks, "block"))
             .lazy(
                 cso_blocks,
                 (
@@ -1734,11 +1733,12 @@ async fn cso(cx: Cx, input: Input) -> Result<()> {
             ),
     );
     cx.annotate(format!(
-        "{} v{}, {} image in {blocks} blocks of {}",
+        "{} v{}, {} image in {blocks_block} of {}",
         if zso { "ZSO (LZ4)" } else { "CSO (deflate)" },
         h.version,
         size(h.total),
-        size(h.block_size.into())
+        size(h.block_size.into()),
+        blocks_block = plural(blocks, "block")
     ));
     Ok(())
 }
@@ -1811,18 +1811,21 @@ async fn dax(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Frame offsets")
             .span(offsets)
-            .summary(format!("{frames} entries")),
+            .summary(plural(frames, "entry")),
     );
     if let Some(l) = lengths {
         cx.emit(
             Node::new("Frame lengths")
                 .span(l)
-                .summary(format!("{frames} entries")),
+                .summary(plural(frames, "entry")),
         );
     }
     cx.emit(
         Node::new("Frames")
-            .summary(format!("{frames} frames of 8 KiB"))
+            .summary(format!(
+                "{frames_frame} of 8 KiB",
+                frames_frame = plural(frames, "frame")
+            ))
             .lazy(dax_frames, (input, offsets, lengths)),
     );
     cx.annotate(format!(
@@ -1922,10 +1925,10 @@ async fn isz(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Compressed data").span(file.tail(h.data_offset.into())));
     let total = u64::from(h.total_sectors).saturating_mul(h.sector_size.into());
     cx.annotate(format!(
-        "ISZ v{}, {} image in {} chunks of {}, encryption {}",
+        "ISZ v{}, {} image in {} of {}, encryption {}",
         h.version,
         size(total),
-        h.blocks,
+        plural(h.blocks, "chunk"),
         size(h.block_size.into()),
         lookup(ISZ_ENCRYPTION, h.encryption.into()).unwrap_or("unknown")
     ));
@@ -1971,7 +1974,7 @@ async fn daa(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Chunk table")
             .span(table)
-            .summary(format!("{chunks} chunks")),
+            .summary(plural(chunks, "chunk")),
     );
     cx.emit(Node::new("Compressed data").span(file.tail(h.data_offset.into())));
     let computed = crate::codec::crc32(&cx.read(file.sub(0, 0x48)).await?);
@@ -1981,7 +1984,7 @@ async fn daa(cx: Cx, input: Input) -> Result<()> {
         )));
     }
     cx.annotate(format!(
-        "{} v{}.{}, {} ISO in {chunks} chunks of {}",
+        "{} v{}.{}, {} ISO in {chunks_chunk} of {}",
         if h.signature.starts_with("GBI") {
             "gBurner image"
         } else if h.signature.starts_with("DAA VOL") {
@@ -1992,7 +1995,8 @@ async fn daa(cx: Cx, input: Input) -> Result<()> {
         h.version >> 8,
         h.version >> 4 & 0xf,
         size(h.iso_size),
-        size(h.chunk_size.into())
+        size(h.chunk_size.into()),
+        chunks_chunk = plural(chunks, "chunk")
     ));
     Ok(())
 }
@@ -2026,8 +2030,8 @@ async fn wbfs(cx: Cx, input: Input) -> Result<()> {
     let table = file.sub(12, hd.saturating_sub(12).min(500));
     let used = cx.read_avail(table).await?;
     cx.emit(Node::new("Disc table").span(table).summary(format!(
-        "{} slots used",
-        used.iter().filter(|&&b| b != 0).count()
+        "{} used",
+        plural(used.iter().filter(|&&b| b != 0).count(), "slot")
     )));
     let mut titles = Vec::new();
     for (slot, &flag) in used.iter().enumerate() {
@@ -2050,8 +2054,8 @@ async fn wbfs(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "WBFS, {} sectors of {}, WBFS sectors of {}, {} disc(s){}",
-        sectors,
+        "WBFS, {} of {}, WBFS sectors of {}, {} disc(s){}",
+        plural(sectors, "sector"),
         size(hd),
         size(1u64.checked_shl(wbfs_shift.into()).unwrap_or(0)),
         titles.len(),
@@ -2109,7 +2113,7 @@ async fn gcz(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Blocks")
             .span(pointers)
-            .summary(format!("{} blocks", h.blocks))
+            .summary(plural(h.blocks, "block"))
             .lazy(
                 gcz_blocks,
                 (
@@ -2122,11 +2126,11 @@ async fn gcz(cx: Cx, input: Input) -> Result<()> {
             ),
     );
     cx.annotate(format!(
-        "GCZ {} image, {} → {}, {} blocks of {}",
+        "GCZ {} image, {} → {}, {} of {}",
         if h.sub_type == 1 { "Wii" } else { "GameCube" },
         size(h.data),
         size(h.compressed),
-        h.blocks,
+        plural(h.blocks, "block"),
         size(h.block_size.into())
     ));
     Ok(())
@@ -2214,12 +2218,15 @@ async fn wia(cx: Cx, input: Input) -> Result<()> {
     );
     let title = crate::text::until_nul(&cx.read_avail(h2.sub(0x10 + 0x20, 64)).await?);
     cx.annotate(format!(
-        "{magic} {} {} image {title:?}, {} → {}, {} chunks of {}",
+        "{magic} {} {} image {title:?}, {} → {}, {} of {}",
         wia_version(version),
         if disc == 2 { "Wii" } else { "GameCube" },
         size(iso),
         size(wia_size),
-        lookup(WIA_COMPRESSION, comp.into()).unwrap_or("unknown"),
+        plural(
+            lookup(WIA_COMPRESSION, comp.into()).unwrap_or("unknown"),
+            "chunk"
+        ),
         size(chunk.into())
     ));
     Ok(())
@@ -2336,9 +2343,10 @@ async fn wii_ciso(cx: Cx, input: Input) -> Result<()> {
         input.nested(file.sub(0x8000, block)),
     ));
     cx.annotate(format!(
-        "compact ISO, {used} blocks of {} stored, image {}",
+        "compact ISO, {used_block} of {} stored, image {}",
         size(block),
-        size(last.saturating_mul(block))
+        size(last.saturating_mul(block)),
+        used_block = plural(used, "block")
     ));
     Ok(())
 }
@@ -2626,9 +2634,9 @@ async fn opera(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{} block(s)", h.root_blocks)),
     );
     cx.annotate(format!(
-        "3DO disc {:?}, {} blocks of {} bytes ({})",
+        "3DO disc {:?}, {} of {} bytes ({})",
         clean(&h.label),
-        h.block_count,
+        plural(h.block_count, "block"),
         h.block_size,
         size(u64::from(h.block_count).saturating_mul(bs))
     ));

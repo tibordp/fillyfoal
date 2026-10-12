@@ -30,7 +30,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Length: 488  [0x44+0x4]
           Info 1: 0x0  [0x48+0x4]
           Info 2: 0x1  [0x4c+0x4]
-      ▾ Sample 1 — video at 1 ticks, 152 bytes  [0x50+0x10]
+      ▾ Sample 1 — video at 1 tick, 152 bytes  [0x50+0x10]
           Offset: 0x1e8  [0x50+0x4]
           Length: 152  [0x54+0x4]
           Info 1: 0x80000001  [0x58+0x4]

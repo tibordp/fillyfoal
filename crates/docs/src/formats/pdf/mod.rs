@@ -595,7 +595,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     cx.emit(
         Node::new("Objects")
-            .summary(format!("{} entries", doc.xref.len()))
+            .summary(plural(doc.xref.len(), "entry"))
             .desc("Every object in the cross-reference data, by number, with where it is")
             .lazy(crate::expander!(self::objects_list: DocRef), doc.clone()),
     );
@@ -671,7 +671,10 @@ async fn annotation(
     }
     let revisions = revision_count(doc);
     if revisions > 1 {
-        out = format!("{out}, {revisions} revisions");
+        out = format!(
+            "{out}, {revisions_revision}",
+            revisions_revision = plural(revisions, "revision")
+        );
     }
     if doc.linearized.is_some() {
         out.push_str(", linearized");
@@ -751,8 +754,8 @@ fn short(item: &Item) -> String {
             let text: String = syntax::text(prefix).chars().take(24).collect();
             format!("({text})")
         }
-        Obj::Array(items) => format!("[{} items]", items.len()),
-        Obj::Dict(entries) => format!("<<{} entries>>", entries.len()),
+        Obj::Array(items) => format!("[{}]", plural(items.len(), "item")),
+        Obj::Dict(entries) => format!("<<{}>>", plural(entries.len(), "entry")),
     }
 }
 
@@ -765,9 +768,9 @@ fn dict_summary(item: &Item) -> String {
         .filter_map(|k| item.get(k).and_then(Item::name).map(|n| format!("/{n}")))
         .collect();
     if kind.is_empty() {
-        format!("{} entries", entries.len())
+        plural(entries.len(), "entry")
     } else {
-        format!("{}, {} entries", kind.join(" "), entries.len())
+        format!("{}, {}", kind.join(" "), plural(entries.len(), "entry"))
     }
 }
 

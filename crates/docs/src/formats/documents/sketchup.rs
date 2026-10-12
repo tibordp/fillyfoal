@@ -27,6 +27,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Input, Probe, embedded};
 use crate::node::{Count, Node};
@@ -166,7 +167,10 @@ async fn sketchup(cx: Cx, input: Input) -> Result<()> {
                     }
                     let mut node = Node::new("Version map")
                         .span(file.sub(at, cur.pos().saturating_sub(at)))
-                        .summary(format!("{entries} classes, schema {schema}"))
+                        .summary(format!(
+                            "{entries_class}, schema {schema}",
+                            entries_class = plural(entries, "class")
+                        ))
                         .lazy(version_map, (file, at, start));
                     if !ended {
                         node = node.diag(Diagnostic::note(

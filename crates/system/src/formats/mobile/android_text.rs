@@ -7,6 +7,7 @@ use crate::error::Result;
 use crate::formats::ml::text::block_lines;
 use crate::formats::text::probe::{self, significant};
 use crate::formats::text::scan::Lines;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -50,7 +51,7 @@ async fn build_prop(cx: Cx, input: Input) -> Result<()> {
             let span = file.sub(start, end.saturating_sub(start));
             Node::new(name)
                 .span(span)
-                .summary(format!("{n} properties"))
+                .summary(plural(n, "property"))
                 .lazy(block_lines, span)
         })
     };
@@ -100,8 +101,8 @@ async fn build_prop(cx: Cx, input: Input) -> Result<()> {
         .unwrap_or("");
     cx.annotate(
         format!(
-            "Android build properties, {} entries, Android {release} {id} {device}",
-            props.len()
+            "Android build properties, {}, Android {release} {id} {device}",
+            plural(props.len(), "entry")
         )
         .trim_end()
         .to_owned(),
@@ -151,7 +152,7 @@ async fn tombstone(cx: Cx, input: Input) -> Result<()> {
             cx.push(
                 Node::new(name)
                     .span(span)
-                    .summary(format!("{n} lines"))
+                    .summary(plural(n, "line"))
                     .lazy(block_lines, span),
             )
             .await;
@@ -243,7 +244,7 @@ async fn anr(cx: Cx, input: Input) -> Result<()> {
                 Node::new(format!("pid {pid}"))
                     .span(span)
                     .value(text(at))
-                    .summary(format!("{threads} threads"))
+                    .summary(plural(threads, "thread"))
                     .lazy(anr_process, span),
             )
             .await;

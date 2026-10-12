@@ -32,7 +32,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Literal run — 3 pixels, 3 bytes  [0x4a+0x6]
       Run — 3 pixels, index 1  [0x50+0x2]
       End of line — row 1  [0x52+0x2]
-      Delta — skip 2 pixels right and 1 rows on  [0x54+0x4]
+      Delta — skip 2 pixels right and 1 row on  [0x54+0x4]
       Run — 4 pixels, index 3  [0x58+0x2]
       End of line — row 2  [0x5a+0x2]
       End of bitmap  [0x5c+0x2]

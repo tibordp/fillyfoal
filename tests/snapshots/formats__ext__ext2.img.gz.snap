@@ -108,7 +108,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x684+0x178]
       Checksum: 0x0  [0x7fc+0x4]
     Boot block — block 0, left for a boot loader  [0x0+0x400]
-  ▾ Block group descriptors — 1 groups of 8192 blocks  [0x800+0x20]
+  ▾ Block group descriptors — 1 group of 8192 blocks  [0x800+0x20]
     ▾ Group 0 — blocks 1–255, inode table at 5, 196 free blocks, 13 free inodes  [0x800+0x20]
         Block bitmap: 3  [0x800+0x4]
         Inode bitmap: 4  [0x804+0x4]
@@ -123,7 +123,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Unused inodes: 0  [0x81c+0x2]
         Checksum: 0x0  [0x81e+0x2]
       Unused — rest of the descriptor table's last block  [0x820+0x3e0]
-  ▾ Block groups — 1 groups
+  ▾ Block groups — 1 group
     ▾ Group 0 — blocks 1–255  [0x400+0x3fc00]
         Superblock (primary) — shown at the top level  [0x400+0x400]
         Group descriptors (primary) — shown at the top level  [0x800+0x20]
@@ -1356,7 +1356,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Line 38: "fragment line 0037 ............................................................................"  [#3:0xde0+0x5f]
             Line 39: "fragment line 0038 ............................................................................"  [#3:0xe40+0x5f]
             Line 40: "fragment line 0039 ............................................................................"  [#3:0xea0+0x5f]
-  ▾ Special inodes — 1 inodes
+  ▾ Special inodes — 1 inode
     ▾ Resize inode — -rw-------, 64.3 MiB
       ▾ Inode 7 — -rw-------, 64.3 MiB  [0x1a00+0x100]
           Mode: 0x8180 — -rw-------  [0x1a00+0x2]

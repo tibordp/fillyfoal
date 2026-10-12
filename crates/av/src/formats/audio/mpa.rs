@@ -18,6 +18,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, Layout, parse, struct_node};
 use crate::formats::audio::{ac3, adts, ape, dts, flac, musepack, tta, wavpack};
 use crate::formats::util::arcutil::human_size;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{
     Bits, CRC16_MPEG, FrameSyntax, bits_node, duration, junk_node, leaf, resync, tail_node,
 };
@@ -894,7 +895,7 @@ impl Vbr {
     fn summary(&self) -> String {
         let mut parts = vec![if self.cbr { "CBR" } else { "VBR" }.to_owned()];
         if let Some(n) = self.frames {
-            parts.push(format!("{n} frames"));
+            parts.push(plural(n, "frame"));
         }
         if let Some(b) = self.bytes {
             parts.push(human_size(b.into()));
@@ -1103,11 +1104,11 @@ async fn expand_lame(cx: Cx, (span, frame): (Span, Span)) -> Result<()> {
         .emit()?;
     b.field("Encoder delay", 12)
         .desc("Samples the encoder added at the start; players skip them (and the decoder's own delay) for gapless playback")
-        .with(|v, n| n.summary(format!("{v} samples")))
+        .with(|v, n| n.summary(plural(v, "sample")))
         .emit()?;
     b.field("End padding", 12)
         .desc("Samples added at the end to fill the last frame")
-        .with(|v, n| n.summary(format!("{v} samples")))
+        .with(|v, n| n.summary(plural(v, "sample")))
         .emit()?;
     b.field("Source sample rate", 2)
         .enumeration(SOURCE_RATE)
@@ -1189,7 +1190,10 @@ fn vbri(f: &mut Fields<'_>, _: &VbrCtx) -> Result<Vbr> {
         f.node(
             Node::new("Table of contents")
                 .span(span)
-                .summary(format!("{entries} entries of {per} frames"))
+                .summary(format!(
+                    "{entries_entry} of {per} frames",
+                    entries_entry = plural(entries, "entry")
+                ))
                 .desc("Bytes taken by each run of frames (entry × scale factor)")
                 .lazy(expand_vbri_toc, (span, size, scale, per)),
         );
@@ -1495,11 +1499,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut frames = Node::new("Frames").span(stream);
     frames = match (vbr.and_then(|v| v.frames), stats.complete) {
         (Some(n), _) => frames.summary(format!(
-            "{} frames ({} header frame + {n} audio)",
-            u64::from(n).saturating_add(1),
+            "{} ({} header frame + {n} audio)",
+            plural(u64::from(n).saturating_add(1), "frame"),
             vbr.map_or("VBR", |v| v.name().trim_end_matches(" header"))
         )),
-        (None, true) => frames.summary(format!("{} frames", stats.frames)),
+        (None, true) => frames.summary(plural(stats.frames, "frame")),
         (None, false) => frames.summary(human_size(stream.len)),
     };
     let walk = Walk {

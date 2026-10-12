@@ -6,6 +6,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::uint;
 use crate::formats::{Codec, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
@@ -70,10 +71,10 @@ async fn stl(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Triangles")
             .span(triangles)
-            .summary(format!("{count} triangles"))
+            .summary(plural(count, "triangle"))
             .lazy(stl_triangles, triangles),
     );
-    cx.annotate(format!("{count} triangles"));
+    cx.annotate(plural(count, "triangle"));
     Ok(())
 }
 
@@ -261,7 +262,7 @@ async fn fbx_nodes(cx: Cx, (input, list, wide): (Input, Span, bool)) -> Result<(
                 name
             })
             .span(record)
-            .summary(format!("{props} properties"))
+            .summary(plural(props, "property"))
             .lazy(fbx_node, (input, props_span, props, nested, wide)),
         )
         .await;
@@ -317,7 +318,7 @@ async fn fbx_node(
                 let len = cur.u32().await?;
                 let data = cur.span(len.into());
                 cur.skip(len.into());
-                let summary = format!("{elements} elements");
+                let summary = plural(elements, "element");
                 if encoding == 1 {
                     content(name, input, data, Codec::Zlib, None)
                         .summary(format!("{summary}, zlib"))
@@ -557,10 +558,11 @@ async fn usdc(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "USD crate {}.{}.{}, {count} sections",
+        "USD crate {}.{}.{}, {count_section}",
         version.first().copied().unwrap_or(0),
         version.get(1).copied().unwrap_or(0),
-        version.get(2).copied().unwrap_or(0)
+        version.get(2).copied().unwrap_or(0),
+        count_section = plural(count, "section")
     ));
     Ok(())
 }

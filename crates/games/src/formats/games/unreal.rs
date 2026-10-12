@@ -123,9 +123,11 @@ pub async fn package(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Import table").summary(format!("{} imports at {:#x}", s.imports.0, s.imports.1)),
     );
-    cx.emit(
-        Node::new("Export table").summary(format!("{} exports at {:#x}", s.exports.0, s.exports.1)),
-    );
+    cx.emit(Node::new("Export table").summary(format!(
+        "{} at {:#x}",
+        crate::formats::util::fmt::plural(s.exports.0, "export"),
+        s.exports.1
+    )));
     cx.annotate(format!(
         "{engine} package v{file_version}, {}, {}",
         fmt::plural(s.names.0, "name"),
@@ -248,7 +250,11 @@ fn generations(f: &mut Fields<'_>, &(count, size): &(i32, u64)) -> Result<()> {
         f.node(
             Node::new(format!("Generation {i}"))
                 .span(span)
-                .summary(format!("{exports} exports, {names} names")),
+                .summary(format!(
+                    "{exports_export}, {names_name}",
+                    exports_export = crate::formats::util::fmt::plural(exports, "export"),
+                    names_name = crate::formats::util::fmt::plural(names, "name")
+                )),
         );
     }
     Ok(())

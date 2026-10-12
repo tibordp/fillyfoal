@@ -3,11 +3,27 @@
 
 use crate::value::Value;
 
-/// `n` and a noun, with an `s` unless `n` is 1: `"1 file"`, `"3 files"`.
-pub fn plural(n: impl Into<u64>, noun: &str) -> String {
-    let n = n.into();
-    if n == 1 {
-        format!("1 {noun}")
+/// `n` and a noun, in the plural unless `n` is 1: `"1 file"`, `"3 files"`,
+/// `"2 entries"`, `"2 hashes"` (regular English plurals: a consonant and
+/// `y` take `ies`; `s`, `x`, `z`, `ch` and `sh` take `es`; use [`count`]
+/// for others). `n` is any count that displays as a number (any integer
+/// type, or a count already formatted as text); only a `1` takes the
+/// singular.
+pub fn plural(n: impl std::fmt::Display, noun: &str) -> String {
+    let n = n.to_string();
+    if n == "1" {
+        return format!("1 {noun}");
+    }
+    let mut chars = noun.chars().rev();
+    let (last, before) = (chars.next(), chars.next());
+    if last == Some('y') && before.is_some_and(|c| !"aeiou".contains(c)) {
+        let stem = noun.strip_suffix('y').unwrap_or(noun);
+        format!("{n} {stem}ies")
+    } else if ["s", "x", "z", "ch", "sh"]
+        .iter()
+        .any(|e| noun.ends_with(e))
+    {
+        format!("{n} {noun}es")
     } else {
         format!("{n} {noun}s")
     }
@@ -154,6 +170,12 @@ mod tests {
     #[test]
     fn counts() {
         assert_eq!(plural(1u8, "file"), "1 file");
+        assert_eq!(plural(0usize, "file"), "0 files");
+        assert_eq!(plural(2u64, "entry"), "2 entries");
+        assert_eq!(plural(2u64, "key"), "2 keys");
+        assert_eq!(plural(3i32, "hash"), "3 hashes");
+        assert_eq!(plural(4u32, "index"), "4 indexes");
+        assert_eq!(plural("1", "track"), "1 track");
         assert_eq!(count(2u8, "entry", "entries"), "2 entries");
         assert_eq!(grouped(1_234_567u32), "1,234,567");
         assert_eq!(grouped(999u32), "999");

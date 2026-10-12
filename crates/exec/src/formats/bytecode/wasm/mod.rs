@@ -593,7 +593,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         };
         let mut summary = format!("{:#x} bytes", s.body.len);
         if let Some(n) = count {
-            summary = format!("{n} entries, {summary}");
+            summary = format!("{n_entry}, {summary}", n_entry = plural(n, "entry"));
         }
         cx.push(
             Node::new(label)
@@ -640,7 +640,7 @@ async fn module_summary(cx: &Cx, m: &ModuleInfo) -> String {
     if let Some(s) = m.find(3)
         && let Some(n) = leading_count(cx, s.body).await
     {
-        let mut s = format!("{n} functions");
+        let mut s = plural(n, "function");
         match imported {
             Some(0) => {}
             Some(k) => s.push_str(&format!(" + {k} imported")),
@@ -667,7 +667,11 @@ async fn module_summary(cx: &Cx, m: &ModuleInfo) -> String {
             }
             names.push(export);
         }
-        parts.push(format!("{n} exports ({})", clip(&names.join(", "), 80)));
+        parts.push(format!(
+            "{n_export} ({})",
+            clip(&names.join(", "), 80),
+            n_export = plural(n, "export")
+        ));
     }
     parts.join(", ")
 }
@@ -1186,7 +1190,7 @@ fn element(r: &mut Reader<'_>, i: u64, _: &mut [u64; 5]) -> Option<Entry> {
     Some(Entry::new(
         Node::new(format!("segment {i}"))
             .value(text(clip(&items.join(", "), 120)))
-            .summary(format!("{mode}, {n} items")),
+            .summary(format!("{mode}, {n_item}", n_item = plural(n, "item"))),
     ))
 }
 

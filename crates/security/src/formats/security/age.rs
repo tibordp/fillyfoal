@@ -202,7 +202,7 @@ fn stanza_summary(kind: &str, words: &[String]) -> String {
         ("ssh-rsa", Some(tag), _) => format!("SSH RSA key, tag {tag}"),
         ("piv-p256", Some(tag), _) => format!("PIV P-256 key, tag {tag}"),
         (k, _, _) if k.ends_with("-grease") => "grease (ignored)".into(),
-        _ => format!("{} arguments", words.len().saturating_sub(1)),
+        _ => plural(words.len().saturating_sub(1), "argument"),
     }
 }
 

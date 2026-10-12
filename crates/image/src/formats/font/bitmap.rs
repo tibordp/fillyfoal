@@ -8,7 +8,7 @@ use crate::bytes::{to_u64, to_usize, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -162,7 +162,7 @@ pub async fn pcf(cx: Cx, input: Input) -> Result<()> {
             }
         }
     }
-    cx.annotate(format!("{summary}, {} tables", tables.len()));
+    cx.annotate(format!("{summary}, {}", plural(tables.len(), "table")));
     for (i, t) in tables.iter().enumerate() {
         let entry = file.sub(8u64.saturating_add(to_u64(i).saturating_mul(16)), 16);
         let name = lookup(TABLE_TYPES, t.kind.into())

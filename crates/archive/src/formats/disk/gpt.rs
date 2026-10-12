@@ -186,10 +186,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let header = parse(&cx, header_span, LE, &(), Header::layout).await?;
     let mut header_node =
         struct_node("GPT header", header_sector, LE, (), header_layout).summary(format!(
-            "revision {}.{}, {} entries at LBA {}, usable LBA {}–{}",
+            "revision {}.{}, {} at LBA {}, usable LBA {}–{}",
             header.revision >> 16,
             header.revision & 0xffff,
-            header.entries,
+            plural(header.entries, "entry"),
             header.entries_lba,
             header.first_usable,
             header.last_usable
@@ -240,7 +240,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         list.summary(match used {
             Some(n) => format!("{n} used of {entries}, {entry_size} bytes each"),
-            None => format!("{entries} entries"),
+            None => plural(entries, "entry"),
         })
         .lazy(partitions, gpt),
     );

@@ -16,6 +16,7 @@ use crate::bytes::{to_u64, u16_be, u16_le, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::{fmt as ufmt, val};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -291,7 +292,10 @@ async fn block_detail(
     cx.emit(
         Node::new("Page numbers")
             .span(pages)
-            .summary(format!("{used} frames in use"))
+            .summary(format!(
+                "{used_frame} in use",
+                used_frame = plural(used, "frame")
+            ))
             .lazy(page_numbers, (pages, e, first, used)),
     );
     let table = cx.read(hash).await?;

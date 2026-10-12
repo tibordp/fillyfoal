@@ -40,6 +40,7 @@ use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::audio::midi::GM_PROGRAMS;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -604,8 +605,10 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         if let Some(z) = sizes {
             s.push_str(&format!(
-                ", {} tracks, {} measures, {} BPM",
-                z.tracks, z.measures, z.tempo
+                ", {}, {} measures, {} BPM",
+                plural(z.tracks, "track"),
+                z.measures,
+                z.tempo
             ));
         }
         s
@@ -903,9 +906,10 @@ async fn song_body(cx: &Cx, f: &mut Fields<'_>, ver: Ver, file: Span) -> Result<
         f.bytes("Padding", if ver.v510 { 1 } else { 2 }).emit()?;
     }
     let rest = file.tail(f.pos());
-    let node = Node::new("Measures")
-        .span(rest)
-        .summary(format!("{measures} measures × {tracks} tracks"));
+    let node = Node::new("Measures").span(rest).summary(format!(
+        "{measures} measures × {tracks_track}",
+        tracks_track = plural(tracks, "track")
+    ));
     // Without tracks a measure holds no data.
     f.node(if song.tracks.is_empty() || song.headers.is_empty() {
         node
@@ -917,7 +921,7 @@ async fn song_body(cx: &Cx, f: &mut Fields<'_>, ver: Ver, file: Span) -> Result<
 
 fn track_list(tracks: &[Track]) -> String {
     let names: Vec<&str> = tracks.iter().map(|t| t.name.as_str()).take(8).collect();
-    let mut s = format!("{} tracks", tracks.len());
+    let mut s = plural(tracks.len(), "track");
     if !names.is_empty() {
         s.push_str(&format!(": {}", names.join(", ")));
         if tracks.len() > names.len() {
@@ -1153,7 +1157,11 @@ fn track_summary(t: &Track) -> String {
             .rev()
             .map(|&p| pitch_name(i64::from(p)))
             .collect();
-        s.push_str(&format!(", {} strings ({})", t.strings, tuning.join(" ")));
+        s.push_str(&format!(
+            ", {} ({})",
+            plural(t.strings, "string"),
+            tuning.join(" ")
+        ));
         s.push_str(&format!(", {} frets", t.frets));
         if t.capo > 0 {
             s.push_str(&format!(", capo {}", t.capo));
@@ -1197,7 +1205,7 @@ impl Tally {
     }
 
     fn summary(&self) -> String {
-        format!("{} beats, {} notes", self.beats, self.notes)
+        format!("{}, {} notes", plural(self.beats, "beat"), self.notes)
     }
 }
 
@@ -1529,7 +1537,7 @@ fn beat_effects(f: &mut Fields<'_>, ver: &Ver) -> Result<()> {
         f.u8("Slap effect").enumeration(SLAP).emit()?;
     }
     if flags2 & 0x04 != 0 {
-        group(f, "Tremolo bar", &(), bend, |n| Some(format!("{n} points")))?;
+        group(f, "Tremolo bar", &(), bend, |n| Some(plural(n, "point")))?;
     }
     if flags1 & 0x40 != 0 {
         i8f(f, "Stroke down")?;
@@ -1687,7 +1695,7 @@ fn note_effects(f: &mut Fields<'_>, ver: &Ver) -> Result<()> {
     if ver.major == 3 {
         let flags = f.u8("Flags").flags(GP3_NOTE_EFFECTS).emit()?;
         if flags & 0x01 != 0 {
-            group(f, "Bend", &(), bend, |n| Some(format!("{n} points")))?;
+            group(f, "Bend", &(), bend, |n| Some(plural(n, "point")))?;
         }
         if flags & 0x10 != 0 {
             group(f, "Grace note", ver, grace, |_| None)?;
@@ -1697,7 +1705,7 @@ fn note_effects(f: &mut Fields<'_>, ver: &Ver) -> Result<()> {
     let flags1 = f.u8("Flags 1").flags(NOTE_EFFECTS1).emit()?;
     let flags2 = f.u8("Flags 2").flags(NOTE_EFFECTS2).emit()?;
     if flags1 & 0x01 != 0 {
-        group(f, "Bend", &(), bend, |n| Some(format!("{n} points")))?;
+        group(f, "Bend", &(), bend, |n| Some(plural(n, "point")))?;
     }
     if flags1 & 0x10 != 0 {
         group(f, "Grace note", ver, grace, |_| None)?;

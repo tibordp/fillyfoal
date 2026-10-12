@@ -10,6 +10,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
@@ -240,7 +241,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(region("Image data", file, pos, len).summary(if rle {
         "run-length encoded".to_owned()
     } else {
-        format!("{} rows", h.height)
+        plural(h.height, "row")
     }));
     for node in areas {
         cx.emit(node);

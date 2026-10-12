@@ -34,7 +34,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Do: "/Im1" — paint XObject  [#1:0x18+0x7]
                 Q — restore graphics state  [#1:0x20+0x1]
           ▾ /Resources: "2 0 R" — 2 entries  [0xac+0x10] → 0x20f+0x0
-            ▾ /XObject — 1 entries  [0x21a+0x19]
+            ▾ /XObject — 1 entry  [0x21a+0x19]
               ▾ /Im1: "1 0 R" — stream, image 64×32, /DeviceGray, 1-bit, /XObject /Image, 9 entries, 73 bytes, /JBIG2Decode (globals in 6 0 R)  [0x226+0xa] → 0xf4+0x0
                   /Type: "/XObject"  [0xff+0xe]
                   /Subtype: "/Image"  [0x10e+0xf]
@@ -45,9 +45,9 @@ expression: "common::explore(&display_name(&path), &data)"
                   /Length: 73  [0x15f+0xa]
                 ▾ /Filter — [/JBIG2Decode]  [0x16a+0x16]
                     [0]: "/JBIG2Decode"  [0x173+0xc]
-                ▾ /DecodeParms — [<<1 entries>>]  [0x181+0x28]
-                  ▾ [0] — 1 entries  [0x18f+0x19]
-                    ▾ /JBIG2Globals: "6 0 R" — stream, 1 entries, 37 bytes  [0x192+0x13] → 0x250+0x0
+                ▾ /DecodeParms — [<<1 entry>>]  [0x181+0x28]
+                  ▾ [0] — 1 entry  [0x18f+0x19]
+                    ▾ /JBIG2Globals: "6 0 R" — stream, 1 entry, 37 bytes  [0x192+0x13] → 0x250+0x0
                         /Length: 37  [0x25b+0xa]
                       ▾ Stream data — 37 bytes  [0x270+0x25]
                           Data  [0x270+0x25]
@@ -117,7 +117,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Do: "/Im1" — paint XObject  [#1:0x18+0x7]
             Q — restore graphics state  [#1:0x20+0x1]
       ▾ /Resources: "2 0 R" — 2 entries  [0xac+0x10] → 0x20f+0x0
-        ▾ /XObject — 1 entries  [0x21a+0x19]
+        ▾ /XObject — 1 entry  [0x21a+0x19]
           ▾ /Im1: "1 0 R" — stream, image 64×32, /DeviceGray, 1-bit, /XObject /Image, 9 entries, 73 bytes, /JBIG2Decode (globals in 6 0 R)  [0x226+0xa] → 0xf4+0x0
               /Type: "/XObject"  [0xff+0xe]
               /Subtype: "/Image"  [0x10e+0xf]
@@ -128,9 +128,9 @@ expression: "common::explore(&display_name(&path), &data)"
               /Length: 73  [0x15f+0xa]
             ▾ /Filter — [/JBIG2Decode]  [0x16a+0x16]
                 [0]: "/JBIG2Decode"  [0x173+0xc]
-            ▾ /DecodeParms — [<<1 entries>>]  [0x181+0x28]
-              ▾ [0] — 1 entries  [0x18f+0x19]
-                ▾ /JBIG2Globals: "6 0 R" — stream, 1 entries, 37 bytes  [0x192+0x13] → 0x250+0x0
+            ▾ /DecodeParms — [<<1 entry>>]  [0x181+0x28]
+              ▾ [0] — 1 entry  [0x18f+0x19]
+                ▾ /JBIG2Globals: "6 0 R" — stream, 1 entry, 37 bytes  [0x192+0x13] → 0x250+0x0
                     /Length: 37  [0x25b+0xa]
                   ▾ Stream data — 37 bytes  [0x270+0x25]
                       Data  [0x270+0x25]
@@ -181,7 +181,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Object 3 0: 0x85 — /Page, 5 entries (in use, generation 0) → 0x85+0x6e
       Object 4 0: 0xf — stream, 2 entries, 39 bytes, /FlateDecode (in use, generation 0) → 0xf+0x75
       Object 5 0: 0x2a7 — /Pages, 3 entries (in use, generation 0) → 0x2a7+0x38
-      Object 6 0: 0x250 — stream, 1 entries, 37 bytes (in use, generation 0) → 0x250+0x56
+      Object 6 0: 0x250 — stream, 1 entry, 37 bytes (in use, generation 0) → 0x250+0x56
       Object 7 0: 0x2e0 — /Catalog, 2 entries (in use, generation 0) → 0x2e0+0x30
       Object 8 0: 0x311 — 5 entries (in use, generation 0) → 0x311+0x7b
   ▾ Revisions — 1 cross-reference section
@@ -229,8 +229,8 @@ expression: "common::explore(&display_name(&path), &data)"
             /Length: 73  [0x15f+0xa]
           ▾ /Filter — [/JBIG2Decode]  [0x16a+0x16]
               [0]: "/JBIG2Decode"  [0x173+0xc]
-          ▾ /DecodeParms — [<<1 entries>>]  [0x181+0x28]
-            ▾ [0] — 1 entries  [0x18f+0x19]
+          ▾ /DecodeParms — [<<1 entry>>]  [0x181+0x28]
+            ▾ [0] — 1 entry  [0x18f+0x19]
                 /JBIG2Globals: "6 0 R"  [0x192+0x13] → 0x250+0x0
             Stream keyword: "stream"  [0x1ac+0x8]
           ▾ Stream data — 73 bytes, image 64×32, /DeviceGray, 1-bit, /JBIG2Decode (globals in 6 0 R)  [0x1b4+0x49]
@@ -267,12 +267,12 @@ expression: "common::explore(&display_name(&path), &data)"
             End keywords: "endstream endobj"  [0x1fd+0x11]
         ▾ Object 2 0 — 2 entries  [0x20f+0x40]
             Object header: "2 0 obj"  [0x20f+0x8]
-          ▾ /XObject — 1 entries  [0x21a+0x19]
+          ▾ /XObject — 1 entry  [0x21a+0x19]
               /Im1: "1 0 R"  [0x226+0xa] → 0xf4+0x0
           ▾ /ProcSet — [/PDF]  [0x234+0x11]
               [0]: "/PDF"  [0x23f+0x4]
             End keywords: "endobj"  [0x248+0x7]
-        ▾ Object 6 0 — stream, 1 entries, 37 bytes  [0x250+0x56]
+        ▾ Object 6 0 — stream, 1 entry, 37 bytes  [0x250+0x56]
             Object header: "6 0 obj"  [0x250+0x8]
             /Length: 37  [0x25b+0xa]
             Stream keyword: "stream"  [0x268+0x8]

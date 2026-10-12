@@ -12,7 +12,7 @@ use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::binutil::{Reader, data_node};
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::text;
 use crate::formats::{Codec, Format, Input, Probe, content};
 use crate::node::{Count, Node};
@@ -161,9 +161,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         names.get(1).map_or("?", String::as_str)
     );
     if let Some(n) = exports {
-        summary.push_str(&format!(", {n} exports"));
+        summary.push_str(&format!(", {n_export}", n_export = plural(n, "export")));
     }
-    summary.push_str(&format!(", {} chunks", m.len()));
+    summary.push_str(&format!(", {}", plural(m.len(), "chunk")));
     cx.annotate(summary);
     cx.set_count(Count::Exact(to_u64(m.len()).saturating_add(3)));
     for (i, c) in m.iter().enumerate() {

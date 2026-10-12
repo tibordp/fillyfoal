@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&name, &data)"
 ---
-▾ v003.xcf — 4×2, RGB, 1 layers  [0x0+0xb6]
+▾ v003.xcf — 4×2, RGB, 1 layer  [0x0+0xb6]
     Signature: "gimp xcf v003" — version 3  [0x0+0xe]
     Width: 4  [0xe+0x4]
     Height: 2  [0x12+0x4]
@@ -12,7 +12,7 @@ expression: "common::explore(&name, &data)"
       PROP_RESOLUTION — 72 × 72 dpi  [0x23+0x10]
       PROP_UNIT — 1  [0x33+0xc]
       PROP_END — 0 bytes  [0x3f+0x8]
-  ▾ Layers — 1 layers  [0x47+0x8]
+  ▾ Layers — 1 layer  [0x47+0x8]
     ▾ Layer 0: "Background" — 4×2 at 0x53  [0x47+0x4] → 0x53+0x10
         Width: 4  [0x53+0x4]
         Height: 2  [0x57+0x4]

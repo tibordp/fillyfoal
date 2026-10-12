@@ -21,6 +21,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::disk::PieceList;
 use crate::formats::util::datakit::{hex, size, text};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Codec, Input, Probe, content, dissect_or_data};
 use crate::node::{Count, Node};
 use crate::record;
@@ -360,9 +361,10 @@ async fn ewf(cx: Cx, input: Input) -> Result<()> {
                 {
                     media = bytes;
                     node = node.summary(format!(
-                        "{chunks} chunks of {}, media {}",
+                        "{chunks_chunk} of {}, media {}",
                         size(chunk_size.into()),
-                        size(bytes)
+                        size(bytes),
+                        chunks_chunk = plural(chunks, "chunk")
                     ));
                 }
             }
@@ -436,7 +438,7 @@ async fn ewf_section(
             cx.emit(
                 Node::new("Chunks")
                     .span(entries)
-                    .summary(format!("{count} chunks"))
+                    .summary(plural(count, "chunk"))
                     .lazy(ewf_chunks, (input, entries, base, ends)),
             );
         }
@@ -814,9 +816,9 @@ async fn ewf2(cx: Cx, input: Input) -> Result<()> {
             4 => {
                 let t = cx.read_avail(data.sub(0, 16)).await?;
                 node.summary(format!(
-                    "chunks {}.., {} entries",
+                    "chunks {}.., {}",
                     u64_le(&t, 0).unwrap_or(0),
-                    u32_le(&t, 8).unwrap_or(0)
+                    plural(u32_le(&t, 8).unwrap_or(0), "entry")
                 ))
             }
             0x0d | 0x0f => node,
@@ -885,7 +887,7 @@ async fn ewf2_section(
             cx.emit(
                 Node::new("Chunks")
                     .span(entries)
-                    .summary(format!("{count} chunks"))
+                    .summary(plural(count, "chunk"))
                     .lazy(ewf2_chunks, (input, entries, chunk)),
             );
             let footer = data.sub(entries.end().saturating_sub(data.offset), 16);
@@ -908,7 +910,7 @@ async fn ewf2_section(
             cx.emit(
                 Node::new(if kind == 5 { "Errors" } else { "Sessions" })
                     .span(entries)
-                    .summary(format!("{count} entries"))
+                    .summary(plural(count, "entry"))
                     .lazy(ewf2_ranges, (entries, kind)),
             );
         }
@@ -938,7 +940,10 @@ async fn ewf2_ranges(cx: Cx, (entries, kind): (Span, u32)) -> Result<()> {
         let start = u64_le(&raw, at).unwrap_or(0);
         let second = u32_le(&raw, at.saturating_add(8)).unwrap_or(0);
         let summary = if kind == 5 {
-            format!("sectors {start}.., {second} sectors")
+            format!(
+                "sectors {start}.., {second_sector}",
+                second_sector = plural(second, "sector")
+            )
         } else {
             format!("first sector {start}, flags {second:#x}")
         };

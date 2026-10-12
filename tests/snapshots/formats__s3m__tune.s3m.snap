@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tune.s3m — S3M, Scream Tracker 3.20, 4 channels, 4 orders, 1 patterns, 2 instruments — fillyfoal s3m  [0x0+0x175]
+▾ tune.s3m — S3M, Scream Tracker 3.20, 4 channels, 4 orders, 1 pattern, 2 instruments — fillyfoal s3m  [0x0+0x175]
   ▾ Header  [0x0+0x60]
       Title: "fillyfoal s3m"  [0x0+0x1c]
       EOF marker: 0x1a  [0x1c+0x1]
@@ -59,7 +59,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Internal: 00 00 00 00 00 00 00 00 00 00 00 00  |............|  [0xe4+0xc]
         Name: "Empty"  [0xf0+0x1c]
         Signature: "SCRS"  [0x10c+0x4]
-  ▾ Patterns — 1 patterns  [0x68+0x2]
+  ▾ Patterns — 1 pattern  [0x68+0x2]
     ▾ Pattern 0 — 69 bytes packed, 64 rows  [0x110+0x45]
         Packed length: 69  [0x110+0x2]
         Row 00 — 1: ?3D 01 ... ...  [0x112+0x4]

@@ -15,7 +15,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::binutil::NodeExt;
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::{name_or, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
@@ -745,7 +745,10 @@ fn record_node(s: &BlockState, r: &Record, span: Span) -> Node {
             let count = r.operands.first().copied().unwrap_or(0);
             let lengths = r.operands.get(1).copied().unwrap_or(0);
             return node
-                .summary(format!("{count} strings in {len} bytes"))
+                .summary(format!(
+                    "{count_string} in {len} bytes",
+                    count_string = plural(count, "string")
+                ))
                 .target(blob)
                 .lazy(
                     crate::expander!(self::metadata_strings: (Stream, u64, u64, u64, u64)),

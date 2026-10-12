@@ -761,7 +761,7 @@ async fn root_summary(cx: &Cx, t: Tiff, dir: Dir, ifd: &Ifd, kind: &str) -> Stri
     if is_exif(ifd) {
         let text = shot.describe(true);
         return if text.is_empty() {
-            format!("Exif, {} entries in IFD0", ifd.entries.len())
+            format!("Exif, {} in IFD0", plural(ifd.entries.len(), "entry"))
         } else {
             format!("Exif: {text}")
         };
@@ -820,7 +820,7 @@ async fn ifd_summary(cx: &Cx, t: Tiff, dir: Dir, ifd: &Ifd) -> String {
             .push(lookup(COMPRESSION, c).map_or_else(|| format!("compression {c}"), str::to_owned));
     }
     if let (Some(w), Some(h)) = (first(0x0142).await, first(0x0143).await) {
-        parts.push(format!("{} tiles", dims(w, h)));
+        parts.push(plural(dims(w, h), "tile"));
     }
     if let Some(flags) = first(0x00fe).await {
         if flags & 1 != 0 {
@@ -834,7 +834,7 @@ async fn ifd_summary(cx: &Cx, t: Tiff, dir: Dir, ifd: &Ifd) -> String {
         parts.push("GeoTIFF".to_owned());
     }
     if parts.is_empty() {
-        format!("{} entries", ifd.entries.len())
+        plural(ifd.entries.len(), "entry")
     } else {
         parts.join(", ")
     }
@@ -1081,8 +1081,8 @@ async fn entry_node(cx: &Cx, t: Tiff, dir: Dir, e: &Entry, refs: &render::Refs) 
             )));
         } else if count != 0 && !is_text(e.kind) && e.count != u64::from(count) {
             node = node.diag(Diagnostic::warning(format!(
-                "{} values; the specification gives {count}",
-                e.count
+                "{}; the specification gives {count}",
+                plural(e.count, "value")
             )));
         }
     }
@@ -1316,7 +1316,7 @@ async fn entry(cx: Cx, st: EntryState) -> Result<()> {
             cx.emit(
                 Node::new("Images")
                     .span(e.data)
-                    .summary(format!("{} entries", e.size / 16))
+                    .summary(plural(e.size / 16, "entry"))
                     .lazy(mp_entries, (t, e)),
             );
             return Ok(());
@@ -1346,7 +1346,7 @@ async fn entry(cx: Cx, st: EntryState) -> Result<()> {
         cx.emit(
             Node::new("Values")
                 .span(e.data)
-                .summary(format!("{} values", e.count))
+                .summary(plural(e.count, "value"))
                 .lazy(values, (t, st.dir, e)),
         );
     } else if !e.inline {
@@ -1363,7 +1363,7 @@ async fn child_summary(cx: &Cx, t: Tiff, dir: Dir, ifd: &Ifd) -> String {
         Dir::Main | Dir::PanasonicRaw => Some(ifd_summary(cx, t, dir, ifd).await),
         Dir::Interop | Dir::Maker(_) => None,
     };
-    text.unwrap_or_else(|| format!("{} entries", ifd.entries.len()))
+    text.unwrap_or_else(|| plural(ifd.entries.len(), "entry"))
 }
 
 async fn sub_ifds(cx: &Cx, st: &EntryState, name: &'static str, dir: Dir) -> Result<()> {
@@ -1504,9 +1504,9 @@ async fn maker_note(cx: &Cx, st: &EntryState) -> Result<()> {
     match read_ifd(cx, mt, offset).await {
         Ok(ifd) => {
             node = node.span(ifd.span).summary(format!(
-                "{}, {} entries",
+                "{}, {}",
                 layout.label,
-                ifd.entries.len()
+                plural(ifd.entries.len(), "entry")
             ));
         }
         Err(err) => node = node.diag(err),

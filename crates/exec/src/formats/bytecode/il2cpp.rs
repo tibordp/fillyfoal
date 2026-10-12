@@ -6,6 +6,7 @@
 use crate::bytes::{to_u64, to_usize, u32_le};
 use crate::cx::Cx;
 use crate::error::Result;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
@@ -58,8 +59,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let literal_count = tables.first().map_or(0, |(_, _, s)| s / 8);
     let identifiers = tables.get(2).map_or(0, |(_, span, _)| span.len);
     cx.annotate(format!(
-        "Unity IL2CPP metadata v{version}, {} tables, {literal_count} string literals, {identifiers:#x} bytes of identifiers",
-        tables.len()
+        "Unity IL2CPP metadata v{version}, {}, {literal_count} string literals, {identifiers:#x} bytes of identifiers",
+        plural(tables.len(), "table")
     ));
     for (i, (entry, span, size)) in tables.iter().copied().enumerate() {
         let name = NAMES

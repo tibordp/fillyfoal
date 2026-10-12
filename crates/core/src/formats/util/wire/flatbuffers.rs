@@ -12,6 +12,7 @@
 use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{Radix, Value};
@@ -249,7 +250,11 @@ pub async fn raw_table(cx: Cx, (buf, t): (Span, Table)) -> Result<()> {
     cx.emit(
         Node::new("vtable")
             .span(buf.sub(t.vtable, t.vtable_len.into()))
-            .summary(format!("{} slots, table size {}", t.slots(), t.size)),
+            .summary(format!(
+                "{}, table size {}",
+                plural(t.slots(), "slot"),
+                t.size
+            )),
     );
     for slot in 0..t.slots() {
         if let Some(at) = fb.field(&t, slot).await? {

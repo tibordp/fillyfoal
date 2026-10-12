@@ -23,6 +23,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::executable::dwarf::Sec;
 use crate::formats::util::binutil::{RangeIndex, data_node, get_at, perms};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{name_or, text};
 use crate::formats::{Codec, Format, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
@@ -377,7 +378,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Program Headers")
                 .span(table)
-                .summary(format!("{} segments", elf.segments.len()))
+                .summary(plural(elf.segments.len(), "segment"))
                 .lazy(segment_list, elf.clone()),
         );
     }
@@ -385,7 +386,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Section Headers")
                 .span(table)
-                .summary(format!("{} sections", elf.sections.len()))
+                .summary(plural(elf.sections.len(), "section"))
                 .lazy(section_list, elf.clone()),
         );
     }
@@ -406,7 +407,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let total: u64 = regions.iter().map(|r| r.span.len).sum();
         cx.emit(
             Node::new("Notes")
-                .summary(format!("{} regions, {total:#x} bytes", regions.len()))
+                .summary(format!(
+                    "{}, {total:#x} bytes",
+                    plural(regions.len(), "region")
+                ))
                 .lazy(all_notes, (elf.clone(), regions)),
         );
     }
@@ -1076,9 +1080,9 @@ async fn section_contents(cx: &Cx, elf: &Elf, section: &Section) -> Result<Optio
         }
         SHT_REL | SHT_RELA => symbols::relocations_node(elf, section),
         SHT_INIT_ARRAY | SHT_FINI_ARRAY | SHT_PREINIT_ARRAY => lazy("Pointers")
-            .summary(format!(
-                "{} entries",
-                section.size.checked_div(elf.class.word()).unwrap_or(0)
+            .summary(plural(
+                section.size.checked_div(elf.class.word()).unwrap_or(0),
+                "entry",
             ))
             .lazy(symbols::pointers, (elf.clone(), data)),
         SHT_GROUP => lazy("Group").lazy(symbols::group, (elf.clone(), data)),
@@ -1087,7 +1091,7 @@ async fn section_contents(cx: &Cx, elf: &Elf, section: &Section) -> Result<Optio
         }
         SHT_GNU_VERDEF => lazy("Version Definitions").lazy(symbols::verdef, (elf.clone(), index)),
         SHT_GNU_VERSYM => lazy("Symbol Versions")
-            .summary(format!("{} entries", section.size / 2))
+            .summary(plural(section.size / 2, "entry"))
             .lazy(symbols::versym, (elf.clone(), index)),
         SHT_HASH => lazy("SysV Hash Table").lazy(hash::sysv, (elf.class, data, section.entsize)),
         SHT_GNU_HASH => lazy("GNU Hash Table").lazy(hash::gnu, (elf.class, data)),
@@ -1300,9 +1304,9 @@ fn dynamic_node(elf: &Elf) -> Option<Node> {
     Some(
         Node::new("Dynamic Section")
             .span(span)
-            .summary(format!(
-                "{} entries",
-                span.len.checked_div(elf.class.dyn_size()).unwrap_or(0)
+            .summary(plural(
+                span.len.checked_div(elf.class.dyn_size()).unwrap_or(0),
+                "entry",
             ))
             .lazy(symbols::dynamic, (elf.clone(), span, link)),
     )

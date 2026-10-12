@@ -5,6 +5,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -63,7 +64,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if h.map_length > 0 {
         let map = region("Color map", file, pos, h.map_length.into());
         cx.emit(if h.map_type == 1 {
-            map.summary(format!("{} entries, planar R, G, B", h.map_length / 3))
+            map.summary(format!(
+                "{}, planar R, G, B",
+                plural(h.map_length / 3, "entry")
+            ))
         } else {
             map
         });
@@ -85,7 +89,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(if h.kind == 2 {
         node.summary("run-length encoded")
     } else {
-        node.summary(format!("{} rows of {stride:#x} bytes", h.height))
+        node.summary(format!("{} of {stride:#x} bytes", plural(h.height, "row")))
     });
     let end = pos.saturating_add(len);
     if end < file.len {

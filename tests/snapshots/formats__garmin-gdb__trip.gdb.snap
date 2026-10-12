@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ trip.gdb — MapSource GDB v3, 2 waypoints, 1 tracks, 0 routes  [0x0+0xae]
+▾ trip.gdb — MapSource GDB v3, 2 waypoints, 1 track, 0 routes  [0x0+0xae]
     Magic: "MsRcf"  [0x0+0x6]
     header — format version 3  [0x6+0x7]
     application: "MapSource" — 31 bytes  [0xd+0x24]

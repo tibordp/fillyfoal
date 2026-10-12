@@ -745,7 +745,7 @@ async fn debug(cx: &Cx, p: &mut Parser<'_>, index: usize) -> Step<()> {
             .summary(if v >= 0x54 {
                 format!("{n} line deltas")
             } else {
-                format!("{n} lines")
+                plural(n, "line")
             }),
     );
     if v >= 0x54 {

@@ -24,7 +24,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Package GUID: {01234567-89ab-cdef-0011-223344556677}  [0x45+0x10]
       Generations: 1  [0x55+0x4]
     ▾ Generation list  [0x59+0xc]
-        Generation 0 — 1 exports, 7 names  [0x59+0xc]
+        Generation 0 — 1 export, 7 names  [0x59+0xc]
       Engine version: 12791  [0x65+0x4]
       Cooker version: 136  [0x69+0x4]
       Compression flags: 0x0 []  [0x6d+0x4]
@@ -39,4 +39,4 @@ expression: "common::explore(&display_name(&path), &data)"
       Texture2D — #5  [0xd9+0x16]
       Crate — #6  [0xef+0x12]
     Import table — 2 imports at 0x101
-    Export table — 1 exports at 0x139
+    Export table — 1 export at 0x139

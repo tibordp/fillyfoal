@@ -8,6 +8,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::Endian;
 use crate::formats::tracker::{named, note_name, order_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::table;
 use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
@@ -116,7 +117,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Node::new("Format tag")
             .span(file.sub(1080, 4))
             .value(text(crate::formats::util::sound::fourcc(tag)))
-            .summary(format!("{channels} channels")),
+            .summary(plural(channels, "channel")),
     );
     let all_orders = head.get(952..1080).unwrap_or_default();
     let patterns = u64::from(all_orders.iter().copied().max().unwrap_or(0)).saturating_add(1);
@@ -125,7 +126,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Patterns")
             .span(pspan)
-            .summary(format!("{patterns} patterns"))
+            .summary(plural(patterns, "pattern"))
             .lazy(list_patterns, (pspan, channels, patterns)),
     );
     let mut at = pspan.end().saturating_sub(file.offset);
@@ -146,10 +147,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Node::new("Trailing data").span(file.tail(at)));
     }
     cx.annotate(format!(
-        "MOD ({}), {channels} channels, {} orders, {patterns} patterns, {used} samples — {}",
+        "MOD ({}), {channels_channel}, {}, {patterns_pattern}, {used_sample} — {}",
         crate::formats::util::sound::fourcc(tag),
-        song_length,
-        named(&title)
+        plural(song_length, "order"),
+        named(&title),
+        channels_channel = plural(channels, "channel"),
+        patterns_pattern = plural(patterns, "pattern"),
+        used_sample = plural(used, "sample")
     ));
     Ok(())
 }

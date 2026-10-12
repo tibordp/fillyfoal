@@ -14,6 +14,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{PieceList, content_node, fragments_node, size, unix_mode, unix_time};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -343,8 +344,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         name_len,
     });
     cx.annotate(format!(
-        "Minix v{version} filesystem, {}, {inodes} inodes, {name_len}-character names",
-        size(zones.saturating_mul(fs.zone()))
+        "Minix v{version} filesystem, {}, {inodes_inode}, {name_len}-character names",
+        size(zones.saturating_mul(fs.zone())),
+        inodes_inode = plural(inodes, "inode")
     ));
     cx.emit(
         Node::new("Boot block")
@@ -408,7 +410,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Inode table")
             .span(fs.inodes)
-            .summary(format!("{inodes} inodes of {inode_size} bytes"))
+            .summary(format!(
+                "{inodes_inode} of {inode_size} bytes",
+                inodes_inode = plural(inodes, "inode")
+            ))
             .lazy(inode_table, (fs.clone(), imap_span, inodes)),
     );
     cx.emit(

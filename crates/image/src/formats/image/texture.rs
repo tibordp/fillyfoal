@@ -11,6 +11,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::util::arcutil::human_size;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
@@ -111,7 +112,11 @@ pub async fn dissect_astc(cx: Cx, input: Input) -> Result<()> {
     } else {
         dims(bx, by)
     };
-    let mut summary = format!("{}, {footprint} blocks ({bpp:.2} bpp)", dims(x, y));
+    let mut summary = format!(
+        "{}, {footprint_block} ({bpp:.2} bpp)",
+        dims(x, y),
+        footprint_block = plural(footprint, "block")
+    );
     if z > 1 {
         summary = format!("{summary}, depth {z}");
     }
@@ -302,7 +307,7 @@ pub async fn dissect_pvr(cx: Cx, input: Input) -> Result<()> {
         summary = format!("{summary}, {} faces", h.faces);
     }
     if h.surfaces > 1 {
-        summary = format!("{summary}, {} surfaces", h.surfaces);
+        summary = format!("{summary}, {}", plural(h.surfaces, "surface"));
     }
     if h.color_space == 1 {
         summary.push_str(", sRGB");
@@ -657,7 +662,7 @@ pub async fn dissect_vtf(cx: Cx, input: Input) -> Result<()> {
         summary.push_str(", environment map");
     }
     if info.frames > 1 {
-        summary = format!("{summary}, {} frames", info.frames);
+        summary = format!("{summary}, {}", plural(info.frames, "frame"));
     }
     cx.annotate(format!("{summary}, {}", mip_levels(info.mipmaps.into())));
     // Where the two images are: from the resource table (7.3 and later), or
@@ -679,7 +684,7 @@ pub async fn dissect_vtf(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Resources")
                 .span(table)
-                .summary(format!("{} entries", info.resources))
+                .summary(plural(info.resources, "entry"))
                 .lazy(vtf_resources, (file, table)),
         );
     } else {

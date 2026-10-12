@@ -10,6 +10,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::text::probe;
 use crate::formats::text::scan::Lines;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, int, text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content};
 use crate::node::Node;
@@ -125,16 +126,20 @@ async fn aseprite(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Frame {i}"))
                 .span(span)
-                .summary(format!("{} ms, {chunks} chunks", f.duration))
+                .summary(format!(
+                    "{} ms, {chunks_chunk}",
+                    f.duration,
+                    chunks_chunk = plural(chunks, "chunk")
+                ))
                 .lazy(ase_frame, (span, chunks, sprite)),
         )
         .await;
     }
     cx.annotate(format!(
-        "Aseprite sprite, {}×{}, {} frames, {}",
+        "Aseprite sprite, {}×{}, {}, {}",
         h.width,
         h.height,
-        h.frames,
+        plural(h.frames, "frame"),
         match h.depth {
             8 => "indexed",
             16 => "grayscale",
@@ -399,11 +404,11 @@ async fn gem(cx: Cx, input: Input) -> Result<()> {
             .summary("pattern runs, solid runs, bit strings, vertical replication"),
     );
     cx.annotate(format!(
-        "GEM bitmap{}, {}×{}, {} planes",
+        "GEM bitmap{}, {}×{}, {}",
         if header > 16 { " (XIMG)" } else { "" },
         w(12),
         w(14),
-        w(4)
+        plural(w(4), "plane")
     ));
     Ok(())
 }
@@ -1012,7 +1017,7 @@ async fn pict_bits_view(cx: Cx, s: BitsState) -> Result<()> {
     cx.emit(
         Node::new("Pixel data")
             .span(b.data)
-            .summary(format!("{} rows", b.rows)),
+            .summary(plural(b.rows, "row")),
     );
     Ok(())
 }
@@ -1313,7 +1318,10 @@ async fn ggr(cx: Cx, input: Input) -> Result<()> {
             n = n.saturating_add(1);
         }
     }
-    cx.annotate(format!("GIMP gradient {name:?}, {n} segments"));
+    cx.annotate(format!(
+        "GIMP gradient {name:?}, {n_segment}",
+        n_segment = plural(n, "segment")
+    ));
     Ok(())
 }
 
@@ -1379,18 +1387,19 @@ async fn cube(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new("Table")
                 .span(span)
-                .summary(format!("{entries} entries"))
+                .summary(plural(entries, "entry"))
                 .lazy(cube_rows, span),
         )
         .await;
     }
     cx.annotate(format!(
-        "{kind} colour LUT{}, size {size}, {entries} entries",
+        "{kind} colour LUT{}, size {size}, {entries_entry}",
         if title.is_empty() {
             String::new()
         } else {
             format!(" {title:?}")
-        }
+        },
+        entries_entry = plural(entries, "entry")
     ));
     Ok(())
 }

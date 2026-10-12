@@ -11,6 +11,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Prim, parse};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
@@ -209,7 +210,7 @@ pub async fn dissect_ktx1(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Mip levels")
             .span(data)
-            .summary(format!("{levels} levels"))
+            .summary(plural(levels, "level"))
             .lazy(ktx1_levels, (data, endian, levels, cube)),
     );
     Ok(())
@@ -299,7 +300,7 @@ pub async fn dissect_ktx2(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Level index")
             .span(index)
-            .summary(format!("{levels} levels"))
+            .summary(plural(levels, "level"))
             .lazy(ktx2_levels, (file, index, levels)),
     );
     if h.dfd_length > 0 {

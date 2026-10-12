@@ -591,7 +591,7 @@ async fn dos_exe(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Relocation Table")
                 .span(reloc_span)
-                .summary(format!("{relocations} entries"))
+                .summary(plural(relocations, "entry"))
                 .desc("Segment:offset of each word the loader adds the load segment to")
                 .lazy(dos_relocations, (reloc_span, module_start)),
         );
@@ -640,7 +640,10 @@ async fn dos_exe(cx: Cx, input: Input) -> Result<()> {
         u64::from(min_alloc).saturating_mul(16) / 1024
     );
     if relocations > 0 {
-        summary.push_str(&format!(", {relocations} relocations"));
+        summary.push_str(&format!(
+            ", {relocations_relocation}",
+            relocations_relocation = plural(relocations, "relocation")
+        ));
     }
     if let Some(tag) = header_tag(&header) {
         summary.push_str(&format!(", {tag}"));
@@ -760,13 +763,21 @@ pub(super) async fn base_relocations(cx: Cx, (pe, dir): (Pe, Directory)) -> Resu
         cx.push(
             Node::new(format!("Page {page:#x}"))
                 .span(span)
-                .summary(format!("{n} entries, {}", pe.describe_rva(page)))
+                .summary(format!(
+                    "{n_entry}, {}",
+                    pe.describe_rva(page),
+                    n_entry = plural(n, "entry")
+                ))
                 .lazy(relocation_block, (pe.clone(), span, page)),
         )
         .await;
         pos = pos.saturating_add(size);
     }
-    cx.annotate(format!("{blocks} pages, {entries} entries"));
+    cx.annotate(format!(
+        "{blocks_page}, {entries_entry}",
+        blocks_page = plural(blocks, "page"),
+        entries_entry = plural(entries, "entry")
+    ));
     Ok(())
 }
 

@@ -72,9 +72,12 @@ fn division(d: u16) -> String {
             29 => "29.97 fps drop-frame".to_owned(),
             n => format!("{n} fps"),
         };
-        format!("SMPTE {fps}, {lo} ticks per frame")
+        format!(
+            "SMPTE {fps}, {lo_tick} per frame",
+            lo_tick = plural(lo, "tick")
+        )
     } else {
-        format!("{d} ticks per quarter note")
+        format!("{d_tick} per quarter note", d_tick = plural(d, "tick"))
     }
 }
 

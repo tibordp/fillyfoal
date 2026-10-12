@@ -238,7 +238,7 @@ expression: "common::explore(&display_name(&path), &data)"
             CRC-32C: 0x1aeeeffa — valid  [0x1c34+0x4]
           Unused — 968 bytes  [0x1c38+0x3c8]
       ▾ Inode B+tree — root at AG block 4, 1 level
-        ▾ Header — level 0, 1 records  [0x1000+0x38]
+        ▾ Header — level 0, 1 record  [0x1000+0x38]
             Magic: "IAB3"  [0x1000+0x4]
             Level: 0  [0x1004+0x2]
             Records: 1  [0x1006+0x2]
@@ -363,7 +363,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Inode 10879 — free  [0x54fe00+0x200]
           Unused — 952 bytes  [0x1048+0x3b8]
       ▾ Free inode B+tree — root at AG block 5, 1 level
-        ▾ Header — level 0, 1 records  [0x1400+0x38]
+        ▾ Header — level 0, 1 record  [0x1400+0x38]
             Magic: "FIB3"  [0x1400+0x4]
             Level: 0  [0x1404+0x2]
             Records: 1  [0x1406+0x2]

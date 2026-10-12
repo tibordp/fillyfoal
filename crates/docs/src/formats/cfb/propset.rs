@@ -14,6 +14,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::formats::image::bmp::CLIPBOARD_FORMATS;
 use crate::formats::util::datakit::guid_le;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, uint};
 use crate::formats::{Input, embedded_as};
 use crate::node::{Count, Node};
@@ -238,8 +239,8 @@ pub async fn emit(cx: &Cx, input: Input, span: Span) -> Result<()> {
         match &parsed {
             Ok(p) => {
                 node = node.summary(format!(
-                    "{} properties, code page {}",
-                    p.entries.len(),
+                    "{}, code page {}",
+                    plural(p.entries.len(), "property"),
                     p.codepage
                 ));
             }
@@ -425,7 +426,7 @@ fn decode(
             pos = end;
         }
         let total = to_usize(align_up(to_u64(pos), 4)).saturating_sub(at);
-        let mut summary = format!("{count} elements");
+        let mut summary = plural(count, "element");
         if !texts.is_empty() {
             summary = format!(
                 "{summary}: {}",
@@ -596,7 +597,7 @@ async fn properties(
     cx.emit(
         Node::new("PropertyIdentifierAndOffset")
             .span(set.sub(8, to_u64(count).saturating_mul(8)))
-            .summary(format!("{count} entries"))
+            .summary(plural(count, "entry"))
             .lazy(
                 id_table,
                 (
@@ -618,7 +619,7 @@ async fn properties(
             cx.push(
                 Node::new("Dictionary")
                     .span(span)
-                    .summary(format!("{} names", entries.len()))
+                    .summary(plural(entries.len(), "name"))
                     .lazy(dictionary_node, (span, Arc::new(entries))),
             )
             .await;

@@ -9,6 +9,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::binutil::data_node;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, name_or};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -289,7 +290,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Symbols")
                 .span(table)
-                .summary(format!("{} symbols", table.len / 12))
+                .summary(plural(table.len / 12, "symbol"))
                 .lazy(symbols, (table, strings, e)),
         );
         cx.emit(

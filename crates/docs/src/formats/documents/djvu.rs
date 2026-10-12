@@ -793,8 +793,8 @@ async fn dirm_fields(cx: Cx, (input, body, offset): (Input, Span, u64)) -> Resul
     let mut node = Node::new("Entries (BZZ)")
         .span(body.tail(at))
         .summary(format!(
-            "{} files, {} bytes compressed",
-            dir.files.len(),
+            "{}, {} bytes compressed",
+            plural(dir.files.len(), "file"),
             body.len.saturating_sub(at)
         ));
     if let Some(e) = &dir.error {
@@ -1195,7 +1195,7 @@ async fn text_layer(cx: Cx, (body, compressed): (Span, bool)) -> Result<()> {
     cx.emit(
         Node::new("Text")
             .span(text_span)
-            .summary(format!("{words} words"))
+            .summary(plural(words, "word"))
             .value(Value::Text(full)),
     );
     let at = 3usize.saturating_add(to_usize(len.into()));

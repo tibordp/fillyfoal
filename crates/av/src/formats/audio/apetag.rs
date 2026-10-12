@@ -13,6 +13,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::Input;
 use crate::formats::util::arcutil::human_size;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{clip, decode_text, image_info, leaf};
 use crate::formats::util::val::text;
 use crate::node::{Count, Node};
@@ -143,7 +144,7 @@ async fn expand(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     cx.emit(
         Node::new("Items")
             .span(items)
-            .summary(format!("{} items", footer.items))
+            .summary(plural(footer.items, "item"))
             .lazy(expand_items, (input, items, footer.items, footer.version)),
     );
     cx.emit(Footer::node("Footer", footer_span, LE));

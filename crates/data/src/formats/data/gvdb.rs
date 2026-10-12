@@ -29,7 +29,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::datakit::{ByteReader, le_uint};
-use crate::formats::util::fmt::{clip, grouped_count};
+use crate::formats::util::fmt::{clip, grouped_count, plural};
 use crate::formats::util::val;
 use crate::formats::{Format, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
@@ -304,8 +304,8 @@ async fn load_table(cx: &Cx, file: &File, seg: Seg) -> Result<Arc<Table>> {
         .saturating_add(buckets.saturating_mul(4));
     if items_at > seg.len() {
         return Err(Diagnostic::malformed(format!(
-            "bloom filter ({bloom_words} words) and buckets ({buckets}) do not fit in the {}-byte table",
-            seg.len()
+            "bloom filter ({bloom_words_word}) and buckets ({buckets}) do not fit in the {}-byte table",
+            seg.len(), bloom_words_word = plural(bloom_words, "word")
         ))
         .at(span));
     }

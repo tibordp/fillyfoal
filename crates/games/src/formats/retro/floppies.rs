@@ -8,8 +8,8 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::fmt::fourcc;
 use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{fourcc, plural};
 use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
@@ -84,17 +84,17 @@ async fn hfe(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Track list")
             .span(list)
-            .summary(format!("{} tracks", h.tracks))
+            .summary(plural(h.tracks, "track"))
             .lazy(hfe_tracks, (file, list)),
     );
     cx.annotate(format!(
-        "HFE {} image, {} tracks × {} sides, {}, {} kbit/s, {} RPM, {}",
+        "HFE {} image, {} × {} sides, {}, {} kbit/s, {} RPM, {}",
         if h.signature == "HXCHFEV3" {
             "v3"
         } else {
             "v1"
         },
-        h.tracks,
+        plural(h.tracks, "track"),
         h.sides,
         lookup(HFE_ENCODINGS, h.encoding.into()).unwrap_or("unknown encoding"),
         h.bitrate,
@@ -224,7 +224,10 @@ async fn scp(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Tracks")
             .span(table)
-            .summary(format!("{present} tracks captured"))
+            .summary(format!(
+                "{present_track} captured",
+                present_track = plural(present, "track")
+            ))
             .lazy(scp_tracks, (file, table, h.revolutions)),
     );
     cx.annotate(format!(
@@ -419,12 +422,13 @@ async fn ipf(cx: Cx, input: Input) -> Result<()> {
         )
     });
     cx.annotate(format!(
-        "IPF image{what}, {tracks} track descriptors, {records} records{}",
+        "IPF image{what}, {tracks} track descriptors, {records_record}{}",
         if bad > 0 {
             format!(", {bad} bad CRCs")
         } else {
             String::new()
-        }
+        },
+        records_record = plural(records, "record")
     ));
     Ok(())
 }
@@ -484,23 +488,26 @@ async fn stx(cx: Cx, input: Input) -> Result<()> {
                     unknown,
                 })
                 .summary(format!(
-                    "{n} sectors, {mfm} MFM bytes, type {kind}{}",
+                    "{n_sector}, {mfm} MFM bytes, type {kind}{}",
                     if fz > 0 {
                         format!(", {fz} fuzzy bytes")
                     } else {
                         String::new()
-                    }
+                    },
+                    n_sector = plural(n, "sector")
                 )),
         )
         .await;
     }
     cx.annotate(format!(
-        "Pasti STX v{version}, {count} tracks, {sectors} sectors{}",
+        "Pasti STX v{version}, {count_track}, {sectors_sector}{}",
         if fuzzy > 0 {
             format!(", {fuzzy} fuzzy bytes (copy protection)")
         } else {
             String::new()
-        }
+        },
+        count_track = plural(count, "track"),
+        sectors_sector = plural(sectors, "sector")
     ));
     Ok(())
 }
@@ -603,13 +610,16 @@ async fn imd(cx: Cx, input: Input) -> Result<()> {
                     bits: 8,
                     name: lookup(IMD_MODES, mode.into()),
                 })
-                .summary(format!("{count} sectors of {bytes} bytes")),
+                .summary(format!(
+                    "{count_sector} of {bytes} bytes",
+                    count_sector = plural(count, "sector")
+                )),
         )
         .await;
     }
     cx.annotate(format!(
-        "ImageDisk {}, {tracks} tracks, {total} sectors ({compressed} compressed, {errors} with errors)",
-        banner.trim_start_matches("IMD ").trim_end()
+        "ImageDisk {}, {tracks_track}, {total_sector} ({compressed} compressed, {errors} with errors)",
+        banner.trim_start_matches("IMD ").trim_end(), tracks_track = plural(tracks, "track"), total_sector = plural(total, "sector")
     ));
     Ok(())
 }
@@ -758,7 +768,10 @@ async fn td0_tracks(cx: Cx, (file, at): (Span, u64)) -> Result<()> {
             Node::new(format!("Cylinder {cyl} head {}", head & 1))
                 .span(cur.since(start))
                 .value(uint(count, 8))
-                .summary(format!("{count} sectors, {repeated} run-length encoded")),
+                .summary(format!(
+                    "{count_sector}, {repeated} run-length encoded",
+                    count_sector = plural(count, "sector")
+                )),
         )
         .await;
     }
@@ -935,10 +948,11 @@ async fn a2r(cx: Cx, input: Input) -> Result<()> {
         .to_owned();
     let drive = info.get(33).copied().unwrap_or(0);
     cx.annotate(format!(
-        "Applesauce {} flux image{}, {}, {count} chunks, by {creator:?}",
+        "Applesauce {} flux image{}, {}, {count_chunk}, by {creator:?}",
         fourcc(&head),
         meta_title(meta.as_deref()),
-        lookup(A2R_DRIVES, drive.into()).unwrap_or("unknown drive")
+        lookup(A2R_DRIVES, drive.into()).unwrap_or("unknown drive"),
+        count_chunk = plural(count, "chunk")
     ));
     Ok(())
 }
@@ -966,14 +980,15 @@ async fn moof(cx: Cx, input: Input) -> Result<()> {
         .trim_end()
         .to_owned();
     cx.annotate(format!(
-        "MOOF image{}, {}, {count} chunks, by {creator:?}{}",
+        "MOOF image{}, {}, {count_chunk}, by {creator:?}{}",
         meta_title(meta.as_deref()),
         lookup(MOOF_DISKS, disk.into()).unwrap_or("unknown disk"),
         if computed == Some(stored) {
             ", CRC valid"
         } else {
             ""
-        }
+        },
+        count_chunk = plural(count, "chunk")
     ));
     Ok(())
 }
@@ -1026,18 +1041,19 @@ async fn d88(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Tracks")
             .span(table)
-            .summary(format!("{used} tracks"))
+            .summary(plural(used, "track"))
             .lazy(d88_tracks, (file, offsets)),
     );
     cx.annotate(format!(
-        "D88 {} disk {:?}, {used} tracks{}",
+        "D88 {} disk {:?}, {used_track}{}",
         lookup(D88_MEDIA, media.into()).unwrap_or("unknown"),
         name,
         if protect != 0 {
             ", write-protected"
         } else {
             ""
-        }
+        },
+        used_track = plural(used, "track")
     ));
     Ok(())
 }
@@ -1069,8 +1085,9 @@ async fn d88_tracks(cx: Cx, (file, offsets): (Span, Vec<u64>)) -> Result<()> {
             ))
             .span(file.sub(at, pos.saturating_sub(at)))
             .summary(format!(
-                "{sectors} sectors of {bytes} bytes, IDs {}",
-                ids.join(" ")
+                "{sectors_sector} of {bytes} bytes, IDs {}",
+                ids.join(" "),
+                sectors_sector = plural(sectors, "sector")
             )),
         )
         .await;
@@ -1197,12 +1214,12 @@ async fn amiga_rdb(cx: Cx, input: Input) -> Result<()> {
         next = u32_be(&p, 16).unwrap_or(u32::MAX);
     }
     cx.annotate(format!(
-        "Amiga RDB disk {} {}, {} cylinders × {} heads × {} sectors, partitions: {}",
+        "Amiga RDB disk {} {}, {} cylinders × {} heads × {}, partitions: {}",
         h.vendor.trim(),
         h.product.trim(),
         h.cylinders,
         h.heads,
-        h.sectors,
+        plural(h.sectors, "sector"),
         names.join(", ")
     ));
     Ok(())

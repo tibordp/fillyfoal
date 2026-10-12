@@ -15,6 +15,7 @@ use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::geo::survey::{LasHeader, las_evlrs, las_extra, las_header};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -90,20 +91,24 @@ async fn gdbtable(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Field descriptors")
             .span(section)
-            .summary(format!("{count} fields, {geometry} geometry"))
+            .summary(format!(
+                "{count_field}, {geometry} geometry",
+                count_field = plural(count, "field")
+            ))
             .lazy(gdb_fields, section),
     );
     cx.emit(
         Node::new("Rows")
             .span(file.tail(start.saturating_add(size).saturating_add(4)))
             .summary(format!(
-                "{} rows (located through the .gdbtablx index)",
-                h.rows
+                "{} (located through the .gdbtablx index)",
+                plural(h.rows, "row")
             )),
     );
     cx.annotate(format!(
-        "File Geodatabase table, {count} fields, {} rows, {geometry} geometry",
-        h.rows
+        "File Geodatabase table, {count_field}, {}, {geometry} geometry",
+        plural(h.rows, "row"),
+        count_field = plural(count, "field")
     ));
     Ok(())
 }
@@ -343,7 +348,7 @@ async fn ddr_record(cx: Cx, (span, ddr): (Span, Ddr)) -> Result<()> {
     cx.emit(
         Node::new("Directory")
             .span(span.sub(24, leader.base.saturating_sub(24)))
-            .summary(format!("{} entries", leader.entries.len())),
+            .summary(plural(leader.entries.len(), "entry")),
     );
     for (tag, flen, fpos) in &leader.entries {
         let fspan = span.sub(leader.base.saturating_add(*fpos), *flen);
@@ -651,12 +656,13 @@ async fn ntv2(cx: Cx, input: Input) -> Result<()> {
         let grid = file.sub(pos.saturating_add(hspan.len), count.saturating_mul(16));
         let mut nodes: Vec<Node> = records.into_iter().map(|(l, v, s)| leaf(l, s, v)).collect();
         nodes.push(Node::new("Grid").span(grid).summary(format!(
-            "{count} nodes ({rows}×{cols}), 4 × f32 each: lat/long shift and accuracy"
+            "{count_node} ({rows}×{cols}), 4 × f32 each: lat/long shift and accuracy",
+            count_node = plural(count, "node")
         )));
         cx.push(
             Node::new(format!("Sub-grid {name}"))
                 .span(file.sub(pos, hspan.len.saturating_add(grid.len)))
-                .summary(format!("{count} nodes"))
+                .summary(plural(count, "node"))
                 .lazy(emit_nodes, std::sync::Arc::new(nodes)),
         )
         .await;
@@ -820,7 +826,10 @@ async fn laz(cx: Cx, input: Input) -> Result<()> {
     cx.push(
         Node::new("Compressed points")
             .span(file.sub(data_start, data_end.saturating_sub(data_start)))
-            .summary(format!("{point_count} points, chunks of {chunk_size}")),
+            .summary(format!(
+                "{point_count_point}, chunks of {chunk_size}",
+                point_count_point = plural(point_count, "point")
+            )),
     )
     .await;
     if extra.evlrs > 0 && extra.evlr_start > table_at {
@@ -833,19 +842,20 @@ async fn laz(cx: Cx, input: Input) -> Result<()> {
             Node::new("Chunk table")
                 .span(file.sub(table_at, table_end.saturating_sub(table_at)))
                 .summary(format!(
-                    "version {}, {} chunks",
+                    "version {}, {}",
                     u32_le(&b, 0).unwrap_or(0),
-                    u32_le(&b, 4).unwrap_or(0)
+                    plural(u32_le(&b, 4).unwrap_or(0), "chunk")
                 )),
         )
         .await;
     }
     las_evlrs(&cx, file, extra).await?;
     cx.annotate(format!(
-        "LAZ (LAS {}.{}), {point_count} points, by {}",
+        "LAZ (LAS {}.{}), {point_count_point}, by {}",
         h.major,
         h.minor,
-        h.software.trim_end()
+        h.software.trim_end(),
+        point_count_point = plural(point_count, "point")
     ));
     Ok(())
 }
@@ -1145,7 +1155,8 @@ async fn garmin_gdb(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!(
-        "MapSource GDB v{version}, {w} waypoints, {t} tracks, {r} routes"
+        "MapSource GDB v{version}, {w} waypoints, {t_track}, {r} routes",
+        t_track = plural(t, "track")
     ));
     Ok(())
 }

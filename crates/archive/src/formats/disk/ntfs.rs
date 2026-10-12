@@ -21,6 +21,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::disk::{PieceList, content_node, fragments_node, size};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{name_or, text, uint};
 use crate::formats::util::winsec;
 use crate::formats::{Format, Input, Probe, embedded_named};
@@ -492,7 +493,8 @@ async fn fixup(cx: &Cx, span: Span, magic: &[u8]) -> Result<Fixup> {
     if count != sectors.saturating_add(1) || usa.saturating_add(count.saturating_mul(2)) > 512 {
         return Ok(Fixup::Rejected(
             Diagnostic::malformed(format!(
-                "update sequence of {count} entries for {sectors} sectors"
+                "update sequence of {count} entries for {sectors_sector}",
+                sectors_sector = plural(sectors, "sector")
             ))
             .at(span),
         ));
@@ -763,9 +765,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         return Err(Diagnostic::malformed("implausible sector, cluster or record size").at(span));
     }
     cx.annotate(format!(
-        "NTFS volume, {}, {} clusters",
+        "NTFS volume, {}, {}",
         size(b.total_sectors.saturating_mul(sector)),
-        size(cluster)
+        plural(size(cluster), "cluster")
     ));
     // Record 0 ($MFT) describes where the MFT itself lives.
     let mft0 = vol.sub(b.mft_lcn.saturating_mul(cluster), record);
@@ -827,14 +829,18 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     {
         let label = crate::text::utf16(&cx.read_avail(name).await?, LE);
         cx.annotate(format!(
-            "NTFS volume \"{label}\", {}, {} clusters",
+            "NTFS volume \"{label}\", {}, {}",
             size(b.total_sectors.saturating_mul(sector)),
-            size(cluster)
+            plural(size(cluster), "cluster")
         ));
     }
     cx.emit(
         Node::new("MFT")
-            .summary(format!("{mft_records} records of {}", size(record)))
+            .summary(format!(
+                "{mft_records_record} of {}",
+                size(record),
+                mft_records_record = plural(mft_records, "record")
+            ))
             .lazy(mft_listing, (fs.clone(), mft_records)),
     );
     cx.emit(Node::new("MFT mirror").span(vol.sub(
@@ -1164,7 +1170,10 @@ async fn attribute_fields(cx: Cx, (store, a, record): (Store, Arc<Attr>, u64)) -
         let node = Node::new(format!("Run {i}")).span(runs.sub(run.at, run.len));
         let node = match lcn {
             Some(l) => {
-                let node = node.summary(format!("VCN {vcn}: {count} clusters at LCN {l}"));
+                let node = node.summary(format!(
+                    "VCN {vcn}: {count_cluster} at LCN {l}",
+                    count_cluster = plural(count, "cluster")
+                ));
                 match &store {
                     Store::Volume(fs) => node.target(fs.cluster_span(l, count)),
                     Store::Mft(_) => node,

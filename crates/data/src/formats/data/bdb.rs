@@ -13,6 +13,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::binutil::get;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
@@ -233,9 +234,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!(
-        "Berkeley DB {kind} database, version {}, {} pages of {pagesize} bytes",
+        "Berkeley DB {kind} database, version {}, {} of {pagesize} bytes",
         u32v(16),
-        u64::from(db.last).saturating_add(1)
+        plural(u64::from(db.last).saturating_add(1), "page")
     ));
     cx.emit(
         Node::new("Metadata page")
@@ -683,7 +684,10 @@ async fn page_contents(cx: Cx, (db, no): (DbRef, u32)) -> Result<()> {
                     bits: 32,
                     radix: Radix::Dec,
                 })
-                .summary(format!("{} records in child page {child}", item.total))
+                .summary(format!(
+                    "{} in child page {child}",
+                    plural(item.total, "record")
+                ))
                 .target(db.page(child)),
             (3, Some(child)) => node
                 .value(text(bytes))

@@ -7,7 +7,7 @@ use crate::bytes::{to_u64, u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::fmt::{clip, fourcc};
+use crate::formats::util::fmt::{clip, fourcc, plural};
 use crate::formats::{Input, embedded_named};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -537,7 +537,7 @@ async fn name_table(cx: &Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Name records")
             .span(records)
-            .summary(format!("{count} records"))
+            .summary(plural(count, "record"))
             .lazy(name_records, (span, count, strings)),
     );
     Ok(())
@@ -642,8 +642,8 @@ async fn cmap(cx: &Cx, span: Span) -> Result<()> {
         };
         let sub = sub.sub(0, length);
         let detail = match format {
-            4 => format!(", {} segments", u16_be(&sh, 6).unwrap_or(0) / 2),
-            12 | 13 => format!(", {} groups", u32_be(&sh, 12).unwrap_or(0)),
+            4 => format!(", {}", plural(u16_be(&sh, 6).unwrap_or(0) / 2, "segment")),
+            12 | 13 => format!(", {}", plural(u32_be(&sh, 12).unwrap_or(0), "group")),
             _ => String::new(),
         };
         cx.push(
@@ -895,12 +895,12 @@ pub fn short(tag: &str, head: &[u8]) -> Option<String> {
             u16_be(head, 4)?,
             clip(&String::from_utf8_lossy(head.get(58..62)?), 4)
         )),
-        "name" => Some(format!("{} records", u16_be(head, 2)?)),
-        "cmap" => Some(format!("{} subtables", u16_be(head, 2)?)),
+        "name" => Some(plural(u16_be(head, 2)?, "record")),
+        "cmap" => Some(plural(u16_be(head, 2)?, "subtable")),
         "fvar" => Some(format!(
-            "{} axes, {} instances",
+            "{} axes, {}",
             u16_be(head, 8)?,
-            u16_be(head, 12)?
+            plural(u16_be(head, 12)?, "instance")
         )),
         "post" => Some(format!("version {}", fixed(u32_be(head, 0)?))),
         _ => None,

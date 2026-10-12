@@ -11,6 +11,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::datakit::{cf_time, clip, hex_string};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -187,7 +188,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new(format!("Table of contents {id}"))
                 .span(data.sub(toc.into(), 20u64.saturating_add(entries.len)))
-                .summary(format!("{count} entries"))
+                .summary(plural(count, "entry"))
                 .lazy(toc_entries, (book, entries)),
         );
         if next == toc {

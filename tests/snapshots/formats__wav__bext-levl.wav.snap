@@ -65,4 +65,4 @@ expression: "common::explore(&display_name(&path), &data)"
       Offset to peaks: 128  [0x624+0x4]
       Timestamp: ""  [0x628+0x1c]
       Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x644+0x3c]
-      Peak data — 7 frames × 1 channels  [0x680+0x1c]
+      Peak data — 7 frames × 1 channel  [0x680+0x1c]

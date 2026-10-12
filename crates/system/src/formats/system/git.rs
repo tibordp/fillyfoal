@@ -24,6 +24,7 @@ use crate::cx::{Cx, lock};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::datakit::{clip, hex_string, size};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
@@ -317,8 +318,9 @@ pub async fn pack(cx: Cx, input: Input) -> Result<()> {
         ""
     };
     cx.annotate(format!(
-        "Git pack v{}, {count} objects{format}",
-        u32_be(&head, 4).unwrap_or(0)
+        "Git pack v{}, {count_object}{format}",
+        u32_be(&head, 4).unwrap_or(0),
+        count_object = plural(count, "object")
     ));
     let body_end = p.body_end();
     cx.set_count(Count::Exact(u64::from(count).saturating_add(2)));
@@ -846,7 +848,7 @@ fn commit_header(data: Span, key: String, value: &str, start: usize, end: usize)
         node = node.value(Value::Text(clip(value, 4000)));
         let lines = value.lines().count();
         if lines > 1 {
-            node = node.summary(format!("{lines} lines"));
+            node = node.summary(plural(lines, "line"));
         }
     }
     node
@@ -975,8 +977,9 @@ pub async fn pack_index(cx: Cx, input: Input) -> Result<()> {
         Ok(())
     }));
     cx.annotate(format!(
-        "Git pack index v2, {count} objects{}",
-        if hash == SHA256_LEN { ", SHA-256" } else { "" }
+        "Git pack index v2, {count_object}{}",
+        if hash == SHA256_LEN { ", SHA-256" } else { "" },
+        count_object = plural(count, "object")
     ));
     cx.emit(
         Node::new("Fan-out table")
@@ -1171,8 +1174,9 @@ pub async fn index(cx: Cx, input: Input) -> Result<()> {
         Ok(())
     }));
     cx.annotate(format!(
-        "Git index v{version}, {count} entries{}",
-        if t.len == SHA256_LEN { ", SHA-256" } else { "" }
+        "Git index v{version}, {count_entry}{}",
+        if t.len == SHA256_LEN { ", SHA-256" } else { "" },
+        count_entry = plural(count, "entry")
     ));
     cx.emit(
         Node::new("Entries")
@@ -1320,7 +1324,10 @@ async fn cache_tree(cx: Cx, (span, hash_len): (Span, u64)) -> Result<()> {
         } else {
             path
         })
-        .summary(format!("{entries} entries, {subtrees} subtrees"));
+        .summary(format!(
+            "{entries_entry}, {subtrees} subtrees",
+            entries_entry = plural(entries, "entry")
+        ));
         if valid {
             let sha = rest.get(len..len.saturating_add(hash)).unwrap_or_default();
             node = node.value(Value::Text(hex_string(sha)));

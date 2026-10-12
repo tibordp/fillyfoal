@@ -10,6 +10,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::binutil::data_node;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, name_or};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -297,22 +298,22 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
     let names: Vec<&str> = x.sections.iter().map(|s| s.name.as_str()).collect();
     cx.annotate(format!(
-        "XCOFF {} {kind} (AIX), sections {}, {} symbols",
+        "XCOFF {} {kind} (AIX), sections {}, {}",
         if wide { "64-bit" } else { "32-bit" },
         names.join(" "),
-        h.nsyms
+        plural(h.nsyms, "symbol")
     ));
     cx.emit(
         Node::new("Section Table")
             .span(table)
-            .summary(format!("{} sections", x.sections.len()))
+            .summary(plural(x.sections.len(), "section"))
             .lazy(section_list, x.clone()),
     );
     if h.symptr != 0 {
         cx.emit(
             Node::new("Symbol Table")
                 .span(symbols)
-                .summary(format!("{} entries", h.nsyms))
+                .summary(plural(h.nsyms, "entry"))
                 .lazy(symbol_list, x.clone()),
         );
         cx.emit(
@@ -332,10 +333,10 @@ async fn section_list(cx: Cx, x: Xcoff) -> Result<()> {
             Node::new(s.name.clone())
                 .span(s.header)
                 .summary(format!(
-                    "{}, {:#x} bytes, {} relocations",
+                    "{}, {:#x} bytes, {}",
                     set.join(" "),
                     s.size,
-                    s.nreloc
+                    plural(s.nreloc, "relocation")
                 ))
                 .lazy(section_node, (x.clone(), i)),
         )
@@ -362,7 +363,7 @@ async fn section_node(cx: Cx, (x, index): (Xcoff, usize)) -> Result<()> {
         cx.emit(
             Node::new("Relocations")
                 .span(span)
-                .summary(format!("{} entries", s.nreloc))
+                .summary(plural(s.nreloc, "entry"))
                 .lazy(relocations, (x.clone(), span)),
         );
     }

@@ -9,6 +9,7 @@ use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::text::{probe, xml};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
@@ -62,7 +63,10 @@ async fn indesign(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new(format!("Master page {i}"))
                 .span(span)
-                .summary(format!("{kind}, sequence {seq}, {pages} pages"))
+                .summary(format!(
+                    "{kind}, sequence {seq}, {pages_page}",
+                    pages_page = plural(pages, "page")
+                ))
                 .lazy(master_fields, span),
         );
     }
@@ -71,7 +75,10 @@ async fn indesign(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Database pages")
             .span(file.sub(2 * PAGE, db_end.saturating_sub(2 * PAGE)))
-            .summary(format!("{} pages of 4 KiB", pages.saturating_sub(2))),
+            .summary(format!(
+                "{} of 4 KiB",
+                plural(pages.saturating_sub(2), "page")
+            )),
     );
     // Contiguous objects follow the database: header GUID, UID, class,
     // stream length, checksum; the stream; a trailer.
@@ -288,12 +295,13 @@ async fn xara(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!(
-        "Xara document{}, {records} records",
+        "Xara document{}, {records_record}",
         if kind.is_empty() {
             String::new()
         } else {
             format!(" ({kind})")
-        }
+        },
+        records_record = plural(records, "record")
     ));
     Ok(())
 }
@@ -323,7 +331,9 @@ async fn scribus(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "Scribus document {version}{}{}",
         title.map(|t| format!(", {t:?}")).unwrap_or_default(),
-        pages.map(|p| format!(", {p} pages")).unwrap_or_default()
+        pages
+            .map(|p| format!(", {p_page}", p_page = plural(p, "page")))
+            .unwrap_or_default()
     ));
     Ok(())
 }

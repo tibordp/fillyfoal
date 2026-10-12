@@ -12,6 +12,7 @@ use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::datakit::{clip, size};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -260,8 +261,9 @@ async fn body_fields(cx: &Cx, input: Input, body: Span) -> Result<String> {
         (input, tags, 0u32),
     ));
     Ok(format!(
-        "{width}×{height}, {} fps, {frames} frames",
-        f64::from(rate) / 256.0
+        "{width}×{height}, {} fps, {frames_frame}",
+        f64::from(rate) / 256.0,
+        frames_frame = plural(frames, "frame")
     ))
 }
 

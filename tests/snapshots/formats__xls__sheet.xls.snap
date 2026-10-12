@@ -24,7 +24,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ DIFAT — 1 FAT sectors  [0x4c+0x1b4]
       FAT sector 0: 0  [0x4c+0x4] → 0x200+0x200
       Unused entries: 0xffffffff — 108 × FREESECT  [0x50+0x1b0]
-  ▾ FAT — 1 sectors
+  ▾ FAT — 1 sector
     ▾ FAT sector 0 — sector 0: entries for sectors 0..128  [0x200+0x200]
         Sector 0: 4294967293 — FATSECT  [0x200+0x4]
         Sector 1: 4294967294 — ENDOFCHAIN  [0x204+0x4]
@@ -234,7 +234,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Starting sector: 3 — sector 3  [#1:0x74+0x4]
         Stream size: 576  [#1:0x78+0x8]
       Mini stream — 0x240 bytes in 64-byte mini sectors  [#3:0x0+0x240]
-    ▾ Workbook — Excel 97–2003 (BIFF8) workbook, 1 sheets: "Sheet1"  [#1:0x80+0x80]
+    ▾ Workbook — Excel 97–2003 (BIFF8) workbook, 1 sheet: "Sheet1"  [#1:0x80+0x80]
       ▾ Directory entry  [#1:0x80+0x80]
           Name: "Workbook"  [#1:0x80+0x40]
           Name length: 18  [#1:0xc0+0x2]
@@ -275,12 +275,12 @@ expression: "common::explore(&display_name(&path), &data)"
             hsState: visible (0x0)  [#5:0x22+0x1]
             dt: worksheet or dialog sheet (0x0)  [#5:0x23+0x1]
             stName: "Sheet1"  [#5:0x24+0x8]
-        ▾ SST: 0xfc — 1 unique strings, 1 references  [#5:0x2c+0x14]
+        ▾ SST: 0xfc — 1 unique strings, 1 reference  [#5:0x2c+0x14]
             Type: SST (0xfc)  [#5:0x2c+0x2]
             Length: 16  [#5:0x2e+0x2]
             cstTotal: 1  [#5:0x30+0x4]
             cstUnique: 1  [#5:0x34+0x4]
-          ▾ Strings — spread over 1 records
+          ▾ Strings — spread over 1 record
               String 0: "hello"  [#6:0x8+0x8]
         ▾ EOF: 0xa — 0 bytes  [#5:0x40+0x4]
             Type: EOF (0xa)  [#5:0x40+0x2]

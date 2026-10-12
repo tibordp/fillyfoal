@@ -2,16 +2,16 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ sample.pxl — PCL XL stream (HP-PCL XL;2;0;Comment Fixture), 10 operators, 1 pages  [0x0+0x95]
+▾ sample.pxl — PCL XL stream (HP-PCL XL;2;0;Comment Fixture), 10 operators, 1 page  [0x0+0x95]
     Stream header: ") HP-PCL XL;2;0;Comment Fixture" — little-endian binding  [0x0+0x21]
     BeginSession: "UnitsPerMeasure=uint16 (600, 600), Measure=ubyte 0" — 2 attributes  [0x21+0xc]
     OpenDataSource: "SourceType=ubyte 0, DataOrg=ubyte 1" — 2 attributes  [0x2d+0x9]
     BeginPage: "Orientation=ubyte 0, MediaSize=ubyte 2" — 2 attributes  [0x36+0x9]
     SetFont: "FontName=ubyte \"Courier       \", CharSize=real32 40, SymbolSet=uint16 629" — 3 attributes  [0x3f+0x21]
-    SetCursor: "Point=uint16 (100, 200)" — 1 attributes  [0x60+0x8]
-    Text: "TextData=ubyte \"Hello\"" — 1 attributes  [0x68+0xc]
+    SetCursor: "Point=uint16 (100, 200)" — 1 attribute  [0x60+0x8]
+    Text: "TextData=ubyte \"Hello\"" — 1 attribute  [0x68+0xc]
     ReadImage: "CompressMode=ubyte 0, StartLine=uint16 8, BlockHeight=uint16 1" — 3 attributes  [0x74+0xf]
     Embedded data — 8 bytes  [0x83+0xa]
-    EndPage: "PageCopies=uint16 1" — 1 attributes  [0x8d+0x6]
+    EndPage: "PageCopies=uint16 1" — 1 attribute  [0x8d+0x6]
     CloseDataSource  [0x93+0x1]
     EndSession  [0x94+0x1]

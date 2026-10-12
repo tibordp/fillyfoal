@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tiny.imf — Imago Orpheus module "Tiny IMF": 1 patterns, 1 instruments, 125 BPM  [0x0+0x80]
+▾ tiny.imf — Imago Orpheus module "Tiny IMF": 1 pattern, 1 instrument, 125 BPM  [0x0+0x80]
     Title: "Tiny IMF"  [0x0+0x20]
     Orders: 1  [0x20+0x2]
     Patterns: 1  [0x22+0x2]

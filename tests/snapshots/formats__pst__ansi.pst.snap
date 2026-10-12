@@ -85,7 +85,7 @@ expression: "common::explore(&display_name(&path), &data)"
         cbEnt: 16  [0xbb2+0x1]
         cLevel: 0  [0xbb3+0x1]
     ▾ NID 0x21 (message store) — data 0x4  [0x9c0+0x10]
-      ▾ Data blocks — 1 blocks, 86 bytes
+      ▾ Data blocks — 1 block, 86 bytes
         ▾ BID 0x4 — 86 bytes  [0x200+0x80]
             Data  [0x200+0x56]
           ▾ Block trailer — cb 86, signature 0x0204, CRC 0x327e4295, BID 0x4  [0x274+0xc]
@@ -123,7 +123,7 @@ expression: "common::explore(&display_name(&path), &data)"
               rgibAlloc: 0x48  [0x254+0x2]
         Data — property context  [0x200+0x56]
     ▾ NID 0x122 (root folder) — data 0x8, parent 0x122  [0x9d0+0x10]
-      ▾ Data blocks — 1 blocks, 62 bytes
+      ▾ Data blocks — 1 block, 62 bytes
         ▾ BID 0x8 — 62 bytes  [0x280+0x80]
             Data  [0x280+0x3e]
           ▾ Block trailer — cb 62, signature 0x0288, CRC 0xb9ddaebd, BID 0x8  [0x2f4+0xc]
@@ -158,7 +158,7 @@ expression: "common::explore(&display_name(&path), &data)"
               rgibAlloc: 0x34  [0x2bc+0x2]
         Data — property context  [0x280+0x3e]
     ▾ NID 0x12d (hierarchy table 9) — data 0xc  [0x9e0+0x10]
-      ▾ Data blocks — 1 blocks, 140 bytes
+      ▾ Data blocks — 1 block, 140 bytes
         ▾ BID 0xc — 140 bytes  [0x300+0xc0]
             Data  [0x300+0x8c]
           ▾ Block trailer — cb 140, signature 0x030c, CRC 0xc025f66f, BID 0xc  [0x3b4+0xc]
@@ -243,7 +243,7 @@ expression: "common::explore(&display_name(&path), &data)"
             PidTagContentUnreadCount: 1  [0x32f+0x4]
             PidTagSubfolders: false  [0x333+0x1]
     ▾ NID 0x12e (contents table 9) — data 0x10  [0x9f0+0x10]
-      ▾ Data blocks — 1 blocks, 108 bytes
+      ▾ Data blocks — 1 block, 108 bytes
         ▾ BID 0x10 — 108 bytes  [0x3c0+0x80]
             Data  [0x3c0+0x6c]
           ▾ Block trailer — cb 108, signature 0x03d0, CRC 0xd4842383, BID 0x10  [0x434+0xc]
@@ -319,7 +319,7 @@ expression: "common::explore(&display_name(&path), &data)"
             PidTagMessageFlags: 0xe070003 — PtypInteger32, 4 bytes at 24, existence bit 5  [0x412+0x8]
             PidTagMessageSize: 0xe080003 — PtypInteger32, 4 bytes at 28, existence bit 6  [0x41a+0x8]
     ▾ NID 0x8022 (normal folder 1025) — data 0x14, parent 0x122  [0xa00+0x10]
-      ▾ Data blocks — 1 blocks, 88 bytes
+      ▾ Data blocks — 1 block, 88 bytes
         ▾ BID 0x14 — 88 bytes  [0x440+0x80]
             Data  [0x440+0x58]
           ▾ Block trailer — cb 88, signature 0x0454, CRC 0x6b1148b7, BID 0x14  [0x4b4+0xc]
@@ -359,7 +359,7 @@ expression: "common::explore(&display_name(&path), &data)"
               rgibAlloc: 0x49  [0x496+0x2]
         Data — property context  [0x440+0x58]
     ▾ NID 0x802d (hierarchy table 1025) — data 0x18  [0xa10+0x10]
-      ▾ Data blocks — 1 blocks, 100 bytes
+      ▾ Data blocks — 1 block, 100 bytes
         ▾ BID 0x18 — 100 bytes  [0x4c0+0x80]
             Data  [0x4c0+0x64]
           ▾ Block trailer — cb 100, signature 0x04d8, CRC 0xc6e4d41f, BID 0x18  [0x534+0xc]
@@ -430,7 +430,7 @@ expression: "common::explore(&display_name(&path), &data)"
             PidTagContentUnreadCount: 0x36030003 — PtypInteger32, 4 bytes at 16, existence bit 4  [0x50a+0x8]
             PidTagSubfolders: 0x360a000b — PtypBoolean, 1 bytes at 20, existence bit 5  [0x512+0x8]
     ▾ NID 0x802e (contents table 1025) — data 0x24, subnodes 0x22  [0xa20+0x10]
-      ▾ Data blocks — 1 blocks, 148 bytes
+      ▾ Data blocks — 1 block, 148 bytes
         ▾ BID 0x24 — 148 bytes  [0x5c0+0xc0]
             Data  [0x5c0+0x94]
           ▾ Block trailer — cb 148, signature 0x05e4, CRC 0x41bead68, BID 0x24  [0x674+0xc]
@@ -521,7 +521,7 @@ expression: "common::explore(&display_name(&path), &data)"
             PidTagMessageFlags: 0x11 [mfRead | mfHasAttach]  [0x558+0x4]
             PidTagMessageSize: 600  [0x55c+0x4]
       ▾ Subnode NID 0x3f (ltp 1) — data 0x1c, subnodes 0x0  [0x584+0xc]
-        ▾ Data blocks — 1 blocks, 33 bytes
+        ▾ Data blocks — 1 block, 33 bytes
           ▾ BID 0x1c — 33 bytes  [0x540+0x40]
               Data  [0x540+0x21]
             ▾ Block trailer — cb 33, signature 0x055c, CRC 0x2add1c1e, BID 0x1c  [0x574+0xc]
@@ -531,7 +531,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 dwCRC: 0x2add1c1e  [0x57c+0x4]
           Data  [0x540+0x21]
     ▾ NID 0x200024 (normal message 65537) — data 0x38, subnodes 0x36, parent 0x8022  [0xa30+0x10]
-      ▾ Data blocks — 1 blocks, 226 bytes
+      ▾ Data blocks — 1 block, 226 bytes
         ▾ BID 0x38 — 226 bytes  [0x8c0+0x100]
             Data  [0x8c0+0xe2]
           ▾ Block trailer — cb 226, signature 0x08f8, CRC 0x6b0288a4, BID 0x38  [0x9b4+0xc]
@@ -585,7 +585,7 @@ expression: "common::explore(&display_name(&path), &data)"
               rgibAlloc: 0xc9  [0x9a0+0x2]
         Data — property context  [0x8c0+0xe2]
       ▾ Subnode NID 0x671 (attachment table) — data 0x2c, subnodes 0x0  [0x884+0xc]
-        ▾ Data blocks — 1 blocks, 134 bytes
+        ▾ Data blocks — 1 block, 134 bytes
           ▾ BID 0x2c — 134 bytes  [0x740+0xc0]
               Data  [0x740+0x86]
             ▾ Block trailer — cb 134, signature 0x076c, CRC 0xf601e361, BID 0x2c  [0x7f4+0xc]
@@ -664,7 +664,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagAttachSize: 25  [0x76f+0x4]
               PidTagAttachMethod: By value (0x1)  [0x773+0x4]
       ▾ Subnode NID 0x692 (recipient table) — data 0x28, subnodes 0x0  [0x890+0xc]
-        ▾ Data blocks — 1 blocks, 146 bytes
+        ▾ Data blocks — 1 block, 146 bytes
           ▾ BID 0x28 — 146 bytes  [0x680+0xc0]
               Data  [0x680+0x92]
             ▾ Block trailer — cb 146, signature 0x06a8, CRC 0xdcf13dfc, BID 0x28  [0x734+0xc]
@@ -745,7 +745,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagEmailAddress: "bob@example.com"  [0x68f+0xf]
               PidTagRecipientType: To (0x1)  [0x6bc+0x4]
       ▾ Subnode NID 0x8025 (attachment 1025) — data 0x30, subnodes 0x0  [0x89c+0xc]
-        ▾ Data blocks — 1 blocks, 100 bytes
+        ▾ Data blocks — 1 block, 100 bytes
           ▾ BID 0x30 — 100 bytes  [0x800+0x80]
               Data  [0x800+0x64]
             ▾ Block trailer — cb 100, signature 0x0830, CRC 0x30a07c6f, BID 0x30  [0x874+0xc]
@@ -845,7 +845,7 @@ expression: "common::explore(&display_name(&path), &data)"
           bid: 0x1c  [0x578+0x4]
           dwCRC: 0x2add1c1e  [0x57c+0x4]
     ▾ BID 0x22 — 16 bytes at 0x580, 2 references, internal  [0xc14+0xc]
-      ▾ Data — SLBLOCK (subnodes), 1 entries  [0x580+0x10]
+      ▾ Data — SLBLOCK (subnodes), 1 entry  [0x580+0x10]
           btype: 2  [0x580+0x1]
           cLevel: 0  [0x581+0x1]
           cEnt: 1  [0x582+0x2]
@@ -915,14 +915,14 @@ expression: "common::explore(&display_name(&path), &data)"
         PidTagContentCount: 0  [0x298+0x4]
         PidTagContentUnreadCount: 0  [0x2a0+0x4]
         PidTagSubfolders: true  [0x2a8+0x1]
-    ▾ Inbox — 1 messages, 1 unread  [0x31f+0x16]
+    ▾ Inbox — 1 message, 1 unread  [0x31f+0x16]
       ▾ Properties — 5 properties  [0x440+0xc]
           PidTagDisplayName: "Inbox"  [0x44c+0x5]
           PidTagContentCount: 1  [0x465+0x4]
           PidTagContentUnreadCount: 1  [0x46d+0x4]
           PidTagSubfolders: false  [0x475+0x1]
           PidTagContainerClass: "IPF.Note"  [0x451+0x8]
-      ▾ Messages — 1 rows  [0x5f6+0x4e]
+      ▾ Messages — 1 row  [0x5f6+0x4e]
         ▾ Grüße from an ANSI file: 2024-03-04 09:30:00 UTC — from Alice  [0x540+0x21]
           ▾ Properties — 9 properties  [0x8c0+0xc]
               PidTagMessageClass: "IPM.Note"  [0x8cc+0x8]

@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ Manifest.mbdb — iOS backup manifest, 2 files (2.3 MiB), 1 directories  [0x0+0x19d]
+▾ Manifest.mbdb — iOS backup manifest, 2 files (2.3 MiB), 1 directory  [0x0+0x19d]
     Signature: "mbdb 5.0"  [0x0+0x6]
   ▾ HomeDomain/Library/SMS: 2014-05-13 16:53:20 UTC — drwxr-xr-x 0 bytes  [0x6+0x47]
       Domain: "HomeDomain"  [0x6+0xc]

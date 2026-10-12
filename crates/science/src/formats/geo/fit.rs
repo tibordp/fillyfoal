@@ -17,6 +17,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::Node;
 use crate::record;
@@ -442,8 +443,8 @@ async fn records(cx: Cx, data: Span) -> Result<()> {
             let span = cur.since(start);
             let name = format!("Definition {local}: {}", def.name());
             let summary = format!(
-                "{} fields, {} bytes per message",
-                def.fields.len().saturating_add(def.dev.len()),
+                "{}, {} bytes per message",
+                plural(def.fields.len().saturating_add(def.dev.len()), "field"),
                 def.size()
             );
             cx.push(
@@ -491,7 +492,7 @@ async fn records(cx: Cx, data: Span) -> Result<()> {
         }
         n = n.saturating_add(1);
     }
-    cx.annotate(format!("{n} records"));
+    cx.annotate(plural(n, "record"));
     Ok(())
 }
 

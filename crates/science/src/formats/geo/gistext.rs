@@ -18,6 +18,7 @@ use crate::fields::Endian;
 use crate::formats::text::piece::Piece;
 use crate::formats::text::probe;
 use crate::formats::text::scan::{LineBuf, Lines};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -575,7 +576,10 @@ async fn grass_ascii(cx: Cx, input: Input) -> Result<()> {
             continue;
         }
         if row == 0 {
-            cx.annotate(format!("GRASS ASCII raster, {rows} rows × {cols} columns"));
+            cx.annotate(format!(
+                "GRASS ASCII raster, {rows_row} × {cols} columns",
+                rows_row = plural(&rows, "row")
+            ));
         }
         cx.push(super::words_node(format!("Row {row}"), &line, &[]))
             .await;
@@ -1113,8 +1117,12 @@ async fn srm(cx: Cx, input: Input) -> Result<()> {
         Value::Timestamp { unix_seconds: date },
     ));
     cx.annotate(format!(
-        "SRM ride ({}), {} blocks, {} markers, interval {}/{} s",
-        h.magic, h.blocks, h.markers, h.recint1, h.recint2
+        "SRM ride ({}), {}, {} markers, interval {}/{} s",
+        h.magic,
+        plural(h.blocks, "block"),
+        h.markers,
+        h.recint1,
+        h.recint2
     ));
     Ok(())
 }

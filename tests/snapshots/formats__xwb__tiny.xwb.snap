@@ -16,6 +16,6 @@ expression: "common::explore(&display_name(&path), &data)"
     Entry names length: 0  [0x28+0x4]
     Wave data offset: 0x200  [0x2c+0x4]
     Wave data length: 32  [0x30+0x4]
-    Bank data — "TinyBank", 1 entries  [0x34+0x60]
+    Bank data — "TinyBank", 1 entry  [0x34+0x60]
     Entry metadata  [0x94+0x18]
     Wave data  [0x200+0x20]

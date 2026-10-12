@@ -26,6 +26,7 @@ use crate::formats::disk::DIRENT_TYPES;
 use crate::formats::disk::{
     PieceList, content_node, crc32c_update, size, text, unix_mode, uuid_value,
 };
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -369,9 +370,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         );
     }
     let mut node = struct_node("Superblock", sb_span, LE, computed, sb_layout).summary(format!(
-        "{} inodes, {} blocks of {}",
-        sb.inos,
-        sb.blocks,
+        "{}, {} of {}",
+        plural(sb.inos, "inode"),
+        plural(sb.blocks, "block"),
         size(blk)
     ));
     if let Some(c) = computed
@@ -392,14 +393,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         algs.push("LZ4");
     }
     cx.annotate(format!(
-        "EROFS filesystem{}, {}, {} inodes, {}",
+        "EROFS filesystem{}, {}, {}, {}",
         if label.is_empty() {
             String::new()
         } else {
             format!(" \"{label}\"")
         },
         size(u64::from(sb.blocks).saturating_mul(blk)),
-        sb.inos,
+        plural(sb.inos, "inode"),
         if algs.is_empty() {
             "uncompressed".to_owned()
         } else {
@@ -455,7 +456,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Compression configurations")
                 .span(Span::new(vol.source, start, end.saturating_sub(start)))
-                .summary(format!("{} algorithms", cfgs.len()))
+                .summary(plural(cfgs.len(), "algorithm"))
                 .lazy(compression_cfgs, Arc::new(cfgs)),
         );
     }
@@ -956,9 +957,9 @@ async fn view(cx: Cx, (fs, nid): (FsRef, u64)) -> Result<()> {
             inode_layout,
         )
         .summary(format!(
-            "nid {nid}, {} inode, {} links",
+            "nid {nid}, {} inode, {}",
             if ino.ext { "extended" } else { "compact" },
-            ino.nlink
+            plural(ino.nlink, "link")
         )),
     );
     if ino.xattr_len() > 0 {
@@ -1237,7 +1238,7 @@ async fn dir_block(cx: Cx, span: Span) -> Result<()> {
         cx.emit(
             Node::new("Names")
                 .span(names)
-                .summary(format!("{} names", list.len()))
+                .summary(plural(list.len(), "name"))
                 .lazy(dir_names, Arc::new(list)),
         );
     }

@@ -25,6 +25,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::forensics::winsec::{KEY_RIGHTS, sd_summary, security_descriptor};
 use crate::formats::util::datakit::{clip, hex, uint};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::name_or;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
@@ -243,8 +244,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     match key_info(&cx, &hive, base.root).await {
         Ok(root) => {
             summary = format!(
-                "{summary}, root {:?} ({} subkeys, {} values)",
-                root.name, root.subkeys, root.values
+                "{summary}, root {:?} ({}, {})",
+                root.name,
+                plural(root.subkeys, "subkey"),
+                plural(root.values, "value")
             );
             cx.annotate(summary);
             cx.emit(key_node(&hive, base.root, &root, &[]));
@@ -399,7 +402,11 @@ fn key_node(hive: &H, offset: u32, info: &KeyInfo, path: &[u32]) -> Node {
         .value(Value::Timestamp {
             unix_seconds: crate::text::filetime_to_unix(info.written),
         })
-        .summary(format!("{} subkeys, {} values", info.subkeys, info.values));
+        .summary(format!(
+            "{}, {}",
+            plural(info.subkeys, "subkey"),
+            plural(info.values, "value")
+        ));
     if info.flags & 0x10 != 0 {
         node = node.desc("Symbolic link");
     }
@@ -539,8 +546,8 @@ async fn key(cx: Cx, k: Key) -> Result<()> {
     }
     if emitted != info.subkeys {
         cx.diag(Diagnostic::warning(format!(
-            "key node announces {} subkeys, index lists {emitted}",
-            info.subkeys
+            "key node announces {}, index lists {emitted}",
+            plural(info.subkeys, "subkey")
         )));
     }
     Ok(())
@@ -995,7 +1002,10 @@ fn cell_node(hive: &H, offset: u64, span: Span, allocated: bool, sig: u16, body:
             let sd = body.get(0x14..).unwrap_or_default();
             node = node
                 .value(Value::Text(sd_summary(sd)))
-                .summary(format!("{state}security descriptor, {refs} references"))
+                .summary(format!(
+                    "{state}security descriptor, {refs_reference}",
+                    refs_reference = plural(refs, "reference")
+                ))
                 .lazy(sk_cell, (hive.clone(), data));
         }
         b"lf" | b"lh" | b"li" | b"ri" | b"db" => {
@@ -1192,7 +1202,10 @@ async fn log_entries(cx: &Cx, file: Span) -> Result<()> {
         cx.emit(
             Node::new("Dirty pages")
                 .span(file.tail(start).sub(0, dirty.saturating_mul(512)))
-                .summary(format!("{dirty} pages of 512 bytes, in bitmap order")),
+                .summary(format!(
+                    "{dirty_page} of 512 bytes, in bitmap order",
+                    dirty_page = plural(dirty, "page")
+                )),
         );
         return Ok(());
     }

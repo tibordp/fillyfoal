@@ -73,10 +73,10 @@ expression: "common::explore(&display_name(&path), &data)"
         1: "Male"  [0x1fc+0x10]
         2: "Female"  [0x20c+0x10]
       Value label variables — sex  [0x21c+0xc]
-    ▾ Value labels — 1 labels  [0x228+0x18]
+    ▾ Value labels — 1 label  [0x228+0x18]
         99: "Refused"  [0x230+0x10]
       Value label variables — score  [0x240+0xc]
-      Document — 1 lines  [0x24c+0x58]
+      Document — 1 line  [0x24c+0x58]
     ▾ Machine integer info — subtype 3, 8 × 4 bytes  [0x2a4+0x30]
         Version major: 20  [0x2b4+0x4]
         Version minor: 0  [0x2b8+0x4]
@@ -171,7 +171,7 @@ expression: "common::explore(&display_name(&path), &data)"
         2: "Female"  [0x20c+0x10]
     ▾ Set 2 (score) — 99 = "Refused"  [0x228+0x18]
         99: "Refused"  [0x230+0x10]
-  ▾ Documents — 1 lines
+  ▾ Documents — 1 line
       Line 1: "Generated for fillyfoal's test suite"
   ▾ Cases — 5 cases × 7 slots  [0x3ad+0x90]
     ▾ Case 1 — id=1, name="Alice", sex=1 (Male), score=12.5, born=1980-01-15  [#1:0x0+0x38]

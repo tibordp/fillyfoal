@@ -10,6 +10,7 @@ use std::sync::Arc;
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::wire::protobuf as pb;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -614,12 +615,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if let Some((span, data)) = &footer {
         let fi = ints_stepped(&cx, data).await;
         if let Some(rows) = get(&fi, 6) {
-            summary = format!("{summary}, {rows} rows");
+            summary = format!("{summary}, {rows_row}", rows_row = plural(rows, "row"));
         }
         let stripe_count = messages_stepped(&cx, data, 3).await.len();
         summary = format!(
-            "{summary}, {stripe_count} stripes, {} types",
-            messages_stepped(&cx, data, 4).await.len()
+            "{summary}, {stripe_count_stripe}, {}",
+            plural(messages_stepped(&cx, data, 4).await.len(), "type"),
+            stripe_count_stripe = plural(stripe_count, "stripe")
         );
         cx.emit(
             Node::new("Stripes")
@@ -687,7 +689,7 @@ async fn stripes(cx: Cx, (input, footer, compression): (Input, Buf, u64)) -> Res
         cx.push(
             Node::new(format!("Stripe {i}"))
                 .span(whole)
-                .summary(format!("{rows} rows"))
+                .summary(plural(rows, "row"))
                 .lazy(stripe, (whole, index, data, foot, compression)),
         )
         .await;

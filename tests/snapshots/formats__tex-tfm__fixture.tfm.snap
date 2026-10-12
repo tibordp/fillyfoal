@@ -11,7 +11,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Widths — 4 words  [0x6c+0x10]
     Heights — 3 words  [0x7c+0xc]
     Depths — 2 words  [0x88+0x8]
-    Italic corrections — 1 words  [0x90+0x4]
+    Italic corrections — 1 word  [0x90+0x4]
     Lig/kern program — 0 words  [0x94+0x0]
     Kerns — 0 words  [0x94+0x0]
     Extensible recipes — 0 words  [0x94+0x0]

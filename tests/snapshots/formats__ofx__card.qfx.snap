@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ card.qfx — OFX 220 statement for account 4111XXXXXXXX1111, 1 transactions, balance -15.99 EUR  [0x0+0x24a]
+▾ card.qfx — OFX 220 statement for account 4111XXXXXXXX1111, 1 transaction, balance -15.99 EUR  [0x0+0x24a]
   ▾ Header — 5 keys  [0x0+0x91]
       OFXHEADER: "200"  [0x37+0x5a]
       VERSION: "220"  [0x37+0x5a]

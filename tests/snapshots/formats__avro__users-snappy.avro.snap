@@ -30,7 +30,7 @@ expression: "common::explore(&display_name(&path), &data)"
             name: "bob"  [#1:0x7+0x4]
             age: 25  [#1:0xb+0x1]
         Sync marker  [0xd1+0x10]
-    ▾ Block 1 — 1 objects, 13 bytes  [0xe1+0x1f]
+    ▾ Block 1 — 1 object, 13 bytes  [0xe1+0x1f]
         Object count: 1  [0xe1+0x1]
         Size: 13  [0xe2+0x1]
       ▾ Objects — 13 bytes  [0xe3+0x9]

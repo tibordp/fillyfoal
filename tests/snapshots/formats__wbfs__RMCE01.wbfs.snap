@@ -9,7 +9,7 @@ expression: "common::explore(&display_name(&path), &data)"
     WBFS sector size (shift): 21 — 2 MiB  [0x9+0x1]
     Version: 1  [0xa+0x1]
     Padding: 0  [0xb+0x1]
-    Disc table — 1 slots used  [0xc+0x1f4]
+    Disc table — 1 slot used  [0xc+0x1f4]
   ▾ Disc 0: "RMCE01" — Mario Kart Wii  [0x200+0x200]
       Game ID: "RMCE01"  [0x200+0x6]
       Disc number: 0  [0x206+0x1]

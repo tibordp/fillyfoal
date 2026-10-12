@@ -21,7 +21,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::formats::content;
-use crate::formats::util::fmt::{clip, grouped_count, size};
+use crate::formats::util::fmt::{clip, grouped_count, plural, size};
 use crate::formats::util::val::{hex, uint};
 use crate::node::{Count, Node};
 use crate::record;
@@ -47,8 +47,8 @@ const DIRECTIONS: EnumTable = &[
 
 fn heap_records(v: u16) -> String {
     format!(
-        "{} records in the heap, {} format",
-        v & 0x7fff,
+        "{} in the heap, {} format",
+        plural(v & 0x7fff, "record"),
         if v & 0x8000 != 0 {
             "compact"
         } else {
@@ -369,8 +369,8 @@ fn parse_redundant(page: &[u8], origin: u64, def: Option<&IndexDef>, leaf: bool)
         };
         if p.status < 2 && p.fields.len() != expected {
             p.problem = Some(format!(
-                "{} fields, the definition has {expected}",
-                p.fields.len()
+                "{}, the definition has {expected}",
+                plural(p.fields.len(), "field")
             ));
         }
     }

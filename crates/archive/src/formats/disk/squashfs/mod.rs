@@ -26,7 +26,7 @@ use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::disk::{PieceList, content_node, unix_mode};
 use crate::formats::util::arcutil::unsupported;
 use crate::formats::util::fmt;
-use crate::formats::util::fmt::count;
+use crate::formats::util::fmt::{count, plural};
 use crate::formats::util::val::hex;
 use crate::formats::{Codec, Format, Input, Probe, content};
 use crate::node::Node;
@@ -193,11 +193,11 @@ pub async fn dissect_squashfs(cx: Cx, input: Input) -> Result<()> {
     };
     let compressor = lookup(COMPRESSOR, sb.compressor.into()).unwrap_or("unknown");
     cx.annotate(format!(
-        "SquashFS {}.{}, {compressor}, {}, {} blocks, {}",
+        "SquashFS {}.{}, {compressor}, {}, {}, {}",
         sb.major,
         sb.minor,
         count(sb.inodes, "inode", "inodes"),
-        fmt::size(sb.block_size.into()),
+        plural(fmt::size(sb.block_size.into()), "block"),
         fmt::size(sb.bytes_used)
     ));
     if sb.major != 4 {
@@ -301,7 +301,7 @@ pub async fn dissect_squashfs(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new(name)
                 .span(file.sub(at, index_len))
-                .summary(format!("{n} entries"))
+                .summary(plural(n, "entry"))
                 .lazy(lookup_table, (fs.clone(), kind)),
         );
     }
@@ -570,7 +570,7 @@ impl Inode {
             )
         };
         if self.nlink > 1 && !self.is_dir() {
-            s.push_str(&format!(", {} links", self.nlink));
+            s.push_str(&format!(", {}", plural(self.nlink, "link")));
         }
         s
     }
@@ -964,7 +964,8 @@ async fn dir_entries(cx: &Cx, listing: Span) -> Result<(Vec<DirEnt>, Option<Diag
             return Ok((
                 out,
                 Some(Diagnostic::malformed(format!(
-                    "directory header claims {n} entries"
+                    "directory header claims {n_entry}",
+                    n_entry = plural(n, "entry")
                 ))),
             ));
         }
@@ -1295,7 +1296,7 @@ async fn lookup_table(cx: Cx, (fs, kind): (FsRef, Lookup)) -> Result<()> {
     cx.emit(
         Node::new("Entries")
             .span(decoded)
-            .summary(format!("{n} entries"))
+            .summary(plural(n, "entry"))
             .lazy(lookup_entries, (fs.clone(), kind, decoded)),
     );
     Ok(())

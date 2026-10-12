@@ -17,6 +17,7 @@ use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::executable::pe::version::FixedFileInfo;
 use crate::formats::util::binutil::{ellipsize, name_or, text};
 use crate::formats::util::datakit::hex;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
@@ -1022,11 +1023,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(parts.join(", "));
 
     let used = streams.iter().filter(|(_, d)| d.kind != 0).count();
-    cx.emit(
-        Node::new("Stream Directory")
-            .span(table)
-            .summary(format!("{count} entries, {used} streams")),
-    );
+    cx.emit(Node::new("Stream Directory").span(table).summary(format!(
+        "{count_entry}, {used} streams",
+        count_entry = plural(count, "entry")
+    )));
     // The streams are a collection: pushed, so a large directory pages.
     for (entry, d) in streams {
         let span = file.sub(d.rva.into(), d.size.into());
@@ -1748,9 +1748,10 @@ async fn function_tables(cx: &Cx, span: Span) -> Result<()> {
             Node::new(format!("Table {i}"))
                 .span(at)
                 .summary(format!(
-                    "{:#x}–{:#x}, {count} functions",
+                    "{:#x}–{:#x}, {count_function}",
                     u64_le(&d, 0).unwrap_or(0),
-                    u64_le(&d, 8).unwrap_or(0)
+                    u64_le(&d, 8).unwrap_or(0),
+                    count_function = plural(count, "function")
                 ))
                 .lazy(function_table, (at, desc, native, entry, count)),
         )

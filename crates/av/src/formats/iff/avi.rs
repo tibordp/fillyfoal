@@ -394,8 +394,8 @@ async fn reserved(cx: &Cx, chunk: &Chunk) -> Result<bool> {
                 Node::new("Entry space")
                     .span(data.tail(24))
                     .summary(format!(
-                        "room for {} entries",
-                        data.len.saturating_sub(24) / 16
+                        "room for {}",
+                        plural(data.len.saturating_sub(24) / 16, "entry")
                     )),
             );
         }
@@ -421,7 +421,7 @@ fn entry_count(n: u64) -> String {
     if n == 1 {
         "1 entry".to_owned()
     } else {
-        format!("{n} entries")
+        plural(n, "entry")
     }
 }
 

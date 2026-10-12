@@ -32,6 +32,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::text::decode::{Transform, decoded_node, derive_with};
 use crate::formats::text::ssh::key_bits;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Input, Probe};
 use crate::node::Node;
@@ -182,7 +183,7 @@ async fn ppk(cx: Cx, input: Input) -> Result<()> {
                         .lazy(private_key, state),
                 );
             } else {
-                cx.emit(Node::new(format!("{n} lines")).span(body));
+                cx.emit(Node::new(plural(n, "line")).span(body));
             }
             continue;
         }

@@ -17,7 +17,7 @@ use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::text::hex_lower;
@@ -1191,8 +1191,9 @@ pub(super) async fn root(cx: Cx, (pe, root): (Pe, Span)) -> Result<()> {
             "#~" | "#-" => {
                 let n = md.valid.count_ones();
                 node.summary(format!(
-                    "{n} tables, {} rows",
-                    md.rows.iter().map(|&r| u64::from(r)).sum::<u64>()
+                    "{n_table}, {}",
+                    plural(md.rows.iter().map(|&r| u64::from(r)).sum::<u64>(), "row"),
+                    n_table = plural(n, "table")
                 ))
                 .lazy(tables, st)
             }
@@ -1835,7 +1836,7 @@ async fn pdb_stream(cx: Cx, (_pe, _root, span): (Pe, Span, Span)) -> Result<()> 
             let span = f.peek_span(4);
             let rows = f.u32("Rows").get()?;
             f.node(
-                Node::new(format!("{} rows", table_name(t)))
+                Node::new(plural(table_name(t), "row"))
                     .span(span)
                     .value(Value::UInt {
                         value: rows.into(),

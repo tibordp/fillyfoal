@@ -9,6 +9,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::iff::wav;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{fourcc, peek_text};
 use crate::formats::util::val::text;
 use crate::formats::{Format, Input, Probe};
@@ -130,7 +131,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 Some(d) => format!("{body} bytes, {d}"),
                 None => format!("{body} bytes"),
             },
-            ("fact", _) => fact.map_or_else(|| format!("{body} bytes"), |n| format!("{n} frames")),
+            ("fact", _) => fact.map_or_else(|| format!("{body} bytes"), |n| plural(n, "frame")),
             ("bext", _) => {
                 let t = peek_text(&cx, span.sub(24, 256), 256).await?;
                 if t.is_empty() {
@@ -181,7 +182,7 @@ async fn chunk(cx: Cx, st: State) -> Result<()> {
             if let Some(fmt) = &st.fmt {
                 let mut parts = Vec::new();
                 if let Some(n) = fmt.frames(data.len, st.frames) {
-                    parts.push(format!("{n} frames"));
+                    parts.push(plural(n, "frame"));
                 }
                 if let Some(d) = fmt.duration(data.len, st.frames) {
                     parts.push(d);

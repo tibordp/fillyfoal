@@ -304,7 +304,7 @@ pub async fn dissect_smacker(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Frame sizes")
             .span(sizes)
-            .summary(format!("{count} entries")),
+            .summary(plural(count, "entry")),
     );
     cx.emit(Node::new("Frame types").span(types));
     cx.emit(

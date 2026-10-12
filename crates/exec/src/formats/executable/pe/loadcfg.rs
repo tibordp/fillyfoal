@@ -595,7 +595,7 @@ async fn lock_prefixes(cx: &Cx, pe: &Pe, va: u64) -> Option<Node> {
     Some(
         Node::new("Lock Prefix Table")
             .span(span)
-            .summary(format!("{count} entries"))
+            .summary(plural(count, "entry"))
             .lazy(va_list, (pe.clone(), span)),
     )
 }

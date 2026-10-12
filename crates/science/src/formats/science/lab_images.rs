@@ -9,6 +9,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::lines::{Lines, float32, int, is_text, preview, text, uint};
 use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
@@ -742,8 +743,9 @@ async fn freesurfer_surf(cx: Cx, input: Input) -> Result<()> {
         faces.saturating_mul(12),
     )));
     cx.annotate(format!(
-        "FreeSurfer surface, {v} vertices, {faces} triangles ({})",
-        preview(&comment, 60)
+        "FreeSurfer surface, {v} vertices, {faces_triangle} ({})",
+        preview(&comment, 60),
+        faces_triangle = plural(faces, "triangle")
     ));
     Ok(())
 }

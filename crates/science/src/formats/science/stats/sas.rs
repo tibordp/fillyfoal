@@ -29,6 +29,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::civil::SAS_EPOCH;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -480,7 +481,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if file_type == "DATA" {
         cx.emit(
             Node::new("Rows")
-                .summary(format!("{} rows × {} bytes", sas.row_count, sas.row_length))
+                .summary(format!(
+                    "{} × {} bytes",
+                    plural(sas.row_count, "row"),
+                    sas.row_length
+                ))
                 .lazy(rows, sas.clone()),
         );
     }
@@ -490,9 +495,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         _ => "",
     };
     cx.annotate(format!(
-        "SAS {file_type} {name:?}, {} columns × {} rows{compression}, release {release}, {}-bit {}{}",
+        "SAS {file_type} {name:?}, {} columns × {}{compression}, release {release}, {}-bit {}{}",
         sas.columns.len(),
-        sas.row_count,
+        plural(sas.row_count, "row"),
         if u64 { 64 } else { 32 },
         if endian == Endian::Little {
             "little-endian"
@@ -500,7 +505,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             "big-endian"
         },
         match date_cell(created, 1.0, SAS_EPOCH, true) {
-            Cell::Date { unix_seconds, .. } => format!(", created {}", super::date_string(unix_seconds, true)),
+            Cell::Date { unix_seconds, .. } =>
+                format!(", created {}", super::date_string(unix_seconds, true)),
             _ => String::new(),
         }
     ));
@@ -677,8 +683,8 @@ async fn pages(cx: Cx, sas: Arc<Sas>) -> Result<()> {
         let page = parse_page(sas.lay, span, &raw, sas.codec.is_some());
         let kind = lookup(PAGE_TYPES, page.kind.into()).unwrap_or("unknown");
         let mut node = Node::new(name).span(span).summary(format!(
-            "{kind}, {} blocks, {} subheaders",
-            page.blocks,
+            "{kind}, {}, {} subheaders",
+            plural(page.blocks, "block"),
             page.pointers.len()
         ));
         if to_u64(raw.len()) < span.len {

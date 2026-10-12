@@ -9,7 +9,7 @@ use crate::codec::crypto::Sha256;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::datakit::{digest_paced, hex_string};
-use crate::formats::util::fmt::{clip, size};
+use crate::formats::util::fmt::{clip, plural, size};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -302,7 +302,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
 async fn torrent_summary(scan: &mut Scan<'_>, root: &Item) -> Result<String> {
     let Some(info) = scan.lookup(root, b"info").await? else {
-        return Ok(format!("bencode dictionary ({} keys)", root.count));
+        return Ok(format!(
+            "bencode dictionary ({})",
+            plural(root.count, "key")
+        ));
     };
     let mut parts = vec!["torrent".to_owned()];
     if let Some(name) = scan.lookup(&info, b"name").await? {
@@ -330,13 +333,21 @@ async fn torrent_summary(scan: &mut Scan<'_>, root: &Item) -> Result<String> {
                 total = total.saturating_add(u64::try_from(n).unwrap_or(0));
             }
         }
-        parts.push(format!("{count} files, {}", size(total)));
+        parts.push(format!(
+            "{count_file}, {}",
+            size(total),
+            count_file = plural(count, "file")
+        ));
     } else if let Some(tree) = scan.lookup(&info, b"file tree").await? {
         let (count, total) = file_tree(scan, &tree).await?;
         if count == 1 {
             parts.push(size(total));
         } else {
-            parts.push(format!("{count} files, {}", size(total)));
+            parts.push(format!(
+                "{count_file}, {}",
+                size(total),
+                count_file = plural(count, "file")
+            ));
         }
     } else if let Some(Item {
         kind: Kind::Int(n), ..
@@ -348,7 +359,7 @@ async fn torrent_summary(scan: &mut Scan<'_>, root: &Item) -> Result<String> {
         kind: Kind::Int(n), ..
     }) = scan.lookup(&info, b"piece length").await?
     {
-        parts.push(format!("{} pieces", size(u64::try_from(n).unwrap_or(0))));
+        parts.push(plural(size(u64::try_from(n).unwrap_or(0)), "piece"));
     }
     Ok(parts.join(", "))
 }

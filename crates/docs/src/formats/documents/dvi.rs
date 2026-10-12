@@ -5,6 +5,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Input, Probe};
 use crate::node::Node;
@@ -61,7 +62,10 @@ async fn dvi(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "DVI (id {id}), {}{}, magnification {mag}",
         comment.trim(),
-        pages.map_or(String::new(), |p| format!(", {p} pages"))
+        pages.map_or(String::new(), |p| format!(
+            ", {p_page}",
+            p_page = plural(p, "page")
+        ))
     ));
     Ok(())
 }

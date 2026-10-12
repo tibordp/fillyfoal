@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ web.unity3d — UnityWeb v3, Unity 5.2.4f1, LZMA, 1 files  [0x0+0x35b]
+▾ web.unity3d — UnityWeb v3, Unity 5.2.4f1, LZMA, 1 file  [0x0+0x35b]
     Signature: "UnityWeb"  [0x0+0x9]
     Format version: 3  [0x9+0x4]
     Player version: "3.x.x"  [0xd+0x6]

@@ -8,6 +8,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::disk::{PieceList, content_node, fragments_node, size, unix_mode, uuid_value};
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag};
@@ -194,7 +195,7 @@ impl Dinode {
     pub(super) fn summary(&self) -> String {
         let mut s = format!("{}, {}", unix_mode(self.mode.into()), size(self.size));
         if self.kind() != S_IFDIR && self.nlink > 1 {
-            s.push_str(&format!(", {} links", self.nlink));
+            s.push_str(&format!(", {}", plural(self.nlink, "link")));
         }
         s
     }
@@ -409,7 +410,11 @@ fn fork_node(fs: &FsRef, di: &Dinode, attr: bool, span: Span) -> Node {
             if count == 1 { "" } else { "s" },
             size(span.len)
         ),
-        FMT_BTREE => format!("{what}, {count} extents, {}", size(span.len)),
+        FMT_BTREE => format!(
+            "{what}, {count_extent}, {}",
+            size(span.len),
+            count_extent = plural(count, "extent")
+        ),
         _ => format!("{what}, {}", size(span.len)),
     };
     if format == FMT_BTREE {
@@ -643,7 +648,7 @@ pub(super) async fn view(cx: Cx, (fs, ino): (FsRef, u64)) -> Result<()> {
     if matches!(di.aformat, FMT_EXTENTS | FMT_BTREE) && di.anextents > 0 {
         cx.emit(
             Node::new("Attribute blocks")
-                .summary(format!("{} extents", di.anextents))
+                .summary(plural(di.anextents, "extent"))
                 .lazy(super::attr::blocks, (fs.clone(), ino)),
         );
         cx.emit(Node::new("Attributes").lazy(super::attr::list, (fs.clone(), ino)));

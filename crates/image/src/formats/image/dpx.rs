@@ -441,7 +441,10 @@ pub async fn dissect_dpx(cx: Cx, input: Input) -> Result<()> {
         summary = format!("{summary}, {t}");
     }
     if elements > 1 {
-        summary = format!("{summary}, {elements} elements");
+        summary = format!(
+            "{summary}, {elements_element}",
+            elements_element = plural(elements, "element")
+        );
     }
     cx.annotate(format!("{summary}, {}", endian_name(endian)));
     cx.emit(region(

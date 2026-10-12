@@ -17,6 +17,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::disk::{PieceList, size};
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
@@ -719,7 +720,7 @@ pub(super) async fn view(cx: Cx, (fs, nid): (FsRef, u64)) -> Result<()> {
     let aligned = align_up(end, 32);
     cx.emit(
         Node::new("Extents")
-            .summary(format!("{} extents", exts.len()))
+            .summary(plural(exts.len(), "extent"))
             .lazy(extents_view, (fs.clone(), Arc::new(exts))),
     );
     if aligned > end {

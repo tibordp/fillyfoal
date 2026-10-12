@@ -14,7 +14,7 @@ use crate::codec::inflate_span;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::fmt::fourcc;
+use crate::formats::util::fmt::{fourcc, plural};
 use crate::formats::{Input, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -333,7 +333,7 @@ fn glyph_summary(head: &[u8]) -> String {
         return "truncated".to_owned();
     };
     let kind = if n >= 0 {
-        format!("{n} contours")
+        plural(n, "contour")
     } else {
         "composite".to_owned()
     };
@@ -383,7 +383,11 @@ async fn simple_glyph(cx: &Cx, f: &mut Fields<'_>, contours: u16) -> Result<()> 
     f.node(
         Node::new("End points of contours")
             .span(ends_span)
-            .summary(format!("{contours} contours, {points} points")),
+            .summary(format!(
+                "{contours_contour}, {points_point}",
+                contours_contour = plural(contours, "contour"),
+                points_point = plural(points, "point")
+            )),
     );
     f.skip(ends_len);
     let instructions = f.u16("Instruction length").emit()?;

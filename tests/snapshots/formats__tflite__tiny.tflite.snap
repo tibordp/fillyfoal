@@ -27,5 +27,5 @@ expression: "common::explore(&display_name(&path), &data)"
       [1] — 32 bytes  [0x2dc+0x20]
       [2] — 8 bytes  [0x314+0x8]
       [3] — 5 bytes  [0x334+0x5]
-  ▾ Metadata — 1 entries  [0x340+0x4]
+  ▾ Metadata — 1 entry  [0x340+0x4]
       [0]: "min_runtime_version" — buffer 3  [0x350+0xc]

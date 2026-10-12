@@ -139,7 +139,7 @@ record! {
         mtime: u32 "Modified" .with(crate::formats::disk::unix_time),
         size: u64 "Virtual disk size" .with(|&v, n| n.summary(size(v))),
         cluster_bits: u8 "Cluster bits" .with(|&b, n| n.summary(crate::formats::disk::size(1u64.checked_shl(b.into()).unwrap_or(0)))),
-        l2_bits: u8 "L2 bits" .with(|&b, n| n.summary(format!("{} entries per L2 table", 1u64.checked_shl(b.into()).unwrap_or(0)))),
+        l2_bits: u8 "L2 bits" .with(|&b, n| n.summary(format!("{} per L2 table", plural(1u64.checked_shl(b.into()).unwrap_or(0), "entry")))),
         _padding: u16 "Padding",
         crypt: u32 "Encryption" .enumeration(CRYPT),
         l1_offset: u64 "L1 table offset" .hex(),
@@ -367,9 +367,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
 
     let mut summary = format!(
-        "QCOW2 version {version} image, {} virtual, {} clusters",
+        "QCOW2 version {version} image, {} virtual, {}",
         size(h.size),
-        size(cluster)
+        plural(size(cluster), "cluster")
     );
     if version >= 3 {
         summary.push_str(&format!(
@@ -436,8 +436,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             Node::new("Refcount table")
                 .span(rt)
                 .summary(format!(
-                    "{} entries, {}-bit refcounts",
-                    rt.len / 8,
+                    "{}, {}-bit refcounts",
+                    plural(rt.len / 8, "entry"),
                     1u32 << image.refcount_order
                 ))
                 .lazy(refcount_table, image.clone()),
@@ -541,7 +541,7 @@ async fn extensions(cx: Cx, (area, exts): (Span, Arc<Vec<Ext>>)) -> Result<()> {
                 "{:?}",
                 crate::text::until_nul(&cx.read_avail(e.data).await?)
             )),
-            EXT_FEATURES => node.summary(format!("{} features", e.data.len / 48)),
+            EXT_FEATURES => node.summary(plural(e.data.len / 48, "feature")),
             0 => node,
             _ => node.summary(size(e.data.len)),
         };
@@ -659,9 +659,9 @@ async fn qcow1(cx: &Cx, input: Input) -> Result<()> {
     }
     let backing = backing_name(cx, file, h.backing_offset, h.backing_size).await?;
     cx.annotate(format!(
-        "QCOW version 1 image, {} virtual, {} clusters{}{}",
+        "QCOW version 1 image, {} virtual, {}{}{}",
         size(h.size),
-        size(1u64 << h.cluster_bits),
+        plural(size(1u64 << h.cluster_bits), "cluster"),
         if h.crypt != 0 { ", AES encrypted" } else { "" },
         match &backing {
             Some((name, _)) => format!(", backed by {name:?}"),
@@ -1459,8 +1459,8 @@ fn bitmap_layout(f: &mut Fields<'_>, image: &Arc<Image>) -> Result<()> {
         Node::new("Bitmap table")
             .span(table)
             .summary(format!(
-                "{} entries, each covering {} of the guest",
-                e.table_size,
+                "{}, each covering {} of the guest",
+                plural(e.table_size, "entry"),
                 size(covers)
             ))
             .lazy(bitmap_table, (image.clone(), table, covers)),

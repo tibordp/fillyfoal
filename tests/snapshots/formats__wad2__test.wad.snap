@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ test.wad — WAD3, 1 entries  [0x0+0x154]
+▾ test.wad — WAD3, 1 entry  [0x0+0x154]
   ▾ Header  [0x0+0xc]
       Identification: "WAD3"  [0x0+0x4]
       Number of lumps: 1  [0x4+0x4]

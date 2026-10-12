@@ -1475,7 +1475,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ #US — 576 bytes  [0x19ec+0x240]  (+23 nodes elided)
       ▾ #GUID — 1 GUIDs  [0x1c2c+0x10]  (+1 node elided)
       ▾ #Blob — 796 bytes  [0x1c3c+0x31c]  (+101 nodes elided)
-    ▾ VTable Fixups — 1 entries  [0x458+0x8]
+    ▾ VTable Fixups — 1 entry  [0x458+0x8]
       ▾ #0  [0x458+0x8]
           RVA: 0x4000 — .sdata  [0x458+0x4] → 0x2200+0x0
           Count: 5  [0x45c+0x2]

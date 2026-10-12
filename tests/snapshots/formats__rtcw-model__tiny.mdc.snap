@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tiny.mdc — MDC compressed model "models/tiny.mdc": 1 frames, 1 surfaces, 1 tags  [0x0+0x84]
+▾ tiny.mdc — MDC compressed model "models/tiny.mdc": 1 frame, 1 surface, 1 tags  [0x0+0x84]
     Signature: "IDPC"  [0x0+0x4]
     Version: 2  [0x4+0x4]
     Name: "models/tiny.mdc"  [0x8+0x40]

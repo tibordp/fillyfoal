@@ -11,6 +11,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{PieceList, size};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe, dissect_or_data};
 use crate::node::{Count, Node};
 use crate::record;
@@ -73,9 +74,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Header::node("Header", span, LE));
     let cluster = u64::from(h.tracks).saturating_mul(SECTOR);
     cx.annotate(format!(
-        "Parallels disk image, {}, {} clusters",
+        "Parallels disk image, {}, {}",
         size(h.sectors.saturating_mul(SECTOR)),
-        size(cluster)
+        plural(size(cluster), "cluster")
     ));
     if cluster == 0 {
         return Err(Diagnostic::malformed("zero cluster size").at(span));
@@ -90,7 +91,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Block allocation table")
             .span(image.bat)
-            .summary(format!("{} entries", h.bat_entries))
+            .summary(plural(h.bat_entries, "entry"))
             .lazy(bat, image.clone()),
     );
     cx.emit(

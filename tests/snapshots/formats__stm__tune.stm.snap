@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tune.stm — STM 2.21 (!Scream!), 1 patterns — fillyfoal stm  [0x0+0x8a0]
+▾ tune.stm — STM 2.21 (!Scream!), 1 pattern — fillyfoal stm  [0x0+0x8a0]
   ▾ Header  [0x0+0x30]
       Song name: "fillyfoal stm"  [0x0+0x14]
       Tracker: "!Scream!"  [0x14+0x8]
@@ -387,6 +387,6 @@ expression: "common::explore(&display_name(&path), &data)"
         Reserved: 0  [0x407+0x1]
         C-3 speed: 8363  [0x408+0x2]
         Reserved: 00 00 00 00 00 00  |......|  [0x40a+0x6]
-    Orders: "0" — 1 entries  [0x410+0x80]
-    Patterns — 1 patterns of 64 rows × 4 channels  [0x490+0x400]
+    Orders: "0" — 1 entry  [0x410+0x80]
+    Patterns — 1 pattern of 64 rows × 4 channels  [0x490+0x400]
     Sample data  [0x890+0x10]

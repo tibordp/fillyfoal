@@ -9,7 +9,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{plural, size};
 use crate::formats::util::val::name_or;
 use crate::formats::util::val::{hex, text};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded, embedded_as};
@@ -72,10 +72,11 @@ async fn wux(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{stored} stored")),
     );
     cx.annotate(format!(
-        "WUX image, {} in {sectors} sectors of {}, {stored} unique ({}% stored)",
+        "WUX image, {} in {sectors_sector} of {}, {stored} unique ({}% stored)",
         size(h.size),
         size(sector),
-        stored.saturating_mul(100).checked_div(sectors).unwrap_or(0)
+        stored.saturating_mul(100).checked_div(sectors).unwrap_or(0),
+        sectors_sector = plural(sectors, "sector")
     ));
     Ok(())
 }
@@ -123,7 +124,7 @@ async fn ncz(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Sections")
             .span(file.sub(0x4000, table.len.saturating_add(16)))
-            .summary(format!("{count} sections"))
+            .summary(plural(count, "section"))
             .lazy(ncz_sections, table),
     );
     let mut at = table.end().saturating_sub(file.offset);
@@ -135,9 +136,10 @@ async fn ncz(cx: Cx, input: Input) -> Result<()> {
         let total = u64_le(&raw, 16).unwrap_or(0);
         let span = file.sub(at, 24u64.saturating_add(n.saturating_mul(4)));
         cx.emit(Node::new("Block header").span(span).summary(format!(
-            "{n} blocks of {}, {} decompressed",
+            "{n_block} of {}, {} decompressed",
             size(1u64.checked_shl(exp.into()).unwrap_or(0)),
-            size(total)
+            size(total),
+            n_block = plural(n, "block")
         )));
         blocks = Some(n);
         at = span.end().saturating_sub(file.offset);
@@ -147,11 +149,12 @@ async fn ncz(cx: Cx, input: Input) -> Result<()> {
         input.nested(file.tail(at)),
     ));
     cx.annotate(format!(
-        "NCZ, {count} sections{}",
+        "NCZ, {count_section}{}",
         blocks.map_or_else(
             || ", solid zstd stream".to_owned(),
             |n| format!(", {n} zstd blocks")
-        )
+        ),
+        count_section = plural(count, "section")
     ));
     Ok(())
 }
@@ -315,9 +318,10 @@ async fn ps3_pup(cx: Cx, input: Input) -> Result<()> {
     );
     cx.emit(Node::new("SHA-1 HMAC table").span(hashes));
     cx.annotate(format!(
-        "PS3 update {}, image {image}, {count} files, {}",
+        "PS3 update {}, image {image}, {count_file}, {}",
         if version.is_empty() { "?" } else { &version },
-        size(data_len)
+        size(data_len),
+        count_file = plural(count, "file")
     ));
     Ok(())
 }
@@ -439,9 +443,11 @@ async fn ps4_pkg(cx: Cx, input: Input) -> Result<()> {
             .summary(size(body)),
     );
     cx.annotate(format!(
-        "PS4 package {id}{}, {}, {count} entries, {files} files",
+        "PS4 package {id}{}, {}, {count_entry}, {files_file}",
         title.map_or_else(String::new, |t| format!(" {t:?}")),
-        lookup(PS4_CONTENT, kind.into()).unwrap_or("unknown content")
+        lookup(PS4_CONTENT, kind.into()).unwrap_or("unknown content"),
+        count_entry = plural(count, "entry"),
+        files_file = plural(files, "file")
     ));
     Ok(())
 }

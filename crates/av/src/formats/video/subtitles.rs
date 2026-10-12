@@ -6,6 +6,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record};
 use crate::error::Result;
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -109,7 +110,10 @@ async fn scc(cx: Cx, input: Input) -> Result<()> {
             cx.emit(Node::new("Header").span(span).value(text(line)));
         }
     }
-    cx.annotate(format!("SCC captions, {captions} lines"));
+    cx.annotate(format!(
+        "SCC captions, {captions_line}",
+        captions_line = plural(captions, "line")
+    ));
     Ok(())
 }
 

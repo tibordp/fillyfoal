@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -111,7 +112,7 @@ async fn pak(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("{count} files"));
+    cx.annotate(plural(count, "file"));
     Ok(())
 }
 
@@ -153,7 +154,7 @@ async fn wad2(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("{}, {} entries", h.magic, h.lumps));
+    cx.annotate(format!("{}, {}", h.magic, plural(h.lumps, "entry")));
     Ok(())
 }
 
@@ -410,8 +411,10 @@ async fn mdl(cx: Cx, input: Input) -> Result<()> {
         LE,
     ));
     cx.annotate(format!(
-        "{} vertices, {} triangles, {} frames",
-        h.vertices, h.triangles, h.frames
+        "{} vertices, {}, {}",
+        h.vertices,
+        plural(h.triangles, "triangle"),
+        plural(h.frames, "frame")
     ));
     Ok(())
 }
@@ -449,8 +452,10 @@ async fn md2(cx: Cx, input: Input) -> Result<()> {
         u64::from(h.frames).saturating_mul(h.frame_size.into()),
     )));
     cx.annotate(format!(
-        "{} vertices, {} triangles, {} frames",
-        h.vertices, h.triangles, h.frames
+        "{} vertices, {}, {}",
+        h.vertices,
+        plural(h.triangles, "triangle"),
+        plural(h.frames, "frame")
     ));
     Ok(())
 }
@@ -500,11 +505,10 @@ async fn md3(cx: Cx, input: Input) -> Result<()> {
         // numVerts (80), numTriangles (84), then the offsets.
         let verts = u32_le(&header, 80).unwrap_or(0);
         let tris = u32_le(&header, 84).unwrap_or(0);
-        cx.push(
-            Node::new(name)
-                .span(file.sub(at, end))
-                .summary(format!("{verts} vertices, {tris} triangles")),
-        )
+        cx.push(Node::new(name).span(file.sub(at, end)).summary(format!(
+            "{verts} vertices, {tris_triangle}",
+            tris_triangle = plural(tris, "triangle")
+        )))
         .await;
         if end == 0 {
             break;
@@ -512,10 +516,10 @@ async fn md3(cx: Cx, input: Input) -> Result<()> {
         at = at.saturating_add(end);
     }
     cx.annotate(format!(
-        "{:?}, {} surfaces, {} frames",
+        "{:?}, {}, {}",
         h.name.trim_end(),
-        h.surfaces,
-        h.frames
+        plural(h.surfaces, "surface"),
+        plural(h.frames, "frame")
     ));
     Ok(())
 }

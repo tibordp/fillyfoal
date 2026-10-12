@@ -205,7 +205,7 @@ async fn walk(cx: &Cx, file: Span, pos: u64, sequential: bool, pages: Option<u32
 }
 
 async fn annotate(cx: &Cx, data: Span, pages: Option<u32>) {
-    let pages = pages.map_or_else(|| "unknown page count".to_owned(), |p| format!("{p} pages"));
+    let pages = pages.map_or_else(|| "unknown page count".to_owned(), |p| plural(p, "page"));
     let Ok(b) = cx.read_avail(data.sub(0, 8)).await else {
         return;
     };

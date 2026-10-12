@@ -12,7 +12,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{plural, size};
 use crate::formats::{Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
@@ -194,8 +194,8 @@ async fn bomstore(cx: Cx, input: Input) -> Result<()> {
     }
     let names: Vec<&str> = bom.vars.iter().map(|v| v.0.as_str()).collect();
     cx.annotate(format!(
-        "BOMStore, {} blocks, variables: {}",
-        bom.block_count(),
+        "BOMStore, {}, variables: {}",
+        plural(bom.block_count(), "block"),
         names.join(", ")
     ));
     Ok(())

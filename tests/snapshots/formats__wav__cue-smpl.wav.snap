@@ -51,7 +51,7 @@ expression: "common::explore(&display_name(&path), &data)"
       SMPTE offset: 0x0 — +00:00:00:00  [0x8c+0x4]
       Sample loops: 1  [0x90+0x4]
       Sampler data size: 0  [0x94+0x4]
-    ▾ Loops — 1 entries  [0x98+0x18]
+    ▾ Loops — 1 entry  [0x98+0x18]
       ▾ Loop 0 — forward, 0..199, infinite  [0x98+0x18]
           Cue point ID: 1  [0x98+0x4]
           Type: forward (0x0)  [0x9c+0x4]

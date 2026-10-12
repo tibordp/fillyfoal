@@ -236,7 +236,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ Extended attributes — 1 attribute
         ▾ com.apple.provenance — 11 bytes  [0xc054+0xb]
             Data  [0xc054+0xb]
-    ▾ Sub directory — folder, 1 items  [0x1b5ec+0x58]
+    ▾ Sub directory — folder, 1 item  [0x1b5ec+0x58]
       ▾ Catalog record  [0x1b5ec+0x58]
           Record type: 1  [0x1b5ec+0x2]
           Flags: 0x84  [0x1b5ee+0x2]

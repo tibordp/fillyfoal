@@ -46,5 +46,5 @@ expression: "common::explore(&name, &data)"
     ARM9 binary  [0x200+0x100]
     ARM7 binary  [0x300+0x80]
     File name table  [0x380+0x10]
-    File allocation table — 1 files  [0x390+0x8]
+    File allocation table — 1 file  [0x390+0x8]
     Icon and title — Fillyfoal / Test ROM / fillyfoal  [0x400+0x840]

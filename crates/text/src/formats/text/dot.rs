@@ -3,6 +3,7 @@
 
 use crate::cx::Cx;
 use crate::error::{DiagKind, Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -344,9 +345,12 @@ async fn statements(cx: &Cx, lex: &mut Lexer<'_>) -> Result<Stats> {
                     let attrs = lex.attributes().await?;
                     let span = lex.scan.span(t.start, lex.pos);
                     cx.push(
-                        Node::new(format!("Default {lower} attributes"))
-                            .span(span)
-                            .value(Value::Text(attr_text(&attrs))),
+                        Node::new(format!(
+                            "Default {lower_attribute}",
+                            lower_attribute = plural(lower, "attribute")
+                        ))
+                        .span(span)
+                        .value(Value::Text(attr_text(&attrs))),
                     )
                     .await;
                     continue;

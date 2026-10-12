@@ -9,7 +9,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Nodes  [0x1b+0xf6]
     ▾ FBXHeaderExtension — 0 properties  [0x1b+0x48]
       ▾ Children  [0x3a+0x29]
-        ▾ FBXVersion — 1 properties  [0x3a+0x1c]
+        ▾ FBXVersion — 1 property  [0x3a+0x1c]
             [0] I: 7400  [0x51+0x5]
     ▾ Objects — 0 properties  [0x63+0xa1]
       ▾ Children  [0x77+0x8d]
@@ -18,6 +18,6 @@ expression: "common::explore(&display_name(&path), &data)"
             [1] S: "Cube::Geometry"  [0x95+0x13]
             [2] S: "Mesh"  [0xa8+0x9]
           ▾ Children  [0xb1+0x46]
-            ▾ Vertices — 1 properties  [0xb1+0x39]
+            ▾ Vertices — 1 property  [0xb1+0x39]
               ▾ [0] d — 0x100 bytes decompressed  [0xd3+0x17] → 0xc6+0x24
                   Data  [#1:0x0+0x100]

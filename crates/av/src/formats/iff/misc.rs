@@ -9,6 +9,7 @@ use crate::error::Result;
 use crate::fields::{Fields, parse};
 use crate::formats::embedded;
 use crate::formats::iff::{Chunk, Ctx, find, scan, wav};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{peek_text, table};
 use crate::node::Node;
 use crate::record;
@@ -170,11 +171,11 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
     Ok(match (&chunk.ctx.form, &chunk.id) {
         (b"ACON", b"anih") => {
             let h = parse(cx, chunk.data, e, &(), AniHeader::layout).await?;
-            Some(format!("{} frames, {} steps", h.frames, h.steps))
+            Some(format!("{}, {} steps", plural(h.frames, "frame"), h.steps))
         }
         (b"DLS ", b"colh") => {
             let n = cx.read(chunk.data.sub(0, 4)).await?;
-            Some(format!("{} instruments", u32_le(&n, 0).unwrap_or(0)))
+            Some(plural(u32_le(&n, 0).unwrap_or(0), "instrument"))
         }
         (b"DLS ", b"vers") => {
             let v = cx.read(chunk.data.sub(0, 8)).await?;
@@ -186,8 +187,10 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
         (b"DLS ", b"insh") => {
             let h = parse(cx, chunk.data, e, &(), InstrumentHeader::layout).await?;
             Some(format!(
-                "bank {:#x}, program {}, {} regions",
-                h.bank, h.program, h.regions
+                "bank {:#x}, program {}, {}",
+                h.bank,
+                h.program,
+                plural(h.regions, "region")
             ))
         }
         (_, b"fmt ") if &chunk.ctx.form != b"CDXA" && &chunk.ctx.form != b"QLCM" => Some(
@@ -205,13 +208,16 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
         }
         (b"sfbk", b"isng" | b"irom") => Some(peek_text(cx, chunk.data, 64).await?),
         (b"sfbk", b"phdr") => Some(format!("{} presets", records(chunk, 38))),
-        (b"sfbk", b"inst") => Some(format!("{} instruments", records(chunk, 22))),
-        (b"sfbk", b"shdr") => Some(format!("{} samples", records(chunk, 46))),
+        (b"sfbk", b"inst") => Some(plural(records(chunk, 22), "instrument")),
+        (b"sfbk", b"shdr") => Some(plural(records(chunk, 46), "sample")),
         (b"PAL ", b"data") => {
             let h = cx.read(chunk.data.sub(0, 4)).await?;
             Some(format!("{} colors", u16_le(&h, 2).unwrap_or(0)))
         }
-        (b"CDXA", b"data") => Some(format!("{} sectors of 2352 bytes", chunk.size / 2352)),
+        (b"CDXA", b"data") => Some(format!(
+            "{} of 2352 bytes",
+            plural(chunk.size / 2352, "sector")
+        )),
         _ => None,
     })
 }
@@ -373,8 +379,10 @@ pub async fn describe(cx: &Cx, ctx: &Ctx, region: Span) -> Result<Option<String>
             Some(h) => {
                 let h = parse(cx, h.data, e, &(), AniHeader::layout).await?;
                 Some(format!(
-                    "Animated cursor, {} frames, {} steps, {} jiffies per step",
-                    h.frames, h.steps, h.rate
+                    "Animated cursor, {}, {} steps, {} jiffies per step",
+                    plural(h.frames, "frame"),
+                    h.steps,
+                    h.rate
                 ))
             }
             None => None,
@@ -384,8 +392,8 @@ pub async fn describe(cx: &Cx, ctx: &Ctx, region: Span) -> Result<Option<String>
             Some(c) => {
                 let n = cx.read(c.data.sub(0, 4)).await?;
                 Some(format!(
-                    "DLS collection, {} instruments",
-                    u32_le(&n, 0).unwrap_or(0)
+                    "DLS collection, {}",
+                    plural(u32_le(&n, 0).unwrap_or(0), "instrument")
                 ))
             }
             None => Some("DLS collection".to_owned()),

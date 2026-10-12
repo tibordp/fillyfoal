@@ -17,6 +17,7 @@ use crate::bytes::{to_u64, to_usize, u32_le};
 use crate::codec::Codec;
 use crate::cx::{Cx, lock};
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::wire::thrift::compact::{
     field_header, list_header, skip, varint, zigzag,
 };
@@ -258,7 +259,7 @@ async fn value_node(
                 _ => Kind::Plain,
             };
             let count = list_header(data, at).map_or(0, |(n, _, _)| n);
-            node = node.summary(format!("{count} elements"));
+            node = node.summary(plural(count, "element"));
             if state.depth >= MAX_DEPTH {
                 return node.diag(Diagnostic::limit("structures nested too deeply"));
             }
@@ -1255,7 +1256,7 @@ async fn summary(cx: &Cx, buf: &Buf) -> String {
     }
     let mut out = "Parquet".to_owned();
     if let Some(r) = rows {
-        out = format!("{out}, {r} rows");
+        out = format!("{out}, {r_row}", r_row = plural(r, "row"));
     }
     if let Some(g) = groups {
         out = format!("{out}, {g} row groups");
@@ -1299,9 +1300,10 @@ async fn row_groups(cx: Cx, ctx: Ctx) -> Result<()> {
             .min();
         let mut node = Node::new(format!("Row group {g}"))
             .summary(format!(
-                "{rows} rows, {} columns, {}",
+                "{rows_row}, {} columns, {}",
                 cols.len(),
-                crate::formats::util::fmt::size(u64::try_from(bytes).unwrap_or(0))
+                crate::formats::util::fmt::size(u64::try_from(bytes).unwrap_or(0)),
+                rows_row = plural(rows, "row")
             ))
             .lazy(columns, (ctx.clone(), g));
         if let Some(start) = start {
@@ -1325,10 +1327,10 @@ async fn columns(cx: Cx, (ctx, g): (Ctx, usize)) -> Result<()> {
             continue;
         };
         let summary = format!(
-            "{}, {}, {} values",
+            "{}, {}, {}",
             lookup(TYPES, c.leaf.phys.cast_unsigned()).unwrap_or("?"),
             lookup(CODECS, c.codec.cast_unsigned()).unwrap_or("?"),
-            c.num_values
+            plural(c.num_values, "value")
         );
         if let Some(path) = &c.external {
             cx.push(
@@ -1441,9 +1443,9 @@ async fn pages(cx: Cx, (ctx, col, span): (Ctx, usize, Span)) -> Result<()> {
                 .summary({
                     let info = page_info(&data);
                     format!(
-                        "{}, {} values, {}",
+                        "{}, {}, {}",
                         crate::formats::util::fmt::size(compressed),
-                        info.num_values,
+                        plural(info.num_values, "value"),
                         lookup(ENCODINGS, info.encoding.cast_unsigned()).unwrap_or("?")
                     )
                 })
@@ -1755,7 +1757,7 @@ fn run_nodes(runs: &[Run], span: Span, base: usize) -> Vec<Node> {
                         shown.join(" "),
                         if r.count > 32 { " …" } else { "" }
                     )))
-                    .summary(format!("{} values", r.count))
+                    .summary(plural(r.count, "value"))
             }
         })
         .collect()
@@ -1909,7 +1911,11 @@ async fn values(
             cx.emit(
                 group("Dictionary indices", nodes)
                     .span(rest)
-                    .summary(format!("{count} values, {} runs", runs.len())),
+                    .summary(format!(
+                        "{count_value}, {}",
+                        plural(runs.len(), "run"),
+                        count_value = plural(count, "value")
+                    )),
             );
         }
         3 if c.leaf.phys == 0 => {
@@ -1971,8 +1977,9 @@ async fn values(
                 Node::new("Values")
                     .span(rest)
                     .summary(format!(
-                        "{count} values, {}",
-                        lookup(ENCODINGS, e.cast_unsigned()).unwrap_or("unknown encoding")
+                        "{count_value}, {}",
+                        lookup(ENCODINGS, e.cast_unsigned()).unwrap_or("unknown encoding"),
+                        count_value = plural(count, "value")
                     ))
                     .diag(Diagnostic::unsupported("this encoding is not decoded")),
             );
@@ -2105,7 +2112,8 @@ async fn delta_decode(cx: &Cx, data: &[u8], span: Span) -> Delta {
     {
         d.error = Some(
             Diagnostic::malformed(format!(
-                "invalid block layout: {block_size} values in {mb_count} miniblocks"
+                "invalid block layout: {block_size_value} in {mb_count} miniblocks",
+                block_size_value = plural(block_size, "value")
             ))
             .at(span.sub(0, to_u64(pos))),
         );
@@ -2321,7 +2329,11 @@ async fn delta_blocks(cx: Cx, span: Span) -> Result<()> {
             children.push(
                 Node::new(format!("Miniblock {j}"))
                     .span(sub(m.start, m.end))
-                    .summary(format!("bit width {}, {} values", m.width, m.count)),
+                    .summary(format!(
+                        "bit width {}, {}",
+                        m.width,
+                        plural(m.count, "value")
+                    )),
             );
         }
         cx.push(
@@ -2556,8 +2568,8 @@ async fn bloom_filters(cx: Cx, ctx: Ctx) -> Result<()> {
         let children = vec![
             header,
             Node::new("Bitset").span(bitset).summary(format!(
-                "{} blocks of 256 bits (split block, xxHash64)",
-                num_bytes / 32
+                "{} of 256 bits (split block, xxHash64)",
+                plural(num_bytes / 32, "block")
             )),
         ];
         cx.push(

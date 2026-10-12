@@ -11,6 +11,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::vidutil::{self, text, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
@@ -782,7 +783,7 @@ fn item_node(name: String, tag: u16, span: Span, vspan: Span, v: &[u8]) -> Node 
         | 0x4803 => node.value(Value::Text(ul_text(v))),
         0x3b06 | 0x1901 | 0x1902 | 0x4403 | 0x1001 | 0x3f01 | 0x3b0a | 0x3b0b | 0x2f01 => {
             let count = u32_be(v, 0).unwrap_or(0);
-            node.summary(format!("{count} items"))
+            node.summary(plural(count, "item"))
                 .desc("Batch or array of references")
         }
         _ if v.len() <= 16 => node.value(Value::Bytes(v.to_vec())),

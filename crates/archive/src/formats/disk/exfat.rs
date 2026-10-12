@@ -19,6 +19,7 @@ use crate::formats::disk::ntfs::FILE_ATTRIBUTES;
 use crate::formats::disk::{
     assemble, coalesce_stepped, content_node, dos_stamp, fragments_node, size,
 };
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -218,8 +219,8 @@ impl Volume {
         }
         let problem = (to_u64(out.len()) < needed).then(|| {
             Diagnostic::malformed(format!(
-                "cluster chain has {} clusters, {needed} needed",
-                out.len()
+                "cluster chain has {}, {needed} needed",
+                plural(out.len(), "cluster")
             ))
         });
         Ok((out, problem))
@@ -316,7 +317,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     );
     let fat_node = Node::new("FAT")
         .span(fat)
-        .summary(format!("{} entries", bs.cluster_count.saturating_add(2)));
+        .summary(plural(bs.cluster_count.saturating_add(2), "entry"));
     let heap = vol.sub(
         u64::from(bs.heap_offset).saturating_mul(sector),
         u64::from(bs.cluster_count).saturating_mul(cluster),
@@ -350,14 +351,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!(
-        "exFAT filesystem{}, {}, {} clusters of {}",
+        "exFAT filesystem{}, {}, {} of {}",
         if label.is_empty() {
             String::new()
         } else {
             format!(" \"{label}\"")
         },
         size(bs.volume_length.saturating_mul(sector)),
-        bs.cluster_count,
+        plural(bs.cluster_count, "cluster"),
         size(cluster)
     ));
     cx.emit(
@@ -696,7 +697,11 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
                 } else {
                     let raw = cx.read_avail(table.sub(0, 1 << 20)).await?;
                     let used: u32 = raw.iter().map(|b| b.count_ones()).sum();
-                    tnode = tnode.summary(format!("{}, {used} clusters in use", size(table.len)));
+                    tnode = tnode.summary(format!(
+                        "{}, {used_cluster} in use",
+                        size(table.len),
+                        used_cluster = plural(used, "cluster")
+                    ));
                 }
                 cx.push(tnode).await;
             }
@@ -862,7 +867,7 @@ async fn directory_with_entries(cx: Cx, (dir, set): (Dir, Arc<FileSet>)) -> Resu
 fn entry_set_node(set: &FileSet) -> Node {
     Node::new("Directory entries")
         .span(set.span)
-        .summary(format!("{} entries", set.entries.len()))
+        .summary(plural(set.entries.len(), "entry"))
         .lazy(entry_set, Arc::new(set.entries.clone()))
 }
 

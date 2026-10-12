@@ -39,6 +39,7 @@ use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::binutil::{NodeExt, Reader, Tree, dec, ellipsize, hex, text};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -153,7 +154,7 @@ fn datetime(raw: i64) -> (Value, String) {
         .saturating_sub(62_135_596_800);
     (
         Value::Timestamp { unix_seconds: unix },
-        format!("{kind}, {ticks} ticks"),
+        format!("{kind}, {ticks_tick}", ticks_tick = plural(ticks, "tick")),
     )
 }
 
@@ -341,8 +342,10 @@ async fn dotnet_resources(cx: Cx, input: Input) -> Result<()> {
         Node::new("Resource set header")
             .span(h.set)
             .summary(format!(
-                "version {}, {} resources, {} types",
-                h.version.0, h.count.0, h.type_count.0
+                "version {}, {} resources, {}",
+                h.version.0,
+                h.count.0,
+                plural(h.type_count.0, "type")
             ))
             .lazy(set_fields, h.clone()),
     );
@@ -437,7 +440,7 @@ async fn set_fields(cx: Cx, h: Arc<Headers>) -> Result<()> {
         cx.emit(
             Node::new("Types")
                 .span(span)
-                .summary(format!("{} types", h.types.len()))
+                .summary(plural(h.types.len(), "type"))
                 .lazy(type_list, h.clone()),
         );
     }
@@ -451,7 +454,10 @@ async fn set_fields(cx: Cx, h: Arc<Headers>) -> Result<()> {
     cx.emit(
         Node::new("Name hashes")
             .span(h.hashes)
-            .summary(format!("{} hashes, sorted as signed integers", h.count.0))
+            .summary(format!(
+                "{}, sorted as signed integers",
+                plural(h.count.0, "hash")
+            ))
             .lazy(int_table, (h.hashes, true)),
     );
     cx.emit(
@@ -1548,8 +1554,7 @@ impl<'a> Nrbf<'a> {
                     self.i32()?.max(0) as u32
                 };
                 self.field(node, "Null count", at, dec(count.into(), 32));
-                self.tree
-                    .update(node, |n| n.summary(format!("{count} nulls")));
+                self.tree.update(node, |n| n.summary(plural(count, "null")));
                 Got::Nulls(count.into())
             }
             21 | 22 => {
@@ -1721,9 +1726,8 @@ impl<'a> Nrbf<'a> {
             }
         }
         let span = self.span(values_at);
-        self.tree.update(values, |n| {
-            n.span(span).summary(format!("{count} elements"))
-        });
+        self.tree
+            .update(values, |n| n.span(span).summary(plural(count, "element")));
         let span = self.span(start);
         self.register(id, span);
         self.tree.update(node, |n| {
@@ -1808,9 +1812,9 @@ async fn parse_nrbf(cx: &Cx, data: &[u8], input: Input) -> Parsed {
     }
     let root = p.root_class.clone().unwrap_or_else(|| "?".into());
     let summary = format!(
-        "BinaryFormatter stream, root {}, {} records",
+        "BinaryFormatter stream, root {}, {}",
         ellipsize(&root, 80),
-        p.records
+        plural(p.records, "record")
     );
     Parsed {
         tree: Arc::new(p.tree),

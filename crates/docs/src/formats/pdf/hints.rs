@@ -304,7 +304,7 @@ async fn page_entries(cx: Cx, (span, pages, h): (Span, u64, Vec<u64>)) -> Result
     let mut next_id = 0usize;
     for (i, &delta) in objects.iter().enumerate() {
         let get = |v: &[u64]| v.get(i).copied();
-        let mut parts = vec![format!("{} objects", at(0).saturating_add(delta))];
+        let mut parts = vec![plural(at(0).saturating_add(delta), "object")];
         if let Some(len) = get(&lengths) {
             parts.push(format!("{} bytes", at(3).saturating_add(len)));
         }

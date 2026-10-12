@@ -780,7 +780,7 @@ async fn array(cx: &Cx, input: Input) -> Result<()> {
         if index == 1 {
             "1 entry".to_owned()
         } else {
-            format!("{index} entries")
+            plural(index, "entry")
         },
         first.map(|f| format!("; first: {f}")).unwrap_or_default()
     ));
@@ -1059,8 +1059,10 @@ async fn rle_records(cx: Cx, (span, bits): (Span, u8)) -> Result<()> {
                     );
                     (
                         4,
-                        Node::new("Delta")
-                            .summary(format!("skip {dx} pixels right and {dy} rows on")),
+                        Node::new("Delta").summary(format!(
+                            "skip {dx} pixels right and {dy_row} on",
+                            dy_row = plural(dy, "row")
+                        )),
                     )
                 }
                 n => {

@@ -18,6 +18,7 @@ use crate::formats::disk::ntfs::FILE_ATTRIBUTES;
 use crate::formats::disk::{
     assemble, content_node, dos_date, dos_stamp, fragments_node, size, size_summary,
 };
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -428,14 +429,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     ),
                 )
                 .summary(format!(
-                    "{} sectors after the boot sector",
-                    bpb.reserved.saturating_sub(1)
+                    "{} after the boot sector",
+                    plural(bpb.reserved.saturating_sub(1), "sector")
                 )),
         );
     }
     let label = label.trim_end().to_owned();
     cx.annotate(format!(
-        "{} filesystem{}, {}, {} clusters of {}",
+        "{} filesystem{}, {}, {} of {}",
         kind.name(),
         if label.is_empty() || label == "NO NAME" {
             String::new()
@@ -443,7 +444,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             format!(" \"{label}\"")
         },
         size(total.saturating_mul(sector)),
-        clusters,
+        plural(clusters, "cluster"),
         size(cluster),
     ));
 
@@ -913,7 +914,7 @@ async fn file(cx: Cx, (fs, entry, long): (Vol, Span, Option<Span>)) -> Result<()
         cx.emit(
             Node::new("Long name entries")
                 .span(Span::new(start.source, start.offset, len))
-                .summary(format!("{} entries", len / ENTRY))
+                .summary(plural(len / ENTRY, "entry"))
                 .lazy(lfn_entries, Span::new(start.source, start.offset, len)),
         );
     }
@@ -930,7 +931,8 @@ async fn file(cx: Cx, (fs, entry, long): (Vol, Span, Option<Span>)) -> Result<()
         cx.diag(d);
     } else if found < needed {
         cx.diag(Diagnostic::malformed(format!(
-            "cluster chain has {found} clusters, the file size needs {needed}"
+            "cluster chain has {found_cluster}, the file size needs {needed}",
+            found_cluster = plural(found, "cluster")
         )));
     }
     let pieces = Arc::new(crate::formats::disk::coalesce_stepped(&cx, pieces, size).await);

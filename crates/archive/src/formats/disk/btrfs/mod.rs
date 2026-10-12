@@ -20,6 +20,7 @@ use crate::dsl::{Path, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::disk::{crc32c, size, text, uuid_value};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -427,7 +428,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let fs: FsRef = Arc::new(fs);
     cx.emit(
         Node::new("Chunk map")
-            .summary(format!("{} chunks", fs.chunks.len()))
+            .summary(plural(fs.chunks.len(), "chunk"))
             .lazy(chunk_map, fs.clone()),
     );
     for (name, logical) in [("Chunk tree", sb.chunk_root), ("Root tree", sb.root)] {

@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Input, Probe, embedded, embedded_as};
 use crate::node::Node;
@@ -73,7 +74,10 @@ async fn clip_studio(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
         n = n.saturating_add(1);
     }
-    cx.annotate(format!("Clip Studio Paint file, {n} chunks"));
+    cx.annotate(format!(
+        "Clip Studio Paint file, {n_chunk}",
+        n_chunk = plural(n, "chunk")
+    ));
     Ok(())
 }
 

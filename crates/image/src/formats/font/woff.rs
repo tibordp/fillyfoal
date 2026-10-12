@@ -15,7 +15,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::font::{glyphs, tables};
 use crate::formats::util::datakit::size;
-use crate::formats::util::fmt::fourcc;
+use crate::formats::util::fmt::{fourcc, plural};
 use crate::formats::{Codec, Format, Input, Probe, content};
 use crate::node::{Count, Node};
 use crate::record;
@@ -98,17 +98,17 @@ pub async fn woff(cx: Cx, input: Input) -> Result<()> {
     let h = parse(&cx, hspan, BE, &(), WoffHeader::layout).await?;
     cx.emit(WoffHeader::node("Header", hspan, BE));
     cx.annotate(format!(
-        "WOFF {}.{}, {} tables, {} as sfnt",
+        "WOFF {}.{}, {}, {} as sfnt",
         h.major,
         h.minor,
-        h.tables,
+        plural(h.tables, "table"),
         size(h.sfnt_size.into())
     ));
     let dir = file.sub_exact(WoffHeader::SIZE, u64::from(h.tables).saturating_mul(20))?;
     cx.emit(
         Node::new("Table directory")
             .span(dir)
-            .summary(format!("{} tables", h.tables)),
+            .summary(plural(h.tables, "table")),
     );
     metadata_nodes(
         &cx,
@@ -265,10 +265,10 @@ pub async fn woff2(cx: Cx, input: Input) -> Result<()> {
     let h = parse(&cx, hspan, BE, &(), Woff2Header::layout).await?;
     cx.emit(Woff2Header::node("Header", hspan, BE));
     cx.annotate(format!(
-        "WOFF2 {}.{}, {} tables, {} as sfnt, {} compressed",
+        "WOFF2 {}.{}, {}, {} as sfnt, {} compressed",
         h.major,
         h.minor,
-        h.tables,
+        plural(h.tables, "table"),
         size(h.sfnt_size.into()),
         size(h.compressed.into())
     ));
@@ -302,7 +302,7 @@ pub async fn woff2(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Table directory")
             .span(dir)
-            .summary(format!("{} tables", h.tables))
+            .summary(plural(h.tables, "table"))
             .lazy(woff2_directory, (entries.clone(),)),
     );
     let mut stream_at = dir_end;

@@ -12,6 +12,7 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::arcutil::human_size;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{
     Bits, CRC16_BUYPASS, FrameRef, FrameSyntax, bits_node, duration, frames_node, leaf,
 };
@@ -442,8 +443,8 @@ fn eac3_bsi(b: &mut Bits<'_>) -> Result<Info> {
             .field("Blocks per frame code", 2)
             .with(|v, n| {
                 n.summary(format!(
-                    "{} blocks of 256 samples",
-                    [1, 2, 3, 6].get(to_usize(v)).copied().unwrap_or(0)
+                    "{} of 256 samples",
+                    plural([1, 2, 3, 6].get(to_usize(v)).copied().unwrap_or(0), "block")
                 ))
             })
             .emit()?;
@@ -475,7 +476,7 @@ fn eac3_bsi(b: &mut Bits<'_>) -> Result<Info> {
         chanmap = Some(
             b.field("Channel map", 16)
                 .flags(CHANMAP)
-                .with(|v, n| n.summary(format!("{} channels", chanmap_channels(v))))
+                .with(|v, n| n.summary(plural(chanmap_channels(v), "channel")))
                 .emit()?,
         );
     }

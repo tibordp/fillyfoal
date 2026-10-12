@@ -490,7 +490,7 @@ async fn shx(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Index")
             .span(file.tail(100))
-            .summary(format!("{count} records"))
+            .summary(crate::formats::util::fmt::plural(count, "record"))
             .lazy(shx_index, file.tail(100)),
     );
     let kind = lookup(SHAPE_TYPES, b.shape.into()).unwrap_or("unknown shapes");
@@ -690,7 +690,7 @@ async fn dbf(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Fields")
             .span(descriptors)
-            .summary(format!("{count} fields"))
+            .summary(crate::formats::util::fmt::plural(count, "field"))
             .lazy(dbf_fields, descriptors),
     );
     let after = DbfHeader::SIZE.saturating_add(count.saturating_mul(DbfField::SIZE));
@@ -723,7 +723,7 @@ async fn dbf(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Records")
             .span(records)
-            .summary(format!("{} records", h.records))
+            .summary(crate::formats::util::fmt::plural(h.records, "record"))
             .lazy(
                 dbf_records,
                 (
@@ -737,8 +737,8 @@ async fn dbf(cx: Cx, input: Input) -> Result<()> {
     let version = lookup(DBF_VERSIONS, h.version.into()).unwrap_or("dBase");
     let names: Vec<String> = fields.iter().map(|f| f.0.clone()).collect();
     cx.annotate(format!(
-        "{version}, {} records × [{}]",
-        h.records,
+        "{version}, {} × [{}]",
+        crate::formats::util::fmt::plural(h.records, "record"),
         names.join(", ")
     ));
     Ok(())
@@ -1015,17 +1015,19 @@ async fn las(cx: Cx, input: Input) -> Result<()> {
         Node::new("Point records")
             .span(file.sub(offset, len))
             .summary(format!(
-                "{points} points × {} bytes (format {})",
+                "{points_point} × {} bytes (format {})",
                 h.point_length,
-                h.point_format & 0x3f
+                h.point_format & 0x3f,
+                points_point = crate::formats::util::fmt::plural(points, "point")
             )),
     );
     las_evlrs(&cx, file, extra).await?;
     cx.annotate(format!(
-        "LAS {}.{}, {points} points, by {}",
+        "LAS {}.{}, {points_point}, by {}",
         h.major,
         h.minor,
-        h.software.trim_end()
+        h.software.trim_end(),
+        points_point = crate::formats::util::fmt::plural(points, "point")
     ));
     Ok(())
 }

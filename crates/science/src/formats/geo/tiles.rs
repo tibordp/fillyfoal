@@ -10,6 +10,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Path, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::pace::Pace;
 use crate::formats::util::wire::flatbuffers::mem::{self as fb, Table as FbTable};
 use crate::formats::util::wire::protobuf::{self as pb, varint, zigzag};
@@ -154,7 +155,7 @@ async fn pmtiles(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Tile data")
             .span(state.data)
-            .summary(format!("{} tiles", h.contents)),
+            .summary(plural(h.contents, "tile")),
     );
     let kind = crate::value::lookup(TILE_TYPES, h.tile_type.into()).unwrap_or("unknown");
     cx.annotate(format!(
@@ -280,7 +281,10 @@ async fn directory(cx: Cx, (state, dir, path): (PmState, Span, Path)) -> Result<
             None => format!("Tile {id}"),
         };
         let summary = if run > 1 {
-            format!("{len} bytes, repeated for {run} tiles")
+            format!(
+                "{len} bytes, repeated for {run_tile}",
+                run_tile = plural(run, "tile")
+            )
         } else {
             format!("{len} bytes")
         };
@@ -407,7 +411,7 @@ async fn flatgeobuf(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Features")
             .span(data)
-            .summary(format!("{features} features"))
+            .summary(plural(features, "feature"))
             .lazy(fgb_features, (data, columns)),
     );
     let geom = crate::value::lookup(GEOMETRY_TYPES, gtype.into()).unwrap_or("unknown");
@@ -544,8 +548,9 @@ fn feature_summary(buf: &[u8], columns: &Columns) -> Option<String> {
     let ty = g.u8(buf, 6).unwrap_or(0);
     let points = g.vector(buf, 1, 8).map_or(0, |v| v.0 / 2);
     let mut s = format!(
-        "{}, {points} points",
-        crate::value::lookup(GEOMETRY_TYPES, ty.into()).unwrap_or("geometry")
+        "{}, {points_point}",
+        crate::value::lookup(GEOMETRY_TYPES, ty.into()).unwrap_or("geometry"),
+        points_point = plural(points, "point")
     );
     let props = properties(buf, columns);
     if let Some((name, value, _)) = props.first() {
@@ -649,7 +654,11 @@ async fn fgb_feature(cx: Cx, (body, columns): (Span, Columns)) -> Result<()> {
                 })
                 .collect();
             let more = if n > 4 { ", …" } else { "" };
-            node = node.summary(format!("{n} points: {}{more}", coords.join(", ")));
+            node = node.summary(format!(
+                "{n_point}: {}{more}",
+                coords.join(", "),
+                n_point = plural(n, "point")
+            ));
         }
         if let Some((n, _)) = g.vector(&buf, 7, 4) {
             node = node.summary(format!("{n} parts"));
@@ -749,14 +758,14 @@ async fn mvt(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Layer {name}"))
                 .span(span)
-                .summary(format!("{features} features"))
+                .summary(plural(features, "feature"))
                 .lazy(mvt_layer, body),
         )
         .await;
     }
     cx.annotate(format!(
-        "vector tile, {} layers: {}",
-        names.len(),
+        "vector tile, {}: {}",
+        plural(names.len(), "layer"),
         names.join(", ")
     ));
     Ok(())
@@ -836,7 +845,11 @@ async fn geometry_summary(pace: &mut Pace<'_>, cmds: &[u64]) -> String {
         }
         i = i.saturating_add(1).saturating_add(to_usize(params));
     }
-    format!("{ops} commands, {points} points")
+    format!(
+        "{ops_command}, {points_point}",
+        ops_command = plural(ops, "command"),
+        points_point = plural(points, "point")
+    )
 }
 
 /// A layer's fields and its tables of keys and values.
@@ -1052,7 +1065,8 @@ async fn o5m(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
     }
     cx.annotate(format!(
-        "o5m, {nodes} nodes, {ways} ways, {relations} relations"
+        "o5m, {nodes_node}, {ways} ways, {relations} relations",
+        nodes_node = plural(nodes, "node")
     ));
     Ok(())
 }

@@ -142,19 +142,19 @@ async fn nib(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Objects")
             .span(objects)
-            .summary(format!("{} objects", h.objects))
+            .summary(crate::formats::util::fmt::plural(h.objects, "object"))
             .lazy(nib_objects, nib.clone()),
     );
     cx.emit(
         Node::new("Keys")
             .span(keys_span)
-            .summary(format!("{} keys", h.keys))
+            .summary(crate::formats::util::fmt::plural(h.keys, "key"))
             .lazy(nib_strings, (nib.clone(), true)),
     );
     cx.emit(
         Node::new("Values")
             .span(values_span)
-            .summary(format!("{} values", h.values)),
+            .summary(crate::formats::util::fmt::plural(h.values, "value")),
     );
     cx.emit(
         Node::new("Class names")
@@ -164,8 +164,10 @@ async fn nib(cx: Cx, input: Input) -> Result<()> {
     );
     let root = nib.classes.first().cloned().unwrap_or_default();
     cx.annotate(format!(
-        "NIB archive v{}, {} objects, {} classes (first: {root})",
-        h.version, h.objects, h.classes
+        "NIB archive v{}, {}, {} (first: {root})",
+        h.version,
+        crate::formats::util::fmt::plural(h.objects, "object"),
+        crate::formats::util::fmt::plural(h.classes, "class")
     ));
     Ok(())
 }
@@ -196,7 +198,7 @@ async fn nib_objects(cx: Cx, nib: Arc<Nib>) -> Result<()> {
             Node::new(format!("Object {i}"))
                 .span(cur.since(start))
                 .value(text(name))
-                .summary(format!("{count} values"))
+                .summary(crate::formats::util::fmt::plural(count, "value"))
                 .lazy(nib_object, (nib.clone(), first, count)),
         )
         .await;
@@ -362,7 +364,7 @@ async fn metallib(cx: Cx, input: Input) -> Result<()> {
     }
     let fl = Node::new("Functions")
         .span(list)
-        .summary(format!("{count} functions"));
+        .summary(crate::formats::util::fmt::plural(count, "function"));
     cx.emit(fl.lazy(metal_functions, (input, bitcode, Arc::new(entries))));
     cx.emit(
         Node::new("Bitcode")
@@ -370,8 +372,9 @@ async fn metallib(cx: Cx, input: Input) -> Result<()> {
             .summary(size(bitcode.len)),
     );
     cx.annotate(format!(
-        "Metal library, {count} functions: {}",
-        names.join(", ")
+        "Metal library, {count_function}: {}",
+        names.join(", "),
+        count_function = crate::formats::util::fmt::plural(count, "function")
     ));
     Ok(())
 }
@@ -607,7 +610,7 @@ async fn car(cx: Cx, input: Input) -> Result<()> {
             "EXTENDED_METADATA" => struct_node(name.clone(), span, LE, (), car_metadata),
             "KEYFORMAT" => Node::new(name.clone())
                 .span(span)
-                .summary(format!("{} attributes", tokens.len()))
+                .summary(crate::formats::util::fmt::plural(tokens.len(), "attribute"))
                 .lazy(key_format, (span, tokens.clone())),
             "RENDITIONS" => Node::new(name.clone())
                 .span(span)
@@ -635,7 +638,7 @@ async fn car(cx: Cx, input: Input) -> Result<()> {
     cx.push(
         Node::new("Block index")
             .span(index)
-            .summary(format!("{} slots", bom.block_count()))
+            .summary(crate::formats::util::fmt::plural(bom.block_count(), "slot"))
             .lazy(block_index, (bom.clone(), index)),
     )
     .await;
@@ -1044,7 +1047,7 @@ async fn rendition(
     cx.emit(
         Node::new("Key")
             .span(key)
-            .summary(format!("{} attributes", key.len / 2))
+            .summary(crate::formats::util::fmt::plural(key.len / 2, "attribute"))
             .lazy(rendition_key, (key, tokens)),
     );
     let head = value.sub(0, 184);

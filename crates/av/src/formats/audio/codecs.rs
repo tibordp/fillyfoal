@@ -6,6 +6,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -118,8 +119,9 @@ async fn psion_wve(cx: Cx, input: Input) -> Result<()> {
     f.u16("Repeats").emit()?;
     cx.emit(Node::new("A-law samples (8 kHz)").span(file.tail(32)));
     cx.annotate(format!(
-        "Psion A-law sound, {samples} samples ({:.2} s)",
-        f64::from(samples) / 8000.0
+        "Psion A-law sound, {samples_sample} ({:.2} s)",
+        f64::from(samples) / 8000.0,
+        samples_sample = plural(samples, "sample")
     ));
     Ok(())
 }

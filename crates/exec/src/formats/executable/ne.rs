@@ -15,7 +15,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::util::arcutil::push_nodes;
 use crate::formats::util::binutil::data_node;
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::name_or;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -181,7 +181,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         "executable"
     };
     cx.annotate(format!(
-        "NE {kind} ({} {}), module {module}{}, {} segments",
+        "NE {kind} ({} {}), module {module}{}, {}",
         name_or(TARGET_OS, h.exetyp.into(), "OS"),
         format_args!("{}.{}", h.expver >> 8, h.expver & 0xff),
         if description.is_empty() {
@@ -189,7 +189,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         } else {
             format!(", {:?}", clip(&description, 80))
         },
-        h.cseg
+        plural(h.cseg, "segment")
     ));
 
     // Imported modules.
@@ -217,7 +217,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Segment Table")
             .span(segtab)
-            .summary(format!("{} segments", h.cseg))
+            .summary(plural(h.cseg, "segment"))
             .lazy(segments, (file, segtab, shift, imports)),
     );
     // Resources.
@@ -279,7 +279,7 @@ fn name_list(
         .collect();
     Node::new(label)
         .span(span)
-        .summary(format!("{} names", nodes.len()))
+        .summary(plural(nodes.len(), "name"))
         .lazy(push_nodes, Arc::new(nodes))
 }
 
@@ -367,7 +367,7 @@ async fn segment(
     cx.emit(
         Node::new("Relocations")
             .span(span)
-            .summary(format!("{n} records"))
+            .summary(plural(n, "record"))
             .lazy(relocations, (span, n, imports)),
     );
     Ok(())

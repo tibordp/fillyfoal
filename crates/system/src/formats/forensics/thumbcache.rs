@@ -11,6 +11,7 @@ use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::datakit::clip;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -155,8 +156,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         count = count.saturating_add(1);
     }
     cx.annotate(format!(
-        "Windows thumbnail cache ({}), {count} entries",
-        crate::value::lookup(VERSIONS, version.into()).unwrap_or("unknown version")
+        "Windows thumbnail cache ({}), {count_entry}",
+        crate::value::lookup(VERSIONS, version.into()).unwrap_or("unknown version"),
+        count_entry = plural(count, "entry")
     ));
     Ok(())
 }

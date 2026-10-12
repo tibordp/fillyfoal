@@ -14,7 +14,7 @@ expression: "common::explore(&display_name(&path), &data)"
       data size: 640  [0x1c+0x8]
       Sample count: 160  [0x24+0x8]
       Table length: 1  [0x2c+0x4]
-    ▾ Size table — 1 entries  [0x30+0xc]
+    ▾ Size table — 1 entry  [0x30+0xc]
       ▾ Entry 0 — axml: 252 bytes  [0x30+0xc]
           Chunk ID: "axml"  [0x30+0x4]
           Size: 252  [0x34+0x8]

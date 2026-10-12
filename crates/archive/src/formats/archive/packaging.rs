@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::text::scan::head_lines;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::uint;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
@@ -110,11 +111,10 @@ async fn solaris_pkg(cx: Cx, input: Input) -> Result<()> {
         if let (Some(name), Some(parts_n), Some(size)) = (parts.next(), parts.next(), parts.next())
         {
             packages.push(name.to_owned());
-            cx.emit(
-                Node::new(name.to_owned())
-                    .span(*span)
-                    .summary(format!("{parts_n} part(s), up to {size} blocks")),
-            );
+            cx.emit(Node::new(name.to_owned()).span(*span).summary(format!(
+                "{parts_n} part(s), up to {size_block}",
+                size_block = plural(size, "block")
+            )));
         }
     }
     cx.emit(Node::new("Header").span(file.sub(0, end)));

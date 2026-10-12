@@ -24,6 +24,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::Input;
 use crate::formats::science::numarray::num;
+use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, Value, lookup};
@@ -867,7 +868,11 @@ async fn subset_list(cx: Cx, (data, subsets): (Span, Arc<Vec<Subset>>)) -> Resul
         cx.push(
             Node::new(format!("Subset {}", i.saturating_add(1)))
                 .span(span)
-                .summary(format!("{} elements: {} …", s.len(), preview.join(", ")))
+                .summary(format!(
+                    "{}: {} …",
+                    plural(s.len(), "element"),
+                    preview.join(", ")
+                ))
                 .lazy(subset, (data, subsets.clone(), i)),
         )
         .await;

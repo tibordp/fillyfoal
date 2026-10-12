@@ -13,7 +13,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::binutil::{Reader, get_at};
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{plural, size};
 use crate::formats::util::val::{hex, text, uint};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -816,7 +816,7 @@ pub(crate) async fn header<I: Image + Clone + Send + Sync + 'static>(
     let table = table.sub(0, n.saturating_mul(entry));
     let mut node = Node::new("Table")
         .span(table)
-        .summary(format!("{n} entries"))
+        .summary(plural(n, "entry"))
         .lazy(
             self::table::<I>,
             (

@@ -11,6 +11,7 @@ use crate::formats::tracker::{
     Cell, Note, Pointers, SampleData, letter_effect, named, order_node, pcm_bytes, pointed,
     row_summary, schism_version,
 };
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -163,19 +164,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Patterns")
             .span(patterns)
-            .summary(format!("{} patterns", h.patterns))
+            .summary(plural(h.patterns, "pattern"))
             .lazy(list_patterns, (file, patterns)),
     );
     if h.default_pan == 252 {
         cx.emit(Node::new("Channel panning").span(file.sub(at, 32)));
     }
     cx.annotate(format!(
-        "S3M, {}, {} channels, {} orders, {} patterns, {} instruments — {}",
+        "S3M, {}, {}, {}, {}, {} — {}",
         tracker(h.tracker, &h._reserved2),
-        used_channels(&h.channels),
-        h.orders,
-        h.patterns,
-        h.instruments,
+        plural(used_channels(&h.channels), "channel"),
+        plural(h.orders, "order"),
+        plural(h.patterns, "pattern"),
+        plural(h.instruments, "instrument"),
         named(&h.title)
     ));
     Ok(())

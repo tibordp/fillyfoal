@@ -31,6 +31,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::executable::pe::tables::MACHINE_SHORT;
 use crate::formats::util::arcutil::push_nodes;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -549,7 +550,8 @@ async fn pdb2(cx: Cx, input: Input) -> Result<()> {
     let dir = f.u32("Stream directory size").emit()?;
     cx.emit(Node::new("Blocks").span(file.tail(u64::from(block_size))));
     cx.annotate(format!(
-        "PDB 2.00, {blocks} blocks of {block_size} bytes, directory {dir} bytes"
+        "PDB 2.00, {blocks_block} of {block_size} bytes, directory {dir} bytes",
+        blocks_block = plural(blocks, "block")
     ));
     Ok(())
 }

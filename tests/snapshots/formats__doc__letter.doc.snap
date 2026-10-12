@@ -24,7 +24,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ DIFAT — 1 FAT sectors  [0x4c+0x1b4]
       FAT sector 0: 0  [0x4c+0x4] → 0x200+0x200
       Unused entries: 0xffffffff — 108 × FREESECT  [0x50+0x1b0]
-  ▾ FAT — 1 sectors
+  ▾ FAT — 1 sector
     ▾ FAT sector 0 — sector 0: entries for sectors 0..128  [0x200+0x200]
         Sector 0: 4294967293 — FATSECT  [0x200+0x4]
         Sector 1: 4294967295 — FREESECT  [0x204+0x4]
@@ -683,7 +683,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ Text — "Hello, Word\rA bold and red italic paragraph.\rPage \u{13} PAGE \u{14}1\u{15}"  [#7:0x7ce+0x15]
           Main document: "Hello, Word\rA bold and red italic paragraph.\rPage \u{13} PAGE \u{14}1\u{15}, see \u{13} HYPERLINK \"https://example.org/\"\u{1}\u{14}example.org\u{15}.\rFirst item\rSecond item\ra1\u{7}b1\u{7}\u{7}\u{c}Two columns of text in a second section.\u{2}\u{c}Ünïcödé — end.\r" — 204 characters from CP 0
           Footnotes: "\u{2}\tA footnote.\r\r" — 15 characters from CP 204
-        ▾ Pcdt — 1 pieces  [#7:0x7ce+0x15]
+        ▾ Pcdt — 1 piece  [#7:0x7ce+0x15]
             clxt: 0x2  [#7:0x7ce+0x1]
             lcb: 16  [#7:0x7cf+0x4]
           ▾ CPs — 2 character positions  [#7:0x7d3+0x8]

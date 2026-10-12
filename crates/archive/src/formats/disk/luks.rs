@@ -195,10 +195,10 @@ async fn key_slots(cx: Cx, (disk, span, key_bytes): (Span, Span, u32)) -> Result
         if slot.state == LUKS1_SLOT_ACTIVE {
             node = node
                 .summary(format!(
-                    "enabled, {} PBKDF2 iterations, {} of AF-split key material ({} stripes)",
+                    "enabled, {} PBKDF2 iterations, {} of AF-split key material ({})",
                     slot.iterations,
                     size(material.len),
-                    slot.stripes
+                    plural(slot.stripes, "stripe")
                 ))
                 .target(material);
         } else {
@@ -396,8 +396,9 @@ async fn luks2(cx: &Cx, input: Input) -> Result<()> {
                 crate::bytes::align_up(key_size.saturating_mul(stripes), 512),
             ),
             summary: format!(
-                "{}-bit key, {kdf}, AF {stripes} stripes, area encrypted with {enc}{priority}",
-                key_size.saturating_mul(8)
+                "{}-bit key, {kdf}, AF {stripes_stripe}, area encrypted with {enc}{priority}",
+                key_size.saturating_mul(8),
+                stripes_stripe = plural(stripes, "stripe")
             ),
         });
     }

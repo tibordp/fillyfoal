@@ -24,7 +24,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Bits per sample: 16  [0x44+0x2]
       Channels: 2  [0x46+0x2]
       Sample rate: 44100  [0x48+0x4]
-  ▾ Seek table — 1 entries  [0x4c+0x4]
+  ▾ Seek table — 1 entry  [0x4c+0x4]
     ▾ Frame 0 — at 0x7c  [0x4c+0x4]
         Offset: 0x7c  [0x4c+0x4]
   ▾ WAV header — WAV PCM 16-bit, 44.1 kHz, stereo, 100 ms  [0x50+0x2c]

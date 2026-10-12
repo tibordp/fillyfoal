@@ -12,7 +12,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Folder 0: "e18ee67232545172093ce053ae9d2c73" — 2 entries  [0x14+0x34]
       Entry 0: "bf215181b5140522137b3d4f6b73544a"  [0x28+0x10]
       Entry 1: "b83a886a5c437ccd9ac15473fd6f1788"  [0x38+0x10]
-  ▾ Folder 1: "ec559fc895e8cc77ef0c4d6fdff5bdcb" — 1 entries  [0x48+0x24]
+  ▾ Folder 1: "ec559fc895e8cc77ef0c4d6fdff5bdcb" — 1 entry  [0x48+0x24]
       Entry 0: "c984d06aafbecf6bc55569f964148ea3"  [0x5c+0x10]
     Encrypted data  [0x6c+0x60]
       ! note: requires the wallet password

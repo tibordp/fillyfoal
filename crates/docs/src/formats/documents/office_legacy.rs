@@ -12,7 +12,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::{hex, text};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -349,13 +349,14 @@ async fn lotus(cx: Cx, input: Input) -> Result<()> {
     }
     let product = lookup(versions, version.into()).unwrap_or("unknown version");
     cx.annotate(format!(
-        "{}{product}, {records} records, {cells} cells{}",
+        "{}{product}, {records_record}, {cells} cells{}",
         if works {
             "Microsoft Works spreadsheet, "
         } else {
             ""
         },
-        dims.map(|d| format!(", range {d}")).unwrap_or_default()
+        dims.map(|d| format!(", range {d}")).unwrap_or_default(),
+        records_record = plural(records, "record")
     ));
     Ok(())
 }
@@ -491,7 +492,10 @@ async fn sylk(cx: Cx, input: Input) -> Result<()> {
                     .iter()
                     .find_map(|f| f.strip_prefix('X'))
                     .unwrap_or("?");
-                bounds = format!("{rows} rows × {cols} columns");
+                bounds = format!(
+                    "{rows_row} × {cols} columns",
+                    rows_row = plural(rows, "row")
+                );
             }
             "C" | "F" => {
                 for f in fields.iter().skip(1) {
@@ -670,7 +674,8 @@ async fn dif(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "DIF table {title:?}, {vectors} columns × {tuples} rows"
+        "DIF table {title:?}, {vectors} columns × {tuples_row}",
+        tuples_row = plural(tuples, "row")
     ));
     Ok(())
 }
@@ -798,8 +803,9 @@ async fn qif(cx: Cx, input: Input) -> Result<()> {
     }
     let _ = section;
     cx.annotate(format!(
-        "Quicken QIF, {entries} entries ({})",
-        sections.join(", ")
+        "Quicken QIF, {entries_entry} ({})",
+        sections.join(", "),
+        entries_entry = plural(entries, "entry")
     ));
     Ok(())
 }
@@ -1032,7 +1038,7 @@ async fn ofx(cx: Cx, input: Input) -> Result<()> {
     }
     cx.emit(
         header_node
-            .summary(format!("{} keys", keys.len()))
+            .summary(plural(keys.len(), "key"))
             .lazy(ofx_header, keys),
     );
     for &i in &doc.roots {
@@ -1054,7 +1060,7 @@ async fn ofx(cx: Cx, input: Input) -> Result<()> {
         .next()
         .and_then(|e| markup_child(&doc, e, "BALAMT").map(str::to_owned));
     cx.annotate(format!(
-        "OFX {version} statement{}, {transactions} transactions{}",
+        "OFX {version} statement{}, {transactions_transaction}{}",
         if account.is_empty() {
             String::new()
         } else {
@@ -1062,7 +1068,8 @@ async fn ofx(cx: Cx, input: Input) -> Result<()> {
         },
         balance
             .map(|b| format!(", balance {b} {currency}"))
-            .unwrap_or_default()
+            .unwrap_or_default(),
+        transactions_transaction = plural(transactions, "transaction")
     ));
     Ok(())
 }
@@ -1338,15 +1345,15 @@ async fn ami_pro(cx: Cx, input: Input) -> Result<()> {
             .map(|(_, t)| *t);
         let mut node = Node::new(format!("[{name}]"))
             .span(file.sub(*start, end.saturating_sub(*start)))
-            .summary(format!("{} lines", list.len()));
+            .summary(plural(list.len(), "line"));
         if let Some(t) = title {
             node = node.desc(t);
         }
         cx.push(node.lazy(ami_lines, (file, list.clone()))).await;
     }
     cx.annotate(format!(
-        "Ami Pro document (format {version}), {} sections, {body_lines} text lines",
-        sections.len()
+        "Ami Pro document (format {version}), {}, {body_lines} text lines",
+        plural(sections.len(), "section")
     ));
     Ok(())
 }
@@ -1379,7 +1386,8 @@ async fn money(cx: Cx, input: Input) -> Result<()> {
     crate::formats::data::jet::dissect(cx.clone(), input).await?;
     let pages = input.span.len / 4096;
     cx.annotate(format!(
-        "Microsoft Money file (MSISAM, Jet 4 pages), {pages} pages of 4 KiB"
+        "Microsoft Money file (MSISAM, Jet 4 pages), {pages_page} of 4 KiB",
+        pages_page = plural(pages, "page")
     ));
     Ok(())
 }
@@ -1502,9 +1510,10 @@ async fn winword2(cx: Cx, input: Input) -> Result<()> {
     );
     cx.emit(Node::new("Formatting and tables").span(file.tail(u64::from(fc_mac))));
     cx.annotate(format!(
-        "Word for Windows {} document, {}, {words} words",
+        "Word for Windows {} document, {}, {words_word}",
         if ident == 0xa5db { "2.0" } else { "1.x" },
-        crate::formats::util::lcid::display_name(lid.into()).unwrap_or("unknown language")
+        crate::formats::util::lcid::display_name(lid.into()).unwrap_or("unknown language"),
+        words_word = plural(words, "word")
     ));
     Ok(())
 }

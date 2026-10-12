@@ -23,6 +23,7 @@ use crate::dsl::{Path, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::disk::{crc32c_update, size, text, unix_time, uuid_value};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -588,7 +589,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
     let label = crate::text::until_nul(&sb.volume_name);
     cx.annotate(format!(
-        "{kind} filesystem{}, {}, {}-byte blocks, {} inodes ({} free)",
+        "{kind} filesystem{}, {}, {}-byte blocks, {} ({} free)",
         if label.is_empty() {
             String::new()
         } else {
@@ -596,7 +597,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         },
         size(blocks.saturating_mul(block)),
         block,
-        sb.inodes,
+        plural(sb.inodes, "inode"),
         sb.free_inodes
     ));
     if sb.blocks_per_group == 0 || sb.inodes_per_group == 0 {
@@ -679,11 +680,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut descs = Node::new("Block group descriptors")
         .summary(if meta_bg && contiguous < groups {
             format!(
-                "{groups} groups of {} blocks; META_BG from group {contiguous}",
-                sb.blocks_per_group
+                "{groups_group} of {} blocks; META_BG from group {contiguous}",
+                sb.blocks_per_group,
+                groups_group = plural(groups, "group")
             )
         } else {
-            format!("{groups} groups of {} blocks", sb.blocks_per_group)
+            format!(
+                "{groups_group} of {} blocks",
+                sb.blocks_per_group,
+                groups_group = plural(groups, "group")
+            )
         })
         .lazy(group_descriptors, fs.clone());
     if fs.gdt.len > 0 {
@@ -692,7 +698,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(descs);
     cx.emit(
         Node::new("Block groups")
-            .summary(format!("{groups} groups"))
+            .summary(plural(groups, "group"))
             .lazy(block_groups, fs.clone()),
     );
     cx.emit(Node::new("Root directory").summary("inode 2").lazy(
@@ -726,7 +732,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if !special.is_empty() {
         cx.emit(
             Node::new("Special inodes")
-                .summary(format!("{} inodes", special.len()))
+                .summary(plural(special.len(), "inode"))
                 .lazy(special_inodes, (fs.clone(), Arc::new(special))),
         );
     }
@@ -876,7 +882,7 @@ async fn group(cx: Cx, (fs, g): (FsRef, u64)) -> Result<()> {
             cx.emit(
                 Node::new("Group descriptors (backup)")
                     .span(fs.blocks_span(first.saturating_add(1), gdt_blocks))
-                    .summary(format!("{gdt_blocks} blocks")),
+                    .summary(plural(gdt_blocks, "block")),
             );
         }
         if fs.reserved_gdt > 0 {
@@ -886,7 +892,10 @@ async fn group(cx: Cx, (fs, g): (FsRef, u64)) -> Result<()> {
                         first.saturating_add(1).saturating_add(gdt_blocks),
                         fs.reserved_gdt,
                     ))
-                    .summary(format!("{} blocks for online resizing", fs.reserved_gdt)),
+                    .summary(format!(
+                        "{} for online resizing",
+                        plural(fs.reserved_gdt, "block")
+                    )),
             );
         }
     }
@@ -964,19 +973,19 @@ async fn group(cx: Cx, (fs, g): (FsRef, u64)) -> Result<()> {
         Node::new("Inode table")
             .span(table)
             .summary(format!(
-                "blocks {}–{}, {} inodes",
+                "blocks {}–{}, {}",
                 gd.inode_table,
                 gd.inode_table
                     .saturating_add(table.len.div_ceil(fs.block))
                     .saturating_sub(1),
-                fs.inodes_per_group
+                plural(fs.inodes_per_group, "inode")
             ))
             .lazy(inode_table, (fs.clone(), g)),
     );
     if !block_uninit {
         cx.emit(
             Node::new("Free blocks")
-                .summary(format!("{} blocks", gd.free_blocks))
+                .summary(plural(gd.free_blocks, "block"))
                 .lazy(free_blocks, (fs.clone(), g)),
         );
     }

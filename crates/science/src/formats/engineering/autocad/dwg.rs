@@ -49,6 +49,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
@@ -592,7 +593,10 @@ async fn r2004(cx: Cx, input: Input, ver: Ver) -> Result<()> {
     cx.emit(
         Node::new("Section page map")
             .span(map_header.sub(0, 0x14))
-            .summary(format!("page {map_id}, {} entries", page_map.len()))
+            .summary(format!(
+                "page {map_id}, {}",
+                plural(page_map.len(), "entry")
+            ))
             .lazy(page_map_node, (file, map_header, map_data)),
     );
     let Some(&(_, sm_address, _, _)) = page_map
@@ -609,7 +613,7 @@ async fn r2004(cx: Cx, input: Input, ver: Ver) -> Result<()> {
     cx.emit(
         Node::new("Section map")
             .span(sm_header)
-            .summary(format!("{count} sections"))
+            .summary(plural(count, "section"))
             .lazy(section_map_node, (sm_header, sm_data)),
     );
     // Page number to address, the first entry winning (as a linear search

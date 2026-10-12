@@ -8,6 +8,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
 use crate::formats::tracker::{named, order_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{fourcc, peek_text, table};
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Head, Input, Probe};
@@ -87,7 +88,7 @@ pub async fn mtm(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Tracks")
             .span(tracks)
-            .summary(format!("{} tracks of 64 rows", h.tracks)),
+            .summary(format!("{} of 64 rows", plural(h.tracks, "track"))),
     );
     at = at.saturating_add(tracks.len);
     let seq = file.sub(
@@ -106,12 +107,12 @@ pub async fn mtm(cx: Cx, input: Input) -> Result<()> {
     }
     cx.emit(Node::new("Sample data").span(file.tail(at)));
     cx.annotate(format!(
-        "MTM {}.{}, {} channels, {} patterns, {} samples — {}",
+        "MTM {}.{}, {}, {}, {} — {}",
         h.version >> 4,
         h.version & 0xf,
-        h.channels,
-        u16::from(h.last_pattern).saturating_add(1),
-        h.samples,
+        plural(h.channels, "channel"),
+        plural(u16::from(h.last_pattern).saturating_add(1), "pattern"),
+        plural(h.samples, "sample"),
         named(&h.name)
     ));
     Ok(())
@@ -200,18 +201,17 @@ pub async fn stm(cx: Cx, input: Input) -> Result<()> {
         order_at.saturating_add(order_len),
         u64::from(h.patterns).saturating_mul(1024),
     );
-    cx.emit(
-        Node::new("Patterns")
-            .span(patterns)
-            .summary(format!("{} patterns of 64 rows × 4 channels", h.patterns)),
-    );
+    cx.emit(Node::new("Patterns").span(patterns).summary(format!(
+        "{} of 64 rows × 4 channels",
+        plural(h.patterns, "pattern")
+    )));
     cx.emit(Node::new("Sample data").span(file.tail(patterns.end().saturating_sub(file.offset))));
     cx.annotate(format!(
-        "STM {}.{:02} ({}), {} patterns — {}",
+        "STM {}.{:02} ({}), {} — {}",
         h.major,
         h.minor,
         h.tracker.trim(),
-        h.patterns,
+        plural(h.patterns, "pattern"),
         named(&h.name)
     ));
     Ok(())
@@ -293,15 +293,16 @@ pub async fn composer669(cx: Cx, input: Input) -> Result<()> {
         sspan.end().saturating_sub(file.offset),
         u64::from(patterns).saturating_mul(1536),
     );
-    cx.emit(
-        Node::new("Patterns")
-            .span(pspan)
-            .summary(format!("{patterns} patterns of 64 rows × 8 channels")),
-    );
+    cx.emit(Node::new("Patterns").span(pspan).summary(format!(
+        "{patterns_pattern} of 64 rows × 8 channels",
+        patterns_pattern = plural(patterns, "pattern")
+    )));
     cx.emit(Node::new("Sample data").span(file.tail(pspan.end().saturating_sub(file.offset))));
     cx.annotate(format!(
-        "669, 8 channels, {patterns} patterns, {samples} samples — {}",
-        crate::formats::util::sound::clip(&t, 36)
+        "669, 8 channels, {patterns_pattern}, {samples_sample} — {}",
+        crate::formats::util::sound::clip(&t, 36),
+        patterns_pattern = plural(patterns, "pattern"),
+        samples_sample = plural(samples, "sample")
     ));
     Ok(())
 }
@@ -375,7 +376,7 @@ pub async fn ult(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Samples")
             .span(samples)
-            .summary(format!("{count} samples"))
+            .summary(plural(count, "sample"))
             .lazy(ult_samples, (samples, record)),
     );
     at = at.saturating_add(samples.len);
@@ -401,9 +402,12 @@ pub async fn ult(cx: Cx, input: Input) -> Result<()> {
     }
     cx.emit(Node::new("Pattern and sample data").span(file.tail(at)));
     cx.annotate(format!(
-        "ULT v{}, {channels} channels, {patterns} patterns, {count} samples — {}",
+        "ULT v{}, {channels_channel}, {patterns_pattern}, {count_sample} — {}",
         char::from(version),
-        named(&title)
+        named(&title),
+        channels_channel = plural(channels, "channel"),
+        patterns_pattern = plural(patterns, "pattern"),
+        count_sample = plural(count, "sample")
     ));
     Ok(())
 }
@@ -511,10 +515,10 @@ pub async fn med(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!(
-        "OctaMED ({}), {} blocks, {} samples — {}",
+        "OctaMED ({}), {}, {} — {}",
         h.id,
-        song.blocks,
-        song.samples,
+        plural(song.blocks, "block"),
+        plural(song.samples, "sample"),
         named(&name)
     ));
     Ok(())
@@ -576,7 +580,7 @@ pub async fn okt(cx: Cx, input: Input) -> Result<()> {
                     })
                     .sum();
                 node = node
-                    .summary(format!("{channels} channels"))
+                    .summary(plural(channels, "channel"))
                     .lazy(okt_words, data);
             }
             b"SAMP" => {
@@ -604,9 +608,9 @@ pub async fn okt(cx: Cx, input: Input) -> Result<()> {
                 patterns = patterns.saturating_add(1);
                 let rows = cx.read_avail(data.sub(0, 2)).await?;
                 node = node.summary(format!(
-                    "pattern {}, {} rows",
+                    "pattern {}, {}",
                     patterns.saturating_sub(1),
-                    u16_be(&rows, 0).unwrap_or(0)
+                    plural(u16_be(&rows, 0).unwrap_or(0), "row")
                 ));
             }
             b"SBOD" => {
@@ -619,7 +623,10 @@ pub async fn okt(cx: Cx, input: Input) -> Result<()> {
         pos = pos.saturating_add(size).saturating_add(8);
     }
     cx.annotate(format!(
-        "Oktalyzer, {channels} channels, {patterns} patterns, {samples} samples"
+        "Oktalyzer, {channels_channel}, {patterns_pattern}, {samples_sample}",
+        channels_channel = plural(channels, "channel"),
+        patterns_pattern = plural(patterns, "pattern"),
+        samples_sample = plural(samples, "sample")
     ));
     Ok(())
 }

@@ -9,6 +9,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
 use crate::formats::util::binutil::data_node;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
@@ -50,8 +51,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let (platform, at) = cx.cstr(file.sub(Header::SIZE, 256)).await?;
     cx.emit(Node::new("platform").span(at).value(text(platform.clone())));
     cx.annotate(format!(
-        "Ruby {}.{} YARV bytecode ({platform}), {} instruction sequences, {} objects",
-        h.major, h.minor, h.iseqs, h.objects
+        "Ruby {}.{} YARV bytecode ({platform}), {} instruction sequences, {}",
+        h.major,
+        h.minor,
+        h.iseqs,
+        plural(h.objects, "object")
     ));
     let iseqs = file.sub(h.iseq_offset.into(), u64::from(h.iseqs).saturating_mul(4));
     cx.emit(

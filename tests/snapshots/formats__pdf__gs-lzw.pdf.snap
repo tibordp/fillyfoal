@@ -32,7 +32,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 [0]: "/PDF"  [0x332+0x4]
                 [1]: "/ImageC"  [0x337+0x7]
                 [2]: "/Text"  [0x33f+0x5]
-            ▾ /ExtGState: "10 0 R" — 1 entries  [0x346+0x11] → 0x4b0+0x0
+            ▾ /ExtGState: "10 0 R" — 1 entry  [0x346+0x11] → 0x4b0+0x0
               ▾ /R9: "9 0 R" — /ExtGState, 2 entries  [0x4bb+0x9] → 0x484+0x0
                   /Type: "/ExtGState"  [0x48e+0xf]
                   /SA: false  [0x49e+0x9]
@@ -189,7 +189,7 @@ expression: "common::explore(&display_name(&path), &data)"
             ▾ /ProcSet — [/PDF /Text]  [0x3d2+0x14]
                 [0]: "/PDF"  [0x3db+0x4]
                 [1]: "/Text"  [0x3e0+0x5]
-            ▾ /Font: "16 0 R" — 1 entries  [0x3e7+0xc] → 0x4f5+0x0
+            ▾ /Font: "16 0 R" — 1 entry  [0x3e7+0xc] → 0x4f5+0x0
               ▾ /R15: "15 0 R" — /Font /Type1, 4 entries  [0x500+0xb] → 0x65f+0x0
                   /BaseFont: "/Courier"  [0x66a+0x11]
                 ▾ /ToUnicode: "17 0 R" — stream, 2 entries, 264 bytes, /LZWDecode  [0x67b+0x11] → 0x515+0x0
@@ -297,7 +297,7 @@ expression: "common::explore(&display_name(&path), &data)"
             [0]: "/PDF"  [0x332+0x4]
             [1]: "/ImageC"  [0x337+0x7]
             [2]: "/Text"  [0x33f+0x5]
-        ▾ /ExtGState: "10 0 R" — 1 entries  [0x346+0x11] → 0x4b0+0x0
+        ▾ /ExtGState: "10 0 R" — 1 entry  [0x346+0x11] → 0x4b0+0x0
           ▾ /R9: "9 0 R" — /ExtGState, 2 entries  [0x4bb+0x9] → 0x484+0x0
               /Type: "/ExtGState"  [0x48e+0xf]
               /SA: false  [0x49e+0x9]
@@ -454,7 +454,7 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ /ProcSet — [/PDF /Text]  [0x3d2+0x14]
             [0]: "/PDF"  [0x3db+0x4]
             [1]: "/Text"  [0x3e0+0x5]
-        ▾ /Font: "16 0 R" — 1 entries  [0x3e7+0xc] → 0x4f5+0x0
+        ▾ /Font: "16 0 R" — 1 entry  [0x3e7+0xc] → 0x4f5+0x0
           ▾ /R15: "15 0 R" — /Font /Type1, 4 entries  [0x500+0xb] → 0x65f+0x0
               /BaseFont: "/Courier"  [0x66a+0x11]
             ▾ /ToUnicode: "17 0 R" — stream, 2 entries, 264 bytes, /LZWDecode  [0x67b+0x11] → 0x515+0x0
@@ -550,13 +550,13 @@ expression: "common::explore(&display_name(&path), &data)"
       Object 7 0: 0x7f2 — /Font /Type1, 4 entries (in use, generation 0) → 0x7f2+0x50
       Object 8 0: 0x99a — /Font /Type1, 4 entries (in use, generation 0) → 0x99a+0x53
       Object 9 0: 0x484 — /ExtGState, 2 entries (in use, generation 0) → 0x484+0x2b
-      Object 10 0: 0x4b0 — 1 entries (in use, generation 0) → 0x4b0+0x1d
+      Object 10 0: 0x4b0 — 1 entry (in use, generation 0) → 0x4b0+0x1d
       Object 11 0: 0x4ce — 2 entries (in use, generation 0) → 0x4ce+0x26
       Object 12 0: 0x382 — /Page, 6 entries (in use, generation 0) → 0x382+0x8f
       Object 13 0: 0x22d — stream, 2 entries, 82 bytes, /FlateDecode (in use, generation 0) → 0x22d+0x99
       Object 14 0: 0x2c7 — 82 (in use, generation 0) → 0x2c7+0x12
       Object 15 0: 0x65f — /Font /Type1, 4 entries (in use, generation 0) → 0x65f+0x4f
-      Object 16 0: 0x4f5 — 1 entries (in use, generation 0) → 0x4f5+0x1f
+      Object 16 0: 0x4f5 — 1 entry (in use, generation 0) → 0x4f5+0x1f
       Object 17 0: 0x515 — stream, 2 entries, 264 bytes, /LZWDecode (in use, generation 0) → 0x515+0x149
       Object 18 0: 0x6af — stream, 2 entries, 257 bytes, /LZWDecode (in use, generation 0) → 0x6af+0x142
       Object 19 0: 0x843 — stream, 2 entries, 277 bytes, /LZWDecode (in use, generation 0) → 0x843+0x156
@@ -692,7 +692,7 @@ expression: "common::explore(&display_name(&path), &data)"
             /Type: "/ExtGState"  [0x48e+0xf]
             /SA: false  [0x49e+0x9]
             End keywords: "endobj"  [0x4a9+0x6]
-        ▾ Object 10 0 — 1 entries  [0x4b0+0x1d]
+        ▾ Object 10 0 — 1 entry  [0x4b0+0x1d]
             Object header: "10 0 obj"  [0x4b0+0x9]
             /R9: "9 0 R"  [0x4bb+0x9] → 0x484+0x0
             End keywords: "endobj"  [0x4c6+0x7]
@@ -701,7 +701,7 @@ expression: "common::explore(&display_name(&path), &data)"
             /R7: "7 0 R"  [0x4d9+0x9] → 0x7f2+0x0
             /R8: "8 0 R"  [0x4e2+0x9] → 0x99a+0x0
             End keywords: "endobj"  [0x4ed+0x7]
-        ▾ Object 16 0 — 1 entries  [0x4f5+0x1f]
+        ▾ Object 16 0 — 1 entry  [0x4f5+0x1f]
             Object header: "16 0 obj"  [0x4f5+0x9]
             /R15: "15 0 R"  [0x500+0xb] → 0x65f+0x0
             End keywords: "endobj"  [0x50d+0x7]

@@ -10,6 +10,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::audio::ape::trailing_tags;
 use crate::formats::util::datakit::crc32_paced;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{channels, duration_of, leaf, table};
 use crate::formats::util::val::hex;
 use crate::formats::util::vidutil::khz;
@@ -113,7 +114,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Frames")
             .span(data)
-            .summary(format!("{frames} frames"))
+            .summary(plural(frames, "frame"))
             .lazy(
                 list_frames,
                 Frames {

@@ -11,7 +11,7 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::binutil::{Reader, Tree, mutf8};
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::{hex, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
@@ -319,8 +319,9 @@ impl Parser<'_> {
                     let span = self.span(start);
                     self.tree.update(node, |n| {
                         n.span(span).value(text(name)).summary(format!(
-                            "serialVersionUID {uid:#x}, {count} fields, {}",
-                            set.join(" ")
+                            "serialVersionUID {uid:#x}, {count_field}, {}",
+                            set.join(" "),
+                            count_field = plural(count, "field")
                         ))
                     });
                     Ok(Some(handle))
@@ -545,7 +546,7 @@ impl Parser<'_> {
                     self.tree.update(node, |n| {
                         n.span(span)
                             .value(text(name))
-                            .summary(format!("{size} elements"))
+                            .summary(plural(size, "element"))
                     });
                     Ok(Some(h))
                 }
@@ -637,7 +638,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         items = items.saturating_add(1);
     }
-    let mut summary = format!("Java serialization stream, {items} items");
+    let mut summary = format!(
+        "Java serialization stream, {items_item}",
+        items_item = plural(items, "item")
+    );
     if !p.top.is_empty() {
         summary.push_str(&format!(": {}", clip(&p.top.join(", "), 120)));
     }

@@ -163,7 +163,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Header — 0 snapshots, tree at block 107  [0x6a000+0x58]
     ▾ Mappings  [0x6b000+0x1000]
         Object 1026 @ transaction 4 — block 105  [0x6b1f8+0x10] → 0x69000+0x1000
-  ▾ Volume (object 1026) — "FIXTURE" (none), 5 files, 1 directories  [0x69000+0x1000]
+  ▾ Volume (object 1026) — "FIXTURE" (none), 5 files, 1 directory  [0x69000+0x1000]
     ▾ Volume superblock  [0x69000+0x1000]
         Checksum: 0xdd0e8742b2473efe  [0x69000+0x8]
         Object id: 1026  [0x69008+0x8]

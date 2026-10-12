@@ -13,7 +13,7 @@ use crate::codec::crc::crc32c;
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
-use crate::formats::util::fmt::{grouped_count, size};
+use crate::formats::util::fmt::{grouped_count, plural, size};
 use crate::formats::util::val::{hex, text, uint};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -137,7 +137,8 @@ pub fn link(name: &'static str, state: &PageState, no: u32, at: Span) -> Node {
             .span(at)
             .value(uint(no, 32))
             .diag(Diagnostic::malformed(format!(
-                "page {no} links back to a page that led here"
+                "page {no_link} back to a page that led here",
+                no_link = plural(no, "link")
             )));
     }
     if state.path.len() >= MAX_DEPTH {
@@ -739,7 +740,8 @@ async fn inodes(cx: Cx, (state, start, n): (PageState, u64, u64)) -> Result<()> 
                 .fold(0, u32::saturating_add);
             node = node
                 .summary(format!(
-                    "segment {id}: {extents} extents, {frags} fragment pages"
+                    "segment {id}: {extents_extent}, {frags} fragment pages",
+                    extents_extent = plural(extents, "extent")
                 ))
                 .lazy(inode_fields, (state.clone(), off));
             if u32_be(&page, o.saturating_add(60)) != Some(FSEG_MAGIC) {
@@ -897,8 +899,8 @@ fn trx_sys_page(cx: &Cx, space: &Space, span: Span, page: &[u8]) {
         let mut n = Node::new("Doublewrite buffer")
             .span(at(dw, 34))
             .summary(format!(
-                "blocks at pages {b1} and {b2}, {} pages each",
-                space.geo.pages_per_extent()
+                "blocks at pages {b1} and {b2}, {} each",
+                plural(space.geo.pages_per_extent(), "page")
             ))
             .desc("Pages are written here first so a torn write can be repaired (MySQL 8.0.20 moved it to #ib_*.dblwr files)");
         if u32_be(page, d.saturating_add(30)) == Some(DOUBLEWRITE_SPACE_IDS) {
@@ -999,7 +1001,10 @@ fn sys_page(cx: &Cx, state: &PageState, span: Span, page: &[u8]) {
             Node::new("Undo slots")
                 .span(at(72, slots.saturating_mul(4)))
                 .summary(if used.is_empty() {
-                    format!("{slots} slots, none in use")
+                    format!(
+                        "{slots_slot}, none in use",
+                        slots_slot = plural(slots, "slot")
+                    )
                 } else {
                     used.join(", ")
                 }),
@@ -1244,7 +1249,10 @@ fn lob_page(cx: &Cx, space: &Space, span: Span, page: &[u8], kind: u16) {
             Node::new("Index entries")
                 .span(at(entries_at, entries.saturating_mul(60)))
                 .summary(if list.is_empty() {
-                    format!("{entries} slots, none used")
+                    format!(
+                        "{entries_slot}, none used",
+                        entries_slot = plural(entries, "slot")
+                    )
                 } else {
                     list.join(", ")
                 }),

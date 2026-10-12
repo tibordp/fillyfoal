@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ I30 — NTFS index, 1 buffers, 5 entries  [0x0+0x1000]
+▾ I30 — NTFS index, 1 buffer, 5 entries  [0x0+0x1000]
   ▾ Buffer 0 (VCN 0) — 4 entries, 1 recovered from slack  [0x0+0x1000]
     ▾ Header  [#1:0x0+0x28]
         Signature: "INDX"  [#1:0x0+0x4]

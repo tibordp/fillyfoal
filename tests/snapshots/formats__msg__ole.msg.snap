@@ -24,7 +24,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ DIFAT — 1 FAT sectors  [0x4c+0x1b4]
       FAT sector 0: 33  [0x4c+0x4] → 0x4400+0x200
       Unused entries: 0xffffffff — 108 × FREESECT  [0x50+0x1b0]
-  ▾ FAT — 1 sectors
+  ▾ FAT — 1 sector
     ▾ FAT sector 0 — sector 33: entries for sectors 0..128  [0x4400+0x200]
         Sector 0: 1 — next: 1  [0x4400+0x4]
         Sector 1: 2 — next: 2  [0x4404+0x4]
@@ -1812,7 +1812,7 @@ expression: "common::explore(&display_name(&path), &data)"
           ▾ Text — "Hello, Word\rA bold and red italic paragraph.\rPage \u{13} PAGE \u{14}1\u{15}"  [#28:0x7ce+0x15]
               Main document: "Hello, Word\rA bold and red italic paragraph.\rPage \u{13} PAGE \u{14}1\u{15}, see \u{13} HYPERLINK \"https://example.org/\"\u{1}\u{14}example.org\u{15}.\rFirst item\rSecond item\ra1\u{7}b1\u{7}\u{7}\u{c}Two columns of text in a second section.\u{2}\u{c}Ünïcödé — end.\r" — 204 characters from CP 0
               Footnotes: "\u{2}\tA footnote.\r\r" — 15 characters from CP 204
-            ▾ Pcdt — 1 pieces  [#28:0x7ce+0x15]
+            ▾ Pcdt — 1 piece  [#28:0x7ce+0x15]
                 clxt: 0x2  [#28:0x7ce+0x1]
                 lcb: 16  [#28:0x7cf+0x4]
               ▾ CPs — 2 character positions  [#28:0x7d3+0x8]
@@ -2687,20 +2687,20 @@ expression: "common::explore(&display_name(&path), &data)"
               CLSID: {00000000-0000-0000-0000-000000000000}  [#32:0x8+0x10]
               NumPropertySets: 2  [#32:0x18+0x4]
             FMTID/Offset 0: {d5cdd502-2e9c-101b-9397-08002b2cf9ae} — DocumentSummaryInformation at 0x44  [#32:0x1c+0x14]
-          ▾ DocumentSummaryInformation: {d5cdd502-2e9c-101b-9397-08002b2cf9ae} — 1 properties, code page 65001  [#32:0x44+0x18]
+          ▾ DocumentSummaryInformation: {d5cdd502-2e9c-101b-9397-08002b2cf9ae} — 1 property, code page 65001  [#32:0x44+0x18]
               Size: 24  [#32:0x44+0x4]
               NumProperties: 1  [#32:0x48+0x4]
-            ▾ PropertyIdentifierAndOffset — 1 entries  [#32:0x4c+0x8]
+            ▾ PropertyIdentifierAndOffset — 1 entry  [#32:0x4c+0x8]
                 CodePage: 0x1 — value at 0x10  [#32:0x4c+0x8] → #32:0x54+0x4
             ▾ CodePage: -535 — VT_I2  [#32:0x54+0x8]
                 Type: VT_I2 (0x2)  [#32:0x54+0x2]
                 Padding: 0  [#32:0x56+0x2]
                 Value  [#32:0x58+0x4]
             FMTID/Offset 1: {d5cdd505-2e9c-101b-9397-08002b2cf9ae} — User-defined properties at 0x5c  [#32:0x30+0x14]
-          ▾ User-defined properties: {d5cdd505-2e9c-101b-9397-08002b2cf9ae} — 1 properties, code page 65001  [#32:0x5c+0x18]
+          ▾ User-defined properties: {d5cdd505-2e9c-101b-9397-08002b2cf9ae} — 1 property, code page 65001  [#32:0x5c+0x18]
               Size: 24  [#32:0x5c+0x4]
               NumProperties: 1  [#32:0x60+0x4]
-            ▾ PropertyIdentifierAndOffset — 1 entries  [#32:0x64+0x8]
+            ▾ PropertyIdentifierAndOffset — 1 entry  [#32:0x64+0x8]
                 CodePage: 0x1 — value at 0x10  [#32:0x64+0x8] → #32:0x6c+0x4
             ▾ CodePage: -535 — VT_I2  [#32:0x6c+0x8]
                 Type: VT_I2 (0x2)  [#32:0x6c+0x2]

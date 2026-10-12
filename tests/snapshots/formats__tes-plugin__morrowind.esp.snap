@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ morrowind.esp — Morrowind plugin, fillyfoal v1.30, 1 records, masters: Morrowind.esm  [0x0+0x19a]
+▾ morrowind.esp — Morrowind plugin, fillyfoal v1.30, 1 record, masters: Morrowind.esm  [0x0+0x19a]
   ▾ TES3 — 346 bytes  [0x0+0x16a]
     ▾ Record header  [0x0+0x10]
         Type: "TES3"  [0x0+0x4]

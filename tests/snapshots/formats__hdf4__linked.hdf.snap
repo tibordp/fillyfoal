@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ linked.hdf — HDF4 4.3.0, 2 vdata(s): log (4 records), other (1 records)  [0x0+0x11ca]
+▾ linked.hdf — HDF4 4.3.0, 2 vdata(s): log (4 records), other (1 record)  [0x0+0x11ca]
     Magic: 0xe031301  [0x0+0x4]
   ▾ Data descriptors — 1 block(s), 8 of 16 descriptors used
     ▾ DD block 1 — 16 descriptors, 8 used, next none  [0x4+0xc6]

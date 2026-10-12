@@ -9,6 +9,7 @@ use crate::cx::{Block, Cx, lock};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
 use crate::formats::util::datakit::guid_le;
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{Value, lookup};
@@ -446,8 +447,9 @@ pub async fn read_log(cx: &Cx, file: Span, first: Fcr, transactions: u32) -> TxL
     }
     if log.committed < transactions {
         log.diags.push(Diagnostic::warning(format!(
-            "the header promises {transactions} transactions, the log holds {}",
-            log.committed
+            "the header promises {transactions_transaction}, the log holds {}",
+            log.committed,
+            transactions_transaction = plural(transactions, "transaction")
         )));
     }
     log

@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ repo.bundle — git bundle, 1 refs, 0 prerequisites  [0x0+0x10a]
+▾ repo.bundle — git bundle, 1 ref, 0 prerequisites  [0x0+0x10a]
     Signature: "# v2 git bundle"  [0x0+0x10]
     HEAD: "f6b0a55c3f0c286e5d4da8df05425ae4d1931f6b"  [0x10+0x2e]
   ▾ Pack — Git pack v2, 3 objects  [0x3f+0xcb]

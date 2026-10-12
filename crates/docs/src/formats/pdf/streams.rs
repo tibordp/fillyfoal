@@ -150,7 +150,7 @@ pub(super) fn filters_summary(item: &Item) -> Option<String> {
                     );
                     details.push(format!("{} columns", int("Columns").unwrap_or(1728)));
                     if let Some(rows) = int("Rows") {
-                        details.push(format!("{rows} rows"));
+                        details.push(plural(rows, "row"));
                     }
                     if matches!(get("BlackIs1").map(|b| &b.obj), Some(Obj::Bool(true))) {
                         details.push("black is 1".to_owned());

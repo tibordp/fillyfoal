@@ -76,7 +76,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Items: 1  [0x17d+0x4]
         Flags: 0xa0000000 [HAS_HEADER | IS_HEADER]  [0x181+0x4]
         Reserved: 00 00 00 00 00 00 00 00  |........|  [0x185+0x8]
-    ▾ Items — 1 items  [0x18d+0x12]
+    ▾ Items — 1 item  [0x18d+0x12]
       ▾ Title — Tone  [0x18d+0x12]
           Value size: 4  [0x18d+0x4]
           Flags: 0x0 [] — UTF-8 text  [0x191+0x4]

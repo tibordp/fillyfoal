@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ ride.srm — SRM ride (SRM7), 1 blocks, 1 markers, interval 1/1 s  [0x0+0x96]
+▾ ride.srm — SRM ride (SRM7), 1 block, 1 markers, interval 1/1 s  [0x0+0x96]
   ▾ Header  [0x0+0x56]
       Magic: "SRM7"  [0x0+0x4]
       Days since 1880-01-01: 52000  [0x4+0x2]

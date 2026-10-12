@@ -397,7 +397,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Signature: "FSSE"  [0x4c0a+0x4]
                 Version: 0  [0x4c0e+0x1]
                 Free-space manager address: 0x49b8  [0x4c0f+0x8]
-              ▾ 1 sections of 229 bytes  [0x4c17+0x9]
+              ▾ 1 section of 229 bytes  [0x4c17+0x9]
                   Sections of this size: 1  [0x4c17+0x1]
                   Section size: 229  [0x4c18+0x3]
                   Section offset: 283  [0x4c1b+0x4]
@@ -1037,7 +1037,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 [3, 4]: 19  [0x184c+0x4]
         ▾ [1]: 0x2c8 — object reference  [0x1b95+0x8] → 0x2c8+0x4
           ▾ Object: 0x2c8 — group → 0x2c8+0x4
-            ▾ Object header — version 1, 1 messages  [0x2c8+0x28]
+            ▾ Object header — version 1, 1 message  [0x2c8+0x28]
                 Version: 1  [0x2c8+0x1]
                 Reserved: 00  |.|  [0x2c9+0x1]
                 Number of messages: 1  [0x2ca+0x2]
@@ -1092,7 +1092,7 @@ expression: "common::explore(&display_name(&path), &data)"
                         Offset of next free block: 1  [0x4050+0x8]
                         Size: 72  [0x4058+0x8]
             ▾ sub: 0x2f0 — group  [0x4338+0x28] → 0x2f0+0x4
-              ▾ Object header — version 1, 1 messages  [0x2f0+0x28]
+              ▾ Object header — version 1, 1 message  [0x2f0+0x28]
                   Version: 1  [0x2f0+0x1]
                   Reserved: 00  |.|  [0x2f1+0x1]
                   Number of messages: 1  [0x2f2+0x2]
@@ -1514,7 +1514,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Reserved: 00 00 00 00 00 00  |......|  [0x8d2+0x6]
               Free space size: 3888  [0x8d8+0x8]
               Free space  [0x8e0+0xf20]
-          [0]: "[1]" — 1 elements  [0x1b1e+0x10] → 0x890+0x4
+          [0]: "[1]" — 1 element  [0x1b1e+0x10] → 0x890+0x4
           [1]: "[2, 3]" — 2 elements  [0x1b2e+0x10] → 0x8a8+0x8
           [2]: "[4, 5, 6]" — 3 elements  [0x1b3e+0x10] → 0x8c0+0xc
     ▾ array: 0x3988 — dataset, int32[2×3] [2], contiguous  [0x4c39+0x10] → 0x3988+0x4  (+66 nodes elided)

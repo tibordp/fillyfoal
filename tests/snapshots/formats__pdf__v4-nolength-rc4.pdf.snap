@@ -40,7 +40,7 @@ expression: "common::explore(&display_name(&path), &data)"
       /Title: "Fillyfoal V4 without Length" — hex string  [0x6a+0x3f]
   ▾ Encryption — RC4-128, R4
       Object header: "6 0 obj"  [0x19f+0x8]
-    ▾ /CF — 1 entries  [0x1aa+0x3e]
+    ▾ /CF — 1 entry  [0x1aa+0x3e]
       ▾ /StdCF — 3 entries  [0x1b1+0x34]
           /AuthEvent: "/DocOpen"  [0x1bb+0x13]
           /CFM: "/V2"  [0x1cf+0x8]
@@ -126,7 +126,7 @@ expression: "common::explore(&display_name(&path), &data)"
             End keywords: "endstream endobj"  [0x18d+0x11]
         ▾ Object 6 0 — 12 entries  [0x19f+0x14f]
             Object header: "6 0 obj"  [0x19f+0x8]
-          ▾ /CF — 1 entries  [0x1aa+0x3e]
+          ▾ /CF — 1 entry  [0x1aa+0x3e]
             ▾ /StdCF — 3 entries  [0x1b1+0x34]
                 /AuthEvent: "/DocOpen"  [0x1bb+0x13]
                 /CFM: "/V2"  [0x1cf+0x8]

@@ -4,6 +4,7 @@
 use crate::bytes::{to_u64, to_usize};
 use crate::error::Diagnostic;
 use crate::formats::util::floats::f16;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val;
 use crate::node::Node;
 use crate::value::{EnumTable, FlagTable, Radix, Value, flag, lookup};
@@ -698,7 +699,10 @@ pub fn format(ty: &Ty, bytes: &[u8]) -> String {
             if *string {
                 format!("<string of {n} bytes in the global heap>")
             } else {
-                format!("<{n} elements in the global heap>")
+                format!(
+                    "<{n_element} in the global heap>",
+                    n_element = plural(n, "element")
+                )
             }
         }
         Ty::Ref { kind: 1, .. } => "<region reference>".to_owned(),

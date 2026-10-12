@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ sample-pwg.ras — PWG raster v2, 1 pages, 16×4, 300 dpi, 8-bit sGray  [0x0+0x722]
+▾ sample-pwg.ras — PWG raster v2, 1 page, 16×4, 300 dpi, 8-bit sGray  [0x0+0x722]
     Sync word: "2SaR" — version 2, little-endian  [0x0+0x4]
   ▾ Page 1 — 16×4, 300 dpi, 8-bit sGray  [0x4+0x71e]
     ▾ Page header  [0x4+0x1a4]

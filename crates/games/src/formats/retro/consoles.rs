@@ -8,6 +8,7 @@ use crate::declare_format;
 use crate::dsl::{Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -441,7 +442,7 @@ async fn nds(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("File allocation table")
                 .span(region(h.fat_offset, h.fat_size))
-                .summary(format!("{} files", h.fat_size / 8)),
+                .summary(plural(h.fat_size / 8, "file")),
         );
     }
     let mut title = None;
@@ -912,7 +913,7 @@ async fn xbe(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Sections")
             .span(table)
-            .summary(format!("{} sections", h.sections))
+            .summary(plural(h.sections, "section"))
             .lazy(xbe_sections, (file, table, h.base)),
     );
     Ok(())

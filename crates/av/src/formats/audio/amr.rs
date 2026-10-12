@@ -5,6 +5,7 @@
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{Bits, bits_node, duration};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
@@ -133,7 +134,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             Node::new("Channel description")
                 .span(file.sub(pos, 4))
                 .value(crate::formats::util::val::hex(desc, 32))
-                .summary(format!("{channels} channels")),
+                .summary(plural(channels, "channel")),
         );
         pos = pos.saturating_add(4);
     }

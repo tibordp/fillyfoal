@@ -6,6 +6,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 
@@ -92,10 +93,11 @@ async fn nw4(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!(
-        "Nintendo {magic} v{}.{}.{}, {sections} sections",
+        "Nintendo {magic} v{}.{}.{}, {sections_section}",
         version >> 24,
         (version >> 16) & 0xff,
-        (version >> 8) & 0xff
+        (version >> 8) & 0xff,
+        sections_section = plural(sections, "section")
     ));
     Ok(())
 }
@@ -142,9 +144,10 @@ async fn nw4r(cx: Cx, input: Input) -> Result<()> {
     }
     let _ = header_len;
     cx.annotate(format!(
-        "Nintendo {magic} v{}.{}, {blocks} blocks",
+        "Nintendo {magic} v{}.{}, {blocks_block}",
         version >> 8,
-        version & 0xff
+        version & 0xff,
+        blocks_block = plural(blocks, "block")
     ));
     Ok(())
 }

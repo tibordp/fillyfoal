@@ -2,8 +2,8 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ deflate64.zip — ZIP archive, 1 entries  [0x0+0x23a6]
-  ▾ Central Directory — 1 entries  [0x2335+0x5b]
+▾ deflate64.zip — ZIP archive, 1 entry  [0x0+0x23a6]
+  ▾ Central Directory — 1 entry  [0x2335+0x5b]
     ▾ salad.txt — deflate64, 8974 → 155000 bytes  [0x2335+0x5b]
       ▾ Central Directory Header  [0x2335+0x2e]
           Signature: 50 4b 01 02  |PK..|  [0x2335+0x4]

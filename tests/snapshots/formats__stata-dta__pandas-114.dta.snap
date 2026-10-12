@@ -121,7 +121,7 @@ expression: "common::explore(&display_name(&path), &data)"
         name: "Eve with a longer name"  [0x787+0x16]
         born: 2024-02-29 00:00:00 UTC — 2024-02-29  [0x79d+0x8]
         grade: 1 — b  [0x7a5+0x1]
-  ▾ Value labels — 1 tables
+  ▾ Value labels — 1 table
     ▾ grade — 0 = "a", 1 = "b", 2 = "c"  [0x7a6+0x4e]
         0: "a"
         1: "b"

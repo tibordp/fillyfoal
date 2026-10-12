@@ -22,6 +22,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, Value};
@@ -383,7 +384,7 @@ pub fn table<E: Entry>(
         .summary(if count == 1 {
             "1 entry".to_owned()
         } else {
-            format!("{count} entries")
+            plural(count, "entry")
         })
         .lazy(
             expand_table::<E>,

@@ -5,7 +5,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ▾ 9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B — Firefox cache entry v3: https://www.example.com/images/hello.js (HTTP/2 200 OK), 46 bytes body  [0x0+0x147]
     Body: "/* example */\nfunction hello() { return 42; }\n" — 46 bytes  [0x0+0x2e]
     Metadata hash  [0x2e+0x4]
-    Chunk hashes — 1 chunks  [0x32+0x2]
+    Chunk hashes — 1 chunk  [0x32+0x2]
   ▾ Header  [0x34+0x20]
       Version: 3  [0x34+0x4]
       Fetch count: 4  [0x38+0x4]

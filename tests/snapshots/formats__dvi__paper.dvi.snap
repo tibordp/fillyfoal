@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ paper.dvi — DVI (id 2), TeX output 2026.10.06:0100, 1 pages, magnification 1000  [0x0+0x7f]
+▾ paper.dvi — DVI (id 2), TeX output 2026.10.06:0100, 1 page, magnification 1000  [0x0+0x7f]
     pre: 0xf7  [0x0+0x1]
     Identification: 2  [0x1+0x1]
     Numerator: 25400000  [0x2+0x4]

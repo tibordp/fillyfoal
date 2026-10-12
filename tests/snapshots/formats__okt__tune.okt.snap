@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tune.okt — Oktalyzer, 5 channels, 1 patterns, 1 samples  [0x0+0x588]
+▾ tune.okt — Oktalyzer, 5 channels, 1 pattern, 1 sample  [0x0+0x588]
     Magic: "OKTASONG"  [0x0+0x8]
   ▾ CMOD — 5 channels  [0x8+0x10]
       Channel pair: 0  [0x10+0x2]

@@ -21,6 +21,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::arcutil::human_size;
 use crate::formats::util::datakit::be_uint;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{clip, image_info, latin1_field, latin1_z, leaf};
 use crate::formats::util::val::{enumv, hex, text, uint};
 use crate::formats::{Format, Input, Probe, audio::apetag, embedded, embedded_as};
@@ -1641,7 +1642,7 @@ fn render(b: &mut Body<'_>, frame: &Frame, id: &str) -> Result<()> {
             b.emit(
                 Node::new("Adjustment points")
                     .span(points)
-                    .summary(format!("{} points", points.len / 4))
+                    .summary(plural(points.len / 4, "point"))
                     .lazy(expand_equ2, points),
             );
             b.at = b.data.len();

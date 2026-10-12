@@ -65,7 +65,7 @@ expression: "common::explore(&display_name(&path), &data)"
         tag: SecretKeyEntry (0x3)  [0x19a+0x4]
         alias: "secret-aes"  [0x1a0+0xa]
         timestamp: 2026-10-10 19:08:34 UTC  [0x1aa+0x8]
-      ▾ Sealed key — Java serialization stream, 1 items: com.sun.crypto.provider.SealedObjectForKeyProtector  [0x1b2+0x1c1]
+      ▾ Sealed key — Java serialization stream, 1 item: com.sun.crypto.provider.SealedObjectForKeyProtector  [0x1b2+0x1c1]
           magic: 0xaced  [0x1b2+0x2]
           version: 5  [0x1b4+0x2]
         ▾ content: "com.sun.crypto.provider.SealedObjectForKeyProtector"  [0x1b6+0x1bd]

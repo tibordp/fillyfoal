@@ -7,7 +7,7 @@ use crate::bytes::u32_be;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::binutil::data_node;
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
@@ -147,7 +147,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Section Table")
             .span(table)
-            .summary(format!("{count} sections")),
+            .summary(plural(count, "section")),
     );
     cx.emit(
         Node::new("Section Count")
@@ -168,6 +168,6 @@ async fn names(cx: Cx, span: Span) -> Result<()> {
 
 async fn code(cx: Cx, span: Span) -> Result<()> {
     let words = span.len / 4;
-    cx.emit(data_node("Instructions", span, span.len).summary(format!("{words} words")));
+    cx.emit(data_node("Instructions", span, span.len).summary(plural(words, "word")));
     Ok(())
 }

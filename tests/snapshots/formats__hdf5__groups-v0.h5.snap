@@ -195,7 +195,7 @@ expression: "common::explore(&display_name(&path), &data)"
           [1, 1]: 5  [0x2c8+0x8]
           [1, 2]: 6  [0x2d0+0x8]
     ▾ sub: 0x2e4 — group  [0x198+0x28] → 0x2e4+0x4
-      ▾ Object header — version 1, 1 messages  [0x2e4+0x28]
+      ▾ Object header — version 1, 1 message  [0x2e4+0x28]
           Version: 1  [0x2e4+0x1]
           Reserved: 00  |.|  [0x2e5+0x1]
           Number of messages: 1  [0x2e6+0x2]

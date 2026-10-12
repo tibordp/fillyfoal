@@ -6,6 +6,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -69,7 +70,8 @@ async fn tokyo(cx: Cx, input: Input) -> Result<()> {
     );
     cx.emit(Node::new("Body").span(file.tail(256)));
     cx.annotate(format!(
-        "Tokyo Cabinet {kind_name} database {version}, {records} records"
+        "Tokyo Cabinet {kind_name} database {version}, {records_record}",
+        records_record = plural(records, "record")
     ));
     Ok(())
 }
@@ -286,7 +288,11 @@ async fn rrd(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("RRA {cf}"))
                 .span(file.sub(pos, 120))
-                .summary(format!("{rows} rows × {} s", pdp.saturating_mul(step))),
+                .summary(format!(
+                    "{rows_row} × {} s",
+                    pdp.saturating_mul(step),
+                    rows_row = plural(rows, "row")
+                )),
         )
         .await;
         pos = pos.saturating_add(120);

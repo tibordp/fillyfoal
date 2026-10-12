@@ -4,6 +4,7 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Input, Probe, embedded};
 use crate::node::Node;
@@ -54,7 +55,10 @@ async fn warc(cx: Cx, input: Input) -> Result<()> {
         .await;
         pos = pos.saturating_add(total);
     }
-    cx.annotate(format!("WARC, {records} records"));
+    cx.annotate(format!(
+        "WARC, {records_record}",
+        records_record = plural(records, "record")
+    ));
     Ok(())
 }
 

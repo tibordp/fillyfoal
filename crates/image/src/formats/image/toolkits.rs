@@ -6,6 +6,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Input, Probe};
 use crate::node::Node;
@@ -201,6 +202,9 @@ async fn psp(cx: Cx, input: Input) -> Result<()> {
         n = n.saturating_add(1);
         pos = pos.saturating_add(block_head).saturating_add(len);
     }
-    cx.annotate(format!("Paint Shop Pro image v{major}.{minor}, {n} blocks"));
+    cx.annotate(format!(
+        "Paint Shop Pro image v{major}.{minor}, {n_block}",
+        n_block = plural(n, "block")
+    ));
     Ok(())
 }

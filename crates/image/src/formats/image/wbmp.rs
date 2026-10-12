@@ -8,6 +8,7 @@
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::uint;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
@@ -80,8 +81,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!("{}, 1-bit", dims(w, h)));
     cx.emit(
         region("Raster", file, to_u64(len), raster_len(w, h)).summary(format!(
-            "{h} rows of {} bytes, 1 = white",
-            w.saturating_add(7) / 8
+            "{h_row} of {} bytes, 1 = white",
+            w.saturating_add(7) / 8,
+            h_row = plural(h, "row")
         )),
     );
     Ok(())

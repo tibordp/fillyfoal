@@ -63,7 +63,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Allocation groups — 2 × 16 KiB
     ▾ AG 0 — 16 KiB, from block 0  [0x0+0x4000]
         Superblock (primary) — shown at the top level  [0x0+0x200]
-      ▾ AGF (free space) — 1 free blocks (4 KiB), longest free extent 1 blocks  [0x200+0x200]
+      ▾ AGF (free space) — 1 free blocks (4 KiB), longest free extent 1 block  [0x200+0x200]
           ! warning: AGF CRC mismatch: stored 0x00000000, computed 0x5abfa5e0
           Magic: "XAGF"  [0x200+0x4]
           Version: 1  [0x204+0x4]
@@ -282,7 +282,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Features 2: 0x0 []  [0x40c8+0x4]
           Features 2 (copy): 0x0 []  [0x40cc+0x4]
           Unused — 304 bytes  [0x40d0+0x130]
-      ▾ AGF (free space) — 1 free blocks (4 KiB), longest free extent 1 blocks  [0x4200+0x200]
+      ▾ AGF (free space) — 1 free blocks (4 KiB), longest free extent 1 block  [0x4200+0x200]
           ! warning: AGF CRC mismatch: stored 0x00000000, computed 0x2c4bb351
           Magic: "XAGF"  [0x4200+0x4]
           Version: 1  [0x4204+0x4]

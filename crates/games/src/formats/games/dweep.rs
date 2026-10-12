@@ -244,7 +244,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .next()
             .unwrap_or_default(),
     );
-    let mut summary = format!("Dweep level pack {pack_title:?}, {count} levels");
+    let mut summary = format!(
+        "Dweep level pack {pack_title:?}, {count_level}",
+        count_level = plural(count, "level")
+    );
     if stored > u64::from(count) {
         summary.push_str(&format!(
             " (+{} beyond the count)",
@@ -255,7 +258,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Levels")
             .span(records)
-            .summary(format!("{stored} records of {RECORD} bytes"))
+            .summary(format!(
+                "{stored_record} of {RECORD} bytes",
+                stored_record = plural(stored, "record")
+            ))
             .lazy(levels, (records, count)),
     );
     let rest = records.len % RECORD;

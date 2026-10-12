@@ -8,6 +8,7 @@ use crate::declare_format;
 use crate::dsl::{ChunkLayout, Cursor, Record, emit_record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Codec, Head, Input, Probe, content};
 use crate::node::Node;
 use crate::record;
@@ -48,13 +49,13 @@ async fn ptm(cx: Cx, input: Input) -> Result<()> {
     let h: PtmHeader = emit_record(&cx, input.span.sub(0, PtmHeader::SIZE), LE).await?;
     cx.emit(Node::new("Orders, samples and patterns").span(input.span.tail(PtmHeader::SIZE)));
     cx.annotate(format!(
-        "PolyTracker {}.{:02x} module {:?}: {} channels, {} patterns, {} samples",
+        "PolyTracker {}.{:02x} module {:?}: {}, {}, {}",
         h.major,
         h.minor,
         h.title.trim(),
-        h.channels,
-        h.patterns,
-        h.samples
+        plural(h.channels, "channel"),
+        plural(h.patterns, "pattern"),
+        plural(h.samples, "sample")
     ));
     Ok(())
 }
@@ -123,10 +124,10 @@ async fn imf(cx: Cx, input: Input) -> Result<()> {
             .span(input.span.tail(ImfHeader::SIZE)),
     );
     cx.annotate(format!(
-        "Imago Orpheus module {:?}: {} patterns, {} instruments, {} BPM",
+        "Imago Orpheus module {:?}: {}, {}, {} BPM",
         h.title.trim(),
-        h.patterns,
-        h.instruments,
+        plural(h.patterns, "pattern"),
+        plural(h.instruments, "instrument"),
         h.bpm
     ));
     Ok(())
@@ -228,7 +229,7 @@ async fn mt2(cx: Cx, input: Input) -> Result<()> {
     let instruments = f.u16("Instruments").emit()?;
     let _ = samples;
     cx.emit(Node::new("Song, patterns, drums and instruments").span(file.tail(0x7e)));
-    cx.annotate(format!("MadTracker {}.{:02x} module {:?} ({}): {positions} positions, {patterns} patterns, {tracks} tracks, {instruments} instruments", version >> 8, version & 0xff, title.trim(), tracker.trim()));
+    cx.annotate(format!("MadTracker {}.{:02x} module {:?} ({}): {positions} positions, {patterns_pattern}, {tracks_track}, {instruments_instrument}", version >> 8, version & 0xff, title.trim(), tracker.trim(), patterns_pattern = plural(patterns, "pattern"), tracks_track = plural(tracks, "track"), instruments_instrument = plural(instruments, "instrument")));
     Ok(())
 }
 
@@ -325,7 +326,10 @@ async fn symphonie(cx: Cx, input: Input) -> Result<()> {
         pos = pos.saturating_add(len);
         n = n.saturating_add(1);
     }
-    cx.annotate(format!("Symphonie module, {n} chunks"));
+    cx.annotate(format!(
+        "Symphonie module, {n_chunk}",
+        n_chunk = plural(n, "chunk")
+    ));
     Ok(())
 }
 
@@ -384,7 +388,7 @@ async fn plm(cx: Cx, input: Input) -> Result<()> {
     let patterns = f.u8("Patterns").emit()?;
     let orders = f.u16("Orders").emit()?;
     cx.emit(Node::new("Orders, patterns and samples").span(file.tail(size.into())));
-    cx.annotate(format!("Disorder Tracker v{version} module {:?}: {channels} channels, {patterns} patterns, {samples} samples, {orders} orders", title.trim()));
+    cx.annotate(format!("Disorder Tracker v{version} module {:?}: {channels_channel}, {patterns_pattern}, {samples_sample}, {orders_order}", title.trim(), channels_channel = plural(channels, "channel"), patterns_pattern = plural(patterns, "pattern"), samples_sample = plural(samples, "sample"), orders_order = plural(orders, "order")));
     Ok(())
 }
 
@@ -427,7 +431,10 @@ async fn psm(cx: Cx, input: Input) -> Result<()> {
         }
         cx.push(node).await;
     }
-    cx.annotate(format!("MASI module {title:?}, {samples} samples"));
+    cx.annotate(format!(
+        "MASI module {title:?}, {samples_sample}",
+        samples_sample = plural(samples, "sample")
+    ));
     Ok(())
 }
 
@@ -453,7 +460,10 @@ async fn amf(cx: Cx, input: Input) -> Result<()> {
         f.u8("Restart position").emit()?;
         cx.emit(Node::new("Orders, samples and patterns").span(file.tail(38)));
         cx.annotate(format!(
-            "ASYLUM module: {samples} samples, {patterns} patterns, {orders} orders"
+            "ASYLUM module: {samples_sample}, {patterns_pattern}, {orders_order}",
+            samples_sample = plural(samples, "sample"),
+            patterns_pattern = plural(patterns, "pattern"),
+            orders_order = plural(orders, "order")
         ));
         return Ok(());
     }
@@ -467,7 +477,7 @@ async fn amf(cx: Cx, input: Input) -> Result<()> {
     let tracks = f.u16("Tracks").emit()?;
     let channels = f.u8("Channels").emit()?;
     cx.emit(Node::new("Module").span(file.tail(41)));
-    cx.annotate(format!("DSMI AMF v{}.{} module {:?}: {channels} channels, {orders} orders, {tracks} tracks, {samples} samples", version >> 4, version & 0xf, title.trim()));
+    cx.annotate(format!("DSMI AMF v{}.{} module {:?}: {channels_channel}, {orders_order}, {tracks_track}, {samples_sample}", version >> 4, version & 0xf, title.trim(), channels_channel = plural(channels, "channel"), orders_order = plural(orders, "order"), tracks_track = plural(tracks, "track"), samples_sample = plural(samples, "sample")));
     Ok(())
 }
 

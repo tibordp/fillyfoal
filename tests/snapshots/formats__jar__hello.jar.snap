@@ -294,7 +294,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   4: "return"  [#2:0x16f+0x1]
                 exception_table_length: 0  [#2:0x170+0x2]
                 attributes_count: 1  [#2:0x172+0x2]
-              ▾ LineNumberTable — 1 entries  [#2:0x174+0xc]
+              ▾ LineNumberTable — 1 entry  [#2:0x174+0xc]
                   attribute_name_index: 24 — LineNumberTable  [#2:0x174+0x2]
                   attribute_length: 6  [#2:0x176+0x4]
                   line_number_table_length: 1  [#2:0x17a+0x2]

@@ -2,8 +2,8 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ cp866-unicode-path.zip — ZIP archive, 1 entries  [0x0+0xb0]
-  ▾ Central Directory — 1 entries  [0x49+0x51]
+▾ cp866-unicode-path.zip — ZIP archive, 1 entry  [0x0+0xb0]
+  ▾ Central Directory — 1 entry  [0x49+0x51]
     ▾ Привет.txt — deflate, 8 → 6 bytes  [0x49+0x51]
       ▾ Central Directory Header  [0x49+0x2e]
           Signature: 50 4b 01 02  |PK..|  [0x49+0x4]

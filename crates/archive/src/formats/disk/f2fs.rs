@@ -19,6 +19,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::disk::DIRENT_TYPES;
 use crate::formats::disk::{PieceList, content_node, crc32_update, size, unix_mode, uuid_value};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -514,15 +515,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .saturating_mul(bps)
                 .saturating_mul(BLOCK),
         );
-        cx.emit(
-            Node::new(name)
-                .span(area)
-                .summary(format!("block {start}, {segments} segments: {what}")),
-        );
+        cx.emit(Node::new(name).span(area).summary(format!(
+            "block {start}, {segments_segment}: {what}",
+            segments_segment = plural(segments, "segment")
+        )));
     }
     cx.emit(
         Node::new("NAT journal")
-            .summary(format!("{} entries", fs.nat_journal.len()))
+            .summary(plural(fs.nat_journal.len(), "entry"))
             .lazy(journal_view, fs.clone()),
     );
     cx.emit(
@@ -558,9 +558,10 @@ async fn checkpoint_area(
                 cp_layout,
             )
             .summary(format!(
-                "version {:#x}, {total} blocks{}",
+                "version {:#x}, {total_block}{}",
                 u64_le(&raw, 0).unwrap_or(0),
-                if current { ", current" } else { "" }
+                if current { ", current" } else { "" },
+                total_block = plural(total, "block")
             )),
         );
         if total > 2 {
@@ -573,7 +574,7 @@ async fn checkpoint_area(
                     addr.saturating_add(1).saturating_mul(BLOCK),
                     total.saturating_sub(2).saturating_mul(BLOCK),
                 ))
-                .summary(format!("{} blocks", total.saturating_sub(2))),
+                .summary(plural(total.saturating_sub(2), "block")),
             );
         }
         if total >= 2 {
@@ -783,7 +784,8 @@ fn inode_layout(f: &mut Fields<'_>, ctx: &InodeCtx) -> Result<()> {
         Node::new("Addresses")
             .span(f.peek_span(words.saturating_mul(4)))
             .summary(format!(
-                "{words} words: data block addresses, inline data or xattrs"
+                "{words_word}: data block addresses, inline data or xattrs",
+                words_word = plural(words, "word")
             ))
             .lazy(addr_list, f.peek_span(words.saturating_mul(4))),
     );

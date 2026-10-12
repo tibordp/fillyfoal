@@ -14,6 +14,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::arcutil::human_size;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{
     Bits, CRC16_BUYPASS, bits_node, channels, duration_of, image_info, leaf, parse_bits, table,
 };
@@ -379,8 +380,10 @@ pub async fn block(cx: Cx, b: Block) -> Result<()> {
                     "placeholder".to_owned()
                 } else {
                     format!(
-                        "sample {} at byte {} ({} samples)",
-                        p.sample, p.offset, p.samples
+                        "sample {} at byte {} ({})",
+                        p.sample,
+                        p.offset,
+                        plural(p.samples, "sample")
                     )
                 }
             }),
@@ -403,7 +406,7 @@ async fn cuesheet_summary(cx: &Cx, data: Span) -> Result<String> {
     let catalog = crate::formats::util::sound::latin1_z(head.get(..128).unwrap_or_default());
     let cd = head.get(136).is_some_and(|b| b & 0x80 != 0);
     let tracks = head.get(395).copied().unwrap_or(0);
-    let mut s = format!("{tracks} tracks");
+    let mut s = plural(tracks, "track");
     if cd {
         s.push_str(", CD-DA");
     }
@@ -432,7 +435,7 @@ async fn cuesheet(cx: &Cx, data: Span) -> Result<()> {
     cx.emit(
         Node::new("Tracks")
             .span(region)
-            .summary(format!("{tracks} tracks"))
+            .summary(plural(tracks, "track"))
             .lazy(expand_tracks, (region, tracks, cd)),
     );
     Ok(())
@@ -818,10 +821,10 @@ fn frame_header(d: &[u8]) -> Option<FrameHeader> {
 pub fn frame_summary(d: &[u8]) -> Option<String> {
     let h = frame_header(d)?;
     Some(format!(
-        "{} {}, {} samples, {}",
+        "{} {}, {}, {}",
         if h.variable { "sample" } else { "frame" },
         h.number,
-        h.block_size,
+        plural(h.block_size, "sample"),
         lookup(CHANNELS, h.channels.into()).unwrap_or("?")
     ))
 }
@@ -932,9 +935,9 @@ async fn list_frames(cx: Cx, (region, info): (Span, StreamInfo)) -> Result<()> {
             Node::new(format!("Frame {index}"))
                 .span(span)
                 .summary(format!(
-                    "{what} {}, {} samples, {chans}, {}",
+                    "{what} {}, {}, {chans}, {}",
                     h.number,
-                    h.block_size,
+                    plural(h.block_size, "sample"),
                     human_size(span.len)
                 ))
                 .lazy(frame, (span, h.len)),
@@ -1030,10 +1033,10 @@ fn frame_fields(b: &mut Bits<'_>) -> Result<()> {
         .field("Block size code", 4)
         .with(|v, n| match v {
             1 => n.summary("192 samples"),
-            2..=5 => n.summary(format!("{} samples", 576u64 << v.saturating_sub(2))),
+            2..=5 => n.summary(plural(576u64 << v.saturating_sub(2), "sample")),
             6 => n.summary("8-bit value follows"),
             7 => n.summary("16-bit value follows"),
-            8..=15 => n.summary(format!("{} samples", 256u64 << v.saturating_sub(8))),
+            8..=15 => n.summary(plural(256u64 << v.saturating_sub(8), "sample")),
             _ => n.diag(Diagnostic::malformed("reserved block size code")),
         })
         .emit()?;
@@ -1072,12 +1075,12 @@ fn frame_fields(b: &mut Bits<'_>) -> Result<()> {
     match size_code {
         6 => {
             b.field("Block size − 1", 8)
-                .with(|v, n| n.summary(format!("{} samples", v.saturating_add(1))))
+                .with(|v, n| n.summary(plural(v.saturating_add(1), "sample")))
                 .emit()?;
         }
         7 => {
             b.field("Block size − 1", 16)
-                .with(|v, n| n.summary(format!("{} samples", v.saturating_add(1))))
+                .with(|v, n| n.summary(plural(v.saturating_add(1), "sample")))
                 .emit()?;
         }
         _ => {}

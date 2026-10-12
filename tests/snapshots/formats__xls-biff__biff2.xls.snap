@@ -57,7 +57,7 @@ expression: "common::explore(&display_name(&path), &data)"
       cch: 5  [0x54+0x1]
       cce: 7  [0x55+0x1]
       Name: "Total"  [0x56+0x5]
-    ▾ rgce: "=$B$1:$B$2" — 1 tokens  [0x5b+0x7]
+    ▾ rgce: "=$B$1:$B$2" — 1 token  [0x5b+0x7]
         PtgArea: 0x25 — $B$1:$B$2 (reference)  [0x5b+0x7]
   ▾ DIMENSIONS: 0x0 — cells A1:C4  [0x62+0xc]
       Type: DIMENSIONS (0x0)  [0x62+0x2]

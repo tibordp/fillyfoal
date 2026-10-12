@@ -8,7 +8,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{plural, size};
 use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Input, Probe};
 use crate::node::Node;
@@ -203,8 +203,9 @@ async fn gnome_keyring(cx: Cx, input: Input) -> Result<()> {
             ),
     );
     cx.annotate(format!(
-        "GNOME Keyring {name:?}, {count} items, {} encrypted",
-        size(enc)
+        "GNOME Keyring {name:?}, {count_item}, {} encrypted",
+        size(enc),
+        count_item = plural(count, "item")
     ));
     Ok(())
 }
@@ -496,7 +497,7 @@ async fn kwallet(cx: Cx, input: Input) -> Result<()> {
                 .span(cur.since(start))
                 .value(text(hex_lower(&folder_hash)))
                 .desc("MD5 of the folder name")
-                .summary(format!("{entries} entries"))
+                .summary(plural(entries, "entry"))
                 .lazy(kw_entries, list),
         )
         .await;
@@ -507,9 +508,10 @@ async fn kwallet(cx: Cx, input: Input) -> Result<()> {
             .diag(Diagnostic::note("requires the wallet password")),
     );
     cx.annotate(format!(
-        "KWallet {major}.{minor}, {}, {}, {folders} folders, {entries_total} entries",
+        "KWallet {major}.{minor}, {}, {}, {folders} folders, {entries_total_entry}",
         lookup(KW_CIPHERS, cipher.into()).unwrap_or("unknown cipher"),
-        lookup(KW_HASHES, hash.into()).unwrap_or("unknown hash")
+        lookup(KW_HASHES, hash.into()).unwrap_or("unknown hash"),
+        entries_total_entry = plural(entries_total, "entry")
     ));
     Ok(())
 }

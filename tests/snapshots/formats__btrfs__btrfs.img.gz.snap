@@ -170,7 +170,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Checksum tree level: 0  [0x10dc0+0x1]
         Unused: 00 00 00 00 00 00 00 00 00 00  |..........|  [0x10dc1+0xa]
     Padding — rest of the superblock  [0x10dcb+0x235]
-  ▾ Chunk map — 1 chunks
+  ▾ Chunk map — 1 chunk
       Logical 0x100000 — 4 MiB SYSTEM → physical 0x11000  [0x11000+0x2000]
       Unallocated 0x0 — 68 KiB not in any chunk  [0x0+0x11000]
   ▾ Chunk tree — CHUNK_TREE, level 0, 2 items  [0x11000+0x1000]

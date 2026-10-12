@@ -2,8 +2,8 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ piped-descriptor.zip — ZIP archive, 1 entries  [0x0+0xa3]
-  ▾ Central Directory — 1 entries  [0x5e+0x2f]
+▾ piped-descriptor.zip — ZIP archive, 1 entry  [0x0+0xa3]
+  ▾ Central Directory — 1 entry  [0x5e+0x2f]
     ▾ - — deflate, 19 → 17 bytes  [0x5e+0x2f]
       ▾ Central Directory Header  [0x5e+0x2e]
           Signature: 50 4b 01 02  |PK..|  [0x5e+0x4]

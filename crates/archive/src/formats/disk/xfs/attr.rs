@@ -8,6 +8,7 @@ use crate::fields::{Fields, struct_node};
 use crate::formats::disk::acl;
 use crate::formats::disk::name_field;
 use crate::formats::disk::{PieceList, size, uuid_value};
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{FlagTable, Value, flag};
@@ -216,7 +217,10 @@ pub(super) async fn blocks(cx: Cx, (fs, ino): (FsRef, u64)) -> Result<()> {
         let kind = attr_kind(&fs, &data);
         let info: usize = if fs.v5 { 56 } else { 12 };
         let summary = match kind {
-            AttrKind::Leaf => format!("leaf, {} entries", u16_be(&data, info).unwrap_or(0)),
+            AttrKind::Leaf => format!(
+                "leaf, {}",
+                plural(u16_be(&data, info).unwrap_or(0), "entry")
+            ),
             AttrKind::Node => format!(
                 "DA B+tree node, level {}, {} children",
                 u16_be(&data, info.saturating_add(2)).unwrap_or(0),

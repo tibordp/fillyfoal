@@ -6,6 +6,7 @@ use crate::declare_format;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
 use crate::formats::archive::legacy::signature_and_body;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -70,7 +71,7 @@ async fn squeeze(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Huffman tree")
             .span(file.sub(at, nodes.saturating_mul(4).saturating_add(2)))
-            .summary(format!("{nodes} nodes")),
+            .summary(plural(nodes, "node")),
     );
     cx.emit(
         Node::new("Squeezed data")

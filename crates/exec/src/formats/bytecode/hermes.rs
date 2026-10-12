@@ -6,6 +6,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
 use crate::formats::util::binutil::data_node;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -44,8 +45,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Header::node("Header", hspan, LE));
     let h = parse(&cx, hspan, LE, &(), Header::layout).await?;
     cx.annotate(format!(
-        "Hermes bytecode v{}, {} functions, {} strings, {} identifiers",
-        h.version, h.functions, h.strings, h.identifiers
+        "Hermes bytecode v{}, {}, {}, {} identifiers",
+        h.version,
+        plural(h.functions, "function"),
+        plural(h.strings, "string"),
+        h.identifiers
     ));
     // The rest of the header (counts that vary between versions) is
     // padded to 128 bytes; the body follows.

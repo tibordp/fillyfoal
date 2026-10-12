@@ -17,6 +17,7 @@
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::{lines, val};
 use crate::formats::{Format, Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
@@ -480,7 +481,7 @@ async fn geometry(cx: &Cx, span: Span, at: u64, depth: u32) -> Result<u64> {
                 cx.push(
                     Node::new(format!("Ring {r}"))
                         .span(ring)
-                        .summary(format!("{label}, {n} points"))
+                        .summary(format!("{label}, {n_point}", n_point = plural(n, "point")))
                         .lazy(points, (pts, le, dims)),
                 )
                 .await;

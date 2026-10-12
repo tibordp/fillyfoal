@@ -11,6 +11,7 @@ use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::floats::ibm;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::lines::{
     Line, Lines, enumeration, float32, head_lines, int, is_text, number, preview, summarize, text,
     uint,
@@ -216,8 +217,8 @@ async fn segy(cx: Cx, input: Input) -> Result<()> {
         Node::new("Binary header")
             .span(bspan)
             .summary(format!(
-                "{} samples × {} µs, {}",
-                b.samples,
+                "{} × {} µs, {}",
+                plural(b.samples, "sample"),
                 b.interval,
                 lookup(SEGY_FORMATS, b.format.into()).unwrap_or("?")
             ))
@@ -247,11 +248,11 @@ async fn segy(cx: Cx, input: Input) -> Result<()> {
             .lazy(segy_traces, (traces, b.format, b.samples, endian)),
     );
     cx.annotate(format!(
-        "SEG-Y rev {}.{}{}, {count} trace(s) × {} samples at {} µs ({}){}",
+        "SEG-Y rev {}.{}{}, {count} trace(s) × {} at {} µs ({}){}",
         revision >> 8,
         revision & 0xff,
         if endian == LE { " (little endian)" } else { "" },
-        b.samples,
+        plural(b.samples, "sample"),
         b.interval,
         lookup(SEGY_FORMATS, b.format.into()).unwrap_or("?"),
         if first.is_empty() {
@@ -358,12 +359,13 @@ async fn segy_traces(
             Node::new(format!("Trace {i}"))
                 .span(trace)
                 .summary(format!(
-                    "field record {}, trace {}, CDP {}, {n} samples: {}{}",
+                    "field record {}, trace {}, CDP {}, {n_sample}: {}{}",
                     t.field_record,
                     t.trace,
                     t.ensemble,
                     shown.join(", "),
-                    if n > 6 { ", …" } else { "" }
+                    if n > 6 { ", …" } else { "" },
+                    n_sample = plural(n, "sample")
                 ))
                 .lazy(segy_trace, (trace, format, endian)),
         )
@@ -535,8 +537,9 @@ async fn seg2_traces(cx: Cx, (file, offsets, endian): (Span, Vec<u64>, Endian)) 
         let mut node = Node::new(format!("Trace {i}"))
             .span(span)
             .summary(format!(
-                "{samples} samples, {}",
-                lookup(SEG2_FORMATS, format.into()).unwrap_or("?")
+                "{samples_sample}, {}",
+                lookup(SEG2_FORMATS, format.into()).unwrap_or("?"),
+                samples_sample = plural(samples, "sample")
             ))
             .lazy(
                 seg2_trace,
@@ -740,14 +743,14 @@ async fn mseed2(cx: Cx, input: Input) -> Result<()> {
                 .span(span)
                 .value(text(id))
                 .summary(format!(
-                    "{:04}-{:03} {:02}:{:02}:{:02}.{:04}, {} samples at {rate} Hz, {}",
+                    "{:04}-{:03} {:02}:{:02}:{:02}.{:04}, {} at {rate} Hz, {}",
                     h.year,
                     h.day,
                     h.hour,
                     h.minute,
                     h.second,
                     h.fraction,
-                    h.samples,
+                    plural(h.samples, "sample"),
                     encoding
                         .and_then(|e| lookup(MSEED_ENCODINGS, e.into()))
                         .unwrap_or("unknown encoding")
@@ -759,8 +762,9 @@ async fn mseed2(cx: Cx, input: Input) -> Result<()> {
         at = at.saturating_add(len);
     }
     cx.annotate(format!(
-        "miniSEED, {count} record(s), {samples} samples, {}",
-        ids.join(", ")
+        "miniSEED, {count} record(s), {samples_sample}, {}",
+        ids.join(", "),
+        samples_sample = plural(samples, "sample")
     ));
     Ok(())
 }
@@ -896,8 +900,14 @@ async fn mseed3(cx: Cx, input: Input) -> Result<()> {
                 .span(span)
                 .value(text(sid.clone()))
                 .summary(format!(
-                    "{:04}-{:03} {:02}:{:02}:{:02}.{:09}, {} samples at {rate} Hz",
-                    h.year, h.day, h.hour, h.minute, h.second, h.nanosecond, h.samples
+                    "{:04}-{:03} {:02}:{:02}:{:02}.{:09}, {} at {rate} Hz",
+                    h.year,
+                    h.day,
+                    h.hour,
+                    h.minute,
+                    h.second,
+                    h.nanosecond,
+                    plural(h.samples, "sample")
                 ))
                 .lazy(mseed3_record, (input, hs, sid_span, extra, data)),
         )
@@ -1179,7 +1189,7 @@ async fn sac(cx: Cx, input: Input) -> Result<()> {
         .join(".");
     let delta = getf(0);
     cx.annotate(format!(
-        "SAC v{} ({} endian), {id}, {npts} samples at {} Hz, start {:04}-{:03} {:02}:{:02}:{:02}.{:03}",
+        "SAC v{} ({} endian), {id}, {npts_sample} at {} Hz, start {:04}-{:03} {:02}:{:02}:{:02}.{:03}",
         geti(6),
         if endian == LE { "little" } else { "big" },
         if delta > 0.0 { (1.0 / f64::from(delta)).to_string() } else { "?".to_owned() },
@@ -1188,7 +1198,7 @@ async fn sac(cx: Cx, input: Input) -> Result<()> {
         geti(2),
         geti(3),
         geti(4),
-        geti(5)
+        geti(5), npts_sample = plural(npts, "sample")
     ));
     Ok(())
 }
@@ -1855,7 +1865,10 @@ async fn surfer(cx: Cx, input: Input) -> Result<()> {
                 );
             }
             cx.emit(Node::new("Values").span(file.tail(lines.pos())));
-            cx.annotate(format!("Surfer 6 ASCII grid, {dims} nodes"));
+            cx.annotate(format!(
+                "Surfer 6 ASCII grid, {dims_node}",
+                dims_node = plural(dims, "node")
+            ));
         }
         b"DSBB" => {
             let b = cx.block(file.sub(0, 56)).await?;
@@ -1900,7 +1913,7 @@ async fn surfer(cx: Cx, input: Input) -> Result<()> {
                 if dims.is_empty() {
                     String::new()
                 } else {
-                    format!(", {dims} nodes")
+                    format!(", {dims_node}", dims_node = plural(dims, "node"))
                 }
             ));
         }
@@ -2096,9 +2109,9 @@ async fn envi(cx: Cx, input: Input) -> Result<()> {
         .and_then(|t| lookup(ENVI_TYPES, t))
         .unwrap_or("?");
     cx.annotate(format!(
-        "ENVI header: {} samples × {} lines × {} bands, {dtype}, {}",
-        get("samples"),
-        get("lines"),
+        "ENVI header: {} × {} × {} bands, {dtype}, {}",
+        plural(get("samples"), "sample"),
+        plural(get("lines"), "line"),
         get("bands"),
         get("interleave")
     ));

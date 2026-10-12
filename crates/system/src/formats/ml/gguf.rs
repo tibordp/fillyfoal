@@ -9,6 +9,7 @@
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::datakit::{ByteReader, clip, le_uint, size};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -369,7 +370,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(summary);
     cx.emit(
         Node::new("Metadata")
-            .summary(format!("{kvs} entries"))
+            .summary(plural(kvs, "entry"))
             .lazy(metadata, g),
     );
     cx.emit(

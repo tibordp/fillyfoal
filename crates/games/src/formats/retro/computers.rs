@@ -6,6 +6,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::name_or;
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -169,12 +170,13 @@ async fn d64_directory(cx: Cx, input: Input) -> Result<()> {
                 Node::new(name)
                     .span(entry)
                     .summary(format!(
-                        "{type_name}, {blocks} blocks{}",
+                        "{type_name}, {blocks_block}{}",
                         if kind & 0x80 == 0 {
                             " (not closed)"
                         } else {
                             ""
-                        }
+                        },
+                        blocks_block = plural(blocks, "block")
                     ))
                     .lazy(d64_file, (input, start)),
             )
@@ -240,9 +242,9 @@ async fn d64_file(cx: Cx, (input, start): (Input, (u8, u8))) -> Result<()> {
             }),
     );
     cx.emit(Node::new("Contents").span(chain).summary(format!(
-        "{} bytes in {} sectors",
+        "{} bytes in {}",
         chain.len,
-        visited.len()
+        plural(visited.len(), "sector")
     )));
     Ok(())
 }
@@ -297,7 +299,11 @@ async fn t64(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("{:?}, {} files", h.name.trim_end(), h.used));
+    cx.annotate(format!(
+        "{:?}, {}",
+        h.name.trim_end(),
+        plural(h.used, "file")
+    ));
     Ok(())
 }
 
@@ -662,9 +668,10 @@ async fn tzx(cx: Cx, input: Input) -> Result<()> {
         blocks = blocks.saturating_add(1);
     }
     cx.annotate(format!(
-        "TZX {}.{}, {blocks} blocks",
+        "TZX {}.{}, {blocks_block}",
         version.get(8).copied().unwrap_or(0),
-        version.get(9).copied().unwrap_or(0)
+        version.get(9).copied().unwrap_or(0),
+        blocks_block = plural(blocks, "block")
     ));
     Ok(())
 }
@@ -710,18 +717,19 @@ async fn cpc_dsk(cx: Cx, input: Input) -> Result<()> {
                 header.get(0x11).copied().unwrap_or(0)
             ))
             .span(span)
-            .summary(format!("{sectors} sectors")),
+            .summary(plural(sectors, "sector")),
         )
         .await;
         at = at.saturating_add(size);
     }
     cx.annotate(format!(
-        "{}, {tracks} tracks, {sides} side(s)",
+        "{}, {tracks_track}, {sides} side(s)",
         if extended {
             "Extended DSK"
         } else {
             "Standard DSK"
-        }
+        },
+        tracks_track = plural(tracks, "track")
     ));
     Ok(())
 }
@@ -770,8 +778,8 @@ async fn msa(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "{} sectors/track, tracks {}-{}, {} side(s)",
-        h.sectors,
+        "{}/track, tracks {}-{}, {} side(s)",
+        plural(h.sectors, "sector"),
         h.start,
         h.end,
         h.sides.saturating_add(1)
@@ -890,7 +898,11 @@ async fn two_img(cx: Cx, input: Input) -> Result<()> {
                 .value(Value::Text(String::from_utf8_lossy(&text).into_owned())),
         );
     }
-    cx.annotate(format!("{} blocks, created by {}", h.blocks, h.creator));
+    cx.annotate(format!(
+        "{}, created by {}",
+        plural(h.blocks, "block"),
+        h.creator
+    ));
     Ok(())
 }
 

@@ -11,6 +11,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::formats::science::bio::binary::SAM_FLAGS;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::lines::{
     Line, Lines, flags, head_lines, is_text, number, preview, summarize, tally, text, uint,
 };
@@ -1702,7 +1703,7 @@ async fn pdb_structure(cx: Cx, input: Input) -> Result<()> {
             format!(", chains {chain_list}")
         },
         if models > 1 {
-            format!(", {models} models")
+            format!(", {models_model}", models_model = plural(models, "model"))
         } else {
             String::new()
         }
@@ -2469,10 +2470,13 @@ async fn jcamp(cx: Cx, input: Input) -> Result<()> {
         if npoints.is_empty() {
             String::new()
         } else {
-            format!(", {npoints} points")
+            format!(
+                ", {npoints_point}",
+                npoints_point = plural(npoints, "point")
+            )
         },
         if blocks > 1 {
-            format!(", {blocks} blocks")
+            format!(", {blocks_block}", blocks_block = plural(blocks, "block"))
         } else {
             format!(": {}", preview(&title, 60))
         }

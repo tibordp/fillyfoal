@@ -16,7 +16,7 @@ use super::{BLCKSZ, page_checksum};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::util::fmt::{grouped_count, size};
+use crate::formats::util::fmt::{grouped_count, plural, size};
 use crate::formats::util::val::flagsv;
 use crate::formats::util::val::{hex, uint};
 use crate::formats::{Format, Head, Input, Probe};
@@ -576,8 +576,8 @@ fn heap_summary(b: &[u8]) -> String {
     let mask = u16_le(b, 20).unwrap_or(0);
     let hoff = u64::from(b.get(22).copied().unwrap_or(0));
     let mut s = format!(
-        "xmin {xmin}, xmax {xmax}, {} attributes, {} of data",
-        mask2 & 0x7ff,
+        "xmin {xmin}, xmax {xmax}, {}, {} of data",
+        plural(mask2 & 0x7ff, "attribute"),
         size(to_u64(b.len()).saturating_sub(hoff))
     );
     if mask2 & 0x4000 != 0 {
@@ -669,7 +669,7 @@ async fn tuple_fields(cx: Cx, (t, heap): (Span, bool)) -> Result<()> {
         Node::new("infomask2")
             .span(at(18, 2))
             .value(flagsv(u64::from(mask2 & 0xf800), 16, INFOMASK2))
-            .summary(format!("{} attributes", mask2 & 0x7ff)),
+            .summary(plural(mask2 & 0x7ff, "attribute")),
     );
     let mask = u16_le(&b, 20).unwrap_or(0);
     cx.emit(

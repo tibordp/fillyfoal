@@ -8,7 +8,7 @@ use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::Fields;
 use crate::formats::util::binutil::{NodeExt, Reader};
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::text;
 use crate::node::Node;
 use crate::value::{EnumTable, FlagTable, flag};
@@ -450,7 +450,7 @@ pub(super) async fn expand(
                 let node = Node::new(c.utf8_or(name))
                     .span(span)
                     .value(text(decl))
-                    .summary(format!("{count} attributes"));
+                    .summary(plural(count, "attribute"));
                 f.node(if count > 0 && depth < MAX_DEPTH {
                     node.lazy(
                         crate::expander!(self::component: (Class, usize, usize, u32)),

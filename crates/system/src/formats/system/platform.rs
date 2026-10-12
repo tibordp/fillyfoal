@@ -10,6 +10,7 @@ use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, Layout, parse, struct_node};
 use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Head, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
@@ -130,7 +131,7 @@ async fn ldso_cache(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Old-format table")
                 .span(file.sub(0, base))
-                .summary(format!("{n} entries")),
+                .summary(plural(n, "entry")),
         );
     }
     let head = cx.block(file.sub(base, 48)).await?;
@@ -142,7 +143,7 @@ async fn ldso_cache(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Libraries")
             .span(entries)
-            .summary(format!("{count} entries"))
+            .summary(plural(count, "entry"))
             .lazy(ldso_entries, (file, entries, base)),
     );
     cx.annotate(format!(
@@ -848,7 +849,10 @@ async fn cbfs(cx: Cx, input: Input) -> Result<()> {
             .saturating_add(len)
             .next_multiple_of(64);
     }
-    cx.annotate(format!("CBFS, {files} files"));
+    cx.annotate(format!(
+        "CBFS, {files_file}",
+        files_file = plural(files, "file")
+    ));
     Ok(())
 }
 

@@ -11,7 +11,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
 use crate::formats::util::arcutil::push_nodes;
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::name_or;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -226,11 +226,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
     let names: Vec<String> = imports.iter().map(|n| n.name.to_string()).collect();
     cx.annotate(format!(
-        "{} {kind} ({}, {}), module {module}, {} objects{}",
+        "{} {kind} ({}, {}), module {module}, {}{}",
         if &h.signature == "LX" { "LX" } else { "LE" },
         name_or(OS, h.os.into(), "OS"),
         name_or(CPU, h.cpu.into(), "CPU"),
-        h.objects,
+        plural(h.objects, "object"),
         if names.is_empty() {
             String::new()
         } else {
@@ -244,7 +244,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Object Table")
             .span(table)
-            .summary(format!("{} objects", h.objects))
+            .summary(plural(h.objects, "object"))
             .lazy(objects, table),
     );
     cx.emit(
@@ -278,13 +278,13 @@ async fn objects(cx: Cx, table: Span) -> Result<()> {
         let flag = |b: u32, c: char| if o.flags & b != 0 { c } else { '-' };
         cx.push(
             Object::node(format!("Object {}", i.saturating_add(1)), at, LE).summary(format!(
-                "{}{}{} {:#x} bytes at {:#x}, {} pages",
+                "{}{}{} {:#x} bytes at {:#x}, {}",
                 flag(1, 'r'),
                 flag(2, 'w'),
                 flag(4, 'x'),
                 o.virtual_size,
                 o.base,
-                o.page_count
+                plural(o.page_count, "page")
             )),
         )
         .await;

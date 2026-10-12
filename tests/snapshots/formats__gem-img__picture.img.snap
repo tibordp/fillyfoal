@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ picture.img — GEM bitmap (XIMG), 16×4, 1 planes  [0x0+0x32]
+▾ picture.img — GEM bitmap (XIMG), 16×4, 1 plane  [0x0+0x32]
     Version: 1  [0x0+0x2]
     Header length (words): 17  [0x2+0x2]
     Planes: 1  [0x4+0x2]

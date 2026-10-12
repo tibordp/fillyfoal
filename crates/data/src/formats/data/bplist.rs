@@ -14,7 +14,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::util::datakit::be_uint;
 use crate::formats::util::datakit::{cf_time, uint};
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -136,9 +136,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let pl: Pl = Arc::new(plist);
     match &root {
         Some(Ok(obj)) => {
-            let mut summary = format!("binary plist, {} objects", trailer.objects);
+            let mut summary = format!("binary plist, {}", plural(trailer.objects, "object"));
             if obj.kind == Kind::Dict && has_key(&cx, &pl, obj, "$archiver").await {
-                summary = format!("NSKeyedArchiver archive, {} objects", trailer.objects);
+                summary = format!(
+                    "NSKeyedArchiver archive, {}",
+                    plural(trailer.objects, "object")
+                );
             }
             cx.annotate(format!("{summary}, root {}", obj.summary));
             cx.emit(object_node(&pl, "Root".into(), trailer.top, obj, &[]));
@@ -150,12 +153,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Objects")
                 .span(file.sub(Header::SIZE, trailer.table.saturating_sub(Header::SIZE)))
-                .summary(format!("{} objects", trailer.objects))
+                .summary(plural(trailer.objects, "object"))
                 .lazy(objects, pl.clone()),
         );
         let mut table = Node::new("Offset table")
             .span(table_span)
-            .summary(format!("{} entries", trailer.objects))
+            .summary(plural(trailer.objects, "entry"))
             .lazy(offset_table, pl);
         if table_span.len < table_len {
             table = table.diag(Diagnostic::truncated(
@@ -173,8 +176,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 async fn offset_of(cx: &Cx, pl: &Plist, index: u64) -> Result<u64> {
     if index >= pl.objects {
         return Err(Diagnostic::malformed(format!(
-            "object {index} is beyond the {} objects",
-            pl.objects
+            "object {index} is beyond the {}",
+            plural(pl.objects, "object")
         )));
     }
     let size = u64::from(pl.offset_size);

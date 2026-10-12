@@ -23,7 +23,7 @@ use crate::bytes::{u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::fmt::{clip, fourcc};
+use crate::formats::util::fmt::{clip, fourcc, plural};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -118,7 +118,7 @@ async fn font_at(cx: &Cx, input: Input, file: Span, base: u64) -> Result<String>
         },
     ));
     if count > MAX_TABLES {
-        return Err(Diagnostic::malformed(format!("{count} tables")).at(file.sub(base, 6)));
+        return Err(Diagnostic::malformed(plural(count, "table")).at(file.sub(base, 6)));
     }
     let dir = file.sub_exact(base.saturating_add(12), u64::from(count).saturating_mul(16))?;
     let data = cx.read(dir).await?;
@@ -164,11 +164,14 @@ async fn font_at(cx: &Cx, input: Input, file: Span, base: u64) -> Result<String>
             summary = format!("{summary}, {glyphs} glyphs");
         }
     }
-    summary = format!("{summary}, {count} tables");
+    summary = format!(
+        "{summary}, {count_table}",
+        count_table = plural(count, "table")
+    );
     cx.emit(
         Node::new("Table directory")
             .span(dir)
-            .summary(format!("{count} tables"))
+            .summary(plural(count, "table"))
             .lazy(directory, dir),
     );
     for entry in entries {

@@ -22,7 +22,7 @@ use crate::formats::text::scan::Owned;
 use crate::formats::text::xml::{Kind, Lexer, Mode, token_text};
 use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::fmt;
-use crate::formats::util::fmt::count;
+use crate::formats::util::fmt::{count, plural};
 use crate::formats::util::val::{hex, uint};
 use crate::formats::{
     Codec, Format, Head, Input, Probe, content, dissect_or_data, embedded, embedded_named,
@@ -151,9 +151,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     cx.emit(Koly::node("Trailer (koly)", trailer, BE));
     cx.annotate(format!(
-        "Apple disk image (UDIF), {} ({} sectors)",
+        "Apple disk image (UDIF), {} ({})",
         fmt::size(koly.sectors.saturating_mul(512)),
-        koly.sectors
+        plural(koly.sectors, "sector")
     ));
     Ok(())
 }

@@ -8,6 +8,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -256,7 +257,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         summary = format!("{summary}, {levels} mip levels");
     }
     if surfaces > 1 {
-        summary = format!("{summary}, {surfaces} surfaces");
+        summary = format!(
+            "{summary}, {surfaces_surface}",
+            surfaces_surface = plural(surfaces, "surface")
+        );
     }
     cx.annotate(summary);
     let data = file.tail(pos);
@@ -278,7 +282,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.emit(
                 Node::new("Surfaces")
                     .span(data)
-                    .summary(format!("{surfaces} × {levels} levels"))
+                    .summary(format!(
+                        "{surfaces} × {levels_level}",
+                        levels_level = plural(levels, "level")
+                    ))
                     .lazy(list_surfaces, (data, layout)),
             );
         }

@@ -20,6 +20,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::Describe;
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -61,7 +62,7 @@ pub async fn order_node(cx: &Cx, span: Span) -> Result<Node> {
     let list = cx.read_avail(span).await?;
     Ok(Node::new("Orders")
         .span(span)
-        .summary(format!("{} entries", list.len()))
+        .summary(plural(list.len(), "entry"))
         .value(crate::formats::util::val::text(orders(&list))))
 }
 
@@ -94,7 +95,7 @@ pub fn pointed<R: Record>(
         .unwrap_or(0);
     Node::new(name)
         .span(pointers.table)
-        .summary(format!("{count} entries"))
+        .summary(plural(count, "entry"))
         .lazy(expand_pointed::<R>, (file, pointers, item, describe, data))
 }
 
@@ -231,10 +232,12 @@ async fn it214_node(
     let mut node = Node::new("Sample data")
         .span(span)
         .summary(format!(
-            "IT{} compressed, {walked} blocks, {frames} samples{}{}",
+            "IT{} compressed, {walked_block}, {frames_sample}{}{}",
             if it215 { "215" } else { "214" },
             if sixteen { ", 16-bit" } else { ", 8-bit" },
-            if stereo { ", stereo" } else { "" }
+            if stereo { ", stereo" } else { "" },
+            walked_block = plural(walked, "block"),
+            frames_sample = plural(frames, "sample")
         ))
         .lazy(it214_blocks, (span, sixteen));
     if short {
@@ -257,8 +260,8 @@ async fn it214_blocks(cx: Cx, (span, sixteen): (Span, bool)) -> Result<()> {
             Node::new(format!("Block {index}"))
                 .span(block)
                 .summary(format!(
-                    "{len} bytes, up to {} samples",
-                    it214_block(sixteen)
+                    "{len} bytes, up to {}",
+                    plural(it214_block(sixteen), "sample")
                 )),
         )
         .await;

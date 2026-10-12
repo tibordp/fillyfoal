@@ -403,8 +403,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             && u64::from(declared) != animation.frames
         {
             cx.diag(Diagnostic::warning(format!(
-                "acTL declares {declared} frames, {} fcTL chunks found",
-                animation.frames
+                "acTL declares {declared_frame}, {} fcTL chunks found",
+                animation.frames,
+                declared_frame = plural(declared, "frame")
             )));
         }
     }
@@ -601,9 +602,9 @@ fn summarize(kind: &Kind, d: &[u8], len: u64, image: &Image) -> Option<String> {
         b"pCAL" => format!("\"{}\"", latin1(cut(d).0)),
         b"gIFg" => format!("GIF delay {} ms", u32::from(u16_at(2)?).saturating_mul(10)),
         b"MHDR" => format!(
-            "MNG {}, {} ticks/s",
+            "MNG {}, {}/s",
             dims(u32_at(0)?, u32_at(4)?),
-            u32_at(8)?
+            plural(u32_at(8)?, "tick")
         ),
         b"JHDR" => format!("JNG {}, {}-bit", dims(u32_at(0)?, u32_at(4)?), at(9)?),
         b"IEND" | b"MEND" => "end of image".to_owned(),

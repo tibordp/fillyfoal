@@ -2844,7 +2844,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Key size: 8  [0xb606+0x2]
           Key  [0xb608+0x8]
           Data  [0xb610+0x0]
-    ▾ Page 12 — leaf, 1 keys  [0xc000+0x1000]  (+13 nodes elided)
+    ▾ Page 12 — leaf, 1 key  [0xc000+0x1000]  (+13 nodes elided)
     ▾ Page 13 — leaf, 2 keys  [0xd000+0x1000]  (+20 nodes elided)
     ▾ Page 14 — overflow, 1 page  [0xe000+0x1000]  (+6 nodes elided)
     ▾ Page 15 — leaf, 2 keys  [0xf000+0x1000]  (+20 nodes elided)

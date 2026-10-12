@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ plain.orc — ORC, NONE compression, 3 rows, 1 stripes, 3 types  [0x0+0xac]
+▾ plain.orc — ORC, NONE compression, 3 rows, 1 stripe, 3 types  [0x0+0xac]
     Magic: "ORC"  [0x0+0x3]
   ▾ Stripes — 1
     ▾ Stripe 0 — 3 rows  [0x3+0x31]

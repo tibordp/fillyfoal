@@ -6,6 +6,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{crc32_update, size, text, unix_time, uuid_value};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -93,14 +94,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let block = 1024u64.checked_shl(sb.log_block_size).unwrap_or(0);
     let label = crate::text::until_nul(&sb.volume_name);
     cx.annotate(format!(
-        "NILFS2 filesystem{}, {}, {} segments of {} blocks, checkpoint {}",
+        "NILFS2 filesystem{}, {}, {} of {} blocks, checkpoint {}",
         if label.is_empty() {
             String::new()
         } else {
             format!(" \"{label}\"")
         },
         size(sb.dev_size),
-        sb.segments,
+        plural(sb.segments, "segment"),
         sb.blocks_per_segment,
         sb.last_cno
     ));

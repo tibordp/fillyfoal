@@ -10,6 +10,7 @@ use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::compression::gzip;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::lines::{enumeration, float32, hex, int, preview, summarize, text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded, embedded_as};
 use crate::node::{Count, Node};
@@ -2509,7 +2510,7 @@ async fn abif_dir(cx: Cx, (file, entries): (Span, Span)) -> Result<()> {
             node = node.desc(d);
         }
         if e.count > 16 && matches!(e.element_type, 3 | 4 | 5 | 7) {
-            node = node.summary(format!("{} values", e.count));
+            node = node.summary(plural(e.count, "value"));
         }
         cx.push(node).await;
         at = at.saturating_add(AbifEntry::SIZE);
@@ -2553,7 +2554,7 @@ async fn scf(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Samples")
             .span(file.sub(h.samples_offset.into(), sample_bytes))
-            .summary(format!("4 channels × {} samples", h.samples)),
+            .summary(format!("4 channels × {}", plural(h.samples, "sample"))),
     );
     let bases = file.sub(h.bases_offset.into(), u64::from(h.bases).saturating_mul(12));
     let v3 = h.version.starts_with('3');
@@ -2595,8 +2596,10 @@ async fn scf(cx: Cx, input: Input) -> Result<()> {
         );
     }
     cx.annotate(format!(
-        "SCF {}, {} bases, {} samples",
-        h.version, h.bases, h.samples
+        "SCF {}, {} bases, {}",
+        h.version,
+        h.bases,
+        plural(h.samples, "sample")
     ));
     Ok(())
 }

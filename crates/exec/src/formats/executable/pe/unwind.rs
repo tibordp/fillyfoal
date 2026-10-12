@@ -16,6 +16,7 @@ use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Fields, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::hex;
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -48,7 +49,7 @@ pub(super) async fn exceptions(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()>
     };
     let count = dir.span.len.checked_div(entry).unwrap_or(0);
     cx.set_count(Count::Exact(count));
-    cx.annotate(format!("{count} functions"));
+    cx.annotate(plural(count, "function"));
     for i in 0..count {
         let span = dir.span.sub(i.saturating_mul(entry), entry);
         let data = cx.read(span).await?;

@@ -22,6 +22,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::disk::{PieceList, size, text, unix_mode, uuid_value};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::uint;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
@@ -122,7 +123,10 @@ fn pxd_summary(b: &Vec<u8>, n: Node) -> Node {
     if len == 0 && addr == 0 {
         n.summary("none")
     } else {
-        n.summary(format!("{len} blocks at block {addr}"))
+        n.summary(format!(
+            "{len_block} at block {addr}",
+            len_block = plural(len, "block")
+        ))
     }
 }
 
@@ -368,7 +372,10 @@ fn dtree_root(f: &mut Fields<'_>) -> Result<()> {
     f.u32("Parent inode").emit()?;
     f.bytes("Sorted slot table", 8).emit()?;
     f.bytes("Slots", 256)
-        .summary(format!("{count} entries in 8 slots of 32 bytes"))
+        .summary(format!(
+            "{count_entry} in 8 slots of 32 bytes",
+            count_entry = plural(count, "entry")
+        ))
         .emit()?;
     Ok(())
 }
@@ -417,8 +424,8 @@ fn xtree_root(f: &mut Fields<'_>) -> Result<()> {
                 .span(span)
                 .value(uint(x.addr, 40))
                 .summary(format!(
-                    "{} blocks at file block {}, flags {:#x}",
-                    x.len,
+                    "{} at file block {}, flags {:#x}",
+                    plural(x.len, "block"),
                     x.offset,
                     raw.first().copied().unwrap_or(0)
                 )),
@@ -581,16 +588,17 @@ async fn bmap(cx: Cx, file: Span) -> Result<()> {
     let dmaps = ctl.map_size.div_ceil(BPERDMAP);
     let pages = file.len / PAGE;
     cx.set_count(Count::Exact(pages.saturating_add(1)));
-    cx.push(
-        DbMap::node("Control page", control, LE)
-            .summary(format!("{} blocks, {} free", ctl.map_size, ctl.free)),
-    )
+    cx.push(DbMap::node("Control page", control, LE).summary(format!(
+        "{}, {} free",
+        plural(ctl.map_size, "block"),
+        ctl.free
+    )))
     .await;
     let per_ag = control.sub(56, 1024);
     cx.push(
         Node::new("Free blocks per allocation group")
             .span(per_ag)
-            .summary(format!("{} groups", ctl.ags))
+            .summary(plural(ctl.ags, "group"))
             .lazy(ag_free, (per_ag, ctl.ags)),
     )
     .await;
@@ -766,8 +774,8 @@ async fn ag_controls(cx: Cx, span: Span) -> Result<()> {
         },
         |i, span, e| {
             struct_node(format!("AG {i}"), span, LE, (), agctl_layout).summary(format!(
-                "{} inodes, {} free",
-                u32_le(e, 8).unwrap_or(0),
+                "{}, {} free",
+                plural(u32_le(e, 8).unwrap_or(0), "inode"),
                 u32_le(e, 12).unwrap_or(0)
             ))
         },
@@ -805,10 +813,10 @@ fn iag_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u32("Free extents").emit()?;
     f.bytes("Unused", 1976).emit()?;
     f.bytes("Working map", 512)
-        .with(|b, n| n.summary(format!("{} inodes allocated", allocated(b, 4096))))
+        .with(|b, n| n.summary(format!("{} allocated", plural(allocated(b, 4096), "inode"))))
         .emit()?;
     f.bytes("Persistent map", 512)
-        .with(|b, n| n.summary(format!("{} inodes allocated", allocated(b, 4096))))
+        .with(|b, n| n.summary(format!("{} allocated", plural(allocated(b, 4096), "inode"))))
         .emit()?;
     Ok(())
 }
@@ -830,8 +838,10 @@ async fn imap(cx: Cx, map: Imap) -> Result<()> {
     cx.set_count(Count::Exact(pages.saturating_add(1)));
     let mut head = DinoMap::node("Control page", control, LE);
     head = head.summary(format!(
-        "{} IAGs, {} inodes, {} free",
-        ctl.next_iag, ctl.inodes, ctl.free
+        "{} IAGs, {}, {} free",
+        ctl.next_iag,
+        plural(ctl.inodes, "inode"),
+        ctl.free
     ));
     cx.push(head).await;
     cx.push(
@@ -925,7 +935,7 @@ async fn pxd_list(cx: Cx, span: Span) -> Result<()> {
             Node::new(format!("Extent {k}"))
                 .span(span)
                 .value(uint(addr, 40))
-                .summary(format!("{len} blocks"))
+                .summary(plural(len, "block"))
         },
     )
     .await
@@ -1173,7 +1183,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Secondary aggregate inode table")
                 .span(span)
-                .summary(format!("{len} blocks at block {addr}"))
+                .summary(format!(
+                    "{len_block} at block {addr}",
+                    len_block = plural(len, "block")
+                ))
                 .lazy(inode_table, (agg, span.sub(0, 0x4000))),
         );
     }
@@ -1188,7 +1201,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     fileset: false,
                 },
             )
-            .summary(format!("{len} blocks at block {addr}")),
+            .summary(format!(
+                "{len_block} at block {addr}",
+                len_block = plural(len, "block")
+            )),
         );
     }
     // The block allocation map and the fileset's inode map are files
@@ -1232,7 +1248,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Inline log")
                 .span(agg.blocks(log_addr, log_len))
-                .summary(format!("{log_len} blocks at block {log_addr}"))
+                .summary(format!(
+                    "{log_len_block} at block {log_addr}",
+                    log_len_block = plural(log_len, "block")
+                ))
                 .lazy(inline_log, agg.blocks(log_addr, log_len)),
         );
     }
@@ -1241,7 +1260,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("fsck work space")
                 .span(agg.blocks(fsck_addr, fsck_len))
-                .summary(format!("{fsck_len} blocks at block {fsck_addr}")),
+                .summary(format!(
+                    "{fsck_len_block} at block {fsck_addr}",
+                    fsck_len_block = plural(fsck_len, "block")
+                )),
         );
     }
     let label = crate::text::until_nul(&sb.label);
@@ -1299,8 +1321,10 @@ async fn inode_table(cx: Cx, (agg, span): (Agg, Span)) -> Result<()> {
                 Node::new(format!("Inode {i} extent {k}"))
                     .span(agg.blocks(x.addr, x.len))
                     .summary(format!(
-                        "{} blocks at block {}, file block {}",
-                        x.len, x.addr, x.offset
+                        "{} at block {}, file block {}",
+                        plural(x.len, "block"),
+                        x.addr,
+                        x.offset
                     )),
             )
             .await;

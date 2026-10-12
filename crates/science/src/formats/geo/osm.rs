@@ -10,7 +10,7 @@ use crate::codec::Codec;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{plural, size};
 use crate::formats::util::val::uint;
 use crate::formats::util::wire::protobuf::{self as pb, Elem, LEN, Msg, Ty, VARINT, f};
 use crate::formats::{Head, Input, Probe};
@@ -230,7 +230,10 @@ async fn osm_pbf(cx: Cx, input: Input) -> Result<()> {
         .await;
         pos = pos.saturating_add(total);
     }
-    cx.annotate(format!("OSM PBF, {blocks} blocks"));
+    cx.annotate(format!(
+        "OSM PBF, {blocks_block}",
+        blocks_block = plural(blocks, "block")
+    ));
     Ok(())
 }
 

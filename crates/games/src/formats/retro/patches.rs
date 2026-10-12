@@ -9,7 +9,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{plural, size};
 use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
@@ -129,9 +129,10 @@ async fn ips_walk(cx: Cx, input: Input, width: u64, eof: &'static [u8]) -> Resul
         cx.diag(Diagnostic::warning("no end-of-file marker"));
     }
     cx.annotate(format!(
-        "{}{name} patch, {records} records ({rle} RLE), writes up to {end:#x}{}",
+        "{}{name} patch, {records_record} ({rle} RLE), writes up to {end:#x}{}",
         if ebp { "EBP (EarthBound) " } else { "" },
-        truncate.map_or_else(String::new, |t| format!(", truncates to {t:#x}"))
+        truncate.map_or_else(String::new, |t| format!(", truncates to {t:#x}")),
+        records_record = plural(records, "record")
     ));
     Ok(())
 }
@@ -764,9 +765,10 @@ async fn ppf(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
     }
     cx.annotate(format!(
-        "PPF {version}.0 patch {:?}, {records} records, {bytes} bytes{}",
+        "PPF {version}.0 patch {:?}, {records_record}, {bytes} bytes{}",
         description.trim(),
-        if undo { ", undo data" } else { "" }
+        if undo { ", undo data" } else { "" },
+        records_record = plural(records, "record")
     ));
     Ok(())
 }
@@ -834,14 +836,15 @@ async fn aps_n64(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "APS N64 patch {:?}{}, {records} records, output {}",
+        "APS N64 patch {:?}{}, {records_record}, output {}",
         description.trim(),
         if cart.is_empty() {
             String::new()
         } else {
             format!(" for cart {cart}")
         },
-        size(out.into())
+        size(out.into()),
+        records_record = plural(records, "record")
     ));
     Ok(())
 }
@@ -880,9 +883,10 @@ async fn aps_gba(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "APS GBA patch, {} → {}, {count} blocks",
+        "APS GBA patch, {} → {}, {count_block}",
         size(h.source.into()),
-        size(h.target.into())
+        size(h.target.into()),
+        count_block = plural(count, "block")
     ));
     Ok(())
 }
@@ -969,7 +973,8 @@ async fn gdiff(cx: Cx, input: Input) -> Result<()> {
         cx.diag(Diagnostic::warning("no EOF command"));
     }
     cx.annotate(format!(
-        "GDIFF, {commands} commands ({copies} copies, {data} literal bytes), output {out} bytes"
+        "GDIFF, {commands_command} ({copies} copies, {data} literal bytes), output {out} bytes",
+        commands_command = plural(commands, "command")
     ));
     Ok(())
 }

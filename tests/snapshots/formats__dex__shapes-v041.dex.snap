@@ -1346,7 +1346,7 @@ expression: "common::explore(&display_name(&path), &data)"
               value: "{Lorg/fillyfoal/sample/Shape$Square$Counter;}"  [0x13e4+0x5]
   ▾ Map List — 18 sections  [0x161c+0xdc]
       size: 18  [0x161c+0x4]
-    ▾ TYPE_HEADER_ITEM — 1 items at 0x0  [0x1620+0xc] → 0x0+0x0
+    ▾ TYPE_HEADER_ITEM — 1 item at 0x0  [0x1620+0xc] → 0x0+0x0
         type: TYPE_HEADER_ITEM (0x0)  [0x1620+0x2]
         unused: 0  [0x1622+0x2]
         size: 1  [0x1624+0x4]
@@ -2672,8 +2672,8 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ TYPE_STRING_DATA_ITEM — 130 items at 0xba4  [0x1698+0xc] → 0xba4+0x0  (+524 nodes elided)
     ▾ TYPE_ANNOTATION_ITEM — 25 items at 0x12d1  [0x16a4+0xc] → 0x12d1+0x0  (+143 nodes elided)
     ▾ TYPE_CLASS_DATA_ITEM — 7 items at 0x13e9  [0x16b0+0xc] → 0x13e9+0x0  (+541 nodes elided)
-    ▾ TYPE_ENCODED_ARRAY_ITEM — 1 items at 0x149c  [0x16bc+0xc] → 0x149c+0x0  (+12 nodes elided)
+    ▾ TYPE_ENCODED_ARRAY_ITEM — 1 item at 0x149c  [0x16bc+0xc] → 0x149c+0x0  (+12 nodes elided)
     ▾ TYPE_ANNOTATION_SET_ITEM — 15 items at 0x14b4  [0x16c8+0xc] → 0x14b4+0x0  (+193 nodes elided)
-    ▾ TYPE_ANNOTATION_SET_REF_LIST — 1 items at 0x1564  [0x16d4+0xc] → 0x1564+0x0  (+13 nodes elided)
+    ▾ TYPE_ANNOTATION_SET_REF_LIST — 1 item at 0x1564  [0x16d4+0xc] → 0x1564+0x0  (+13 nodes elided)
     ▾ TYPE_ANNOTATIONS_DIRECTORY_ITEM — 7 items at 0x156c  [0x16e0+0xc] → 0x156c+0x0  (+230 nodes elided)
-    ▾ TYPE_MAP_LIST — 1 items at 0x161c  [0x16ec+0xc] → 0x161c+0x0  (+4 nodes elided)
+    ▾ TYPE_MAP_LIST — 1 item at 0x161c  [0x16ec+0xc] → 0x161c+0x0  (+4 nodes elided)

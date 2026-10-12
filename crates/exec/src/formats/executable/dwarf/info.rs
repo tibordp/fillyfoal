@@ -10,6 +10,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::util::binutil::Reader;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, int, name_or, text, uint};
 use crate::node::Node;
 use crate::value::{Value, lookup};
@@ -175,13 +176,13 @@ pub(super) async fn abbreviations(cx: &Cx, dw: &Arc<Dwarf>) -> Result<()> {
                         .span(span)
                         .value(text(tag))
                         .summary(format!(
-                            "{}, {} attributes",
+                            "{}, {}",
                             if a.children {
                                 "DW_CHILDREN_yes"
                             } else {
                                 "DW_CHILDREN_no"
                             },
-                            attrs.len()
+                            plural(attrs.len(), "attribute")
                         ));
                     if !attrs.is_empty() {
                         node =

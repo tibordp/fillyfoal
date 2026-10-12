@@ -13,6 +13,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
@@ -479,13 +480,13 @@ pub async fn dissect_wmf(cx: Cx, input: Input) -> Result<()> {
     let h = parse(&cx, span, LE, &(), WmfHeader::layout).await?;
     let version = if h.version == 0x0100 { "1.0" } else { "3.0" };
     cx.emit(WmfHeader::node("Header", span, LE).summary(format!(
-        "version {version}, {}, {} objects",
+        "version {version}, {}, {}",
         crate::formats::util::arcutil::human_size(u64::from(h.size).saturating_mul(2)),
-        h.objects
+        plural(h.objects, "object")
     )));
     cx.annotate(format!(
-        "WMF {version}{size_summary}, {} objects",
-        h.objects
+        "WMF {version}{size_summary}, {}",
+        plural(h.objects, "object")
     ));
     pos = pos.saturating_add(u64::from(h.header_size).saturating_mul(2));
     let records = file.tail(pos);
@@ -595,7 +596,7 @@ fn wmf_summary(function: u16, p: &[u8]) -> Option<String> {
         0x0201 | 0x0209 => color(p, 6),
         0x012d | 0x01f0 | 0x0234 => Some(format!("object {}", u16_le(p, 6)?)),
         0x0127 => Some(format!("saved state {}", i16_at(p, 6)?)),
-        0x0324 | 0x0325 => Some(format!("{} points", u16_le(p, 6)?)),
+        0x0324 | 0x0325 => Some(plural(u16_le(p, 6)?, "point")),
         0x0538 => Some(format!("{} polygons", u16_le(p, 6)?)),
         0x0626 => Some(format!(
             "function {:#06x}, {} bytes",
@@ -731,10 +732,15 @@ pub async fn dissect_emf(cx: Cx, input: Input) -> Result<()> {
         )
     );
     cx.emit(
-        struct_node("EMR_HEADER", span, LE, extensions, emf_header)
-            .summary(format!("{size}, {records} records")),
+        struct_node("EMR_HEADER", span, LE, extensions, emf_header).summary(format!(
+            "{size}, {records_record}",
+            records_record = plural(records, "record")
+        )),
     );
-    let mut summary = format!("EMF, {size}, {records} records");
+    let mut summary = format!(
+        "EMF, {size}, {records_record}",
+        records_record = plural(records, "record")
+    );
     if desc_len > 0 && desc_off >= 88 {
         let desc_span = file.sub(desc_off, desc_len);
         let text_bytes = cx.read_avail(desc_span).await?;
@@ -753,7 +759,7 @@ pub async fn dissect_emf(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Records")
             .span(rest)
-            .summary(format!("{} records", records.saturating_sub(1)))
+            .summary(plural(records.saturating_sub(1), "record"))
             .lazy(emf_records, (input, rest)),
     );
     Ok(())
@@ -866,11 +872,11 @@ fn emf_summary(kind: u32, p: &[u8]) -> Option<String> {
         24 | 25 => color(p, 8),
         37 | 40 | 48 => handle(8),
         34 => Some(format!("saved state {}", i32_at(p, 8)?)),
-        2..=6 | 85..=89 => Some(format!("{} points", u32_le(p, 24)?)),
+        2..=6 | 85..=89 => Some(plural(u32_le(p, 24)?, "point")),
         7 | 8 | 90 | 91 => Some(format!(
-            "{} polygons, {} points",
+            "{} polygons, {}",
             u32_le(p, 24)?,
-            u32_le(p, 28)?
+            plural(u32_le(p, 28)?, "point")
         )),
         14 => Some(format!("{} palette entries", u32_le(p, 8)?)),
         38 => {

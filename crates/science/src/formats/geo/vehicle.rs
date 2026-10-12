@@ -16,6 +16,7 @@ use crate::formats::science::systemtime;
 use crate::formats::text::piece::Piece;
 use crate::formats::text::probe;
 use crate::formats::text::scan::Lines;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -77,15 +78,15 @@ async fn blf(cx: Cx, input: Input) -> Result<()> {
         LE,
     ));
     cx.annotate(format!(
-        "Vector BLF, {} objects, {}",
-        h.objects,
+        "Vector BLF, {}, {}",
+        plural(h.objects, "object"),
         systemtime(&h.start)
     ));
     let body = file.tail(h.header_size.into());
     cx.emit(
         Node::new("Objects")
             .span(body)
-            .summary(format!("{} objects", h.objects))
+            .summary(plural(h.objects, "object"))
             .lazy(blf_stream, body),
     );
     cx.emit(

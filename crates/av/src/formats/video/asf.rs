@@ -674,7 +674,7 @@ fn entry_count(n: u64) -> String {
     if n == 1 {
         "1 entry".to_owned()
     } else {
-        format!("{n} entries")
+        plural(n, "entry")
     }
 }
 

@@ -13,6 +13,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{PieceList, size};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe, dissect_or_data};
 use crate::node::{Count, Node};
 use crate::record;
@@ -123,7 +124,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Block map")
             .span(image.map)
-            .summary(format!("{} entries", h.blocks))
+            .summary(plural(h.blocks, "entry"))
             .lazy(block_map, image.clone()),
     );
     cx.emit(if h.image_type == 4 {

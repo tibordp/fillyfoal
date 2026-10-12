@@ -10,7 +10,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::binutil::mutf8;
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::{name_or, text};
 use crate::formats::{Format, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
@@ -218,14 +218,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .map(|(_, e)| e.alias.as_str())
         .collect();
     cx.annotate(format!(
-        "Java KeyStore ({kind} v{version}), {count} entries: {}",
-        clip(&aliases.join(", "), 100)
+        "Java KeyStore ({kind} v{version}), {count_entry}: {}",
+        clip(&aliases.join(", "), 100),
+        count_entry = plural(count, "entry")
     ));
     let table = file.sub(12, offset.saturating_sub(12));
     cx.emit(
         Node::new("Entries")
             .span(table)
-            .summary(format!("{} entries", entries.len()))
+            .summary(plural(entries.len(), "entry"))
             .lazy(
                 entry_list,
                 (ctx, entries.iter().map(|(s, _)| *s).collect::<Vec<_>>()),

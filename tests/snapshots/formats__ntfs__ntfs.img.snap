@@ -1136,7 +1136,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 512  [#8:0x110+0x8]
             Data size: 512 — 512 bytes  [#8:0x118+0x8]
             Initialized size: 512  [#8:0x120+0x8]
-          Run 0 — VCN 0: 1 clusters at LCN 0  [#8:0x128+0x3] → 0x0+0x200
+          Run 0 — VCN 0: 1 cluster at LCN 0  [#8:0x128+0x3] → 0x0+0x200
       ▾ Clusters — contiguous, 512 bytes
           Fragment 0 — file offset 0x0, 512 bytes  [0x0+0x200]
         Content — the volume's boot sector and loader (shown at the top level)  [0x0+0x200]
@@ -1805,7 +1805,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 512  [#8:0x110+0x8]
             Data size: 512 — 512 bytes  [#8:0x118+0x8]
             Initialized size: 512  [#8:0x120+0x8]
-          Run 0 — VCN 0: 1 clusters at LCN 0  [#8:0x128+0x3] → 0x0+0x200
+          Run 0 — VCN 0: 1 cluster at LCN 0  [#8:0x128+0x3] → 0x0+0x200
       ▾ Clusters — contiguous, 512 bytes
           Fragment 0 — file offset 0x0, 512 bytes  [0x0+0x200]
         Content — the volume's boot sector and loader (shown at the top level)  [0x0+0x200]

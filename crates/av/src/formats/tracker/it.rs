@@ -11,6 +11,7 @@ use crate::formats::tracker::{
     Cell, Note, Pointers, SampleData, letter_effect, named, order_node, pcm_bytes, pointed,
     row_summary, schism_version,
 };
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::peek_text;
 use crate::formats::util::val::text;
 use crate::formats::{Format, Input, Probe};
@@ -208,7 +209,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             file,
             instruments,
             "Instrument",
-            Some(|i| format!("{}, {} samples", named(&i.name), i.samples)),
+            Some(|i| format!("{}, {}", named(&i.name), plural(i.samples, "sample"))),
             None,
         ));
     }
@@ -219,9 +220,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         "Sample",
         Some(|s| {
             format!(
-                "{}, {} samples at {} Hz{}",
+                "{}, {} at {} Hz{}",
                 named(&s.name),
-                s.length,
+                plural(s.length, "sample"),
                 s.c5_speed,
                 if s.flags & 0x8 != 0 {
                     ", compressed"
@@ -235,7 +236,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Patterns")
             .span(patterns.table)
-            .summary(format!("{} patterns", h.patterns))
+            .summary(plural(h.patterns, "pattern"))
             .lazy(list_patterns, (file, patterns.table)),
     );
     // After the offset tables: the edit history (a count, then 8 bytes
@@ -248,7 +249,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Edit history")
                 .span(span)
-                .summary(format!("{count} entries"))
+                .summary(plural(count, "entry"))
                 .lazy(edit_history, span),
         );
     }
@@ -268,14 +269,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let channels = h.pan.iter().filter(|&&p| p & 0x80 == 0).count();
     cx.annotate(format!(
-        "IT {}, {}, {channels} channels, {} orders, {} patterns, {} samples, {} instruments — {}",
+        "IT {}, {}, {channels_channel}, {}, {}, {}, {} — {}",
         version(h.compatible),
         tracker(h.created, h.reserved),
-        h.orders,
-        h.patterns,
-        h.samples,
-        h.instruments,
-        named(&h.name)
+        plural(h.orders, "order"),
+        plural(h.patterns, "pattern"),
+        plural(h.samples, "sample"),
+        plural(h.instruments, "instrument"),
+        named(&h.name),
+        channels_channel = plural(channels, "channel")
     ));
     Ok(())
 }
@@ -403,7 +405,10 @@ async fn list_patterns(cx: Cx, (file, table): (Span, Span)) -> Result<()> {
         cx.push(
             Node::new(name)
                 .span(span)
-                .summary(format!("{rows} rows, {len} bytes packed"))
+                .summary(format!(
+                    "{rows_row}, {len} bytes packed",
+                    rows_row = plural(rows, "row")
+                ))
                 .lazy(pattern, (span, rows)),
         )
         .await;

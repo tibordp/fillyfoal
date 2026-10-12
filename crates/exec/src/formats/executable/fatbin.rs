@@ -8,6 +8,7 @@ use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
 use crate::formats::util::binutil::data_node;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
@@ -69,8 +70,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.checkpoint().await;
     }
     cx.annotate(format!(
-        "CUDA fat binary, {} entries: {}",
-        entries.len(),
+        "CUDA fat binary, {}: {}",
+        plural(entries.len(), "entry"),
         archs.join(", ")
     ));
     for (header, content, kind, flags, arch) in entries {

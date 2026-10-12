@@ -39,7 +39,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::fmt::{grouped_count, size};
+use crate::formats::util::fmt::{grouped_count, plural, size};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -318,8 +318,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         && !map.problems.is_empty()
     {
         pages_node = pages_node.diag(Diagnostic::warning(format!(
-            "{} pages are used inconsistently",
-            map.problems.len()
+            "{} are used inconsistently",
+            plural(map.problems.len(), "page")
         )));
     }
     cx.emit(pages_node);

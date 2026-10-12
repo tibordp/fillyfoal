@@ -8,6 +8,7 @@
 use crate::bytes::{find, to_u64};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -204,7 +205,7 @@ pub async fn dissect_xpm(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Colors")
                 .span(span)
-                .summary(format!("{colors_len} entries"))
+                .summary(plural(colors_len, "entry"))
                 .lazy(xpm_colors, (span, *cpp)),
         );
     }
@@ -220,9 +221,12 @@ pub async fn dissect_xpm(cx: Cx, input: Input) -> Result<()> {
                 a.offset,
                 b.end().saturating_sub(a.offset),
             ))
-            .summary(format!("{rows_len} rows"));
+            .summary(plural(rows_len, "row"));
         if to_u64(rows_len) != *height {
-            node = node.diag(Diagnostic::warning(format!("expected {height} rows")));
+            node = node.diag(Diagnostic::warning(format!(
+                "expected {height_row}",
+                height_row = plural(height, "row")
+            )));
         }
         cx.emit(node);
     }

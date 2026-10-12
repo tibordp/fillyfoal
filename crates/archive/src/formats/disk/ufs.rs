@@ -20,6 +20,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{PieceList, content_node, fragments_node, size, unix_mode};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -281,7 +282,8 @@ impl Fs {
             || fpg == 0
         {
             return Err(Diagnostic::malformed(format!(
-                "block size {bsize}, fragment size {fsize}, {ipg} inodes and {fpg} fragments per group"
+                "block size {bsize}, fragment size {fsize}, {ipg_inode} and {fpg} fragments per group",
+                ipg_inode = plural(ipg, "inode")
             )));
         }
         Ok(Fs {

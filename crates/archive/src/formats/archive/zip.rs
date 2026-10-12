@@ -12,6 +12,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Codec, Format, Head, Input, Probe, content};
 use crate::node::{Count, Node};
 use crate::record;
@@ -949,8 +950,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     // Probes run synchronously over the head; charge them.
     cx.charge(units).await;
     let label = match found {
-        Some(f) if f.name != "zip" => format!("{} ({} entries)", f.title, dir.entries),
-        _ => format!("ZIP archive, {} entries", dir.entries),
+        Some(f) if f.name != "zip" => format!("{} ({})", f.title, plural(dir.entries, "entry")),
+        _ => format!("ZIP archive, {}", plural(dir.entries, "entry")),
     };
     cx.annotate(label);
 
@@ -976,7 +977,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Central Directory")
             .span(cd_span)
-            .summary(format!("{} entries", dir.entries))
+            .summary(plural(dir.entries, "entry"))
             .lazy(central_directory, (input, cd_span, dir.entries, prefix)),
     );
     for node in nodes.into_iter().rev() {
@@ -1114,14 +1115,15 @@ async fn central_directory(
     }
     if index > entries {
         cx.diag(Diagnostic::warning(format!(
-            "the end record says {entries} entries, the central directory holds {index}{}",
+            "the end record says {entries_entry}, the central directory holds {index}{}",
             if index % 65536 == entries % 65536 {
                 " (the count was stored modulo 65536)"
             } else {
                 ""
-            }
+            },
+            entries_entry = plural(entries, "entry")
         )));
-        cx.annotate(format!("{index} entries"));
+        cx.annotate(plural(index, "entry"));
     }
     Ok(())
 }

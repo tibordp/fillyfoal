@@ -11,7 +11,7 @@ use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::finder::{FINDER_FLAGS, FINDER_FLAGS_HIGH};
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{plural, size};
 use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded, embedded_as};
 use crate::node::{Count, Node};
@@ -408,13 +408,14 @@ async fn rzx(cx: Cx, input: Input) -> Result<()> {
                 frames = frames.saturating_add(n);
                 let flags = u32_le(&raw, 9).unwrap_or(0);
                 node = node.summary(format!(
-                    "{n} frames, starting at T-state {}{}",
+                    "{n_frame}, starting at T-state {}{}",
                     u32_le(&raw, 5).unwrap_or(0),
                     if flags & 2 != 0 {
                         ", zlib-compressed"
                     } else {
                         ""
-                    }
+                    },
+                    n_frame = plural(n, "frame")
                 ));
             }
             _ => node = node.summary(format!("{len} bytes")),
@@ -422,12 +423,13 @@ async fn rzx(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
     }
     cx.annotate(format!(
-        "RZX v{major}.{minor} recording, {frames} frames, {snapshots} snapshot(s){}",
+        "RZX v{major}.{minor} recording, {frames_frame}, {snapshots} snapshot(s){}",
         if creator.is_empty() {
             String::new()
         } else {
             format!(", by {creator}")
-        }
+        },
+        frames_frame = plural(frames, "frame")
     ));
     Ok(())
 }
@@ -484,7 +486,10 @@ async fn nib(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("MNIB nibbler image v{version}, {tracks} tracks"));
+    cx.annotate(format!(
+        "MNIB nibbler image v{version}, {tracks_track}",
+        tracks_track = plural(tracks, "track")
+    ));
     Ok(())
 }
 
@@ -620,13 +625,14 @@ async fn atari_xex(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "Atari 8-bit executable, {segments} segments, {bytes} bytes loaded{}{}",
+        "Atari 8-bit executable, {segments_segment}, {bytes} bytes loaded{}{}",
         run.map_or_else(String::new, |r| format!(", runs at ${r:04x}")),
         if inits > 0 {
             format!(", {inits} init call(s)")
         } else {
             String::new()
-        }
+        },
+        segments_segment = plural(segments, "segment")
     ));
     Ok(())
 }
@@ -675,12 +681,13 @@ async fn atari_cas(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "Atari cassette{}, {records} records ({data_bytes} bytes) at {baud} baud",
+        "Atari cassette{}, {records_record} ({data_bytes} bytes) at {baud} baud",
         if description.is_empty() {
             String::new()
         } else {
             format!(" {:?}", description.trim())
-        }
+        },
+        records_record = plural(records, "record")
     ));
     Ok(())
 }
@@ -733,8 +740,9 @@ async fn atx(cx: Cx, input: Input) -> Result<()> {
             let n = u16_le(&raw, 2).unwrap_or(0);
             sectors = sectors.saturating_add(n.into());
             Node::new(format!("Track {}", raw.first().copied().unwrap_or(0))).summary(format!(
-                "{n} sectors, rate {}",
-                u16_le(&raw, 4).unwrap_or(0)
+                "{n_sector}, rate {}",
+                u16_le(&raw, 4).unwrap_or(0),
+                n_sector = plural(n, "sector")
             ))
         } else {
             Node::new(format!("Record type {kind}")).summary(format!("{len} bytes"))
@@ -742,12 +750,14 @@ async fn atx(cx: Cx, input: Input) -> Result<()> {
         cx.push(node.span(cur.since(start))).await;
     }
     cx.annotate(format!(
-        "ATX v{} image, {} density, {tracks} tracks, {sectors} sectors",
+        "ATX v{} image, {} density, {tracks_track}, {sectors_sector}",
         h.version,
         ["single", "medium", "double"]
             .get(usize::from(h.density))
             .copied()
-            .unwrap_or("unknown")
+            .unwrap_or("unknown"),
+        tracks_track = plural(tracks, "track"),
+        sectors_sector = plural(sectors, "sector")
     ));
     Ok(())
 }

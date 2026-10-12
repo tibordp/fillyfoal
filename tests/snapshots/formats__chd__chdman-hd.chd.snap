@@ -19,7 +19,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Raw SHA-1: 1d a1 65 af b9 60 e8 69 15 2f a5 5c b3 f5 e5 b9 …  |..e..`.i./.\....|  [0x40+0x14]
       SHA-1: 22 31 7a f4 a4 c5 a4 35 5a 3c 14 3e f0 b3 ae dc …  |"1z....5Z<.>....|  [0x54+0x14]
       Parent SHA-1: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x68+0x14]
-  ▾ Metadata — 1 entries  [0x7c+0x10]
+  ▾ Metadata — 1 entry  [0x7c+0x10]
       GDDD: hard disk geometry (GDDD) (0x47444444) — CYLS:1,HEADS:4,SECS:32,BPS:512  [0x7c+0x2f] → 0x8c+0x1f
   ▾ Hunk map (compressed) — 16 hunks  [0x77c+0x3d]
     ▾ Map header  [0x77c+0x10]

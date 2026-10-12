@@ -18,6 +18,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::{fmt, val};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -202,7 +203,10 @@ async fn header_summary(cx: &Cx, file: Span, layout: Layout) -> Result<String> {
                 if layout.tes3 {
                     summary = format!("{} ", until_nul(data.get(8..40).unwrap_or_default()));
                 }
-                summary.push_str(&format!("v{version:.2}, {records} records"));
+                summary.push_str(&format!(
+                    "v{version:.2}, {records_record}",
+                    records_record = plural(records, "record")
+                ));
             }
             b"CNAM" => summary = format!("{summary} by {}", until_nul(data)),
             b"MAST" => masters.push(until_nul(data)),

@@ -285,7 +285,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Checkpoint descriptor area")
                 .span(vol.sub(desc.0.saturating_mul(block), desc.1.saturating_mul(block)))
-                .summary(format!("{} blocks", desc.1))
+                .summary(plural(desc.1, "block"))
                 .lazy(checkpoint_area, (c.clone(), desc.0, desc.1)),
         );
     } else {
@@ -572,11 +572,11 @@ async fn volume(cx: Cx, (c, paddr): (Arc<Container>, u64)) -> Result<()> {
     .await?;
     let (_, ok) = c.object(&cx, paddr).await?;
     cx.annotate(format!(
-        "\"{}\" ({}), {} files, {} directories",
+        "\"{}\" ({}), {}, {}",
         v.name,
         lookup(ROLES, v.role.into()).unwrap_or("unknown role"),
-        v.files,
-        v.directories
+        plural(v.files, "file"),
+        plural(v.directories, "directory")
     ));
     let mut node = VolumeSuperblock::node("Volume superblock", span, LE);
     if !ok {
@@ -670,9 +670,9 @@ async fn fs_node(cx: Cx, (fs, oid, depth): (Arc<FsTree>, u64, u32)) -> Result<()
     let leaf = level == 0;
     let entries = toc(&node, c.block, (0, 0));
     cx.annotate(format!(
-        "block {paddr}, level {}, {} records",
+        "block {paddr}, level {}, {}",
         u16_le(&node, 34).unwrap_or(0),
-        entries.len()
+        plural(entries.len(), "record")
     ));
     for (k, klen, v, vlen) in entries {
         let header = u64_le(&node, k).unwrap_or(0);

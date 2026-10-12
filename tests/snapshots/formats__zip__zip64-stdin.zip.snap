@@ -2,8 +2,8 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ zip64-stdin.zip — ZIP archive, 1 entries  [0x0+0xd0]
-  ▾ Central Directory — 1 entries  [0x3f+0x2f]
+▾ zip64-stdin.zip — ZIP archive, 1 entry  [0x0+0xd0]
+  ▾ Central Directory — 1 entry  [0x3f+0x2f]
     ▾ - — stored, 12 → 12 bytes  [0x3f+0x2f]
       ▾ Central Directory Header  [0x3f+0x2e]
           Signature: 50 4b 01 02  |PK..|  [0x3f+0x4]

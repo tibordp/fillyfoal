@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Path, Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Codec, Head, Input, Probe, content, embedded};
 use crate::node::Node;
@@ -174,7 +175,10 @@ async fn win_res(cx: Cx, input: Input) -> Result<()> {
             .saturating_add(data_size)
             .next_multiple_of(4);
     }
-    cx.annotate(format!("Win32 resources, {count} entries"));
+    cx.annotate(format!(
+        "Win32 resources, {count_entry}",
+        count_entry = plural(count, "entry")
+    ));
     Ok(())
 }
 
@@ -450,7 +454,7 @@ async fn nar_node(
                 .span
                 .sub(entries_start, cur.pos().saturating_sub(entries_start));
             Node::new(format!("{name}/"))
-                .summary(format!("{count} entries"))
+                .summary(plural(count, "entry"))
                 .lazy(
                     crate::expander!(self::nar_dir: (Input, Span, Path)),
                     (input, entries, child_path),
@@ -526,7 +530,10 @@ async fn git_bundle(cx: Cx, input: Input) -> Result<()> {
     }
     let pack = file.tail(to_u64(end).saturating_add(2));
     cx.emit(embedded("Pack", input.nested(pack)).summary(format!("{} bytes", pack.len)));
-    cx.annotate(format!("git bundle, {refs} refs, {prereqs} prerequisites"));
+    cx.annotate(format!(
+        "git bundle, {refs_ref}, {prereqs} prerequisites",
+        refs_ref = plural(refs, "ref")
+    ));
     Ok(())
 }
 
@@ -692,7 +699,10 @@ async fn svn_dump(cx: Cx, input: Input) -> Result<()> {
         }
         pos = after.saturating_add(content_len);
     }
-    cx.annotate(format!("Subversion dump v{version}, {revisions} revisions"));
+    cx.annotate(format!(
+        "Subversion dump v{version}, {revisions_revision}",
+        revisions_revision = plural(revisions, "revision")
+    ));
     Ok(())
 }
 

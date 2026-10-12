@@ -4,7 +4,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ hfs-udbz.dmg — Apple disk image (UDIF), 1.8 MiB (3714 sectors)  [0x0+0x128f]
     Data fork — 936 bytes  [0x0+0x3a8]
-  ▾ Disk — HFS+ volume "T", 1.8 MiB (1 files, 2 folders)
+  ▾ Disk — HFS+ volume "T", 1.8 MiB (1 file, 2 folders)
       Boot blocks  [#6:0x0+0x400]
     ▾ Volume header  [#6:0x400+0x200]
         Signature: "H+"  [#6:0x400+0x2]
@@ -161,7 +161,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Text encoding: 0  [#6:0xf32b2+0x4]
   ▾ Partitions  [0x3a8+0xce7]
     ▾ whole disk (Apple_HFS : 0) — 1.8 MiB, 11 chunks  [0x535+0x3c5]
-      ▾ Contents — HFS+ volume "T", 1.8 MiB (1 files, 2 folders)
+      ▾ Contents — HFS+ volume "T", 1.8 MiB (1 file, 2 folders)
           Boot blocks  [#7:0x0+0x400]
         ▾ Volume header  [#7:0x400+0x200]
             Signature: "H+"  [#7:0x400+0x2]

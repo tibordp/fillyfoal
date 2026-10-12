@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::{ChunkLayout, Cursor, Path};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -138,7 +139,8 @@ async fn bgeo(cx: Cx, input: Input) -> Result<()> {
     f.u32("Detail attributes").emit()?;
     cx.emit(Node::new("Geometry").span(file.tail(41)));
     cx.annotate(format!(
-        "Houdini classic geometry v{version}: {points} points, {prims} primitives"
+        "Houdini classic geometry v{version}: {points_point}, {prims} primitives",
+        points_point = plural(points, "point")
     ));
     Ok(())
 }
@@ -189,7 +191,10 @@ async fn alembic(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Root group")
             .span(file.sub(root, count.saturating_add(1).saturating_mul(8)))
-            .summary(format!("{count} children: {groups} groups, {data} data")),
+            .summary(format!(
+                "{count} children: {groups_group}, {data} data",
+                groups_group = plural(groups, "group")
+            )),
     );
     cx.annotate(format!(
         "Alembic (Ogawa) archive, root with {count} children"

@@ -9,6 +9,7 @@ use std::sync::Arc;
 use crate::bytes::{to_u64, to_usize, u16_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val;
 use crate::node::Node;
 use crate::span::Span;
@@ -702,7 +703,7 @@ fn v2_tree_node(
         if depth > 0 { "Internal" } else { "Leaf" }
     ))
     .span(file.at(addr, to_u64(len)))
-    .summary(format!("{nrec} records"))
+    .summary(plural(nrec, "record"))
     .lazy(
         crate::expander!(self::v2_tree_expand: (FileRef, Arc<V2Hdr>, u64, u64, u16, Option<usize>)),
         (file.clone(), hdr, addr, nrec, depth, rank),
@@ -993,7 +994,7 @@ async fn fa_expand(cx: Cx, (file, addr): (FileRef, u64)) -> Result<()> {
         cx.emit(
             Node::new("Data block")
                 .target(file.at(hdr.dblock, 4))
-                .summary(format!("{} entries", hdr.count))
+                .summary(plural(hdr.count, "entry"))
                 .lazy(fa_dblock, (file.clone(), hdr)),
         );
     }
@@ -1375,7 +1376,7 @@ async fn ea_iblock(cx: Cx, (file, hdr): (FileRef, Arc<EaHdr>)) -> Result<()> {
 fn ea_dblock_node(file: &FileRef, hdr: &Arc<EaHdr>, addr: u64, elems: u64) -> Node {
     Node::new(format!("Data block at {addr:#x}"))
         .target(file.at(addr, 4))
-        .summary(format!("{elems} elements"))
+        .summary(plural(elems, "element"))
         .lazy(ea_dblock, (file.clone(), hdr.clone(), addr, elems))
 }
 

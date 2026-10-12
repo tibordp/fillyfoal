@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::{ChunkLayout, Cursor, Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -43,8 +44,9 @@ async fn mus(cx: Cx, input: Input) -> Result<()> {
     );
     cx.emit(Node::new("Score").span(file.sub(h.score_start.into(), h.score_len.into())));
     cx.annotate(format!(
-        "Doom MUS, {} channels, {} instruments",
-        h.channels, h.instruments
+        "Doom MUS, {}, {}",
+        plural(h.channels, "channel"),
+        plural(h.instruments, "instrument")
     ));
     Ok(())
 }
@@ -79,7 +81,7 @@ async fn hmi(cx: Cx, input: Input) -> Result<()> {
         "HMI {} song{}",
         if hmp { "HMP" } else { "HMI" },
         if hmp {
-            format!(", {tracks} tracks")
+            format!(", {tracks_track}", tracks_track = plural(tracks, "track"))
         } else {
             String::new()
         }
@@ -106,8 +108,10 @@ async fn ahx(cx: Cx, input: Input) -> Result<()> {
     let (title, span) = cx.cstr(file.sub(names.into(), 256)).await?;
     cx.emit(Node::new("Title").span(span).value(text(title.clone())));
     cx.annotate(format!(
-        "AHX v{rev} {title:?}, {} positions, {tracks} tracks, {samples} instruments",
-        len & 0xfff
+        "AHX v{rev} {title:?}, {} positions, {tracks_track}, {samples_instrument}",
+        len & 0xfff,
+        tracks_track = plural(tracks, "track"),
+        samples_instrument = plural(samples, "instrument")
     ));
     Ok(())
 }

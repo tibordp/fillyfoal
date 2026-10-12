@@ -425,7 +425,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Start page — (3:0)  [0x20088+0x6]
         Single page allocations — none  [0x2008e+0x30]
         Record header — 7992-byte record  [0x200be+0x4]
-        Extent bitmap — 1 extents allocated to the allocation unit  [0x200c2+0x1f34]
+        Extent bitmap — 1 extent allocated to the allocation unit  [0x200c2+0x1f34]
       ▾ Slot array — 2 slots  [0x21ffc+0x4]
           Slot 0: 0x60  [0x21ffe+0x2] → 0x20060+0x1
           Slot 1: 0xbe  [0x21ffc+0x2] → 0x200be+0x1

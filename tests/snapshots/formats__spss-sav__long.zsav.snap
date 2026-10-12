@@ -100,7 +100,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Display width: 8
         Alignment: left (0x0)
     zlib header — header at 0x1e5, trailer at 0x8cc (48 bytes)  [0x1e5+0x18]
-  ▾ zlib trailer — 1 blocks, 7952 bytes uncompressed  [0x8cc+0x30]
+  ▾ zlib trailer — 1 block, 7952 bytes uncompressed  [0x8cc+0x30]
       Bias: -100  [0x8cc+0x8]
       Zero: 0  [0x8d4+0x8]
       Block size: 4190208  [0x8dc+0x4]

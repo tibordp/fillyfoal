@@ -703,7 +703,7 @@ fn colors(frame: &Frame, space: Space) -> String {
         },
         Space::Cmyk => "CMYK".to_owned(),
         Space::Ycck => "YCCK".to_owned(),
-        Space::Unknown => format!("{} components", frame.components.len()),
+        Space::Unknown => plural(frame.components.len(), "component"),
     }
 }
 
@@ -2000,7 +2000,7 @@ fn irb_summary(g: &IrbGroup, index: usize) -> String {
         s.push_str(", IPTC");
     }
     if g.parts.len() > 1 {
-        s.push_str(&format!(", in {} segments", g.parts.len()));
+        s.push_str(&format!(", in {}", plural(g.parts.len(), "segment")));
     }
     s
 }
@@ -2348,8 +2348,10 @@ async fn icc_segment(cx: &Cx, input: Input, rest: Span, ident: Node) -> Result<(
     } else if seq == 1 {
         match icc_profile(cx, input.span, count).await {
             Ok((profile, problems)) => {
-                let mut node = embedded("ICC profile", input.nested(profile))
-                    .summary(format!("reassembled from {count} chunks"));
+                let mut node = embedded("ICC profile", input.nested(profile)).summary(format!(
+                    "reassembled from {count_chunk}",
+                    count_chunk = plural(count, "chunk")
+                ));
                 for d in problems {
                     node = node.diag(d);
                 }
@@ -2542,8 +2544,9 @@ async fn jumbf_segment(cx: &Cx, input: Input, payload: Span) -> Result<()> {
             let mut node = embedded_as("JUMBF", input.nested(span), &JUMBF);
             if packets > 1 {
                 node = node.desc(format!(
-                    "{}, reassembled from {packets} packets",
-                    human_size(span.len)
+                    "{}, reassembled from {packets_packet}",
+                    human_size(span.len),
+                    packets_packet = plural(packets, "packet")
                 ));
             }
             cx.emit(node);
@@ -2918,7 +2921,7 @@ impl Info {
                     .as_ref()
                     .and_then(|f| lookup(FRAME_TYPES, f.marker.into()))
                     .unwrap_or("no frames");
-                text = format!("{text} ({} frames, {process})", self.frames);
+                text = format!("{text} ({}, {process})", plural(self.frames, "frame"));
             }
             parts.push(text);
         }
@@ -3021,7 +3024,7 @@ async fn observe(cx: &Cx, input: Input, seg: &Segment, info: &mut Info) -> Optio
             if info.dnl.is_none() {
                 info.dnl = Some(n);
             }
-            Some(format!("{n} lines"))
+            Some(plural(n, "line"))
         }
         0xdf => {
             let b = cx.read_avail(payload.sub(0, 1)).await.ok()?;

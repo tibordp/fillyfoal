@@ -13,6 +13,7 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::arcutil::human_size;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{
     Bits, FrameRef, FrameSyntax, bits_node, duration, estimate_frames, frames_node,
 };
@@ -236,11 +237,11 @@ async fn adts_frame(cx: Cx, f: FrameRef) -> Result<()> {
     if blocks == 1 {
         cx.emit(raw_block(payload, &head));
     } else {
-        cx.emit(
-            Node::new("Raw data blocks")
-                .span(payload)
-                .summary(format!("{blocks} blocks, {}", human_size(payload.len))),
-        );
+        cx.emit(Node::new("Raw data blocks").span(payload).summary(format!(
+            "{blocks_block}, {}",
+            human_size(payload.len),
+            blocks_block = plural(blocks, "block")
+        )));
     }
     Ok(())
 }

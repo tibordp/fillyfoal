@@ -21,6 +21,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::civil::SAS_EPOCH;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -358,7 +359,7 @@ async fn binary(cx: Cx, file: Span) -> Result<()> {
     cx.emit(
         Node::new("Expansion fields")
             .span(file.sub(start, at.saturating_sub(start)))
-            .summary(format!("{fields} fields")),
+            .summary(plural(fields, "field")),
     );
     dta.row = offset;
     dta.rows = nobs;
@@ -686,7 +687,7 @@ fn finish(
             .lazy(variables, dta.clone()),
     );
     let mut sets = Node::new("Value labels")
-        .summary(format!("{} tables", dta.sets.len()))
+        .summary(plural(dta.sets.len(), "table"))
         .lazy(label_sets, dta.clone());
     if let Some(p) = problem {
         sets = sets.diag(p);
@@ -702,7 +703,7 @@ fn finish(
     cx.emit(
         Node::new("Observations")
             .span(dta.data)
-            .summary(format!("{} rows × {} bytes", dta.rows, dta.row))
+            .summary(format!("{} × {} bytes", plural(dta.rows, "row"), dta.row))
             .lazy(observations, dta.clone()),
     );
     cx.emit(sets);

@@ -8,6 +8,7 @@ use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::disk::{size, uuid_value};
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{Radix, Value};
@@ -210,7 +211,7 @@ fn record_summary(st: &TreeState, rec: &[u8]) -> String {
                 if cow {
                     "copy-on-write staging".to_owned()
                 } else {
-                    format!("{refs} references")
+                    plural(refs, "reference")
                 }
             )
         }
@@ -374,7 +375,10 @@ fn key_summary(kind: Kind, key: &[u8]) -> String {
     let a = u32_be(key, 0).unwrap_or(0);
     match kind {
         Kind::Bno | Kind::Refc => format!("from block {a}"),
-        Kind::Cnt => format!("from {} blocks at {a}", u32_be(key, 4).unwrap_or(0)),
+        Kind::Cnt => format!(
+            "from {} at {a}",
+            plural(u32_be(key, 4).unwrap_or(0), "block")
+        ),
         Kind::Ino | Kind::Fino => format!("from AG inode {a}"),
         Kind::Rmap => format!("blocks {a}–{}", u32_be(key, 20).unwrap_or(0)),
     }
@@ -413,9 +417,9 @@ pub(super) async fn tree_block(cx: Cx, st: TreeState) -> Result<()> {
             short_header,
         )
         .summary(format!(
-            "level {}, {} records",
+            "level {}, {}",
             u16_be(&data, 4).unwrap_or(0),
-            u16_be(&data, 6).unwrap_or(0)
+            plural(u16_be(&data, 6).unwrap_or(0), "record")
         )),
     );
     let magic = st.kind.magic(fs.v5);
@@ -441,7 +445,8 @@ pub(super) async fn tree_block(cx: Cx, st: TreeState) -> Result<()> {
         let max = room.checked_div(rs).unwrap_or(0);
         if numrecs > max {
             cx.diag(Diagnostic::malformed(format!(
-                "{numrecs} records do not fit in a block (at most {max})"
+                "{numrecs_record} do not fit in a block (at most {max})",
+                numrecs_record = plural(numrecs, "record")
             )));
         }
         let n = numrecs.min(max);
@@ -480,7 +485,8 @@ pub(super) async fn tree_block(cx: Cx, st: TreeState) -> Result<()> {
     let max = room.checked_div(ks.saturating_add(4)).unwrap_or(0);
     if numrecs > max {
         cx.diag(Diagnostic::malformed(format!(
-            "{numrecs} keys do not fit in a block (at most {max})"
+            "{numrecs_key} do not fit in a block (at most {max})",
+            numrecs_key = plural(numrecs, "key")
         )));
     }
     let n = numrecs.min(max);
@@ -488,7 +494,7 @@ pub(super) async fn tree_block(cx: Cx, st: TreeState) -> Result<()> {
     cx.emit(
         Node::new("Keys")
             .span(span.sub(hdr, n.saturating_mul(ks)))
-            .summary(format!("{n} keys"))
+            .summary(plural(n, "key"))
             .lazy(keys, (span.sub(hdr, n.saturating_mul(ks)), st.kind)),
     );
     unused(
@@ -619,7 +625,8 @@ pub(super) async fn bmdr_root(cx: Cx, (fs, fork): (FsRef, Span)) -> Result<()> {
     }
     if numrecs > max {
         cx.diag(Diagnostic::malformed(format!(
-            "{numrecs} keys do not fit in the fork (at most {max})"
+            "{numrecs_key} do not fit in the fork (at most {max})",
+            numrecs_key = plural(numrecs, "key")
         )));
     }
     let n = numrecs.min(max);
@@ -717,9 +724,9 @@ pub(super) async fn bmbt_block(cx: Cx, st: BmbtState) -> Result<()> {
             long_header,
         )
         .summary(format!(
-            "level {}, {} records",
+            "level {}, {}",
             u16_be(&data, 4).unwrap_or(0),
-            u16_be(&data, 6).unwrap_or(0)
+            plural(u16_be(&data, 6).unwrap_or(0), "record")
         )),
     );
     let magic: &[u8] = if fs.v5 { b"BMA3" } else { b"BMAP" };
@@ -742,7 +749,8 @@ pub(super) async fn bmbt_block(cx: Cx, st: BmbtState) -> Result<()> {
     let max = fs.block.saturating_sub(hdr).checked_div(16).unwrap_or(0);
     if numrecs > max {
         cx.diag(Diagnostic::malformed(format!(
-            "{numrecs} entries do not fit in a block (at most {max})"
+            "{numrecs_entry} do not fit in a block (at most {max})",
+            numrecs_entry = plural(numrecs, "entry")
         )));
     }
     let n = numrecs.min(max);

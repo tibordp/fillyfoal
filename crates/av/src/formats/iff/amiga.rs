@@ -7,6 +7,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Fields, parse};
 use crate::formats::iff::{Chunk, Ctx, find, scan};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{duration_of, table};
 use crate::node::Node;
 use crate::record;
@@ -149,13 +150,21 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
         b"VHDR" => {
             let h = parse(cx, chunk.data, e, &(), VoiceHeader::layout).await?;
             Some(format!(
-                "{} Hz, {} octaves, {} + {} samples",
-                h.rate, h.octaves, h.one_shot, h.repeat
+                "{} Hz, {} octaves, {} + {}",
+                h.rate,
+                h.octaves,
+                h.one_shot,
+                plural(h.repeat, "sample")
             ))
         }
         b"BMHD" => {
             let h = parse(cx, chunk.data, e, &(), BitmapHeader::layout).await?;
-            Some(format!("{}×{}, {} planes", h.width, h.height, h.planes))
+            Some(format!(
+                "{}×{}, {}",
+                h.width,
+                h.height,
+                plural(h.planes, "plane")
+            ))
         }
         b"CMAP" => Some(format!("{} colors", chunk.size / 3)),
         b"ANHD" => {
@@ -233,10 +242,10 @@ pub async fn describe(cx: &Cx, ctx: &Ctx, region: Span) -> Result<Option<String>
             let h = parse(cx, vhdr.data, e, &(), VoiceHeader::layout).await?;
             let samples = u64::from(h.one_shot).saturating_add(h.repeat.into());
             let mut line = format!(
-                "{}, {} Hz, {} samples",
+                "{}, {} Hz, {}",
                 if &ctx.form == b"8SVX" { "8SVX" } else { "16SV" },
                 h.rate,
-                samples
+                plural(samples, "sample")
             );
             if let Some(d) = duration_of(samples, h.rate.into()) {
                 line.push_str(&format!(", {d}"));
@@ -258,16 +267,22 @@ pub async fn describe(cx: &Cx, ctx: &Ctx, region: Span) -> Result<Option<String>
                 _ => None,
             };
             Some(match first {
-                Some(f) => format!("ANIM, {frames} frames, first: {f}"),
-                None => format!("ANIM, {frames} frames"),
+                Some(f) => format!(
+                    "ANIM, {frames_frame}, first: {f}",
+                    frames_frame = plural(frames, "frame")
+                ),
+                None => format!(
+                    "ANIM, {frames_frame}",
+                    frames_frame = plural(frames, "frame")
+                ),
             })
         }
         b"SMUS" => match find(cx, ctx, region, b"SHDR").await? {
             Some(h) => {
                 let h = parse(cx, h.data, e, &(), ScoreHeader::layout).await?;
                 Some(format!(
-                    "SMUS score, {} tracks, {} BPM",
-                    h.tracks,
+                    "SMUS score, {}, {} BPM",
+                    plural(h.tracks, "track"),
                     h.tempo / 128
                 ))
             }
@@ -294,11 +309,11 @@ async fn bitmap(cx: &Cx, ctx: &Ctx, region: Span) -> Result<Option<String>> {
     };
     let h = parse(cx, bmhd.data, ctx.endian, &(), BitmapHeader::layout).await?;
     let mut line = format!(
-        "{} {}×{}, {} planes",
+        "{} {}×{}, {}",
         crate::formats::util::sound::fourcc(&ctx.form),
         h.width,
         h.height,
-        h.planes
+        plural(h.planes, "plane")
     );
     if let Some(name) = crate::value::lookup(ILBM_COMPRESSION, h.compression.into())
         && h.compression != 0

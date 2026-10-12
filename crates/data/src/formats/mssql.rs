@@ -21,7 +21,7 @@ use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::datakit::guid_le;
-use crate::formats::util::fmt::{grouped_count, size};
+use crate::formats::util::fmt::{grouped_count, plural, size};
 use crate::formats::util::val::{enumv, flagsv, hex, text, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -874,8 +874,8 @@ fn bitmap_page(cx: &Cx, span: Span, p: &[u8], t: u8) {
         Node::new("Extent bitmap")
             .span(span.sub(194, len.saturating_sub(4)))
             .summary(format!(
-                "{} extents, {set} set: {meaning}",
-                to_u64(bits.len()).saturating_mul(8)
+                "{}, {set} set: {meaning}",
+                plural(to_u64(bits.len()).saturating_mul(8), "extent")
             )),
     );
 }
@@ -916,7 +916,10 @@ fn iam(cx: &Cx, span: Span, p: &[u8]) {
     cx.emit(
         Node::new("Extent bitmap")
             .span(span.sub(194, len.saturating_sub(4)))
-            .summary(format!("{set} extents allocated to the allocation unit")),
+            .summary(format!(
+                "{set_extent} allocated to the allocation unit",
+                set_extent = plural(set, "extent")
+            )),
     );
 }
 

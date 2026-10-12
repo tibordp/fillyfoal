@@ -49,4 +49,4 @@ expression: "common::explore(&display_name(&path), &data)"
     Chunk table offset: 0xffffffffffffffff — -1: stored at the end of the file  [0x147+0x8]
     Chunk table offset (end of file): 0x1ba  [0x1c7+0x8]
     Compressed points — 20 points, chunks of 50000  [0x14f+0x6b]
-    Chunk table — version 0, 1 chunks  [0x1ba+0xd]
+    Chunk table — version 0, 1 chunk  [0x1ba+0xd]

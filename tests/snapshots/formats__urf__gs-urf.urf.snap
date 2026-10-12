@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ gs-urf.urf — Apple raster, 1 pages, 72×54, 72 dpi, 1-bit sGray  [0x0+0xd9]
+▾ gs-urf.urf — Apple raster, 1 page, 72×54, 72 dpi, 1-bit sGray  [0x0+0xd9]
     Signature  [0x0+0x8]
     Pages: 0  [0x8+0x4]
   ▾ Page 1 — 72×54, 72 dpi, 1-bit sGray  [0xc+0xcd]

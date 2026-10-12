@@ -9,7 +9,7 @@ use crate::declare_format;
 use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::fmt::fourcc;
+use crate::formats::util::fmt::{fourcc, plural};
 use crate::formats::util::val::{hex, int, text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded};
 use crate::node::Node;
@@ -129,7 +129,10 @@ async fn director(cx: Cx, input: Input) -> Result<()> {
     };
     if codec.starts_with("FGD") {
         let n = afterburner(&cx, input, endian).await?;
-        cx.annotate(format!("{kind} (Afterburner), {n} sections"));
+        cx.annotate(format!(
+            "{kind} (Afterburner), {n_section}",
+            n_section = plural(n, "section")
+        ));
         return Ok(());
     }
     // imap: map count, memory map offset, map version.
@@ -171,11 +174,10 @@ async fn director(cx: Cx, input: Input) -> Result<()> {
     let entry_len = u64::from(m.u16().await?);
     let _max = m.u32().await?;
     let used = m.u32().await?;
-    cx.emit(
-        Node::new("mmap")
-            .span(mmap.span)
-            .summary(format!("{used} entries of {entry_len} bytes")),
-    );
+    cx.emit(Node::new("mmap").span(mmap.span).summary(format!(
+        "{used_entry} of {entry_len} bytes",
+        used_entry = plural(used, "entry")
+    )));
     if entry_len < 12 {
         return Err(
             Diagnostic::malformed(format!("memory map entry size {entry_len}")).at(mmap.span),
@@ -217,12 +219,13 @@ async fn director(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
     }
     cx.annotate(format!(
-        "{kind} ({}), {shown} chunks",
+        "{kind} ({}), {shown_chunk}",
         if endian == Endian::Big {
             "Mac"
         } else {
             "Windows"
-        }
+        },
+        shown_chunk = plural(shown, "chunk")
     ));
     Ok(())
 }
@@ -551,7 +554,10 @@ async fn figma(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
         n = n.saturating_add(1);
     }
-    cx.annotate(format!("{kind}, format version {version}, {n} chunks"));
+    cx.annotate(format!(
+        "{kind}, format version {version}, {n_chunk}",
+        n_chunk = plural(n, "chunk")
+    ));
     Ok(())
 }
 

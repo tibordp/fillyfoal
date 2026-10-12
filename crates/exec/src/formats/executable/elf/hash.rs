@@ -6,6 +6,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::struct_node;
 use crate::formats::util::binutil::get_at;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::hex;
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -48,16 +49,21 @@ pub(super) async fn sysv(cx: Cx, (class, span, entsize): (Class, Span, u64)) -> 
     cx.emit(
         Node::new("Buckets")
             .span(buckets)
-            .summary(format!("{nbucket} buckets")),
+            .summary(plural(nbucket, "bucket")),
     );
-    let mut node = Node::new("Chains")
-        .span(chains)
-        .summary(format!("{nchain} entries, one per symbol"));
+    let mut node = Node::new("Chains").span(chains).summary(format!(
+        "{nchain_entry}, one per symbol",
+        nchain_entry = plural(nchain, "entry")
+    ));
     if chains.len < nchain.saturating_mul(size) {
         node = node.diag(Diagnostic::truncated(chains, chains.len));
     }
     cx.emit(node);
-    cx.annotate(format!("{nbucket} buckets, {nchain} symbols"));
+    cx.annotate(format!(
+        "{nbucket_bucket}, {nchain_symbol}",
+        nbucket_bucket = plural(nbucket, "bucket"),
+        nchain_symbol = plural(nchain, "symbol")
+    ));
     Ok(())
 }
 
@@ -84,27 +90,27 @@ pub(super) async fn gnu(cx: Cx, (class, span): (Class, Span)) -> Result<()> {
         },
     ));
     let bloom = span.sub(16, u64::from(bloom_size).saturating_mul(class.word()));
-    cx.emit(
-        Node::new("Bloom filter")
-            .span(bloom)
-            .summary(format!("{bloom_size} words, shift {shift}")),
-    );
+    cx.emit(Node::new("Bloom filter").span(bloom).summary(format!(
+        "{bloom_size_word}, shift {shift}",
+        bloom_size_word = plural(bloom_size, "word")
+    )));
     let buckets_at = 16u64.saturating_add(bloom.len);
     let buckets = span.sub(buckets_at, u64::from(nbuckets).saturating_mul(4));
     cx.emit(
         Node::new("Buckets")
             .span(buckets)
-            .summary(format!("{nbuckets} buckets")),
+            .summary(plural(nbuckets, "bucket")),
     );
     let chains = span.tail(buckets_at.saturating_add(buckets.len));
     let hashed = chains.len / 4;
     cx.emit(
         Node::new("Hash values")
             .span(chains)
-            .summary(format!("{hashed} symbols")),
+            .summary(plural(hashed, "symbol")),
     );
     cx.annotate(format!(
-        "{nbuckets} buckets, {hashed} hashed symbols from index {symoffset}"
+        "{nbuckets_bucket}, {hashed} hashed symbols from index {symoffset}",
+        nbuckets_bucket = plural(nbuckets, "bucket")
     ));
     Ok(())
 }

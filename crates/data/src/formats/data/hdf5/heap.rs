@@ -8,6 +8,7 @@ use crate::bytes::{to_u64, to_usize, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::fmt;
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{FlagTable, Radix, Value, flag};
@@ -721,7 +722,7 @@ async fn dblock_expand(
 
 fn iblock_node(file: &FileRef, heap: Arc<FrHeap>, addr: u64, rows: u32, depth: u32) -> Node {
     Node::new(format!("Indirect block at {addr:#x}"))
-        .summary(format!("{rows} rows"))
+        .summary(plural(rows, "row"))
         .target(file.at(addr, 4))
         .lazy(
             crate::expander!(self::iblock_expand: (FileRef, Arc<FrHeap>, u64, u32, u32)),
@@ -922,7 +923,14 @@ async fn sections(
             }
         }
         seen = seen.saturating_add(n.max(1));
-        rd.join(format!("{n} sections of {size} bytes"), start, sub);
+        rd.join(
+            format!(
+                "{n_section} of {size} bytes",
+                n_section = plural(n, "section")
+            ),
+            start,
+            sub,
+        );
         if rd.pos == start {
             break;
         }

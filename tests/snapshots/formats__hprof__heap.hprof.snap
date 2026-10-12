@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ heap.hprof — JAVA PROFILE 1.0.3 heap dump, 5 records (2 strings, 1 classes, 1 heap dump segments)  [0x0+0x89]
+▾ heap.hprof — JAVA PROFILE 1.0.3 heap dump, 5 records (2 strings, 1 class, 1 heap dump segments)  [0x0+0x89]
     Format: "JAVA PROFILE 1.0.3"  [0x0+0x13]
     Identifier size: 4  [0x13+0x4]
     Timestamp: 2023-11-14 22:13:20 UTC  [0x17+0x8]

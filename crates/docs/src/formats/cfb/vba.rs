@@ -13,6 +13,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::Input;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, uint};
 use crate::node::Node;
 use crate::span::Span;
@@ -215,7 +216,7 @@ async fn dir_node(cx: Cx, span: Span) -> Result<()> {
                 cx.push(
                     Node::new(format!("Module {}", quoted(&name, 40)))
                         .span(span.sub(at, end.saturating_sub(at)))
-                        .summary(format!("{} records", list.len()))
+                        .summary(plural(list.len(), "record"))
                         .lazy(module_records, (span, Arc::new(list), codepage)),
                 )
                 .await;

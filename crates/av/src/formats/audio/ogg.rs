@@ -24,6 +24,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::arcutil::{count, emit_nodes, human_size};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{Bits, duration, leaf, u24};
 use crate::formats::util::val::uint;
 use crate::formats::util::vidutil::{audio::OpusInfo, nal};
@@ -1111,7 +1112,7 @@ async fn packet_node(
         summary.push_str(&format!(", {s}"));
     }
     if pieces.len() > 1 {
-        summary.push_str(&format!(", across {} pages", pieces.len()));
+        summary.push_str(&format!(", across {}", plural(pieces.len(), "page")));
     }
     if let Some(g) = granule.filter(|&g| g != u64::MAX && kind.is_none()) {
         match stream.and_then(|s| s.seconds(g)) {
@@ -1188,7 +1189,7 @@ fn opus_toc(toc: u8, next: Option<u8>) -> Option<String> {
         0 => "1 frame".to_owned(),
         1 => "2 equal frames".to_owned(),
         2 => "2 frames".to_owned(),
-        _ => format!("{} frames", next? & 0x3f),
+        _ => plural(next? & 0x3f, "frame"),
     };
     Some(format!(
         "{mode} {} {ms} ms, {}, {frames}",
@@ -1383,9 +1384,9 @@ pub fn vorbis_id(cx: &Cx, block: &Block) -> Result<()> {
     f.u8("Block sizes")
         .with(|&v, n| {
             n.summary(format!(
-                "{} / {} samples",
+                "{} / {}",
                 1u32 << (v & 0xf).min(31),
-                1u32 << (v >> 4).min(31)
+                plural(1u32 << (v >> 4).min(31), "sample")
             ))
         })
         .emit()?;
@@ -1518,8 +1519,8 @@ async fn expand_packet(cx: Cx, st: PacketState) -> Result<()> {
     let span = join(&cx, &st.pieces).await?;
     if st.pieces.len() > 1 {
         cx.diag(Diagnostic::note(format!(
-            "reassembled from {} pages",
-            st.pieces.len()
+            "reassembled from {}",
+            plural(st.pieces.len(), "page")
         )));
     }
     let block = cx.block(span.sub(0, span.len.min(0x1000))).await?;
@@ -1591,7 +1592,7 @@ async fn expand_packet(cx: Cx, st: PacketState) -> Result<()> {
                 .with(|&v, n| if v < 0 { n.summary("unset") } else { n })
                 .emit()?;
             f.i32("Frame size")
-                .with(|&v, n| n.summary(format!("{v} samples")))
+                .with(|&v, n| n.summary(plural(v, "sample")))
                 .emit()?;
             f.i32("VBR").emit()?;
             f.i32("Frames per packet").emit()?;

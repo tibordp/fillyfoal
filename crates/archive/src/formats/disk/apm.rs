@@ -8,6 +8,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{size, volume};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -95,9 +96,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let head = parse(&cx, first, BE, &(), Entry::layout).await?;
     let count = head.map_entries.min(MAX_ENTRIES);
     cx.annotate(format!(
-        "Apple partition map, {count} entries, {}-byte blocks, {}",
+        "Apple partition map, {count_entry}, {}-byte blocks, {}",
         block,
-        size(u64::from(ddm.block_count).saturating_mul(block))
+        size(u64::from(ddm.block_count).saturating_mul(block)),
+        count_entry = plural(count, "entry")
     ));
     for i in 1..=u64::from(count) {
         let span = disk.sub(i.saturating_mul(block), Entry::SIZE);

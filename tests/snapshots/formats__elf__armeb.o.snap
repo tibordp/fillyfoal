@@ -171,7 +171,7 @@ expression: "common::explore(&display_name(&path), &data)"
         sh_info: 6 — applies to .data  [0x4a8+0x4]
         sh_addralign: 0x4  [0x4ac+0x4]
         sh_entsize: 0x8  [0x4b0+0x4]
-      ▾ Relocations — 1 entries  [0x2a8+0x8]
+      ▾ Relocations — 1 entry  [0x2a8+0x8]
         ▾ R_ARM_ABS32: 0x10 — .rodata.str1.1  [0x2a8+0x8]
             r_offset: 0x10  [0x2a8+0x4]
             r_info: 0x802 — symbol 8, type R_ARM_ABS32  [0x2ac+0x4]

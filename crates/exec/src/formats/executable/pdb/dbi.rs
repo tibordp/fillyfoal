@@ -9,6 +9,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::executable::pe::tables::{MACHINE, SECTION_CHARACTERISTICS};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, text, uint};
 use crate::node::{Count, Node};
 use crate::record;
@@ -232,9 +233,9 @@ async fn module_list(cx: Cx, span: Span) -> Result<()> {
             struct_node(format!("Module {i}"), m.span, LE, (), module_info)
                 .value(text(m.name.clone()))
                 .summary(if m.object.is_empty() || m.object == m.name {
-                    format!("{stream}, {} files", m.files)
+                    format!("{stream}, {}", plural(m.files, "file"))
                 } else {
-                    format!("{stream}, {} files, from {}", m.files, m.object)
+                    format!("{stream}, {}, from {}", plural(m.files, "file"), m.object)
                 }),
         )
         .await;

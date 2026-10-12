@@ -1021,14 +1021,14 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
         }
         b"fact" => fact_value(cx, &chunk.ctx, data)
             .await
-            .map(|n| format!("{n} samples")),
+            .map(|n| plural(n, "sample")),
         b"cue " => {
             let n = get::<u32>(&cx.read(data.sub(0, 4)).await?, 0, e).unwrap_or(0);
             Some(format!("{n} cue points"))
         }
         b"plst" => {
             let n = get::<u32>(&cx.read(data.sub(0, 4)).await?, 0, e).unwrap_or(0);
-            Some(format!("{n} segments"))
+            Some(plural(n, "segment"))
         }
         b"bext" => {
             let head = cx.read_avail(data.sub(0, 288)).await?;
@@ -1064,9 +1064,9 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
         b"acid" => {
             let a = crate::dsl::read_record::<Acid>(cx, data.sub(0, Acid::SIZE), e).await?;
             Some(format!(
-                "{:.2} BPM, {} beats, {}/{}{}",
+                "{:.2} BPM, {}, {}/{}{}",
                 a.tempo,
-                a.beats,
+                plural(a.beats, "beat"),
                 a.meter_numerator,
                 a.meter_denominator,
                 if a.flags & 1 != 0 { ", one-shot" } else { "" }
@@ -1074,13 +1074,20 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
         }
         b"ds64" => {
             let d = crate::dsl::read_record::<Ds64>(cx, data.sub(0, Ds64::SIZE), e).await?;
-            Some(format!("data {} bytes, {} samples", d.data_size, d.samples))
+            Some(format!(
+                "data {} bytes, {}",
+                d.data_size,
+                plural(d.samples, "sample")
+            ))
         }
         b"chna" => {
             let h = cx.read(data.sub(0, 4)).await?;
             let tracks = crate::bytes::u16_le(&h, 0).unwrap_or(0);
             let uids = crate::bytes::u16_le(&h, 2).unwrap_or(0);
-            Some(format!("{tracks} tracks, {uids} track UIDs"))
+            Some(format!(
+                "{tracks_track}, {uids} track UIDs",
+                tracks_track = plural(tracks, "track")
+            ))
         }
         b"levl" => {
             let h = cx.read(data.sub(0, 24)).await?;
@@ -1091,7 +1098,7 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
                 "{frames} peak frames of {block} samples, {channels} ch"
             ))
         }
-        b"PEAK" => Some(format!("{} channels", data.len.saturating_sub(8) / 8)),
+        b"PEAK" => Some(plural(data.len.saturating_sub(8) / 8, "channel")),
         b"cart" => {
             let title = peek_text(cx, data.sub(4, 64), 64).await?;
             let artist = peek_text(cx, data.sub(68, 64), 64).await?;
@@ -1113,7 +1120,10 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
             let len = get::<u32>(&head, 4, e).unwrap_or(0);
             let purpose = fourcc(head.get(8..12).unwrap_or_default());
             let text = peek_text(cx, data.tail(20), 120).await?;
-            let mut s = format!("cue {id}, {len} samples, {purpose}");
+            let mut s = format!(
+                "cue {id}, {len_sample}, {purpose}",
+                len_sample = plural(len, "sample")
+            );
             if !text.is_empty() {
                 s.push_str(&format!(": {}", clip(&text, 50)));
             }
@@ -1121,7 +1131,10 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
         }
         b"slnt" => {
             let n = get::<u32>(&cx.read(data.sub(0, 4)).await?, 0, e).unwrap_or(0);
-            Some(format!("{n} samples of silence"))
+            Some(format!(
+                "{n_sample} of silence",
+                n_sample = plural(n, "sample")
+            ))
         }
         _ if &chunk.list == b"exif" => Some(clip(&peek_text(cx, data, 120).await?, 60)),
         _ => None,
@@ -1154,7 +1167,7 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
                 let samples = fact_samples(cx, chunk).await;
                 let mut parts = Vec::new();
                 if let Some(n) = fmt.frames(chunk.size, samples) {
-                    parts.push(format!("{n} frames"));
+                    parts.push(plural(n, "frame"));
                 }
                 if let Some(d) = fmt.duration(chunk.size, samples) {
                     parts.push(d);
@@ -1172,7 +1185,10 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
                 .u32("Sample length")
                 .desc("Samples per channel")
                 .with(|&v, n| match rf64 {
-                    Some(s) if v == u32::MAX => n.summary(format!("see ds64: {s} samples")),
+                    Some(s) if v == u32::MAX => n.summary(format!(
+                        "see ds64: {s_sample}",
+                        s_sample = plural(s, "sample")
+                    )),
                     _ => n,
                 })
                 .emit()?;
@@ -1239,11 +1255,11 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
             latin1_field(&mut f, "Timestamp", 28).emit()?;
             f.bytes("Reserved", 60).emit()?;
             let peaks = data.tail(u64::from(offset).saturating_sub(8).max(120));
-            cx.emit(
-                Node::new("Peak data")
-                    .span(peaks)
-                    .summary(format!("{frames} frames × {ch} channels")),
-            );
+            cx.emit(Node::new("Peak data").span(peaks).summary(format!(
+                "{frames_frame} × {ch_channel}",
+                frames_frame = plural(frames, "frame"),
+                ch_channel = plural(ch, "channel")
+            )));
         }
         b"cue " => {
             let block = cx.block(data.sub(0, 4)).await?;
@@ -1266,7 +1282,14 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
                 segments,
                 e,
                 "Segment",
-                Some(|s| format!("cue {}, {} samples, {}×", s.id, s.length, s.repeats)),
+                Some(|s| {
+                    format!(
+                        "cue {}, {}, {}×",
+                        s.id,
+                        plural(s.length, "sample"),
+                        s.repeats
+                    )
+                }),
             ));
         }
         b"smpl" => {

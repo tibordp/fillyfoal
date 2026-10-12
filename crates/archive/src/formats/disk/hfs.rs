@@ -219,9 +219,9 @@ impl Fork {
         match overflow_extents(cx, tree, self, id, kind).await {
             Err(e) => Some(e),
             Ok(()) if self.overflowed() => Some(Diagnostic::malformed(format!(
-                "extents found for {} of the fork's {} blocks",
+                "extents found for {} of the fork's {}",
                 self.mapped(),
-                self.blocks
+                plural(self.blocks, "block")
             ))),
             Ok(()) => None,
         }
@@ -513,14 +513,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
     let volume_name = folder_name(&cx, &volume).await.unwrap_or_default();
     cx.annotate(format!(
-        "{journaled}{kind} volume{}, {} ({} files, {} folders)",
+        "{journaled}{kind} volume{}, {} ({}, {} folders)",
         if volume_name.is_empty() {
             String::new()
         } else {
             format!(" \"{volume_name}\"")
         },
         size(u64::from(h.total_blocks).saturating_mul(block)),
-        h.files,
+        plural(h.files, "file"),
         h.folders
     ));
     let fs: Vol = Arc::new(volume);
@@ -1091,9 +1091,10 @@ async fn folder(cx: Cx, f: Folder) -> Result<()> {
                 1 => {
                     let id = u32_be(&node, r.body.saturating_add(8)).unwrap_or(0);
                     let items = u32_be(&node, r.body.saturating_add(4)).unwrap_or(0);
-                    let out = Node::new(name)
-                        .span(span)
-                        .summary(format!("folder, {items} items"));
+                    let out = Node::new(name).span(span).summary(format!(
+                        "folder, {items_item}",
+                        items_item = plural(items, "item")
+                    ));
                     subfolder(out, &vol, id, Some(span), &ancestors)
                 }
                 2 => {

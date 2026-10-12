@@ -355,7 +355,7 @@ fn private_1(cx: &Cx, payload: Span, d: &[u8]) {
                 w.en("sampling_frequency", 2, &[(0, "48 kHz"), (1, "96 kHz")])?;
                 w.u("reserved", 1)?;
                 let ch = w.u("number_of_audio_channels_minus1", 3)?;
-                w.summary(|| format!("{} channels", ch.saturating_add(1)));
+                w.summary(|| plural(ch.saturating_add(1), "channel"));
                 w.x("dynamic_range_control", 8)?;
                 Some(7)
             }

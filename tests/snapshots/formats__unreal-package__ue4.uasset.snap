@@ -34,7 +34,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Persistent GUID: {11111111-2222-3333-4444-555555555555}  [0xba+0x10]
       Generations: 1  [0xca+0x4]
     ▾ Generation list  [0xce+0x8]
-        Generation 0 — 1 exports, 9 names  [0xce+0x8]
+        Generation 0 — 1 export, 9 names  [0xce+0x8]
     ▾ Saved by engine version  [0xd6+0x21]
         Major: 4  [0xd6+0x2]
         Minor: 27  [0xd8+0x2]

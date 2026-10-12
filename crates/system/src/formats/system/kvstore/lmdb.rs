@@ -134,7 +134,7 @@ impl DbRecord {
     }
 
     fn summary(&self) -> String {
-        let mut s = format!("{} entries, depth {}", self.entries, self.depth);
+        let mut s = format!("{}, depth {}", plural(self.entries, "entry"), self.depth);
         let names: Vec<&str> = DB_FLAGS
             .iter()
             .filter(|f| u64::from(self.flags) & f.mask == f.value)
@@ -197,8 +197,8 @@ impl Env {
     fn offset(&self, pgno: u64) -> Result<u64> {
         if pgno >= self.pages {
             return Err(Diagnostic::malformed(format!(
-                "page {pgno} lies outside the file ({} pages)",
-                self.pages
+                "page {pgno} lies outside the file ({})",
+                plural(self.pages, "page")
             )));
         }
         Ok(pgno.saturating_mul(self.page_size))
@@ -423,7 +423,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Pages")
             .span(file)
-            .summary(format!("{} pages of {page_size} bytes", env.pages))
+            .summary(format!(
+                "{} of {page_size} bytes",
+                plural(env.pages, "page")
+            ))
             .lazy(pages, env.clone()),
     );
     cx.annotate(format!(
@@ -628,7 +631,7 @@ async fn record_node(cx: &Cx, db: &Database, page: &Arc<Page>, i: u16) -> Result
         let (kind, summary) = if n.flags & F_DUPDATA != 0 {
             (
                 Kind::Dups,
-                format!("{} values (sub-database)", record.entries),
+                format!("{} (sub-database)", plural(record.entries, "value")),
             )
         } else {
             (Kind::Named, format!("database: {}", record.summary()))
@@ -653,7 +656,7 @@ async fn record_node(cx: &Cx, db: &Database, page: &Arc<Page>, i: u16) -> Result
         let sub = Page::at(cx, None, data).await;
         return Ok(match sub {
             Ok(sub) => node
-                .summary(format!("{} values (sub-page)", sub.count))
+                .summary(format!("{} (sub-page)", plural(sub.count, "value")))
                 .lazy(
                     subpage,
                     (env.clone(), data, db.record.flags & MDB_INTEGERDUP != 0),
@@ -915,7 +918,10 @@ async fn pages(cx: Cx, env: EnvRef) -> Result<()> {
             extent = n.clamp(1, env.pages.saturating_sub(pgno).max(1));
             summary.push_str(&format!(", {}", plural(n, "page")));
         } else if flags & (P_BRANCH | P_LEAF) != 0 {
-            summary.push_str(&format!(", {} keys", lower.saturating_sub(16) / 2));
+            summary.push_str(&format!(
+                ", {}",
+                plural(lower.saturating_sub(16) / 2, "key")
+            ));
         }
         let span = env
             .input

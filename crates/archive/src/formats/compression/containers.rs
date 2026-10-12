@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Input, Probe, embedded};
 use crate::node::Node;
 use crate::value::{EnumTable, FlagTable, Value, field, flag};
@@ -113,7 +114,10 @@ async fn apple_archive(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("Apple Archive, {entries} entries"));
+    cx.annotate(format!(
+        "Apple Archive, {entries_entry}",
+        entries_entry = plural(entries, "entry")
+    ));
     Ok(())
 }
 

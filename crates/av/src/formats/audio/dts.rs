@@ -8,6 +8,7 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::arcutil::human_size;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{Bits, FrameRef, FrameSyntax, bits_node, duration, frames_node};
 use crate::formats::{Format, Input, Probe, audio::id3};
 use crate::node::Node;
@@ -246,18 +247,13 @@ fn layout(b: &mut Bits<'_>) -> Result<()> {
             if v == 31 {
                 n.summary("normal frame")
             } else {
-                n.summary(format!("{} samples short", v.saturating_add(1)))
+                n.summary(format!("{} short", plural(v.saturating_add(1), "sample")))
             }
         })
         .emit()?;
     let crc = b.field("CRC present", 1).flag().emit()?;
     b.field("PCM sample blocks − 1", 7)
-        .with(|v, n| {
-            n.summary(format!(
-                "{} samples",
-                v.saturating_add(1).saturating_mul(32)
-            ))
-        })
+        .with(|v, n| n.summary(plural(v.saturating_add(1).saturating_mul(32), "sample")))
         .emit()?;
     b.field("Frame size − 1", 14)
         .with(|v, n| n.summary(format!("{} bytes", v.saturating_add(1))))

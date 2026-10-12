@@ -10,6 +10,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::lines::{
     Lines, contains, float, float32, hex, int, number, preview, summarize, text, uint,
 };
@@ -865,12 +866,13 @@ async fn edf_signals(cx: Cx, (span, ns): (Span, u64)) -> Result<()> {
                 label
             })
             .summary(format!(
-                "{rate} samples/record{}",
+                "{rate_sample}/record{}",
                 if dim.is_empty() {
                     String::new()
                 } else {
                     format!(", {dim}")
-                }
+                },
+                rate_sample = plural(rate, "sample")
             ))
             .lazy(edf_signal, parts),
         )
@@ -2194,7 +2196,8 @@ async fn plx_blocks(cx: Cx, data: Span) -> Result<()> {
                 .span(cur.since(start))
                 .value(uint(timestamp))
                 .summary(format!(
-                    "channel {channel}, unit {unit}, {waveforms} × {words} words"
+                    "channel {channel}, unit {unit}, {waveforms} × {words_word}",
+                    words_word = plural(words, "word")
                 )),
         )
         .await;

@@ -2,11 +2,11 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tune.ult — ULT v4, 4 channels, 1 patterns, 1 samples — fillyfoal ult  [0x0+0x6a9]
+▾ tune.ult — ULT v4, 4 channels, 1 pattern, 1 sample — fillyfoal ult  [0x0+0x6a9]
     Magic: "MAS_UTrack_V004"  [0x0+0xf]
     Title: "fillyfoal ult"  [0xf+0x20]
     Text: "Hello from UltraTracker!"  [0x30+0x20]
-  ▾ Samples — 1 samples  [0x51+0x42]
+  ▾ Samples — 1 sample  [0x51+0x42]
     ▾ Sample 1 — beep  [0x51+0x40]
         Name: "beep"  [0x51+0x20]
         File name: "beep.smp"  [0x71+0xc]

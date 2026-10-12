@@ -8,6 +8,7 @@ use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::mapi::{self, Named};
 use crate::node::Node;
 use crate::span::Span;
@@ -179,7 +180,11 @@ fn multi(ty: u16, raw: &[u8]) -> String {
                     .map_or_else(String::new, |v| crate::render::value(&v))
             })
             .collect();
-        return format!("{n} values: {}", shown.join(", "));
+        return format!(
+            "{n_value}: {}",
+            shown.join(", "),
+            n_value = plural(n, "value")
+        );
     }
     let mut items = Vec::new();
     for i in 0..count.min(16) {
@@ -198,7 +203,11 @@ fn multi(ty: u16, raw: &[u8]) -> String {
             _ => format!("{} bytes", item.len()),
         });
     }
-    format!("{count} values: {}", items.join(", "))
+    format!(
+        "{count_value}: {}",
+        items.join(", "),
+        count_value = plural(count, "value")
+    )
 }
 
 /// Reads a property's bytes (inline or from the heap or a subnode), up

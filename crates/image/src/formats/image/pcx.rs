@@ -7,6 +7,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::record;
 use crate::value::EnumTable;
@@ -90,9 +91,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let height = u32::from(h.ymax.saturating_sub(h.ymin)).saturating_add(1);
     let depth = u16::from(h.bits).saturating_mul(h.planes.into());
     cx.annotate(format!(
-        "{}, {depth}-bit, {} planes",
+        "{}, {depth}-bit, {}",
         dims(width, height),
-        h.planes
+        plural(h.planes, "plane")
     ));
     if depth <= 4 {
         cx.emit(palette(
@@ -117,8 +118,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             end.saturating_sub(Header::SIZE),
         )
         .summary(format!(
-            "{height} scanlines × {} planes × {} bytes{}",
-            h.planes,
+            "{height} scanlines × {} × {} bytes{}",
+            plural(h.planes, "plane"),
             h.bytes_per_line,
             if h.encoding == 1 { ", RLE" } else { "" }
         )),
@@ -157,8 +158,8 @@ pub async fn dissect_dcx(cx: Cx, input: Input) -> Result<()> {
         .take_while(|&o| o != 0)
         .collect();
     let table_len = to_u64(offsets.len()).saturating_add(1).saturating_mul(4);
-    cx.emit(region("Page table", file, 4, table_len).summary(format!("{} pages", offsets.len())));
-    cx.annotate(format!("{} pages", offsets.len()));
+    cx.emit(region("Page table", file, 4, table_len).summary(plural(offsets.len(), "page")));
+    cx.annotate(plural(offsets.len(), "page"));
     for (i, &offset) in offsets.iter().enumerate() {
         let end = offsets
             .get(i.saturating_add(1))

@@ -10,6 +10,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
@@ -286,10 +287,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 let tiles_y = h.div_ceil(s.tile_height.max(1));
                 let depth = s.components.first().copied().unwrap_or(0);
                 let summary = format!(
-                    "{}, {} components, {depth}-bit, {} tiles",
+                    "{}, {}, {depth}-bit, {}",
                     dims(w, h),
-                    s.components.len(),
-                    tiles_x.saturating_mul(tiles_y)
+                    plural(s.components.len(), "component"),
+                    plural(tiles_x.saturating_mul(tiles_y), "tile")
                 );
                 cx.annotate(summary.clone());
                 cx.push(segment_node(marker, span, payload).summary(summary))

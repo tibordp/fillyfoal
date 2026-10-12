@@ -10,6 +10,7 @@ use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::disk::{PieceList, content_node, fragments_node, size, unix_mode, unix_time};
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{FlagTable, Value, flag};
@@ -169,7 +170,7 @@ impl Inode {
             unix_mode(self.mode().into()),
             size(self.size()),
             if links > 1 && self.kind() != S_IFDIR {
-                format!(", {links} links")
+                format!(", {links_link}", links_link = plural(links, "link"))
             } else {
                 String::new()
             }
@@ -243,9 +244,9 @@ fn i_block_node(ctx: &InodeCtx, span: Span, bytes: &[u8]) -> Node {
             extent_node_layout,
         )
         .summary(format!(
-            "depth {}, {} entries",
+            "depth {}, {}",
             u16_le(bytes, 6).unwrap_or(0),
-            u16_le(bytes, 2).unwrap_or(0)
+            plural(u16_le(bytes, 2).unwrap_or(0), "entry")
         ));
     }
     if ctx.flags & FL_INLINE != 0 {
@@ -455,9 +456,12 @@ fn leaf_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u16("Length")
         .with(|&v, n| {
             if v > 32768 {
-                n.summary(format!("{} blocks, uninitialized", v.saturating_sub(32768)))
+                n.summary(format!(
+                    "{}, uninitialized",
+                    plural(v.saturating_sub(32768), "block")
+                ))
             } else {
-                n.summary(format!("{v} blocks"))
+                n.summary(plural(v, "block"))
             }
         })
         .desc("Above 32768: an uninitialized (preallocated) extent of length − 32768")
@@ -542,7 +546,7 @@ fn extent_node_layout(f: &mut Fields<'_>, ctx: &ExtCtx) -> Result<()> {
             f.node(
                 Node::new("Unused entries")
                     .span(f.peek_span(tail_at.saturating_sub(used)))
-                    .summary(format!("{} slots", max.saturating_sub(entries))),
+                    .summary(plural(max.saturating_sub(entries), "slot")),
             );
             f.seek(start.saturating_add(tail_at));
         }

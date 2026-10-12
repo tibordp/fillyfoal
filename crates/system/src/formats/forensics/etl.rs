@@ -1072,7 +1072,10 @@ fn ext_node(e: &Ext) -> Node {
             if let Some(s) = tl_schema(&e.data) {
                 node = node
                     .value(text(s.name.clone()))
-                    .summary(format!("TraceLogging schema, {} fields", s.fields.len()))
+                    .summary(format!(
+                        "TraceLogging schema, {}",
+                        plural(s.fields.len(), "field")
+                    ))
                     .lazy(tl_fields_node, (e.data_span, s.fields));
             }
         }

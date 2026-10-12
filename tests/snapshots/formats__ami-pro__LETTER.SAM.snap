@@ -3,11 +3,11 @@ source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ LETTER.SAM — Ami Pro document (format 4), 7 sections, 4 text lines  [0x0+0xca]
-  ▾ [ver] — 1 lines  [0x0+0xb]
+  ▾ [ver] — 1 line  [0x0+0xb]
       Line 0: "\t4"  [0x7+0x4]
-  ▾ [sty] — 1 lines  [0xb+0xa]
+  ▾ [sty] — 1 line  [0xb+0xa]
       Line 0: ""  [0x12+0x3]
-  ▾ [compat] — 1 lines  [0x15+0xe]
+  ▾ [compat] — 1 line  [0x15+0xe]
       Line 0: "\t1"  [0x1f+0x4]
   ▾ [fnt] — 2 lines  [0x23+0x20]
       Line 0: "\tTimes New Roman"  [0x2a+0x12]

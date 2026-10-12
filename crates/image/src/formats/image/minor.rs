@@ -5,6 +5,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -38,7 +39,8 @@ async fn pgf(cx: Cx, input: Input) -> Result<()> {
     f.u8("Used bits per channel").emit()?;
     cx.emit(Node::new("Image data").span(file.tail(8u64.saturating_add(size.into()))));
     cx.annotate(format!(
-        "PGF v{version:x}, {w}×{h}, {bpp} bpp, {channels} channel(s), {levels} levels"
+        "PGF v{version:x}, {w}×{h}, {bpp} bpp, {channels} channel(s), {levels_level}",
+        levels_level = plural(levels, "level")
     ));
     Ok(())
 }

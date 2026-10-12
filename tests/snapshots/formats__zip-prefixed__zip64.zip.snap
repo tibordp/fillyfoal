@@ -2,14 +2,14 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ zip64.zip — ZIP archive after other data (1 entries)  [0x0+0x134]
+▾ zip64.zip — ZIP archive after other data (1 entry)  [0x0+0x134]
   ▾ Prefix data — UTF-8 text, LF line endings, 2 lines  [0x0+0x64]
       Encoding: "UTF-8"
       Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
     ▾ Lines — 2 lines  [0x0+0x64]
         Line 1: "#!stub: prefixed data before the archive"  [0x0+0x28]
         Line 2: "..........................................................."  [0x29+0x3b]
-  ▾ Central Directory — 1 entries  [0xa3+0x2f]
+  ▾ Central Directory — 1 entry  [0xa3+0x2f]
     ▾ - — stored, 12 → 12 bytes  [0xa3+0x2f]
       ▾ Central Directory Header  [0xa3+0x2e]
           Signature: 50 4b 01 02  |PK..|  [0xa3+0x4]

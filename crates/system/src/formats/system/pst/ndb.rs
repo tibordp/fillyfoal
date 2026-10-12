@@ -8,6 +8,7 @@ use crate::codec::crc::Crc;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::Input;
+use crate::formats::util::fmt::plural;
 use crate::span::{Origin, Span};
 
 /// [MS-PST]'s CRC: CRC-32 (reflected 0x04C11DB7) with no initial or
@@ -211,7 +212,8 @@ pub async fn page(cx: &Cx, pst: &Pst, bref: Bref) -> Result<Arc<Page>> {
     let n = u64::from(count).min(fits);
     if u64::from(count) > fits {
         problems.push(Diagnostic::malformed(format!(
-            "{count} entries do not fit in the page"
+            "{count_entry} do not fit in the page",
+            count_entry = plural(count, "entry")
         )));
     }
     let mut entries = Vec::new();

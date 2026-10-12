@@ -17,7 +17,7 @@ use crate::cx::{Block, Cx};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::binutil::{NodeExt, Reader, mutf8};
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::{name_or, text};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -489,9 +489,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         summary.push_str(&format!(", extends {}", c.class_name(c.super_class)));
     }
     summary.push_str(&format!(
-        ", {} fields, {} methods",
-        c.fields.2.len(),
-        c.methods.2.len()
+        ", {}, {}",
+        plural(c.fields.2.len(), "field"),
+        plural(c.methods.2.len(), "method")
     ));
     cx.annotate(summary);
 
@@ -499,7 +499,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Constant Pool")
             .span(c.span(pool_offset, pool_len))
-            .summary(format!("{} entries", c.pool.len().saturating_sub(1)))
+            .summary(plural(c.pool.len().saturating_sub(1), "entry"))
             .lazy(constant_pool, c.clone()),
     );
     let flags = |raw: u16, table: FlagTable| {
@@ -543,7 +543,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new(name)
                 .span(c.span(*offset, *len))
-                .summary(format!("{} entries", members.len()))
+                .summary(plural(members.len(), "entry"))
                 .lazy(member_list, (c.clone(), which)),
         );
     }
@@ -926,18 +926,18 @@ fn attribute_summary(c: &ClassInfo, name: &str, a: &Attribute) -> String {
         | "NestMembers"
         | "PermittedSubclasses"
         | "StackMapTable"
-        | "ModulePackages" => format!("{} entries", u16_at(0)),
+        | "ModulePackages" => plural(u16_at(0), "entry"),
         "RuntimeVisibleAnnotations" | "RuntimeInvisibleAnnotations" => {
             attrs::annotation_types(c, b).join(", ")
         }
-        "MethodParameters" => format!("{} entries", b.first().copied().unwrap_or(0)),
+        "MethodParameters" => plural(b.first().copied().unwrap_or(0), "entry"),
         "RuntimeVisibleParameterAnnotations" | "RuntimeInvisibleParameterAnnotations" => {
-            format!("{} parameters", b.first().copied().unwrap_or(0))
+            plural(b.first().copied().unwrap_or(0), "parameter")
         }
         "RuntimeVisibleTypeAnnotations" | "RuntimeInvisibleTypeAnnotations" => {
-            format!("{} annotations", u16_at(0))
+            plural(u16_at(0), "annotation")
         }
-        "Record" => format!("{} components", u16_at(0)),
+        "Record" => plural(u16_at(0), "component"),
         "AnnotationDefault" => attrs::default_value(c, b),
         "Module" => c.resolve(u16_at(0)),
         // 1 KiB holds well over the 80 characters shown.

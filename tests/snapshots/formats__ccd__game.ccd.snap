@@ -3,7 +3,7 @@ source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ game.ccd — CloneCD v3, 1 session(s), 4 TOC entries, 1 track(s)  [0x0+0x20a]
-  ▾ [CloneCD] — 1 keys  [0x0+0x14]
+  ▾ [CloneCD] — 1 key  [0x0+0x14]
       Version: 3  [0xb+0x9]
   ▾ [Disc] — 4 keys  [0x16+0x47]
       TocEntries: 4  [0x1e+0xc]

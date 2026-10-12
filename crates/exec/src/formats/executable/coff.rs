@@ -22,7 +22,7 @@ use crate::formats::executable::pe::tables::{
     FILE_CHARACTERISTICS, MACHINE, SECTION_CHARACTERISTICS,
 };
 use crate::formats::util::binutil::data_node;
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::{hex, name_or, text};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -609,11 +609,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let c: Coff = Arc::new(info);
 
     let mut summary = format!(
-        "COFF object{}, {}, {} sections, {} symbols",
+        "COFF object{}, {}, {}, {}",
         if big { " (bigobj)" } else { "" },
         lookup(MACHINE, h.machine.into()).unwrap_or("unknown machine"),
-        h.sections,
-        h.nsyms
+        plural(h.sections, "section"),
+        plural(h.nsyms, "symbol")
     );
     let directives = c.sections.iter().find(|s| s.name == ".drectve");
     let mut directive_text = None;
@@ -629,7 +629,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Section Table")
             .span(table)
-            .summary(format!("{} sections", c.sections.len()))
+            .summary(plural(c.sections.len(), "section"))
             .lazy(section_list, c.clone()),
     );
     if let Some((t, span)) = directive_text {
@@ -658,7 +658,7 @@ fn symbol_nodes(c: &Coff) -> [Node; 2] {
     [
         Node::new("Symbol Table")
             .span(c.symbols)
-            .summary(format!("{} records", c.nsyms))
+            .summary(plural(c.nsyms, "record"))
             .lazy(symbol_list, c.clone()),
         Node::new("String Table")
             .span(strtab)
@@ -767,13 +767,13 @@ async fn section_list(cx: Cx, c: Coff) -> Result<()> {
             }
         };
         let summary = format!(
-            "{}{}{}  {:#x} bytes at {:#x}, {} relocations",
+            "{}{}{}  {:#x} bytes at {:#x}, {}",
             flag(0x4000_0000, 'r'),
             flag(0x8000_0000, 'w'),
             flag(0x2000_0000, 'x'),
             s.raw_size,
             s.raw_pointer,
-            nreloc
+            plural(nreloc, "relocation")
         );
         cx.push(
             Node::new(s.name.clone())
@@ -801,7 +801,7 @@ async fn section_node(cx: Cx, (c, index): (Coff, usize)) -> Result<()> {
             Ok(r) => cx.emit(
                 Node::new("Relocations")
                     .span(r.span)
-                    .summary(format!("{} entries", r.count))
+                    .summary(plural(r.count, "entry"))
                     .lazy(relocations, (c.clone(), r)),
             ),
             Err(e) => cx.diag(e),

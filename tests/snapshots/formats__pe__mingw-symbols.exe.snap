@@ -313,7 +313,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Raw Data  [0x2400+0x13]
         Alignment Padding — 493 bytes  [0x2413+0x1ed]
     Header Padding  [0x3e0+0x220]
-  ▾ Export Table — mingw-symbols.exe, 1 functions  [0x1000+0x50]
+  ▾ Export Table — mingw-symbols.exe, 1 function  [0x1000+0x50]
     ▾ Export Directory  [0x1000+0x28]
         Characteristics: 0x0  [0x1000+0x4]
         TimeDateStamp: 1970-01-01 00:00:00 UTC  [0x1004+0x4]
@@ -327,14 +327,14 @@ expression: "common::explore(&display_name(&path), &data)"
         AddressOfNames: 0x602c — .edata  [0x1020+0x4] → 0x102c+0x0
         AddressOfNameOrdinals: 0x6030 — .edata  [0x1024+0x4] → 0x1030+0x0
       Name: "mingw-symbols.exe"  [0x1032+0x12]
-    ▾ Functions — 1 functions, 1 by name
+    ▾ Functions — 1 function, 1 by name
         filly_value: 0x1000 — ordinal 1, code at 0x1000  [0x1028+0x4] → 0x600+0x0
-    ▾ Export Address Table — 1 entries  [0x1028+0x4]
+    ▾ Export Address Table — 1 entry  [0x1028+0x4]
         Ordinal 1: 0x1000 — filly_value, RVA 0x1000 (.text)  [0x1028+0x4] → 0x600+0x0
-    ▾ Name Pointer Table — 1 names  [0x102c+0x4]
+    ▾ Name Pointer Table — 1 name  [0x102c+0x4]
       ▾ #0: 0x6044 — filly_value  [0x102c+0x4] → 0x1044+0xc
           Name: "filly_value"  [0x1044+0xc]
-    ▾ Ordinal Table — 1 entries  [0x1030+0x2]
+    ▾ Ordinal Table — 1 entry  [0x1030+0x2]
         #0: 0 — filly_value → ordinal 1  [0x1030+0x2]
   ▾ Import Table — RVA 0x7000 (.idata), 0x18 bytes  [0x1200+0x18]
     ▾ Terminator — null descriptor, ends the table  [0x1200+0x14]

@@ -6,6 +6,7 @@ use crate::bytes::{u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{channels, duration, leaf, peek_text, u24};
 use crate::formats::util::val::text;
 use crate::formats::{Format, Input, Probe};
@@ -200,8 +201,11 @@ async fn block_summary(cx: &Cx, kind: u8, span: Span) -> Result<String> {
             span.len.saturating_sub(16)
         ),
         3 => format!(
-            "{} samples at {} Hz",
-            u32::from(u16_le(&head, 4).unwrap_or(0)).saturating_add(1),
+            "{} at {} Hz",
+            plural(
+                u32::from(u16_le(&head, 4).unwrap_or(0)).saturating_add(1),
+                "sample"
+            ),
             rate_of(head.get(6).copied().unwrap_or(0))
         ),
         5 => peek_text(cx, span.tail(4), 80).await?,

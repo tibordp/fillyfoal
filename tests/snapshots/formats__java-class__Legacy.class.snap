@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&name, &data)"
 ---
-▾ Legacy.class — Java interface net.fillyfoal.Legacy (Java 1.4), 1 fields, 1 methods  [0x0+0xc5]
+▾ Legacy.class — Java interface net.fillyfoal.Legacy (Java 1.4), 1 field, 1 method  [0x0+0xc5]
   ▾ Header  [0x0+0xa]
       magic: 0xcafebabe  [0x0+0x4]
       minor_version: 0  [0x4+0x2]
@@ -57,7 +57,7 @@ expression: "common::explore(&name, &data)"
     Access Flags: 0x601 [PUBLIC | INTERFACE | ABSTRACT]  [0x97+0x2]
     This Class: "net.fillyfoal.Legacy" — #8  [0x99+0x2]
     Super Class: "java.lang.Object" — #10  [0x9b+0x2]
-  ▾ Fields — 1 entries  [0x9f+0x12]
+  ▾ Fields — 1 entry  [0x9f+0x12]
     ▾ MAX — public static final int MAX  [0xa1+0x10]
         access_flags: 0x19 [PUBLIC | STATIC | FINAL]  [0xa1+0x2]
         name_index: 5 — MAX  [0xa3+0x2]
@@ -67,7 +67,7 @@ expression: "common::explore(&name, &data)"
           attribute_name_index: 4 — ConstantValue  [0xa9+0x2]
           attribute_length: 2  [0xab+0x4]
           constantvalue_index: 3 — 7  [0xaf+0x2]
-  ▾ Methods — 1 entries  [0xb1+0xa]
+  ▾ Methods — 1 entry  [0xb1+0xa]
     ▾ trot — public abstract boolean trot(int, long, java.lang.String[][])  [0xb3+0x8]
         access_flags: 0x401 [PUBLIC | ABSTRACT]  [0xb3+0x2]
         name_index: 1 — trot  [0xb5+0x2]

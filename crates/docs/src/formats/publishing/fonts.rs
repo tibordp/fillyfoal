@@ -12,6 +12,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::text::scan::Lines;
 use crate::formats::text::{probe, xml};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, int, text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -600,7 +601,7 @@ async fn font_dicts(cx: Cx, (cff, idx): (Cff, Index)) -> Result<()> {
 fn index_node(name: &'static str, idx: Index) -> Node {
     Node::new(name)
         .span(idx.span)
-        .summary(format!("{} entries", idx.count))
+        .summary(plural(idx.count, "entry"))
 }
 
 async fn index_strings(cx: Cx, (region, idx): (Span, Index)) -> Result<()> {
@@ -772,7 +773,7 @@ async fn fnt(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Character table")
             .span(table)
-            .summary(format!("{count} entries"))
+            .summary(plural(count, "entry"))
             .lazy(
                 fnt_chars,
                 (file, table, info.first_char, v3, info.pix_height, vector),
@@ -1048,7 +1049,7 @@ async fn tfm(cx: Cx, input: Input) -> Result<()> {
         let span = file.sub(at, words(n));
         tables.push(span);
         at = at.saturating_add(words(n));
-        let node = Node::new(name).span(span).summary(format!("{n} words"));
+        let node = Node::new(name).span(span).summary(plural(n, "word"));
         cx.emit(if name == "Parameters" {
             node.lazy(tfm_params, (span, design))
         } else {
@@ -1480,12 +1481,12 @@ async fn bgi(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Stroke offsets")
             .span(offsets)
-            .summary(format!("{count} entries")),
+            .summary(plural(count, "entry")),
     );
     cx.emit(
         Node::new("Widths")
             .span(widths)
-            .summary(format!("{count} entries")),
+            .summary(plural(count, "entry")),
     );
     cx.emit(Node::new("Stroke data").span(file.tail(base.saturating_add(strokes.into()))));
     cx.annotate(format!(
@@ -1596,7 +1597,7 @@ async fn sfd_glyph(cx: Cx, span: Span) -> Result<()> {
             cx.push(
                 Node::new("Outline")
                     .span(lines.since(start))
-                    .summary(format!("{points} points")),
+                    .summary(plural(points, "point")),
             )
             .await;
         } else if let Some((k, v)) = t.split_once(':') {

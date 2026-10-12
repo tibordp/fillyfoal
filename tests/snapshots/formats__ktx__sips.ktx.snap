@@ -21,5 +21,5 @@ expression: "common::explore(&name, &data)"
   ▾ Key/value data  [0x40+0x34]
       KTXorientation: "S=r,T=d"  [0x40+0x1b]
       AlphaInfo_APPLE: "3"  [0x5c+0x16]
-  ▾ Mip levels — 1 levels  [0x74+0x204]
+  ▾ Mip levels — 1 level  [0x74+0x204]
       Level 0 — imageSize 0x200  [0x74+0x204]

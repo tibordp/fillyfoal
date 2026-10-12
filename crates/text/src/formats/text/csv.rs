@@ -326,10 +326,10 @@ async fn dissect(cx: Cx, input: Input, candidates: &[u8]) -> Result<()> {
         String::new()
     };
     cx.annotate(format!(
-        "{kind}{}, {}{names}, ~{} records",
+        "{kind}{}, {}{names}, ~{}",
         prepared.note(),
         plural(first.count, "column", "columns"),
-        count(estimate)
+        crate::formats::util::fmt::plural(count(estimate), "record")
     ));
     // A resumed run continues with the records (the children before them
     // were produced by the first run).
@@ -374,8 +374,9 @@ async fn dissect(cx: Cx, input: Input, candidates: &[u8]) -> Result<()> {
             .lazy(fields, (span, delim, columns.clone(), false));
         if header && rec.count != first.count {
             node = node.diag(Diagnostic::warning(format!(
-                "{} fields, header has {}",
-                rec.count, first.count
+                "{}, header has {}",
+                crate::formats::util::fmt::plural(rec.count, "field"),
+                first.count
             )));
         }
         if rec.unterminated {

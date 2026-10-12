@@ -40,6 +40,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, Prim, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::uint;
 use crate::formats::{Head, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
@@ -353,8 +354,8 @@ async fn fs_bundle(
     let data = file.sub(data_start, pos.saturating_sub(data_start));
     let scheme = blocks.first().map_or(0, |b| u32::from(b.flags & 0x3f));
     let mut node = Node::new("Data").span(data).summary(format!(
-        "{} blocks, {}, {} → {total} bytes",
-        blocks.len(),
+        "{}, {}, {} → {total} bytes",
+        plural(blocks.len(), "block"),
         compression_name(scheme),
         data.len
     ));
@@ -386,7 +387,11 @@ async fn fs_bundle(
         )
         .await;
     }
-    Ok(format!(", {}, {count} files", compression_name(scheme)))
+    Ok(format!(
+        ", {}, {count_file}",
+        compression_name(scheme),
+        count_file = plural(count, "file")
+    ))
 }
 
 async fn push_entry(
@@ -472,7 +477,7 @@ async fn blocks_info(cx: Cx, (info, file, data_start): (Span, Span, u64)) -> Res
     cx.emit(
         Node::new("Blocks")
             .span(table)
-            .summary(format!("{n} blocks"))
+            .summary(plural(n, "block"))
             .lazy(block_list, (table, file, data_start)),
     );
     cur.skip(table.len);
@@ -487,7 +492,7 @@ async fn blocks_info(cx: Cx, (info, file, data_start): (Span, Span, u64)) -> Res
     cx.emit(
         Node::new("Directory")
             .span(info.sub(start, end.saturating_sub(start)))
-            .summary(format!("{n} nodes"))
+            .summary(plural(n, "node"))
             .lazy(directory_list, info.tail(start)),
     );
     Ok(())
@@ -648,8 +653,9 @@ async fn web_bundle(
         push_entry(cx, input, stream, offset.into(), size.into(), false, &path).await;
     }
     Ok(format!(
-        ", {}, {files} files",
-        if lzma { "LZMA" } else { "uncompressed" }
+        ", {}, {files_file}",
+        if lzma { "LZMA" } else { "uncompressed" },
+        files_file = plural(files, "file")
     ))
 }
 
@@ -884,7 +890,7 @@ async fn serialized(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Types")
             .span(tspan)
-            .summary(format!("{type_count} types"))
+            .summary(plural(type_count, "type"))
             .lazy(type_list, (sf.clone(), start, false)),
     );
     if let Some(node) = big_node {
@@ -905,7 +911,7 @@ async fn serialized(cx: Cx, input: Input) -> Result<()> {
             ospan.offset.saturating_sub(file.offset),
             table.end().saturating_sub(ospan.offset),
         ))
-        .summary(format!("{count} objects"));
+        .summary(plural(count, "object"));
     let fits = table.len >= count.saturating_mul(stride);
     if !fits {
         objects = objects.diag(Diagnostic::truncated(
@@ -938,7 +944,7 @@ async fn serialized(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Script types")
                 .span(span)
-                .summary(format!("{n} scripts"))
+                .summary(plural(n, "script"))
                 .lazy(script_list, (sf.clone(), start)),
         );
         cur.seek(end);
@@ -952,7 +958,7 @@ async fn serialized(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Externals")
             .span(cur.since(start))
-            .summary(format!("{n} files"))
+            .summary(plural(n, "file"))
             .lazy(external_list, (sf.clone(), start)),
     );
 
@@ -965,7 +971,7 @@ async fn serialized(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Reference types")
                 .span(cur.since(start))
-                .summary(format!("{n} types"))
+                .summary(plural(n, "type"))
                 .lazy(type_list, (sf.clone(), start, true)),
         );
     }
@@ -984,8 +990,10 @@ async fn serialized(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{} bytes", data.len)),
     );
     cx.annotate(format!(
-        "Unity {unity} serialized file v{version}{}, {count} objects, {type_count} types",
-        platform.map_or(String::new(), |p| format!(", {p}"))
+        "Unity {unity} serialized file v{version}{}, {count_object}, {type_count_type}",
+        platform.map_or(String::new(), |p| format!(", {p}")),
+        count_object = plural(count, "object"),
+        type_count_type = plural(type_count, "type")
     ));
     Ok(())
 }
@@ -1141,7 +1149,7 @@ async fn read_type(
                 show(
                     Node::new("Type dependencies")
                         .span(cur.since(dstart))
-                        .summary(format!("{n} types")),
+                        .summary(plural(n, "type")),
                 );
             }
         }

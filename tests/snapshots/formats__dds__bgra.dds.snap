@@ -26,5 +26,5 @@ expression: "common::explore(&name, &data)"
       dwCaps3: 0  [0x74+0x4]
       dwCaps4: 0  [0x78+0x4]
       dwReserved2: 0  [0x7c+0x4]
-  ▾ Surfaces — 1 × 1 levels  [0x80+0x18]
+  ▾ Surfaces — 1 × 1 level  [0x80+0x18]
       Level 0 — 3×2, 0x18 bytes  [0x80+0x18]

@@ -22,6 +22,7 @@ use crate::error::{Diagnostic, Result};
 use crate::formats::archive::zip::{self, Member};
 use crate::formats::disk::PieceList;
 use crate::formats::util::datakit::{clip, size, text, uint};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Codec, Head, Input, Probe, content, dissect_or_data, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
@@ -793,7 +794,11 @@ async fn bevies(cx: Cx, (volume, urn): (Arc<Volume>, String)) -> Result<()> {
         cx.push(
             Node::new(format!("Bevy {i}"))
                 .span(data)
-                .summary(format!("{} chunks, {}", index.len / 12, size(data.len)))
+                .summary(format!(
+                    "{}, {}",
+                    plural(index.len / 12, "chunk"),
+                    size(data.len)
+                ))
                 .lazy(bevy_chunks, (volume.clone(), urn.clone(), data, index)),
         )
         .await;

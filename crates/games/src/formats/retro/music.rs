@@ -6,6 +6,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Codec, Input, Probe, content};
 use crate::node::Node;
@@ -626,7 +627,7 @@ async fn ym(cx: Cx, input: Input) -> Result<()> {
             "{} digidrum samples precede the strings",
             h.digidrums
         )));
-        cx.annotate(format!("{} frames at {} Hz", h.frames, h.rate));
+        cx.annotate(format!("{} at {} Hz", plural(h.frames, "frame"), h.rate));
         return Ok(());
     }
     let mut at = YmHeader::SIZE.saturating_add(h.extra.into());

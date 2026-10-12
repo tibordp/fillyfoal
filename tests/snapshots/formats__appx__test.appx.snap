@@ -2,8 +2,8 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ test.appx — Windows app package (APPX/MSIX) (1 entries)  [0x0+0x8d]
-  ▾ Central Directory — 1 entries  [0x39+0x3e]
+▾ test.appx — Windows app package (APPX/MSIX) (1 entry)  [0x0+0x8d]
+  ▾ Central Directory — 1 entry  [0x39+0x3e]
     ▾ AppxManifest.xml — stored, 11 → 11 bytes  [0x39+0x3e]
       ▾ Central Directory Header  [0x39+0x2e]
           Signature: 50 4b 01 02  |PK..|  [0x39+0x4]

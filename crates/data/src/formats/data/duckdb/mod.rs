@@ -45,7 +45,7 @@ use crate::formats::Input;
 use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::binutil::{Tree, dec, text};
 use crate::formats::util::fmt;
-use crate::formats::util::fmt::grouped_count;
+use crate::formats::util::fmt::{grouped_count, plural};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, Value};
@@ -691,7 +691,10 @@ async fn blocks(cx: Cx, (geo, usage): (Geo, Arc<Usage>)) -> Result<()> {
         } else if let Some(mask) = usage.metadata.get(&id) {
             format!("metadata, {} of 64 sub-blocks used", mask.count_zeros())
         } else if let Some(n) = usage.shared.get(&id) {
-            format!("data, shared by {n} segments")
+            format!(
+                "data, shared by {n_segment}",
+                n_segment = plural(n, "segment")
+            )
         } else {
             "data".to_owned()
         };

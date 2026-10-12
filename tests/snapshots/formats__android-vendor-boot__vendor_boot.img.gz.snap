@@ -91,7 +91,7 @@ expression: "common::explore(&display_name(&path), &data)"
         model: "tiny"  [0x2040+0x14] → 0x204c+0x5
       Strings  [0x205c+0x6]
     Padding — 3.9 KiB  [0x2062+0xf9e]
-  ▾ Ramdisk table — 1 entries  [0x3000+0x6c]
+  ▾ Ramdisk table — 1 entry  [0x3000+0x6c]
     ▾ Entry 0 — platform  [0x3000+0x6c]
         Ramdisk size: 94 — 94 bytes  [0x3000+0x4]
         Ramdisk offset: 0x0  [0x3004+0x4]

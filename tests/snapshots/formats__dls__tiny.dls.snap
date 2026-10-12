@@ -2,12 +2,12 @@
 source: tests/formats.rs
 expression: "common::explore(&name, &data)"
 ---
-▾ tiny.dls — DLS collection, 1 instruments  [0x0+0x156]
+▾ tiny.dls — DLS collection, 1 instrument  [0x0+0x156]
   ▾ Header  [0x0+0xc]
       Chunk ID: "RIFF"  [0x0+0x4]
       Size: 334  [0x4+0x4]
       Form type: "DLS "  [0x8+0x4]
-  ▾ colh — 1 instruments  [0xc+0xc]
+  ▾ colh — 1 instrument  [0xc+0xc]
       Chunk ID: "colh"  [0xc+0x4]
       Chunk size: 4  [0x10+0x4]
       Instruments: 1  [0x14+0x4]
@@ -24,7 +24,7 @@ expression: "common::explore(&name, &data)"
         Chunk ID: "LIST"  [0x34+0x4]
         Chunk size: 142  [0x38+0x4]
         Type: "ins"  [0x3c+0x4]
-      ▾ insh — bank 0x0, program 5, 1 regions  [0x40+0x14]
+      ▾ insh — bank 0x0, program 5, 1 region  [0x40+0x14]
           Chunk ID: "insh"  [0x40+0x4]
           Chunk size: 12  [0x44+0x4]
         ▾ Instrument header  [0x48+0xc]
@@ -81,7 +81,7 @@ expression: "common::explore(&name, &data)"
       Chunk size: 12  [0xce+0x4]
       Structure size: 8  [0xd2+0x4]
       Cues: 1  [0xd6+0x4]
-    ▾ Offsets — 1 entries  [0xda+0x4]
+    ▾ Offsets — 1 entry  [0xda+0x4]
       ▾ Cue 0 — 0x0  [0xda+0x4]
           Value: 0  [0xda+0x4]
   ▾ LIST wvpl — 108 bytes  [0xde+0x78]

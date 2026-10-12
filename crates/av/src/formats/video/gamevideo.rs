@@ -182,8 +182,8 @@ impl vidutil::Entry for FilmSample {
             format!("audio, {} bytes", self.length)
         } else {
             format!(
-                "video at {} ticks, {} bytes{}",
-                self.info1 & 0x7fff_ffff,
+                "video at {}, {} bytes{}",
+                plural(self.info1 & 0x7fff_ffff, "tick"),
                 self.length,
                 if self.info1 & 0x8000_0000 == 0 {
                     ", keyframe"
@@ -328,8 +328,8 @@ pub async fn dissect_smjpeg(cx: Cx, input: Input) -> Result<()> {
             }
             b"_VID" => {
                 let s = format!(
-                    "{} frames, {}×{}, {}",
-                    u32_be(&d, 8).unwrap_or(0),
+                    "{}, {}×{}, {}",
+                    plural(u32_be(&d, 8).unwrap_or(0), "frame"),
                     u16_be(&d, 12).unwrap_or(0),
                     u16_be(&d, 14).unwrap_or(0),
                     vidutil::fourcc(d.get(16..20).unwrap_or_default())

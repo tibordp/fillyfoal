@@ -12,6 +12,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::arcutil::unix_mode;
 use crate::formats::util::datakit::{clip, hex, hex_string, size, text};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -96,7 +97,10 @@ async fn fsevents(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Page {pages}"))
                 .span(span)
-                .summary(format!("version {version}, {count} records"))
+                .summary(format!(
+                    "version {version}, {count_record}",
+                    count_record = plural(count, "record")
+                ))
                 .lazy(fsevents_page, (span, version)),
         )
         .await;
@@ -104,7 +108,9 @@ async fn fsevents(cx: Cx, input: Input) -> Result<()> {
         at = at.saturating_add(len);
     }
     cx.annotate(format!(
-        "FSEvents log (version {version}), {pages} pages, {records} records"
+        "FSEvents log (version {version}), {pages_page}, {records_record}",
+        pages_page = plural(pages, "page"),
+        records_record = plural(records, "record")
     ));
     Ok(())
 }
@@ -528,7 +534,11 @@ async fn asl(cx: Cx, input: Input) -> Result<()> {
         count = count.saturating_add(1);
         at = next;
     }
-    cx.annotate(format!("Apple System Log v{}, {count} messages", h.version));
+    cx.annotate(format!(
+        "Apple System Log v{}, {count_message}",
+        h.version,
+        count_message = plural(count, "message")
+    ));
     Ok(())
 }
 
@@ -635,8 +645,10 @@ async fn mbdb(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "iOS backup manifest, {files} files ({}), {dirs} directories",
-        size(bytes)
+        "iOS backup manifest, {files_file} ({}), {dirs_directory}",
+        size(bytes),
+        files_file = plural(files, "file"),
+        dirs_directory = plural(dirs, "directory")
     ));
     Ok(())
 }
@@ -852,8 +864,9 @@ async fn utmp(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "login records, {count} entries, {logins} user sessions ({})",
-        users.into_iter().collect::<Vec<_>>().join(", ")
+        "login records, {count_entry}, {logins} user sessions ({})",
+        users.into_iter().collect::<Vec<_>>().join(", "),
+        count_entry = plural(count, "entry")
     ));
     Ok(())
 }
@@ -1099,8 +1112,8 @@ async fn abx(cx: Cx, input: Input) -> Result<()> {
         .map(|e| e.name.clone())
         .unwrap_or_default();
     cx.annotate(format!(
-        "Android binary XML, root <{root}>, {} elements",
-        doc.elements.len()
+        "Android binary XML, root <{root}>, {}",
+        plural(doc.elements.len(), "element")
     ));
     Ok(())
 }
@@ -1202,7 +1215,8 @@ async fn utmpx(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!(
-        "macOS utmpx, {count} records, {sessions} user sessions"
+        "macOS utmpx, {count_record}, {sessions} user sessions",
+        count_record = plural(count, "record")
     ));
     Ok(())
 }
@@ -1280,7 +1294,7 @@ async fn uuidtext_ranges(cx: Cx, ranges: Vec<UuidRange>) -> Result<()> {
             Node::new(format!("Range {i} at {start:#x}"))
                 .span(data)
                 .target(entry)
-                .summary(format!("{} strings", strings.len()))
+                .summary(plural(strings.len(), "string"))
                 .lazy(uuidtext_strings, (data, start)),
         )
         .await;
@@ -1340,7 +1354,10 @@ async fn mbdx(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("iOS backup manifest index, {count} files"));
+    cx.annotate(format!(
+        "iOS backup manifest index, {count_file}",
+        count_file = plural(count, "file")
+    ));
     Ok(())
 }
 

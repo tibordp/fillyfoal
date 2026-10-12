@@ -96,7 +96,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let originals = file.sub_exact(h.originals.into(), table_len)?;
     let translations = file.sub_exact(h.translations.into(), table_len)?;
 
-    let mut summary = format!("gettext catalog, {} messages", h.count);
+    let mut summary = format!(
+        "gettext catalog, {}",
+        crate::formats::util::fmt::plural(h.count, "message")
+    );
     if h.count > 0
         && let Ok((_, first)) = cat.string(&cx, h.originals, 0).await
         && first.is_empty()
@@ -119,7 +122,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     h.hash_offset.into(),
                     u64::from(h.hash_size).saturating_mul(4),
                 ))
-                .summary(format!("{} slots", h.hash_size)),
+                .summary(crate::formats::util::fmt::plural(h.hash_size, "slot")),
         );
     }
     cx.emit(

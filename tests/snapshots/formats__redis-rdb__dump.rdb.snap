@@ -8,5 +8,5 @@ expression: "common::explore(&display_name(&path), &data)"
     redis-ver: "7.2.4"  [0x9+0x11]
     redis-bits: "64"  [0x1a+0xe]
     SELECTDB 0  [0x28+0x2]
-    RESIZEDB — 1 keys, 0 with expiry  [0x2a+0x3]
+    RESIZEDB — 1 key, 0 with expiry  [0x2a+0x3]
     Key-value pairs  [0x2d+0x14]

@@ -16,6 +16,7 @@ use crate::bytes::{i32_le, to_u64, to_usize, u32_le, u64_le};
 use crate::codec::Codec;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::int;
 use crate::formats::util::wire::flatbuffers::mem::{Table, deref, root, table};
 use crate::formats::{Format, Head, Input, Probe};
@@ -422,7 +423,7 @@ fn metadata_node(buf: &Buf, t: &Table, slot: usize) -> Option<Node> {
                 start.saturating_sub(4),
                 n.saturating_mul(4).saturating_add(4),
             ))
-            .summary(format!("{n} entries")),
+            .summary(plural(n, "entry")),
     )
 }
 
@@ -647,7 +648,7 @@ fn schema_node(buf: &Buf, schema: Table) -> Node {
     }
     group("Schema", children)
         .span(tspan(buf, &schema))
-        .summary(format!("{n} fields"))
+        .summary(plural(n, "field"))
 }
 
 // ---------------------------------------------------------------------------
@@ -826,10 +827,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let rows = footer_rows(&cx, input, &buf, &footer).await;
     let version = footer.i16(data, 0).unwrap_or(0);
     cx.annotate(format!(
-        "Arrow IPC file, metadata {}, {} fields, {batches} record batches{}",
+        "Arrow IPC file, metadata {}, {}, {batches} record batches{}",
         lookup(VERSIONS, u64::from(version.cast_unsigned())).unwrap_or("unknown version"),
-        schema.fields.len(),
-        rows.map_or_else(String::new, |r| format!(", {r} rows"))
+        plural(schema.fields.len(), "field"),
+        rows.map_or_else(String::new, |r| format!(
+            ", {r_row}",
+            r_row = plural(r, "row")
+        ))
     ));
     cx.emit(
         Node::new("Messages")
@@ -889,9 +893,9 @@ pub async fn dissect_stream(cx: Cx, input: Input) -> Result<()> {
     );
     let version = msg.i16(&first.data, 0).unwrap_or(0);
     cx.annotate(format!(
-        "Arrow IPC stream, metadata {}, {} fields",
+        "Arrow IPC stream, metadata {}, {}",
         lookup(VERSIONS, u64::from(version.cast_unsigned())).unwrap_or("unknown version"),
-        schema.fields.len()
+        plural(schema.fields.len(), "field")
     ));
     messages(cx, (input, 0, file.len, Some(schema))).await
 }
@@ -1058,8 +1062,9 @@ async fn messages(
                     .and_then(|b| b.i64(&m.data, 0))
                     .unwrap_or(0);
                 summary = format!(
-                    "{rows} rows, body {}",
-                    crate::formats::util::fmt::size(body)
+                    "{rows_row}, body {}",
+                    crate::formats::util::fmt::size(body),
+                    rows_row = plural(rows, "row")
                 );
                 batch = batch.saturating_add(1);
                 format!("Record batch {}", batch.saturating_sub(1))
@@ -1071,7 +1076,10 @@ async fn messages(
                     .and_then(|d| d.table(&m.data, 1))
                     .and_then(|b| b.i64(&m.data, 0))
                     .unwrap_or(0);
-                summary = format!("dictionary {id}, {rows} values");
+                summary = format!(
+                    "dictionary {id}, {rows_value}",
+                    rows_value = plural(rows, "value")
+                );
                 "Dictionary batch".to_owned()
             }
             1 => {
@@ -1079,7 +1087,7 @@ async fn messages(
                     .table(&m.data, 2)
                     .and_then(|s| s.vector(&m.data, 1, 4))
                     .map_or(0, |(n, _)| n);
-                summary = format!("{n} fields");
+                summary = plural(n, "field");
                 "Schema".to_owned()
             }
             k => lookup(HEADERS, k.into()).unwrap_or("Message").to_owned(),
@@ -1254,7 +1262,11 @@ fn record_batch(buf: &Buf, batch: &Table, fields: &[Field], body: Span) -> (Vec<
                         .unwrap_or_else(|| format!("Field node {i}")),
                 )
                 .span(buf.at(at, 16))
-                .summary(format!("{len} values, {nulls} nulls"))
+                .summary(format!(
+                    "{len_value}, {nulls_null}",
+                    len_value = plural(len, "value"),
+                    nulls_null = plural(nulls, "null")
+                ))
                 .lazy(
                     crate::formats::util::arcutil::push_nodes,
                     Arc::new(vec![
@@ -1322,8 +1334,8 @@ fn record_batch(buf: &Buf, batch: &Table, fields: &[Field], body: Span) -> (Vec<
             .summary(format!("{n}"));
         if !fields.is_empty() && n != slots.len() {
             node = node.diag(Diagnostic::warning(format!(
-                "the schema has {} buffers",
-                slots.len()
+                "the schema has {}",
+                plural(slots.len(), "buffer")
             )));
         }
         out.push(node);
@@ -1575,7 +1587,7 @@ async fn values(
                 .span(span)
                 .value(Value::Text(bits(&data, rows)))
                 .summary(if slot.label == "validity" {
-                    format!("{nulls} nulls")
+                    plural(nulls, "null")
                 } else {
                     "one bit per value".to_owned()
                 }),

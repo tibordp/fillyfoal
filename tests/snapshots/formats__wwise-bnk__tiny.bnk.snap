@@ -4,7 +4,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ tiny.bnk — Wwise sound bank 0x1234 (v113), 1 embedded media  [0x0+0x80]
     BKHD — bank header, version 113, id 0x1234  [0x0+0x18]
-    DIDX — media index, 1 entries  [0x18+0x14]
+    DIDX — media index, 1 entry  [0x18+0x14]
   ▾ DATA — 1 media files  [0x2c+0x48]
     ▾ 42.wem — WAV PCM 16-bit, 8 kHz, mono, 1 ms  [0x34+0x3c]
       ▾ Header  [0x34+0xc]

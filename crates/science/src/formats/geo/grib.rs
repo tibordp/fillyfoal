@@ -22,6 +22,7 @@ use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::Input;
 use crate::formats::science::numarray::num;
 use crate::formats::util::floats::ibm;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::uint;
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -586,8 +587,16 @@ fn grid_summary2(template: u16, b: &[u8], points: u32) -> String {
                 num(inc)
             )
         }
-        40 | 41 => format!("Gaussian N{} {} grid, {points} points", at(67), name),
-        _ => format!("{name} grid, {points} points"),
+        40 | 41 => format!(
+            "Gaussian N{} {} grid, {points_point}",
+            at(67),
+            name,
+            points_point = plural(points, "point")
+        ),
+        _ => format!(
+            "{name} grid, {points_point}",
+            points_point = plural(points, "point")
+        ),
     }
 }
 
@@ -681,7 +690,7 @@ async fn summarize(cx: &Cx, span: Span, edition: u8) -> Result<String> {
         }
     }
     if s.fields > 1 {
-        out.push_str(&format!(" ({} fields)", s.fields));
+        out.push_str(&format!(" ({})", plural(s.fields, "field")));
     }
     Ok(out)
 }
@@ -1645,8 +1654,8 @@ fn values_node(label: String, ctx: &Context, data: Span) -> Node {
                 )));
             }
             let summary = format!(
-                "{} points{}",
-                points,
+                "{}{}",
+                plural(points, "point"),
                 if ctx.bitmap.is_some() {
                     ", with bit-map"
                 } else {

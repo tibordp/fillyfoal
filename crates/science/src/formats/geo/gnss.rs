@@ -14,6 +14,7 @@ use crate::dsl::{Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::text::scan::{Lines, Scanner};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::vidutil::Bits;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -219,7 +220,10 @@ async fn ubx(cx: Cx, input: Input) -> Result<()> {
         pos = pos.saturating_add(total);
         n = n.saturating_add(1);
     }
-    cx.annotate(format!("u-blox UBX, {n} packets"));
+    cx.annotate(format!(
+        "u-blox UBX, {n_packet}",
+        n_packet = plural(n, "packet")
+    ));
     Ok(())
 }
 
@@ -425,10 +429,11 @@ async fn rtcm3(cx: Cx, input: Input) -> Result<()> {
         n = n.saturating_add(1);
     }
     cx.annotate(format!(
-        "RTCM 3, {n} messages{}",
+        "RTCM 3, {n_message}{}",
         station
             .map(|s| format!(", station {s}"))
-            .unwrap_or_default()
+            .unwrap_or_default(),
+        n_message = plural(n, "message")
     ));
     Ok(())
 }
@@ -608,7 +613,10 @@ async fn sbf(cx: Cx, input: Input) -> Result<()> {
         pos = pos.saturating_add(to_u64(total));
         n = n.saturating_add(1);
     }
-    cx.annotate(format!("Septentrio SBF, {n} blocks"));
+    cx.annotate(format!(
+        "Septentrio SBF, {n_block}",
+        n_block = plural(n, "block")
+    ));
     Ok(())
 }
 
@@ -825,7 +833,10 @@ async fn novatel(cx: Cx, input: Input) -> Result<()> {
         pos = pos.saturating_add(total);
         n = n.saturating_add(1);
     }
-    cx.annotate(format!("NovAtel binary log, {n} messages"));
+    cx.annotate(format!(
+        "NovAtel binary log, {n_message}",
+        n_message = plural(n, "message")
+    ));
     Ok(())
 }
 

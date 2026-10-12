@@ -640,7 +640,7 @@ async fn delay_module(cx: Cx, (pe, descriptor): (Pe, Span)) -> Result<()> {
                 cx.emit(
                     Node::new(label)
                         .span(span)
-                        .summary(format!("{n} entries"))
+                        .summary(plural(n, "entry"))
                         .desc(desc)
                         .lazy(address_list, (pe.clone(), span)),
                 );

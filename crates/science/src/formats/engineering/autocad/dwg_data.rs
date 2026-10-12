@@ -19,6 +19,7 @@ use crate::bytes::{to_u64, to_usize, u16_be, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{hex, uint};
 use crate::formats::{Input, embedded, embedded_as};
 use crate::node::{Count, Node};
@@ -375,7 +376,7 @@ pub async fn classes_node(cx: &Cx, d: &Drawing, data: Span) -> Result<()> {
     f.bytes("End sentinel", 16)
         .check(sentinel_check(SENTINEL_CLASSES_END))
         .emit()?;
-    cx.annotate(format!("{} classes", classes.list.len()));
+    cx.annotate(plural(classes.list.len(), "class"));
     Ok(())
 }
 
@@ -473,7 +474,7 @@ async fn load_map(cx: &Cx, data: Span) -> Result<Arc<ObjectMap>> {
 
 pub async fn object_map(cx: &Cx, data: Span) -> Result<()> {
     let map = load_map(cx, data).await?;
-    cx.annotate(format!("{} objects", map.entries.len()));
+    cx.annotate(plural(map.entries.len(), "object"));
     if let Some(e) = &map.error {
         cx.diag(e.clone());
     }
@@ -482,7 +483,7 @@ pub async fn object_map(cx: &Cx, data: Span) -> Result<()> {
         let summary = if count == 0 {
             "end".to_owned()
         } else {
-            format!("{count} entries")
+            plural(count, "entry")
         };
         cx.push(
             Node::new(format!("Block {i}"))
@@ -698,7 +699,7 @@ pub async fn objects(cx: Cx, d: Arc<Drawing>) -> Result<()> {
         .ok_or_else(|| Diagnostic::malformed("no objects section"))?;
     let map = load_map(&cx, handles.data).await?;
     let classes = load_classes(&cx, &d).await;
-    cx.annotate(format!("{} objects", map.entries.len()));
+    cx.annotate(plural(map.entries.len(), "object"));
     let extra = if d.ver >= Ver::R2004 { 2 } else { 1 };
     cx.set_count(Count::Exact(
         to_u64(map.entries.len()).saturating_add(extra),
@@ -849,7 +850,7 @@ async fn object_types(cx: Cx, d: Arc<Drawing>) -> Result<()> {
     }
     let mut sorted: Vec<(String, u64)> = counts.into_iter().collect();
     sorted.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-    cx.annotate(format!("{} types", sorted.len()));
+    cx.annotate(plural(sorted.len(), "type"));
     for (name, n) in sorted {
         cx.push(Node::new(name).value(uint(n, 64))).await;
     }

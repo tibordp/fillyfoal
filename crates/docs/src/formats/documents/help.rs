@@ -4,6 +4,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::text;
 use crate::formats::{Input, Probe};
 use crate::node::Node;
@@ -59,9 +60,9 @@ async fn os2_inf(cx: Cx, input: Input) -> Result<()> {
     let title = f.ascii("Title", 48).emit()?;
     let _ = (resources, names);
     cx.annotate(format!(
-        "OS/2 {} {major}.{minor} {:?}: {toc} topics, {index} index entries, {slots} slots, {words} words",
+        "OS/2 {} {major}.{minor} {:?}: {toc} topics, {index} index entries, {slots_slot}, {words_word}",
         if kind == 0x10 { "HLP" } else { "INF" },
-        title.trim()
+        title.trim(), slots_slot = plural(slots, "slot"), words_word = plural(words, "word")
     ));
     Ok(())
 }
@@ -143,6 +144,9 @@ async fn amigaguide(cx: Cx, input: Input) -> Result<()> {
             .await;
         }
     }
-    cx.annotate(format!("AmigaGuide, {nodes} nodes"));
+    cx.annotate(format!(
+        "AmigaGuide, {nodes_node}",
+        nodes_node = plural(nodes, "node")
+    ));
     Ok(())
 }

@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::value::Value;
@@ -60,7 +61,10 @@ async fn godot_pck(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("Godot {major}.{minor} pack, {count} files"));
+    cx.annotate(format!(
+        "Godot {major}.{minor} pack, {count_file}",
+        count_file = plural(count, "file")
+    ));
     Ok(())
 }
 
@@ -102,7 +106,10 @@ async fn gamemaker(cx: Cx, input: Input) -> Result<()> {
     } else {
         String::new()
     };
-    cx.annotate(format!("GameMaker data {name:?}, {chunks} chunks"));
+    cx.annotate(format!(
+        "GameMaker data {name:?}, {chunks_chunk}",
+        chunks_chunk = plural(chunks, "chunk")
+    ));
     Ok(())
 }
 

@@ -290,12 +290,13 @@ fn pool_node(doc: &Doc, c: &Chunk, label: &str) -> Node {
     Node::new(label.to_owned())
         .span(doc.at(c.offset, c.size))
         .summary(format!(
-            "{count} strings, {}",
+            "{count_string}, {}",
             if flags & 0x100 != 0 {
                 "UTF-8"
             } else {
                 "UTF-16"
-            }
+            },
+            count_string = crate::formats::util::fmt::plural(count, "string")
         ))
         .lazy(string_pool, (doc.clone(), *c))
 }
@@ -594,7 +595,8 @@ impl XmlBuilder<'_> {
         let mut element = Node::new(format!("<{name}>")).span(self.doc.at(c.offset, c.size));
         if declared > count {
             element = element.diag(Diagnostic::malformed(format!(
-                "{declared} attributes declared, {count} fit in the chunk"
+                "{declared_attribute} declared, {count} fit in the chunk",
+                declared_attribute = crate::formats::util::fmt::plural(declared, "attribute")
             )));
         }
         let node = self.tree.add(parent, element);
@@ -1009,8 +1011,8 @@ pub async fn dissect_table(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!(
-        "Android resource table, {} strings, packages {}",
-        pool.len(),
+        "Android resource table, {}, packages {}",
+        crate::formats::util::fmt::plural(pool.len(), "string"),
         packages.join(", ")
     ));
     Ok(())
@@ -1106,7 +1108,7 @@ async fn package(cx: Cx, (doc, c, pool): (Doc, Chunk, Arc<Vec<String>>)) -> Resu
                 let n = u32_le(&data, child.offset.saturating_add(12)).unwrap_or(0);
                 Node::new(format!("Type Spec {}", type_name(id)))
                     .span(span)
-                    .summary(format!("{n} entries"))
+                    .summary(crate::formats::util::fmt::plural(n, "entry"))
                     .lazy(type_spec, (doc.clone(), child))
             }
             0x0203 => Node::new("Library")
@@ -1125,7 +1127,7 @@ async fn package(cx: Cx, (doc, c, pool): (Doc, Chunk, Arc<Vec<String>>)) -> Resu
                 let config = config_summary(&data, child.offset.saturating_add(20));
                 Node::new(format!("{} ({config})", type_name(id)))
                     .span(span)
-                    .summary(format!("{n} entries"))
+                    .summary(crate::formats::util::fmt::plural(n, "entry"))
                     .lazy(type_chunk, (pkg.clone(), child))
             }
             other => Node::new(crate::value::lookup(CHUNK_TYPE, other.into()).unwrap_or("chunk"))

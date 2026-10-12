@@ -24,6 +24,7 @@ use crate::bytes::{to_u64, to_usize, u32_le, u64_le};
 use crate::codec::crc::crc32c_update;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -245,7 +246,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Index block")
                 .span(file.sub(off, size.saturating_add(TRAILER)))
-                .summary(format!("{blocks} entries"))
+                .summary(plural(blocks, "entry"))
                 .lazy(block, (input, off, size, BlockKind::Index, flavor)),
         );
     }

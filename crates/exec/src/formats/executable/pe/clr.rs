@@ -9,6 +9,7 @@ use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, parse, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, flag};
@@ -174,7 +175,7 @@ pub(super) async fn clr(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
             Ok(span) => cx.emit(
                 Node::new("VTable Fixups")
                     .span(span)
-                    .summary(format!("{} entries", vt_size / 8))
+                    .summary(plural(vt_size / 8, "entry"))
                     .lazy(vtable_fixups, (pe.clone(), span)),
             ),
             Err(e) => cx.diag(e),
@@ -303,7 +304,10 @@ async fn ready_to_run(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
         }
         cx.push(node).await;
     }
-    cx.annotate(format!("ReadyToRun {major}.{minor}, {count} sections"));
+    cx.annotate(format!(
+        "ReadyToRun {major}.{minor}, {count_section}",
+        count_section = plural(count, "section")
+    ));
     Ok(())
 }
 

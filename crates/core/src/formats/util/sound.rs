@@ -11,6 +11,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields};
+use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value};
@@ -425,7 +426,7 @@ pub fn table<R: Record>(
     let count = span.len.checked_div(R::SIZE).unwrap_or(0);
     Node::new(name)
         .span(span)
-        .summary(format!("{count} entries"))
+        .summary(plural(count, "entry"))
         .lazy(expand_table::<R>, (span, endian, item, describe))
 }
 

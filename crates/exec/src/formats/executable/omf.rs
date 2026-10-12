@@ -9,7 +9,7 @@ use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::binutil::NodeExt;
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::name_or;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
@@ -243,7 +243,7 @@ fn file_summary(walk: &Walk, done: bool) -> String {
             .map(|m| format!(" {m}"))
             .unwrap_or_default(),
         if done {
-            format!(", {} records", walk.records)
+            format!(", {}", plural(walk.records, "record"))
         } else {
             String::new()
         }

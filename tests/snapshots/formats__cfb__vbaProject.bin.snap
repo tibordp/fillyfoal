@@ -24,7 +24,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ DIFAT — 1 FAT sectors  [0x4c+0x1b4]
       FAT sector 0: 6  [0x4c+0x4] → 0xe00+0x200
       Unused entries: 0xffffffff — 108 × FREESECT  [0x50+0x1b0]
-  ▾ FAT — 1 sectors
+  ▾ FAT — 1 sector
     ▾ FAT sector 0 — sector 6: entries for sectors 0..128  [0xe00+0x200]
         Sector 0: 1 — next: 1  [0xe00+0x4]
         Sector 1: 2 — next: 2  [0xe04+0x4]

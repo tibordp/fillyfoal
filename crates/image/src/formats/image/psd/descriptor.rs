@@ -14,7 +14,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::fmt::fourcc;
+use crate::formats::util::fmt::{fourcc, plural};
 use crate::formats::util::val::{int, text, uint};
 use crate::node::Node;
 use crate::span::Span;
@@ -278,15 +278,20 @@ fn open(r: &mut Rd<'_>, t: &[u8; 4], depth: u32) -> Option<(Open, Val)> {
         b"Objc" | b"GlbO" => {
             let inner = depth.saturating_add(1);
             let (class, n) = descriptor_head(r, inner)?;
-            (Kind::Descriptor, n, inner, format!("{class}, {n} items"))
+            (
+                Kind::Descriptor,
+                n,
+                inner,
+                format!("{class}, {n_item}", n_item = plural(n, "item")),
+            )
         }
         b"VlLs" => {
             let n = r.u32()?;
-            (Kind::List, n, depth.saturating_add(1), format!("{n} items"))
+            (Kind::List, n, depth.saturating_add(1), plural(n, "item"))
         }
         b"obj " => {
             let n = r.u32()?;
-            (Kind::Reference, n, depth, format!("{n} items"))
+            (Kind::Reference, n, depth, plural(n, "item"))
         }
         _ => return None,
     };
@@ -370,7 +375,11 @@ fn leaf(r: &mut Rd<'_>, t: &[u8; 4], depth: u32) -> Option<Val> {
             let u = r.fourcc()?;
             let n = r.u32()?;
             r.skip(usize::try_from(n).ok()?.checked_mul(8)?)?;
-            Val::Note(format!("{n} values in {}", unit_name(&u)))
+            Val::Note(format!(
+                "{n_value} in {}",
+                unit_name(&u),
+                n_value = plural(n, "value")
+            ))
         }
         b"TEXT" => Val::Leaf(text(r.unicode()?), None),
         b"enum" => {

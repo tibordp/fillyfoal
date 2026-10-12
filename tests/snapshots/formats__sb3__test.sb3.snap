@@ -2,8 +2,8 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ test.sb3 — Scratch 3 project (1 entries)  [0x0+0x89]
-  ▾ Central Directory — 1 entries  [0x39+0x3a]
+▾ test.sb3 — Scratch 3 project (1 entry)  [0x0+0x89]
+  ▾ Central Directory — 1 entry  [0x39+0x3a]
     ▾ project.json — stored, 15 → 15 bytes  [0x39+0x3a]
       ▾ Central Directory Header  [0x39+0x2e]
           Signature: 50 4b 01 02  |PK..|  [0x39+0x4]

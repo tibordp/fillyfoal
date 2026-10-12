@@ -11,7 +11,7 @@ use crate::declare_format;
 use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::fmt::fourcc;
+use crate::formats::util::fmt::{fourcc, plural};
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -43,7 +43,10 @@ async fn pat(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
         n = n.saturating_add(1);
     }
-    cx.annotate(format!("Photoshop patterns, {count} patterns"));
+    cx.annotate(format!(
+        "Photoshop patterns, {count_pattern}",
+        count_pattern = plural(count, "pattern")
+    ));
     Ok(())
 }
 
@@ -592,7 +595,7 @@ async fn acv(cx: Cx, input: Input) -> Result<()> {
             Node::new(name)
                 .span(cur.since(start))
                 .value(text(pts.join(", ")))
-                .summary(format!("{points} points")),
+                .summary(plural(points, "point")),
         )
         .await;
     }
@@ -818,7 +821,7 @@ async fn act(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Colours")
             .span(table)
-            .summary(format!("{count} entries"))
+            .summary(plural(count, "entry"))
             .lazy(act_colours, table),
     );
     cx.emit(
@@ -873,7 +876,8 @@ async fn csh(cx: Cx, input: Input) -> Result<()> {
             .diag(Diagnostic::unsupported("custom shape records")),
     );
     cx.annotate(format!(
-        "Photoshop custom shapes v{version}, {count} shapes"
+        "Photoshop custom shapes v{version}, {count_shape}",
+        count_shape = plural(count, "shape")
     ));
     Ok(())
 }

@@ -11,6 +11,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
 use crate::formats::Input;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{enumv, hex, uint};
 use crate::node::Node;
 use crate::span::Span;
@@ -420,15 +421,23 @@ async fn container_summary(cx: &Cx, kind: u16, body: Span) -> String {
         n = n.saturating_add(1);
     }
     let _ = kind;
-    format!("container, {n} records, {} bytes", body.len)
+    format!(
+        "container, {n_record}, {} bytes",
+        body.len,
+        n_record = plural(n, "record")
+    )
 }
 
 fn atom_summary(kind: u16, inst: u16, data: &[u8], len: u64) -> String {
     let s = match kind {
-        0xf006 => u32_le(data, 0)
-            .zip(u32_le(data, 12))
-            .map(|(max, dgs)| format!("next shape ID {max}, {dgs} drawings")),
-        0xf008 => u32_le(data, 0).map(|n| format!("drawing {inst}, {n} shapes")),
+        0xf006 => u32_le(data, 0).zip(u32_le(data, 12)).map(|(max, dgs)| {
+            format!(
+                "next shape ID {max}, {dgs_drawing}",
+                dgs_drawing = plural(dgs, "drawing")
+            )
+        }),
+        0xf008 => u32_le(data, 0)
+            .map(|n| format!("drawing {inst}, {n_shape}", n_shape = plural(n, "shape"))),
         0xf00a => u32_le(data, 0).zip(u32_le(data, 4)).map(|(spid, flags)| {
             let (set, _) = crate::value::decode_flags(FSP_FLAGS, flags.into());
             format!(
@@ -442,12 +451,12 @@ fn atom_summary(kind: u16, inst: u16, data: &[u8], len: u64) -> String {
                 }
             )
         }),
-        0xf00b | 0xf121 | 0xf122 => Some(format!("{inst} properties")),
+        0xf00b | 0xf121 | 0xf122 => Some(plural(inst, "property")),
         0xf007 => data.first().map(|&t| {
             format!(
-                "{} picture, {} references",
+                "{} picture, {}",
                 lookup(BLIP_TYPES, t.into()).unwrap_or("unknown"),
-                u32_le(data, 24).unwrap_or(0)
+                plural(u32_le(data, 24).unwrap_or(0), "reference")
             )
         }),
         0xf009 | 0xf00f => {

@@ -110,7 +110,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Pack 2 unused — rest of the pack's segment  [0x4000+0x0]
     Segment information table — block 1536, 2 segments: valid block counts and bitmaps of each segment, in two copies  [0x4000+0x0]
     Node address table — block 2560, 2 segments: node id → block, in two copies  [0x4000+0x0]
-    Segment summary area — block 3584, 1 segments: the owner of each block of each main area segment  [0x4000+0x0]
+    Segment summary area — block 3584, 1 segment: the owner of each block of each main area segment  [0x4000+0x0]
     Main area — block 4096, 120 segments: node and data blocks  [0x4000+0x0]
   ▾ NAT journal — 0 entries
   ▾ Root directory — inode 3

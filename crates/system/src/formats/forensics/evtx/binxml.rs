@@ -20,6 +20,7 @@ use crate::formats::text::xml::decode_entities;
 use crate::formats::util::binutil::Tree;
 use crate::formats::util::civil::systemtime;
 use crate::formats::util::datakit::guid_le;
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
 use crate::text::hex_upper;
@@ -584,7 +585,11 @@ impl<'a> Parser<'a> {
         let label = format!("<{name}>");
         let summary = match (attributes.len(), content.len()) {
             (0, 0) => "empty".to_owned(),
-            (a, c) => format!("{a} attributes, {c} items"),
+            (a, c) => format!(
+                "{a_attribute}, {c_item}",
+                a_attribute = plural(a, "attribute"),
+                c_item = plural(c, "item")
+            ),
         };
         self.update(node, |n| {
             let mut n = n.span(span).summary(summary);
@@ -755,7 +760,10 @@ impl<'a> Parser<'a> {
             *pos = at.saturating_add(len);
         }
         let span = self.span(start, pos.saturating_sub(start));
-        let summary = format!("template {id:#010x}, {count} values");
+        let summary = format!(
+            "template {id:#010x}, {count_value}",
+            count_value = plural(count, "value")
+        );
         self.update(node, |n| n.span(span).summary(summary));
         Ok(Instance { definition, values })
     }

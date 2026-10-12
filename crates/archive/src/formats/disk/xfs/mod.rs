@@ -35,6 +35,7 @@ use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields, parse, struct_node};
 use crate::formats::disk::{crc32c_update, size, size_summary, text, uuid_value};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -505,7 +506,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
     }
     let summary = format!(
-        "XFS v{}{}, {}, {} × {} allocation groups, {} blocks{}",
+        "XFS v{}{}, {}, {} × {} allocation groups, {}{}",
         sb.version & 0xf,
         if label.is_empty() {
             String::new()
@@ -515,7 +516,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         size(sb.dblocks.saturating_mul(block)),
         sb.ag_count,
         size(u64::from(sb.ag_blocks).saturating_mul(block)),
-        size(block),
+        plural(size(block), "block"),
         if features.is_empty() {
             String::new()
         } else {
@@ -524,8 +525,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     );
     cx.annotate(summary);
     let mut node = struct_node("Superblock", sb_span, BE, computed, sb_layout).summary(format!(
-        "{} inodes ({} free), {} free",
-        sb.icount,
+        "{} ({} free), {} free",
+        plural(sb.icount, "inode"),
         sb.ifree,
         size(sb.fdblocks.saturating_mul(block))
     ));
@@ -609,7 +610,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if !special.is_empty() {
         cx.emit(
             Node::new("Metadata inodes")
-                .summary(format!("{} inodes", special.len()))
+                .summary(plural(special.len(), "inode"))
                 .lazy(metadata_inodes, (fs.clone(), Arc::new(special))),
         );
     }

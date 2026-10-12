@@ -9,6 +9,7 @@ use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::embedded;
+use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, Radix, Value, lookup};
@@ -171,7 +172,7 @@ async fn folder(cx: Cx, (pst, nid, path): (Pst, u32, Path)) -> Result<()> {
     cx.emit(
         Node::new("Properties")
             .span(pc.heap.header)
-            .summary(format!("{} properties", pc.props.len()))
+            .summary(plural(pc.props.len(), "property"))
             .lazy(properties, (pst, node)),
     );
     let base = nid & !0x1f;
@@ -198,8 +199,10 @@ async fn folder(cx: Cx, (pst, nid, path): (Pst, u32, Path)) -> Result<()> {
             );
             if let Some(m) = messages {
                 n = n.summary(match unread {
-                    Some(u) if u > 0 => format!("{m} messages, {u} unread"),
-                    _ => format!("{m} messages"),
+                    Some(u) if u > 0 => {
+                        format!("{m_message}, {u} unread", m_message = plural(m, "message"))
+                    }
+                    _ => plural(m, "message"),
                 });
             }
             cx.emit(n);
@@ -217,7 +220,7 @@ async fn folder(cx: Cx, (pst, nid, path): (Pst, u32, Path)) -> Result<()> {
         cx.emit(
             Node::new(label)
                 .span(tc.info)
-                .summary(format!("{count} rows"))
+                .summary(plural(count, "row"))
                 .lazy(contents, (pst, table, path.clone())),
         );
     }
@@ -356,7 +359,7 @@ async fn message(cx: Cx, (pst, msg, path): (Pst, Msg, Path)) -> Result<()> {
     cx.emit(
         Node::new("Properties")
             .span(pc.heap.header)
-            .summary(format!("{} properties", pc.props.len()))
+            .summary(plural(pc.props.len(), "property"))
             .lazy(properties, (pst, node)),
     );
     // The usual header fields.
@@ -585,7 +588,7 @@ async fn attachment(cx: Cx, (pst, node, path): (Pst, NodeRef, Path)) -> Result<(
     cx.emit(
         Node::new("Properties")
             .span(pc.heap.header)
-            .summary(format!("{} properties", pc.props.len()))
+            .summary(plural(pc.props.len(), "property"))
             .lazy(properties, (pst, node)),
     );
     let name = match string_prop(&cx, &pst, &pc, 0x3707).await {
@@ -773,10 +776,10 @@ async fn btree_page(cx: Cx, (pst, bref, parent_level): (Pst, Bref, u8)) -> Resul
             Entry::Block(b) => Node::new(format!("BID {:#x}", b.bref.bid))
                 .span(*span)
                 .summary(format!(
-                    "{} bytes at {:#x}, {} references{}",
+                    "{} bytes at {:#x}, {}{}",
                     b.cb,
                     b.bref.ib,
-                    b.refs,
+                    plural(b.refs, "reference"),
                     if b.bref.bid & 2 != 0 {
                         ", internal"
                     } else {
@@ -801,7 +804,7 @@ async fn node_view(cx: Cx, (pst, node, path): (Pst, NodeRef, Path)) -> Result<()
             .fold(0, u64::saturating_add);
         cx.emit(
             Node::new("Data blocks")
-                .summary(format!("{} blocks, {total} bytes", blocks.len()))
+                .summary(format!("{}, {total} bytes", plural(blocks.len(), "block")))
                 .lazy(data_blocks, (pst, node.data)),
         );
         let stream = ndb::stream(&cx, &pst, node.data).await?;
@@ -927,7 +930,10 @@ async fn block_view(cx: Cx, (pst, bid): (Pst, u64)) -> Result<()> {
             _ => "unknown internal block",
         };
         let count = u16_le(&raw, 2).unwrap_or(0);
-        let mut s = format!("{kind}, {count} entries");
+        let mut s = format!(
+            "{kind}, {count_entry}",
+            count_entry = plural(count, "entry")
+        );
         if btype == 1 {
             s.push_str(&format!(
                 ", {} bytes in total",

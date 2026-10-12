@@ -19,6 +19,7 @@ use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::disk::qcow::Regions;
 use crate::formats::disk::{PieceList, guid_le, size};
 use crate::formats::util::datakit::crc32c_paced;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe, dissect_or_data};
 use crate::node::Node;
 use crate::record;
@@ -255,7 +256,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             Ok(t) if t.signature == "regi" => {
                 let mut node = Node::new(name)
                     .span(span)
-                    .summary(format!("{} regions", t.entries));
+                    .summary(plural(t.entries, "region"));
                 if let Some(d) = verify(&cx, span, t.checksum).await? {
                     node = node.diag(d);
                 }
@@ -323,14 +324,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!(
-        "VHDX {} disk, {}, {} blocks, {}-byte logical / {}-byte physical sectors{}",
+        "VHDX {} disk, {}, {}, {}-byte logical / {}-byte physical sectors{}",
         if params.has_parent {
             "differencing"
         } else {
             "dynamic/fixed"
         },
         size(params.disk_size),
-        size(params.block),
+        plural(size(params.block), "block"),
         params.logical_sector,
         params.physical_sector,
         match params.page83 {
@@ -478,7 +479,7 @@ async fn metadata(cx: Cx, (input, region): (Input, Span)) -> Result<()> {
             (),
             metadata_header_layout,
         )
-        .summary(format!("{count} entries")),
+        .summary(plural(count, "entry")),
     );
     let mut items = Vec::new();
     for i in 0..count {
@@ -505,9 +506,8 @@ async fn metadata(cx: Cx, (input, region): (Input, Span)) -> Result<()> {
         let data = cx.read_avail(value).await?;
         let node = Node::new(name).span(value);
         let node = match name {
-            "File parameters" => struct_node(name, value, LE, (), file_params_layout).summary(
-                format!("{} blocks", size(u32_le(&data, 0).unwrap_or(0).into())),
-            ),
+            "File parameters" => struct_node(name, value, LE, (), file_params_layout)
+                .summary(plural(size(u32_le(&data, 0).unwrap_or(0).into()), "block")),
             "Virtual disk size" => node
                 .value(Value::UInt {
                     value: u64_le(&data, 0).unwrap_or(0),
@@ -912,8 +912,8 @@ async fn bat_entries(cx: Cx, d: Arc<Disk>) -> Result<()> {
                     i.saturating_sub(start).saturating_mul(8),
                 );
                 cx.push(Node::new("Unused entries").span(run).summary(format!(
-                    "{} entries beyond the disk size",
-                    i.saturating_sub(start)
+                    "{} beyond the disk size",
+                    plural(i.saturating_sub(start), "entry")
                 )))
                 .await;
             }

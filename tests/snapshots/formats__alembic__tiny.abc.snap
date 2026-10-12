@@ -7,4 +7,4 @@ expression: "common::explore(&display_name(&path), &data)"
     Frozen: true  [0x5+0x1]
     Version: 1  [0x6+0x2]
     Root group offset: 0x10  [0x8+0x8]
-    Root group — 2 children: 1 groups, 1 data  [0x10+0x18]
+    Root group — 2 children: 1 group, 1 data  [0x10+0x18]

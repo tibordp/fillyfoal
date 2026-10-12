@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ plain.bundle — UnityFS v7, Unity 2020.3.48f1, none, 1 files  [0x0+0x15fb]
+▾ plain.bundle — UnityFS v7, Unity 2020.3.48f1, none, 1 file  [0x0+0x15fb]
     Signature: "UnityFS"  [0x0+0x8]
     Format version: 7  [0x8+0x4]
     Player version: "5.x.x"  [0xc+0x6]
@@ -15,18 +15,18 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Blocks info — none, 91 → 91 bytes  [0x40+0x5b]
       Uncompressed data hash: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x40+0x10]
       Block count: 1  [0x50+0x4]
-    ▾ Blocks — 1 blocks  [0x54+0xa]
+    ▾ Blocks — 1 block  [0x54+0xa]
       ▾ Block 0 — none, 5472 → 5472 bytes  [0x54+0xa] → 0x9b+0x1560
           Uncompressed size: 5472  [0x54+0x4]
           Compressed size: 5472  [0x58+0x4] → 0x9b+0x1560
           Flags: 0x40 [streamed]  [0x5c+0x2]
-    ▾ Directory — 1 nodes  [0x5e+0x3d]
+    ▾ Directory — 1 node  [0x5e+0x3d]
       ▾ CAB-fedcba9876543210fedcba9876543210 — offset 0x0, 5472 bytes  [0x62+0x39]
           Offset: 0x0  [0x62+0x8]
           Size: 5472  [0x6a+0x8]
           Flags: 0x4 [serialized file]  [0x72+0x4]
           Path: "CAB-fedcba9876543210fedcba9876543210"  [0x76+0x25]
-    Data — 1 blocks, none, 5472 → 5472 bytes  [0x9b+0x1560]
+    Data — 1 block, none, 5472 → 5472 bytes  [0x9b+0x1560]
   ▾ CAB-fedcba9876543210fedcba9876543210 — Unity 2020.3.48f1 serialized file v21, StandaloneWindows64, 5 objects, 5 types  [#1:0x0+0x1560]
     ▾ Header  [#1:0x0+0x14]
         Metadata size: 5086  [#1:0x0+0x4]
@@ -283,9 +283,9 @@ expression: "common::explore(&display_name(&path), &data)"
           m_ClassName: "Spinner"  [#1:0x1530+0xc]
           m_Namespace: "Demo"  [#1:0x153c+0x8]
           m_AssemblyName: "Assembly-CSharp.dll"  [#1:0x1544+0x18]
-    ▾ Script types — 1 scripts  [#1:0x13a4+0x10]
+    ▾ Script types — 1 script  [#1:0x13a4+0x10]
         Script 0 — file 0, path ID 6  [#1:0x13a8+0xc]
-    ▾ Externals — 1 files  [#1:0x13b4+0x39]
+    ▾ Externals — 1 file  [#1:0x13b4+0x39]
         File 1: "Library/unity default resources" — non-asset  [#1:0x13b8+0x35]
     ▾ Reference types — 0 types  [#1:0x13ed+0x4]
       User information: ""  [#1:0x13f1+0x1]

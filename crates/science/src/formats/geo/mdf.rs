@@ -16,6 +16,7 @@ use crate::declare_format;
 use crate::dsl::{Path, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -271,9 +272,9 @@ async fn describe(cx: &Cx, m: Mdf, b: &Block) -> Option<String> {
             Some(format!("{name}{cycles} records"))
         }
         (b"CG", false) => Some(format!(
-            "{} channels, {} records of {} bytes",
-            u16_le(&data, 2).unwrap_or(0),
-            u32_le(&data, 6).unwrap_or(0),
+            "{}, {} of {} bytes",
+            plural(u16_le(&data, 2).unwrap_or(0), "channel"),
+            plural(u32_le(&data, 6).unwrap_or(0), "record"),
             u16_le(&data, 4).unwrap_or(0)
         )),
         (b"TX" | b"MD", _) => block_text(cx, m, b.span.offset.saturating_sub(m.file.offset)).await,

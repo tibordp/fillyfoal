@@ -8,7 +8,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::formats::text::xml::{self, Kind, Lexer, Mode, Tok};
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{plural, size};
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -476,14 +476,17 @@ async fn xml_dat(cx: Cx, input: Input) -> Result<()> {
     let count = entries.len();
     cx.emit(
         Node::new(if softlist { "Software" } else { "Games" })
-            .summary(format!("{count} entries, {roms} ROMs"))
+            .summary(format!(
+                "{count_entry}, {roms} ROMs",
+                count_entry = plural(count, "entry")
+            ))
             .lazy(xml_entries, (file, entries)),
     );
     if file.len > limit {
         cx.diag(Diagnostic::limit("only the first 4 MiB were parsed"));
     }
     cx.annotate(format!(
-        "{} {:?}{}, {count} entries, {roms} ROMs",
+        "{} {:?}{}, {count_entry}, {roms} ROMs",
         if softlist {
             "MAME software list"
         } else {
@@ -494,7 +497,8 @@ async fn xml_dat(cx: Cx, input: Input) -> Result<()> {
             String::new()
         } else {
             format!(" ({list_desc})")
-        }
+        },
+        count_entry = plural(count, "entry")
     ));
     Ok(())
 }
@@ -598,8 +602,9 @@ async fn cdrdao_toc(cx: Cx, input: Input) -> Result<()> {
     let mut distinct = modes.clone();
     distinct.dedup();
     cx.annotate(format!(
-        "cdrdao TOC, {disc}, {count} tracks ({}), {files} data file reference(s)",
-        distinct.join(", ")
+        "cdrdao TOC, {disc}, {count_track} ({}), {files} data file reference(s)",
+        distinct.join(", "),
+        count_track = plural(count, "track")
     ));
     Ok(())
 }

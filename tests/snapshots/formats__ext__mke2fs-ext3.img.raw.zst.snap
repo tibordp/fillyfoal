@@ -108,7 +108,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x684+0x178]
       Checksum: 0x0  [0x7fc+0x4]
     Boot block — block 0, left for a boot loader  [0x0+0x400]
-  ▾ Block group descriptors — 1 groups of 8192 blocks  [0x800+0x20]
+  ▾ Block group descriptors — 1 group of 8192 blocks  [0x800+0x20]
     ▾ Group 0 — blocks 1–4095, inode table at 20, 2702 free blocks, 22 free inodes  [0x800+0x20]
         Block bitmap: 18  [0x800+0x4]
         Inode bitmap: 19  [0x804+0x4]
@@ -123,7 +123,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Unused inodes: 0  [0x81c+0x2]
         Checksum: 0x0  [0x81e+0x2]
       Unused — rest of the descriptor table's last block  [0x820+0x3e0]
-  ▾ Block groups — 1 groups
+  ▾ Block groups — 1 group
     ▾ Group 0 — blocks 1–4095  [0x400+0x3ffc00]
         Superblock (primary) — shown at the top level  [0x400+0x400]
         Group descriptors (primary) — shown at the top level  [0x800+0x20]
@@ -2621,7 +2621,7 @@ expression: "common::explore(&display_name(&path), &data)"
         User: "00000000-0000-0000-0000-000000000000"  [#4:0x100+0x10]
         Unused user slots — 752 bytes  [#4:0x110+0x2f0]
       Log — 1023 KiB, empty (the journal is clean)  [#4:0x400+0xffc00]
-  ▾ Special inodes — 1 inodes
+  ▾ Special inodes — 1 inode
     ▾ Resize inode — -rw-------, 64.3 MiB
       ▾ Inode 7 — -rw-------, 64.3 MiB  [0x5600+0x100]
           Mode: 0x8180 — -rw-------  [0x5600+0x2]

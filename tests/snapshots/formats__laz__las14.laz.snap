@@ -67,5 +67,5 @@ expression: "common::explore(&display_name(&path), &data)"
       Item 0: POINT14 (0xa) — 30 bytes, version 3  [0x20a+0x6]
     Chunk table offset: 0x2ab  [0x210+0x8]
     Compressed points — 5 points, chunks of 50000  [0x218+0x93]
-    Chunk table — version 0, 1 chunks  [0x2ab+0xd]
+    Chunk table — version 0, 1 chunk  [0x2ab+0xd]
     Extended VLR fillyfoal/2 — test evlr  [0x2b8+0x42]

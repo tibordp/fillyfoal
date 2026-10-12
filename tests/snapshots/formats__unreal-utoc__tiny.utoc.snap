@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tiny.utoc — Unreal IoStore TOC v3: 2 chunks, 2 compressed blocks of 65536 bytes, 1 methods  [0x0+0xd0]
+▾ tiny.utoc — Unreal IoStore TOC v3: 2 chunks, 2 compressed blocks of 65536 bytes, 1 method  [0x0+0xd0]
     Signature: "-==--==--==--==-"  [0x0+0x10]
     Version: 3  [0x10+0x1]
     Reserved: 00 00 00  |...|  [0x11+0x3]

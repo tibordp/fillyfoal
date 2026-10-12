@@ -31,6 +31,7 @@ use std::sync::Arc;
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -567,7 +568,7 @@ fn describe(o: &Obj) -> String {
             o.ty.as_ref()
                 .map_or_else(|| "?".to_owned(), |t| t.describe())
         ),
-        Kind::Other => format!("object, {} messages", o.header.msgs.len()),
+        Kind::Other => format!("object, {}", plural(o.header.msgs.len(), "message")),
     }
 }
 
@@ -616,11 +617,11 @@ async fn object(cx: Cx, st: ObjState) -> Result<()> {
     let first = h.blocks.first().map(|b| b.span);
     let mut header = Node::new("Object header")
         .summary(format!(
-            "version {}, {} messages{}",
+            "version {}, {}{}",
             h.version,
-            h.msgs.len(),
+            plural(h.msgs.len(), "message"),
             if h.blocks.len() > 1 {
-                format!(", {} blocks", h.blocks.len())
+                format!(", {}", plural(h.blocks.len(), "block"))
             } else {
                 String::new()
             }

@@ -11,6 +11,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::text::probe;
 use crate::formats::text::scan::{Lines, Scanner};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
@@ -442,8 +443,9 @@ async fn pcl(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!(
-        "PCL 5 print job, {commands} commands, {} pages",
-        pages.max(1)
+        "PCL 5 print job, {commands_command}, {}",
+        plural(pages.max(1), "page"),
+        commands_command = plural(commands, "command")
     ));
     Ok(())
 }
@@ -852,7 +854,7 @@ async fn pclxl(cx: Cx, input: Input) -> Result<()> {
                     node
                 } else {
                     node.value(text(attrs.join(", ")))
-                        .summary(format!("{} attributes", attrs.len()))
+                        .summary(plural(attrs.len(), "attribute"))
                 };
                 cx.push(node).await;
                 attrs.clear();
@@ -862,8 +864,10 @@ async fn pclxl(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!(
-        "PCL XL stream ({}), {ops} operators, {pages} pages",
-        header.get(2..).unwrap_or_default()
+        "PCL XL stream ({}), {ops_operator}, {pages_page}",
+        header.get(2..).unwrap_or_default(),
+        ops_operator = plural(ops, "operator"),
+        pages_page = plural(pages, "page")
     ));
     Ok(())
 }
@@ -1046,7 +1050,8 @@ async fn hpgl(cx: Cx, input: Input) -> Result<()> {
         pos = end.max(args_at);
     }
     cx.annotate(format!(
-        "HP-GL/2 plot, {count} instructions, up to pen {pens}, {pages} pages"
+        "HP-GL/2 plot, {count} instructions, up to pen {pens}, {pages_page}",
+        pages_page = plural(pages, "page")
     ));
     Ok(())
 }
@@ -1242,7 +1247,8 @@ async fn escp(cx: Cx, input: Input) -> Result<()> {
         pos = end;
     }
     cx.annotate(format!(
-        "Epson ESC/P print data, {commands} commands, {graphics} graphics blocks"
+        "Epson ESC/P print data, {commands_command}, {graphics} graphics blocks",
+        commands_command = plural(commands, "command")
     ));
     Ok(())
 }
@@ -1367,7 +1373,10 @@ async fn zpl(cx: Cx, input: Input) -> Result<()> {
             pos = end;
         }
     }
-    cx.annotate(format!("Zebra ZPL, {labels} labels"));
+    cx.annotate(format!(
+        "Zebra ZPL, {labels_label}",
+        labels_label = plural(labels, "label")
+    ));
     Ok(())
 }
 
@@ -1801,7 +1810,10 @@ async fn cups_raster(cx: Cx, input: Input) -> Result<()> {
     } else {
         "CUPS raster"
     };
-    cx.annotate(format!("{kind} v{version}, {pages} pages, {summary}"));
+    cx.annotate(format!(
+        "{kind} v{version}, {pages_page}, {summary}",
+        pages_page = plural(pages, "page")
+    ));
     Ok(())
 }
 
@@ -1952,7 +1964,10 @@ async fn urf(cx: Cx, input: Input) -> Result<()> {
         .await;
         pos = end;
     }
-    cx.annotate(format!("Apple raster, {pages} pages, {first}"));
+    cx.annotate(format!(
+        "Apple raster, {pages_page}, {first}",
+        pages_page = plural(pages, "page")
+    ));
     Ok(())
 }
 

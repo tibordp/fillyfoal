@@ -19,7 +19,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::binutil::{NodeExt, Reader, get_at, mutf8};
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::sound::sign_extend;
 use crate::formats::util::val::{hex, name_or, text, uint};
 use crate::formats::{Format, Head, Input, Probe, embedded_as};
@@ -539,8 +539,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     });
     let kind = if compact { "compact DEX" } else { "DEX" };
     let mut summary = format!(
-        "Android {kind} v{version}, {} classes, {} methods, {} strings",
-        h.classes.size, h.methods.size, h.strings.size
+        "Android {kind} v{version}, {}, {}, {}",
+        plural(h.classes.size, "class"),
+        plural(h.methods.size, "method"),
+        plural(h.strings.size, "string")
     );
     if h.classes.size > 0 {
         let first = match dex.word(&cx, h.classes, 32, 0, 0).await {
@@ -569,7 +571,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new(name)
                 .span(span)
-                .summary(format!("{} entries", t.size))
+                .summary(plural(t.size, "entry"))
                 .lazy(id_list, (dex.clone(), kind)),
         );
     }
@@ -583,7 +585,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Map List")
                 .span(span)
-                .summary(format!("{n} sections"))
+                .summary(plural(n, "section"))
                 .desc("Every section of the file, in offset order; expand one to walk its items")
                 .lazy(map_list, dex.clone()),
         );
@@ -646,7 +648,11 @@ async fn map_list(cx: Cx, dex: Dex) -> Result<()> {
             .map_or(dex.file.len, |&o| u64::from(o));
         let name = name_or(MAP_TYPE, item.kind.into(), "type");
         let node = MapItem::node(name, *at, LE)
-            .summary(format!("{} items at {:#x}", item.size, item.offset))
+            .summary(format!(
+                "{} at {:#x}",
+                plural(item.size, "item"),
+                item.offset
+            ))
             .target(dex.file.sub(item.offset.into(), 0));
         let node = match item.kind {
             TYPE_HEADER | TYPE_MAP_LIST => node,
@@ -662,13 +668,21 @@ async fn map_list(cx: Cx, dex: Dex) -> Result<()> {
                 };
                 Node::new(name_or(MAP_TYPE, item.kind.into(), "type"))
                     .span(*at)
-                    .summary(format!("{} items at {:#x}", item.size, item.offset))
+                    .summary(format!(
+                        "{} at {:#x}",
+                        plural(item.size, "item"),
+                        item.offset
+                    ))
                     .target(dex.file.sub(item.offset.into(), 0))
                     .lazy(id_list, (dex.clone(), kind))
             }
             _ => Node::new(name_or(MAP_TYPE, item.kind.into(), "type"))
                 .span(*at)
-                .summary(format!("{} items at {:#x}", item.size, item.offset))
+                .summary(format!(
+                    "{} at {:#x}",
+                    plural(item.size, "item"),
+                    item.offset
+                ))
                 .target(dex.file.sub(item.offset.into(), 0))
                 .lazy(
                     section,
@@ -1557,7 +1571,10 @@ async fn item_label(
             let insns = u32_le(data, 12).unwrap_or(0);
             (
                 name,
-                format!("{regs} registers, {insns} code units, {tries} try blocks"),
+                format!(
+                    "{regs_register}, {insns} code units, {tries} try blocks",
+                    regs_register = plural(regs, "register")
+                ),
             )
         }
         TYPE_CLASS_DATA => {
@@ -1593,7 +1610,7 @@ async fn item_label(
         }
         TYPE_ANNOTATION_SET | TYPE_ANNOTATION_SET_REF_LIST => {
             let n = u32_le(data, 0).unwrap_or(0);
-            (name, format!("{n} entries"))
+            (name, plural(n, "entry"))
         }
         TYPE_DEBUG_INFO => {
             let line = r.uleb().unwrap_or(0);
@@ -1868,7 +1885,7 @@ async fn item_fields(cx: Cx, (dex, kind, offset): (Dex, u16, u32)) -> Result<()>
             cx.emit(
                 Node::new("offsets")
                     .span(offsets)
-                    .summary(format!("{classes} classes"))
+                    .summary(plural(classes, "class"))
                     .desc(
                         "Per class def, offset of its flags from the start of this item (0: none)",
                     ),

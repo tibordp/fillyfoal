@@ -16,6 +16,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::Input;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{enumv, hex, uint};
 use crate::node::{Count, Node};
 use crate::record;
@@ -620,7 +621,7 @@ pub async fn word(
         let summary = match index {
             pair::STSHF => style_count(cx, span).await,
             pair::STTBF_FFN => font_summary(cx, span).await,
-            pair::PLCF_SED => format!("{} sections", plc_count(span.len, 12)),
+            pair::PLCF_SED => plural(plc_count(span.len, 12), "section"),
             pair::PLCF_FLD_MOM => format!("{} field characters", plc_count(span.len, 2)),
             pair::PLCF_BTE_CHPX | pair::PLCF_BTE_PAPX => {
                 format!("{} formatting pages", plc_count(span.len, 4))
@@ -1286,7 +1287,7 @@ async fn text_node(cx: Cx, doc: Doc) -> Result<()> {
     cx.emit(
         Node::new("Pcdt")
             .span(clx.tail(pieces.prc_len))
-            .summary(format!("{n} pieces"))
+            .summary(plural(n, "piece"))
             .lazy(piece_list, doc.clone()),
     );
     Ok(())
@@ -2235,7 +2236,7 @@ async fn sttb_summary(cx: &Cx, span: Span) -> (String, usize) {
         .map(|(_, _, t)| quoted(t, 40))
         .collect();
     (
-        format!("{} strings: {}", entries.len(), shown.join(", ")),
+        format!("{}: {}", plural(entries.len(), "string"), shown.join(", ")),
         entries.len(),
     )
 }

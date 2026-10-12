@@ -13,7 +13,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::executable::pe::tables::SECTION_CHARACTERISTICS;
 use crate::formats::util::binutil::NodeExt;
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val::{hex, int, name_or, text, uint};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -412,7 +412,12 @@ pub(super) fn type_record(f: &mut Fields<'_>, _: &()) -> Result<String> {
             f.u8("Options").flags(FUNCTION_OPTIONS).emit()?;
             let n = f.u16("Parameter count").emit()?;
             let a = ti(f, "Argument list")?;
-            format!("{} ({n} parameters, {})", type_name(r), type_name(a))
+            format!(
+                "{} ({n_parameter}, {})",
+                type_name(r),
+                type_name(a),
+                n_parameter = plural(n, "parameter")
+            )
         }
         0x1009 => {
             let r = ti(f, "Return type")?;
@@ -425,7 +430,12 @@ pub(super) fn type_record(f: &mut Fields<'_>, _: &()) -> Result<String> {
             let n = f.u16("Parameter count").emit()?;
             ti(f, "Argument list")?;
             f.i32("This adjustment").emit()?;
-            format!("{} {}::({n} parameters)", type_name(r), type_name(c))
+            format!(
+                "{} {}::({n_parameter})",
+                type_name(r),
+                type_name(c),
+                n_parameter = plural(n, "parameter")
+            )
         }
         0x1201 | 0x1604 => {
             let n = f.u32("Count").emit()?;
@@ -459,7 +469,7 @@ pub(super) fn type_record(f: &mut Fields<'_>, _: &()) -> Result<String> {
                 }
                 n = n.saturating_add(1);
             }
-            format!("{n} methods")
+            plural(n, "method")
         }
         0x1503 => {
             let e = ti(f, "Element type")?;
@@ -512,7 +522,7 @@ pub(super) fn type_record(f: &mut Fields<'_>, _: &()) -> Result<String> {
             f.bytes("Descriptors", bytes)
                 .desc("4 bits per vtable slot")
                 .emit()?;
-            format!("{n} slots")
+            plural(n, "slot")
         }
         0x000e => {
             f.u16("Mode").emit()?;
@@ -548,7 +558,7 @@ pub(super) fn type_record(f: &mut Fields<'_>, _: &()) -> Result<String> {
                     .unwrap_or("Argument");
                 ti(f, label)?;
             }
-            format!("{n} arguments")
+            plural(n, "argument")
         }
         0x1605 => {
             ti(f, "Substrings")?;
@@ -1302,7 +1312,7 @@ pub(super) fn symbol_record(f: &mut Fields<'_>, _: &()) -> Result<(String, Strin
                 }
                 pairs = pairs.saturating_add(1);
             }
-            (String::new(), format!("{pairs} strings"))
+            (String::new(), plural(pairs, "string"))
         }
         0x1136 => {
             let n = f.u16("Section").emit()?;
@@ -1709,7 +1719,7 @@ pub(super) async fn module_stream(
         cx.emit(
             Node::new("Global references")
                 .span(refs)
-                .summary(format!("{} references", size / 4))
+                .summary(plural(size / 4, "reference"))
                 .lazy(global_refs, (refs.tail(4), tables.symbols)),
         );
     }
@@ -1920,12 +1930,8 @@ async fn line_block(cx: Cx, (span, n, columns): (Span, u32, bool)) -> Result<()>
             12u64.saturating_add(u64::from(n).saturating_mul(8)),
             u64::from(n).saturating_mul(4),
         );
-        cx.push(
-            Node::new("Columns")
-                .span(cols)
-                .summary(format!("{n} entries")),
-        )
-        .await;
+        cx.push(Node::new("Columns").span(cols).summary(plural(n, "entry")))
+            .await;
     }
     Ok(())
 }

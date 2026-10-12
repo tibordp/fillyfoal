@@ -8,6 +8,7 @@ use crate::declare_format;
 use crate::dsl::{Record, read_record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::lines::{Lines, float32, text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
@@ -385,10 +386,10 @@ async fn nmrpipe(cx: Cx, input: Input) -> Result<()> {
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let dims = get(9) as u32;
     cx.annotate(format!(
-        "NMRPipe {dims}D spectrum ({} endian), {} × {} points, F2 {} {} MHz{}",
+        "NMRPipe {dims}D spectrum ({} endian), {} × {}, F2 {} {} MHz{}",
         if endian == LE { "little" } else { "big" },
         get(99),
-        get(219),
+        plural(get(219), "point"),
         label(16),
         get(119),
         if get(220) != 0.0 {

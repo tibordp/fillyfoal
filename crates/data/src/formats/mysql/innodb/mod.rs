@@ -33,7 +33,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::fmt::{grouped_count, size};
+use crate::formats::util::fmt::{grouped_count, plural, size};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -231,7 +231,7 @@ pub(crate) fn describe_flags(flags: u32) -> String {
     let Some(geo) = Geometry::from_flags(flags) else {
         return "unknown page size".to_owned();
     };
-    let mut parts = vec![format!("{} pages", size(geo.logical))];
+    let mut parts = vec![plural(size(geo.logical), "page")];
     if geo.sum == Sum::FullCrc32 {
         parts.push("full_crc32".to_owned());
         let algorithm = (flags >> 5) & 7;
@@ -288,9 +288,10 @@ pub(crate) fn list_base(b: &[u8]) -> String {
         return "empty".to_owned();
     }
     format!(
-        "{len} entries, first at {}, last at {}",
+        "{len_entry}, first at {}, last at {}",
         file_addr(b, 4),
-        file_addr(b, 10)
+        file_addr(b, 10),
+        len_entry = plural(len, "entry")
     )
 }
 

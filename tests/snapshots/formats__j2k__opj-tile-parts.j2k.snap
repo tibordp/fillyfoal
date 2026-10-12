@@ -2,9 +2,9 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ opj-tile-parts.j2k — 64×64, 1 components, 8-bit, 4 tiles  [0x0+0x3c8]
+▾ opj-tile-parts.j2k — 64×64, 1 component, 8-bit, 4 tiles  [0x0+0x3c8]
     SOC  [0x0+0x2]
-  ▾ SIZ — 64×64, 1 components, 8-bit, 4 tiles  [0x2+0x2b]
+  ▾ SIZ — 64×64, 1 component, 8-bit, 4 tiles  [0x2+0x2b]
       Marker: 0xff51  [0x2+0x2]
       Lsiz: 41  [0x4+0x2]
       Rsiz: 0x0  [0x6+0x2]

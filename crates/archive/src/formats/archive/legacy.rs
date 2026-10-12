@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
@@ -107,7 +108,10 @@ async fn ha(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("HA archive, {count} entries"));
+    cx.annotate(format!(
+        "HA archive, {count_entry}",
+        count_entry = plural(count, "entry")
+    ));
     Ok(())
 }
 
@@ -189,7 +193,10 @@ async fn paq8(cx: Cx, input: Input) -> Result<()> {
         pos = pos.saturating_add(len).saturating_add(1);
     }
     cx.emit(Node::new("Compressed stream").span(file.tail(to_u64(end).saturating_add(2))));
-    cx.annotate(format!("{version} archive, {files} files"));
+    cx.annotate(format!(
+        "{version} archive, {files_file}",
+        files_file = plural(files, "file")
+    ));
     Ok(())
 }
 
@@ -261,7 +268,10 @@ async fn amiga_lzx(cx: Cx, input: Input) -> Result<()> {
         n = n.saturating_add(1);
         pos = data.end().saturating_sub(file.offset);
     }
-    cx.annotate(format!("Amiga LZX archive, {n} entries"));
+    cx.annotate(format!(
+        "Amiga LZX archive, {n_entry}",
+        n_entry = plural(n, "entry")
+    ));
     Ok(())
 }
 
@@ -323,7 +333,10 @@ async fn packit(cx: Cx, input: Input) -> Result<()> {
         n = n.saturating_add(1);
         pos = entry.end().saturating_sub(file.offset);
     }
-    cx.annotate(format!("PackIt archive, {n} files"));
+    cx.annotate(format!(
+        "PackIt archive, {n_file}",
+        n_file = plural(n, "file")
+    ));
     Ok(())
 }
 

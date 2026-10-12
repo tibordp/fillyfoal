@@ -23,6 +23,7 @@ use crate::error::{Diagnostic, Result};
 use crate::formats::data::valuetree::decimal_string;
 use crate::formats::util::civil::ole_date;
 use crate::formats::util::floats::f80_le;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::lines::{float, int};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
@@ -579,8 +580,8 @@ fn component_node(input: Input, form: &Form, index: usize) -> Node {
     };
     let span = at(input.span, c.start, c.end.saturating_sub(c.start));
     let mut summary = format!(
-        "{} properties, {} children",
-        c.properties.len(),
+        "{}, {} children",
+        plural(c.properties.len(), "property"),
         c.children.len()
     );
     if let Some((_, f)) = c.flags {
@@ -638,10 +639,10 @@ async fn dfm(cx: Cx, input: Input) -> Result<()> {
     };
     cx.emit(component_node(input, &form, form.root));
     cx.annotate(format!(
-        "Delphi form {}: {}, {} components",
+        "Delphi form {}: {}, {}",
         display_name(&c.name.1),
         c.class.1,
-        c.components
+        plural(c.components, "component")
     ));
     let rest = file.tail(to_u64(c.end).saturating_add(4));
     if rest.len > 0 {

@@ -707,7 +707,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Unused — 8 bytes  [0x147f8+0x8]
           Unused pointer slots — 80 bytes  [0x14fb0+0x50]
       ▾ Reference count B+tree — root at AG block 85, 1 level
-        ▾ Header — level 0, 1 records  [0x15400+0x38]
+        ▾ Header — level 0, 1 record  [0x15400+0x38]
             Magic: "R3FC"  [0x15400+0x4]
             Level: 0  [0x15404+0x2]
             Records: 1  [0x15406+0x2]
@@ -724,7 +724,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Reference count: 2  [0x15440+0x4]
           Unused — 956 bytes  [0x15444+0x3bc]
       ▾ Inode B+tree — root at AG block 75, 1 level
-        ▾ Header — level 0, 1 records  [0x12c00+0x38]
+        ▾ Header — level 0, 1 record  [0x12c00+0x38]
             Magic: "IAB3"  [0x12c00+0x4]
             Level: 0  [0x12c04+0x2]
             Records: 1  [0x12c06+0x2]
@@ -957,7 +957,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Inode 127 — free  [0xfe00+0x200]
           Unused — 952 bytes  [0x12c48+0x3b8]
       ▾ Free inode B+tree — root at AG block 77, 1 level
-        ▾ Header — level 0, 1 records  [0x13400+0x38]
+        ▾ Header — level 0, 1 record  [0x13400+0x38]
             Magic: "FIB3"  [0x13400+0x4]
             Level: 0  [0x13404+0x2]
             Records: 1  [0x13406+0x2]
@@ -1212,7 +1212,7 @@ expression: "common::explore(&display_name(&path), &data)"
             CRC-32C: 0x55d97d30 — valid  [0x1001434+0x4]
           Unused — 968 bytes  [0x1001438+0x3c8]
       ▾ Inode B+tree — root at AG block 2, 1 level
-        ▾ Header — level 0, 1 records  [0x1000800+0x38]
+        ▾ Header — level 0, 1 record  [0x1000800+0x38]
             Magic: "IAB3"  [0x1000800+0x4]
             Level: 0  [0x1000804+0x2]
             Records: 1  [0x1000806+0x2]
@@ -1466,7 +1466,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Inode 43647 — free  [0x154fe00+0x200]
           Unused — 952 bytes  [0x1000848+0x3b8]
       ▾ Free inode B+tree — root at AG block 3, 1 level
-        ▾ Header — level 0, 1 records  [0x1000c00+0x38]
+        ▾ Header — level 0, 1 record  [0x1000c00+0x38]
             Magic: "FIB3"  [0x1000c00+0x4]
             Level: 0  [0x1000c04+0x2]
             Records: 1  [0x1000c06+0x2]
@@ -2737,7 +2737,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Length: 56  [0x7bca+0x2]
                 Unused — 50 bytes  [0x7bcc+0x32]
                 Tag: 4040  [0x7bfe+0x2]
-          ▾ Data block 1 — data, 1 entries  [0x4c00+0x1000]
+          ▾ Data block 1 — data, 1 entry  [0x4c00+0x1000]
             ▾ Header  [0x4c00+0x40]
                 Magic: "XDD3"  [0x4c00+0x4]
                 CRC-32C: 0xc537f3fd — valid  [0x4c04+0x4]

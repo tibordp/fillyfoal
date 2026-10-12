@@ -7,6 +7,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::disk::{acl, name_field};
 use crate::formats::disk::{crc32c, size, unix_mode, uuid_value};
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -525,7 +526,7 @@ fn item_summary(ty: u8, data: &[u8], len: u64) -> String {
             u64_le(data, 176).unwrap_or(0),
             data.get(238).copied().unwrap_or(0)
         ),
-        168 | 169 => format!("{} references", u64_le(data, 0).unwrap_or(0)),
+        168 | 169 => plural(u64_le(data, 0).unwrap_or(0), "reference"),
         192 => format!("{} used", size(u64_le(data, 0).unwrap_or(0))),
         204 => format!(
             "{} of chunk {:#x}",
@@ -597,8 +598,9 @@ async fn tree_node(cx: Cx, st: NodeState) -> Result<()> {
     let items = u64::from(u32_le(&data, 0x60).unwrap_or(0));
     let level = data.get(0x64).copied().unwrap_or(0);
     cx.annotate(format!(
-        "{}, level {level}, {items} items",
-        lookup(OBJECTIDS, owner).unwrap_or("tree")
+        "{}, level {level}, {items_item}",
+        lookup(OBJECTIDS, owner).unwrap_or("tree"),
+        items_item = plural(items, "item")
     ));
     let len = to_u64(data.len());
     if level == 0 {

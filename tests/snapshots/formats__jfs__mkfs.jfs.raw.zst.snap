@@ -634,7 +634,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Blocks per allocation group: 8192  [0x10438+0x8]
         Largest free buddy (log2): 10  [0x10440+0x1]
         Unused: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x10441+0xbbf]
-    ▾ Free blocks per allocation group — 1 groups  [0x10038+0x400]
+    ▾ Free blocks per allocation group — 1 group  [0x10038+0x400]
         AG 0: 3754  [0x10038+0x8]
       Level 2 summary 0 — unused (beyond the map's top level or size)  [0x11000+0x1000]
       Level 1 summary 0 — unused (beyond the map's top level or size)  [0x12000+0x1000]

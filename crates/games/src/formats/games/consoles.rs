@@ -10,6 +10,7 @@ use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
 use crate::formats::util::binutil::get;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
@@ -218,8 +219,9 @@ async fn byml(cx: Cx, input: Input) -> Result<()> {
             Node::new(name)
                 .span(file.sub(at.into(), 4))
                 .summary(format!(
-                    "{} with {n} entries",
-                    byml_type(h.first().copied().unwrap_or(0))
+                    "{} with {n_entry}",
+                    byml_type(h.first().copied().unwrap_or(0)),
+                    n_entry = plural(n, "entry")
                 )),
         );
     }
@@ -231,16 +233,20 @@ async fn byml(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Root node")
                 .span(file.sub(root.into(), 4))
-                .summary(format!("{root_kind} with {n} entries")),
+                .summary(format!(
+                    "{root_kind} with {n_entry}",
+                    n_entry = plural(n, "entry")
+                )),
         );
     }
     cx.annotate(format!(
-        "BYML v{version} ({}), root {root_kind}, {key_count} keys",
+        "BYML v{version} ({}), root {root_kind}, {key_count_key}",
         if e == BE {
             "big-endian"
         } else {
             "little-endian"
-        }
+        },
+        key_count_key = plural(key_count, "key")
     ));
     Ok(())
 }
@@ -284,7 +290,10 @@ async fn msbt(cx: Cx, input: Input) -> Result<()> {
             if id == "TXT2" || id == "TXTW" {
                 messages = n;
             }
-            node = node.summary(format!("{n} entries, {size} bytes"));
+            node = node.summary(format!(
+                "{n_entry}, {size} bytes",
+                n_entry = plural(n, "entry")
+            ));
         }
         cx.push(node).await;
         pos = pos
@@ -295,7 +304,9 @@ async fn msbt(cx: Cx, input: Input) -> Result<()> {
     }
     let _ = encoding;
     cx.annotate(format!(
-        "{magic} v{version}, {sections} sections, {messages} messages"
+        "{magic} v{version}, {sections_section}, {messages_message}",
+        sections_section = plural(sections, "section"),
+        messages_message = plural(messages, "message")
     ));
     Ok(())
 }
@@ -399,8 +410,9 @@ async fn j3d(cx: Cx, input: Input) -> Result<()> {
         _ => "file",
     };
     cx.annotate(format!(
-        "J3D {kind} ({magic}), {sections} sections: {}",
-        names.join(", ")
+        "J3D {kind} ({magic}), {sections_section}: {}",
+        names.join(", "),
+        sections_section = plural(sections, "section")
     ));
     Ok(())
 }
@@ -459,7 +471,11 @@ async fn rarc(cx: Cx, input: Input) -> Result<()> {
         files = files.saturating_add(1);
     }
     let _ = nodes_rel;
-    cx.annotate(format!("RARC archive, {nodes} directories, {files} files"));
+    cx.annotate(format!(
+        "RARC archive, {nodes_directory}, {files_file}",
+        nodes_directory = plural(nodes, "directory"),
+        files_file = plural(files, "file")
+    ));
     Ok(())
 }
 
@@ -489,7 +505,11 @@ async fn brres(cx: Cx, input: Input) -> Result<()> {
         }
         cx.push(chunk.node()).await;
     }
-    cx.annotate(format!("BRRES, {sections} sections: {}", kinds.join(", ")));
+    cx.annotate(format!(
+        "BRRES, {sections_section}: {}",
+        kinds.join(", "),
+        sections_section = plural(sections, "section")
+    ));
     Ok(())
 }
 
@@ -732,7 +752,10 @@ async fn xdbf(cx: Cx, input: Input) -> Result<()> {
         };
         cx.push(node.target(file.sub(at, 18))).await;
     }
-    cx.annotate(format!("XDBF v{version:#x}, {count} entries"));
+    cx.annotate(format!(
+        "XDBF v{version:#x}, {count_entry}",
+        count_entry = plural(count, "entry")
+    ));
     Ok(())
 }
 
