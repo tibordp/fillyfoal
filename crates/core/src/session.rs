@@ -365,6 +365,40 @@ impl<C: Catalog> Session<C> {
             .is_none_or(|s| s.len_known)
     }
 
+    /// Declares the holes of a sparse host source: byte ranges (`start..end`)
+    /// that read as zeros, as `SEEK_HOLE`/`SEEK_DATA` or `FIEMAP` report
+    /// them. Optional: a host that cannot tell declares none, and everything
+    /// works as before. Reads that fall wholly inside holes are answered
+    /// without asking the host for bytes, and walkers over mostly sparse
+    /// files skip them (`Cx::next_data`). Replaces earlier declarations for
+    /// the source; ranges may come in any order and may overlap. Declare
+    /// holes before polling: dissectors that already looked keep what they
+    /// saw. Ignored for sources the host does not supply.
+    pub fn set_holes(&mut self, source: SourceId, holes: &[std::ops::Range<u64>]) {
+        let mut ranges: Vec<(u64, u64)> = holes
+            .iter()
+            .filter(|r| r.start < r.end)
+            .map(|r| (r.start, r.end))
+            .collect();
+        ranges.sort_unstable();
+        let mut merged: Vec<(u64, u64)> = Vec::with_capacity(ranges.len());
+        for (start, end) in ranges {
+            match merged.last_mut() {
+                Some(last) if start <= last.1 => last.1 = last.1.max(end),
+                _ => merged.push((start, end)),
+            }
+        }
+        let mut sh = lock(&self.shared);
+        if let Some(slot) = sh.sources.get_mut(to_usize(source.0.into()))
+            && slot.data.is_none()
+            && slot.pieces.is_none()
+            && slot.lazy.is_none()
+            && slot.origin.is_none()
+        {
+            slot.holes = (!merged.is_empty()).then(|| merged.into());
+        }
+    }
+
     /// Shrinks a source, e.g. when the host finds the file shorter than
     /// announced. Pending reads beyond the new end become truncations.
     pub fn set_source_len(&mut self, source: SourceId, len: u64) {

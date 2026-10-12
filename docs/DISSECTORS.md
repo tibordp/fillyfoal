@@ -213,6 +213,16 @@ are all pushed in the loop (see `tar.rs`, `zip.rs`, `text/plain.rs`).
 `cx.skipping()` tells a walker that the next child lies before the host's
 window and will be dropped, if building it is expensive.
 
+A walker over a file that is mostly holes (lastlog, indexed by UID; a
+sparse table) asks `cx.next_data(span).await` where data may resume, like
+`SEEK_DATA`: the offset into `span` of the first byte not known to be a
+hole, or `None` if the rest is holes. Holes are what the host declared
+with `Session::set_holes` (from `SEEK_HOLE`/`SEEK_DATA` or `FIEMAP`) and
+the zero pieces of piecewise sources (sparse files inside a file system
+image); a host that declares none gets `Some(0)`, so the walker behaves
+as before. Reads wholly inside declared holes are answered as zeros
+without asking the host.
+
 A walker that does not know its count up front (tar, a scan over records)
 should report progress for the host's display: `cx.progress(done, total)`,
 or `cx.progress_in(input.span, pos)` with its position in its input (over a

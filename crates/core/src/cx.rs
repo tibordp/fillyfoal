@@ -121,6 +121,10 @@ pub(crate) struct SourceEntry {
     /// nothing records gets an upper bound (see [`Cx::decode_lazy_unsized`])
     /// that shrinks to the real length once the stream has been decoded.
     pub len_known: bool,
+    /// Ranges of a host source the host declared holes (they read as
+    /// zeros; see [`crate::Session::set_holes`]): sorted, disjoint
+    /// `(start, end)` pairs.
+    pub holes: Option<Arc<[(u64, u64)]>>,
 }
 
 impl SourceEntry {
@@ -137,6 +141,7 @@ impl SourceEntry {
             used: 0,
             on_demand: false,
             len_known: true,
+            holes: None,
         }
     }
 
@@ -607,9 +612,33 @@ impl Shared {
             return self.read_lazy(source, start, end, depth);
         }
         let Some(pieces) = entry.pieces.clone() else {
-            return self.cache.read(source, start, end).map_err(|missing| {
-                Pending::Bytes(missing.into_iter().map(|i| (source, i)).collect())
-            });
+            let holes = entry.holes.clone();
+            let missing = match self.cache.read(source, start, end) {
+                Ok(data) => return Ok(data),
+                Err(missing) => missing,
+            };
+            // Chunks wholly inside a declared hole are zeros: no request.
+            let mut wanted = Vec::new();
+            for index in missing {
+                let from = self.cache.chunk_start(index);
+                let to = from
+                    .saturating_add(self.cache.chunk_size())
+                    .min(self.source_len(source));
+                match &holes {
+                    Some(holes) if in_hole(holes, from, to) => {
+                        let len = crate::bytes::to_usize(to.saturating_sub(from));
+                        self.cache.insert(source, index, vec![0; len]);
+                    }
+                    _ => wanted.push((source, index)),
+                }
+            }
+            return if wanted.is_empty() {
+                self.cache.read(source, start, end).map_err(|missing| {
+                    Pending::Bytes(missing.into_iter().map(|i| (source, i)).collect())
+                })
+            } else {
+                Err(Pending::Bytes(wanted))
+            };
         };
         if depth > 32 {
             return Ok(Vec::new());
@@ -886,6 +915,83 @@ impl Shared {
     }
 
     /// Resolves a span of any source to spans of non-piecewise sources.
+    /// The first offset in `start..end` of `source` that may hold data, or
+    /// `None` if all of it is known to be holes: declared by the host for
+    /// a host source ([`crate::Session::set_holes`]), or zero pieces of a
+    /// piecewise source (followed into their parents). Bounded: after
+    /// [`NEXT_DATA_STEPS`] pieces or holes it answers where it got to.
+    pub fn next_data(&self, source: SourceId, start: u64, end: u64, depth: u32) -> Option<u64> {
+        let mut steps = 0usize;
+        self.next_data_in(source, start, end, depth, &mut steps)
+    }
+
+    fn next_data_in(
+        &self,
+        source: SourceId,
+        start: u64,
+        end: u64,
+        depth: u32,
+        steps: &mut usize,
+    ) -> Option<u64> {
+        let end = end.min(self.source_len(source));
+        if start >= end || source == SourceId::ZEROS {
+            return None;
+        }
+        let Some(entry) = self.source(source) else {
+            return Some(start);
+        };
+        if let Some(holes) = &entry.holes {
+            let mut pos = start;
+            let mut index = holes.partition_point(|&(_, e)| e <= pos);
+            while let Some(&(from, to)) = holes.get(index) {
+                if from > pos || *steps >= NEXT_DATA_STEPS {
+                    break;
+                }
+                *steps = steps.saturating_add(1);
+                pos = pos.max(to);
+                index = index.saturating_add(1);
+            }
+            return (pos < end).then_some(pos);
+        }
+        let Some(pieces) = entry.pieces.as_ref().filter(|_| depth <= 32) else {
+            return Some(start);
+        };
+        let mut index = pieces
+            .starts
+            .partition_point(|&s| s <= start)
+            .saturating_sub(1);
+        let mut pos = start;
+        while pos < end {
+            let (Some(piece), Some(&piece_start)) =
+                (pieces.spans.get(index), pieces.starts.get(index))
+            else {
+                return None;
+            };
+            if *steps >= NEXT_DATA_STEPS {
+                return Some(pos);
+            }
+            *steps = steps.saturating_add(1);
+            let within = pos.saturating_sub(piece_start);
+            let take = piece
+                .len
+                .saturating_sub(within)
+                .min(end.saturating_sub(pos));
+            let from = piece.offset.saturating_add(within);
+            if let Some(found) = self.next_data_in(
+                piece.source,
+                from,
+                from.saturating_add(take),
+                depth.saturating_add(1),
+                steps,
+            ) {
+                return Some(pos.saturating_add(found.saturating_sub(from)));
+            }
+            pos = pos.saturating_add(take.max(1));
+            index = index.saturating_add(1);
+        }
+        None
+    }
+
     pub fn resolve(&self, span: Span, depth: u32, out: &mut Vec<Span>) {
         if span.source == SourceId::ZEROS {
             return;
@@ -920,6 +1026,19 @@ impl Shared {
             index = index.saturating_add(1);
         }
     }
+}
+
+/// Pieces or holes [`Shared::next_data`] looks at before answering where it
+/// got to.
+pub(crate) const NEXT_DATA_STEPS: usize = 4096;
+
+/// Whether `from..to` lies wholly inside one of `holes` (sorted, disjoint,
+/// and merged, so a range inside holes is inside one).
+fn in_hole(holes: &[(u64, u64)], from: u64, to: u64) -> bool {
+    let index = holes.partition_point(|&(_, e)| e <= from);
+    holes
+        .get(index)
+        .is_some_and(|&(start, end)| start <= from && to <= end)
 }
 
 /// A resume key: dissector state from which an expansion can restart.
@@ -1281,6 +1400,25 @@ impl Cx {
             .is_none_or(|s| !s.on_demand || s.lazy.as_ref().is_some_and(|st| st.done))
     }
 
+    /// Where data may resume in `span`, like `SEEK_DATA`: the offset
+    /// (relative to `span`) of the first byte not known to lie in a hole,
+    /// or `None` if all of `span` is known to be holes. Holes are what the
+    /// host declared for a sparse file ([`crate::Session::set_holes`]) and
+    /// the zero pieces of a piecewise source (sparse files in a file
+    /// system image); without either the answer is `Some(0)`, so a walker
+    /// that skips with this behaves as before. Holes read as zeros; a
+    /// walker over a mostly sparse file (lastlog, indexed by UID) uses this
+    /// to jump over them instead of reading them. The answer is
+    /// conservative: data may still be zeros. Costs a unit of work.
+    pub async fn next_data(&self, span: Span) -> Option<u64> {
+        let found = {
+            let sh = lock(&self.shared);
+            sh.next_data(span.source, span.offset, span.end(), 0)
+        };
+        self.checkpoint().await;
+        found.map(|at| at.saturating_sub(span.offset))
+    }
+
     /// A previously derived source with this origin, if any. Dissectors use
     /// this to avoid decoding the same bytes twice (e.g. after a collapse).
     pub fn derived(&self, origin: Origin) -> Option<crate::codec::Decoded> {
@@ -1360,6 +1498,7 @@ impl Cx {
             used: tick,
             on_demand: false,
             len_known: true,
+            holes: None,
         });
         sh.derived.insert(origin, id);
         Ok(crate::codec::Decoded {
@@ -1440,6 +1579,7 @@ impl Cx {
             used: tick,
             on_demand: false,
             len_known: true,
+            holes: None,
         });
         sh.derived.insert(origin, id);
         Ok(Span::new(id, 0, len))
@@ -1581,6 +1721,7 @@ impl Cx {
             used: tick,
             on_demand: true,
             len_known,
+            holes: None,
         });
         sh.derived.insert(origin, id);
         Ok(Span::new(id, 0, len))

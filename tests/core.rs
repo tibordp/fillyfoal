@@ -126,6 +126,64 @@ fn holes_read_as_zeros_and_resolve_to_nothing() {
     );
 }
 
+/// A sparse stream over a host file with a declared hole: data, zero
+/// pieces, the host's hole, data. Emits what `Cx::next_data` answers and
+/// the stream's bytes.
+async fn holes(cx: Cx, file: Span) -> Result<()> {
+    let at = |offset, len| Span::new(file.source, offset, len);
+    let s = cx.add_pieces(
+        Origin {
+            parent: file,
+            transform: "test-holes",
+        },
+        vec![at(0, 4), Span::zeros(100), at(4, 8), at(12, 4)],
+    )?;
+    for (name, span) in [
+        ("all", s),
+        ("after data", s.tail(4)),
+        ("holes only", s.sub(4, 108)),
+        ("host", file.tail(4)),
+    ] {
+        let found = cx.next_data(span).await;
+        cx.emit(Node::new(name).value(Value::Text(format!("{found:?}"))));
+    }
+    let bytes = cx.read(s).await?;
+    cx.emit(Node::new("bytes").value(Value::Bytes(bytes)));
+    Ok(())
+}
+
+/// `Cx::next_data` skips zero pieces and the holes a host declared
+/// (`Session::set_holes`), and reads inside declared holes are zeros that
+/// are never requested from the host.
+#[test]
+fn next_data_skips_zero_pieces_and_declared_holes() {
+    let data = b"HEAD\x01\x01\x01\x01\x01\x01\x01\x01TAIL".to_vec();
+    let mut host = Host::with_chunk(data, 4);
+    let file = Span::new(fillyfoal::SourceId::default_host(), 0, 16);
+    host.session.set_holes(file.source, &[6..12, 4..7]);
+    let root = host.session.add_root(Node::new("test").lazy(holes, file));
+    host.session.expand(root, 10);
+    host.run();
+    let children = host.session.children(root).unwrap();
+    assert!(children.error.is_none(), "{:?}", children.error);
+    let values: Vec<_> = children
+        .ids
+        .iter()
+        .map(|&id| host.session.node(id).unwrap().value.clone().unwrap())
+        .collect();
+    let text = |s: &str| Value::Text(s.into());
+    assert_eq!(values[0], text("Some(0)"));
+    assert_eq!(values[1], text("Some(108)"));
+    assert_eq!(values[2], text("None"));
+    assert_eq!(values[3], text("Some(8)"));
+    let mut expected = b"HEAD".to_vec();
+    expected.extend([0; 108]);
+    expected.extend(b"TAIL");
+    assert_eq!(values[4], Value::Bytes(expected));
+    // The hole's chunks (bytes 4..12) were never asked for.
+    assert_eq!(host.bytes_supplied, 8);
+}
+
 /// A tarball whose middle member is 2 MiB of zeros: listing the first entry
 /// must not decompress the whole stream.
 #[test]
