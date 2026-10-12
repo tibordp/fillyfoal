@@ -487,3 +487,23 @@ it must be identified as (`fixtures_are_identified_correctly`).
 
 Review the snapshot by eye: it is the best check that values and spans are
 right.
+
+**Snapshot size.** Every fixture is explored completely (the robustness
+and resume tests compare whole trees), but its snapshot renders a bounded
+view (`common::snapshot_tree`), so a large fixture cannot bloat the
+repository with repetition:
+
+- A list of at most 8 children (a file's sections, a record's fields) is
+  always rendered whole.
+- A longer list renders its children with their subtrees, in order, until
+  it has rendered 64 KiB; later children show their own line (and
+  diagnostics) with `(+N nodes elided)` for the subtree left out; after 256
+  of those, `… K more children elided (N nodes)` stands for the rest,
+  followed by the last child's line.
+- Whatever remains is cut at 256 KiB, with a last line counting what was
+  cut.
+
+Elision lines count nodes and diagnostics, so a change in an elided part
+still changes the snapshot. To review a part that is elided, run the
+inspector on the fixture. If a fixture's snapshot hits the 256 KiB cut,
+its interesting part may well be cut too: shrink the fixture.

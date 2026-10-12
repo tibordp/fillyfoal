@@ -466,13 +466,185 @@ pub fn diagnostic_kinds(host: &Host) -> Vec<fillyfoal::DiagKind> {
     out
 }
 
-/// Fully explores `data` and returns the rendered tree.
+/// Fully explores `data` and returns the tree rendered for a snapshot
+/// (bounded by [`snapshot_tree`]).
 pub fn explore(name: &str, data: &[u8]) -> String {
     explore_as(name, data, None)
 }
 
 /// Like [`explore`], dissecting `data` as `format` if given.
 pub fn explore_as(name: &str, data: &[u8], format: Option<&'static formats::Format>) -> String {
+    let host = explored(name, data, format);
+    snapshot_tree(&host.session, host.root)
+}
+
+/// Like [`explore_as`], but renders the whole materialised tree, for
+/// comparing two explorations exactly.
+pub fn explore_full_as(
+    name: &str,
+    data: &[u8],
+    format: Option<&'static formats::Format>,
+) -> String {
+    explored(name, data, format).render()
+}
+
+// ---------------------------------------------------------------------------
+// Snapshot size policy
+//
+// Every fixture is explored completely, but a snapshot only needs enough of
+// the tree to review it and to catch regressions. Large trees are mostly
+// repetition (MFT records, registry keys, event records, table rows), and
+// rendering all of it made single snapshots several megabytes. The policy
+// below bounds what is *rendered*; exploration, the robustness sweeps and
+// the exact comparisons (`explore_full_as`) still see the whole tree.
+//
+// - A small list (at most `SNAPSHOT_SMALL_LIST` children: a file's top-level
+//   sections, a record's fields) is always rendered whole.
+// - A longer list renders its children with their subtrees, in order, until
+//   it has rendered `SNAPSHOT_LIST_BUDGET` bytes. Later children render as
+//   their own line (and diagnostics) only, with "(+N nodes elided)" counting
+//   the subtree left out. After `SNAPSHOT_LIST_HEADERS` such lines, one
+//   "… K more children elided" line stands for the rest, followed by the
+//   last child's line.
+// - Whatever survives that is cut at `SNAPSHOT_MAX` bytes (at a line end),
+//   with a final line counting what was cut.
+//
+// Elision lines count nodes and diagnostics, so a change in an elided part
+// still changes the snapshot. The limits apply per list, so a change
+// shifts what is shown only within that list.
+
+/// Lists of at most this many children are rendered whole.
+pub const SNAPSHOT_SMALL_LIST: usize = 8;
+/// Bytes a longer list renders with full subtrees before eliding them.
+pub const SNAPSHOT_LIST_BUDGET: usize = 64 << 10;
+/// Child lines (subtree elided) a list renders after its budget.
+pub const SNAPSHOT_LIST_HEADERS: usize = 256;
+/// The most a snapshot renders.
+pub const SNAPSHOT_MAX: usize = 256 << 10;
+
+/// Renders the materialised tree under `root` under the snapshot size
+/// policy above.
+pub fn snapshot_tree(session: &Session, root: NodeId) -> String {
+    let mut out = String::new();
+    snapshot_node(session, root, 0, true, &mut out);
+    if out.len() > SNAPSHOT_MAX {
+        let mut cut = SNAPSHOT_MAX;
+        while !out.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        let cut = out[..cut].rfind('\n').map_or(0, |i| i + 1);
+        let lines = out[cut..].lines().count();
+        out.truncate(cut);
+        out.push_str(&format!(
+            "… snapshot cut at {} KiB: {lines} more lines\n",
+            SNAPSHOT_MAX >> 10
+        ));
+    }
+    out
+}
+
+/// Nodes and diagnostics in the materialised subtrees of `ids`, the
+/// nodes themselves included when `own` is set.
+fn subtree_counts(session: &Session, ids: &[NodeId], own: bool) -> (usize, usize) {
+    let (mut nodes, mut diags) = (0, 0);
+    let mut stack: Vec<(NodeId, bool)> = ids.iter().map(|&id| (id, own)).collect();
+    while let Some((id, count)) = stack.pop() {
+        if count {
+            nodes += 1;
+            diags += session.node(id).map_or(0, |n| n.diagnostics.len());
+        }
+        if let Some(children) = session.children(id) {
+            diags += usize::from(children.error.is_some());
+            stack.extend(children.ids.iter().map(|&c| (c, true)));
+        }
+    }
+    (nodes, diags)
+}
+
+fn elided(nodes: usize, diags: usize) -> String {
+    let s = |n: usize| if n == 1 { "" } else { "s" };
+    match diags {
+        0 => format!("{nodes} node{}", s(nodes)),
+        d => format!("{nodes} node{}, {d} diagnostic{}", s(nodes), s(d)),
+    }
+}
+
+fn snapshot_node(session: &Session, id: NodeId, depth: usize, full: bool, out: &mut String) {
+    use std::fmt::Write;
+    let (Some(node), Some(children)) = (session.node(id), session.children(id)) else {
+        return;
+    };
+    let indent = "  ".repeat(depth);
+    let marker = match children.state {
+        ChildState::Leaf => "  ",
+        ChildState::NotRequested => "▸ ",
+        _ => "▾ ",
+    };
+    let _ = write!(out, "{indent}{marker}{}", render::line(node));
+    let (hidden, hidden_diags) = if full {
+        (0, 0)
+    } else {
+        subtree_counts(session, &[id], false)
+    };
+    if hidden > 0 || hidden_diags > 0 {
+        let _ = write!(out, "  (+{} elided)", elided(hidden, hidden_diags));
+    }
+    out.push('\n');
+    for d in &node.diagnostics {
+        let _ = writeln!(out, "{indent}    ! {d}");
+    }
+    if !full {
+        return;
+    }
+    let ids = children.ids;
+    let budgeted = ids.len() > SNAPSHOT_SMALL_LIST;
+    let start = out.len();
+    let mut headers = 0;
+    let mut skipped_from = None;
+    for (j, &child) in ids.iter().enumerate() {
+        let last = j + 1 == ids.len();
+        if !budgeted || out.len() - start < SNAPSHOT_LIST_BUDGET {
+            snapshot_node(session, child, depth + 1, true, out);
+        } else if headers < SNAPSHOT_LIST_HEADERS {
+            headers += 1;
+            snapshot_node(session, child, depth + 1, false, out);
+        } else if last {
+            if let Some(from) = skipped_from {
+                let skipped = ids.get(from..j).unwrap_or_default();
+                let (nodes, diags) = subtree_counts(session, skipped, true);
+                let _ = writeln!(
+                    out,
+                    "{indent}  … {} more children elided ({})",
+                    skipped.len(),
+                    elided(nodes, diags)
+                );
+            }
+            snapshot_node(session, child, depth + 1, false, out);
+        } else if skipped_from.is_none() {
+            skipped_from = Some(j);
+        }
+    }
+    let inner = "  ".repeat(depth + 1);
+    match children.state {
+        ChildState::More => {
+            let total = match children.count {
+                fillyfoal::Count::Exact(n) => format!(" of {n}"),
+                fillyfoal::Count::AtLeast(n) => format!(" of at least {n}"),
+                fillyfoal::Count::Unknown => String::new(),
+            };
+            let _ = writeln!(out, "{inner}  … ({} shown{total})", ids.len());
+        }
+        ChildState::Running(wait) => {
+            let _ = writeln!(out, "{inner}  … (in progress: {wait:?})");
+        }
+        _ => {}
+    }
+    if let Some(error) = children.error {
+        let _ = writeln!(out, "{inner}  ! {error}");
+    }
+}
+
+fn explored(name: &str, data: &[u8], format: Option<&'static formats::Format>) -> Host {
     let mut host = Host::open(
         name,
         data.to_vec(),
@@ -488,7 +660,7 @@ pub fn explore_as(name: &str, data: &[u8], format: Option<&'static formats::Form
         "{name}: internal error\n{}",
         host.render()
     );
-    host.render()
+    host
 }
 
 /// Units of work one exploration of a fixture may cost before its

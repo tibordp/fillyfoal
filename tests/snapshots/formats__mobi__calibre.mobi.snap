@@ -860,94 +860,28 @@ expression: "common::explore(&display_name(&path), &data)"
             @height: "1em"  [#1:0x4ea2+0x3]
             @width: "0pt"  [#1:0x4eae+0x3]
             #text: "Sentence 197 tells of lima charlie foxtrot india lima charlie foxtrot india."  [#1:0x4eb3+0x4c]
-        ▾ p: "Sentence 198 tells of golf juliet alpha delta golf juliet alpha delta golf." — height="1em" width="0pt"  [#1:0x4f03+0x6b]
-            @height: "1em"  [#1:0x4f0e+0x3]
-            @width: "0pt"  [#1:0x4f1a+0x3]
-            #text: "Sentence 198 tells of golf juliet alpha delta golf juliet alpha delta golf."  [#1:0x4f1f+0x4b]
-        ▾ p: "Sentence 199 tells of bravo echo hotel kilo bravo echo hotel kilo bravo echo." — height="1em" width="0pt"  [#1:0x4f6e+0x6d]
-            @height: "1em"  [#1:0x4f79+0x3]
-            @width: "0pt"  [#1:0x4f85+0x3]
-            #text: "Sentence 199 tells of bravo echo hotel kilo bravo echo hotel kilo bravo echo."  [#1:0x4f8a+0x4d]
-        ▾ p: "Sentence 200 tells of india lima charlie foxtrot india lima." — height="1em" width="0pt"  [#1:0x4fdb+0x5c]
-            @height: "1em"  [#1:0x4fe6+0x3]
-            @width: "0pt"  [#1:0x4ff2+0x3]
-            #text: "Sentence 200 tells of india lima charlie foxtrot india lima."  [#1:0x4ff7+0x3c]
-        ▾ p: "Sentence 201 tells of delta golf juliet alpha delta golf juliet." — height="1em" width="0pt"  [#1:0x5037+0x60]
-            @height: "1em"  [#1:0x5042+0x3]
-            @width: "0pt"  [#1:0x504e+0x3]
-            #text: "Sentence 201 tells of delta golf juliet alpha delta golf juliet."  [#1:0x5053+0x40]
-        ▾ p: "Sentence 202 tells of kilo bravo echo hotel kilo bravo echo hotel." — height="1em" width="0pt"  [#1:0x5097+0x62]
-            @height: "1em"  [#1:0x50a2+0x3]
-            @width: "0pt"  [#1:0x50ae+0x3]
-            #text: "Sentence 202 tells of kilo bravo echo hotel kilo bravo echo hotel."  [#1:0x50b3+0x42]
-        ▾ p: "Sentence 203 tells of foxtrot india lima charlie foxtrot india lima charlie foxtrot." — height="1em" width="0pt"  [#1:0x50f9+0x74]
-            @height: "1em"  [#1:0x5104+0x3]
-            @width: "0pt"  [#1:0x5110+0x3]
-            #text: "Sentence 203 tells of foxtrot india lima charlie foxtrot india lima charlie foxtrot."  [#1:0x5115+0x54]
-        ▾ p: "Sentence 204 tells of alpha delta golf juliet alpha delta golf juliet alpha delta." — height="1em" width="0pt"  [#1:0x516d+0x72]
-            @height: "1em"  [#1:0x5178+0x3]
-            @width: "0pt"  [#1:0x5184+0x3]
-            #text: "Sentence 204 tells of alpha delta golf juliet alpha delta golf juliet alpha delta."  [#1:0x5189+0x52]
-        ▾ p: "Sentence 205 tells of hotel kilo bravo echo hotel kilo." — height="1em" width="0pt"  [#1:0x51df+0x57]
-            @height: "1em"  [#1:0x51ea+0x3]
-            @width: "0pt"  [#1:0x51f6+0x3]
-            #text: "Sentence 205 tells of hotel kilo bravo echo hotel kilo."  [#1:0x51fb+0x37]
-        ▾ p: "Sentence 206 tells of charlie foxtrot india lima charlie foxtrot india." — height="1em" width="0pt"  [#1:0x5236+0x67]
-            @height: "1em"  [#1:0x5241+0x3]
-            @width: "0pt"  [#1:0x524d+0x3]
-            #text: "Sentence 206 tells of charlie foxtrot india lima charlie foxtrot india."  [#1:0x5252+0x47]
-        ▾ p: "Sentence 207 tells of juliet alpha delta golf juliet alpha delta golf." — height="1em" width="0pt"  [#1:0x529d+0x66]
-            @height: "1em"  [#1:0x52a8+0x3]
-            @width: "0pt"  [#1:0x52b4+0x3]
-            #text: "Sentence 207 tells of juliet alpha delta golf juliet alpha delta golf."  [#1:0x52b9+0x46]
-        ▾ p: "Sentence 208 tells of echo hotel kilo bravo echo hotel kilo bravo echo." — height="1em" width="0pt"  [#1:0x5303+0x67]
-            @height: "1em"  [#1:0x530e+0x3]
-            @width: "0pt"  [#1:0x531a+0x3]
-            #text: "Sentence 208 tells of echo hotel kilo bravo echo hotel kilo bravo echo."  [#1:0x531f+0x47]
-        ▾ p: "Sentence 209 tells of lima charlie foxtrot india lima charlie foxtrot india lima charlie." — height="1em" width="0pt"  [#1:0x536a+0x79]
-            @height: "1em"  [#1:0x5375+0x3]
-            @width: "0pt"  [#1:0x5381+0x3]
-            #text: "Sentence 209 tells of lima charlie foxtrot india lima charlie foxtrot india lima charlie."  [#1:0x5386+0x59]
-        ▾ p: "Sentence 210 tells of golf juliet alpha delta golf juliet." — height="1em" width="0pt"  [#1:0x53e3+0x5a]
-            @height: "1em"  [#1:0x53ee+0x3]
-            @width: "0pt"  [#1:0x53fa+0x3]
-            #text: "Sentence 210 tells of golf juliet alpha delta golf juliet."  [#1:0x53ff+0x3a]
-        ▾ p: "Sentence 211 tells of bravo echo hotel kilo bravo echo hotel." — height="1em" width="0pt"  [#1:0x543d+0x5d]
-            @height: "1em"  [#1:0x5448+0x3]
-            @width: "0pt"  [#1:0x5454+0x3]
-            #text: "Sentence 211 tells of bravo echo hotel kilo bravo echo hotel."  [#1:0x5459+0x3d]
-        ▾ p: "Sentence 212 tells of india lima charlie foxtrot india lima charlie foxtrot." — height="1em" width="0pt"  [#1:0x549a+0x6c]
-            @height: "1em"  [#1:0x54a5+0x3]
-            @width: "0pt"  [#1:0x54b1+0x3]
-            #text: "Sentence 212 tells of india lima charlie foxtrot india lima charlie foxtrot."  [#1:0x54b6+0x4c]
-        ▾ p: "Sentence 213 tells of delta golf juliet alpha delta golf juliet alpha delta." — height="1em" width="0pt"  [#1:0x5506+0x6c]
-            @height: "1em"  [#1:0x5511+0x3]
-            @width: "0pt"  [#1:0x551d+0x3]
-            #text: "Sentence 213 tells of delta golf juliet alpha delta golf juliet alpha delta."  [#1:0x5522+0x4c]
-        ▾ p: "Sentence 214 tells of kilo bravo echo hotel kilo bravo echo hotel kilo bravo." — height="1em" width="0pt"  [#1:0x5572+0x6d]
-            @height: "1em"  [#1:0x557d+0x3]
-            @width: "0pt"  [#1:0x5589+0x3]
-            #text: "Sentence 214 tells of kilo bravo echo hotel kilo bravo echo hotel kilo bravo."  [#1:0x558e+0x4d]
-        ▾ p: "Sentence 215 tells of foxtrot india lima charlie foxtrot india." — height="1em" width="0pt"  [#1:0x55df+0x5f]
-            @height: "1em"  [#1:0x55ea+0x3]
-            @width: "0pt"  [#1:0x55f6+0x3]
-            #text: "Sentence 215 tells of foxtrot india lima charlie foxtrot india."  [#1:0x55fb+0x3f]
-        ▾ p: "Sentence 216 tells of alpha delta golf juliet alpha delta golf." — height="1em" width="0pt"  [#1:0x563e+0x5f]
-            @height: "1em"  [#1:0x5649+0x3]
-            @width: "0pt"  [#1:0x5655+0x3]
-            #text: "Sentence 216 tells of alpha delta golf juliet alpha delta golf."  [#1:0x565a+0x3f]
-        ▾ p: "Sentence 217 tells of hotel kilo bravo echo hotel kilo bravo echo." — height="1em" width="0pt"  [#1:0x569d+0x62]
-            @height: "1em"  [#1:0x56a8+0x3]
-            @width: "0pt"  [#1:0x56b4+0x3]
-            #text: "Sentence 217 tells of hotel kilo bravo echo hotel kilo bravo echo."  [#1:0x56b9+0x42]
-        ▾ p: "Sentence 218 tells of charlie foxtrot india lima charlie foxtrot india lima charlie." — height="1em" width="0pt"  [#1:0x56ff+0x74]
-            @height: "1em"  [#1:0x570a+0x3]
-            @width: "0pt"  [#1:0x5716+0x3]
-            #text: "Sentence 218 tells of charlie foxtrot india lima charlie foxtrot india lima charlie."  [#1:0x571b+0x54]
-        ▾ p: "Sentence 219 tells of juliet alpha delta golf juliet alpha delta golf juliet alpha." — height="1em" width="0pt"  [#1:0x5773+0x73]
-            @height: "1em"  [#1:0x577e+0x3]
-            @width: "0pt"  [#1:0x578a+0x3]
-            #text: "Sentence 219 tells of juliet alpha delta golf juliet alpha delta golf juliet alpha."  [#1:0x578f+0x53]
+        ▾ p: "Sentence 198 tells of golf juliet alpha delta golf juliet alpha delta golf." — height="1em" width="0pt"  [#1:0x4f03+0x6b]  (+3 nodes elided)
+        ▾ p: "Sentence 199 tells of bravo echo hotel kilo bravo echo hotel kilo bravo echo." — height="1em" width="0pt"  [#1:0x4f6e+0x6d]  (+3 nodes elided)
+        ▾ p: "Sentence 200 tells of india lima charlie foxtrot india lima." — height="1em" width="0pt"  [#1:0x4fdb+0x5c]  (+3 nodes elided)
+        ▾ p: "Sentence 201 tells of delta golf juliet alpha delta golf juliet." — height="1em" width="0pt"  [#1:0x5037+0x60]  (+3 nodes elided)
+        ▾ p: "Sentence 202 tells of kilo bravo echo hotel kilo bravo echo hotel." — height="1em" width="0pt"  [#1:0x5097+0x62]  (+3 nodes elided)
+        ▾ p: "Sentence 203 tells of foxtrot india lima charlie foxtrot india lima charlie foxtrot." — height="1em" width="0pt"  [#1:0x50f9+0x74]  (+3 nodes elided)
+        ▾ p: "Sentence 204 tells of alpha delta golf juliet alpha delta golf juliet alpha delta." — height="1em" width="0pt"  [#1:0x516d+0x72]  (+3 nodes elided)
+        ▾ p: "Sentence 205 tells of hotel kilo bravo echo hotel kilo." — height="1em" width="0pt"  [#1:0x51df+0x57]  (+3 nodes elided)
+        ▾ p: "Sentence 206 tells of charlie foxtrot india lima charlie foxtrot india." — height="1em" width="0pt"  [#1:0x5236+0x67]  (+3 nodes elided)
+        ▾ p: "Sentence 207 tells of juliet alpha delta golf juliet alpha delta golf." — height="1em" width="0pt"  [#1:0x529d+0x66]  (+3 nodes elided)
+        ▾ p: "Sentence 208 tells of echo hotel kilo bravo echo hotel kilo bravo echo." — height="1em" width="0pt"  [#1:0x5303+0x67]  (+3 nodes elided)
+        ▾ p: "Sentence 209 tells of lima charlie foxtrot india lima charlie foxtrot india lima charlie." — height="1em" width="0pt"  [#1:0x536a+0x79]  (+3 nodes elided)
+        ▾ p: "Sentence 210 tells of golf juliet alpha delta golf juliet." — height="1em" width="0pt"  [#1:0x53e3+0x5a]  (+3 nodes elided)
+        ▾ p: "Sentence 211 tells of bravo echo hotel kilo bravo echo hotel." — height="1em" width="0pt"  [#1:0x543d+0x5d]  (+3 nodes elided)
+        ▾ p: "Sentence 212 tells of india lima charlie foxtrot india lima charlie foxtrot." — height="1em" width="0pt"  [#1:0x549a+0x6c]  (+3 nodes elided)
+        ▾ p: "Sentence 213 tells of delta golf juliet alpha delta golf juliet alpha delta." — height="1em" width="0pt"  [#1:0x5506+0x6c]  (+3 nodes elided)
+        ▾ p: "Sentence 214 tells of kilo bravo echo hotel kilo bravo echo hotel kilo bravo." — height="1em" width="0pt"  [#1:0x5572+0x6d]  (+3 nodes elided)
+        ▾ p: "Sentence 215 tells of foxtrot india lima charlie foxtrot india." — height="1em" width="0pt"  [#1:0x55df+0x5f]  (+3 nodes elided)
+        ▾ p: "Sentence 216 tells of alpha delta golf juliet alpha delta golf." — height="1em" width="0pt"  [#1:0x563e+0x5f]  (+3 nodes elided)
+        ▾ p: "Sentence 217 tells of hotel kilo bravo echo hotel kilo bravo echo." — height="1em" width="0pt"  [#1:0x569d+0x62]  (+3 nodes elided)
+        ▾ p: "Sentence 218 tells of charlie foxtrot india lima charlie foxtrot india lima charlie." — height="1em" width="0pt"  [#1:0x56ff+0x74]  (+3 nodes elided)
+        ▾ p: "Sentence 219 tells of juliet alpha delta golf juliet alpha delta golf juliet alpha." — height="1em" width="0pt"  [#1:0x5773+0x73]  (+3 nodes elided)
           mbp:pagebreak  [#1:0x57e6+0x10]
           a  [#1:0x57f6+0x8]
           a  [#1:0x57ff+0x8]
