@@ -273,6 +273,9 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `pyc/filly.cpython-314.pyc` | CPython 3.14 (py_compile) | bytecode of the matching interpreter version |
 | `pyc/filly-hash.cpython-314.pyc` | CPython 3.14 (py_compile, checked hash-based) | bytecode of the matching interpreter version |
 | `pyc/interned.python27.pyc` | CPython 2.7.18 (Docker `python:2.7-slim`, `py_compile`) | reproduced byte-for-byte by `sh tests/data/pyc/make-py2.sh` (source mtime pinned to 2026-01-01 UTC): interned strings (`t`) and back-references (`R`); names checked against the source |
+| `pyc/tables.cpython-38.pyc` | CPython 3.8 (Docker `python:3.8-slim`, `py_compile`) | reproduced byte-for-byte by `sh tests/data/pyc/make-tables.sh` from `tests/data/pyc/tables.py` (source mtime pinned); decoded line tables checked entry by entry against `dis.findlinestarts` in the same image |
+| `pyc/tables.cpython-310.pyc` | CPython 3.10 (Docker `python:3.10-slim`, `py_compile`) | reproduced byte-for-byte by `sh tests/data/pyc/make-tables.sh` from `tests/data/pyc/tables.py` (source mtime pinned); decoded line tables checked entry by entry against `co_lines()` in the same image |
+| `pyc/tables.cpython-313.pyc` | CPython 3.13 (Docker `python:3.13-slim`, `py_compile`) | reproduced byte-for-byte by `sh tests/data/pyc/make-tables.sh` from `tests/data/pyc/tables.py` (source mtime pinned); decoded line and exception tables checked entry by entry against `co_positions()` and `dis._parse_exception_table` in the same image |
 | `mo/de.mo` | GNU gettext msgfmt | reproduced byte-for-byte: `msgunfmt de.mo \| msgfmt -` |
 | `terminfo/fillyfoal-term` | ncurses tic 6.0 (macOS) | reproduced byte-for-byte: `infocmp -x \| tic -x`; the terminal description itself is ours |
 
