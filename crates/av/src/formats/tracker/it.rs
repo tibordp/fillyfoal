@@ -1,6 +1,11 @@
 //! Impulse Tracker modules: `IMPM`, a 192-byte header, the order list,
 //! offset tables for instruments (`IMPI`), samples (`IMPS`) and patterns,
-//! and an optional song message.
+//! and an optional song message. OpenMPT appends its extensions after
+//! everything else: per-instrument properties (`XTPM`) and song
+//! properties (`STPM`), each a list of (code, 16-bit size, data); an MPTM
+//! file (OpenMPT's own format, the same header with "Compatible with"
+//! 0x888) then carries its sequences and tunings in OpenMPT's
+//! serialization (shown, not decoded).
 
 use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
@@ -8,8 +13,8 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::tracker::{
-    Cell, Note, Pointers, SampleData, letter_effect, named, order_node, pcm_bytes, pointed,
-    row_summary, schism_version,
+    Cell, Note, Pointers, SampleData, it214_len, letter_effect, named, order_node, pcm_bytes,
+    pointed, row_summary, schism_version,
 };
 use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::peek_text;
@@ -76,7 +81,11 @@ fn version(v: u16) -> String {
 /// reserved field).
 fn created_with(cwt: u16) -> String {
     match cwt >> 12 {
+        0 if is_mptm(cwt, 0) => format!("OpenMPT MPTM, format {}", version(cwt)),
         0 => version(cwt),
+        // Whether this was a compatibility export shows in the reserved
+        // field.
+        5 => format!("OpenMPT {}", version(cwt & 0x0fff)),
         1 if cwt & 0x0fff == 0x0fff => "Schism Tracker (dated in the reserved field)".to_owned(),
         _ => tracker(cwt, 0),
     }
@@ -85,8 +94,15 @@ fn created_with(cwt: u16) -> String {
 /// The tracker that wrote the file, from its "Created with" field and
 /// the reserved field after the message offset (libxmp's and OpenMPT's
 /// identification, abridged).
+/// An MPTM file (OpenMPT's `Load_it.cpp`): "Created with" 0x889 to 0xfff,
+/// or "Compatible with" 0x888.
+fn is_mptm(cwt: u16, cmwt: u16) -> bool {
+    cmwt == 0x0888 || (0x0889..=0x0fff).contains(&cwt)
+}
+
 fn tracker(cwt: u16, reserved: u32) -> String {
     match cwt >> 12 {
+        0 if is_mptm(cwt, 0) => "OpenMPT".to_owned(),
         0 if cwt == 0x0888 => "OpenMPT 1.17".to_owned(),
         0 if cwt >> 8 == 0 => "unmo3".to_owned(),
         0 if reserved == u32::from_le_bytes(*b"CHBI") => "Chibi Tracker".to_owned(),
@@ -267,10 +283,18 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let message = peek_text(&cx, span, span.len).await?.replace('\r', "\n");
         cx.emit(Node::new("Message").span(span).value(text(message)));
     }
+    let end = known_end(&cx, file, &h, at, &instruments, &samples, &patterns).await;
+    if let Some(node) = openmpt_extensions(&cx, file, end, h.instruments).await? {
+        cx.emit(node);
+    }
     let channels = h.pan.iter().filter(|&&p| p & 0x80 == 0).count();
+    let kind = if is_mptm(h.created, h.compatible) {
+        "MPTM".to_owned()
+    } else {
+        format!("IT {}", version(h.compatible))
+    };
     cx.annotate(format!(
-        "IT {}, {}, {channels_channel}, {}, {}, {}, {} — {}",
-        version(h.compatible),
+        "{kind}, {}, {channels_channel}, {}, {}, {}, {} — {}",
         tracker(h.created, h.reserved),
         plural(h.orders, "order"),
         plural(h.patterns, "pattern"),
@@ -279,6 +303,219 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         named(&h.name),
         channels_channel = plural(channels, "channel")
     ));
+    Ok(())
+}
+
+/// Most entries of each table the end of the known data is computed from.
+const MAX_TABLE: usize = 4096;
+/// An IT 2.x instrument (`IMPI`, with its envelopes).
+const INSTRUMENT_SIZE: u64 = 554;
+
+/// Where the data the header accounts for ends: the tables after the
+/// header (and the edit history and MIDI configuration, `at`), the
+/// message, instruments, patterns and sample data. OpenMPT's extensions
+/// start there.
+async fn known_end(
+    cx: &Cx,
+    file: Span,
+    h: &Header,
+    at: u64,
+    instruments: &Pointers,
+    samples: &Pointers,
+    patterns: &Pointers,
+) -> u64 {
+    let mut end = at;
+    if h.special & 1 != 0 {
+        end = end.max(u64::from(h.message_offset).saturating_add(h.message_length.into()));
+    }
+    let pointers = |data: &[u8]| -> Vec<u64> {
+        data.chunks(4)
+            .take(MAX_TABLE)
+            .filter_map(|c| u32_le(c, 0).map(u64::from))
+            .filter(|&p| p != 0)
+            .collect()
+    };
+    if let Ok(t) = cx.read_avail(instruments.table).await {
+        for p in pointers(&t) {
+            end = end.max(p.saturating_add(INSTRUMENT_SIZE));
+        }
+    }
+    if let Ok(t) = cx.read_avail(patterns.table).await {
+        for p in pointers(&t) {
+            if let Ok(head) = cx.read_avail(file.sub(p, 2)).await {
+                let len = u64::from(u16_le(&head, 0).unwrap_or(0));
+                end = end.max(p.saturating_add(8).saturating_add(len));
+            }
+        }
+    }
+    if let Ok(t) = cx.read_avail(samples.table).await {
+        for p in pointers(&t) {
+            end = end.max(p.saturating_add(Sample::SIZE));
+            let span = file.sub(p, Sample::SIZE);
+            let Ok(s) = parse(cx, span, LE, &(), Sample::layout).await else {
+                continue;
+            };
+            match sample_data(&s, file) {
+                Some(SampleData::Plain(span, _)) => {
+                    let rel = span.offset.saturating_sub(file.offset);
+                    end = end.max(rel.saturating_add(span.len));
+                }
+                Some(SampleData::It214 {
+                    region,
+                    frames,
+                    sixteen,
+                    stereo,
+                    ..
+                }) => {
+                    let len = it214_len(cx, region, frames, sixteen, stereo).await;
+                    let rel = region.offset.saturating_sub(file.offset);
+                    end = end.max(rel.saturating_add(len));
+                }
+                None => {}
+            }
+        }
+    }
+    end
+}
+
+/// The OpenMPT extension blocks at `end`, if there are any.
+async fn openmpt_extensions(
+    cx: &Cx,
+    file: Span,
+    end: u64,
+    instruments: u16,
+) -> Result<Option<Node>> {
+    let rest = file.tail(end);
+    let magic = cx.read_avail(rest.sub(0, 4)).await?;
+    if magic.starts_with(b"228") {
+        return Ok(Some(mptm_node(rest)));
+    }
+    if magic != b"XTPM" && magic != b"STPM" {
+        return Ok(None);
+    }
+    Ok(Some(
+        Node::new("OpenMPT extensions")
+            .span(rest)
+            .desc("Properties OpenMPT keeps beyond the IT format, in (code, size, data) entries")
+            .lazy(extensions, (rest, instruments)),
+    ))
+}
+
+fn mptm_node(span: Span) -> Node {
+    Node::new("MPTM data").span(span).desc(
+        "Sequences, tunings and other MPTM data in OpenMPT's own serialization (\"228\"); not decoded",
+    )
+}
+
+/// Song property codes OpenMPT writes (`SaveExtendedSongProperties`), as
+/// stored (byte-reversed, except AUTH and CCOL), with what they hold.
+const SONG_PROPERTIES: &[(&[u8; 4], &str)] = &[
+    (b"...C", "Number of channels"),
+    (b"..TD", "Default tempo"),
+    (b".BPR", "Rows per beat"),
+    (b".MPR", "Rows per measure"),
+    (b".VWC", "Created with OpenMPT version"),
+    (b"VWSL", "Last saved with OpenMPT version"),
+    (b".APS", "Sample pre-amplification"),
+    (b"VTSV", "Synth (VSTi) volume"),
+    (b".VGD", "Default global volume"),
+    (b"..PR", "Restart position"),
+    (b".MMP", "Mix levels"),
+    (b"..MT", "Tempo mode"),
+    (b".FSM", "Playback compatibility flags"),
+    (b"AMIM", "MIDI mapping"),
+    (b"SnhC", "Channel settings"),
+    (b"SEUC", "Cue points"),
+    (b"GNWS", "Tempo swing"),
+    (b"PMSR", "Resampling mode"),
+    (b"AUTH", "Artist"),
+    (b"CCOL", "Channel colours"),
+];
+
+fn printable(code: &[u8]) -> bool {
+    code.iter().all(|&b| (0x20..0x7f).contains(&b))
+}
+
+/// The XTPM/STPM entries: a 4-byte code, a 16-bit size, then the data
+/// (once per instrument after XTPM). An MPTM's serialized data follows.
+async fn extensions(cx: Cx, (span, instruments): (Span, u16)) -> Result<()> {
+    let mut pos = 0u64;
+    let mut per = 1u64;
+    while pos.saturating_add(4) <= span.len {
+        cx.checkpoint().await;
+        let head = cx.read_avail(span.sub(pos, 6)).await?;
+        let code = head.get(..4).unwrap_or_default();
+        if code == b"XTPM" || code == b"STPM" {
+            let instrument = code == b"XTPM";
+            per = if instrument {
+                u64::from(instruments).max(1)
+            } else {
+                1
+            };
+            cx.push(
+                Node::new(crate::text::latin1(code))
+                    .span(span.sub(pos, 4))
+                    .desc(if instrument {
+                        "Instrument properties follow: each entry's data repeats per instrument"
+                    } else {
+                        "Song properties follow"
+                    }),
+            )
+            .await;
+            pos = pos.saturating_add(4);
+            continue;
+        }
+        let size = u64::from(u16_le(&head, 4).unwrap_or(0));
+        let total = size.saturating_mul(per);
+        if !printable(code)
+            || head.len() < 6
+            || pos.saturating_add(6).saturating_add(total) > span.len
+        {
+            break;
+        }
+        let entry = span.sub(pos, total.saturating_add(6));
+        let data = span.sub(pos.saturating_add(6), total);
+        let mut node = Node::new(crate::text::latin1(code)).span(entry);
+        if let Some((_, m)) = SONG_PROPERTIES.iter().find(|(c, _)| c.as_slice() == code) {
+            node = node.desc(*m);
+        }
+        let bytes = cx.read_avail(data.sub(0, 64)).await?;
+        node = match (code, size) {
+            (b"AUTH", _) => node.value(text(crate::text::latin1(&bytes))),
+            (b"VWSL" | b".VWC", 4) => {
+                let v = u32_le(&bytes, 0).unwrap_or(0);
+                node.value(crate::formats::util::val::hex(v, 32))
+                    .summary(format!(
+                        "{:x}.{:02x}.{:02x}.{:02x}",
+                        v >> 24,
+                        (v >> 16) & 0xff,
+                        (v >> 8) & 0xff,
+                        v & 0xff
+                    ))
+            }
+            (_, 1 | 2 | 4) if per == 1 => {
+                let v = bytes
+                    .iter()
+                    .take(crate::bytes::to_usize(size))
+                    .rev()
+                    .fold(0u64, |a, &b| a.wrapping_shl(8) | u64::from(b));
+                node.value(crate::formats::util::val::uint(v, 32))
+            }
+            _ => node.summary(format!("{total} bytes")),
+        };
+        cx.push(node).await;
+        pos = pos.saturating_add(6).saturating_add(total);
+    }
+    if pos < span.len {
+        let rest = span.tail(pos);
+        let head = cx.read_avail(rest.sub(0, 3)).await?;
+        cx.push(if head == b"228" {
+            mptm_node(rest)
+        } else {
+            Node::new("Trailing data").span(rest)
+        })
+        .await;
+    }
     Ok(())
 }
 

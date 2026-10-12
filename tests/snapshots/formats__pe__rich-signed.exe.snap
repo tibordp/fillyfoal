@@ -298,6 +298,8 @@ expression: "common::explore(&display_name(&path), &data)"
                     ▾ Dss-Sig-Value — SEQUENCE  [0xc75+0x46]
                         r: 59 84 43 d5 5e 1c 0d e0 73 f1 2e 06 06 8a 51 76 …  |Y.C.^...s.....Qv| — INTEGER, 255-bit  [0xc77+0x22]
                         s: 22 81 c2 b6 0e 5e ac cb 35 6f 21 08 13 29 59 af …  |"....^..5o!..)Y.| — INTEGER, 254-bit  [0xc99+0x22]
+      ▾ Image Hash
+          ! unsupported: the signature has no SpcIndirectDataContent digest
       Padding — 5 bytes  [0xcbb+0x5]
   ▾ Debug Directory — REPRO  [0x600+0x1c]
     ▾ REPRO — no data  [0x600+0x1c]

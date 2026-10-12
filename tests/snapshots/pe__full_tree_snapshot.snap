@@ -395,6 +395,8 @@ expression: host.render()
                 ! truncated: needed 0x32 bytes at 0xe0c, only 0x4 available [0xe0c+0x32]
               ▾ SEQUENCE  [0xe0e+0x2]
                   ! truncated: needed 0x32 bytes at 0xe0e, only 0x2 available [0xe0e+0x32]
+      ▾ Image Hash
+          ! unsupported: the signature has no SpcIndirectDataContent digest
   ▾ Debug Directory — CODEVIEW  [0x940+0x1c]
     ▾ CODEVIEW — fixture.pdb  [0x940+0x1c]
         Characteristics: 0x0  [0x940+0x4]

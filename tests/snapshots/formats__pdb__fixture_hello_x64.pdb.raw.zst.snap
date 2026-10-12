@@ -1,0 +1,1514 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ fixture_hello_x64.pdb — PDB VC70, GUID {d5e0df05-018a-42b5-a26e-4983145dc530}, age 1, x64  [0x0+0x75000]
+  ▾ Superblock  [0x0+0x38]
+      Magic: "Microsoft C/C++ MSF 7.00\r\n\u{1a}DS"  [0x0+0x20]
+      Block size: 4096  [0x20+0x4]
+      Free block map block: 1  [0x24+0x4]
+      Number of blocks: 117  [0x28+0x4]
+      Stream directory size: 672  [0x2c+0x4]
+      Unknown: 0  [0x30+0x4]
+      Stream directory block map address: 115  [0x34+0x4]
+    Stream directory — 61 streams  [#1:0x0+0x2a0]
+  ▾ Streams — 61 streams
+      Stream 0: Old directory — 48 bytes  [#2:0x0+0x30]
+    ▾ Stream 1: PDB info — 161 bytes  [#3:0x0+0xa1]
+        Version: VC70 (0x1312e94)  [#3:0x0+0x4]
+        Signature: 0x6acce94a  [#3:0x4+0x4]
+        Age: 1  [#3:0x8+0x4]
+        GUID: {d5e0df05-018a-42b5-a26e-4983145dc530}  [#3:0xc+0x10]
+        Named stream map: string buffer size: 61  [#3:0x1c+0x4]
+      ▾ Names  [#3:0x20+0x3d]
+          0x0: "/LinkInfo"  [#3:0x20+0xa]
+          0xa: "/TMCache"  [#3:0x2a+0x9]
+          0x13: "/names"  [#3:0x33+0x7]
+          0x1a: "/src/headerblock"  [#3:0x3a+0x11]
+          0x2b: "/UDTSRCLINEUNDONE"  [#3:0x4b+0x12]
+      ▾ Named stream map — 5 streams  [#3:0x5d+0x3c]
+          /UDTSRCLINEUNDONE: 59 — stream 59  [#3:0x71+0x8]
+          /src/headerblock: 57 — stream 57  [#3:0x79+0x8]
+          /LinkInfo: 5 — stream 5  [#3:0x81+0x8]
+          /TMCache: 6 — stream 6  [#3:0x89+0x8]
+          /names: 7 — stream 7  [#3:0x91+0x8]
+        Feature: VC140 (0x13351dc)  [#3:0x9d+0x4]
+    ▾ Stream 2: Type info (TPI) — 36580 bytes  [#4:0x0+0x8ee4]
+      ▾ Header  [#4:0x0+0x38]
+          Version: V80 (0x131ca0b)  [#4:0x0+0x4]
+          Header size: 56  [#4:0x4+0x4]
+          First type index: 0x1000  [#4:0x8+0x4]
+          End type index: 0x12c7  [#4:0xc+0x4]
+          Type record bytes: 36524  [#4:0x10+0x4]
+          Hash stream: 58  [#4:0x14+0x2]
+          Auxiliary hash stream: 65535  [#4:0x16+0x2]
+          Hash key size: 4  [#4:0x18+0x4]
+          Hash buckets: 262143  [#4:0x1c+0x4]
+          Hash values offset: 0x0  [#4:0x20+0x4]
+          Hash values size: 2844  [#4:0x24+0x4]
+          Index offsets offset: 0xb1c  [#4:0x28+0x4]
+          Index offsets size: 40  [#4:0x2c+0x4]
+          Hash adjusters offset: 0xb44  [#4:0x30+0x4]
+          Hash adjusters size: 0  [#4:0x34+0x4]
+      ▾ Type records — 711 records, 0x1000 to 0x12c6  [#4:0x38+0x8eac]
+        ▾ 0x1000 LF_FIELDLIST — 4 members  [#4:0x38+0xbc]
+            Length: 186  [#4:0x38+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x3a+0x2]
+          ▾ LF_ENUMERATE JOB_OBJECT_NET_RATE_CONTROL_ENABLE — = 1, public  [#4:0x3c+0x29]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x3c+0x2]
+              Attributes: 0x3 [public]  [#4:0x3e+0x2]
+              Value: 1  [#4:0x40+0x2]
+              Name: "JOB_OBJECT_NET_RATE_CONTROL_ENABLE"  [#4:0x42+0x23]
+          ▾ LF_ENUMERATE JOB_OBJECT_NET_RATE_CONTROL_MAX_BANDWIDTH — = 2, public  [#4:0x68+0x30]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x68+0x2]
+              Attributes: 0x3 [public]  [#4:0x6a+0x2]
+              Value: 2  [#4:0x6c+0x2]
+              Name: "JOB_OBJECT_NET_RATE_CONTROL_MAX_BANDWIDTH"  [#4:0x6e+0x2a]
+          ▾ LF_ENUMERATE JOB_OBJECT_NET_RATE_CONTROL_DSCP_TAG — = 4, public  [#4:0x98+0x2b]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x98+0x2]
+              Attributes: 0x3 [public]  [#4:0x9a+0x2]
+              Value: 4  [#4:0x9c+0x2]
+              Name: "JOB_OBJECT_NET_RATE_CONTROL_DSCP_TAG"  [#4:0x9e+0x25]
+          ▾ LF_ENUMERATE JOB_OBJECT_NET_RATE_CONTROL_VALID_FLAGS — = 7, public  [#4:0xc4+0x2e]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xc4+0x2]
+              Attributes: 0x3 [public]  [#4:0xc6+0x2]
+              Value: 7  [#4:0xc8+0x2]
+              Name: "JOB_OBJECT_NET_RATE_CONTROL_VALID_FLAGS"  [#4:0xca+0x28]
+        ▾ 0x1001 LF_MODIFIER — const char  [#4:0xf4+0xc]
+            Length: 10  [#4:0xf4+0x2]
+            Kind: LF_MODIFIER (0x1001)  [#4:0xf6+0x2]
+            Modified type: 0x70 — char  [#4:0xf8+0x4]
+            Modifiers: 0x1 [const]  [#4:0xfc+0x2]
+        ▾ 0x1002 LF_ARRAY — 0x1001[], 40 bytes  [#4:0x100+0x10]
+            Length: 14  [#4:0x100+0x2]
+            Kind: LF_ARRAY (0x1503)  [#4:0x102+0x2]
+            Element type: 0x1001  [#4:0x104+0x4]
+            Index type: 0x23 — unsigned __int64  [#4:0x108+0x4]
+            Size: 40  [#4:0x10c+0x2]
+            Name: ""  [#4:0x10e+0x1]
+        ▾ 0x1003 LF_STRUCTURE — "__crt_locale_pointers", forward reference  [#4:0x110+0x48]
+            Length: 70  [#4:0x110+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0x112+0x2]
+            Member count: 0  [#4:0x114+0x2]
+            Options: 0x280 [forward ref | has unique name]  [#4:0x116+0x2]
+            Field list: 0x0 — <no type>  [#4:0x118+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0x11c+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0x120+0x4]
+            Size: 0  [#4:0x124+0x2]
+            Name: "__crt_locale_pointers"  [#4:0x126+0x16]
+            Unique name: ".?AU__crt_locale_pointers@@"  [#4:0x13c+0x1c]
+        ▾ 0x1004 LF_POINTER — pointer to 0x1003  [#4:0x158+0xc]
+            Length: 10  [#4:0x158+0x2]
+            Kind: LF_POINTER (0x1002)  [#4:0x15a+0x2]
+            Referent type: 0x1003  [#4:0x15c+0x4]
+            Attributes: 0x1000c — near64, pointer, size 8  [#4:0x160+0x4]
+        ▾ 0x1005 LF_FIELDLIST — 1 members  [#4:0x164+0x1c]
+            Length: 26  [#4:0x164+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x166+0x2]
+          ▾ LF_MEMBER _Placeholder — void*, offset 0, public  [#4:0x168+0x17]
+              Kind: LF_MEMBER (0x150d)  [#4:0x168+0x2]
+              Attributes: 0x3 [public]  [#4:0x16a+0x2]
+              Type: 0x603 — void*  [#4:0x16c+0x4]
+              Offset: 0  [#4:0x170+0x2]
+              Name: "_Placeholder"  [#4:0x172+0xd]
+        ▾ 0x1006 LF_STRUCTURE — "_iobuf", 8 bytes, 1 members in 0x1005  [#4:0x180+0x2c]
+            Length: 42  [#4:0x180+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0x182+0x2]
+            Member count: 1  [#4:0x184+0x2]
+            Options: 0x200 [has unique name]  [#4:0x186+0x2]
+            Field list: 0x1005  [#4:0x188+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0x18c+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0x190+0x4]
+            Size: 8  [#4:0x194+0x2]
+            Name: "_iobuf"  [#4:0x196+0x7]
+            Unique name: ".?AU_iobuf@@"  [#4:0x19d+0xd]
+        ▾ 0x1007 LF_ENUM — "JOB_OBJECT_NET_RATE_CONTROL_FLAGS": int, 4 enumerators in 0x1000  [#4:0x1ac+0x5c]
+            Length: 90  [#4:0x1ac+0x2]
+            Kind: LF_ENUM (0x1507)  [#4:0x1ae+0x2]
+            Member count: 4  [#4:0x1b0+0x2]
+            Options: 0x200 [has unique name]  [#4:0x1b2+0x2]
+            Underlying type: 0x74 — int  [#4:0x1b4+0x4]
+            Field list: 0x1000  [#4:0x1b8+0x4]
+            Name: "JOB_OBJECT_NET_RATE_CONTROL_FLAGS"  [#4:0x1bc+0x22]
+            Unique name: ".?AW4JOB_OBJECT_NET_RATE_CONTROL_FLAGS@@"  [#4:0x1de+0x29]
+        ▾ 0x1008 LF_FIELDLIST — 5 members  [#4:0x208+0x108]
+            Length: 262  [#4:0x208+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x20a+0x2]
+          ▾ LF_ENUMERATE JOB_OBJECT_IO_RATE_CONTROL_ENABLE — = 1, public  [#4:0x20c+0x28]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x20c+0x2]
+              Attributes: 0x3 [public]  [#4:0x20e+0x2]
+              Value: 1  [#4:0x210+0x2]
+              Name: "JOB_OBJECT_IO_RATE_CONTROL_ENABLE"  [#4:0x212+0x22]
+          ▾ LF_ENUMERATE JOB_OBJECT_IO_RATE_CONTROL_STANDALONE_VOLUME — = 2, public  [#4:0x234+0x33]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x234+0x2]
+              Attributes: 0x3 [public]  [#4:0x236+0x2]
+              Value: 2  [#4:0x238+0x2]
+              Name: "JOB_OBJECT_IO_RATE_CONTROL_STANDALONE_VOLUME"  [#4:0x23a+0x2d]
+          ▾ LF_ENUMERATE JOB_OBJECT_IO_RATE_CONTROL_FORCE_UNIT_ACCESS_ALL — = 4, public  [#4:0x268+0x37]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x268+0x2]
+              Attributes: 0x3 [public]  [#4:0x26a+0x2]
+              Value: 4  [#4:0x26c+0x2]
+              Name: "JOB_OBJECT_IO_RATE_CONTROL_FORCE_UNIT_ACCESS_ALL"  [#4:0x26e+0x31]
+          ▾ LF_ENUMERATE JOB_OBJECT_IO_RATE_CONTROL_FORCE_UNIT_ACCESS_ON_SOFT_CAP — = 8, public  [#4:0x2a0+0x3f]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x2a0+0x2]
+              Attributes: 0x3 [public]  [#4:0x2a2+0x2]
+              Value: 8  [#4:0x2a4+0x2]
+              Name: "JOB_OBJECT_IO_RATE_CONTROL_FORCE_UNIT_ACCESS_ON_SOFT_CAP"  [#4:0x2a6+0x39]
+          ▾ LF_ENUMERATE JOB_OBJECT_IO_RATE_CONTROL_VALID_FLAGS — = 15, public  [#4:0x2e0+0x2d]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x2e0+0x2]
+              Attributes: 0x3 [public]  [#4:0x2e2+0x2]
+              Value: 15  [#4:0x2e4+0x2]
+              Name: "JOB_OBJECT_IO_RATE_CONTROL_VALID_FLAGS"  [#4:0x2e6+0x27]
+        ▾ 0x1009 LF_ENUM — "JOB_OBJECT_IO_RATE_CONTROL_FLAGS": int, 5 enumerators in 0x1008  [#4:0x310+0x5c]
+            Length: 90  [#4:0x310+0x2]
+            Kind: LF_ENUM (0x1507)  [#4:0x312+0x2]
+            Member count: 5  [#4:0x314+0x2]
+            Options: 0x200 [has unique name]  [#4:0x316+0x2]
+            Underlying type: 0x74 — int  [#4:0x318+0x4]
+            Field list: 0x1008  [#4:0x31c+0x4]
+            Name: "JOB_OBJECT_IO_RATE_CONTROL_FLAGS"  [#4:0x320+0x21]
+            Unique name: ".?AW4JOB_OBJECT_IO_RATE_CONTROL_FLAGS@@"  [#4:0x341+0x28]
+        ▾ 0x100a LF_FIELDLIST — 3 members  [#4:0x36c+0x40]
+            Length: 62  [#4:0x36c+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x36e+0x2]
+          ▾ LF_ENUMERATE uninitialized — = 0, public  [#4:0x370+0x14]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x370+0x2]
+              Attributes: 0x3 [public]  [#4:0x372+0x2]
+              Value: 0  [#4:0x374+0x2]
+              Name: "uninitialized"  [#4:0x376+0xe]
+          ▾ LF_ENUMERATE initializing — = 1, public  [#4:0x384+0x13]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x384+0x2]
+              Attributes: 0x3 [public]  [#4:0x386+0x2]
+              Value: 1  [#4:0x388+0x2]
+              Name: "initializing"  [#4:0x38a+0xd]
+          ▾ LF_ENUMERATE initialized — = 2, public  [#4:0x398+0x12]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x398+0x2]
+              Attributes: 0x3 [public]  [#4:0x39a+0x2]
+              Value: 2  [#4:0x39c+0x2]
+              Name: "initialized"  [#4:0x39e+0xc]
+        ▾ 0x100b LF_ENUM — "__scrt_native_startup_state": int, 3 enumerators in 0x100a  [#4:0x3ac+0x50]
+            Length: 78  [#4:0x3ac+0x2]
+            Kind: LF_ENUM (0x1507)  [#4:0x3ae+0x2]
+            Member count: 3  [#4:0x3b0+0x2]
+            Options: 0x200 [has unique name]  [#4:0x3b2+0x2]
+            Underlying type: 0x74 — int  [#4:0x3b4+0x4]
+            Field list: 0x100a  [#4:0x3b8+0x4]
+            Name: "__scrt_native_startup_state"  [#4:0x3bc+0x1c]
+            Unique name: ".?AW4__scrt_native_startup_state@@"  [#4:0x3d8+0x23]
+        ▾ 0x100c LF_FIELDLIST — 6 members  [#4:0x3fc+0x15c]
+            Length: 346  [#4:0x3fc+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x3fe+0x2]
+          ▾ LF_ENUMERATE DISPLAYCONFIG_SCANLINE_ORDERING_UNSPECIFIED — = 0, public  [#4:0x400+0x32]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x400+0x2]
+              Attributes: 0x3 [public]  [#4:0x402+0x2]
+              Value: 0  [#4:0x404+0x2]
+              Name: "DISPLAYCONFIG_SCANLINE_ORDERING_UNSPECIFIED"  [#4:0x406+0x2c]
+          ▾ LF_ENUMERATE DISPLAYCONFIG_SCANLINE_ORDERING_PROGRESSIVE — = 1, public  [#4:0x434+0x32]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x434+0x2]
+              Attributes: 0x3 [public]  [#4:0x436+0x2]
+              Value: 1  [#4:0x438+0x2]
+              Name: "DISPLAYCONFIG_SCANLINE_ORDERING_PROGRESSIVE"  [#4:0x43a+0x2c]
+          ▾ LF_ENUMERATE DISPLAYCONFIG_SCANLINE_ORDERING_INTERLACED — = 2, public  [#4:0x468+0x31]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x468+0x2]
+              Attributes: 0x3 [public]  [#4:0x46a+0x2]
+              Value: 2  [#4:0x46c+0x2]
+              Name: "DISPLAYCONFIG_SCANLINE_ORDERING_INTERLACED"  [#4:0x46e+0x2b]
+          ▾ LF_ENUMERATE DISPLAYCONFIG_SCANLINE_ORDERING_INTERLACED_UPPERFIELDFIRST — = 2, public  [#4:0x49c+0x41]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x49c+0x2]
+              Attributes: 0x3 [public]  [#4:0x49e+0x2]
+              Value: 2  [#4:0x4a0+0x2]
+              Name: "DISPLAYCONFIG_SCANLINE_ORDERING_INTERLACED_UPPERFIELDFIRST"  [#4:0x4a2+0x3b]
+          ▾ LF_ENUMERATE DISPLAYCONFIG_SCANLINE_ORDERING_INTERLACED_LOWERFIELDFIRST — = 3, public  [#4:0x4e0+0x41]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x4e0+0x2]
+              Attributes: 0x3 [public]  [#4:0x4e2+0x2]
+              Value: 3  [#4:0x4e4+0x2]
+              Name: "DISPLAYCONFIG_SCANLINE_ORDERING_INTERLACED_LOWERFIELDFIRST"  [#4:0x4e6+0x3b]
+          ▾ LF_ENUMERATE DISPLAYCONFIG_SCANLINE_ORDERING_FORCE_UINT32 — = -1, public  [#4:0x524+0x34]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x524+0x2]
+              Attributes: 0x3 [public]  [#4:0x526+0x2]
+              Value: -1  [#4:0x528+0x3]
+              Name: "DISPLAYCONFIG_SCANLINE_ORDERING_FORCE_UINT32"  [#4:0x52b+0x2d]
+        ▾ 0x100d LF_ENUM — "DISPLAYCONFIG_SCANLINE_ORDERING": int, 6 enumerators in 0x100c  [#4:0x558+0x58]
+            Length: 86  [#4:0x558+0x2]
+            Kind: LF_ENUM (0x1507)  [#4:0x55a+0x2]
+            Member count: 6  [#4:0x55c+0x2]
+            Options: 0x200 [has unique name]  [#4:0x55e+0x2]
+            Underlying type: 0x74 — int  [#4:0x560+0x4]
+            Field list: 0x100c  [#4:0x564+0x4]
+            Name: "DISPLAYCONFIG_SCANLINE_ORDERING"  [#4:0x568+0x20]
+            Unique name: ".?AW4DISPLAYCONFIG_SCANLINE_ORDERING@@"  [#4:0x588+0x27]
+        ▾ 0x100e LF_FIELDLIST — 3 members  [#4:0x5b0+0x48]
+            Length: 70  [#4:0x5b0+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x5b2+0x2]
+          ▾ LF_ENUMERATE _crt_unknown_app — = 0, public  [#4:0x5b4+0x17]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x5b4+0x2]
+              Attributes: 0x3 [public]  [#4:0x5b6+0x2]
+              Value: 0  [#4:0x5b8+0x2]
+              Name: "_crt_unknown_app"  [#4:0x5ba+0x11]
+          ▾ LF_ENUMERATE _crt_console_app — = 1, public  [#4:0x5cc+0x17]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x5cc+0x2]
+              Attributes: 0x3 [public]  [#4:0x5ce+0x2]
+              Value: 1  [#4:0x5d0+0x2]
+              Name: "_crt_console_app"  [#4:0x5d2+0x11]
+          ▾ LF_ENUMERATE _crt_gui_app — = 2, public  [#4:0x5e4+0x13]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x5e4+0x2]
+              Attributes: 0x3 [public]  [#4:0x5e6+0x2]
+              Value: 2  [#4:0x5e8+0x2]
+              Name: "_crt_gui_app"  [#4:0x5ea+0xd]
+        ▾ 0x100f LF_ENUM — "_crt_app_type": int, 3 enumerators in 0x100e  [#4:0x5f8+0x34]
+            Length: 50  [#4:0x5f8+0x2]
+            Kind: LF_ENUM (0x1507)  [#4:0x5fa+0x2]
+            Member count: 3  [#4:0x5fc+0x2]
+            Options: 0x200 [has unique name]  [#4:0x5fe+0x2]
+            Underlying type: 0x74 — int  [#4:0x600+0x4]
+            Field list: 0x100e  [#4:0x604+0x4]
+            Name: "_crt_app_type"  [#4:0x608+0xe]
+            Unique name: ".?AW4_crt_app_type@@"  [#4:0x616+0x15]
+        ▾ 0x1010 LF_FIELDLIST — 5 members  [#4:0x62c+0x80]
+            Length: 126  [#4:0x62c+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x62e+0x2]
+          ▾ LF_ENUMERATE PowerUserPresent — = 0, public  [#4:0x630+0x17]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x630+0x2]
+              Attributes: 0x3 [public]  [#4:0x632+0x2]
+              Value: 0  [#4:0x634+0x2]
+              Name: "PowerUserPresent"  [#4:0x636+0x11]
+          ▾ LF_ENUMERATE PowerUserNotPresent — = 1, public  [#4:0x648+0x1a]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x648+0x2]
+              Attributes: 0x3 [public]  [#4:0x64a+0x2]
+              Value: 1  [#4:0x64c+0x2]
+              Name: "PowerUserNotPresent"  [#4:0x64e+0x14]
+          ▾ LF_ENUMERATE PowerUserInactive — = 2, public  [#4:0x664+0x18]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x664+0x2]
+              Attributes: 0x3 [public]  [#4:0x666+0x2]
+              Value: 2  [#4:0x668+0x2]
+              Name: "PowerUserInactive"  [#4:0x66a+0x12]
+          ▾ LF_ENUMERATE PowerUserMaximum — = 3, public  [#4:0x67c+0x17]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x67c+0x2]
+              Attributes: 0x3 [public]  [#4:0x67e+0x2]
+              Value: 3  [#4:0x680+0x2]
+              Name: "PowerUserMaximum"  [#4:0x682+0x11]
+          ▾ LF_ENUMERATE PowerUserInvalid — = 3, public  [#4:0x694+0x17]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x694+0x2]
+              Attributes: 0x3 [public]  [#4:0x696+0x2]
+              Value: 3  [#4:0x698+0x2]
+              Name: "PowerUserInvalid"  [#4:0x69a+0x11]
+        ▾ 0x1011 LF_ENUM — "_USER_ACTIVITY_PRESENCE": int, 5 enumerators in 0x1010  [#4:0x6ac+0x48]
+            Length: 70  [#4:0x6ac+0x2]
+            Kind: LF_ENUM (0x1507)  [#4:0x6ae+0x2]
+            Member count: 5  [#4:0x6b0+0x2]
+            Options: 0x200 [has unique name]  [#4:0x6b2+0x2]
+            Underlying type: 0x74 — int  [#4:0x6b4+0x4]
+            Field list: 0x1010  [#4:0x6b8+0x4]
+            Name: "_USER_ACTIVITY_PRESENCE"  [#4:0x6bc+0x18]
+            Unique name: ".?AW4_USER_ACTIVITY_PRESENCE@@"  [#4:0x6d4+0x1f]
+        ▾ 0x1012 LF_FIELDLIST — 10 members  [#4:0x6f4+0x108]
+            Length: 262  [#4:0x6f4+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x6f6+0x2]
+          ▾ LF_ENUMERATE PowerLimitContinuous — = 0, public  [#4:0x6f8+0x1b]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x6f8+0x2]
+              Attributes: 0x3 [public]  [#4:0x6fa+0x2]
+              Value: 0  [#4:0x6fc+0x2]
+              Name: "PowerLimitContinuous"  [#4:0x6fe+0x15]
+          ▾ LF_ENUMERATE PowerLimitType1 — = 0, public  [#4:0x714+0x16]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x714+0x2]
+              Attributes: 0x3 [public]  [#4:0x716+0x2]
+              Value: 0  [#4:0x718+0x2]
+              Name: "PowerLimitType1"  [#4:0x71a+0x10]
+          ▾ LF_ENUMERATE PowerLimitBurst — = 1, public  [#4:0x72c+0x16]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x72c+0x2]
+              Attributes: 0x3 [public]  [#4:0x72e+0x2]
+              Value: 1  [#4:0x730+0x2]
+              Name: "PowerLimitBurst"  [#4:0x732+0x10]
+          ▾ LF_ENUMERATE PowerLimitType2 — = 1, public  [#4:0x744+0x16]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x744+0x2]
+              Attributes: 0x3 [public]  [#4:0x746+0x2]
+              Value: 1  [#4:0x748+0x2]
+              Name: "PowerLimitType2"  [#4:0x74a+0x10]
+          ▾ LF_ENUMERATE PowerLimitRapid — = 2, public  [#4:0x75c+0x16]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x75c+0x2]
+              Attributes: 0x3 [public]  [#4:0x75e+0x2]
+              Value: 2  [#4:0x760+0x2]
+              Name: "PowerLimitRapid"  [#4:0x762+0x10]
+          ▾ LF_ENUMERATE PowerLimitType3 — = 2, public  [#4:0x774+0x16]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x774+0x2]
+              Attributes: 0x3 [public]  [#4:0x776+0x2]
+              Value: 2  [#4:0x778+0x2]
+              Name: "PowerLimitType3"  [#4:0x77a+0x10]
+          ▾ LF_ENUMERATE PowerLimitPreemptive — = 3, public  [#4:0x78c+0x1b]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x78c+0x2]
+              Attributes: 0x3 [public]  [#4:0x78e+0x2]
+              Value: 3  [#4:0x790+0x2]
+              Name: "PowerLimitPreemptive"  [#4:0x792+0x15]
+          ▾ LF_ENUMERATE PowerLimitType4 — = 3, public  [#4:0x7a8+0x16]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x7a8+0x2]
+              Attributes: 0x3 [public]  [#4:0x7aa+0x2]
+              Value: 3  [#4:0x7ac+0x2]
+              Name: "PowerLimitType4"  [#4:0x7ae+0x10]
+          ▾ LF_ENUMERATE PowerLimitPreemptiveOffset — = 4, public  [#4:0x7c0+0x21]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x7c0+0x2]
+              Attributes: 0x3 [public]  [#4:0x7c2+0x2]
+              Value: 4  [#4:0x7c4+0x2]
+              Name: "PowerLimitPreemptiveOffset"  [#4:0x7c6+0x1b]
+          ▾ LF_ENUMERATE PowerLimitTypeMax — = 5, public  [#4:0x7e4+0x18]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x7e4+0x2]
+              Attributes: 0x3 [public]  [#4:0x7e6+0x2]
+              Value: 5  [#4:0x7e8+0x2]
+              Name: "PowerLimitTypeMax"  [#4:0x7ea+0x12]
+        ▾ 0x1013 LF_ENUM — "_POWER_LIMIT_TYPES": int, 10 enumerators in 0x1012  [#4:0x7fc+0x40]
+            Length: 62  [#4:0x7fc+0x2]
+            Kind: LF_ENUM (0x1507)  [#4:0x7fe+0x2]
+            Member count: 10  [#4:0x800+0x2]
+            Options: 0x200 [has unique name]  [#4:0x802+0x2]
+            Underlying type: 0x74 — int  [#4:0x804+0x4]
+            Field list: 0x1012  [#4:0x808+0x4]
+            Name: "_POWER_LIMIT_TYPES"  [#4:0x80c+0x13]
+            Unique name: ".?AW4_POWER_LIMIT_TYPES@@"  [#4:0x81f+0x1a]
+        ▾ 0x1014 LF_ARGLIST — ()  [#4:0x83c+0x8]
+            Length: 6  [#4:0x83c+0x2]
+            Kind: LF_ARGLIST (0x1201)  [#4:0x83e+0x2]
+            Count: 0  [#4:0x840+0x4]
+        ▾ 0x1015 LF_PROCEDURE — int (0 parameters, 0x1014)  [#4:0x844+0x10]
+            Length: 14  [#4:0x844+0x2]
+            Kind: LF_PROCEDURE (0x1008)  [#4:0x846+0x2]
+            Return type: 0x74 — int  [#4:0x848+0x4]
+            Calling convention: near C (0x0)  [#4:0x84c+0x1]
+            Options: 0x0 []  [#4:0x84d+0x1]
+            Parameter count: 0  [#4:0x84e+0x2]
+            Argument list: 0x1014  [#4:0x850+0x4]
+        ▾ 0x1016 LF_POINTER — pointer to 0x1015  [#4:0x854+0xc]
+            Length: 10  [#4:0x854+0x2]
+            Kind: LF_POINTER (0x1002)  [#4:0x856+0x2]
+            Referent type: 0x1015  [#4:0x858+0x4]
+            Attributes: 0x1000c — near64, pointer, size 8  [#4:0x85c+0x4]
+        ▾ 0x1017 LF_PROCEDURE — void (0 parameters, 0x1014)  [#4:0x860+0x10]
+            Length: 14  [#4:0x860+0x2]
+            Kind: LF_PROCEDURE (0x1008)  [#4:0x862+0x2]
+            Return type: 0x3 — void  [#4:0x864+0x4]
+            Calling convention: near C (0x0)  [#4:0x868+0x1]
+            Options: 0x0 []  [#4:0x869+0x1]
+            Parameter count: 0  [#4:0x86a+0x2]
+            Argument list: 0x1014  [#4:0x86c+0x4]
+        ▾ 0x1018 LF_POINTER — pointer to 0x1017  [#4:0x870+0xc]
+            Length: 10  [#4:0x870+0x2]
+            Kind: LF_POINTER (0x1002)  [#4:0x872+0x2]
+            Referent type: 0x1017  [#4:0x874+0x4]
+            Attributes: 0x1000c — near64, pointer, size 8  [#4:0x878+0x4]
+        ▾ 0x1019 LF_FIELDLIST — 13 members  [#4:0x87c+0x138]
+            Length: 310  [#4:0x87c+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x87e+0x2]
+          ▾ LF_ENUMERATE WAK_NONE — = 0, public  [#4:0x880+0xf]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x880+0x2]
+              Attributes: 0x3 [public]  [#4:0x882+0x2]
+              Value: 0  [#4:0x884+0x2]
+              Name: "WAK_NONE"  [#4:0x886+0x9]
+          ▾ LF_ENUMERATE WAK_VISIBILITY — = 1, public  [#4:0x890+0x15]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x890+0x2]
+              Attributes: 0x3 [public]  [#4:0x892+0x2]
+              Value: 1  [#4:0x894+0x2]
+              Name: "WAK_VISIBILITY"  [#4:0x896+0xf]
+          ▾ LF_ENUMERATE WAK_POSITION — = 2, public  [#4:0x8a8+0x13]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x8a8+0x2]
+              Attributes: 0x3 [public]  [#4:0x8aa+0x2]
+              Value: 2  [#4:0x8ac+0x2]
+              Name: "WAK_POSITION"  [#4:0x8ae+0xd]
+          ▾ LF_ENUMERATE WAK_SIZE — = 4, public  [#4:0x8bc+0xf]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x8bc+0x2]
+              Attributes: 0x3 [public]  [#4:0x8be+0x2]
+              Value: 4  [#4:0x8c0+0x2]
+              Name: "WAK_SIZE"  [#4:0x8c2+0x9]
+          ▾ LF_ENUMERATE WAK_INSERT_AFTER — = 8, public  [#4:0x8cc+0x17]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x8cc+0x2]
+              Attributes: 0x3 [public]  [#4:0x8ce+0x2]
+              Value: 8  [#4:0x8d0+0x2]
+              Name: "WAK_INSERT_AFTER"  [#4:0x8d2+0x11]
+          ▾ LF_ENUMERATE WAK_ACTIVATE — = 16, public  [#4:0x8e4+0x13]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x8e4+0x2]
+              Attributes: 0x3 [public]  [#4:0x8e6+0x2]
+              Value: 16  [#4:0x8e8+0x2]
+              Name: "WAK_ACTIVATE"  [#4:0x8ea+0xd]
+          ▾ LF_ENUMERATE WAK_PLACEMENT_STATE — = 32, public  [#4:0x8f8+0x1a]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x8f8+0x2]
+              Attributes: 0x3 [public]  [#4:0x8fa+0x2]
+              Value: 32  [#4:0x8fc+0x2]
+              Name: "WAK_PLACEMENT_STATE"  [#4:0x8fe+0x14]
+          ▾ LF_ENUMERATE WAK_NORMAL_RECT — = 64, public  [#4:0x914+0x16]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x914+0x2]
+              Attributes: 0x3 [public]  [#4:0x916+0x2]
+              Value: 64  [#4:0x918+0x2]
+              Name: "WAK_NORMAL_RECT"  [#4:0x91a+0x10]
+          ▾ LF_ENUMERATE WAK_MOVE_TO_MONITOR — = 128, public  [#4:0x92c+0x1a]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x92c+0x2]
+              Attributes: 0x3 [public]  [#4:0x92e+0x2]
+              Value: 128  [#4:0x930+0x2]
+              Name: "WAK_MOVE_TO_MONITOR"  [#4:0x932+0x14]
+          ▾ LF_ENUMERATE WAK_FIT_TO_MONITOR — = 256, public  [#4:0x948+0x19]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x948+0x2]
+              Attributes: 0x3 [public]  [#4:0x94a+0x2]
+              Value: 256  [#4:0x94c+0x2]
+              Name: "WAK_FIT_TO_MONITOR"  [#4:0x94e+0x13]
+          ▾ LF_ENUMERATE WAK_DISPLAY_CHANGE — = 512, public  [#4:0x964+0x19]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x964+0x2]
+              Attributes: 0x3 [public]  [#4:0x966+0x2]
+              Value: 512  [#4:0x968+0x2]
+              Name: "WAK_DISPLAY_CHANGE"  [#4:0x96a+0x13]
+          ▾ LF_ENUMERATE WAK_SYSTEM_OPERATION — = 1024, public  [#4:0x980+0x1b]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x980+0x2]
+              Attributes: 0x3 [public]  [#4:0x982+0x2]
+              Value: 1024  [#4:0x984+0x2]
+              Name: "WAK_SYSTEM_OPERATION"  [#4:0x986+0x15]
+          ▾ LF_ENUMERATE WAK_COALESCEABLE — = 31, public  [#4:0x99c+0x17]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x99c+0x2]
+              Attributes: 0x3 [public]  [#4:0x99e+0x2]
+              Value: 31  [#4:0x9a0+0x2]
+              Name: "WAK_COALESCEABLE"  [#4:0x9a2+0x11]
+        ▾ 0x101a LF_ENUM — "_WINDOW_ACTION_KINDS": int, 13 enumerators in 0x1019  [#4:0x9b4+0x44]
+            Length: 66  [#4:0x9b4+0x2]
+            Kind: LF_ENUM (0x1507)  [#4:0x9b6+0x2]
+            Member count: 13  [#4:0x9b8+0x2]
+            Options: 0x200 [has unique name]  [#4:0x9ba+0x2]
+            Underlying type: 0x74 — int  [#4:0x9bc+0x4]
+            Field list: 0x1019  [#4:0x9c0+0x4]
+            Name: "_WINDOW_ACTION_KINDS"  [#4:0x9c4+0x15]
+            Unique name: ".?AW4_WINDOW_ACTION_KINDS@@"  [#4:0x9d9+0x1c]
+        ▾ 0x101b LF_FIELDLIST — 25 members  [#4:0x9f8+0x32c]
+            Length: 810  [#4:0x9f8+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x9fa+0x2]
+          ▾ LF_ENUMERATE COMIMAGE_FLAGS_ILONLY — = 1, public  [#4:0x9fc+0x1c]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x9fc+0x2]
+              Attributes: 0x3 [public]  [#4:0x9fe+0x2]
+              Value: 1  [#4:0xa00+0x2]
+              Name: "COMIMAGE_FLAGS_ILONLY"  [#4:0xa02+0x16]
+          ▾ LF_ENUMERATE COMIMAGE_FLAGS_32BITREQUIRED — = 2, public  [#4:0xa18+0x23]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xa18+0x2]
+              Attributes: 0x3 [public]  [#4:0xa1a+0x2]
+              Value: 2  [#4:0xa1c+0x2]
+              Name: "COMIMAGE_FLAGS_32BITREQUIRED"  [#4:0xa1e+0x1d]
+          ▾ LF_ENUMERATE COMIMAGE_FLAGS_IL_LIBRARY — = 4, public  [#4:0xa3c+0x20]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xa3c+0x2]
+              Attributes: 0x3 [public]  [#4:0xa3e+0x2]
+              Value: 4  [#4:0xa40+0x2]
+              Name: "COMIMAGE_FLAGS_IL_LIBRARY"  [#4:0xa42+0x1a]
+          ▾ LF_ENUMERATE COMIMAGE_FLAGS_STRONGNAMESIGNED — = 8, public  [#4:0xa5c+0x26]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xa5c+0x2]
+              Attributes: 0x3 [public]  [#4:0xa5e+0x2]
+              Value: 8  [#4:0xa60+0x2]
+              Name: "COMIMAGE_FLAGS_STRONGNAMESIGNED"  [#4:0xa62+0x20]
+          ▾ LF_ENUMERATE COMIMAGE_FLAGS_NATIVE_ENTRYPOINT — = 16, public  [#4:0xa84+0x27]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xa84+0x2]
+              Attributes: 0x3 [public]  [#4:0xa86+0x2]
+              Value: 16  [#4:0xa88+0x2]
+              Name: "COMIMAGE_FLAGS_NATIVE_ENTRYPOINT"  [#4:0xa8a+0x21]
+          ▾ LF_ENUMERATE COMIMAGE_FLAGS_TRACKDEBUGDATA — = 65536, public  [#4:0xaac+0x28]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xaac+0x2]
+              Attributes: 0x3 [public]  [#4:0xaae+0x2]
+              Value: 65536  [#4:0xab0+0x6]
+              Name: "COMIMAGE_FLAGS_TRACKDEBUGDATA"  [#4:0xab6+0x1e]
+          ▾ LF_ENUMERATE COMIMAGE_FLAGS_32BITPREFERRED — = 131072, public  [#4:0xad4+0x28]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xad4+0x2]
+              Attributes: 0x3 [public]  [#4:0xad6+0x2]
+              Value: 131072  [#4:0xad8+0x6]
+              Name: "COMIMAGE_FLAGS_32BITPREFERRED"  [#4:0xade+0x1e]
+          ▾ LF_ENUMERATE COR_VERSION_MAJOR_V2 — = 2, public  [#4:0xafc+0x1b]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xafc+0x2]
+              Attributes: 0x3 [public]  [#4:0xafe+0x2]
+              Value: 2  [#4:0xb00+0x2]
+              Name: "COR_VERSION_MAJOR_V2"  [#4:0xb02+0x15]
+          ▾ LF_ENUMERATE COR_VERSION_MAJOR — = 2, public  [#4:0xb18+0x18]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xb18+0x2]
+              Attributes: 0x3 [public]  [#4:0xb1a+0x2]
+              Value: 2  [#4:0xb1c+0x2]
+              Name: "COR_VERSION_MAJOR"  [#4:0xb1e+0x12]
+          ▾ LF_ENUMERATE COR_VERSION_MINOR — = 5, public  [#4:0xb30+0x18]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xb30+0x2]
+              Attributes: 0x3 [public]  [#4:0xb32+0x2]
+              Value: 5  [#4:0xb34+0x2]
+              Name: "COR_VERSION_MINOR"  [#4:0xb36+0x12]
+          ▾ LF_ENUMERATE COR_DELETED_NAME_LENGTH — = 8, public  [#4:0xb48+0x1e]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xb48+0x2]
+              Attributes: 0x3 [public]  [#4:0xb4a+0x2]
+              Value: 8  [#4:0xb4c+0x2]
+              Name: "COR_DELETED_NAME_LENGTH"  [#4:0xb4e+0x18]
+          ▾ LF_ENUMERATE COR_VTABLEGAP_NAME_LENGTH — = 8, public  [#4:0xb68+0x20]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xb68+0x2]
+              Attributes: 0x3 [public]  [#4:0xb6a+0x2]
+              Value: 8  [#4:0xb6c+0x2]
+              Name: "COR_VTABLEGAP_NAME_LENGTH"  [#4:0xb6e+0x1a]
+          ▾ LF_ENUMERATE NATIVE_TYPE_MAX_CB — = 1, public  [#4:0xb88+0x19]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xb88+0x2]
+              Attributes: 0x3 [public]  [#4:0xb8a+0x2]
+              Value: 1  [#4:0xb8c+0x2]
+              Name: "NATIVE_TYPE_MAX_CB"  [#4:0xb8e+0x13]
+          ▾ LF_ENUMERATE COR_ILMETHOD_SECT_SMALL_MAX_DATASIZE — = 255, public  [#4:0xba4+0x2b]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xba4+0x2]
+              Attributes: 0x3 [public]  [#4:0xba6+0x2]
+              Value: 255  [#4:0xba8+0x2]
+              Name: "COR_ILMETHOD_SECT_SMALL_MAX_DATASIZE"  [#4:0xbaa+0x25]
+          ▾ LF_ENUMERATE IMAGE_COR_MIH_METHODRVA — = 1, public  [#4:0xbd0+0x1e]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xbd0+0x2]
+              Attributes: 0x3 [public]  [#4:0xbd2+0x2]
+              Value: 1  [#4:0xbd4+0x2]
+              Name: "IMAGE_COR_MIH_METHODRVA"  [#4:0xbd6+0x18]
+          ▾ LF_ENUMERATE IMAGE_COR_MIH_EHRVA — = 2, public  [#4:0xbf0+0x1a]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xbf0+0x2]
+              Attributes: 0x3 [public]  [#4:0xbf2+0x2]
+              Value: 2  [#4:0xbf4+0x2]
+              Name: "IMAGE_COR_MIH_EHRVA"  [#4:0xbf6+0x14]
+          ▾ LF_ENUMERATE IMAGE_COR_MIH_BASICBLOCK — = 8, public  [#4:0xc0c+0x1f]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xc0c+0x2]
+              Attributes: 0x3 [public]  [#4:0xc0e+0x2]
+              Value: 8  [#4:0xc10+0x2]
+              Name: "IMAGE_COR_MIH_BASICBLOCK"  [#4:0xc12+0x19]
+          ▾ LF_ENUMERATE COR_VTABLE_32BIT — = 1, public  [#4:0xc2c+0x17]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xc2c+0x2]
+              Attributes: 0x3 [public]  [#4:0xc2e+0x2]
+              Value: 1  [#4:0xc30+0x2]
+              Name: "COR_VTABLE_32BIT"  [#4:0xc32+0x11]
+          ▾ LF_ENUMERATE COR_VTABLE_64BIT — = 2, public  [#4:0xc44+0x17]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xc44+0x2]
+              Attributes: 0x3 [public]  [#4:0xc46+0x2]
+              Value: 2  [#4:0xc48+0x2]
+              Name: "COR_VTABLE_64BIT"  [#4:0xc4a+0x11]
+          ▾ LF_ENUMERATE COR_VTABLE_FROM_UNMANAGED — = 4, public  [#4:0xc5c+0x20]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xc5c+0x2]
+              Attributes: 0x3 [public]  [#4:0xc5e+0x2]
+              Value: 4  [#4:0xc60+0x2]
+              Name: "COR_VTABLE_FROM_UNMANAGED"  [#4:0xc62+0x1a]
+          ▾ LF_ENUMERATE COR_VTABLE_FROM_UNMANAGED_RETAIN_APPDOMAIN — = 8, public  [#4:0xc7c+0x31]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xc7c+0x2]
+              Attributes: 0x3 [public]  [#4:0xc7e+0x2]
+              Value: 8  [#4:0xc80+0x2]
+              Name: "COR_VTABLE_FROM_UNMANAGED_RETAIN_APPDOMAIN"  [#4:0xc82+0x2b]
+          ▾ LF_ENUMERATE COR_VTABLE_CALL_MOST_DERIVED — = 16, public  [#4:0xcb0+0x23]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xcb0+0x2]
+              Attributes: 0x3 [public]  [#4:0xcb2+0x2]
+              Value: 16  [#4:0xcb4+0x2]
+              Name: "COR_VTABLE_CALL_MOST_DERIVED"  [#4:0xcb6+0x1d]
+          ▾ LF_ENUMERATE IMAGE_COR_EATJ_THUNK_SIZE — = 32, public  [#4:0xcd4+0x20]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xcd4+0x2]
+              Attributes: 0x3 [public]  [#4:0xcd6+0x2]
+              Value: 32  [#4:0xcd8+0x2]
+              Name: "IMAGE_COR_EATJ_THUNK_SIZE"  [#4:0xcda+0x1a]
+          ▾ LF_ENUMERATE MAX_CLASS_NAME — = 1024, public  [#4:0xcf4+0x15]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xcf4+0x2]
+              Attributes: 0x3 [public]  [#4:0xcf6+0x2]
+              Value: 1024  [#4:0xcf8+0x2]
+              Name: "MAX_CLASS_NAME"  [#4:0xcfa+0xf]
+          ▾ LF_ENUMERATE MAX_PACKAGE_NAME — = 1024, public  [#4:0xd0c+0x17]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xd0c+0x2]
+              Attributes: 0x3 [public]  [#4:0xd0e+0x2]
+              Value: 1024  [#4:0xd10+0x2]
+              Name: "MAX_PACKAGE_NAME"  [#4:0xd12+0x11]
+        ▾ 0x101c LF_ENUM — "ReplacesCorHdrNumericDefines": int, 25 enumerators in 0x101b  [#4:0xd24+0x54]
+            Length: 82  [#4:0xd24+0x2]
+            Kind: LF_ENUM (0x1507)  [#4:0xd26+0x2]
+            Member count: 25  [#4:0xd28+0x2]
+            Options: 0x200 [has unique name]  [#4:0xd2a+0x2]
+            Underlying type: 0x74 — int  [#4:0xd2c+0x4]
+            Field list: 0x101b  [#4:0xd30+0x4]
+            Name: "ReplacesCorHdrNumericDefines"  [#4:0xd34+0x1d]
+            Unique name: ".?AW4ReplacesCorHdrNumericDefines@@"  [#4:0xd51+0x24]
+        ▾ 0x101d LF_FIELDLIST — 5 members  [#4:0xd78+0xb0]
+            Length: 174  [#4:0xd78+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0xd7a+0x2]
+          ▾ LF_ENUMERATE TP_CALLBACK_PRIORITY_HIGH — = 0, public  [#4:0xd7c+0x20]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xd7c+0x2]
+              Attributes: 0x3 [public]  [#4:0xd7e+0x2]
+              Value: 0  [#4:0xd80+0x2]
+              Name: "TP_CALLBACK_PRIORITY_HIGH"  [#4:0xd82+0x1a]
+          ▾ LF_ENUMERATE TP_CALLBACK_PRIORITY_NORMAL — = 1, public  [#4:0xd9c+0x22]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xd9c+0x2]
+              Attributes: 0x3 [public]  [#4:0xd9e+0x2]
+              Value: 1  [#4:0xda0+0x2]
+              Name: "TP_CALLBACK_PRIORITY_NORMAL"  [#4:0xda2+0x1c]
+          ▾ LF_ENUMERATE TP_CALLBACK_PRIORITY_LOW — = 2, public  [#4:0xdc0+0x1f]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xdc0+0x2]
+              Attributes: 0x3 [public]  [#4:0xdc2+0x2]
+              Value: 2  [#4:0xdc4+0x2]
+              Name: "TP_CALLBACK_PRIORITY_LOW"  [#4:0xdc6+0x19]
+          ▾ LF_ENUMERATE TP_CALLBACK_PRIORITY_INVALID — = 3, public  [#4:0xde0+0x23]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xde0+0x2]
+              Attributes: 0x3 [public]  [#4:0xde2+0x2]
+              Value: 3  [#4:0xde4+0x2]
+              Name: "TP_CALLBACK_PRIORITY_INVALID"  [#4:0xde6+0x1d]
+          ▾ LF_ENUMERATE TP_CALLBACK_PRIORITY_COUNT — = 3, public  [#4:0xe04+0x21]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0xe04+0x2]
+              Attributes: 0x3 [public]  [#4:0xe06+0x2]
+              Value: 3  [#4:0xe08+0x2]
+              Name: "TP_CALLBACK_PRIORITY_COUNT"  [#4:0xe0a+0x1b]
+        ▾ 0x101e LF_ENUM — "_TP_CALLBACK_PRIORITY": int, 5 enumerators in 0x101d  [#4:0xe28+0x44]
+            Length: 66  [#4:0xe28+0x2]
+            Kind: LF_ENUM (0x1507)  [#4:0xe2a+0x2]
+            Member count: 5  [#4:0xe2c+0x2]
+            Options: 0x200 [has unique name]  [#4:0xe2e+0x2]
+            Underlying type: 0x74 — int  [#4:0xe30+0x4]
+            Field list: 0x101d  [#4:0xe34+0x4]
+            Name: "_TP_CALLBACK_PRIORITY"  [#4:0xe38+0x16]
+            Unique name: ".?AW4_TP_CALLBACK_PRIORITY@@"  [#4:0xe4e+0x1d]
+        ▾ 0x101f LF_ARRAY — 0x1016[], 0 bytes  [#4:0xe6c+0x10]
+            Length: 14  [#4:0xe6c+0x2]
+            Kind: LF_ARRAY (0x1503)  [#4:0xe6e+0x2]
+            Element type: 0x1016  [#4:0xe70+0x4]
+            Index type: 0x23 — unsigned __int64  [#4:0xe74+0x4]
+            Size: 0  [#4:0xe78+0x2]
+            Name: ""  [#4:0xe7a+0x1]
+        ▾ 0x1020 LF_ARRAY — 0x1018[], 0 bytes  [#4:0xe7c+0x10]
+            Length: 14  [#4:0xe7c+0x2]
+            Kind: LF_ARRAY (0x1503)  [#4:0xe7e+0x2]
+            Element type: 0x1018  [#4:0xe80+0x4]
+            Index type: 0x23 — unsigned __int64  [#4:0xe84+0x4]
+            Size: 0  [#4:0xe88+0x2]
+            Name: ""  [#4:0xe8a+0x1]
+        ▾ 0x1021 LF_STRUCTURE — "_M128A", forward reference  [#4:0xe8c+0x2c]
+            Length: 42  [#4:0xe8c+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0xe8e+0x2]
+            Member count: 0  [#4:0xe90+0x2]
+            Options: 0x280 [forward ref | has unique name]  [#4:0xe92+0x2]
+            Field list: 0x0 — <no type>  [#4:0xe94+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0xe98+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0xe9c+0x4]
+            Size: 0  [#4:0xea0+0x2]
+            Name: "_M128A"  [#4:0xea2+0x7]
+            Unique name: ".?AU_M128A@@"  [#4:0xea9+0xd]
+        ▾ 0x1022 LF_ARRAY — 0x1021[], 128 bytes  [#4:0xeb8+0x10]
+            Length: 14  [#4:0xeb8+0x2]
+            Kind: LF_ARRAY (0x1503)  [#4:0xeba+0x2]
+            Element type: 0x1021  [#4:0xebc+0x4]
+            Index type: 0x23 — unsigned __int64  [#4:0xec0+0x4]
+            Size: 128  [#4:0xec4+0x2]
+            Name: ""  [#4:0xec6+0x1]
+        ▾ 0x1023 LF_ARRAY — 0x1021[], 256 bytes  [#4:0xec8+0x10]
+            Length: 14  [#4:0xec8+0x2]
+            Kind: LF_ARRAY (0x1503)  [#4:0xeca+0x2]
+            Element type: 0x1021  [#4:0xecc+0x4]
+            Index type: 0x23 — unsigned __int64  [#4:0xed0+0x4]
+            Size: 256  [#4:0xed4+0x2]
+            Name: ""  [#4:0xed6+0x1]
+        ▾ 0x1024 LF_ARRAY — unsigned char[], 96 bytes  [#4:0xed8+0x10]
+            Length: 14  [#4:0xed8+0x2]
+            Kind: LF_ARRAY (0x1503)  [#4:0xeda+0x2]
+            Element type: 0x20 — unsigned char  [#4:0xedc+0x4]
+            Index type: 0x23 — unsigned __int64  [#4:0xee0+0x4]
+            Size: 96  [#4:0xee4+0x2]
+            Name: ""  [#4:0xee6+0x1]
+        ▾ 0x1025 LF_FIELDLIST — 16 members  [#4:0xee8+0x16c]
+            Length: 362  [#4:0xee8+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0xeea+0x2]
+          ▾ LF_MEMBER ControlWord — unsigned short, offset 0, public  [#4:0xeec+0x16]
+              Kind: LF_MEMBER (0x150d)  [#4:0xeec+0x2]
+              Attributes: 0x3 [public]  [#4:0xeee+0x2]
+              Type: 0x21 — unsigned short  [#4:0xef0+0x4]
+              Offset: 0  [#4:0xef4+0x2]
+              Name: "ControlWord"  [#4:0xef6+0xc]
+          ▾ LF_MEMBER StatusWord — unsigned short, offset 2, public  [#4:0xf04+0x15]
+              Kind: LF_MEMBER (0x150d)  [#4:0xf04+0x2]
+              Attributes: 0x3 [public]  [#4:0xf06+0x2]
+              Type: 0x21 — unsigned short  [#4:0xf08+0x4]
+              Offset: 2  [#4:0xf0c+0x2]
+              Name: "StatusWord"  [#4:0xf0e+0xb]
+          ▾ LF_MEMBER TagWord — unsigned char, offset 4, public  [#4:0xf1c+0x12]
+              Kind: LF_MEMBER (0x150d)  [#4:0xf1c+0x2]
+              Attributes: 0x3 [public]  [#4:0xf1e+0x2]
+              Type: 0x20 — unsigned char  [#4:0xf20+0x4]
+              Offset: 4  [#4:0xf24+0x2]
+              Name: "TagWord"  [#4:0xf26+0x8]
+          ▾ LF_MEMBER Reserved1 — unsigned char, offset 5, public  [#4:0xf30+0x14]
+              Kind: LF_MEMBER (0x150d)  [#4:0xf30+0x2]
+              Attributes: 0x3 [public]  [#4:0xf32+0x2]
+              Type: 0x20 — unsigned char  [#4:0xf34+0x4]
+              Offset: 5  [#4:0xf38+0x2]
+              Name: "Reserved1"  [#4:0xf3a+0xa]
+          ▾ LF_MEMBER ErrorOpcode — unsigned short, offset 6, public  [#4:0xf44+0x16]
+              Kind: LF_MEMBER (0x150d)  [#4:0xf44+0x2]
+              Attributes: 0x3 [public]  [#4:0xf46+0x2]
+              Type: 0x21 — unsigned short  [#4:0xf48+0x4]
+              Offset: 6  [#4:0xf4c+0x2]
+              Name: "ErrorOpcode"  [#4:0xf4e+0xc]
+          ▾ LF_MEMBER ErrorOffset — unsigned long, offset 8, public  [#4:0xf5c+0x16]
+              Kind: LF_MEMBER (0x150d)  [#4:0xf5c+0x2]
+              Attributes: 0x3 [public]  [#4:0xf5e+0x2]
+              Type: 0x22 — unsigned long  [#4:0xf60+0x4]
+              Offset: 8  [#4:0xf64+0x2]
+              Name: "ErrorOffset"  [#4:0xf66+0xc]
+          ▾ LF_MEMBER ErrorSelector — unsigned short, offset 12, public  [#4:0xf74+0x18]
+              Kind: LF_MEMBER (0x150d)  [#4:0xf74+0x2]
+              Attributes: 0x3 [public]  [#4:0xf76+0x2]
+              Type: 0x21 — unsigned short  [#4:0xf78+0x4]
+              Offset: 12  [#4:0xf7c+0x2]
+              Name: "ErrorSelector"  [#4:0xf7e+0xe]
+          ▾ LF_MEMBER Reserved2 — unsigned short, offset 14, public  [#4:0xf8c+0x14]
+              Kind: LF_MEMBER (0x150d)  [#4:0xf8c+0x2]
+              Attributes: 0x3 [public]  [#4:0xf8e+0x2]
+              Type: 0x21 — unsigned short  [#4:0xf90+0x4]
+              Offset: 14  [#4:0xf94+0x2]
+              Name: "Reserved2"  [#4:0xf96+0xa]
+          ▾ LF_MEMBER DataOffset — unsigned long, offset 16, public  [#4:0xfa0+0x15]
+              Kind: LF_MEMBER (0x150d)  [#4:0xfa0+0x2]
+              Attributes: 0x3 [public]  [#4:0xfa2+0x2]
+              Type: 0x22 — unsigned long  [#4:0xfa4+0x4]
+              Offset: 16  [#4:0xfa8+0x2]
+              Name: "DataOffset"  [#4:0xfaa+0xb]
+          ▾ LF_MEMBER DataSelector — unsigned short, offset 20, public  [#4:0xfb8+0x17]
+              Kind: LF_MEMBER (0x150d)  [#4:0xfb8+0x2]
+              Attributes: 0x3 [public]  [#4:0xfba+0x2]
+              Type: 0x21 — unsigned short  [#4:0xfbc+0x4]
+              Offset: 20  [#4:0xfc0+0x2]
+              Name: "DataSelector"  [#4:0xfc2+0xd]
+          ▾ LF_MEMBER Reserved3 — unsigned short, offset 22, public  [#4:0xfd0+0x14]
+              Kind: LF_MEMBER (0x150d)  [#4:0xfd0+0x2]
+              Attributes: 0x3 [public]  [#4:0xfd2+0x2]
+              Type: 0x21 — unsigned short  [#4:0xfd4+0x4]
+              Offset: 22  [#4:0xfd8+0x2]
+              Name: "Reserved3"  [#4:0xfda+0xa]
+          ▾ LF_MEMBER MxCsr — unsigned long, offset 24, public  [#4:0xfe4+0x10]
+              Kind: LF_MEMBER (0x150d)  [#4:0xfe4+0x2]
+              Attributes: 0x3 [public]  [#4:0xfe6+0x2]
+              Type: 0x22 — unsigned long  [#4:0xfe8+0x4]
+              Offset: 24  [#4:0xfec+0x2]
+              Name: "MxCsr"  [#4:0xfee+0x6]
+          ▾ LF_MEMBER MxCsr_Mask — unsigned long, offset 28, public  [#4:0xff4+0x15]
+              Kind: LF_MEMBER (0x150d)  [#4:0xff4+0x2]
+              Attributes: 0x3 [public]  [#4:0xff6+0x2]
+              Type: 0x22 — unsigned long  [#4:0xff8+0x4]
+              Offset: 28  [#4:0xffc+0x2]
+              Name: "MxCsr_Mask"  [#4:0xffe+0xb]
+          ▾ LF_MEMBER FloatRegisters — 0x1022, offset 32, public  [#4:0x100c+0x19]
+              Kind: LF_MEMBER (0x150d)  [#4:0x100c+0x2]
+              Attributes: 0x3 [public]  [#4:0x100e+0x2]
+              Type: 0x1022  [#4:0x1010+0x4]
+              Offset: 32  [#4:0x1014+0x2]
+              Name: "FloatRegisters"  [#4:0x1016+0xf]
+          ▾ LF_MEMBER XmmRegisters — 0x1023, offset 160, public  [#4:0x1028+0x17]
+              Kind: LF_MEMBER (0x150d)  [#4:0x1028+0x2]
+              Attributes: 0x3 [public]  [#4:0x102a+0x2]
+              Type: 0x1023  [#4:0x102c+0x4]
+              Offset: 160  [#4:0x1030+0x2]
+              Name: "XmmRegisters"  [#4:0x1032+0xd]
+          ▾ LF_MEMBER Reserved4 — 0x1024, offset 416, public  [#4:0x1040+0x14]
+              Kind: LF_MEMBER (0x150d)  [#4:0x1040+0x2]
+              Attributes: 0x3 [public]  [#4:0x1042+0x2]
+              Type: 0x1024  [#4:0x1044+0x4]
+              Offset: 416  [#4:0x1048+0x2]
+              Name: "Reserved4"  [#4:0x104a+0xa]
+        ▾ 0x1026 LF_STRUCTURE — "_XSAVE_FORMAT", 512 bytes, 16 members in 0x1025  [#4:0x1054+0x38]
+            Length: 54  [#4:0x1054+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0x1056+0x2]
+            Member count: 16  [#4:0x1058+0x2]
+            Options: 0x200 [has unique name]  [#4:0x105a+0x2]
+            Field list: 0x1025  [#4:0x105c+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0x1060+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0x1064+0x4]
+            Size: 512  [#4:0x1068+0x2]
+            Name: "_XSAVE_FORMAT"  [#4:0x106a+0xe]
+            Unique name: ".?AU_XSAVE_FORMAT@@"  [#4:0x1078+0x14]
+        ▾ 0x1027 LF_FIELDLIST — 0 members  [#4:0x108c+0x4]
+            Length: 2  [#4:0x108c+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x108e+0x2]
+        ▾ 0x1028 LF_STRUCTURE — "__vcrt_assert_va_start_is_not_reference<wchar_t const *>", 1 bytes, 0 members in 0x1027  [#4:0x1090+0x88]
+            Length: 134  [#4:0x1090+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0x1092+0x2]
+            Member count: 0  [#4:0x1094+0x2]
+            Options: 0x200 [has unique name]  [#4:0x1096+0x2]
+            Field list: 0x1027  [#4:0x1098+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0x109c+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0x10a0+0x4]
+            Size: 1  [#4:0x10a4+0x2]
+            Name: "__vcrt_assert_va_start_is_not_reference<wchar_t const *>"  [#4:0x10a6+0x39]
+            Unique name: ".?AU?$__vcrt_assert_va_start_is_not_reference@PEB_W@@"  [#4:0x10df+0x36]
+        ▾ 0x1029 LF_STRUCTURE — "_EVENT_DATA_DESCRIPTOR", forward reference  [#4:0x1118+0x4c]
+            Length: 74  [#4:0x1118+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0x111a+0x2]
+            Member count: 0  [#4:0x111c+0x2]
+            Options: 0x280 [forward ref | has unique name]  [#4:0x111e+0x2]
+            Field list: 0x0 — <no type>  [#4:0x1120+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0x1124+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0x1128+0x4]
+            Size: 0  [#4:0x112c+0x2]
+            Name: "_EVENT_DATA_DESCRIPTOR"  [#4:0x112e+0x17]
+            Unique name: ".?AU_EVENT_DATA_DESCRIPTOR@@"  [#4:0x1145+0x1d]
+        ▾ 0x102a LF_POINTER — pointer to 0x1029  [#4:0x1164+0xc]
+            Length: 10  [#4:0x1164+0x2]
+            Kind: LF_POINTER (0x1002)  [#4:0x1166+0x2]
+            Referent type: 0x1029  [#4:0x1168+0x4]
+            Attributes: 0x1000c — near64, pointer, size 8  [#4:0x116c+0x4]
+        ▾ 0x102b LF_STRUCTURE — "_CONTEXT", forward reference  [#4:0x1170+0x30]
+            Length: 46  [#4:0x1170+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0x1172+0x2]
+            Member count: 0  [#4:0x1174+0x2]
+            Options: 0x280 [forward ref | has unique name]  [#4:0x1176+0x2]
+            Field list: 0x0 — <no type>  [#4:0x1178+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0x117c+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0x1180+0x4]
+            Size: 0  [#4:0x1184+0x2]
+            Name: "_CONTEXT"  [#4:0x1186+0x9]
+            Unique name: ".?AU_CONTEXT@@"  [#4:0x118f+0xf]
+        ▾ 0x102c LF_POINTER — pointer to 0x102b  [#4:0x11a0+0xc]
+            Length: 10  [#4:0x11a0+0x2]
+            Kind: LF_POINTER (0x1002)  [#4:0x11a2+0x2]
+            Referent type: 0x102b  [#4:0x11a4+0x4]
+            Attributes: 0x1000c — near64, pointer, size 8  [#4:0x11a8+0x4]
+        ▾ 0x102d LF_FIELDLIST — 1 members  [#4:0x11ac+0x18]
+            Length: 22  [#4:0x11ac+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x11ae+0x2]
+          ▾ LF_ENUMERATE __the_value — = 0, public  [#4:0x11b0+0x12]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x11b0+0x2]
+              Attributes: 0x3 [public]  [#4:0x11b2+0x2]
+              Value: 0  [#4:0x11b4+0x2]
+              Name: "__the_value"  [#4:0x11b6+0xc]
+        ▾ 0x102e LF_ENUM — "__vcrt_va_list_is_reference<char const * const>::<unnamed-enum-__the_value>": bool, 1 enumerators in 0x102d  [#4:0x11c4+0xa4]
+            Length: 162  [#4:0x11c4+0x2]
+            Kind: LF_ENUM (0x1507)  [#4:0x11c6+0x2]
+            Member count: 1  [#4:0x11c8+0x2]
+            Options: 0x208 [nested | has unique name]  [#4:0x11ca+0x2]
+            Underlying type: 0x30 — bool  [#4:0x11cc+0x4]
+            Field list: 0x102d  [#4:0x11d0+0x4]
+            Name: "__vcrt_va_list_is_reference<char const * const>::<unnamed-enum-__the_value>"  [#4:0x11d4+0x4c]
+            Unique name: ".?AW4<unnamed-enum-__the_value>@?$__vcrt_va_list_is_reference@QEBD@@"  [#4:0x1220+0x45]
+        ▾ 0x102f LF_FIELDLIST — 1 members  [#4:0x1268+0x28]
+            Length: 38  [#4:0x1268+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x126a+0x2]
+          ▾ LF_NESTTYPE <unnamed-enum-__the_value> — 0x102e  [#4:0x126c+0x23]
+              Kind: LF_NESTTYPE (0x1510)  [#4:0x126c+0x2]
+              Padding: 0  [#4:0x126e+0x2]
+              Type: 0x102e  [#4:0x1270+0x4]
+              Name: "<unnamed-enum-__the_value>"  [#4:0x1274+0x1b]
+        ▾ 0x1030 LF_STRUCTURE — "__vcrt_va_list_is_reference<char const * const>", 1 bytes, 1 members in 0x102f  [#4:0x1290+0x70]
+            Length: 110  [#4:0x1290+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0x1292+0x2]
+            Member count: 1  [#4:0x1294+0x2]
+            Options: 0x210 [contains nested class | has unique name]  [#4:0x1296+0x2]
+            Field list: 0x102f  [#4:0x1298+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0x129c+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0x12a0+0x4]
+            Size: 1  [#4:0x12a4+0x2]
+            Name: "__vcrt_va_list_is_reference<char const * const>"  [#4:0x12a6+0x30]
+            Unique name: ".?AU?$__vcrt_va_list_is_reference@QEBD@@"  [#4:0x12d6+0x29]
+        ▾ 0x1031 LF_STRUCTURE — "__vcrt_assert_va_start_is_not_reference<__crt_locale_pointers *>", 1 bytes, 0 members in 0x1027  [#4:0x1300+0xa4]
+            Length: 162  [#4:0x1300+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0x1302+0x2]
+            Member count: 0  [#4:0x1304+0x2]
+            Options: 0x200 [has unique name]  [#4:0x1306+0x2]
+            Field list: 0x1027  [#4:0x1308+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0x130c+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0x1310+0x4]
+            Size: 1  [#4:0x1314+0x2]
+            Name: "__vcrt_assert_va_start_is_not_reference<__crt_locale_pointers *>"  [#4:0x1316+0x41]
+            Unique name: ".?AU?$__vcrt_assert_va_start_is_not_reference@PEAU__crt_locale_pointers@@@@"  [#4:0x1357+0x4c]
+        ▾ 0x1032 LF_MODIFIER — unaligned wchar_t  [#4:0x13a4+0xc]
+            Length: 10  [#4:0x13a4+0x2]
+            Kind: LF_MODIFIER (0x1001)  [#4:0x13a6+0x2]
+            Modified type: 0x71 — wchar_t  [#4:0x13a8+0x4]
+            Modifiers: 0x4 [unaligned]  [#4:0x13ac+0x2]
+        ▾ 0x1033 LF_POINTER — pointer to 0x1032  [#4:0x13b0+0xc]
+            Length: 10  [#4:0x13b0+0x2]
+            Kind: LF_POINTER (0x1002)  [#4:0x13b2+0x2]
+            Referent type: 0x1032  [#4:0x13b4+0x4]
+            Attributes: 0x1000c — near64, pointer, size 8  [#4:0x13b8+0x4]
+        ▾ 0x1034 LF_FIELDLIST — 9 members  [#4:0x13bc+0xb8]
+            Length: 182  [#4:0x13bc+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x13be+0x2]
+          ▾ LF_ENUMERATE AR_ENABLED — = 0, public  [#4:0x13c0+0x11]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x13c0+0x2]
+              Attributes: 0x3 [public]  [#4:0x13c2+0x2]
+              Value: 0  [#4:0x13c4+0x2]
+              Name: "AR_ENABLED"  [#4:0x13c6+0xb]
+          ▾ LF_ENUMERATE AR_DISABLED — = 1, public  [#4:0x13d4+0x12]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x13d4+0x2]
+              Attributes: 0x3 [public]  [#4:0x13d6+0x2]
+              Value: 1  [#4:0x13d8+0x2]
+              Name: "AR_DISABLED"  [#4:0x13da+0xc]
+          ▾ LF_ENUMERATE AR_SUPPRESSED — = 2, public  [#4:0x13e8+0x14]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x13e8+0x2]
+              Attributes: 0x3 [public]  [#4:0x13ea+0x2]
+              Value: 2  [#4:0x13ec+0x2]
+              Name: "AR_SUPPRESSED"  [#4:0x13ee+0xe]
+          ▾ LF_ENUMERATE AR_REMOTESESSION — = 4, public  [#4:0x13fc+0x17]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x13fc+0x2]
+              Attributes: 0x3 [public]  [#4:0x13fe+0x2]
+              Value: 4  [#4:0x1400+0x2]
+              Name: "AR_REMOTESESSION"  [#4:0x1402+0x11]
+          ▾ LF_ENUMERATE AR_MULTIMON — = 8, public  [#4:0x1414+0x12]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x1414+0x2]
+              Attributes: 0x3 [public]  [#4:0x1416+0x2]
+              Value: 8  [#4:0x1418+0x2]
+              Name: "AR_MULTIMON"  [#4:0x141a+0xc]
+          ▾ LF_ENUMERATE AR_NOSENSOR — = 16, public  [#4:0x1428+0x12]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x1428+0x2]
+              Attributes: 0x3 [public]  [#4:0x142a+0x2]
+              Value: 16  [#4:0x142c+0x2]
+              Name: "AR_NOSENSOR"  [#4:0x142e+0xc]
+          ▾ LF_ENUMERATE AR_NOT_SUPPORTED — = 32, public  [#4:0x143c+0x17]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x143c+0x2]
+              Attributes: 0x3 [public]  [#4:0x143e+0x2]
+              Value: 32  [#4:0x1440+0x2]
+              Name: "AR_NOT_SUPPORTED"  [#4:0x1442+0x11]
+          ▾ LF_ENUMERATE AR_DOCKED — = 64, public  [#4:0x1454+0x10]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x1454+0x2]
+              Attributes: 0x3 [public]  [#4:0x1456+0x2]
+              Value: 64  [#4:0x1458+0x2]
+              Name: "AR_DOCKED"  [#4:0x145a+0xa]
+          ▾ LF_ENUMERATE AR_LAPTOP — = 128, public  [#4:0x1464+0x10]
+              Kind: LF_ENUMERATE (0x1502)  [#4:0x1464+0x2]
+              Attributes: 0x3 [public]  [#4:0x1466+0x2]
+              Value: 128  [#4:0x1468+0x2]
+              Name: "AR_LAPTOP"  [#4:0x146a+0xa]
+        ▾ 0x1035 LF_ENUM — "tagAR_STATE": int, 9 enumerators in 0x1034  [#4:0x1474+0x30]
+            Length: 46  [#4:0x1474+0x2]
+            Kind: LF_ENUM (0x1507)  [#4:0x1476+0x2]
+            Member count: 9  [#4:0x1478+0x2]
+            Options: 0x200 [has unique name]  [#4:0x147a+0x2]
+            Underlying type: 0x74 — int  [#4:0x147c+0x4]
+            Field list: 0x1034  [#4:0x1480+0x4]
+            Name: "tagAR_STATE"  [#4:0x1484+0xc]
+            Unique name: ".?AW4tagAR_STATE@@"  [#4:0x1490+0x13]
+        ▾ 0x1036 LF_FIELDLIST — 6 members  [#4:0x14a4+0x70]
+            Length: 110  [#4:0x14a4+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x14a6+0x2]
+          ▾ LF_MEMBER Ptr — unsigned __int64, offset 0, public  [#4:0x14a8+0xe]
+              Kind: LF_MEMBER (0x150d)  [#4:0x14a8+0x2]
+              Attributes: 0x3 [public]  [#4:0x14aa+0x2]
+              Type: 0x23 — unsigned __int64  [#4:0x14ac+0x4]
+              Offset: 0  [#4:0x14b0+0x2]
+              Name: "Ptr"  [#4:0x14b2+0x4]
+          ▾ LF_MEMBER Size — unsigned long, offset 8, public  [#4:0x14b8+0xf]
+              Kind: LF_MEMBER (0x150d)  [#4:0x14b8+0x2]
+              Attributes: 0x3 [public]  [#4:0x14ba+0x2]
+              Type: 0x22 — unsigned long  [#4:0x14bc+0x4]
+              Offset: 8  [#4:0x14c0+0x2]
+              Name: "Size"  [#4:0x14c2+0x5]
+          ▾ LF_MEMBER Reserved — unsigned long, offset 12, public  [#4:0x14c8+0x13]
+              Kind: LF_MEMBER (0x150d)  [#4:0x14c8+0x2]
+              Attributes: 0x3 [public]  [#4:0x14ca+0x2]
+              Type: 0x22 — unsigned long  [#4:0x14cc+0x4]
+              Offset: 12  [#4:0x14d0+0x2]
+              Name: "Reserved"  [#4:0x14d2+0x9]
+          ▾ LF_MEMBER Type — unsigned char, offset 12, public  [#4:0x14dc+0xf]
+              Kind: LF_MEMBER (0x150d)  [#4:0x14dc+0x2]
+              Attributes: 0x3 [public]  [#4:0x14de+0x2]
+              Type: 0x20 — unsigned char  [#4:0x14e0+0x4]
+              Offset: 12  [#4:0x14e4+0x2]
+              Name: "Type"  [#4:0x14e6+0x5]
+          ▾ LF_MEMBER Reserved1 — unsigned char, offset 13, public  [#4:0x14ec+0x14]
+              Kind: LF_MEMBER (0x150d)  [#4:0x14ec+0x2]
+              Attributes: 0x3 [public]  [#4:0x14ee+0x2]
+              Type: 0x20 — unsigned char  [#4:0x14f0+0x4]
+              Offset: 13  [#4:0x14f4+0x2]
+              Name: "Reserved1"  [#4:0x14f6+0xa]
+          ▾ LF_MEMBER Reserved2 — unsigned short, offset 14, public  [#4:0x1500+0x14]
+              Kind: LF_MEMBER (0x150d)  [#4:0x1500+0x2]
+              Attributes: 0x3 [public]  [#4:0x1502+0x2]
+              Type: 0x21 — unsigned short  [#4:0x1504+0x4]
+              Offset: 14  [#4:0x1508+0x2]
+              Name: "Reserved2"  [#4:0x150a+0xa]
+        ▾ 0x1037 LF_STRUCTURE — "_EVENT_DATA_DESCRIPTOR", 16 bytes, 6 members in 0x1036  [#4:0x1514+0x4c]
+            Length: 74  [#4:0x1514+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0x1516+0x2]
+            Member count: 6  [#4:0x1518+0x2]
+            Options: 0x200 [has unique name]  [#4:0x151a+0x2]
+            Field list: 0x1036  [#4:0x151c+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0x1520+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0x1524+0x4]
+            Size: 16  [#4:0x1528+0x2]
+            Name: "_EVENT_DATA_DESCRIPTOR"  [#4:0x152a+0x17]
+            Unique name: ".?AU_EVENT_DATA_DESCRIPTOR@@"  [#4:0x1541+0x1d]
+        ▾ 0x1038 LF_STRUCTURE — "__scrt_no_argv_policy", forward reference  [#4:0x1560+0x48]
+            Length: 70  [#4:0x1560+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0x1562+0x2]
+            Member count: 0  [#4:0x1564+0x2]
+            Options: 0x280 [forward ref | has unique name]  [#4:0x1566+0x2]
+            Field list: 0x0 — <no type>  [#4:0x1568+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0x156c+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0x1570+0x4]
+            Size: 0  [#4:0x1574+0x2]
+            Name: "__scrt_no_argv_policy"  [#4:0x1576+0x16]
+            Unique name: ".?AU__scrt_no_argv_policy@@"  [#4:0x158c+0x1c]
+        ▾ 0x1039 LF_MFUNCTION — int 0x1038::(0 parameters)  [#4:0x15a8+0x1c]
+            Length: 26  [#4:0x15a8+0x2]
+            Kind: LF_MFUNCTION (0x1009)  [#4:0x15aa+0x2]
+            Return type: 0x74 — int  [#4:0x15ac+0x4]
+            Class type: 0x1038  [#4:0x15b0+0x4]
+            This type: 0x0 — <no type>  [#4:0x15b4+0x4]
+            Calling convention: near C (0x0)  [#4:0x15b8+0x1]
+            Options: 0x8 [0x8]  [#4:0x15b9+0x1]
+            Parameter count: 0  [#4:0x15ba+0x2]
+            Argument list: 0x1014  [#4:0x15bc+0x4]
+            This adjustment: 0  [#4:0x15c0+0x4]
+        ▾ 0x103a LF_FIELDLIST — 1 members  [#4:0x15c4+0x1c]
+            Length: 26  [#4:0x15c4+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x15c6+0x2]
+          ▾ LF_ONEMETHOD configure_argv — 0x1039, public  [#4:0x15c8+0x17]
+              Kind: LF_ONEMETHOD (0x1511)  [#4:0x15c8+0x2]
+              Attributes: 0xb [public | static]  [#4:0x15ca+0x2]
+              Type: 0x1039  [#4:0x15cc+0x4]
+              Name: "configure_argv"  [#4:0x15d0+0xf]
+        ▾ 0x103b LF_STRUCTURE — "__scrt_no_argv_policy", 1 bytes, 1 members in 0x103a  [#4:0x15e0+0x48]
+            Length: 70  [#4:0x15e0+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0x15e2+0x2]
+            Member count: 1  [#4:0x15e4+0x2]
+            Options: 0x200 [has unique name]  [#4:0x15e6+0x2]
+            Field list: 0x103a  [#4:0x15e8+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0x15ec+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0x15f0+0x4]
+            Size: 1  [#4:0x15f4+0x2]
+            Name: "__scrt_no_argv_policy"  [#4:0x15f6+0x16]
+            Unique name: ".?AU__scrt_no_argv_policy@@"  [#4:0x160c+0x1c]
+        ▾ 0x103c LF_MODIFIER — const unaligned wchar_t  [#4:0x1628+0xc]
+            Length: 10  [#4:0x1628+0x2]
+            Kind: LF_MODIFIER (0x1001)  [#4:0x162a+0x2]
+            Modified type: 0x71 — wchar_t  [#4:0x162c+0x4]
+            Modifiers: 0x5 [const | unaligned]  [#4:0x1630+0x2]
+        ▾ 0x103d LF_POINTER — pointer to 0x103c  [#4:0x1634+0xc]
+            Length: 10  [#4:0x1634+0x2]
+            Kind: LF_POINTER (0x1002)  [#4:0x1636+0x2]
+            Referent type: 0x103c  [#4:0x1638+0x4]
+            Attributes: 0x1000c — near64, pointer, size 8  [#4:0x163c+0x4]
+        ▾ 0x103e LF_STRUCTURE — "_TP_CLEANUP_GROUP", forward reference  [#4:0x1640+0x40]
+            Length: 62  [#4:0x1640+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0x1642+0x2]
+            Member count: 0  [#4:0x1644+0x2]
+            Options: 0x280 [forward ref | has unique name]  [#4:0x1646+0x2]
+            Field list: 0x0 — <no type>  [#4:0x1648+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0x164c+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0x1650+0x4]
+            Size: 0  [#4:0x1654+0x2]
+            Name: "_TP_CLEANUP_GROUP"  [#4:0x1656+0x12]
+            Unique name: ".?AU_TP_CLEANUP_GROUP@@"  [#4:0x1668+0x18]
+        ▾ 0x103f LF_POINTER — pointer to 0x103e  [#4:0x1680+0xc]
+            Length: 10  [#4:0x1680+0x2]
+            Kind: LF_POINTER (0x1002)  [#4:0x1682+0x2]
+            Referent type: 0x103e  [#4:0x1684+0x4]
+            Attributes: 0x1000c — near64, pointer, size 8  [#4:0x1688+0x4]
+        ▾ 0x1040 LF_STRUCTURE — "__scrt_no_environment_policy", forward reference  [#4:0x168c+0x58]
+            Length: 86  [#4:0x168c+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0x168e+0x2]
+            Member count: 0  [#4:0x1690+0x2]
+            Options: 0x280 [forward ref | has unique name]  [#4:0x1692+0x2]
+            Field list: 0x0 — <no type>  [#4:0x1694+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0x1698+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0x169c+0x4]
+            Size: 0  [#4:0x16a0+0x2]
+            Name: "__scrt_no_environment_policy"  [#4:0x16a2+0x1d]
+            Unique name: ".?AU__scrt_no_environment_policy@@"  [#4:0x16bf+0x23]
+        ▾ 0x1041 LF_MFUNCTION — int 0x1040::(0 parameters)  [#4:0x16e4+0x1c]
+            Length: 26  [#4:0x16e4+0x2]
+            Kind: LF_MFUNCTION (0x1009)  [#4:0x16e6+0x2]
+            Return type: 0x74 — int  [#4:0x16e8+0x4]
+            Class type: 0x1040  [#4:0x16ec+0x4]
+            This type: 0x0 — <no type>  [#4:0x16f0+0x4]
+            Calling convention: near C (0x0)  [#4:0x16f4+0x1]
+            Options: 0x8 [0x8]  [#4:0x16f5+0x1]
+            Parameter count: 0  [#4:0x16f6+0x2]
+            Argument list: 0x1014  [#4:0x16f8+0x4]
+            This adjustment: 0  [#4:0x16fc+0x4]
+        ▾ 0x1042 LF_FIELDLIST — 1 members  [#4:0x1700+0x24]
+            Length: 34  [#4:0x1700+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x1702+0x2]
+          ▾ LF_ONEMETHOD initialize_environment — 0x1041, public  [#4:0x1704+0x1f]
+              Kind: LF_ONEMETHOD (0x1511)  [#4:0x1704+0x2]
+              Attributes: 0xb [public | static]  [#4:0x1706+0x2]
+              Type: 0x1041  [#4:0x1708+0x4]
+              Name: "initialize_environment"  [#4:0x170c+0x17]
+        ▾ 0x1043 LF_STRUCTURE — "__scrt_no_environment_policy", 1 bytes, 1 members in 0x1042  [#4:0x1724+0x58]
+            Length: 86  [#4:0x1724+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0x1726+0x2]
+            Member count: 1  [#4:0x1728+0x2]
+            Options: 0x200 [has unique name]  [#4:0x172a+0x2]
+            Field list: 0x1042  [#4:0x172c+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0x1730+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0x1734+0x4]
+            Size: 1  [#4:0x1738+0x2]
+            Name: "__scrt_no_environment_policy"  [#4:0x173a+0x1d]
+            Unique name: ".?AU__scrt_no_environment_policy@@"  [#4:0x1757+0x23]
+        ▾ 0x1044 LF_ARRAY — unsigned char[], 8 bytes  [#4:0x177c+0x10]
+            Length: 14  [#4:0x177c+0x2]
+            Kind: LF_ARRAY (0x1503)  [#4:0x177e+0x2]
+            Element type: 0x20 — unsigned char  [#4:0x1780+0x4]
+            Index type: 0x23 — unsigned __int64  [#4:0x1784+0x4]
+            Size: 8  [#4:0x1788+0x2]
+            Name: ""  [#4:0x178a+0x1]
+        ▾ 0x1045 LF_FIELDLIST — 4 members  [#4:0x178c+0x44]
+            Length: 66  [#4:0x178c+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x178e+0x2]
+          ▾ LF_MEMBER Data1 — unsigned long, offset 0, public  [#4:0x1790+0x10]
+              Kind: LF_MEMBER (0x150d)  [#4:0x1790+0x2]
+              Attributes: 0x3 [public]  [#4:0x1792+0x2]
+              Type: 0x22 — unsigned long  [#4:0x1794+0x4]
+              Offset: 0  [#4:0x1798+0x2]
+              Name: "Data1"  [#4:0x179a+0x6]
+          ▾ LF_MEMBER Data2 — unsigned short, offset 4, public  [#4:0x17a0+0x10]
+              Kind: LF_MEMBER (0x150d)  [#4:0x17a0+0x2]
+              Attributes: 0x3 [public]  [#4:0x17a2+0x2]
+              Type: 0x21 — unsigned short  [#4:0x17a4+0x4]
+              Offset: 4  [#4:0x17a8+0x2]
+              Name: "Data2"  [#4:0x17aa+0x6]
+          ▾ LF_MEMBER Data3 — unsigned short, offset 6, public  [#4:0x17b0+0x10]
+              Kind: LF_MEMBER (0x150d)  [#4:0x17b0+0x2]
+              Attributes: 0x3 [public]  [#4:0x17b2+0x2]
+              Type: 0x21 — unsigned short  [#4:0x17b4+0x4]
+              Offset: 6  [#4:0x17b8+0x2]
+              Name: "Data3"  [#4:0x17ba+0x6]
+          ▾ LF_MEMBER Data4 — 0x1044, offset 8, public  [#4:0x17c0+0x10]
+              Kind: LF_MEMBER (0x150d)  [#4:0x17c0+0x2]
+              Attributes: 0x3 [public]  [#4:0x17c2+0x2]
+              Type: 0x1044  [#4:0x17c4+0x4]
+              Offset: 8  [#4:0x17c8+0x2]
+              Name: "Data4"  [#4:0x17ca+0x6]
+        ▾ 0x1046 LF_STRUCTURE — "_GUID", 16 bytes, 4 members in 0x1045  [#4:0x17d0+0x28]
+            Length: 38  [#4:0x17d0+0x2]
+            Kind: LF_STRUCTURE (0x1505)  [#4:0x17d2+0x2]
+            Member count: 4  [#4:0x17d4+0x2]
+            Options: 0x200 [has unique name]  [#4:0x17d6+0x2]
+            Field list: 0x1045  [#4:0x17d8+0x4]
+            Derivation list: 0x0 — <no type>  [#4:0x17dc+0x4]
+            Vtable shape: 0x0 — <no type>  [#4:0x17e0+0x4]
+            Size: 16  [#4:0x17e4+0x2]
+            Name: "_GUID"  [#4:0x17e6+0x6]
+            Unique name: ".?AU_GUID@@"  [#4:0x17ec+0xc]
+        ▾ 0x1047 LF_FIELDLIST — 5 members  [#4:0x17f8+0x58]
+            Length: 86  [#4:0x17f8+0x2]
+            Kind: LF_FIELDLIST (0x1203)  [#4:0x17fa+0x2]
+          ▾ LF_MEMBER type — int, offset 0, public  [#4:0x17fc+0xf]
+              Kind: LF_MEMBER (0x150d)  [#4:0x17fc+0x2]
+              Attributes: 0x3 [public]  [#4:0x17fe+0x2]
+              Type: 0x74 — int  [#4:0x1800+0x4]
+              Offset: 0  [#4:0x1804+0x2]
+              Name: "type"  [#4:0x1806+0x5]
+          ▾ LF_MEMBER name — char*, offset 8, public  [#4:0x180c+0xf]
+              Kind: LF_MEMBER (0x150d)  [#4:0x180c+0x2]
+              Attributes: 0x3 [public]  [#4:0x180e+0x2]
+              Type: 0x670 — char*  [#4:0x1810+0x4]
+              Offset: 8  [#4:0x1814+0x2]
+              Name: "name"  [#4:0x1816+0x5]
+          ▾ LF_MEMBER arg1 — double, offset 16, public  [#4:0x181c+0xf]
+              Kind: LF_MEMBER (0x150d)  [#4:0x181c+0x2]
+              Attributes: 0x3 [public]  [#4:0x181e+0x2]
+              Type: 0x41 — double  [#4:0x1820+0x4]
+              Offset: 16  [#4:0x1824+0x2]
+              Name: "arg1"  [#4:0x1826+0x5]
+          ▾ LF_MEMBER arg2 — double, offset 24, public  [#4:0x182c+0xf]
+              Kind: LF_MEMBER (0x150d)  [#4:0x182c+0x2]
+              Attributes: 0x3 [public]  [#4:0x182e+0x2]
+              Type: 0x41 — double  [#4:0x1830+0x4]
+              Offset: 24  [#4:0x1834+0x2]
+              Name: "arg2"  [#4:0x1836+0x5]
+          ▾ LF_MEMBER retval — double, offset 32, public  [#4:0x183c+0x11]
+              Kind: LF_MEMBER (0x150d)  [#4:0x183c+0x2]
+              Attributes: 0x3 [public]  [#4:0x183e+0x2]
+              Type: 0x41 — double  [#4:0x1840+0x4]
+              Offset: 32  [#4:0x1844+0x2]
+              Name: "retval"  [#4:0x1846+0x7]
+        ▾ 0x1048 LF_STRUCTURE — "_exception", 40 bytes, 5 members in 0x1047  [#4:0x1850+0x34]  (+10 nodes elided)
+        ▾ 0x1049 LF_FIELDLIST — 7 members  [#4:0x1884+0x84]  (+44 nodes elided)
+        ▾ 0x104a LF_STRUCTURE — "_EVENT_DESCRIPTOR", 16 bytes, 7 members in 0x1049  [#4:0x1908+0x40]  (+10 nodes elided)
+        ▾ 0x104b LF_ENUM — "__vcrt_va_list_is_reference<__crt_locale_pointers * const>::<unnamed-enum-__the_value>": bool, 1 enumerators in 0x102d  [#4:0x1948+0xc4]  (+8 nodes elided)
+        ▾ 0x104c LF_FIELDLIST — 1 members  [#4:0x1a0c+0x28]  (+7 nodes elided)
+        ▾ 0x104d LF_STRUCTURE — "__vcrt_va_list_is_reference<__crt_locale_pointers * const>", 1 bytes, 1 members in 0x104c  [#4:0x1a34+0x94]  (+10 nodes elided)
+        ▾ 0x104e LF_ENUM — "__vcrt_va_list_is_reference<wchar_t const * const>::<unnamed-enum-__the_value>": bool, 1 enumerators in 0x102d  [#4:0x1ac8+0xa8]  (+8 nodes elided)
+        ▾ 0x104f LF_FIELDLIST — 1 members  [#4:0x1b70+0x28]  (+7 nodes elided)
+        ▾ 0x1050 LF_STRUCTURE — "__vcrt_va_list_is_reference<wchar_t const * const>", 1 bytes, 1 members in 0x104f  [#4:0x1b98+0x74]  (+10 nodes elided)
+        ▾ 0x1051 LF_STRUCTURE — "__vcrt_assert_va_start_is_not_reference<wchar_t const * const>", 1 bytes, 0 members in 0x1027  [#4:0x1c0c+0x8c]  (+10 nodes elided)
+        ▾ 0x1052 LF_STRUCTURE — "_TP_CALLBACK_INSTANCE", forward reference  [#4:0x1c98+0x48]  (+10 nodes elided)
+        ▾ 0x1053 LF_POINTER — pointer to 0x1052  [#4:0x1ce0+0xc]  (+4 nodes elided)
+        ▾ 0x1054 LF_ARGLIST — (0x1053, void*)  [#4:0x1cec+0x10]  (+5 nodes elided)
+        ▾ 0x1055 LF_PROCEDURE — void (2 parameters, 0x1054)  [#4:0x1cfc+0x10]  (+7 nodes elided)
+        ▾ 0x1056 LF_STRUCTURE — "__scrt_wide_argv_policy", forward reference  [#4:0x1d0c+0x4c]  (+10 nodes elided)
+        ▾ 0x1057 LF_MFUNCTION — int 0x1056::(0 parameters)  [#4:0x1d58+0x1c]  (+10 nodes elided)
+        ▾ 0x1058 LF_FIELDLIST — 1 members  [#4:0x1d74+0x1c]  (+7 nodes elided)
+        ▾ 0x1059 LF_STRUCTURE — "__scrt_wide_argv_policy", 1 bytes, 1 members in 0x1058  [#4:0x1d90+0x4c]  (+10 nodes elided)
+        ▾ 0x105a LF_MODIFIER — const wchar_t  [#4:0x1ddc+0xc]  (+4 nodes elided)
+        ▾ 0x105b LF_POINTER — pointer to 0x105a  [#4:0x1de8+0xc]  (+4 nodes elided)
+        ▾ 0x105c LF_ARGLIST — (void*, void*)  [#4:0x1df4+0x10]  (+5 nodes elided)
+        ▾ 0x105d LF_PROCEDURE — void (2 parameters, 0x105c)  [#4:0x1e04+0x10]  (+7 nodes elided)
+        ▾ 0x105e LF_STRUCTURE — "_TP_POOL", forward reference  [#4:0x1e14+0x30]  (+10 nodes elided)
+        ▾ 0x105f LF_POINTER — pointer to 0x105e  [#4:0x1e44+0xc]  (+4 nodes elided)
+        ▾ 0x1060 LF_POINTER — pointer to 0x105d  [#4:0x1e50+0xc]  (+4 nodes elided)
+        ▾ 0x1061 LF_STRUCTURE — "_ACTIVATION_CONTEXT", forward reference  [#4:0x1e5c+0x44]  (+10 nodes elided)
+        ▾ 0x1062 LF_POINTER — pointer to 0x1061  [#4:0x1ea0+0xc]  (+4 nodes elided)
+        ▾ 0x1063 LF_POINTER — pointer to 0x1055  [#4:0x1eac+0xc]  (+4 nodes elided)
+        ▾ 0x1064 LF_UNION — "_TP_CALLBACK_ENVIRON_V3::<unnamed-type-u>", forward reference  [#4:0x1eb8+0x68]  (+8 nodes elided)
+        ▾ 0x1065 LF_FIELDLIST — 11 members  [#4:0x1f20+0x10c]  (+67 nodes elided)
+        ▾ 0x1066 LF_STRUCTURE — "_TP_CALLBACK_ENVIRON_V3", 72 bytes, 11 members in 0x1065  [#4:0x202c+0x4c]  (+10 nodes elided)
+        ▾ 0x1067 LF_STRUCTURE — "_TP_CALLBACK_ENVIRON_V3::<unnamed-type-u>::<unnamed-type-s>", forward reference  [#4:0x2078+0x94]  (+10 nodes elided)
+        ▾ 0x1068 LF_FIELDLIST — 3 members  [#4:0x210c+0x3c]  (+19 nodes elided)
+        ▾ 0x1069 LF_UNION — "_TP_CALLBACK_ENVIRON_V3::<unnamed-type-u>", 4 bytes, 3 members in 0x1068  [#4:0x2148+0x68]  (+8 nodes elided)
+        ▾ 0x106a LF_BITFIELD — unsigned long : 1 at bit 0  [#4:0x21b0+0xc]  (+5 nodes elided)
+        ▾ 0x106b LF_BITFIELD — unsigned long : 1 at bit 1  [#4:0x21bc+0xc]  (+5 nodes elided)
+        ▾ 0x106c LF_BITFIELD — unsigned long : 30 at bit 2  [#4:0x21c8+0xc]  (+5 nodes elided)
+        ▾ 0x106d LF_FIELDLIST — 3 members  [#4:0x21d4+0x48]  (+20 nodes elided)
+        ▾ 0x106e LF_STRUCTURE — "_TP_CALLBACK_ENVIRON_V3::<unnamed-type-u>::<unnamed-type-s>", 4 bytes, 3 members in 0x106d  [#4:0x221c+0x94]  (+10 nodes elided)
+        ▾ 0x106f LF_STRUCTURE — "__scrt_narrow_argv_policy", forward reference  [#4:0x22b0+0x50]  (+10 nodes elided)
+        ▾ 0x1070 LF_MFUNCTION — int 0x106f::(0 parameters)  [#4:0x2300+0x1c]  (+10 nodes elided)
+        ▾ 0x1071 LF_FIELDLIST — 1 members  [#4:0x231c+0x1c]  (+7 nodes elided)
+        ▾ 0x1072 LF_STRUCTURE — "__scrt_narrow_argv_policy", 1 bytes, 1 members in 0x1071  [#4:0x2338+0x50]  (+10 nodes elided)
+        ▾ 0x1073 LF_FIELDLIST — 2 members  [#4:0x2388+0x24]  (+14 nodes elided)
+        ▾ 0x1074 LF_STRUCTURE — "_M128A", 16 bytes, 2 members in 0x1073  [#4:0x23ac+0x2c]  (+10 nodes elided)
+        ▾ 0x1075 LF_STRUCTURE — "__vcrt_assert_va_start_is_not_reference<__crt_locale_pointers * const>", 1 bytes, 0 members in 0x1027  [#4:0x23d8+0xac]  (+10 nodes elided)
+        ▾ 0x1076 LF_STRUCTURE — "__vcrt_assert_va_start_is_not_reference<char const * const>", 1 bytes, 0 members in 0x1027  [#4:0x2484+0x88]  (+10 nodes elided)
+        ▾ 0x1077 LF_ENUM — "__vcrt_va_list_is_reference<__crt_locale_pointers *>::<unnamed-enum-__the_value>": bool, 1 enumerators in 0x102d  [#4:0x250c+0xc0]  (+8 nodes elided)
+        ▾ 0x1078 LF_FIELDLIST — 1 members  [#4:0x25cc+0x28]  (+7 nodes elided)
+        ▾ 0x1079 LF_STRUCTURE — "__vcrt_va_list_is_reference<__crt_locale_pointers *>", 1 bytes, 1 members in 0x1078  [#4:0x25f4+0x8c]  (+10 nodes elided)
+        ▾ 0x107a LF_STRUCTURE — "_XSAVE_FORMAT", forward reference  [#4:0x2680+0x38]  (+10 nodes elided)
+        ▾ 0x107b LF_ARRAY — 0x1021[], 32 bytes  [#4:0x26b8+0x10]  (+6 nodes elided)
+        ▾ 0x107c LF_ARRAY — 0x1021[], 416 bytes  [#4:0x26c8+0x10]  (+6 nodes elided)
+        ▾ 0x107d LF_FIELDLIST — 64 members  [#4:0x26d8+0x488]  (+386 nodes elided)
+        ▾ 0x107e LF_STRUCTURE — "_CONTEXT", 1232 bytes, 64 members in 0x107d  [#4:0x2b60+0x30]  (+10 nodes elided)
+        ▾ 0x107f LF_STRUCTURE — "_EVENT_DESCRIPTOR", forward reference  [#4:0x2b90+0x40]  (+10 nodes elided)
+        ▾ 0x1080 LF_POINTER — pointer to 0x107f  [#4:0x2bd0+0xc]  (+4 nodes elided)
+        ▾ 0x1081 LF_FIELDLIST — 3 members  [#4:0x2bdc+0x44]  (+17 nodes elided)
+        ▾ 0x1082 LF_ENUM — "_MACHINE_ATTRIBUTES": int, 3 enumerators in 0x1081  [#4:0x2c20+0x40]  (+8 nodes elided)
+        ▾ 0x1083 LF_FIELDLIST — 2 members  [#4:0x2c60+0x24]  (+14 nodes elided)
+        ▾ 0x1084 LF_STRUCTURE — "_ldiv_t", 8 bytes, 2 members in 0x1083  [#4:0x2c84+0x2c]  (+10 nodes elided)
+        ▾ 0x1085 LF_ARGLIST — (void*, unsigned long, void*)  [#4:0x2cb0+0x14]  (+6 nodes elided)
+        ▾ 0x1086 LF_PROCEDURE — void (3 parameters, 0x1085)  [#4:0x2cc4+0x10]  (+7 nodes elided)
+        ▾ 0x1087 LF_POINTER — pointer to 0x1086  [#4:0x2cd4+0xc]  (+4 nodes elided)
+        ▾ 0x1088 LF_STRUCTURE — "__scrt_winmain_policy", forward reference  [#4:0x2ce0+0x48]  (+10 nodes elided)
+        ▾ 0x1089 LF_MFUNCTION — void 0x1088::(0 parameters)  [#4:0x2d28+0x1c]  (+10 nodes elided)
+        ▾ 0x108a LF_FIELDLIST — 1 members  [#4:0x2d44+0x1c]  (+7 nodes elided)
+        ▾ 0x108b LF_STRUCTURE — "__scrt_winmain_policy", 1 bytes, 1 members in 0x108a  [#4:0x2d60+0x48]  (+10 nodes elided)
+        ▾ 0x108c LF_STRUCTURE — "__scrt_nofile_policy", forward reference  [#4:0x2da8+0x48]  (+10 nodes elided)
+        ▾ 0x108d LF_MFUNCTION — void 0x108c::(0 parameters)  [#4:0x2df0+0x1c]  (+10 nodes elided)
+        ▾ 0x108e LF_FIELDLIST — 2 members  [#4:0x2e0c+0x2c]  (+12 nodes elided)
+        ▾ 0x108f LF_STRUCTURE — "__scrt_nofile_policy", 1 bytes, 2 members in 0x108e  [#4:0x2e38+0x48]  (+10 nodes elided)
+        ▾ 0x1090 LF_STRUCTURE — "__scrt_file_policy", forward reference  [#4:0x2e80+0x44]  (+10 nodes elided)
+        ▾ 0x1091 LF_MFUNCTION — void 0x1090::(0 parameters)  [#4:0x2ec4+0x1c]  (+10 nodes elided)
+        ▾ 0x1092 LF_FIELDLIST — 2 members  [#4:0x2ee0+0x2c]  (+12 nodes elided)
+        ▾ 0x1093 LF_STRUCTURE — "__scrt_file_policy", 1 bytes, 2 members in 0x1092  [#4:0x2f0c+0x44]  (+10 nodes elided)
+        ▾ 0x1094 LF_STRUCTURE — "__scrt_main_policy", forward reference  [#4:0x2f50+0x44]  (+10 nodes elided)
+        ▾ 0x1095 LF_MFUNCTION — void 0x1094::(0 parameters)  [#4:0x2f94+0x1c]  (+10 nodes elided)
+        ▾ 0x1096 LF_FIELDLIST — 1 members  [#4:0x2fb0+0x1c]  (+7 nodes elided)
+        ▾ 0x1097 LF_STRUCTURE — "__scrt_main_policy", 1 bytes, 1 members in 0x1096  [#4:0x2fcc+0x44]  (+10 nodes elided)
+        ▾ 0x1098 LF_STRUCTURE — "_TP_CALLBACK_ENVIRON_V3", forward reference  [#4:0x3010+0x4c]  (+10 nodes elided)
+        ▾ 0x1099 LF_POINTER — pointer to 0x1098  [#4:0x305c+0xc]  (+4 nodes elided)
+        ▾ 0x109a LF_STRUCTURE — "__scrt_narrow_environment_policy", forward reference  [#4:0x3068+0x60]  (+10 nodes elided)
+        ▾ 0x109b LF_MFUNCTION — int 0x109a::(0 parameters)  [#4:0x30c8+0x1c]  (+10 nodes elided)
+        ▾ 0x109c LF_FIELDLIST — 1 members  [#4:0x30e4+0x24]  (+7 nodes elided)
+        ▾ 0x109d LF_STRUCTURE — "__scrt_narrow_environment_policy", 1 bytes, 1 members in 0x109c  [#4:0x3108+0x60]  (+10 nodes elided)
+        ▾ 0x109e LF_FIELDLIST — 2 members  [#4:0x3168+0x24]  (+14 nodes elided)
+        ▾ 0x109f LF_STRUCTURE — "_lldiv_t", 16 bytes, 2 members in 0x109e  [#4:0x318c+0x30]  (+10 nodes elided)
+        ▾ 0x10a0 LF_STRUCTURE — "__crt_fast_encoded_nullptr_t", 1 bytes, 0 members in 0x1027  [#4:0x31bc+0x58]  (+10 nodes elided)
+        ▾ 0x10a1 LF_STRUCTURE — "_EXCEPTION_RECORD", forward reference  [#4:0x3214+0x40]  (+10 nodes elided)
+        ▾ 0x10a2 LF_POINTER — pointer to 0x10a1  [#4:0x3254+0xc]  (+4 nodes elided)
+        ▾ 0x10a3 LF_ARRAY — unsigned __int64[], 120 bytes  [#4:0x3260+0x10]  (+6 nodes elided)
+        ▾ 0x10a4 LF_FIELDLIST — 6 members  [#4:0x3270+0xac]  (+38 nodes elided)
+        ▾ 0x10a5 LF_STRUCTURE — "_EXCEPTION_RECORD", 152 bytes, 6 members in 0x10a4  [#4:0x331c+0x40]  (+10 nodes elided)
+        ▾ 0x10a6 LF_MODIFIER — const unsigned short  [#4:0x335c+0xc]  (+4 nodes elided)
+        ▾ 0x10a7 LF_POINTER — pointer to 0x10a6  [#4:0x3368+0xc]  (+4 nodes elided)
+        ▾ 0x10a8 LF_FIELDLIST — 3 members  [#4:0x3374+0x60]  (+20 nodes elided)
+        ▾ 0x10a9 LF_STRUCTURE — "__crt_locale_data_public", 16 bytes, 3 members in 0x10a8  [#4:0x33d4+0x50]  (+10 nodes elided)
+        ▾ 0x10aa LF_MODIFIER — const 0x107f  [#4:0x3424+0xc]  (+4 nodes elided)
+        ▾ 0x10ab LF_POINTER — pointer to 0x10aa  [#4:0x3430+0xc]  (+4 nodes elided)
+        ▾ 0x10ac LF_STRUCTURE — "__scrt_enclavemain_policy", forward reference  [#4:0x343c+0x50]  (+10 nodes elided)
+        ▾ 0x10ad LF_MFUNCTION — void 0x10ac::(0 parameters)  [#4:0x348c+0x1c]  (+10 nodes elided)
+        ▾ 0x10ae LF_FIELDLIST — 1 members  [#4:0x34a8+0x1c]  (+7 nodes elided)
+        ▾ 0x10af LF_STRUCTURE — "__scrt_enclavemain_policy", 1 bytes, 1 members in 0x10ae  [#4:0x34c4+0x50]  (+10 nodes elided)
+        ▾ 0x10b0 LF_FIELDLIST — 2 members  [#4:0x3514+0x1c]  (+12 nodes elided)
+        ▾ 0x10b1 LF_ENUM — "__scrt_module_type": int, 2 enumerators in 0x10b0  [#4:0x3530+0x40]  (+8 nodes elided)
+        ▾ 0x10b2 LF_ENUM — "__vcrt_va_list_is_reference<wchar_t const *>::<unnamed-enum-__the_value>": bool, 1 enumerators in 0x102d  [#4:0x3570+0xa0]  (+8 nodes elided)
+        ▾ 0x10b3 LF_FIELDLIST — 1 members  [#4:0x3610+0x28]  (+7 nodes elided)
+        ▾ 0x10b4 LF_STRUCTURE — "__vcrt_va_list_is_reference<wchar_t const *>", 1 bytes, 1 members in 0x10b3  [#4:0x3638+0x70]  (+10 nodes elided)
+        ▾ 0x10b5 LF_FIELDLIST — 2 members  [#4:0x36a8+0x28]  (+14 nodes elided)
+        ▾ 0x10b6 LF_STRUCTURE — "_CUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG", 16 bytes, 2 members in 0x10b5  [#4:0x36d0+0x64]  (+10 nodes elided)
+        ▾ 0x10b7 LF_FIELDLIST — 2 members  [#4:0x3734+0x38]  (+14 nodes elided)
+        ▾ 0x10b8 LF_STRUCTURE — "_EXCEPTION_POINTERS", 16 bytes, 2 members in 0x10b7  [#4:0x376c+0x44]  (+10 nodes elided)
+        ▾ 0x10b9 LF_STRUCTURE — "_exception", forward reference  [#4:0x37b0+0x34]  (+10 nodes elided)
+        ▾ 0x10ba LF_POINTER — pointer to 0x10b9  [#4:0x37e4+0xc]  (+4 nodes elided)
+        ▾ 0x10bb LF_ARGLIST — (0x10ba)  [#4:0x37f0+0xc]  (+4 nodes elided)
+        ▾ 0x10bc LF_PROCEDURE — int (1 parameter, 0x10bb)  [#4:0x37fc+0x10]  (+7 nodes elided)
+        ▾ 0x10bd LF_POINTER — pointer to 0x10bc  [#4:0x380c+0xc]  (+4 nodes elided)
+        ▾ 0x10be LF_FIELDLIST — 12 members  [#4:0x3818+0x144]  (+62 nodes elided)
+        ▾ 0x10bf LF_ENUM — "_WINDOW_ACTION_MODIFIERS": int, 12 enumerators in 0x10be  [#4:0x395c+0x4c]  (+8 nodes elided)
+        ▾ 0x10c0 LF_STRUCTURE — "_CUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG", forward reference  [#4:0x39a8+0x64]  (+10 nodes elided)
+        ▾ 0x10c1 LF_POINTER — pointer to 0x10c0  [#4:0x3a0c+0xc]  (+4 nodes elided)
+        ▾ 0x10c2 LF_STRUCTURE — "__crt_locale_data", forward reference  [#4:0x3a18+0x40]  (+10 nodes elided)
+        ▾ 0x10c3 LF_POINTER — pointer to 0x10c2  [#4:0x3a58+0xc]  (+4 nodes elided)
+        ▾ 0x10c4 LF_STRUCTURE — "__crt_multibyte_data", forward reference  [#4:0x3a64+0x48]  (+10 nodes elided)
+        ▾ 0x10c5 LF_POINTER — pointer to 0x10c4  [#4:0x3aac+0xc]  (+4 nodes elided)
+        ▾ 0x10c6 LF_FIELDLIST — 2 members  [#4:0x3ab8+0x2c]  (+14 nodes elided)
+        ▾ 0x10c7 LF_STRUCTURE — "__crt_locale_pointers", 16 bytes, 2 members in 0x10c6  [#4:0x3ae4+0x48]  (+10 nodes elided)
+        ▾ 0x10c8 LF_STRUCTURE — "__scrt_wide_environment_policy", forward reference  [#4:0x3b2c+0x5c]  (+10 nodes elided)
+        ▾ 0x10c9 LF_MFUNCTION — int 0x10c8::(0 parameters)  [#4:0x3b88+0x1c]  (+10 nodes elided)
+        ▾ 0x10ca LF_FIELDLIST — 1 members  [#4:0x3ba4+0x24]  (+7 nodes elided)
+        ▾ 0x10cb LF_STRUCTURE — "__scrt_wide_environment_policy", 1 bytes, 1 members in 0x10ca  [#4:0x3bc8+0x5c]  (+10 nodes elided)
+        ▾ 0x10cc LF_MODIFIER — const int  [#4:0x3c24+0xc]  (+4 nodes elided)
+        ▾ 0x10cd LF_POINTER — pointer to 0x1086  [#4:0x3c30+0xc]  (+4 nodes elided)
+        ▾ 0x10ce LF_POINTER — pointer to 0x10cd  [#4:0x3c3c+0xc]  (+4 nodes elided)
+        ▾ 0x10cf LF_MODIFIER — const bool  [#4:0x3c48+0xc]  (+4 nodes elided)
+        ▾ 0x10d0 LF_POINTER — pointer to char*  [#4:0x3c54+0xc]  (+4 nodes elided)
+        ▾ 0x10d1 LF_PROCEDURE — 0x10d0 (0 parameters, 0x1014)  [#4:0x3c60+0x10]  (+7 nodes elided)
+        ▾ 0x10d2 LF_POINTER — pointer to 0x10d0  [#4:0x3c70+0xc]  (+4 nodes elided)
+        ▾ 0x10d3 LF_PROCEDURE — 0x10d2 (0 parameters, 0x1014)  [#4:0x3c7c+0x10]  (+7 nodes elided)
+        ▾ 0x10d4 LF_PROCEDURE — int* (0 parameters, 0x1014)  [#4:0x3c8c+0x10]  (+7 nodes elided)
+        ▾ 0x10d5 LF_ARGLIST — (int, 0x10d0, 0x10d0)  [#4:0x3c9c+0x14]  (+6 nodes elided)
+        ▾ 0x10d6 LF_PROCEDURE — int (3 parameters, 0x10d5)  [#4:0x3cb0+0x10]  (+7 nodes elided)
+        ▾ 0x10d7 LF_ARGLIST — (0x10b1)  [#4:0x3cc0+0xc]  (+4 nodes elided)
+        ▾ 0x10d8 LF_PROCEDURE — bool (1 parameter, 0x10d7)  [#4:0x3ccc+0x10]  (+7 nodes elided)
+        ▾ 0x10d9 LF_PROCEDURE — bool (0 parameters, 0x1014)  [#4:0x3cdc+0x10]  (+7 nodes elided)
+        ▾ 0x10da LF_POINTER — pointer to 0x1016  [#4:0x3cec+0xc]  (+4 nodes elided)
+        ▾ 0x10db LF_ARGLIST — (0x10da, 0x10da)  [#4:0x3cf8+0x10]  (+5 nodes elided)
+        ▾ 0x10dc LF_PROCEDURE — int (2 parameters, 0x10db)  [#4:0x3d08+0x10]  (+7 nodes elided)
+        ▾ 0x10dd LF_POINTER — pointer to 0x1018  [#4:0x3d18+0xc]  (+4 nodes elided)
+        ▾ 0x10de LF_ARGLIST — (0x10dd, 0x10dd)  [#4:0x3d24+0x10]  (+5 nodes elided)
+        ▾ 0x10df LF_PROCEDURE — void (2 parameters, 0x10de)  [#4:0x3d34+0x10]  (+7 nodes elided)
+        ▾ 0x10e0 LF_ARGLIST — (bool)  [#4:0x3d44+0xc]  (+4 nodes elided)
+        ▾ 0x10e1 LF_PROCEDURE — void (1 parameter, 0x10e0)  [#4:0x3d50+0x10]  (+7 nodes elided)
+        ▾ 0x10e2 LF_POINTER — pointer to 0x10cd  [#4:0x3d60+0xc]  (+4 nodes elided)
+        ▾ 0x10e3 LF_PROCEDURE — 0x10e2 (0 parameters, 0x1014)  [#4:0x3d6c+0x10]  (+7 nodes elided)
+        ▾ 0x10e4 LF_MODIFIER — const void  [#4:0x3d7c+0xc]  (+4 nodes elided)
+        ▾ 0x10e5 LF_POINTER — pointer to 0x10e4  [#4:0x3d88+0xc]  (+4 nodes elided)
+        ▾ 0x10e6 LF_ARGLIST — (0x10e5)  [#4:0x3d94+0xc]  (+4 nodes elided)
+        ▾ 0x10e7 LF_PROCEDURE — bool (1 parameter, 0x10e6)  [#4:0x3da0+0x10]  (+7 nodes elided)
+        ▾ 0x10e8 LF_ARGLIST — (0x1087)  [#4:0x3db0+0xc]  (+4 nodes elided)
+        ▾ 0x10e9 LF_PROCEDURE — void (1 parameter, 0x10e8)  [#4:0x3dbc+0x10]  (+7 nodes elided)
+        ▾ 0x10ea LF_ARGLIST — (bool, bool)  [#4:0x3dcc+0x10]  (+5 nodes elided)
+        ▾ 0x10eb LF_PROCEDURE — bool (2 parameters, 0x10ea)  [#4:0x3ddc+0x10]  (+7 nodes elided)
+        ▾ 0x10ec LF_ARGLIST — (unsigned)  [#4:0x3dec+0xc]  (+4 nodes elided)
+        ▾ 0x10ed LF_PROCEDURE — void (1 parameter, 0x10ec)  [#4:0x3df8+0x10]  (+7 nodes elided)
+        ▾ 0x10ee LF_ARGLIST — (int)  [#4:0x3e08+0xc]  (+4 nodes elided)
+        ▾ 0x10ef LF_PROCEDURE — void (1 parameter, 0x10ee)  [#4:0x3e14+0x10]  (+7 nodes elided)
+        ▾ 0x10f0 LF_STRUCTURE — "_EXCEPTION_POINTERS", forward reference  [#4:0x3e24+0x44]  (+10 nodes elided)
+        ▾ 0x10f1 LF_POINTER — pointer to 0x10f0  [#4:0x3e68+0xc]  (+4 nodes elided)
+        ▾ 0x10f2 LF_ARGLIST — (unsigned long, 0x10f1)  [#4:0x3e74+0x10]  (+5 nodes elided)
+        ▾ 0x10f3 LF_PROCEDURE — int (2 parameters, 0x10f2)  [#4:0x3e84+0x10]  (+7 nodes elided)
+        ▾ 0x10f4 LF_FIELDLIST — 3 members  [#4:0x3e94+0x70]  (+17 nodes elided)
+        ▾ 0x10f5 LF_ENUM — "_crt_argv_mode": int, 3 enumerators in 0x10f4  [#4:0x3f04+0x38]  (+8 nodes elided)
+        ▾ 0x10f6 LF_PROCEDURE — 0x10f5 (0 parameters, 0x1014)  [#4:0x3f3c+0x10]  (+7 nodes elided)
+        ▾ 0x10f7 LF_ARGLIST — (0x10f5)  [#4:0x3f4c+0xc]  (+4 nodes elided)
+        ▾ 0x10f8 LF_PROCEDURE — int (1 parameter, 0x10f7)  [#4:0x3f58+0x10]  (+7 nodes elided)
+        ▾ 0x10f9 LF_PROCEDURE — int (1 parameter, 0x10ee)  [#4:0x3f68+0x10]  (+7 nodes elided)
+        ▾ 0x10fa LF_ARGLIST — (0x100f)  [#4:0x3f78+0xc]  (+4 nodes elided)
+        ▾ 0x10fb LF_PROCEDURE — void (1 parameter, 0x10fa)  [#4:0x3f84+0x10]  (+7 nodes elided)
+        ▾ 0x10fc LF_ARGLIST — (0x1018)  [#4:0x3f94+0xc]  (+4 nodes elided)
+        ▾ 0x10fd LF_PROCEDURE — int (1 parameter, 0x10fc)  [#4:0x3fa0+0x10]  (+7 nodes elided)
+        ▾ 0x10fe LF_ARGLIST — (0x10bd)  [#4:0x3fb0+0xc]  (+4 nodes elided)
+        ▾ 0x10ff LF_PROCEDURE — void (1 parameter, 0x10fe)  [#4:0x3fbc+0x10]  (+7 nodes elided)
+        ▾ 0x1100 LF_ARGLIST — (void*)  [#4:0x3fcc+0xc]  (+4 nodes elided)
+        ▾ 0x1101 LF_PROCEDURE — unsigned long (1 parameter, 0x1100)  [#4:0x3fd8+0x10]  (+7 nodes elided)
+        ▾ 0x1102 LF_FIELDLIST — 3 members  [#4:0x3fe8+0x38]  (+20 nodes elided)
+        ▾ 0x1103 LF_STRUCTURE — "_onexit_table_t", 24 bytes, 3 members in 0x1102  [#4:0x4020+0x3c]  (+10 nodes elided)
+        ▾ 0x1104 LF_ARRAY — unsigned short[], 8 bytes  [#4:0x405c+0x10]  (+6 nodes elided)
+        ▾ 0x1105 LF_ARRAY — unsigned short[], 20 bytes  [#4:0x406c+0x10]  (+6 nodes elided)
+        ▾ 0x1106 LF_FIELDLIST — 19 members  [#4:0x407c+0x170]  (+116 nodes elided)
+        ▾ 0x1107 LF_STRUCTURE — "_IMAGE_DOS_HEADER", 64 bytes, 19 members in 0x1106  [#4:0x41ec+0x40]  (+10 nodes elided)
+        ▾ 0x1108 LF_STRUCTURE — "_IMAGE_NT_HEADERS64", forward reference  [#4:0x422c+0x44]  (+10 nodes elided)
+        ▾ 0x1109 LF_POINTER — pointer to 0x1108  [#4:0x4270+0xc]  (+4 nodes elided)
+        ▾ 0x110a LF_STRUCTURE — "_IMAGE_DOS_HEADER", forward reference  [#4:0x427c+0x40]  (+10 nodes elided)
+        ▾ 0x110b LF_POINTER — pointer to 0x110a  [#4:0x42bc+0xc]  (+4 nodes elided)
+        ▾ 0x110c LF_FIELDLIST — 4 members  [#4:0x42c8+0x88]  (+22 nodes elided)
+        ▾ 0x110d LF_ENUM — "_EXCEPTION_DISPOSITION": int, 4 enumerators in 0x110c  [#4:0x4350+0x48]  (+8 nodes elided)
+        ▾ 0x110e LF_ARGLIST — (0x10a2, void*, 0x102c, void*)  [#4:0x4398+0x18]  (+7 nodes elided)
+        ▾ 0x110f LF_PROCEDURE — 0x110d (4 parameters, 0x110e)  [#4:0x43b0+0x10]  (+7 nodes elided)
+        ▾ 0x1110 LF_FIELDLIST — 7 members  [#4:0x43c0+0xc4]  (+44 nodes elided)
+        ▾ 0x1111 LF_STRUCTURE — "_IMAGE_FILE_HEADER", 20 bytes, 7 members in 0x1110  [#4:0x4484+0x44]  (+10 nodes elided)
+        ▾ 0x1112 LF_FIELDLIST — 2 members  [#4:0x44c8+0x30]  (+14 nodes elided)
+        ▾ 0x1113 LF_STRUCTURE — "_IMAGE_DATA_DIRECTORY", 8 bytes, 2 members in 0x1112  [#4:0x44f8+0x48]  (+10 nodes elided)
+        ▾ 0x1114 LF_STRUCTURE — "_IMAGE_FILE_HEADER", forward reference  [#4:0x4540+0x44]  (+10 nodes elided)
+        ▾ 0x1115 LF_STRUCTURE — "_IMAGE_OPTIONAL_HEADER64", forward reference  [#4:0x4584+0x50]  (+10 nodes elided)
+        ▾ 0x1116 LF_FIELDLIST — 3 members  [#4:0x45d4+0x4c]  (+20 nodes elided)
+        ▾ 0x1117 LF_STRUCTURE — "_IMAGE_NT_HEADERS64", 264 bytes, 3 members in 0x1116  [#4:0x4620+0x44]  (+10 nodes elided)
+        ▾ 0x1118 LF_STRUCTURE — "_IMAGE_DATA_DIRECTORY", forward reference  [#4:0x4664+0x48]  (+10 nodes elided)
+        ▾ 0x1119 LF_ARRAY — 0x1118[], 128 bytes  [#4:0x46ac+0x10]  (+6 nodes elided)
+        ▾ 0x111a LF_FIELDLIST — 30 members  [#4:0x46bc+0x350]  (+182 nodes elided)
+        ▾ 0x111b LF_STRUCTURE — "_IMAGE_OPTIONAL_HEADER64", 240 bytes, 30 members in 0x111a  [#4:0x4a0c+0x50]  (+10 nodes elided)
+        ▾ 0x111c LF_STRUCTURE — "HINSTANCE__", forward reference  [#4:0x4a5c+0x34]  (+10 nodes elided)
+        ▾ 0x111d LF_POINTER — pointer to 0x111c  [#4:0x4a90+0xc]  (+4 nodes elided)
+        ▾ 0x111e LF_ARGLIST — (0x111d, unsigned long, void*)  [#4:0x4a9c+0x14]  (+6 nodes elided)
+        ▾ 0x111f LF_PROCEDURE — int (3 parameters, 0x111e)  [#4:0x4ab0+0x10]  (+7 nodes elided)
+        ▾ 0x1120 LF_POINTER — pointer to 0x111f  [#4:0x4ac0+0xc]  (+4 nodes elided)
+        ▾ 0x1121 LF_FIELDLIST — 1 members  [#4:0x4acc+0x18]  (+8 nodes elided)
+        ▾ 0x1122 LF_STRUCTURE — "HINSTANCE__", 4 bytes, 1 members in 0x1121  [#4:0x4ae4+0x34]  (+10 nodes elided)
+        ▾ 0x1123 LF_STRUCTURE — "_EXCEPTION_REGISTRATION_RECORD", forward reference  [#4:0x4b18+0x5c]  (+10 nodes elided)
+        ▾ 0x1124 LF_POINTER — pointer to 0x1123  [#4:0x4b74+0xc]  (+4 nodes elided)
+        ▾ 0x1125 LF_STRUCTURE — "_NT_TIB", forward reference  [#4:0x4b80+0x2c]  (+10 nodes elided)
+        ▾ 0x1126 LF_POINTER — pointer to 0x1125  [#4:0x4bac+0xc]  (+4 nodes elided)
+        ▾ 0x1127 LF_FIELDLIST — 8 members  [#4:0x4bb8+0xb8]  (+50 nodes elided)
+        ▾ 0x1128 LF_STRUCTURE — "_NT_TIB", 56 bytes, 8 members in 0x1127  [#4:0x4c70+0x2c]  (+10 nodes elided)
+        ▾ 0x1129 LF_POINTER — pointer to 0x110f  [#4:0x4c9c+0xc]  (+4 nodes elided)
+        ▾ 0x112a LF_UNION — "_IMAGE_SECTION_HEADER::<unnamed-type-Misc>", forward reference  [#4:0x4ca8+0x6c]  (+8 nodes elided)
+        ▾ 0x112b LF_FIELDLIST — 11 members  [#4:0x4d14+0x12c]  (+67 nodes elided)
+        ▾ 0x112c LF_STRUCTURE — "_IMAGE_SECTION_HEADER", 40 bytes, 11 members in 0x112b  [#4:0x4e40+0x48]  (+10 nodes elided)
+        ▾ 0x112d LF_FIELDLIST — 2 members  [#4:0x4e88+0x38]  (+14 nodes elided)
+        ▾ 0x112e LF_UNION — "_IMAGE_SECTION_HEADER::<unnamed-type-Misc>", 4 bytes, 2 members in 0x112d  [#4:0x4ec0+0x6c]  (+8 nodes elided)
+        ▾ 0x112f LF_FIELDLIST — 2 members  [#4:0x4f2c+0x28]  (+14 nodes elided)
+        ▾ 0x1130 LF_STRUCTURE — "_EXCEPTION_REGISTRATION_RECORD", 16 bytes, 2 members in 0x112f  [#4:0x4f54+0x5c]  (+10 nodes elided)
+        ▾ 0x1131 LF_STRUCTURE — "_IMAGE_SECTION_HEADER", forward reference  [#4:0x4fb0+0x48]  (+10 nodes elided)
+        ▾ 0x1132 LF_POINTER — pointer to 0x1131  [#4:0x4ff8+0xc]  (+4 nodes elided)
+        ▾ 0x1133 LF_POINTER — pointer to unsigned char  [#4:0x5004+0xc]  (+4 nodes elided)
+        ▾ 0x1134 LF_MODIFIER — const unsigned __int64  [#4:0x5010+0xc]  (+4 nodes elided)
+        ▾ 0x1135 LF_ARGLIST — (0x1133, 0x1134)  [#4:0x501c+0x10]  (+5 nodes elided)
+        ▾ 0x1136 LF_PROCEDURE — 0x1132 (2 parameters, 0x1135)  [#4:0x502c+0x10]  (+7 nodes elided)
+        ▾ 0x1137 LF_POINTER — pointer to 0x1131  [#4:0x503c+0xc]  (+4 nodes elided)
+        ▾ 0x1138 LF_POINTER — pointer to void  [#4:0x5048+0xc]  (+4 nodes elided)
+        ▾ 0x1139 LF_ARGLIST — (0x1138)  [#4:0x5054+0xc]  (+4 nodes elided)
+        ▾ 0x113a LF_PROCEDURE — bool (1 parameter, 0x1139)  [#4:0x5060+0x10]  (+7 nodes elided)
+        ▾ 0x113b LF_STRUCTURE — "_TEB", forward reference  [#4:0x5070+0x28]  (+10 nodes elided)
+        ▾ 0x113c LF_POINTER — pointer to 0x113b  [#4:0x5098+0xc]  (+4 nodes elided)
+        ▾ 0x113d LF_PROCEDURE — 0x113c (0 parameters, 0x1014)  [#4:0x50a4+0x10]  (+7 nodes elided)
+        ▾ 0x113e LF_STRUCTURE — "_onexit_table_t", forward reference  [#4:0x50b4+0x3c]  (+10 nodes elided)
+        ▾ 0x113f LF_POINTER — pointer to 0x113e  [#4:0x50f0+0xc]  (+4 nodes elided)
+        ▾ 0x1140 LF_ARGLIST — (0x113f)  [#4:0x50fc+0xc]  (+4 nodes elided)
+        ▾ 0x1141 LF_PROCEDURE — int (1 parameter, 0x1140)  [#4:0x5108+0x10]  (+7 nodes elided)
+        ▾ 0x1142 LF_ARGLIST — (0x111d, unsigned long, void*, 0x1120, unsigned long, 0x10f1)  [#4:0x5118+0x20]  (+9 nodes elided)
+        ▾ 0x1143 LF_PROCEDURE — int (6 parameters, 0x1142)  [#4:0x5138+0x10]  (+7 nodes elided)
+        ▾ 0x1144 LF_POINTER — pointer to 0x111c  [#4:0x5148+0xc]  (+4 nodes elided)
+        ▾ 0x1145 LF_MODIFIER — const unsigned long  [#4:0x5154+0xc]  (+4 nodes elided)
+        ▾ 0x1146 LF_POINTER — pointer to 0x111f  [#4:0x5160+0xc]  (+4 nodes elided)
+        ▾ 0x1147 LF_POINTER — pointer to 0x10f0  [#4:0x516c+0xc]  (+4 nodes elided)
+        … 382 more children elided (4234 nodes)
+        ▾ 0x12c6 LF_POINTER — pointer to 0x12c5  [#4:0x8ed8+0xc]  (+4 nodes elided)
+    ▾ Stream 3: Debug info (DBI) — 43602 bytes  [#5:0x0+0xaa52]  (+6906 nodes elided)
+    ▾ Stream 4: ID info (IPI) — 10132 bytes  [#6:0x0+0x2794]  (+1700 nodes elided)
+      Stream 5: /LinkInfo — 0 bytes  [#7:0x0+0x0]
+      Stream 6: /TMCache — 0 bytes  [#8:0x0+0x0]
+    ▾ Stream 7: /names — 16251 bytes  [#9:0x0+0x3f7b]  (+513 nodes elided)
+    ▾ Stream 8: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\ucrt_stubs.obj" — 1628 bytes  [#10:0x0+0x65c]  (+353 nodes elided)
+    ▾ Stream 9: Module "KERNEL32.dll" — 212 bytes  [#11:0x0+0xd4]  (+54 nodes elided)
+    ▾ Stream 10: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcruntime\\build\\base\\md\\vcruntime_base_md_kernel32.vcxproj\\objr\\amd64\\softmemtag.obj" — 508 bytes  [#12:0x0+0x1fc]  (+69 nodes elided)
+    ▾ Stream 11: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\exe_main.obj" — 10356 bytes  [#13:0x0+0x2874]  (+1919 nodes elided)
+    ▾ Stream 12: Section headers — 200 bytes  [#14:0x0+0xc8]  (+55 nodes elided)
+    ▾ Stream 13: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\argv_mode.obj" — 648 bytes  [#15:0x0+0x288]  (+108 nodes elided)
+    ▾ Stream 14: Module "C:\\fillyfoal\\src\\fixture_hello_full.obj" — 1952 bytes  [#16:0x0+0x7a0]  (+549 nodes elided)
+    ▾ Stream 15: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\commit_mode.obj" — 608 bytes  [#17:0x0+0x260]  (+102 nodes elided)
+    ▾ Stream 16: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\invalid_parameter_handler.obj" — 628 bytes  [#18:0x0+0x274]  (+101 nodes elided)
+    ▾ Stream 17: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\thread_locale.obj" — 616 bytes  [#19:0x0+0x268]  (+102 nodes elided)
+    ▾ Stream 18: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\gs_cookie.obj" — 408 bytes  [#20:0x0+0x198]  (+56 nodes elided)
+    ▾ Stream 19: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\denormal_control.obj" — 608 bytes  [#21:0x0+0x260]  (+101 nodes elided)
+    ▾ Stream 20: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\default_local_stdio_options.obj" — 6192 bytes  [#22:0x0+0x1830]  (+862 nodes elided)
+    ▾ Stream 21: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\env_mode.obj" — 652 bytes  [#23:0x0+0x28c]  (+107 nodes elided)
+    ▾ Stream 22: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\new_mode.obj" — 604 bytes  [#24:0x0+0x25c]  (+102 nodes elided)
+    ▾ Stream 23: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\file_mode.obj" — 684 bytes  [#25:0x0+0x2ac]  (+112 nodes elided)
+    ▾ Stream 24: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\matherr.obj" — 780 bytes  [#26:0x0+0x30c]  (+143 nodes elided)
+    ▾ Stream 25: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\gs_support.obj" — 5376 bytes  [#27:0x0+0x1500]  (+906 nodes elided)
+    ▾ Stream 26: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\initializers.obj" — 5992 bytes  [#28:0x0+0x1768]  (+803 nodes elided)
+    ▾ Stream 27: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\tncleanup.obj" — 6152 bytes  [#29:0x0+0x1808]  (+868 nodes elided)
+    ▾ Stream 28: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\utility.obj" — 12624 bytes  [#30:0x0+0x3150]  (+2702 nodes elided)
+    ▾ Stream 29: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\guard_support.obj" — 12304 bytes  [#31:0x0+0x3010]  (+2770 nodes elided)
+    ▾ Stream 30: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\matherr_detection.obj" — 576 bytes  [#32:0x0+0x240]  (+94 nodes elided)
+    ▾ Stream 31: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\utility_desktop.obj" — 8232 bytes  [#33:0x0+0x2028]  (+1377 nodes elided)
+    ▾ Stream 32: Module "Import:api-ms-win-crt-locale-l1-1-0.dll" — 152 bytes  [#34:0x0+0x98]  (+36 nodes elided)
+    ▾ Stream 33: Module "Import:api-ms-win-crt-stdio-l1-1-0.dll" — 548 bytes  [#35:0x0+0x224]  (+135 nodes elided)
+    ▾ Stream 34: Module "api-ms-win-crt-heap-l1-1-0.dll" — 184 bytes  [#36:0x0+0xb8]  (+41 nodes elided)
+    ▾ Stream 35: Module "api-ms-win-crt-runtime-l1-1-0.dll" — 192 bytes  [#37:0x0+0xc0]  (+41 nodes elided)
+    ▾ Stream 36: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\loadcfg.obj" — 4528 bytes  [#38:0x0+0x11b0]  (+623 nodes elided)
+    ▾ Stream 37: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\dyn_tls_init.obj" — 4560 bytes  [#39:0x0+0x11d0]  (+633 nodes elided)
+    ▾ Stream 38: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\cpu_disp.obj" — 6880 bytes  [#40:0x0+0x1ae0]  (+1064 nodes elided)
+    ▾ Stream 39: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\dyn_tls_dtor.obj" — 4800 bytes  [#41:0x0+0x12c0]  (+663 nodes elided)
+    ▾ Stream 40: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\ucrt_detection.obj" — 568 bytes  [#42:0x0+0x238]  (+94 nodes elided)
+    ▾ Stream 41: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\guard_xfg_dispatch.obj" — 724 bytes  [#43:0x0+0x2d4]  (+92 nodes elided)
+    ▾ Stream 42: Module "Import:VCRUNTIME140.dll" — 648 bytes  [#44:0x0+0x288]  (+168 nodes elided)
+    ▾ Stream 43: Module "Import:api-ms-win-crt-math-l1-1-0.dll" — 144 bytes  [#45:0x0+0x90]  (+36 nodes elided)
+    ▾ Stream 44: Module "api-ms-win-crt-locale-l1-1-0.dll" — 192 bytes  [#46:0x0+0xc0]  (+41 nodes elided)
+    ▾ Stream 45: Module "api-ms-win-crt-stdio-l1-1-0.dll" — 184 bytes  [#47:0x0+0xb8]  (+41 nodes elided)
+    ▾ Stream 46: Module "* Linker *" — 1548 bytes  [#48:0x0+0x60c]  (+373 nodes elided)
+    ▾ Stream 47: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\initsect.obj" — 6252 bytes  [#49:0x0+0x186c]  (+907 nodes elided)
+    ▾ Stream 48: Module "D:\\a\\_work\\1\\s\\Intermediate\\crt\\vcstartup\\build\\md\\msvcrt_md_kernel32.vcxproj\\objr\\amd64\\guard_dispatch.obj" — 712 bytes  [#50:0x0+0x2c8]  (+92 nodes elided)
+    ▾ Stream 49: Module "Import:KERNEL32.dll" — 1004 bytes  [#51:0x0+0x3ec]  (+267 nodes elided)
+    ▾ Stream 50: Module "VCRUNTIME140.dll" — 152 bytes  [#52:0x0+0x98]  (+37 nodes elided)
+    ▾ Stream 51: Module "Import:api-ms-win-crt-heap-l1-1-0.dll" — 140 bytes  [#53:0x0+0x8c]  (+36 nodes elided)
+    ▾ Stream 52: Module "Import:api-ms-win-crt-runtime-l1-1-0.dll" — 2936 bytes  [#54:0x0+0xb78]  (+696 nodes elided)
+    ▾ Stream 53: Module "api-ms-win-crt-math-l1-1-0.dll" — 184 bytes  [#55:0x0+0xb8]  (+41 nodes elided)
+    ▾ Stream 54: Global symbol hash — 4348 bytes  [#56:0x0+0x10fc]  (+635 nodes elided)
+    ▾ Stream 55: Public symbol hash — 4508 bytes  [#57:0x0+0x119c]  (+758 nodes elided)
+    ▾ Stream 56: Symbol records — 21024 bytes  [#58:0x0+0x5220]  (+3746 nodes elided)
+      Stream 57: /src/headerblock — 0 bytes  [#59:0x0+0x0]
+    ▾ Stream 58: TPI hash — 2884 bytes  [#60:0x0+0xb44]  (+718 nodes elided)
+      Stream 59: /UDTSRCLINEUNDONE — 0 bytes  [#61:0x0+0x0]
+    ▾ Stream 60: IPI hash — 1072 bytes  [#62:0x0+0x430]  (+268 nodes elided)

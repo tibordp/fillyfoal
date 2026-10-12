@@ -29,7 +29,18 @@ pub(super) struct ExportDirectory {
 
 fn export_directory(f: &mut Fields<'_>, pe: &Pe) -> Result<ExportDirectory> {
     f.u32("Characteristics").hex().desc("Reserved, 0").emit()?;
-    f.u32("TimeDateStamp").timestamp().emit()?;
+    f.u32("TimeDateStamp")
+        .timestamp()
+        .with(|&v, n| {
+            if v == u32::MAX {
+                // MSVC's link 14.5x writes -1 here rather than a time.
+                n.value(crate::formats::util::val::hex(v, 32))
+                    .summary("not set (-1)")
+            } else {
+                n
+            }
+        })
+        .emit()?;
     f.u16("MajorVersion").emit()?;
     f.u16("MinorVersion").emit()?;
     let name = rva_field(f.u32("Name"), pe)

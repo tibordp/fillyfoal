@@ -447,6 +447,10 @@ expression: "common::explore(&display_name(&path), &data)"
                                     ▾ Dss-Sig-Value — SEQUENCE  [0x10eb+0x47]
                                         r: 2b 4c bf 5f dc ab 7e ec eb fa e4 a8 5e e3 e9 99 …  |+L._..~.....^...| — INTEGER, 254-bit  [0x10ed+0x22]
                                         s: ef 1e e1 56 1f 56 01 6e fa 9a cb be 1d c2 7b 5e …  |...V.V.n......{^| — INTEGER, 256-bit  [0x110f+0x23]
+      ▾ Image Hash
+          Signed digest: "825717E2CE440674B011EC28A15987FD5C56D3D61669AAB75DA0A00E339F3030" — sha256  [0xa8d+0x20]
+          Computed digest: "825717E2CE440674B011EC28A15987FD5C56D3D61669AAB75DA0A00E339F3030" — matches
+          Signer's messageDigest: "3BC5CF68F460AB5B7E1608B9479EF864FCBE5F637EC2EF25647051D15524B899" — matches SpcIndirectDataContent  [0xa45+0x68]
       Padding — 6 bytes  [0x1132+0x6]
   ▾ Debug Directory — REPRO  [0x600+0x1c]
     ▾ REPRO — no data  [0x600+0x1c]

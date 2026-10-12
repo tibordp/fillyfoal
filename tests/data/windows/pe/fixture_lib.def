@@ -1,0 +1,8 @@
+EXPORTS
+    fillyfoal_add           @1
+    fillyfoal_mul           @2
+    fillyfoal_name          @3
+    fillyfoal_version_size  @4
+    fillyfoal_data_value    @5 DATA
+    fillyfoal_hidden        @7 NONAME
+    fillyfoal_tick_count    = kernel32.GetTickCount

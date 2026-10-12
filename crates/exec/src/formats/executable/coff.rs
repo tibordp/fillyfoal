@@ -809,8 +809,25 @@ async fn section_node(cx: Cx, (c, index): (Coff, usize)) -> Result<()> {
             record: c.record(),
         })
     });
+    let codeview = s.data(c.file, 0).filter(|_| s.raw_size >= 4);
     if let Some(node) = debug.and_then(|d| super::coff_debug::node(&d, index)) {
         cx.emit(node);
+    } else if let Some(data) = codeview.filter(|_| s.name == ".debug$S") {
+        cx.emit(
+            Node::new("CodeView Symbols")
+                .span(data)
+                .desc("C13 CodeView: symbols, line numbers and file checksums")
+                .lazy(super::pdb::codeview::object_symbols, data),
+        );
+    } else if let Some(data) = codeview.filter(|_| s.name == ".debug$T" || s.name == ".debug$P") {
+        cx.emit(
+            Node::new("CodeView Types")
+                .span(data)
+                .desc(
+                    "CodeView type records, or a reference to the type server PDB that holds them",
+                )
+                .lazy(super::pdb::codeview::object_types, data),
+        );
     } else if let Some(data) = s.data(c.file, 0) {
         cx.emit(data_node("Raw Data", data, s.raw_size.into()));
     }

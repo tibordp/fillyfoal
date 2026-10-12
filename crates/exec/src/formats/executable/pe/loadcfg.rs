@@ -602,7 +602,7 @@ async fn lock_prefixes(cx: &Cx, pe: &Pe, va: u64) -> Option<Node> {
 
 fn volatile_metadata(f: &mut Fields<'_>, pe: &Pe) -> Result<()> {
     f.u32("Size").emit()?;
-    f.u32("Version").emit()?;
+    f.u32("Version").hex().emit()?;
     rva_field(f.u32("VolatileAccessTable"), pe).emit()?;
     f.u32("VolatileAccessTableSize").hex().emit()?;
     rva_field(f.u32("VolatileInfoRangeTable"), pe).emit()?;
@@ -621,9 +621,13 @@ async fn arm64ec_metadata(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
         .desc("RVA of the ranges of ARM64, ARM64EC and x64 code")
         .emit()?;
     let count = f.u32("CodeMapCount").emit()?;
+    let entry_points = rva_field(f.u32("CodeRangesToEntryPoints"), &pe)
+        .desc("RVA of (start, end, entry point) triples: the x64-callable entry thunk of each code range")
+        .emit()?;
+    let redirections = rva_field(f.u32("RedirectionMetadata"), &pe)
+        .desc("RVA of (source, destination) pairs: exported functions redirected to their x64-callable thunks")
+        .emit()?;
     for name in [
-        "CodeRangesToEntryPoints",
-        "RedirectionMetadata",
         "__os_arm64x_dispatch_call_no_redirect",
         "__os_arm64x_dispatch_ret",
         "__os_arm64x_dispatch_call",
@@ -634,16 +638,18 @@ async fn arm64ec_metadata(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
     ] {
         rva_field(f.u32(name), &pe).emit()?;
     }
-    f.u32("CodeRangesToEntryPointsCount").emit()?;
-    f.u32("RedirectionMetadataCount").emit()?;
+    let entry_count = f.u32("CodeRangesToEntryPointsCount").emit()?;
+    let redirection_count = f.u32("RedirectionMetadataCount").emit()?;
     for name in [
         "GetX64InformationFunctionPointer",
         "SetX64InformationFunctionPointer",
-        "ExtraRFETable",
     ] {
         rva_field(f.u32(name), &pe).emit()?;
     }
-    f.u32("ExtraRFETableSize").hex().emit()?;
+    let rfe = rva_field(f.u32("ExtraRFETable"), &pe)
+        .desc("RVA of the ARM64 function table (the exception directory holds the x64 one)")
+        .emit()?;
+    let rfe_size = f.u32("ExtraRFETableSize").hex().emit()?;
     for name in [
         "__os_arm64x_dispatch_fptr",
         "AuxiliaryIATCopy",
@@ -672,6 +678,96 @@ async fn arm64ec_metadata(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
                 .summary(format!("{n} ranges"))
                 .lazy(code_map, entries),
         );
+    }
+    if entry_points != 0
+        && entry_count > 0
+        && let Ok(table) = pe.table(entry_points, entry_count.min(65536), 12)
+    {
+        cx.emit(
+            Node::new("Code Ranges to Entry Points")
+                .span(table)
+                .summary(plural(table.len / 12, "range"))
+                .lazy(rva_tuples, (pe.clone(), table, EC_ENTRY_POINT)),
+        );
+    }
+    if redirections != 0
+        && redirection_count > 0
+        && let Ok(table) = pe.table(redirections, redirection_count.min(65536), 8)
+    {
+        cx.emit(
+            Node::new("Redirection Metadata")
+                .span(table)
+                .summary(plural(table.len / 8, "redirection"))
+                .lazy(rva_tuples, (pe.clone(), table, EC_REDIRECTION)),
+        );
+    }
+    if rfe != 0
+        && rfe_size > 0
+        && let Ok(table) = pe.rva_span(rfe, rfe_size.into())
+    {
+        // ARM64 entries (8 bytes) in an ARM64EC image, x64 ones (12) in
+        // an ARM64X image.
+        let (label, entry) = if pe.machine == MACHINE_ARM64 {
+            ("x64 Function Table", 12)
+        } else {
+            ("ARM64 Function Table", 8)
+        };
+        cx.emit(
+            Node::new(label)
+                .span(table)
+                .summary(plural(
+                    table.len.checked_div(entry).unwrap_or(0),
+                    "function",
+                ))
+                .lazy(super::unwind::extra_functions, (pe.clone(), table)),
+        );
+    }
+    Ok(())
+}
+
+/// `IMAGE_ARM64EC_CODE_RANGE_ENTRY_POINT`.
+const EC_ENTRY_POINT: &[&str] = &["StartRva", "EndRva", "EntryPoint"];
+/// `IMAGE_ARM64EC_REDIRECTION_ENTRY`.
+const EC_REDIRECTION: &[&str] = &["Source", "Destination"];
+
+/// A table of records made of RVAs, named by `fields`.
+async fn rva_tuples(
+    cx: Cx,
+    (pe, table, fields): (Pe, Span, &'static [&'static str]),
+) -> Result<()> {
+    let size = to_u64(fields.len()).saturating_mul(4);
+    let n = table.len.checked_div(size).unwrap_or(0);
+    cx.set_count(Count::Exact(n));
+    for i in 0..n {
+        let span = table.sub(i.saturating_mul(size), size);
+        let data = cx.read(span).await?;
+        let values: Vec<u32> = (0..fields.len())
+            .map(|k| u32_le(&data, k.saturating_mul(4)).unwrap_or(0))
+            .collect();
+        let summary = fields
+            .iter()
+            .zip(&values)
+            .map(|(name, v)| format!("{name} {v:#x}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let target = values.last().copied().unwrap_or(0);
+        let mut node = Node::new(format!("#{i}"))
+            .span(span)
+            .summary(summary)
+            .lazy(rva_tuple, (pe.clone(), span, fields));
+        if let Ok(t) = pe.rva_span(target, 0) {
+            node = node.target(t);
+        }
+        cx.push(node).await;
+    }
+    Ok(())
+}
+
+async fn rva_tuple(cx: Cx, (pe, span, fields): (Pe, Span, &'static [&'static str])) -> Result<()> {
+    let block = cx.block(span).await?;
+    let mut f = Fields::emitting(&cx, &block, LE);
+    for &name in fields {
+        rva_field(f.u32(name), &pe).emit()?;
     }
     Ok(())
 }
@@ -745,7 +841,8 @@ async fn dynamic_entry(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
     let width = pe.word();
     let block = cx.block(span.sub(0, width.saturating_add(4))).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
-    f.uword("Symbol", pe.wide)
+    let symbol = f
+        .uword("Symbol", pe.wide)
         .enumeration(DYNAMIC_SYMBOL)
         .emit()?;
     f.u32("BaseRelocSize").hex().emit()?;
@@ -763,7 +860,7 @@ async fn dynamic_entry(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
             Node::new(format!("Page {page:#x}"))
                 .span(blk)
                 .summary(format!("{} bytes of records", size.saturating_sub(8)))
-                .lazy(dynamic_block, blk),
+                .lazy(dynamic_block, (pe.clone(), blk, symbol)),
         )
         .await;
         at = at.saturating_add(size);
@@ -771,17 +868,102 @@ async fn dynamic_entry(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
     Ok(())
 }
 
-async fn dynamic_block(cx: Cx, span: Span) -> Result<()> {
+/// The dynamic relocation symbol of ARM64X fixups.
+const SYMBOL_ARM64X: u64 = 6;
+
+async fn dynamic_block(cx: Cx, (pe, span, symbol): (Pe, Span, u64)) -> Result<()> {
     let block = cx.block(span.sub(0, 8)).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
-    f.u32("VirtualAddress").hex().desc("Page RVA").emit()?;
+    let page = f.u32("VirtualAddress").hex().desc("Page RVA").emit()?;
     f.u32("SizeOfBlock").hex().emit()?;
-    if span.len > 8 {
+    if span.len <= 8 {
+        return Ok(());
+    }
+    let records = span.tail(8);
+    if symbol == SYMBOL_ARM64X {
         cx.emit(
             Node::new("Records")
-                .span(span.tail(8))
+                .span(records)
+                .desc("ARM64X fixups: how the loader rewrites the image for its ARM64EC (x64) view")
+                .lazy(arm64x_fixups, (pe, records, page)),
+        );
+    } else {
+        cx.emit(
+            Node::new("Records")
+                .span(records)
                 .desc("Fixup records in the format of the entry's symbol"),
         );
+    }
+    Ok(())
+}
+
+const ARM64X_FIXUP: EnumTable = &[(0, "zero-fill"), (1, "assign value"), (2, "add delta")];
+
+/// `IMAGE_DVRT_ARM64X_FIXUP_RECORD`s: a 16-bit header (page offset in bits
+/// 0-11, type in 12-13, size or delta sign and scale in 14-15), then for
+/// "assign value" the value (2, 4 or 8 bytes) and for "add delta" a 16-bit
+/// multiple of 4 (bit 15 clear) or 8 (set), negative if bit 14 is set.
+/// The block is padded to 4 bytes with a zero record.
+async fn arm64x_fixups(cx: Cx, (pe, span, page): (Pe, Span, u32)) -> Result<()> {
+    let data = cx.read(span).await?;
+    let mut at = 0usize;
+    while let Some(head) = crate::bytes::u16_le(&data, at) {
+        cx.checkpoint().await;
+        let offset = u32::from(head & 0xfff);
+        let kind = (head >> 12) & 3;
+        let bits = head >> 14;
+        if kind == 0 && bits == 0 {
+            // Zero record: alignment padding.
+            cx.push(padding_node(
+                "Padding",
+                span.tail(to_u64(at)),
+                "Records are padded to 4 bytes",
+            ))
+            .await;
+            break;
+        }
+        let (len, effect) = match kind {
+            0 => (2, format!("zero {} bytes", 1u32.wrapping_shl(bits.into()))),
+            1 => {
+                let size = 1usize.wrapping_shl(bits.into());
+                let start = at.saturating_add(2);
+                let value = data.get(start..start.saturating_add(size)).map(|b| {
+                    b.iter()
+                        .rev()
+                        .fold(0u64, |acc, &x| acc.wrapping_shl(8) | u64::from(x))
+                });
+                let shown = value.map_or_else(|| "truncated".to_owned(), |v| format!("{v:#x}"));
+                (
+                    2usize.saturating_add(size),
+                    format!("set {size} bytes to {shown}"),
+                )
+            }
+            2 => {
+                let raw = crate::bytes::u16_le(&data, at.saturating_add(2)).unwrap_or(0);
+                let scale = if bits & 2 != 0 { 8u64 } else { 4 };
+                let delta = u64::from(raw).saturating_mul(scale);
+                let sign = if bits & 1 != 0 { "-" } else { "+" };
+                (4, format!("add {sign}{delta:#x}"))
+            }
+            _ => (2, "reserved type".to_owned()),
+        };
+        let rva = page.saturating_add(offset);
+        let mut node = Node::new(format!("{rva:#x}"))
+            .span(span.sub(to_u64(at), to_u64(len)))
+            .value(Value::Enum {
+                raw: kind.into(),
+                bits: 2,
+                name: crate::value::lookup(ARM64X_FIXUP, kind.into()),
+            });
+        node = match pe.header_field(rva.into()) {
+            Some(field) => node.summary(format!("{field}: {effect}")),
+            None => node.summary(format!("{}: {effect}", pe.describe_rva(rva))),
+        };
+        if let Ok(target) = pe.rva_span(rva, 0) {
+            node = node.target(target);
+        }
+        cx.push(node).await;
+        at = at.saturating_add(len);
     }
     Ok(())
 }

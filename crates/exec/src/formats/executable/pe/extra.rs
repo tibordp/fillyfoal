@@ -295,7 +295,8 @@ const RICH_PRODUCTS: EnumTable = &[
 ];
 
 /// The Visual Studio release a 14.x toolset build number belongs to
-/// (product IDs 0x00fd and later are shared by VS2015 to VS2022).
+/// (product IDs 0x00fd and later are shared by VS2015 to VS2026). VS2022
+/// ended with toolset 14.44 (builds 352xx); VS2026's 14.50 starts at 35717.
 fn vs_release(product: u32, build: u32) -> Option<&'static str> {
     if product < 0x00fd {
         return None;
@@ -304,7 +305,8 @@ fn vs_release(product: u32, build: u32) -> Option<&'static str> {
         0..=24999 => "VS2015",
         25000..=27499 => "VS2017",
         27500..=30399 => "VS2019",
-        _ => "VS2022",
+        30400..=35699 => "VS2022",
+        _ => "VS2026",
     })
 }
 
@@ -852,7 +854,7 @@ fn win_certificate(f: &mut Fields<'_>, _: &()) -> Result<WinCertificate> {
     Ok(WinCertificate { length, kind })
 }
 
-pub(super) async fn certificates(cx: Cx, (input, dir): (Input, Directory)) -> Result<()> {
+pub(super) async fn certificates(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
     let table = dir.span;
     let mut offset = 0u64;
     let mut count = 0u32;
@@ -876,7 +878,7 @@ pub(super) async fn certificates(cx: Cx, (input, dir): (Input, Directory)) -> Re
             Node::new(label)
                 .span(span)
                 .summary(format!("{:#x} bytes", cert.length))
-                .lazy(certificate, (input, span, cert.kind)),
+                .lazy(certificate, (pe.clone(), table, span, cert.kind)),
         )
         .await;
         count = count.saturating_add(1);
@@ -900,14 +902,14 @@ pub(super) async fn certificates(cx: Cx, (input, dir): (Input, Directory)) -> Re
     Ok(())
 }
 
-async fn certificate(cx: Cx, (input, span, kind): (Input, Span, u16)) -> Result<()> {
+async fn certificate(cx: Cx, (pe, table, span, kind): (Pe, Span, Span, u16)) -> Result<()> {
     let block = cx.block(span.sub(0, 8)).await?;
     win_certificate(&mut Fields::emitting(&cx, &block, LE), &())?;
     let body = span.tail(8);
     cx.emit(match kind {
         2 => crate::formats::embedded_as(
             "bCertificate",
-            input.nested(body),
+            pe.input.nested(body),
             &crate::formats::asn1::PKCS7,
         )
         .desc("PKCS #7 SignedData over the image's Authenticode hash (SpcIndirectDataContent)"),
@@ -915,5 +917,258 @@ async fn certificate(cx: Cx, (input, span, kind): (Input, Span, u16)) -> Result<
             .span(body)
             .desc("Certificate data of a type other than PKCS #7 SignedData"),
     });
+    if kind == 2 {
+        cx.emit(
+            Node::new("Image Hash")
+                .desc("The Authenticode digest of the image recomputed and compared with the signed one: every byte but the CheckSum field, the certificate table's directory entry and the table itself")
+                .lazy(image_hash, (pe, table, body)),
+        );
+    }
+    Ok(())
+}
+
+/// The largest signature read whole to find the signed digests.
+const MAX_SIGNATURE: u64 = 1 << 20;
+/// Images up to this size get their Authenticode hash recomputed.
+const MAX_HASHED_IMAGE: u64 = 256 << 20;
+
+/// What a signature says was signed: the image digest in its
+/// SpcIndirectDataContent, and the messageDigest attribute of its signer
+/// over that content.
+struct Signed {
+    algorithm: String,
+    digest: Vec<u8>,
+    /// Where the digest's bytes are in the signature.
+    digest_at: usize,
+    /// The DER contents (without tag and length) of SpcIndirectDataContent.
+    content: std::ops::Range<usize>,
+    message_digest: Option<(String, Vec<u8>)>,
+}
+
+/// Navigates ContentInfo → SignedData → encapContentInfo →
+/// SpcIndirectDataContent → DigestInfo, and SignedData → signerInfos[0]
+/// → signedAttrs → messageDigest.
+fn signed_digests(data: &[u8]) -> Option<Signed> {
+    use crate::formats::asn1::der;
+    let base = data.as_ptr() as usize;
+    let (_, info) = der::first(data)?;
+    let mut info = der::elements(info);
+    let (_, oid) = info.next()?;
+    if der::oid(oid).as_deref() != Some("1.2.840.113549.1.7.2") {
+        return None;
+    }
+    let (_, explicit) = info.next()?;
+    let (_, signed) = der::first(explicit)?;
+    let mut fields = der::elements(signed).filter(|(t, _)| t.id == 0x30 || t.id == 0x31);
+    let _digest_algorithms = fields.next()?;
+    let (_, encap) = fields.next()?;
+    let mut encap = der::elements(encap);
+    let (_, kind) = encap.next()?;
+    if der::oid(kind).as_deref() != Some("1.3.6.1.4.1.311.2.1.4") {
+        return None;
+    }
+    let (_, explicit) = encap.next()?;
+    let (indirect_tlv, indirect) = der::first(explicit)?;
+    let start = (indirect.as_ptr() as usize).checked_sub(base)?;
+    let content = start..start.checked_add(crate::bytes::to_usize(indirect_tlv.len?))?;
+    let (_, digest_info) = der::elements(indirect).nth(1)?;
+    let mut digest_info = der::elements(digest_info);
+    let (_, alg) = digest_info.next()?;
+    let (_, alg_oid) = der::first(alg)?;
+    let algorithm = der::oid(alg_oid)?;
+    let (_, digest) = digest_info.next()?;
+    // signerInfos is the last SET (digestAlgorithms the first).
+    let message_digest = der::elements(signed)
+        .filter(|(t, _)| t.id == 0x31)
+        .last()
+        .and_then(|(_, signers)| der::first(signers))
+        .and_then(|(_, signer)| {
+            let mut fields = der::elements(signer);
+            let _version = fields.next()?;
+            let _sid = fields.next()?;
+            let (_, alg) = fields.next()?;
+            let (_, alg_oid) = der::first(alg)?;
+            let alg = der::oid(alg_oid)?;
+            let (_, attrs) = fields.find(|(t, _)| t.id == 0xa0)?;
+            der::elements(attrs).find_map(|(_, attr)| {
+                let mut attr = der::elements(attr);
+                let (_, oid) = attr.next()?;
+                if der::oid(oid).as_deref() != Some("1.2.840.113549.1.9.4") {
+                    return None;
+                }
+                let (_, values) = attr.next()?;
+                let (_, value) = der::first(values)?;
+                Some((alg.clone(), value.to_vec()))
+            })
+        });
+    Some(Signed {
+        algorithm,
+        digest: digest.to_vec(),
+        digest_at: (digest.as_ptr() as usize).checked_sub(base)?,
+        content,
+        message_digest,
+    })
+}
+
+/// The digest algorithms Authenticode signatures use.
+enum Digest {
+    Md5(crate::codec::crypto::Md5),
+    Sha1(crate::codec::crypto::Sha1),
+    Sha256(crate::codec::crypto::Sha256),
+    Sha384(crate::codec::crypto::Sha384),
+    Sha512(crate::codec::crypto::Sha512),
+}
+
+impl Digest {
+    fn new(oid: &str) -> Option<Self> {
+        use crate::codec::crypto::Hash;
+        Some(match oid {
+            "1.2.840.113549.2.5" => Digest::Md5(Hash::new()),
+            "1.3.14.3.2.26" => Digest::Sha1(Hash::new()),
+            "2.16.840.1.101.3.4.2.1" => Digest::Sha256(Hash::new()),
+            "2.16.840.1.101.3.4.2.2" => Digest::Sha384(Hash::new()),
+            "2.16.840.1.101.3.4.2.3" => Digest::Sha512(Hash::new()),
+            _ => return None,
+        })
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        use crate::codec::crypto::Hash;
+        match self {
+            Digest::Md5(h) => h.update(data),
+            Digest::Sha1(h) => h.update(data),
+            Digest::Sha256(h) => h.update(data),
+            Digest::Sha384(h) => h.update(data),
+            Digest::Sha512(h) => h.update(data),
+        }
+    }
+
+    fn finish(self) -> Vec<u8> {
+        use crate::codec::crypto::Hash;
+        match self {
+            Digest::Md5(h) => h.finish(),
+            Digest::Sha1(h) => h.finish(),
+            Digest::Sha256(h) => h.finish(),
+            Digest::Sha384(h) => h.finish(),
+            Digest::Sha512(h) => h.finish(),
+        }
+    }
+}
+
+/// Hashes the `ranges` of `file`, a chunk per read, in paced pieces.
+async fn hash_ranges(cx: &Cx, mut h: Digest, file: Span, ranges: &[(u64, u64)]) -> Result<Vec<u8>> {
+    const CHUNK: u64 = 1 << 16;
+    for &(start, end) in ranges {
+        let mut pos = start;
+        while pos < end {
+            let data = cx
+                .read(file.sub(pos, CHUNK.min(end.saturating_sub(pos))))
+                .await?;
+            if data.is_empty() {
+                break;
+            }
+            crate::formats::util::datakit::feed_paced(cx, &data, |piece| h.update(piece)).await;
+            pos = pos.saturating_add(to_u64(data.len()));
+        }
+    }
+    Ok(h.finish())
+}
+
+fn hex_string(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02X}")).collect()
+}
+
+/// Recomputes the Authenticode image digest (as signtool and osslsigncode
+/// do for an image whose sections are contiguous: every byte of the file
+/// in order, skipping the CheckSum field, the certificate table's data
+/// directory entry and the table) and the signer's messageDigest over
+/// SpcIndirectDataContent, and compares them with the signed values.
+async fn image_hash(cx: Cx, (pe, table, body): (Pe, Span, Span)) -> Result<()> {
+    let data = cx.read(body.sub(0, MAX_SIGNATURE)).await?;
+    let Some(signed) = signed_digests(&data) else {
+        return Err(Diagnostic::unsupported(
+            "the signature has no SpcIndirectDataContent digest",
+        ));
+    };
+    let algorithm = crate::formats::asn1::oids::name(&signed.algorithm)
+        .unwrap_or(&signed.algorithm)
+        .to_owned();
+    cx.emit(
+        Node::new("Signed digest")
+            .span(body.sub(to_u64(signed.digest_at), to_u64(signed.digest.len())))
+            .value(Value::Text(hex_string(&signed.digest)))
+            .summary(algorithm.clone()),
+    );
+    let file = pe.file();
+    if file.len > MAX_HASHED_IMAGE {
+        cx.diag(Diagnostic::unsupported("image too large to rehash"));
+        return Ok(());
+    }
+    let checksum = pe
+        .lfanew
+        .saturating_add(24)
+        .saturating_add(super::CHECKSUM_AT);
+    let entry = pe
+        .directories_at
+        .saturating_add(to_u64(super::DIR_SECURITY).saturating_mul(8));
+    let table_at = table.offset.saturating_sub(file.offset);
+    let table_end = table_at.saturating_add(table.len);
+    if !(checksum < entry && entry < table_at && table_end <= file.len) {
+        return Err(Diagnostic::unsupported(
+            "certificate table inside the headers",
+        ));
+    }
+    let ranges = [
+        (0, checksum),
+        (checksum.saturating_add(4), entry),
+        (entry.saturating_add(8), table_at),
+        (table_end, file.len),
+    ];
+    match Digest::new(&signed.algorithm) {
+        Some(h) => {
+            let computed = hash_ranges(&cx, h, file, &ranges).await?;
+            let mut node = Node::new("Computed digest")
+                .value(Value::Text(hex_string(&computed)))
+                .summary(if computed == signed.digest {
+                    "matches"
+                } else {
+                    "differs"
+                });
+            if computed != signed.digest {
+                node = node.diag(Diagnostic::malformed(
+                    "Authenticode digest mismatch: the image was changed after signing",
+                ));
+            }
+            cx.emit(node);
+        }
+        None => cx.diag(Diagnostic::unsupported(format!(
+            "digest algorithm {algorithm}"
+        ))),
+    }
+    if let Some((alg, expected)) = &signed.message_digest
+        && let Some(content) = data.get(signed.content.clone())
+        && let Some(mut h) = Digest::new(alg)
+    {
+        let content_span = body.sub(to_u64(signed.content.start), to_u64(content.len()));
+        crate::formats::util::datakit::feed_paced(&cx, content, |piece| h.update(piece)).await;
+        let computed = h.finish();
+        {
+            let matches = &computed == expected;
+            let mut node = Node::new("Signer's messageDigest")
+                .span(content_span)
+                .value(Value::Text(hex_string(expected)))
+                .summary(if matches {
+                    "matches SpcIndirectDataContent"
+                } else {
+                    "differs from SpcIndirectDataContent"
+                });
+            if !matches {
+                node = node.diag(Diagnostic::malformed(
+                    "messageDigest does not match the signed content",
+                ));
+            }
+            cx.emit(node);
+        }
+    }
     Ok(())
 }

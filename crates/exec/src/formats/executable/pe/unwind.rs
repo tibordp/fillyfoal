@@ -42,16 +42,33 @@ fn arch(machine: u16) -> Arch {
 
 pub(super) async fn exceptions(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
     let a = arch(pe.machine);
+    functions(cx, pe, dir.span, a).await
+}
+
+/// The other function table of a hybrid image (`ExtraRFETable` in its
+/// ARM64EC metadata): ARM64 entries in an ARM64EC image, whose exception
+/// directory holds the x64 ones, and x64 entries in an ARM64X image, whose
+/// directory holds the native ARM64 ones (its x64 view swaps them in).
+pub(super) async fn extra_functions(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
+    let a = if pe.machine == MACHINE_ARM64 {
+        Arch::X64
+    } else {
+        Arch::Arm64
+    };
+    functions(cx, pe, span, a).await
+}
+
+async fn functions(cx: Cx, pe: Pe, table: Span, a: Arch) -> Result<()> {
     let entry = match a {
         Arch::X64 => 12u64,
         Arch::Arm64 | Arch::Arm => 8,
         Arch::Legacy => 20,
     };
-    let count = dir.span.len.checked_div(entry).unwrap_or(0);
+    let count = table.len.checked_div(entry).unwrap_or(0);
     cx.set_count(Count::Exact(count));
     cx.annotate(plural(count, "function"));
     for i in 0..count {
-        let span = dir.span.sub(i.saturating_mul(entry), entry);
+        let span = table.sub(i.saturating_mul(entry), entry);
         let data = cx.read(span).await?;
         let begin = u32_le(&data, 0).unwrap_or(0);
         let second = u32_le(&data, 4).unwrap_or(0);
@@ -78,7 +95,7 @@ pub(super) async fn exceptions(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()>
             Ok(code) => node.target(code),
             Err(_) => node,
         };
-        cx.push(node.span(span).lazy(function, (pe.clone(), span)))
+        cx.push(node.span(span).lazy(function, (pe.clone(), span, a)))
             .await;
     }
     Ok(())
@@ -101,10 +118,10 @@ fn legacy_function(f: &mut Fields<'_>, pe: &Pe) -> Result<()> {
     Ok(())
 }
 
-async fn function(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
+async fn function(cx: Cx, (pe, span, a): (Pe, Span, Arch)) -> Result<()> {
     let block = cx.block(span).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
-    match arch(pe.machine) {
+    match a {
         Arch::X64 => {
             let unwind = x64_function(&mut f, &pe)?;
             if unwind & 1 == 0 && unwind != 0 {
@@ -534,12 +551,17 @@ async fn arm64_xdata(cx: Cx, (pe, rva): (Pe, u32)) -> Result<()> {
             .span(head_span.sub(0, 4))
             .value(hex(w, 32))
             .summary(format!(
-                "function {} bytes, version {}{}{}, {epilogs} epilog{}, {words} code words",
+                "function {} bytes, version {}{}, {}, {words} code words",
                 (w & 0x3ffff).saturating_mul(4),
                 (w >> 18) & 3,
                 if x == 1 { ", exception data" } else { "" },
-                if e == 1 { ", single packed epilog" } else { "" },
-                if epilogs == 1 { "" } else { "s" },
+                // With E set the epilog count field is the single
+                // epilog's first code index.
+                if e == 1 {
+                    format!("single packed epilog, codes from index {epilogs}")
+                } else {
+                    plural(epilogs, "epilog")
+                },
             ))
             .desc("FunctionLength, Vers, X, E, Epilog Count and Code Words"),
     );
@@ -563,9 +585,16 @@ async fn arm64_xdata(cx: Cx, (pe, rva): (Pe, u32)) -> Result<()> {
         .saturating_add(if x == 1 { 4 } else { 0 });
     let body = pe.rva_span(rva, at.saturating_add(total))?;
     let data = cx.read_avail(body).await?;
+    // Where code sequences start: the prolog's at 0, each epilog's at the
+    // index its scope (or, with E set, the header) names.
+    let mut starts = vec![0usize];
+    if e == 1 {
+        starts.push(crate::bytes::to_usize(u64::from((w >> 22) & 0x1f)));
+    }
     for i in 0..u64::from(scopes) {
         let pos = crate::bytes::to_usize(at);
         let s = u32_le(&data, pos).unwrap_or(0);
+        starts.push(crate::bytes::to_usize(u64::from(s >> 22)));
         cx.push(
             Node::new(format!("Epilog Scope {i}"))
                 .span(body.sub(at, 4))
@@ -594,7 +623,22 @@ async fn arm64_xdata(cx: Cx, (pe, rva): (Pe, u32)) -> Result<()> {
                 .value(Value::Text(text)),
         )
         .await;
+        let ended = code.get(i) == Some(&0xe4);
         i = i.saturating_add(len.max(1));
+        // After an `end`, bytes no sequence starts at or after are padding
+        // to the code word.
+        if ended && i < code.len() && !starts.iter().any(|&s| s >= i) {
+            cx.push(super::padding_node(
+                "Padding",
+                body.sub(
+                    at.saturating_add(to_u64(i)),
+                    to_u64(code.len().saturating_sub(i)),
+                ),
+                "Unused bytes of the last code word",
+            ))
+            .await;
+            break;
+        }
     }
     at = at.saturating_add(code_len);
     if x == 1 {
