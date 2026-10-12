@@ -3,7 +3,8 @@ that FFmpeg does not write: CAT, NIT, an SDT with DVB-encoded strings
 (ISO/IEC 6937 diacritics and UTF-8), an EIT event long enough to span two
 packets, TDT and TOT, a PMT with registration, video, AC-3, teletext,
 subtitling, language and maximum-bitrate descriptors, an SCTE-35
-splice_insert section, PCRs at both ends, and one continuity counter
+splice_insert section and a time_signal section with a segmentation
+descriptor, PCRs at both ends, and one continuity counter
 error.
 
     python3 tests/data/mpegts/dvb_si.py
@@ -185,6 +186,19 @@ def main():
     # protocol_version, encrypted/algorithm/pts_adjustment (40 bits), cw_index,
     # tier (12) + splice_command_length (12), command type.
     body = bytes([0x00]) + bytes(5) + bytes([0xFF]) + bytes([0xFF, 0xF0 | (len(cmd) >> 8), len(cmd) & 0xFF]) + bytes([0x05]) + cmd + struct.pack(">H", 0)
+    m.section(0x0105, section(0xFC, 0, body, syntax=False, crc=True))
+    # SCTE-35 time_signal at PTS 3 s with a segmentation_descriptor (SCTE 35
+    # section 10.3.3.1): Provider Placement Opportunity Start, event
+    # 0x48000002, delivery restricted (web, no blackout, archive, no device
+    # restriction), 30 s, Ad-ID UPID, segment 1 of 2, sub-segment 1 of 3.
+    cmd = bytes([0xFE]) + struct.pack(">I", 270_000)
+    seg = b"CUEI" + struct.pack(">I", 0x4800_0002) + bytes([0x7F, 0xDF])
+    seg += (2_700_000).to_bytes(5, "big")
+    seg += bytes([0x03, 12]) + b"FILY00000001"
+    seg += bytes([0x34, 1, 2, 1, 3])
+    descs = desc(0x02, seg)
+    body = bytes([0x00]) + bytes(5) + bytes([0xFF]) + bytes([0xFF, 0xF0 | (len(cmd) >> 8), len(cmd) & 0xFF]) + bytes([0x06]) + cmd
+    body += struct.pack(">H", len(descs)) + descs
     m.section(0x0105, section(0xFC, 0, body, syntax=False, crc=True))
     # Null packets, then the closing PCR.
     for _ in range(2):
