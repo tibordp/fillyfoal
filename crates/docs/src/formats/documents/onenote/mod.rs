@@ -34,7 +34,11 @@
 //! data is encrypted; shown as unsupported), global identification table
 //! entries copied from a dependency revision (GlobalIdTableEntry2FNDX and
 //! 3FNDX, used by `.onetoc2`), and files referenced outside the section
-//! (`<file>` references into the `onefiles` folder).
+//! (`<file>` references into the `onefiles` folder). Sections in the
+//! alternative packaging of [MS-ONESTORE] 2.8 (guidFileFormat
+//! {638DE92F-...}: the revision store inside an MS-FSSHTTPB data element
+//! package, as OneNote for the web hands them out) are recognized; only
+//! their fixed prefix is shown and the package is reported as unsupported.
 
 mod model;
 mod props;
@@ -68,6 +72,10 @@ const MAGIC_ONE: &[u8] = b"\xe4\x52\x5c\x7b\x8c\xd8\xa7\x4d\xae\xb1\x53\x78\xd0\
 const MAGIC_TOC: &[u8] = b"\xa1\x2f\xff\x43\xd9\xef\x76\x4c\x9e\xe2\x10\xea\x57\x22\x76\x5f";
 /// {109ADD3F-911B-49F5-A5D0-1791EDC8AED8}
 const FILE_FORMAT: &str = "{109add3f-911b-49f5-a5d0-1791edc8aed8}";
+/// {638DE92F-A6D4-4BC1-9A36-B3FC2511A5B7}: the alternative packaging of
+/// [MS-ONESTORE] 2.8, which carries the revision store in an MS-FSSHTTPB
+/// data element package (sections downloaded from OneNote for the web).
+const FILE_FORMAT_FSSHTTPB: &str = "{638de92f-a6d4-4bc1-9a36-b3fc2511a5b7}";
 /// FileDataStoreObject header and footer GUIDs.
 const FDSO_HEADER: &str = "{bde316e7-2665-4511-a4c4-8d4d0b7a9eac}";
 const FDSO_FOOTER: &str = "{71fba722-0f79-4a0b-bb13-899256426b24}";
@@ -133,6 +141,13 @@ fn page_title(p: &Page) -> String {
 
 async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
+    let head = cx.read(file.sub(0, 0x40)).await?;
+    if head
+        .get(0x30..0x40)
+        .is_some_and(|g| guid_le(g).to_string() == FILE_FORMAT_FSSHTTPB)
+    {
+        return fsshttpb(&cx, file, &head);
+    }
     cx.emit(struct_node(
         "Header",
         file.sub(0, 0x400),
@@ -235,6 +250,44 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
         );
     }
     cx.annotate(annotation);
+    Ok(())
+}
+
+/// The alternative (MS-FSSHTTPB) packaging: only its fixed prefix is
+/// shown; the data element package after it is not parsed.
+fn fsshttpb(cx: &Cx, file: Span, head: &[u8]) -> Result<()> {
+    let toc = head.get(..16) == Some(MAGIC_TOC);
+    cx.emit(struct_node(
+        "Header",
+        file.sub(0, 0x44),
+        LE,
+        (),
+        fsshttpb_header,
+    ));
+    cx.emit(
+        Node::new("Packaging")
+            .span(file.tail(0x44))
+            .summary("MS-FSSHTTPB data element package")
+            .diag(Diagnostic::unsupported(
+                "FSSHTTPB packaging of the revision store",
+            )),
+    );
+    cx.annotate(if toc {
+        "OneNote table of contents, FSSHTTPB packaging"
+    } else {
+        "OneNote section, FSSHTTPB packaging"
+    });
+    Ok(())
+}
+
+fn fsshttpb_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.guid("guidFileType").emit()?;
+    f.guid("guidFile").emit()?;
+    f.guid("guidLegacyFileVersion").emit()?;
+    f.guid("guidFileFormat")
+        .summary("FSSHTTPB packaging")
+        .emit()?;
+    f.u32("dwReserved").hex().emit()?;
     Ok(())
 }
 

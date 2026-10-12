@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Online.one — OneNote section, FSSHTTPB packaging  [0x0+0x78]
+  ▾ Header  [0x0+0x44]
+      guidFileType: {7b5c52e4-d88c-4da7-aeb1-5378d02996d3}  [0x0+0x10]
+      guidFile: {0f111f0a-0000-4000-8000-000000000500}  [0x10+0x10]
+      guidLegacyFileVersion: {00000000-0000-0000-0000-000000000000}  [0x20+0x10]
+      guidFileFormat: {638de92f-a6d4-4bc1-9a36-b3fc2511a5b7} — FSSHTTPB packaging  [0x30+0x10]
+      dwReserved: 0x0  [0x40+0x4]
+    Packaging — MS-FSSHTTPB data element package  [0x44+0x34]
+      ! unsupported: FSSHTTPB packaging of the revision store
