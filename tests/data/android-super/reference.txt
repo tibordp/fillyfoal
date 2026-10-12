@@ -1,0 +1,189 @@
+# lpdump (AOSP, built by build-lptools.sh) and avbtool info_image
+
+## lpdump super-avb.img
+Slot 0:
+Metadata version: 10.0
+Metadata size: 440 bytes
+Metadata max size: 8192 bytes
+Metadata slot count: 2
+Header flags: none
+Partition table:
+------------------------
+  Name: system
+  Group: main
+  Attributes: readonly
+  Extents:
+    0 .. 255 linear super 2048
+------------------------
+  Name: vendor
+  Group: main
+  Attributes: readonly
+  Extents:
+    0 .. 255 linear super 4096
+------------------------
+Super partition layout:
+------------------------
+super: 2048 .. 2304: system (256 sectors)
+super: 4096 .. 4352: vendor (256 sectors)
+------------------------
+Block device table:
+------------------------
+  Partition name: super
+  First sector: 2048
+  Size: 4194304 bytes
+  Flags: none
+------------------------
+Group table:
+------------------------
+  Name: default
+  Maximum size: 0 bytes
+  Flags: none
+------------------------
+  Name: main
+  Maximum size: 1048576 bytes
+  Flags: none
+------------------------
+
+## lpdump super-ab.img
+Slot 0:
+Metadata version: 10.0
+Metadata size: 592 bytes
+Metadata max size: 8192 bytes
+Metadata slot count: 3
+Header flags: none
+Partition table:
+------------------------
+  Name: system_a
+  Group: main_a
+  Attributes: readonly
+  Extents:
+    0 .. 255 linear super 2048
+------------------------
+  Name: vendor_a
+  Group: main_a
+  Attributes: readonly
+  Extents:
+    0 .. 255 linear super 4096
+------------------------
+  Name: system_b
+  Group: main_b
+  Attributes: readonly
+  Extents:
+------------------------
+  Name: vendor_b
+  Group: main_b
+  Attributes: readonly
+  Extents:
+------------------------
+Super partition layout:
+------------------------
+super: 2048 .. 2304: system_a (256 sectors)
+super: 4096 .. 4352: vendor_a (256 sectors)
+------------------------
+Block device table:
+------------------------
+  Partition name: super
+  First sector: 2048
+  Size: 4194304 bytes
+  Flags: none
+------------------------
+Group table:
+------------------------
+  Name: default
+  Maximum size: 0 bytes
+  Flags: none
+------------------------
+  Name: main_a
+  Maximum size: 1048576 bytes
+  Flags: none
+------------------------
+  Name: main_b
+  Maximum size: 1048576 bytes
+  Flags: none
+------------------------
+
+## avbtool info_image --image super-avb.img
+Footer version:           1.0
+Image size:               5242880 bytes
+Original image size:      4194304 bytes
+VBMeta offset:            4194304
+VBMeta size:              1344 bytes
+--
+Minimum libavb version:   1.0
+Header Block:             256 bytes
+Authentication Block:     320 bytes
+Auxiliary Block:          768 bytes
+Public key (sha1):        0f440317747ae0e1dc83c6f7ec4bcc9ccbb83717
+Algorithm:                SHA256_RSA2048
+Rollback Index:           1
+Flags:                    0
+Rollback Index Location:  0
+Release String:           'avbtool 1.4.0'
+Descriptors:
+    Hash descriptor:
+      Image Size:            4194304 bytes
+      Hash Algorithm:        sha256
+      Partition Name:        super
+      Salt:                  0f1110f00f1110f00f1110f00f1110f0
+      Digest:                98e517ca4998f4a34ce07304a3020fbb125482a963c036fdc5a73a50f55273bb
+      Flags:                 0
+    Prop: org.fillyfoal -> 'super'
+
+## avbtool info_image --image system.img (partition system)
+Footer version:           1.0
+Image size:               131072 bytes
+Original image size:      49152 bytes
+VBMeta offset:            53248
+VBMeta size:              576 bytes
+--
+Minimum libavb version:   1.0
+Header Block:             256 bytes
+Authentication Block:     0 bytes
+Auxiliary Block:          320 bytes
+Algorithm:                NONE
+Rollback Index:           0
+Flags:                    0
+Rollback Index Location:  0
+Release String:           'avbtool 1.4.0'
+Descriptors:
+    Hashtree descriptor:
+      Version of dm-verity:  1
+      Image Size:            49152 bytes
+      Tree Offset:           49152
+      Tree Size:             4096 bytes
+      Data Block Size:       4096 bytes
+      Hash Block Size:       4096 bytes
+      FEC num roots:         0
+      FEC offset:            0
+      FEC size:              0 bytes
+      Hash Algorithm:        sha256
+      Partition Name:        system
+      Salt:                  0f1110f00f1110f00f1110f00f1110f0
+      Root Digest:           8beef73cdd80915c255ee7ae25bb0b55997b877ecb60dbef53badf91713627c9
+      Flags:                 0
+    Prop: org.fillyfoal -> 'system'
+
+## avbtool info_image --image vendor.img (partition vendor)
+Footer version:           1.0
+Image size:               131072 bytes
+Original image size:      49152 bytes
+VBMeta offset:            49152
+VBMeta size:              448 bytes
+--
+Minimum libavb version:   1.0
+Header Block:             256 bytes
+Authentication Block:     0 bytes
+Auxiliary Block:          192 bytes
+Algorithm:                NONE
+Rollback Index:           0
+Flags:                    0
+Rollback Index Location:  0
+Release String:           'avbtool 1.4.0'
+Descriptors:
+    Hash descriptor:
+      Image Size:            49152 bytes
+      Hash Algorithm:        sha256
+      Partition Name:        vendor
+      Salt:                  0f1110f00f1110f00f1110f00f1110f0
+      Digest:                ebe6c385768264e17aa870fcf11ffde61b86329ef4fc0381db11628e4219a7c5
+      Flags:                 0
