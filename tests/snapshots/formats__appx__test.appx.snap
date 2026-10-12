@@ -37,6 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 11  [0x16+0x4]
           File name length: 16  [0x1a+0x2]
           Extra field length: 0  [0x1c+0x2]
+        Local file name: "AppxManifest.xml"  [0x1e+0x10]
       ▾ Content — XML document, root <Package>  [0x2e+0xb]
           Package  [0x2e+0xa]
   ▾ End of Central Directory — at 0x77  [0x77+0x16]

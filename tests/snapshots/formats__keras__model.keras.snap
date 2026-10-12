@@ -37,6 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 63  [0x16+0x4]
           File name length: 13  [0x1a+0x2]
           Extra field length: 0  [0x1c+0x2]
+        Local file name: "metadata.json"  [0x1e+0xd]
       ▾ Content — JSON object, 2 members  [0x2b+0x3d]
           keras_version: "3.3.3"  [#1:0x12+0x7]
           date_saved: "2024-05-17@10:30:00"  [#1:0x29+0x15]
@@ -73,6 +74,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 142  [0x7e+0x4]
           File name length: 11  [0x82+0x2]
           Extra field length: 0  [0x84+0x2]
+        Local file name: "config.json"  [0x86+0xb]
       ▾ Content — JSON object, 3 members  [0x91+0x5b]
           module: "keras"  [#2:0xb+0x7]
           class_name: "Sequential"  [#2:0x22+0xc]
@@ -116,6 +118,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 33  [0x102+0x4]
           File name length: 16  [0x106+0x2]
           Extra field length: 0  [0x108+0x2]
+        Local file name: "model.weights.h5"  [0x10a+0x10]
       ▾ Content — UTF-8 text, 1 line  [0x11a+0x23]
           Encoding: "UTF-8"
           Line endings: "none" — 0 LF, 0 CRLF, 0 CR

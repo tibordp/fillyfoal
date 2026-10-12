@@ -11,7 +11,7 @@ use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
-use crate::fields::Endian;
+use crate::fields::{Endian, Fields};
 use crate::formats::{Codec, Format, Head, Input, Probe, content};
 use crate::node::{Count, Node};
 use crate::record;
@@ -1207,7 +1207,7 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
         cx.emit(
             Node::new("Extra fields")
                 .span(extra)
-                .lazy(extra_fields, extra),
+                .lazy(extra_fields, (extra, Zip64Wants::central(&header))),
         );
     }
     if header.comment_len > 0 {
@@ -1241,6 +1241,16 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
         ));
     }
     cx.emit(local_node);
+    let local_name = file.sub(
+        local_offset.saturating_add(LocalHeader::SIZE),
+        local.name_len.into(),
+    );
+    let local_extra = file.sub(
+        local_name.offset.saturating_sub(file.offset).saturating_add(local_name.len),
+        local.extra_len.into(),
+    );
+    let local_extra_bytes = cx.read_avail(local_extra).await?;
+    emit_local_name_extra(&cx, local_name, local_extra, &local, &local_extra_bytes).await?;
 
     let data_offset = local_offset
         .saturating_add(LocalHeader::SIZE)
@@ -1253,16 +1263,135 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
             data.len,
         ));
     }
-    if header.flags & 0x0001 != 0 {
-        let is_dir = name_is_dir(&cx, name_span).await;
-        let node =
-            encrypted_content(&cx, input, file, data, extra, &header, sizes.uncompressed).await?;
-        if !is_dir {
+    entry_content(&cx, input, name_span, data, extra, &header, sizes).await?;
+    if header.flags & 0x0008 != 0 {
+        let wide = extra_field(&local_extra_bytes, 0x0001).is_some()
+            || header.compressed == u32::MAX
+            || header.uncompressed == u32::MAX;
+        let at = data_offset.saturating_add(sizes.compressed);
+        if let Some(node) = data_descriptor(&cx, file.tail(at), wide, &header, sizes).await {
             cx.emit(node);
+        }
+    }
+    Ok(())
+}
+
+/// The local header's copy of the name and its extra fields.
+async fn emit_local_name_extra(
+    cx: &Cx,
+    name_span: Span,
+    extra: Span,
+    local: &LocalHeader,
+    extra_bytes: &[u8],
+) -> Result<()> {
+    if name_span.len > 0 {
+        let name = decode_name(&cx.read(name_span).await?, local.flags, extra_bytes);
+        cx.emit(
+            Node::new("Local file name")
+                .span(name_span)
+                .value(Value::Text(name)),
+        );
+    }
+    if extra.len > 0 {
+        cx.emit(
+            Node::new("Local extra fields")
+                .span(extra)
+                .lazy(extra_fields, (extra, Zip64Wants::LOCAL)),
+        );
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DescriptorCtx {
+    signature: bool,
+    wide: bool,
+    crc: u32,
+    compressed: u64,
+    uncompressed: u64,
+}
+
+/// The data descriptor that follows an entry written with flag bit 3: an
+/// optional `PK\x07\x08` signature, the CRC-32 and both sizes (8 bytes each
+/// when the local header has a ZIP64 field, APPNOTE 4.3.9).
+async fn data_descriptor(
+    cx: &Cx,
+    rest: Span,
+    wide: bool,
+    header: &CentralHeader,
+    sizes: Sizes,
+) -> Option<Node> {
+    let head = cx.read_avail(rest.sub(0, 4)).await.ok()?;
+    // The signature is optional; a CRC that happens to equal it is the CRC.
+    let signature = head == b"PK\x07\x08" && header.crc != 0x0807_4b50;
+    let len = (if signature { 4u64 } else { 0 })
+        .saturating_add(4)
+        .saturating_add(if wide { 16 } else { 8 });
+    let span = rest.sub(0, len);
+    let ctx = DescriptorCtx {
+        signature,
+        wide,
+        crc: header.crc,
+        compressed: sizes.compressed,
+        uncompressed: sizes.uncompressed,
+    };
+    let parsed = crate::fields::parse(cx, span, LE, &ctx, descriptor_layout).await;
+    let mut node = crate::fields::struct_node("Data Descriptor", span, LE, ctx, descriptor_layout);
+    match parsed {
+        Ok(true) => {}
+        Ok(false) => {
+            node = node.diag(Diagnostic::warning(
+                "data descriptor disagrees with the central directory",
+            ));
+        }
+        Err(e) => node = node.diag(e),
+    }
+    Some(node)
+}
+
+/// Decodes a data descriptor; true when it matches the central directory.
+fn descriptor_layout(f: &mut Fields<'_>, ctx: &DescriptorCtx) -> Result<bool> {
+    if ctx.signature {
+        f.bytes("Signature", 4).emit()?;
+    }
+    let crc = f.u32("CRC-32").hex().emit()?;
+    let (compressed, uncompressed) = if ctx.wide {
+        (
+            f.u64("Compressed size").emit()?,
+            f.u64("Uncompressed size").emit()?,
+        )
+    } else {
+        (
+            f.u32("Compressed size").emit()?.into(),
+            f.u32("Uncompressed size").emit()?.into(),
+        )
+    };
+    Ok(crc == ctx.crc && compressed == ctx.compressed && uncompressed == ctx.uncompressed)
+}
+
+/// An entry's content (or why it cannot be shown).
+async fn entry_content(
+    cx: &Cx,
+    input: Input,
+    name_span: Span,
+    data: Span,
+    extra: Span,
+    header: &CentralHeader,
+    sizes: Sizes,
+) -> Result<()> {
+    let file = input.span;
+    if header.flags & 0x0001 != 0 {
+        let is_dir = name_is_dir(cx, name_span).await;
+        let nodes =
+            encrypted_content(cx, input, file, data, extra, header, sizes.uncompressed).await?;
+        if !is_dir {
+            for node in nodes {
+                cx.emit(node);
+            }
         }
         return Ok(());
     }
-    let codec = match method_codec(&cx, header.method, header.flags, data, sizes.uncompressed).await
+    let codec = match method_codec(cx, header.method, header.flags, data, sizes.uncompressed).await
     {
         Ok(codec) => codec,
         Err(e) => {
@@ -1271,7 +1400,7 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
         }
     };
     match codec {
-        Some((codec, stream)) if !(name_is_dir(&cx, name_span).await) => {
+        Some((codec, stream)) if !(name_is_dir(cx, name_span).await) => {
             if stream.offset != data.offset {
                 cx.emit(lzma_header(
                     data.sub(0, stream.offset.saturating_sub(data.offset)),
@@ -1380,6 +1509,49 @@ fn lzma_header(span: Span, codec: &Codec) -> Node {
 /// The content of an encrypted entry: asks for the archive's password,
 /// verifies it, and decrypts then decompresses on expansion.
 async fn encrypted_content(
+    cx: &Cx,
+    input: Input,
+    archive: Span,
+    data: Span,
+    extra: Span,
+    header: &CentralHeader,
+    uncompressed: u64,
+) -> Result<Vec<Node>> {
+    let payload = encrypted_payload(cx, input, archive, data, extra, header, uncompressed).await?;
+    if header.method != 99 || header.flags & 0x0040 != 0 {
+        return Ok(vec![payload]);
+    }
+    // WinZip AES framing: salt (half the key length), 2-byte password
+    // verifier, the encrypted data, a 10-byte HMAC-SHA1 authentication code.
+    let fields = cx.read_avail(extra).await?;
+    let Some(strength) = extra_field(&fields, 0x9901).and_then(|f| f.get(4).copied()) else {
+        return Ok(vec![payload]);
+    };
+    let salt_len = 4u64.saturating_add(4u64.saturating_mul(strength.into()));
+    if !(1..=3).contains(&strength) || data.len < salt_len.saturating_add(12) {
+        return Ok(vec![payload]);
+    }
+    let body = salt_len.saturating_add(2);
+    let payload = payload.span(data.sub(body, data.len.saturating_sub(body).saturating_sub(10)));
+    Ok(vec![
+        Node::new("Salt")
+            .span(data.sub(0, salt_len))
+            .value(Value::Bytes(cx.read(data.sub(0, salt_len)).await?)),
+        Node::new("Password verifier")
+            .span(data.sub(salt_len, 2))
+            .value(Value::Bytes(cx.read(data.sub(salt_len, 2)).await?)),
+        payload,
+        Node::new("Authentication code")
+            .span(data.tail(data.len.saturating_sub(10)))
+            .summary("HMAC-SHA1, first 10 bytes")
+            .value(Value::Bytes(
+                cx.read(data.tail(data.len.saturating_sub(10))).await?,
+            )),
+    ])
+}
+
+/// The decrypted (and decompressed) content of an encrypted entry.
+async fn encrypted_payload(
     cx: &Cx,
     input: Input,
     archive: Span,
@@ -1603,26 +1775,257 @@ const EXTRA_IDS: EnumTable = &[
     (0xd935, "Android alignment"),
 ];
 
-async fn extra_fields(cx: Cx, span: Span) -> Result<()> {
+/// Which values a ZIP64 extra field holds: those its header set to
+/// 0xffffffff (0xffff for the disk), in this order (APPNOTE 4.5.3). A local
+/// header's field holds both sizes whenever it is present.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Zip64Wants {
+    uncompressed: bool,
+    compressed: bool,
+    offset: bool,
+    disk: bool,
+}
+
+impl Zip64Wants {
+    const LOCAL: Zip64Wants = Zip64Wants {
+        uncompressed: true,
+        compressed: true,
+        offset: false,
+        disk: false,
+    };
+
+    fn central(h: &CentralHeader) -> Self {
+        Zip64Wants {
+            uncompressed: h.uncompressed == u32::MAX,
+            compressed: h.compressed == u32::MAX,
+            offset: h.offset == u32::MAX,
+            disk: h.disk == u16::MAX,
+        }
+    }
+
+    /// The values a field of `len` bytes holds, as (name, width) pairs.
+    fn layout(self, len: u64) -> Vec<(&'static str, u64)> {
+        let all = [
+            (self.uncompressed, "Uncompressed size", 8u64),
+            (self.compressed, "Compressed size", 8),
+            (self.offset, "Local header offset", 8),
+            (self.disk, "Disk number start", 4),
+        ];
+        let wanted: Vec<_> = all
+            .iter()
+            .filter(|f| f.0)
+            .map(|&(_, name, width)| (name, width))
+            .collect();
+        if wanted.iter().map(|f| f.1).fold(0u64, u64::saturating_add) == len {
+            return wanted;
+        }
+        // A writer that disagrees with its header: take the values in order.
+        all.iter().map(|&(_, name, width)| (name, width)).collect()
+    }
+}
+
+const TIMESTAMP_FLAGS: FlagTable = &[
+    flag(0x01, "MODIFICATION_TIME"),
+    flag(0x02, "ACCESS_TIME"),
+    flag(0x04, "CREATION_TIME"),
+];
+
+const AE_VERSION: EnumTable = &[(1, "AE-1"), (2, "AE-2")];
+const AES_STRENGTH: EnumTable = &[(1, "AES-128"), (2, "AES-192"), (3, "AES-256")];
+
+async fn extra_fields(cx: Cx, (span, zip64): (Span, Zip64Wants)) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, LE);
     while cur.remaining() >= 4 {
         let start = cur.pos();
         let id = cur.u16().await?;
         let len = cur.u16().await?;
+        let body = cx.read_avail(cur.span(len.into())).await?;
         cur.skip(len.into());
         let name = crate::value::lookup(EXTRA_IDS, id.into())
             .map_or_else(|| format!("{id:#06x}"), str::to_owned);
+        let summary = extra_summary(id, &body).unwrap_or_else(|| format!("{len} bytes"));
         cx.push(
-            Node::new(name)
-                .span(cur.since(start))
-                .value(Value::UInt {
-                    value: id.into(),
-                    bits: 16,
-                    radix: crate::value::Radix::Hex,
-                })
-                .summary(format!("{len} bytes")),
+            crate::fields::struct_node(name, cur.since(start), LE, (id, zip64), extra_layout)
+                .value(crate::formats::util::val::hex(id, 16))
+                .summary(summary),
         )
         .await;
+    }
+    Ok(())
+}
+
+/// A one-line reading of the common extra fields.
+fn extra_summary(id: u16, body: &[u8]) -> Option<String> {
+    match id {
+        0x5455 => {
+            let flags = *body.first()?;
+            let mtime = u32_le(body, 1)?.cast_signed();
+            (flags & 1 != 0).then(|| {
+                format!(
+                    "modified {}",
+                    crate::formats::util::civil::date(mtime.into())
+                )
+            })
+        }
+        0x000a if u16_le(body, 4) == Some(1) && u16_le(body, 6)? >= 24 => Some(format!(
+            "modified {}",
+            crate::formats::util::civil::date(crate::text::filetime_to_unix(u64_le(body, 8)?))
+        )),
+        0x7875 => {
+            let (uid, rest) = uid_gid(body.get(1..)?)?;
+            let (gid, _) = uid_gid(rest)?;
+            Some(format!("uid {uid}, gid {gid}"))
+        }
+        0x7855 => Some(format!(
+            "uid {}, gid {}",
+            u16_le(body, 0)?,
+            u16_le(body, 2)?
+        )),
+        0x7075 | 0x6375 if body.first() == Some(&1) => {
+            Some(format!("\"{}\"", String::from_utf8_lossy(body.get(5..)?)))
+        }
+        0x9901 => {
+            let version = crate::value::lookup(AE_VERSION, u16_le(body, 0)?.into());
+            let strength = crate::value::lookup(AES_STRENGTH, (*body.get(4)?).into());
+            Some(format!(
+                "{}, {}",
+                version.unwrap_or("unknown version"),
+                strength.unwrap_or("unknown strength")
+            ))
+        }
+        0xd935 => Some(format!("{}-byte alignment", u16_le(body, 0)?)),
+        _ => None,
+    }
+}
+
+/// A length-prefixed little-endian ID (extra field 0x7875) and what follows.
+fn uid_gid(data: &[u8]) -> Option<(u64, &[u8])> {
+    let (&len, rest) = data.split_first()?;
+    let (id, rest) = rest.split_at_checked(len.into())?;
+    Some((le_uint(id)?, rest))
+}
+
+/// A little-endian unsigned integer of up to 8 bytes.
+fn le_uint(bytes: &[u8]) -> Option<u64> {
+    bytes
+        .iter()
+        .rev()
+        .try_fold(0u64, |acc, &b| acc.checked_mul(256)?.checked_add(b.into()))
+}
+
+fn extra_layout(f: &mut Fields<'_>, &(id, zip64): &(u16, Zip64Wants)) -> Result<()> {
+    f.u16("Header ID").hex().emit()?;
+    let len = f.u16("Data size").emit()?;
+    let end = f.pos().saturating_add(len.into());
+    let left = |f: &Fields<'_>| end.saturating_sub(f.pos());
+    let unix = |&t: &i32, n: Node| {
+        n.value(Value::Timestamp {
+            unix_seconds: t.into(),
+        })
+    };
+    match id {
+        0x0001 => {
+            for (name, width) in zip64.layout(len.into()) {
+                if left(f) < width {
+                    break;
+                }
+                if width == 8 {
+                    f.u64(name).emit()?;
+                } else {
+                    f.u32(name).emit()?;
+                }
+            }
+        }
+        0x5455 if len >= 1 => {
+            let flags = f.u8("Flags").flags(TIMESTAMP_FLAGS).emit()?;
+            for (bit, name) in [
+                (1u8, "Modification time"),
+                (2, "Access time"),
+                (4, "Creation time"),
+            ] {
+                // The central directory's copy keeps the flags but only the
+                // modification time.
+                if flags & bit != 0 && left(f) >= 4 {
+                    f.i32(name).with(unix).emit()?;
+                }
+            }
+        }
+        0x5855 if len >= 8 => {
+            f.i32("Access time").with(unix).emit()?;
+            f.i32("Modification time").with(unix).emit()?;
+            if left(f) >= 4 {
+                f.u16("User ID").emit()?;
+                f.u16("Group ID").emit()?;
+            }
+        }
+        0x7855 if len >= 4 => {
+            f.u16("User ID").emit()?;
+            f.u16("Group ID").emit()?;
+        }
+        0x7875 if len >= 1 => {
+            f.u8("Version").emit()?;
+            for (size, name) in [("UID size", "User ID"), ("GID size", "Group ID")] {
+                if left(f) < 1 {
+                    break;
+                }
+                let n = f.u8(size).emit()?;
+                if left(f) < n.into() {
+                    break;
+                }
+                f.bytes(name, n.into())
+                    .with(|b, node| match le_uint(b) {
+                        Some(v) => node.value(crate::formats::util::val::uint(v, 64)),
+                        None => node,
+                    })
+                    .emit()?;
+            }
+        }
+        0x000a if len >= 4 => {
+            f.u32("Reserved").emit()?;
+            while left(f) >= 4 {
+                let tag = f.u16("Attribute tag").emit()?;
+                let size = f.u16("Attribute size").emit()?;
+                let size = u64::from(size).min(left(f));
+                if tag == 1 && size >= 24 {
+                    f.u64("Modification time").filetime().emit()?;
+                    f.u64("Access time").filetime().emit()?;
+                    f.u64("Creation time").filetime().emit()?;
+                    if size > 24 {
+                        f.bytes("Attribute data", size.saturating_sub(24)).emit()?;
+                    }
+                } else if size > 0 {
+                    f.bytes("Attribute data", size).emit()?;
+                }
+            }
+        }
+        0x7075 | 0x6375 if len >= 5 => {
+            f.u8("Version").emit()?;
+            f.u32("CRC-32 of the header field").hex().emit()?;
+            let rest = left(f);
+            f.bytes("UTF-8 text", rest)
+                .with(|b, n| n.value(Value::Text(String::from_utf8_lossy(b).into_owned())))
+                .emit()?;
+        }
+        0x9901 if len >= 7 => {
+            f.u16("Vendor version").enumeration(AE_VERSION).emit()?;
+            f.ascii("Vendor ID", 2).emit()?;
+            f.u8("Key strength").enumeration(AES_STRENGTH).emit()?;
+            f.u16("Compression method").enumeration(METHOD).emit()?;
+        }
+        0xd935 if len >= 2 => {
+            f.u16("Alignment")
+                .desc("Boundary the entry's data is aligned to (zipalign, apksigner)")
+                .emit()?;
+            let rest = left(f);
+            if rest > 0 {
+                f.bytes("Padding", rest).emit()?;
+            }
+        }
+        _ => {}
+    }
+    let rest = left(f);
+    if rest > 0 {
+        f.bytes("Data", rest).emit()?;
     }
     Ok(())
 }
@@ -1706,6 +2109,19 @@ async fn local_entry(
     (input, header, data, codec, size): (Input, Span, Span, Codec, u64),
 ) -> Result<()> {
     cx.emit(LocalHeader::node("Local File Header", header, LE));
+    let local = crate::fields::parse(&cx, header, LE, &(), LocalHeader::layout).await?;
+    let name = Span::new(
+        header.source,
+        header.offset.saturating_add(header.len),
+        local.name_len.into(),
+    );
+    let extra = Span::new(
+        name.source,
+        name.offset.saturating_add(name.len),
+        local.extra_len.into(),
+    );
+    let extra_bytes = cx.read_avail(extra).await?;
+    emit_local_name_extra(&cx, name, extra, &local, &extra_bytes).await?;
     cx.emit(content("Content", input, data, codec, Some(size)));
     Ok(())
 }

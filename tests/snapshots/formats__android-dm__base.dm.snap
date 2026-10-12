@@ -37,6 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 17  [0x16+0x4]
           File name length: 12  [0x1a+0x2]
           Extra field length: 0  [0x1c+0x2]
+        Local file name: "primary.prof"  [0x1e+0xc]
       ▾ Content — ART profile v010, 0 dex file(s)  [0x2a+0xb]
           Magic: "pro"  [#1:0x0+0x4]
           Version: "010"  [#1:0x4+0x4]

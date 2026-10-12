@@ -40,6 +40,7 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `bzip2/bottles.txt.bz2` | bzip2 1.0.8 | reproduced byte-for-byte: `bzip2 -9` |
 | `bzip2/empty.bz2` | bzip2 1.0.8 | reproduced byte-for-byte: `bzip2 -9` of empty input |
 | `bzip2/multi-block.bz2` | bzip2 1.0.8 | reproduced byte-for-byte: `bzip2 -1` |
+| `bzip2/two-streams.bz2` | bzip2 1.0.8 | two streams back to back: `printf 'first stream\n' \| bzip2 -9 > a.bz2; printf 'second stream, a little longer\n' \| bzip2 -1 > b.bz2; cat a.bz2 b.bz2` (each stream reproduced byte-for-byte) |
 | `xz/bottles.txt.xz` | XZ Utils 5.8 | reproduced byte-for-byte: `xz -6` |
 | `xz/large-member.tar.xz` | XZ Utils 5.8 | reproduced byte-for-byte: `xz -9`; commit f0d9d8d1 ("fixtures from xz and zstd CLIs"); the tarball inside is the bsdtar ustar archive of gzip/large-member.tar.gz |
 | `xz/bcj-powerpc.xz` | XZ Utils 5.8.4 | pseudo machine code from `tests/data/xz/bcjdata.py`, reproduced byte-for-byte by `tests/data/xz/make_bcj.sh`: `xz --check=crc64 --powerpc --lzma2=preset=6` |
@@ -59,6 +60,7 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `brotli/page.html.br` | brotli 1.2 CLI | reproduced byte-for-byte: `brotli -q 10 -w 10` (commit 0b9b5a01: "verified against the brotli CLI") |
 | `compress/bottles.txt.Z` | macOS compress(1) | reproduced byte-for-byte: `compress -c` |
 | `zip/zip64-stdin.zip` | Info-ZIP Zip 3.0 (macOS `/usr/bin/zip`) | `printf 'hello zip64\n' \| zip -q zip64-stdin.zip -`: reading stdin, Info-ZIP writes ZIP64 end records and a ZIP64 extra field |
+| `zip/piped-descriptor.zip` | Info-ZIP Zip 3.0 (macOS `/usr/bin/zip`) | `printf 'hello from stdin\n' \| zip -q -X - - \| cat`: writing to a pipe, Info-ZIP sets flag bit 3 and writes a ZIP64 local extra field and a signed data descriptor with 64-bit sizes; the DOS time is when it was made |
 | `gzip/png.gz` | macOS gzip | deflate body reproduced byte-for-byte with `gzip -6`; header keeps FNAME `c.png` and its MTIME. The PNG inside is hand-made (synthetic) |
 | `gzip/large-member.tar.gz` | macOS gzip + bsdtar 3.5.3 (libarchive 3.7.4) | `gzip -9 -n` of a bsdtar ustar archive (a.txt, a 2 MiB zeros.bin, z.txt). Edited: the tar owner name (uname) of every entry replaced with `fillyfoal` and the header checksums recomputed, then recompressed with the same `gzip -9 -n` (the original recorded the build account's user name) |
 | `lzfse/test.lzfse` | macOS compression_tool | reproduced byte-for-byte: `compression_tool -encode -a lzfse` of `hello` |
@@ -90,6 +92,7 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `pbzx/pbze.aar` | macOS aa (Apple Archive) | `aa archive` with LZFSE compression; entries carry `com.apple.provenance` xattrs |
 | `pbzx/pbzz.aar` | macOS aa (Apple Archive) | `aa archive` with zlib compression |
 | `wim/` | wimlib-imagex 1.13.5 (Debian bookworm `wimtools`, Docker) | `tests/data/wim/make.sh`: `wimcapture` of the tree `make_tree.py` writes, image name `fillyfoal`: `lzms.wim` (`--compress=LZMS --chunk-size=32768`), `solid.esd` (`--solid --solid-chunk-size=32768`, solid LZMS), `solid-lzx.wim` (`--solid --solid-compress=LZX --solid-chunk-size=32768`, text file only). Not byte-reproducible (random GUID, creation times in the XML); every stream's SHA-1 in the lookup table checks against our decoding (`codec::wim` tests) |
+| `rar/` | RAR 6.23 for Linux (RARLAB; Debian bullseye non-free `rar` 2:6.23-1~deb11u1, amd64, Docker) | `tests/data/rar/make_external.sh` (commands in `make_external_inner.sh`), mtimes 2024-01-02 03:04:05 UTC: `v4-unicode.rar` (`-ma4 -m3`, names with the 0x200 Unicode encoding), `v4-solid-real.rar` (`-ma4 -m5 -s`), `v5-unicode.rar` (`-ma5 -m3`), `v5-encrypted.rar` (`-ma5 -pfillyfoal`, data encrypted with password `fillyfoal`). Byte-for-byte reproducible except for the RAR 5 encryption salt and IV |
 
 ## Disk images (macOS)
 

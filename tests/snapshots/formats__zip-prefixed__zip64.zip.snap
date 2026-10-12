@@ -43,6 +43,13 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 4294967295  [0x7a+0x4]
           File name length: 1  [0x7e+0x2]
           Extra field length: 20  [0x80+0x2]
+        Local file name: "-"  [0x82+0x1]
+      ▾ Local extra fields  [0x83+0x14]
+        ▾ ZIP64 extended information: 0x1 — 16 bytes  [0x83+0x14]
+            Header ID: 0x1  [0x83+0x2]
+            Data size: 16  [0x85+0x2]
+            Uncompressed size: 12  [0x87+0x8]
+            Compressed size: 12  [0x8f+0x8]
       ▾ Content — UTF-8 text, LF line endings, 1 line  [0x97+0xc]
           Encoding: "UTF-8"
           Line endings: "LF" — 1 LF, 0 CRLF, 0 CR

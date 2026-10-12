@@ -37,6 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 12  [0x16+0x4]
           File name length: 12  [0x1a+0x2]
           Extra field length: 0  [0x1c+0x2]
+        Local file name: "geogebra.xml"  [0x1e+0xc]
       ▾ Content — XML document, root <geogebra>  [0x2a+0xc]
           geogebra  [0x2a+0xb]
   ▾ End of Central Directory — at 0x70  [0x70+0x16]

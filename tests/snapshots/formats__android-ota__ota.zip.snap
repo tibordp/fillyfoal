@@ -37,6 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 84  [0x16+0x4]
           File name length: 29  [0x1a+0x2]
           Extra field length: 0  [0x1c+0x2]
+        Local file name: "META-INF/com/android/metadata"  [0x1e+0x1d]
       ▾ Content — UTF-8 text, LF line endings, 3 lines  [0x3b+0x50]
           Encoding: "UTF-8"
           Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
@@ -77,6 +78,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 60  [0xa1+0x4]
           File name length: 22  [0xa5+0x2]
           Extra field length: 0  [0xa7+0x2]
+        Local file name: "payload_properties.txt"  [0xa9+0x16]
       ▾ Content — UTF-8 text, LF line endings, 4 lines  [0xbf+0x2a]
           Encoding: "UTF-8"
           Line endings: "LF" — 4 LF, 0 CRLF, 0 CR
@@ -118,6 +120,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 0  [0xff+0x4]
           File name length: 11  [0x103+0x2]
           Extra field length: 0  [0x105+0x2]
+        Local file name: "care_map.pb"  [0x107+0xb]
       ▾ Content — 0x0 bytes decompressed  [0x112+0x2]
           Data  [#3:0x0+0x0]
   ▾ End of Central Directory — at 0x1dc  [0x1dc+0x16]

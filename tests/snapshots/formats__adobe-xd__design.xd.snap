@@ -37,6 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 45  [0x16+0x4]
           File name length: 8  [0x1a+0x2]
           Extra field length: 0  [0x1c+0x2]
+        Local file name: "mimetype"  [0x1e+0x8]
       ▾ Content — UTF-8 text, 1 line  [0x26+0x2d]
           Encoding: "UTF-8"
           Line endings: "none" — 0 LF, 0 CRLF, 0 CR
@@ -75,6 +76,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 211  [0x69+0x4]
           File name length: 22  [0x6d+0x2]
           Extra field length: 0  [0x6f+0x2]
+        Local file name: "META-INF/container.xml"  [0x71+0x16]
       ▾ Content — XML document, root <container>  [0x87+0x94]
         ▾ XML declaration  [#1:0x0+0x15]
             Version: "1.0"  [#1:0xf+0x3]
@@ -117,6 +119,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 91  [0x131+0x4]
           File name length: 8  [0x135+0x2]
           Extra field length: 0  [0x137+0x2]
+        Local file name: "manifest"  [0x139+0x8]
       ▾ Content — JSON object, 3 members  [0x141+0x58]
           name: "Fixture design"  [#2:0x8+0x10]
           type: "application/vnd.adobe.sparkler.project+dcx"  [#2:0x20+0x2c]
@@ -154,6 +157,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 33  [0x1af+0x4]
           File name length: 37  [0x1b3+0x2]
           Extra field length: 0  [0x1b5+0x2]
+        Local file name: "artwork/pasteboard/graphicContent.agc"  [0x1b7+0x25]
       ▾ Content — JSON object, 2 members  [0x1dc+0x22]
           version: "1.5.0"  [#3:0xb+0x7]
           children — array, 0 elements  [#3:0x1e+0x2]

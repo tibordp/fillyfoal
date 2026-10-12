@@ -37,6 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 15  [0x16+0x4]
           File name length: 12  [0x1a+0x2]
           Extra field length: 0  [0x1c+0x2]
+        Local file name: "project.json"  [0x1e+0xc]
       ▾ Content — JSON object, 1 member  [0x2a+0xf]
           targets — array, 0 elements  [0x35+0x2]
   ▾ End of Central Directory — at 0x73  [0x73+0x16]
