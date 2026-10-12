@@ -198,6 +198,32 @@ fn it214_block(sixteen: bool) -> u32 {
     if sixteen { 0x4000 } else { 0x8000 }
 }
 
+/// The bytes IT-compressed sample data takes: its blocks' lengths walked
+/// (one read per block), as far as they fit in `region`.
+pub(crate) async fn it214_len(
+    cx: &Cx,
+    region: Span,
+    frames: u32,
+    sixteen: bool,
+    stereo: bool,
+) -> u64 {
+    let blocks =
+        u64::from(frames.div_ceil(it214_block(sixteen))).saturating_mul(if stereo { 2 } else { 1 });
+    let mut pos = 0u64;
+    for _ in 0..blocks {
+        let Ok(head) = cx.read_avail(region.sub(pos, 2)).await else {
+            break;
+        };
+        let Some(len) = u16_le(&head, 0) else { break };
+        let next = pos.saturating_add(2).saturating_add(len.into());
+        if next > region.len {
+            break;
+        }
+        pos = next;
+    }
+    pos
+}
+
 /// Walks the block lengths of IT-compressed sample data (one read per
 /// block) and returns a node spanning the blocks, listing them lazily.
 async fn it214_node(
@@ -239,7 +265,16 @@ async fn it214_node(
             walked_block = plural(walked, "block"),
             frames_sample = plural(frames, "sample")
         ))
-        .lazy(it214_blocks, (span, sixteen));
+        .lazy(
+            it214_blocks,
+            It214 {
+                span,
+                frames,
+                sixteen,
+                stereo,
+                it215,
+            },
+        );
     if short {
         node = node.diag(crate::error::Diagnostic::truncated(
             region.sub(pos, 2),
@@ -249,7 +284,30 @@ async fn it214_node(
     Ok(node)
 }
 
-async fn it214_blocks(cx: Cx, (span, sixteen): (Span, bool)) -> Result<()> {
+/// IT-compressed sample data, as walked by [`it214_node`].
+#[derive(Clone, Copy, Debug)]
+struct It214 {
+    span: Span,
+    frames: u32,
+    sixteen: bool,
+    stereo: bool,
+    it215: bool,
+}
+
+async fn it214_blocks(cx: Cx, c: It214) -> Result<()> {
+    let It214 { span, sixteen, .. } = c;
+    let bytes = u64::from(c.frames)
+        .saturating_mul(if sixteen { 2 } else { 1 })
+        .saturating_mul(if c.stereo { 2 } else { 1 });
+    cx.emit(
+        Node::new("Decoded")
+            .summary(format!(
+                "{bytes} bytes of {}-bit signed PCM{}",
+                if sixteen { 16 } else { 8 },
+                if c.stereo { ", left then right" } else { "" }
+            ))
+            .lazy(it214_decoded, c),
+    );
     let mut pos = 0u64;
     let mut index = 0u64;
     while pos < span.len {
@@ -269,6 +327,184 @@ async fn it214_blocks(cx: Cx, (span, sixteen): (Span, bool)) -> Result<()> {
         index = index.saturating_add(1);
     }
     Ok(())
+}
+
+/// Decompresses IT 2.14/2.15 sample data into signed PCM (8-bit, or
+/// 16-bit little-endian), each channel's frames in turn.
+async fn it214_decoded(cx: Cx, c: It214) -> Result<()> {
+    let per_block = it214_block(c.sixteen);
+    let mut out = Vec::new();
+    let mut pos = 0u64;
+    let mut problem = None;
+    for _ in 0..if c.stereo { 2 } else { 1 } {
+        let mut left = c.frames;
+        while left > 0 {
+            let head = cx.read_avail(c.span.sub(pos, 2)).await?;
+            let Some(len) = u16_le(&head, 0) else {
+                problem = Some(crate::error::Diagnostic::truncated(c.span.sub(pos, 2), 0));
+                break;
+            };
+            let block = cx
+                .read_avail(c.span.sub(pos.saturating_add(2), len.into()))
+                .await?;
+            let n = left.min(per_block);
+            let done = if c.sixteen {
+                it214_block16(&block, n, c.it215, &mut out)
+            } else {
+                it214_block8(&block, n, c.it215, &mut out)
+            };
+            // About a microsecond per 64 samples.
+            cx.charge(u64::from(n) / 64).await;
+            if done < n {
+                problem = Some(crate::error::Diagnostic::malformed(format!(
+                    "compressed block ends after {done} of {n} samples"
+                )));
+                break;
+            }
+            left = left.saturating_sub(n);
+            pos = pos.saturating_add(2).saturating_add(len.into());
+        }
+        if problem.is_some() {
+            break;
+        }
+    }
+    let consumed = pos.min(c.span.len);
+    let decoded = cx.add_derived(
+        crate::span::Origin {
+            parent: c.span,
+            transform: if c.it215 { "it215" } else { "it214" },
+        },
+        out,
+        consumed,
+        problem,
+    )?;
+    let mut node = Node::new("PCM").span(decoded.span);
+    if let Some(e) = decoded.error {
+        node = node.diag(e);
+    }
+    cx.emit(node);
+    Ok(())
+}
+
+/// Bits of an IT-compressed block, least significant first.
+struct Bits<'a> {
+    data: &'a [u8],
+    pos: usize,
+    bit: u32,
+}
+
+impl Bits<'_> {
+    fn read(&mut self, n: u32) -> Option<u32> {
+        let mut v = 0u32;
+        for i in 0..n {
+            let byte = *self.data.get(self.pos)?;
+            let b = u32::from(byte.wrapping_shr(self.bit)) & 1;
+            v |= b.checked_shl(i).unwrap_or(0);
+            self.bit = self.bit.saturating_add(1);
+            if self.bit == 8 {
+                self.bit = 0;
+                self.pos = self.pos.saturating_add(1);
+            }
+        }
+        Some(v)
+    }
+}
+
+/// The width that follows a width-change value (`value` is 1-based).
+fn next_width(value: u32, width: u32) -> u32 {
+    if value < width {
+        value
+    } else {
+        value.saturating_add(1)
+    }
+}
+
+/// One 8-bit block (Schism Tracker's and OpenMPT's IT decompressor): up
+/// to `n` samples appended to `out`; returns how many were decoded.
+fn it214_block8(data: &[u8], n: u32, it215: bool, out: &mut Vec<u8>) -> u32 {
+    let mut bits = Bits {
+        data,
+        pos: 0,
+        bit: 0,
+    };
+    let (mut width, mut d1, mut d2) = (9u32, 0i8, 0i8);
+    let mut done = 0u32;
+    while done < n {
+        let Some(value) = bits.read(width) else { break };
+        if width < 7 {
+            if value == 1u32.checked_shl(width.saturating_sub(1)).unwrap_or(0) {
+                let Some(w) = bits.read(3) else { break };
+                width = next_width(w.saturating_add(1), width);
+                continue;
+            }
+        } else if width < 9 {
+            let border = 0xffu32
+                .wrapping_shr(9u32.saturating_sub(width))
+                .saturating_sub(4);
+            if value > border && value <= border.saturating_add(8) {
+                width = next_width(value.saturating_sub(border), width);
+                continue;
+            }
+        } else if width == 9 {
+            if value & 0x100 != 0 {
+                width = value.saturating_add(1) & 0xff;
+                continue;
+            }
+        } else {
+            break;
+        }
+        // Sign-extend the low `width` bits.
+        let shift = 8u32.saturating_sub(width);
+        let v = (value.checked_shl(shift).unwrap_or(0) as u8 as i8).wrapping_shr(shift);
+        d1 = d1.wrapping_add(v);
+        d2 = d2.wrapping_add(d1);
+        out.push(if it215 { d2 } else { d1 } as u8);
+        done = done.saturating_add(1);
+    }
+    done
+}
+
+/// One 16-bit block, as [`it214_block8`].
+fn it214_block16(data: &[u8], n: u32, it215: bool, out: &mut Vec<u8>) -> u32 {
+    let mut bits = Bits {
+        data,
+        pos: 0,
+        bit: 0,
+    };
+    let (mut width, mut d1, mut d2) = (17u32, 0i16, 0i16);
+    let mut done = 0u32;
+    while done < n {
+        let Some(value) = bits.read(width) else { break };
+        if width < 7 {
+            if value == 1u32.checked_shl(width.saturating_sub(1)).unwrap_or(0) {
+                let Some(w) = bits.read(4) else { break };
+                width = next_width(w.saturating_add(1), width);
+                continue;
+            }
+        } else if width < 17 {
+            let border = 0xffffu32
+                .wrapping_shr(17u32.saturating_sub(width))
+                .saturating_sub(8);
+            if value > border && value <= border.saturating_add(16) {
+                width = next_width(value.saturating_sub(border), width);
+                continue;
+            }
+        } else if width == 17 {
+            if value & 0x1_0000 != 0 {
+                width = value.saturating_add(1) & 0xff;
+                continue;
+            }
+        } else {
+            break;
+        }
+        let shift = 16u32.saturating_sub(width);
+        let v = (value.checked_shl(shift).unwrap_or(0) as u16 as i16).wrapping_shr(shift);
+        d1 = d1.wrapping_add(v);
+        d2 = d2.wrapping_add(d1);
+        out.extend_from_slice(&if it215 { d2 } else { d1 }.to_le_bytes());
+        done = done.saturating_add(1);
+    }
+    done
 }
 
 /// "name" or "(unnamed)".

@@ -50,6 +50,9 @@ expression: "common::explore(&display_name(&path), &data)"
         Vibrato rate: 0  [0x118+0x1]
         Vibrato waveform: 0  [0x119+0x1]
       ▾ Sample data — IT215 compressed, 2 blocks, 20480 samples, 16-bit  [0x169+0x66]
+        ▾ Decoded — 40960 bytes of 16-bit signed PCM
+            PCM  [#1:0x0+0x4]
+              ! malformed: compressed block ends after 2 of 16384 samples
           Block 0 — 64 bytes, up to 16384 samples  [0x169+0x42]
           Block 1 — 34 bytes, up to 16384 samples  [0x1ab+0x24]
   ▾ Patterns — 1 pattern  [0xc6+0x4]

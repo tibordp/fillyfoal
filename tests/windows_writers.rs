@@ -95,6 +95,51 @@ fn type_server_object_names_the_compiler_pdb() {
     assert_has(&t, "types only (compiler PDB)");
 }
 
+/// The bytes of every node named `name` in the fully explored tree of an
+/// external fixture, in tree order (derived sources included).
+fn node_bytes(path: &str, name: &str) -> Vec<Vec<u8>> {
+    let (file, data) = external(path);
+    let mut host = common::Host::named(&file, data.clone(), fillyfoal::Limits::default());
+    host.explore_all();
+    let mut out = Vec::new();
+    let mut stack = vec![host.root];
+    let mut order = Vec::new();
+    while let Some(id) = stack.pop() {
+        order.push(id);
+        let children = host.session.children(id).unwrap();
+        stack.extend(children.ids.iter().rev().copied());
+    }
+    for id in order {
+        let node = host.session.node(id).unwrap();
+        if node.name != name {
+            continue;
+        }
+        let span = node.span.unwrap();
+        let bytes = match host.session.derived_data(span.source) {
+            Some(d) => d[span.offset as usize..(span.offset + span.len) as usize].to_vec(),
+            None => data[span.offset as usize..(span.offset + span.len) as usize].to_vec(),
+        };
+        out.push(bytes);
+    }
+    out
+}
+
+/// OpenMPT saved the same song with and without IT sample compression:
+/// decompressing the IT 2.14 (`.it`) and IT 2.15 (`.mptm`) blocks gives
+/// the uncompressed file's signed PCM exactly.
+#[test]
+fn it_compressed_samples_decode_to_the_uncompressed_pcm() {
+    let plain = node_bytes("it/fillyfoal-uncompressed.it", "Sample data");
+    assert_eq!(plain.iter().map(Vec::len).collect::<Vec<_>>(), [256, 512]);
+    for path in [
+        "it/fillyfoal-compressed.it",
+        "it/fillyfoal-compat-compressed.it",
+        "it/fillyfoal.mptm",
+    ] {
+        assert_eq!(node_bytes(path, "PCM"), plain, "{path}");
+    }
+}
+
 /// Inno Setup 6.3 to 7.1 (the PE snapshots elide the installer data):
 /// each version's header, settings and file entries parse, and the files'
 /// hashes in the location entries match their decompressed content.
