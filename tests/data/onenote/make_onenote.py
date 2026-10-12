@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Writes the synthetic OneNote fixtures:
 
-    tests/fixtures/synthetic/onenote/Notes.one
+    tests/fixtures/synthetic/onenote/Notes.one (page "Shopping list")
+    tests/fixtures/synthetic/onenote/Meeting.one (page "Meeting notes")
     tests/fixtures/synthetic/onetoc2/Notebook.onetoc2
     tests/fixtures/synthetic/onenote/Online.one (FSSHTTPB packaging prefix)
 
 Layouts are from memory of [MS-ONESTORE] / [MS-ONE] (no OneNote writer was
 available), so these files show what our reader expects, not what OneNote
-writes. Notes.one is also read back with pyOneNote (an independent reader)
-by `check_with_pyonenote` below:
+writes. The two sections were one file (both pages) until its snapshot
+outgrew the 256 KiB cap; `make_one(pages)` can still write that. The
+sections are also read back with pyOneNote (an independent reader) by
+`check_with_pyonenote` below:
 
     uv run --with pyOneNote python tests/data/onenote/make_onenote.py --check
 
@@ -300,7 +303,10 @@ def png_dot():
 MINUTES = b"Minutes\r\n- budget approved\r\n- hire two people\r\n"
 
 
-def make_one():
+def make_one(pages=(1, 2), name="Notes.one"):
+    """A section with the given pages: 1 "Shopping list" (two paragraphs,
+    a styled one and an extended-ASCII one, and an image), 2 "Meeting
+    notes" (a subpage with an attachment and a second revision)."""
     w = Writer()
     section, page1, page2 = g(0x5EC), g(0x9A61), g(0x9A62)
     og1, og2, og2b = g(0x0B1), g(0x0B2), g(0x0B3)
@@ -310,12 +316,14 @@ def make_one():
     free = w.alloc(b"\0" * 64)
 
     # File data store.
-    fdso1 = w.fdso(f1, png_dot())
-    fdso2 = w.fdso(f2, MINUTES)
-    store_ref, _ = w.list([
-        fnode(0x094, f1.bytes_le, fdso1, sf=0, cf=1),
-        fnode(0x094, f2.bytes_le, fdso2, sf=0, cf=1),
-    ])
+    store = []
+    if 1 in pages:
+        fdso1 = w.fdso(f1, png_dot())
+        store.append(fnode(0x094, f1.bytes_le, fdso1, sf=0, cf=1))
+    if 2 in pages:
+        fdso2 = w.fdso(f2, MINUTES)
+        store.append(fnode(0x094, f2.bytes_le, fdso2, sf=0, cf=1))
+    store_ref, _ = w.list(store)
 
     def text(oidn, s, ascii_=False, style=None):
         p = Props()
@@ -339,6 +347,18 @@ def make_one():
         return decl(w, 0, oidn, jcid, p)
 
     # Page 1: "Shopping list" with two paragraphs and an image.
+    style = None
+    if 1 in pages:
+        style, p1_revs = page_one(w, page1, og1, f1, text, oe, elements)
+    if 2 in pages:
+        p2_revs, p2_list = page_two(w, page2, og2, og2b, f2, text, oe, elements)
+    return finish(w, pages, name, free, section, page1, page2, style, store_ref,
+                  p1_revs if 1 in pages else None,
+                  p2_revs if 2 in pages else None,
+                  p2_list if 2 in pages else None)
+
+
+def page_one(w, page1, og1, f1, text, oe, elements):
     style = Props().add(Font, utf16z("Calibri")).add(FontSize, 22).add(Bold, True).add(FontColor, 0x000000FF)
     p1 = [
         decl(w, 0, 1, jcidPageManifestNode,
@@ -375,7 +395,10 @@ def make_one():
         fnode(0x05A, exguid(page1, 40) + struct.pack("<I", 2)),
         fnode(0x01C),
     ])
+    return style, p1_revs
 
+
+def page_two(w, page2, og2, og2b, f2, text, oe, elements):
     # Page 2: "Meeting notes" (a subpage), an attachment, and a second
     # revision that depends on the first and changes its outline.
     p2a = [
@@ -417,17 +440,26 @@ def make_one():
         fnode(0x01C),
         fnode(0x05C, exguid(rid2b, 1) + struct.pack("<I", 1)),
     ]
-    p2_revs, p2_list = w.list(p2_nodes)
+    return w.list(p2_nodes)
 
-    # The section: a page series listing both pages.
+
+def finish(w, pages, name, free, section, page1, page2, style, store_ref, p1_revs, p2_revs, p2_list):
+    def elements(oidn, jcid, children, extra=()):
+        p = Props().add(ElementChildNodes, [oid(c) for c in children])
+        for prid, v in extra:
+            p.add(prid, v)
+        return decl(w, 0, oidn, jcid, p)
+
+    # The section: a page series listing its pages.
+    spaces = [(i + 1, {1: page1, 2: page2}[n]) for i, n in enumerate(pages)]
     sec = [
         elements(1, jcidSectionNode, [2],
                  [(NotebookManagementEntityGuid, g(0xE7).bytes_le)]),
         decl(w, 0, 2, jcidPageSeriesNode,
-             Props().add(ChildGraphSpaceElementNodes, [compact(1, 1), compact(2, 1)])),
+             Props().add(ChildGraphSpaceElementNodes, [compact(i, 1) for i, _ in spaces])),
         decl(w, 0, 3, jcidSectionMetaData, Props().add(SchemaRevisionInOrderToRead, 0x2B)),
     ]
-    sec_group = group(w, exguid(g(0x0B0), 1), [(0, section), (1, page1), (2, page2)], sec)
+    sec_group = group(w, exguid(g(0x0B0), 1), [(0, section)] + spaces, sec)
     sec_revs, _ = w.list([
         fnode(0x014, exguid(section, 1) + struct.pack("<I", 0)),
         fnode(0x01E, exguid(g(0x5D01), 1) + NIL_EX + struct.pack("<IH", 1, 0)),
@@ -441,30 +473,37 @@ def make_one():
         ref, _ = w.list([fnode(0x00C, exguid(gosid, 1)), fnode(0x010, b"", revs, base=2)])
         return fnode(0x008, exguid(gosid, 1), ref, base=2)
 
+    manifests = [manifest(section, sec_revs)]
+    if p1_revs is not None:
+        manifests.append(manifest(page1, p1_revs))
+    if p2_revs is not None:
+        manifests.append(manifest(page2, p2_revs))
     root, root_id = w.list(
-        [
-            manifest(section, sec_revs),
-            manifest(page1, p1_revs),
-            manifest(page2, p2_revs),
+        manifests + [
             fnode(0x004, exguid(section, 1)),
             fnode(0x090, b"", store_ref, base=2),
         ],
-        split=3,
+        split=len(manifests),
     )
 
     # Hashed chunk list: one descriptor for the page 1 style object.
-    style_ref = w.propset(style)
-    import hashlib
+    hashed = NIL64
+    if style is not None:
+        style_ref = w.propset(style)
+        import hashlib
 
-    blob = bytes(w.buf[style_ref[0]:style_ref[0] + style_ref[1]])
-    hashed, _ = w.list([fnode(0x0C2, hashlib.md5(blob).digest(), style_ref)])
+        blob = bytes(w.buf[style_ref[0]:style_ref[0] + style_ref[1]])
+        hashed, _ = w.list([fnode(0x0C2, hashlib.md5(blob).digest(), style_ref)])
 
-    # Transaction log: the first transaction commits page 2 with one
-    # revision, the second its second revision.
-    first = dict(w.counts)
-    first[p2_list] = 6
+    # Transaction log: with page 2, the first transaction commits it with
+    # one revision, the second its second revision.
+    commits = [w.counts]
+    if p2_list is not None:
+        first = dict(w.counts)
+        first[p2_list] = 6
+        commits = [first, w.counts]
     tx = b""
-    for counts in (first, w.counts):
+    for counts in commits:
         entries = b"".join(struct.pack("<II", k, v) for k, v in sorted(counts.items()))
         tx += entries + struct.pack("<II", 1, zlib.crc32(entries))
     log = w.alloc(tx + struct.pack("<QI", *NIL64))
@@ -473,8 +512,8 @@ def make_one():
 
     w.buf += b"\0" * (-len(w.buf) % 8)
     header = header_bytes(
-        ONE, 0x2A, transactions=2, hashed=hashed, log=log, root=root, free=free_list,
-        length=len(w.buf), free_space=free[1], name="Notes.one",
+        ONE, 0x2A, transactions=len(commits), hashed=hashed, log=log, root=root, free=free_list,
+        length=len(w.buf), free_space=free[1], name=name,
     )
     w.buf[0:1024] = header
     return bytes(w.buf)
@@ -560,21 +599,21 @@ def make_fsshttpb():
     return head + struct.pack("<I", start) + bytes(range(48))
 
 
-def check_with_pyonenote(path):
+def check_with_pyonenote(path, files_expected, texts_expected, titles_expected):
     from pyOneNote.OneDocument import OneDocment
 
     with open(path, "rb") as f:
         doc = OneDocment(f)
     files = doc.get_files()
     contents = sorted(bytes(v["content"]) for v in files.values())
-    assert contents == sorted([png_dot(), MINUTES]), contents
+    assert contents == sorted(c for c, _ in files_expected), contents
     exts = sorted(v["extension"] for v in files.values())
-    assert exts == [".png", ".txt"], exts
+    assert exts == sorted(e for _, e in files_expected), exts
     texts = [p["val"].get("RichEditTextUnicode") for p in doc.get_properties()]
     titles = [p["val"].get("CachedTitleString") for p in doc.get_properties()]
-    assert "Shopping list" in texts and "Agenda: budget, hiring" in texts, texts
-    assert "Meeting notes" in titles, titles
-    print("pyOneNote:", len(files), "files,", len(doc.get_properties()), "property sets")
+    assert all(t in texts for t in texts_expected), texts
+    assert all(t in titles for t in titles_expected), titles
+    print("pyOneNote:", path, len(files), "files,", len(doc.get_properties()), "property sets")
 
 
 def main():
@@ -582,15 +621,20 @@ def main():
     toc = os.path.join(ROOT, "tests/fixtures/synthetic/onetoc2/Notebook.onetoc2")
     os.makedirs(os.path.dirname(one), exist_ok=True)
     os.makedirs(os.path.dirname(toc), exist_ok=True)
+    meeting = os.path.join(ROOT, "tests/fixtures/synthetic/onenote/Meeting.one")
     with open(one, "wb") as f:
-        f.write(make_one())
+        f.write(make_one((1,), "Notes.one"))
+    with open(meeting, "wb") as f:
+        f.write(make_one((2,), "Meeting.one"))
     with open(toc, "wb") as f:
         f.write(make_toc())
     alt = os.path.join(ROOT, "tests/fixtures/synthetic/onenote/Online.one")
     with open(alt, "wb") as f:
         f.write(make_fsshttpb())
     if "--check" in sys.argv:
-        check_with_pyonenote(one)
+        check_with_pyonenote(one, [(png_dot(), ".png")], ["Shopping list"], ["Shopping list"])
+        check_with_pyonenote(meeting, [(MINUTES, ".txt")], ["Agenda: budget, hiring"],
+                             ["Meeting notes"])
 
 
 if __name__ == "__main__":
