@@ -1115,7 +1115,10 @@ mod tests {
         assert_eq!(checked, (len as usize).div_ceil(FRAME) - 1);
         // The window, the tables (with three 2 KiB lookup tables), the
         // decoder itself.
-        assert!((1 << 16..(1 << 16) + 10 * 1024).contains(&largest), "{largest}");
+        assert!(
+            (1 << 16..(1 << 16) + 10 * 1024).contains(&largest),
+            "{largest}"
+        );
         // A WIM chunk: one frame, so no checkpoint inside it.
         let chunk = read("wim-chunk.lzx");
         verify_checkpoints(
