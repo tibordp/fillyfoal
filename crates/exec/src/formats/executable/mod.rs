@@ -5,6 +5,7 @@
 pub mod aout;
 pub mod coff;
 pub mod dcu;
+pub(crate) mod dwarf;
 pub(crate) mod eh_frame;
 pub mod elf;
 pub mod fatbin;

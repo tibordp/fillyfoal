@@ -1,7 +1,9 @@
 //! DWARF call frame information as found in `.eh_frame` (ELF) and
 //! `__eh_frame` (Mach-O): CIE and FDE headers, with pointers decoded by
 //! their `DW_EH_PE_*` encodings, and the ELF `.eh_frame_hdr` lookup table.
-//! The call frame instructions are not decoded.
+//! The call frame instructions are decoded one per node on expansion, and
+//! `.debug_frame` (the DWARF form: all-ones CIE ids, section-offset CIE
+//! pointers, plain addresses) is walked by the same code.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -50,6 +52,21 @@ struct Cie {
     augmented: bool,
     fde_encoding: u8,
     lsda_encoding: u8,
+    code_align: u64,
+    data_align: i64,
+    /// The address size of a version 4 `.debug_frame` CIE.
+    address_size: Option<u8>,
+}
+
+/// Which flavour of call frame information a section holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Mode {
+    /// `.eh_frame`: CIE id 0, CIE pointers relative to themselves,
+    /// pointers in `DW_EH_PE_*` encodings.
+    Eh,
+    /// `.debug_frame`: CIE id all ones, CIE pointers are section offsets,
+    /// addresses are plain target addresses.
+    Debug,
 }
 
 /// Reads a DWARF-encoded pointer (`DW_EH_PE_*`); `here` is the address of
@@ -131,6 +148,9 @@ fn parse_cie(
         fde_encoding: 0,
         lsda_encoding: 0xff,
         augmented: false,
+        code_align: 1,
+        data_align: 1,
+        address_size: None,
     };
     let mut nodes = Vec::new();
     let mut r = Reader::at(data, header);
@@ -153,6 +173,25 @@ fn parse_cie(
             .value(text(aug.clone())),
     );
     summary.push(format!("version {version}, augmentation \"{aug}\""));
+    if version >= 4 {
+        s = r.pos();
+        if let Some(size) = r.u8() {
+            cie.address_size = Some(size);
+            nodes.push(
+                Node::new("address_size")
+                    .span(at(s, r.pos()))
+                    .value(uint(size, 8)),
+            );
+        }
+        s = r.pos();
+        if let Some(size) = r.u8() {
+            nodes.push(
+                Node::new("segment_selector_size")
+                    .span(at(s, r.pos()))
+                    .value(uint(size, 8)),
+            );
+        }
+    }
     if aug.contains("eh") {
         s = r.pos();
         let v = if img.wide() {
@@ -168,6 +207,7 @@ fn parse_cie(
     }
     s = r.pos();
     if let Some(v) = r.uleb() {
+        cie.code_align = v;
         nodes.push(
             Node::new("code_alignment_factor")
                 .span(at(s, r.pos()))
@@ -176,6 +216,7 @@ fn parse_cie(
     }
     s = r.pos();
     if let Some(v) = r.sleb() {
+        cie.data_align = v;
         nodes.push(
             Node::new("data_alignment_factor")
                 .span(at(s, r.pos()))
@@ -266,12 +307,39 @@ pub(crate) async fn walk(
     span: Span,
     section_addr: u64,
 ) -> Result<()> {
+    walk_mode(cx, img, span, section_addr, Mode::Eh).await
+}
+
+/// Walks a `.debug_frame` section: CIEs and FDEs in the DWARF form.
+pub(crate) async fn walk_debug_frame(cx: &Cx, img: &(dyn Image + Sync), span: Span) -> Result<()> {
+    walk_mode(cx, img, span, 0, Mode::Debug).await
+}
+
+/// A plain target address of `size` bytes.
+fn address(r: &mut Reader<'_>, size: u8, endian: Endian) -> Option<u64> {
+    match size {
+        8 => r.int::<u64>(endian),
+        4 => r.int::<u32>(endian).map(u64::from),
+        2 => r.int::<u16>(endian).map(u64::from),
+        1 => r.u8().map(u64::from),
+        _ => None,
+    }
+}
+
+async fn walk_mode(
+    cx: &Cx,
+    img: &(dyn Image + Sync),
+    span: Span,
+    section_addr: u64,
+    mode: Mode,
+) -> Result<()> {
     let mut cies: BTreeMap<u64, Cie> = BTreeMap::new();
     let mut pos = 0u64;
+    let endian = img.endian();
     while pos < span.len {
         let head = cx.read_avail(span.sub(pos, 12)).await?;
-        let len32 = get_at::<u32>(&head, 0, img.endian()).unwrap_or(0);
-        if len32 == 0 {
+        let len32 = get_at::<u32>(&head, 0, endian).unwrap_or(0);
+        if len32 == 0 && mode == Mode::Eh {
             cx.push(
                 Node::new("Terminator")
                     .span(span.sub(pos, 4))
@@ -287,39 +355,57 @@ pub(crate) async fn walk(
             break;
         }
         let (length, header) = if len32 == 0xffff_ffff {
-            (get_at::<u64>(&head, 4, img.endian()).unwrap_or(0), 12usize)
+            (get_at::<u64>(&head, 4, endian).unwrap_or(0), 12usize)
         } else {
             (u64::from(len32), 4usize)
+        };
+        // `.debug_frame` CIE ids and pointers are as wide as the offsets.
+        let id_size: usize = if mode == Mode::Debug && header == 12 {
+            8
+        } else {
+            4
         };
         let total = to_u64(header).saturating_add(length);
         let record = span.sub(pos, total);
         let data = cx.read_avail(record.sub(0, RECORD_HEAD)).await?;
         let at = |a: usize, b: usize| record.sub(to_u64(a), to_u64(b.saturating_sub(a)));
         let id_at = header;
-        let id = get_at::<u32>(&data, to_u64(id_at), img.endian()).unwrap_or(0);
+        let id = if id_size == 8 {
+            get_at::<u64>(&data, to_u64(id_at), endian).unwrap_or(0)
+        } else {
+            get_at::<u32>(&data, to_u64(id_at), endian).map_or(0, u64::from)
+        };
+        let is_cie = match mode {
+            Mode::Eh => id == 0,
+            Mode::Debug => id == if id_size == 8 { u64::MAX } else { 0xffff_ffff },
+        };
+        let id_end = id_at.saturating_add(id_size);
+        let id_bits = if id_size == 8 { 64 } else { 32 };
         let mut nodes = vec![
             Node::new("length")
                 .span(at(0, header))
                 .value(hex(length, if header == 4 { 32 } else { 64 })),
         ];
         let record_addr = section_addr.saturating_add(pos);
-        let (node, end) = if id == 0 {
+        let (node, end, cie, pc) = if is_cie {
             nodes.push(
                 Node::new("CIE_id")
-                    .span(at(id_at, id_at.saturating_add(4)))
-                    .value(hex(0u32, 32)),
+                    .span(at(id_at, id_end))
+                    .value(hex(id, id_bits)),
             );
-            let (cie, fields, summary, end) =
-                parse_cie(&data, id_at.saturating_add(4), img, &at, record_addr);
+            let (cie, fields, summary, end) = parse_cie(&data, id_end, img, &at, record_addr);
             cies.insert(pos, cie);
             nodes.extend(fields);
-            (("CIE", summary), end)
+            (("CIE", summary), end, cie, None)
         } else {
-            let cie_pos = pos.saturating_add(to_u64(id_at)).wrapping_sub(id.into());
+            let cie_pos = match mode {
+                Mode::Eh => pos.saturating_add(to_u64(id_at)).wrapping_sub(id),
+                Mode::Debug => id,
+            };
             nodes.push(
                 Node::new("CIE_pointer")
-                    .span(at(id_at, id_at.saturating_add(4)))
-                    .value(hex(id, 32))
+                    .span(at(id_at, id_end))
+                    .value(hex(id, id_bits))
                     .summary(format!("CIE at {cie_pos:#x}"))
                     .target(span.sub(cie_pos, 0)),
             );
@@ -331,9 +417,18 @@ pub(crate) async fn walk(
                     let cie_record = span.sub(cie_pos, RECORD_HEAD);
                     let cat =
                         |a: usize, b: usize| cie_record.sub(to_u64(a), to_u64(b.saturating_sub(a)));
+                    let cie_header = match get_at::<u32>(&cie_data, 0, endian) {
+                        Some(0xffff_ffff) => 12usize,
+                        _ => 4,
+                    };
+                    let cie_id = if mode == Mode::Debug && cie_header == 12 {
+                        8
+                    } else {
+                        4
+                    };
                     let cie = parse_cie(
                         &cie_data,
-                        8,
+                        cie_header.saturating_add(cie_id),
                         img,
                         &cat,
                         section_addr.saturating_add(cie_pos),
@@ -343,31 +438,44 @@ pub(crate) async fn walk(
                     cie
                 }
             };
-            let mut r = Reader::at(&data, id_at.saturating_add(4));
+            let mut r = Reader::at(&data, id_end);
             let s = r.pos();
-            let begin = encoded(
-                &mut r,
-                cie.fde_encoding,
-                img.wide(),
-                img.endian(),
-                record_addr.saturating_add(to_u64(s)),
-            )
+            let addr_size = cie.address_size.unwrap_or(if img.wide() { 8 } else { 4 });
+            let begin = match mode {
+                Mode::Eh => encoded(
+                    &mut r,
+                    cie.fde_encoding,
+                    img.wide(),
+                    endian,
+                    record_addr.saturating_add(to_u64(s)),
+                ),
+                Mode::Debug => address(&mut r, addr_size, endian),
+            }
             .unwrap_or(0);
-            let mut field = Node::new("pc_begin")
-                .span(at(s, r.pos()))
-                .value(hex(begin, 64))
-                .summary(img.describe(begin));
+            let mut field = Node::new(match mode {
+                Mode::Eh => "pc_begin",
+                Mode::Debug => "initial_location",
+            })
+            .span(at(s, r.pos()))
+            .value(hex(begin, 64))
+            .summary(img.describe(begin));
             if let Some(t) = img.target(begin) {
                 field = field.target(t);
             }
             nodes.push(field);
             let s = r.pos();
-            let range =
-                encoded(&mut r, cie.fde_encoding & 0x0f, img.wide(), img.endian(), 0).unwrap_or(0);
+            let range = match mode {
+                Mode::Eh => encoded(&mut r, cie.fde_encoding & 0x0f, img.wide(), endian, 0),
+                Mode::Debug => address(&mut r, addr_size, endian),
+            }
+            .unwrap_or(0);
             nodes.push(
-                Node::new("pc_range")
-                    .span(at(s, r.pos()))
-                    .value(hex(range, 64)),
+                Node::new(match mode {
+                    Mode::Eh => "pc_range",
+                    Mode::Debug => "address_range",
+                })
+                .span(at(s, r.pos()))
+                .value(hex(range, 64)),
             );
             if cie.augmented {
                 let s = r.pos();
@@ -384,7 +492,7 @@ pub(crate) async fn walk(
                         &mut r,
                         cie.lsda_encoding,
                         img.wide(),
-                        img.endian(),
+                        endian,
                         record_addr.saturating_add(to_u64(s)),
                     )
                     .unwrap_or(0);
@@ -407,14 +515,31 @@ pub(crate) async fn walk(
                     ),
                 ),
                 r.pos(),
+                cie,
+                Some(begin),
             )
         };
         let instructions = record.tail(to_u64(end));
         if instructions.len > 0 {
+            let ctx = Cfi {
+                span: instructions,
+                code_align: cie.code_align,
+                data_align: cie.data_align,
+                address_size: cie.address_size.unwrap_or(if img.wide() { 8 } else { 4 }),
+                fde_encoding: if mode == Mode::Eh {
+                    Some(cie.fde_encoding)
+                } else {
+                    None
+                },
+                wide: img.wide(),
+                endian,
+                pc,
+            };
             nodes.push(
                 Node::new("Call Frame Instructions")
                     .span(instructions)
-                    .summary(size(instructions.len)),
+                    .summary(size(instructions.len))
+                    .lazy(cfi_instructions, ctx),
             );
         }
         let (name, summary) = node;
@@ -424,6 +549,148 @@ pub(crate) async fn walk(
             break;
         }
         pos = pos.saturating_add(total);
+    }
+    Ok(())
+}
+
+/// What decoding a record's call frame instructions needs.
+#[derive(Clone, Copy, Debug)]
+struct Cfi {
+    span: Span,
+    code_align: u64,
+    data_align: i64,
+    address_size: u8,
+    /// `.eh_frame`'s pointer encoding for `DW_CFA_set_loc`.
+    fde_encoding: Option<u8>,
+    wide: bool,
+    endian: Endian,
+    /// The FDE's initial location (CIE instructions have none).
+    pc: Option<u64>,
+}
+
+/// Bytes read per instruction (an expression longer than this is shown
+/// cut short and skipped).
+const INSTRUCTION_WINDOW: u64 = 0x100;
+
+/// The call frame instructions of a CIE or FDE, one node each, with
+/// factored offsets multiplied out and the location they advance to.
+async fn cfi_instructions(cx: Cx, c: Cfi) -> Result<()> {
+    use crate::formats::executable::dwarf::expr::{Sizes, describe};
+    use crate::formats::executable::dwarf::tables::cfa_name;
+    let (mut pos, mut pc) = cx.resume::<(u64, Option<u64>)>().unwrap_or((0, c.pc));
+    let sizes = Sizes {
+        address: c.address_size,
+        offset: if c.wide { 8 } else { 4 },
+        endian: c.endian,
+    };
+    let factored = |v: u64| -> i64 {
+        i64::try_from(v)
+            .unwrap_or(i64::MAX)
+            .saturating_mul(c.data_align)
+    };
+    while pos < c.span.len {
+        let state = (pos, pc);
+        cx.mark(move || state);
+        let data = cx.read_avail(c.span.sub(pos, INSTRUCTION_WINDOW)).await?;
+        let mut r = Reader::new(&data);
+        let Some(op) = r.u8() else {
+            break;
+        };
+        let name = cfa_name(op);
+        let mut skip = 0u64;
+        let advance = |delta: u64, pc: &mut Option<u64>| -> String {
+            let d = delta.saturating_mul(c.code_align);
+            match pc {
+                Some(p) => {
+                    *p = p.wrapping_add(d);
+                    format!("{d} to {:#x}", *p)
+                }
+                None => format!("{d}"),
+            }
+        };
+        let expression = |r: &mut Reader<'_>, skip: &mut u64| -> Option<String> {
+            let len = r.uleb()?;
+            let have = r.rest();
+            let bytes = have.get(..to_usize(len)).unwrap_or(have);
+            *skip = len.saturating_sub(to_u64(bytes.len()));
+            r.bytes(bytes.len());
+            Some(describe(bytes, sizes))
+        };
+        let operands: Option<String> = match op >> 6 {
+            1 => Some(advance(u64::from(op & 0x3f), &mut pc)),
+            2 => r
+                .uleb()
+                .map(|off| format!("reg{} {:+}", op & 0x3f, factored(off))),
+            3 => Some(format!("reg{}", op & 0x3f)),
+            _ => match op {
+                0x00 | 0x0a | 0x0b | 0x2c | 0x2d => Some(String::new()),
+                0x01 => {
+                    let loc = match c.fde_encoding {
+                        Some(enc) => encoded(&mut r, enc & 0x0f, c.wide, c.endian, 0),
+                        None => address(&mut r, c.address_size, c.endian),
+                    };
+                    loc.map(|a| {
+                        pc = Some(a);
+                        format!("{a:#x}")
+                    })
+                }
+                0x02 => r.u8().map(|d| advance(d.into(), &mut pc)),
+                0x03 => r.int::<u16>(c.endian).map(|d| advance(d.into(), &mut pc)),
+                0x04 => r.int::<u32>(c.endian).map(|d| advance(d.into(), &mut pc)),
+                0x05 | 0x14 => (|| {
+                    let reg = r.uleb()?;
+                    Some(format!("reg{reg} {:+}", factored(r.uleb()?)))
+                })(),
+                0x06 | 0x07 | 0x08 | 0x0d => r.uleb().map(|reg| format!("reg{reg}")),
+                0x09 => (|| {
+                    let reg = r.uleb()?;
+                    Some(format!("reg{reg} reg{}", r.uleb()?))
+                })(),
+                0x0c => (|| {
+                    let reg = r.uleb()?;
+                    Some(format!("reg{reg} {:+}", r.uleb()?))
+                })(),
+                0x0e => r.uleb().map(|off| format!("{off:+}")),
+                0x0f => expression(&mut r, &mut skip),
+                0x10 | 0x16 => (|| {
+                    let reg = r.uleb()?;
+                    Some(format!("reg{reg} {}", expression(&mut r, &mut skip)?))
+                })(),
+                0x11 | 0x12 | 0x15 => (|| {
+                    let reg = r.uleb()?;
+                    let off = r.sleb()?.saturating_mul(c.data_align);
+                    Some(format!("reg{reg} {off:+}"))
+                })(),
+                0x13 => r
+                    .sleb()
+                    .map(|off| format!("{:+}", off.saturating_mul(c.data_align))),
+                0x2e => r.uleb().map(|n| format!("{n}")),
+                0x2f => (|| {
+                    let reg = r.uleb()?;
+                    Some(format!(
+                        "reg{reg} {:+}",
+                        factored(r.uleb()?).saturating_neg()
+                    ))
+                })(),
+                _ => None,
+            },
+        };
+        let Some(operands) = operands else {
+            cx.push(
+                Node::new(name)
+                    .span(c.span.sub(pos, 1))
+                    .diag(Diagnostic::malformed("unknown or truncated instruction")),
+            )
+            .await;
+            break;
+        };
+        let len = to_u64(r.pos()).saturating_add(skip);
+        let mut node = Node::new(name).span(c.span.sub(pos, len));
+        if !operands.is_empty() {
+            node = node.value(text(operands));
+        }
+        cx.push(node).await;
+        pos = pos.saturating_add(len.max(1));
     }
     Ok(())
 }
