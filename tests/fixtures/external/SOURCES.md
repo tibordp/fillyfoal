@@ -937,3 +937,12 @@ Stored whole as `.raw.zst` (zstd -19).
 ## Robotics recordings
 | `mcap/zstd.mcap` | Python `mcap` 1.2.2 `Writer` (zstandard 0.25.0) | `uv run --with mcap==1.2.2 --with zstandard==0.25.0 --with lz4==4.4.5 python3 -I tests/data/mcap/make.py OUTDIR`; reproduced byte-for-byte; one zstd chunk with a schema, two channels and nine JSON messages, then the summary section |
 | `mcap/lz4.mcap` | Python `mcap` 1.2.2 `Writer` (lz4 4.4.5) | same script; the same records in one LZ4-frame chunk |
+## Apple AVFoundation and GPAC muxers
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `mov/avconvert-aac.mov` | macOS 26.5 `avconvert` (AVFoundation, Core Media) | `sh tests/data/mov/make-apple.sh` (`-p PresetLowQuality` of an FFmpeg 8.1.2 H.264/PCM source with 4:3 sample aspect): HE-AAC in a version 1 sound description with a `wave` atom (frma, mp4a, esds, terminator), H.264 passed through, `tapt` clef/prof/enof; not byte-reproducible (creation times) |
+| `mov/avconvert-prores.mov` | macOS 26.5 `avconvert` (AVFoundation, Apple ProRes encoder) | same script (`-p PresetAppleProRes422LPCM --duration 0.1`): ProRes 422 with `colr` nclc and `fiel`, 32-bit float LPCM in a version 2 sound description, `tapt`; not byte-reproducible |
+| `m4a/avconvert.m4a` | macOS 26.5 `avconvert` (AVFoundation, Apple AAC encoder) | same script (`-p PresetAppleM4A`): AAC-LC, `iTunSMPB` gapless tag; not byte-reproducible |
+| `mp4/gpac.mp4` | GPAC MP4Box 2.4.0 (built from the v2.4.0 release tarball in Debian trixie) | `sh tests/data/mp4/make-gpac.sh` (inner commands in `tests/data/mp4/gpac-inner.sh`): `MP4Box -add in.h264:fps=10 -add in.aac -new` of FFmpeg 8.1.2 raw H.264 and ADTS AAC (`iods`, `btrt`, `stss`, GPAC handler names); not byte-reproducible (creation times) |
+| `mp4/gpac-frag.mp4` | GPAC MP4Box 2.4.0 | same script, with `-frag 200`: `mvex`/`mehd`/`trex`, then `moof`/`traf`/`trun` fragments of both tracks; not byte-reproducible |

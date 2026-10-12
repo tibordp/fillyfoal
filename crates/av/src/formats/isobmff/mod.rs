@@ -284,6 +284,11 @@ pub struct Header {
 
 impl Header {
     pub fn name(&self) -> String {
+        if self.kind == [0; 4] && self.size == 8 {
+            // QuickTime ends some atom lists (`wave`, sample entry
+            // extensions) with an empty atom of type 0.
+            return "Terminator".to_owned();
+        }
         fourcc(&self.kind)
     }
 }
@@ -519,7 +524,7 @@ async fn expand_box(cx: Cx, st: BoxState) -> Result<()> {
             }
         })
         .emit()?;
-    f.node(text("Type", f.peek_span(4), h.name()));
+    f.node(text("Type", f.peek_span(4), fourcc(&h.kind)));
     f.skip(4);
     if h.header_len >= 16 && u32_be(&block.data, 0) == Some(1) {
         f.u64("Large size").emit()?;
