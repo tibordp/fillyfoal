@@ -2,7 +2,10 @@
 built from the structure layouts documented in `crates/system/src/formats/forensics/etl.rs`
 (Microsoft's public `evntrace.h`/`evntcons.h` structs, and WMI_BUFFER_HEADER
 and the in-buffer header layouts from memory). There is no ETL writer on
-macOS, so this is our own encoder; the fixture is synthetic.
+macOS, so this is our own encoder; the fixture is synthetic. The layouts
+have since been checked against logs written by Windows (see
+tests/fixtures/external/etl/); that check fixed the TraceLogging array flags
+used here (0x20 = constant count, 0x40 = variable count).
 
     python3 tests/data/etl/make_etl.py
 """
@@ -100,7 +103,7 @@ def tl_metadata():
         (b"Ratio\0", bytes([12])),  # DOUBLE
         (b"Ok\0", bytes([13])),  # BOOL32
         (b"Id\0", bytes([15])),  # GUID
-        (b"Values\0", bytes([0x46]) + struct.pack("<H", 3)),  # UINT16[3], constant count
+        (b"Values\0", bytes([0x26]) + struct.pack("<H", 3)),  # UINT16[3], constant count (0x20)
     ]
     body = b"\x00" + b"Greeting\0" + b"".join(name + t for name, t in fields)
     return struct.pack("<H", 2 + len(body)) + body

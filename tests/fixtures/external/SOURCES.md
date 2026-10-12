@@ -1161,3 +1161,24 @@ Made by `sh tests/data/audio-codecs/make.sh OUTDIR` (fedora:42, `tests/data/audi
 | `macho/shapes-arm64.dwarf` | Apple clang 21.0.0 + ld + dsymutil (Apple LLVM 21.0.0) | reproduced byte-for-byte by `sh tests/data/macho/build-dsym.sh <repo>` from `tests/data/dwarf/shapes.c` and `shapes.h` (built in `/tmp/fixtures/dwarf-macho` with prefix maps to `/src`, `-oso_prefix`, `ZERO_AR_DATE=1`): the DWARF companion file (`MH_DSYM`) from inside `shapes.dSYM`, an arm64 `-g -O1` executable's DWARF 4 in the `__DWARF` segment; checked with `llvm-dwarfdump --verify` and against `llvm-dwarfdump --debug-info` |
 | `coff/shapes-mingw-x64.o` | Debian trixie mingw-w64 GCC 14 (`14-win32`, Docker `debian:trixie`, `gcc-mingw-w64-x86-64`) | reproduced byte-for-byte by `sh tests/data/coff/make-dwarf.sh <repo>` from `tests/data/dwarf/shapes.c` (`x86_64-w64-mingw32-gcc -g -O1 -c` with prefix maps, built in the container's `/build/dwarf`): x64 object with DWARF 5 `.debug_*` sections (long names in the string table) and their SECREL/ADDR64 relocations, `.debug_frame`; checked with `llvm-dwarfdump --verify` and against `llvm-dwarfdump --debug-info` |
 | `coff/shapes-clang-arm64.o` | Debian clang 19.1.7 (Docker, Debian trixie `clang llvm` packages) | same script: `clang --target=aarch64-w64-windows-gnu -g -O1 -c`; ARM64 object with DWARF 4 and relocations against section symbols and against `shape_counter` (value 4); checked as above |
+
+## Windows VM fixtures: ETW logs
+
+Written on a Windows 11 Pro 25H2 ARM64 VM (build 10.0.26200.9457, local
+account `fillyfoal`, computer `FILLYFOAL-VM`, time zone UTC); see
+`tests/data/windows/etl/` (`gen_etl.ps1` and `gen_kernel_procthread.ps1`,
+run elevated through `elevate.ps1`; the helper programs `fillyfoal_tlg.c`,
+`ff_comp.c` and `ff_klog.c` built by `build_tlg.cmd` with MSVC cl 19.51
+for ARM64). Each file was decoded by `tracerpt` 10.0.26100.1 and our event
+counts per provider, group and opcode match its summary. The files are
+unchanged (the larger ones stored as `.raw.zst`); not byte-for-byte
+reproducible (times, process IDs, whatever ran on the machine).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `etl/kernel-process-manifest.etl.raw.zst` | Windows ETW, logman.exe 10.0.26100.1 | `logman start ff-kproc -p Microsoft-Windows-Kernel-Process 0x10 0x4 -bs 16 -nb 2 8 -ets`, two `cmd /c echo`, stop: 9 buffers of 16 KiB, manifest events ProcessStart (id 1, v4) ×25 and ProcessStop (id 2, v2) ×21, header and PartitionInfoExtensionV2; LogFileMode 0. tracerpt: 48 events |
+| `etl/tracelogging-fillyfoal.etl.raw.zst` | Windows ETW, logman.exe; events from `fillyfoal_tlg.exe` (TraceLoggingProvider.h, Windows SDK 10.0.26100) | `logman start ff-tlg -p {a946bbbd-88e8-5895-7beb-4d343c1d945f} 0xFFFFFFFFFFFFFFFF 0x5 ...`: 3 × 3 TraceLogging events of provider `fillyfoal-test` (scalars incl. BOOLEAN and HEX out-types, ANSI/UTF-16/counted strings, GUID, FILETIME, SYSTEMTIME, binary, constant- and variable-count INT32 arrays, a nested struct). tracerpt: 11 events; every value checked against `fillyfoal_tlg.c` |
+| `etl/tracelogging-fillyfoal-xperf-compressed.etl` | xperf.exe 10.0.26100.8249 (Windows Performance Toolkit) | `xperf -merge tracelogging-fillyfoal.etl <out> -mergeonly -compress`: LogFileMode 0x04010001 (COMPRESSED, RELOG, SEQUENTIAL); a 1 KiB uncompressed first buffer, then 3 Xpress-compressed buffers. tracerpt: 12 events |
+| `etl/compressed-session-kproc-tlg.etl.raw.zst` | Windows ETW session started by `ff_comp.exe` (StartTrace with EVENT_TRACE_COMPRESSED_MODE) | `ff_comp.exe <out> fillyfoal_tlg.exe`: 64 KiB buffers compressed by the live session (LogFileMode 0x04000001), Kernel-Process and fillyfoal-test events. tracerpt: 9 buffers, 41 events |
+| `etl/kernel-logger-procthread-raw.etl.raw.zst` | NT Kernel Logger, controlled by `ff_klog.exe` | `ff_klog.exe kernel <out> 10000003 500` (PROCESS \| THREAD \| NO_SYSCONFIG, 8 KiB buffers, 0.5 s): MOF Process (v4 rundown of 187 processes, Start/End/Terminate, v5 Defunct) and Thread (v3, SetName) events with compact and perfinfo headers. tracerpt: 103 buffers, 5064 events. Every command line was reviewed by hand (only Windows, Program Files and `C:\Users\fillyfoal` paths) |
+| `etl/kernel-logger-thread-merged.etl.raw.zst` | xperf.exe 10.0.26100.8249 | `xperf -merge kernel-logger-thread-raw.etl <out> -suppresspii` of a thread-only kernel log (`ff_klog.exe kernel <raw> 10000002 500`): the thread events plus xperf's own FULL_HEADER64 events (provider {9b79ee91-b5fd-41c0-a243-4248e266e9d0}, opcodes 32-37), LogFileMode 0x00010001; the relogged header buffer records its end in `Offset`, not `SavedOffset`. tracerpt: 117 buffers, 6976 events |
