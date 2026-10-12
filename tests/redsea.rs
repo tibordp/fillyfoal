@@ -248,3 +248,20 @@ fn templeos_iso() {
     }
     eprintln!("{} files, {} entries", files.len(), want.len());
 }
+
+/// TempleOS's volume descriptor quirks are one note on its ISOs; the same
+/// bytes without the RedSea volume are an ordinary, damaged ISO and warn.
+#[test]
+fn templeos_iso_quirks_only_with_redsea() {
+    let iso = fixture("external/iso9660/templeos-redseaiso.iso.gz");
+    let tree = common::explore("t.iso", &iso);
+    assert!(tree.contains("note: written by TempleOS"), "{tree}");
+    assert!(!tree.contains("copies differ"), "{tree}");
+    assert!(!tree.contains("Path table ("), "{tree}");
+    let mut plain = iso;
+    plain[0xb000..0xb200].fill(0);
+    let tree = common::explore("t.iso", &plain);
+    assert!(!tree.contains("written by TempleOS"), "{tree}");
+    assert!(tree.contains("copies differ"), "{tree}");
+    assert!(tree.contains("Path table (optional M)"), "{tree}");
+}

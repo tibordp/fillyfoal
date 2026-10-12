@@ -208,11 +208,16 @@ const MEDIA_FLAGS: FlagTable = &[
 
 /// A 32-bit number stored twice, little- then big-endian.
 fn both32<'a>(f: &mut Fields<'a>, name: &'static str) -> Field<'a, u32> {
+    both32_checked(f, name, true)
+}
+
+/// [`both32`], warning about differing copies only if `check`.
+fn both32_checked<'a>(f: &mut Fields<'a>, name: &'static str, check: bool) -> Field<'a, u32> {
     f.bytes(name, 8)
-        .with(|b, n| {
+        .with(move |b, n| {
             let le = u32_le(b, 0).unwrap_or(0);
             let n = n.value(uint(le, 64));
-            if u32_be(b, 4) == Some(le) {
+            if !check || u32_be(b, 4) == Some(le) {
                 n
             } else {
                 n.diag(Diagnostic::warning("little- and big-endian copies differ"))
@@ -221,12 +226,14 @@ fn both32<'a>(f: &mut Fields<'a>, name: &'static str) -> Field<'a, u32> {
         .map(|b| u32_le(&b, 0).unwrap_or(0))
 }
 
-fn both16<'a>(f: &mut Fields<'a>, name: &'static str) -> Field<'a, u16> {
+/// A 16-bit number stored twice, little- then big-endian, warning about
+/// differing copies only if `check`.
+fn both16_checked<'a>(f: &mut Fields<'a>, name: &'static str, check: bool) -> Field<'a, u16> {
     f.bytes(name, 4)
-        .with(|b, n| {
+        .with(move |b, n| {
             let le = u16_le(b, 0).unwrap_or(0);
             let n = n.value(uint(le, 64));
-            if u16_be(b, 2) == Some(le) {
+            if !check || u16_be(b, 2) == Some(le) {
                 n
             } else {
                 n.diag(Diagnostic::warning("little- and big-endian copies differ"))
@@ -343,7 +350,11 @@ struct Volume {
     joliet: bool,
 }
 
-fn volume_layout(f: &mut Fields<'_>, _: &()) -> Result<Volume> {
+/// A primary or supplementary volume descriptor. `templeos`: written by
+/// TempleOS's `RedSeaISO9660`, whose layout is off (see [`TEMPLEOS_NOTE`]),
+/// so its both-endian fields are shown without comparing the copies.
+fn volume_layout(f: &mut Fields<'_>, &templeos: &bool) -> Result<Volume> {
+    let check = !templeos;
     let kind = f.u8("Type").enumeration(DESCRIPTOR_TYPE).emit()?;
     f.ascii("Identifier", 5).emit()?;
     f.u8("Version")
@@ -367,7 +378,7 @@ fn volume_layout(f: &mut Fields<'_>, _: &()) -> Result<Volume> {
     text_field(f, "System identifier", 32, joliet)?;
     text_field(f, "Volume identifier", 32, joliet)?;
     unused(f, "Unused", 8)?;
-    let blocks = both32(f, "Volume space size")
+    let blocks = both32_checked(f, "Volume space size", check)
         .desc("Logical blocks in the volume")
         .emit()?;
     if kind == 2 {
@@ -388,10 +399,10 @@ fn volume_layout(f: &mut Fields<'_>, _: &()) -> Result<Volume> {
     } else {
         unused(f, "Unused", 32)?;
     }
-    both16(f, "Volume set size").emit()?;
-    both16(f, "Volume sequence number").emit()?;
-    let block_size = both16(f, "Logical block size").emit()?;
-    let path_table_size = both32(f, "Path table size")
+    both16_checked(f, "Volume set size", check).emit()?;
+    both16_checked(f, "Volume sequence number", check).emit()?;
+    let block_size = both16_checked(f, "Logical block size", check).emit()?;
+    let path_table_size = both32_checked(f, "Path table size", check)
         .with(|&v, n| n.summary(fmt::size(v.into())))
         .emit()?;
     let l = f.u32("L path table location").emit()?;
@@ -411,7 +422,7 @@ fn volume_layout(f: &mut Fields<'_>, _: &()) -> Result<Volume> {
         "Root directory record",
         root,
         LE,
-        joliet,
+        (joliet, check),
         record_layout,
     ));
     f.skip(34);
@@ -705,19 +716,21 @@ struct RecCtx {
     block: u64,
 }
 
-fn record_layout(f: &mut Fields<'_>, joliet: &bool) -> Result<()> {
-    record_fields(f, *joliet, None)
+/// A volume descriptor's root directory record: `(joliet, check)`, `check`
+/// whether to compare both-endian copies.
+fn record_layout(f: &mut Fields<'_>, &(joliet, check): &(bool, bool)) -> Result<()> {
+    record_fields(f, joliet, None, check)
 }
 
 fn record_layout_with(f: &mut Fields<'_>, ctx: &RecCtx) -> Result<()> {
-    record_fields(f, ctx.joliet, Some(*ctx))
+    record_fields(f, ctx.joliet, Some(*ctx), true)
 }
 
-fn record_fields(f: &mut Fields<'_>, joliet: bool, ctx: Option<RecCtx>) -> Result<()> {
+fn record_fields(f: &mut Fields<'_>, joliet: bool, ctx: Option<RecCtx>, check: bool) -> Result<()> {
     let len = f.u8("Record length").emit()?;
     f.u8("Extended attribute length").emit()?;
-    both32(f, "Extent location").emit()?;
-    both32(f, "Data length")
+    both32_checked(f, "Extent location", check).emit()?;
+    both32_checked(f, "Data length", check)
         .with(|&s, n| n.summary(fmt::size(s.into())))
         .emit()?;
     f.bytes("Recording time", 7)
@@ -729,7 +742,7 @@ fn record_fields(f: &mut Fields<'_>, joliet: bool, ctx: Option<RecCtx>) -> Resul
     f.u8("File flags").flags(FILE_FLAGS).emit()?;
     f.u8("File unit size").emit()?;
     f.u8("Interleave gap").emit()?;
-    both16(f, "Volume sequence number").emit()?;
+    both16_checked(f, "Volume sequence number", check).emit()?;
     let name_len = f.u8("Name length").emit()?;
     f.bytes("Name", name_len.into())
         .with(|b, n| {
@@ -1933,6 +1946,18 @@ fn round(span: Span, file: Span) -> Span {
 // ---------------------------------------------------------------------------
 // Top level
 
+/// What `RedSeaISO9660` (`Adam/Opt/Boot/DskISORedSea.HC`) writes: only the
+/// sizes, the root block and the publisher, through TempleOS's
+/// `CISOPriDesc` (`Kernel/KernelA.HH`), which pads 20 bytes where ISO 9660
+/// has 24 of path table fields, so `root_dir_record` is at 0x98, and the
+/// root block is stored over the start of that record rather than its
+/// extent. Everything after it is 4 bytes early too.
+const TEMPLEOS_NOTE: &str = "written by TempleOS (RedSeaISO), whose volume descriptors \
+    put the fields from offset 0x98 on 4 bytes early (the RedSea root block as a \
+    both-endian number at 0x98, the publisher at 0x13a): the root record, path table \
+    locations, identifiers and file structure version are shown raw but mean nothing; \
+    the files are in the RedSea volume";
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let system = cx.read_avail(file.sub(0, DESCRIPTORS_AT)).await?;
@@ -1945,6 +1970,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     } else {
         cx.emit(Node::new("System area").span(system_span).summary("empty"));
     }
+    // TempleOS's ISO: an empty ISO 9660 shell around a RedSea volume at a
+    // fixed place (`RedSeaISO` in DskISORedSea.HC).
+    let redsea_at = super::redsea::ISO_DRV_OFFSET.saturating_mul(512);
+    let sector = cx.read_avail(file.sub(redsea_at, 512)).await?;
+    let redsea = super::redsea::boot(&sector)
+        .filter(|b| b.drv_offset == super::redsea::ISO_DRV_OFFSET)
+        .map(|b| file.sub(redsea_at, b.sects.saturating_mul(512)));
+    let templeos = redsea.is_some();
     let mut primary: Option<(Volume, Span)> = None;
     let mut joliet: Option<(Volume, Span)> = None;
     let mut boot: Option<u32> = None;
@@ -1972,7 +2005,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 };
                 let node = match kind {
                     1 | 2 => {
-                        let v = crate::fields::parse(&cx, span, LE, &(), volume_layout).await?;
+                        let v =
+                            crate::fields::parse(&cx, span, LE, &templeos, volume_layout).await?;
                         let block = cx.read(span.sub(40, 32)).await?;
                         let vol = decode_text(&block, v.joliet);
                         let summary = if v.joliet {
@@ -1992,7 +2026,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                         } else if v.joliet && joliet.is_none() {
                             joliet = Some((v, span));
                         }
-                        struct_node(name, span, LE, (), volume_layout).summary(summary)
+                        struct_node(name, span, LE, templeos, volume_layout).summary(summary)
                     }
                     0 => {
                         let catalog = crate::fields::parse(&cx, span, LE, &(), boot_layout).await?;
@@ -2047,12 +2081,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.checkpoint().await;
     }
     let n = to_u64(descriptors.len());
-    cx.emit(
-        Node::new("Volume descriptors")
-            .span(file.sub(DESCRIPTORS_AT, n.saturating_mul(SECTOR)))
-            .summary(count(n, "descriptor", "descriptors"))
-            .lazy(emit_nodes, Arc::new(descriptors)),
-    );
+    let mut node = Node::new("Volume descriptors")
+        .span(file.sub(DESCRIPTORS_AT, n.saturating_mul(SECTOR)))
+        .summary(count(n, "descriptor", "descriptors"));
+    if templeos && primary.is_some() {
+        node = node.diag(Diagnostic::note(TEMPLEOS_NOTE));
+    }
+    cx.emit(node.lazy(emit_nodes, Arc::new(descriptors)));
     let mut features: Vec<String> = Vec::new();
     if enhanced {
         features.push("ISO 9660:1999".to_owned());
@@ -2063,7 +2098,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         ("Root directory", primary, "Path table"),
         ("Joliet root directory", joliet, "Joliet path table"),
     ] {
-        let Some((v, span)) = vol else {
+        // TempleOS's root record and path table locations are not what
+        // they seem; its files are in the RedSea volume.
+        let Some((v, span)) = vol.filter(|_| !templeos) else {
             continue;
         };
         let block_size = u64::from(v.block_size.max(1));
@@ -2120,17 +2157,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .lazy(boot_catalog, (input, span, block_size)),
         );
     }
-    // TempleOS's ISO: an empty ISO 9660 shell around a RedSea volume at a
-    // fixed place (`RedSeaISO` in DskISORedSea.HC).
-    let redsea_at = super::redsea::ISO_DRV_OFFSET.saturating_mul(512);
-    let sector = cx.read_avail(file.sub(redsea_at, 512)).await?;
-    let mut redsea = None;
-    if let Some(b) =
-        super::redsea::boot(&sector).filter(|b| b.drv_offset == super::redsea::ISO_DRV_OFFSET)
-    {
-        let span = file.sub(redsea_at, b.sects.saturating_mul(512));
+    if let Some(span) = redsea {
         features.push("TempleOS RedSea".to_owned());
-        redsea = Some(span);
         cx.emit(
             embedded_as(
                 "RedSea file system",
