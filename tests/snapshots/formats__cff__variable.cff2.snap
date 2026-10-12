@@ -10,4 +10,8 @@ expression: "common::explore(&display_name(&path), &data)"
       CharStrings: 48  [0x8+0x2]
       vstore: 16  [0xa+0x2]
     Global Subrs INDEX — 0 entries  [0xc+0x4]
+  ▾ FDArray INDEX — 1 Font DICTs  [0x54+0xa]
+    ▾ Font DICT 0  [0x5b+0x3]
+        Private: "0 94"  [0x5b+0x3]
+    ▾ Private DICT 0 — 0 bytes  [0x5e+0x0]
     CharStrings INDEX — 2 glyphs  [0x30+0x24]
