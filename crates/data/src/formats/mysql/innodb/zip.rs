@@ -236,7 +236,12 @@ fn shown_def(cols: &[Col], trx: Option<usize>, n_nullable: usize, id: u64) -> In
         fixed("DB_ROLL_PTR", Ty::RollPtr, 7, true),
     ];
     if len > 13 {
-        split.push(fixed(&format!("Field {t}+"), Ty::Raw, len.saturating_sub(13), false));
+        split.push(fixed(
+            &format!("Field {t}+"),
+            Ty::Raw,
+            len.saturating_sub(13),
+            false,
+        ));
     }
     let tail = def.fields.split_off(t.min(def.fields.len()));
     def.fields.extend(split);
