@@ -131,11 +131,18 @@ const fn slot_tables() -> ([u8; 51], [u32; 51]) {
 
 const SLOTS: ([u8; 51], [u32; 51]) = slot_tables();
 
-/// A canonical Huffman code, decoded MSB first one bit at a time.
+/// Bits looked up at once by [`Huffman::fast`].
+const FAST_BITS: u32 = 10;
+
+/// A canonical Huffman code, decoded MSB first: codes of up to
+/// [`FAST_BITS`] bits through a lookup table, longer ones a bit at a time.
 #[derive(Clone, Debug, Default)]
 struct Huffman {
     counts: [u16; MAX_BITS + 1],
     symbols: Vec<u16>,
+    /// By the next `FAST_BITS` bits: the symbol and its code length
+    /// (`length << 12 | symbol`; 0 where the code is longer).
+    fast: Vec<u16>,
 }
 
 impl Huffman {
@@ -178,7 +185,32 @@ impl Huffman {
                 *o = o.saturating_add(1);
             }
         }
-        Ok(Huffman { counts, symbols })
+        // Canonical codes in `symbols` order: each length's codes follow
+        // the previous length's, shifted left.
+        let mut fast = vec![0u16; 1 << FAST_BITS];
+        let (mut code, mut at) = (0u32, 0usize);
+        for len in 1..=FAST_BITS {
+            let n = usize::from(counts.get(len as usize).copied().unwrap_or(0));
+            for &sym in symbols.get(at..at.saturating_add(n)).unwrap_or_default() {
+                let fill = 1u32 << FAST_BITS.saturating_sub(len);
+                let first = code << FAST_BITS.saturating_sub(len);
+                let entry = u16::try_from(len << 12 | u32::from(sym)).unwrap_or(0);
+                for slot in fast
+                    .get_mut(first as usize..first.saturating_add(fill) as usize)
+                    .unwrap_or_default()
+                {
+                    *slot = entry;
+                }
+                code = code.saturating_add(1);
+            }
+            at = at.saturating_add(n);
+            code <<= 1;
+        }
+        Ok(Huffman {
+            counts,
+            symbols,
+            fast,
+        })
     }
 }
 
@@ -222,6 +254,31 @@ impl Bits {
     }
 
     fn decode(&mut self, input: &[u8], eof: bool, h: &Huffman) -> Result<usize> {
+        // Look at the next FAST_BITS bits without loading a word whose bits
+        // are not used: words are loaded only as they are read, so that
+        // `align` (which drops the rest of the current word) and the byte
+        // reads of uncompressed blocks stay where they are.
+        let window = if self.left >= FAST_BITS {
+            Some(self.buf)
+        } else if let (Some(&lo), Some(&hi)) =
+            (input.get(self.pos), input.get(self.pos.saturating_add(1)))
+        {
+            Some(
+                self.buf
+                    | u64::from(u16::from_le_bytes([lo, hi])) << 48u32.saturating_sub(self.left),
+            )
+        } else {
+            None
+        };
+        if let Some(window) = window {
+            let peek = usize::try_from(window >> (64 - FAST_BITS)).unwrap_or(0);
+            let entry = h.fast.get(peek).copied().unwrap_or(0);
+            let len = u32::from(entry >> 12);
+            if len != 0 {
+                self.read(input, eof, len)?;
+                return Ok(usize::from(entry & 0x0fff));
+            }
+        }
         let (mut code, mut first, mut index) = (0i32, 0i32, 0i32);
         for len in 1..=MAX_BITS {
             code |= i32::try_from(self.read(input, eof, 1)?).unwrap_or(0);
@@ -387,7 +444,12 @@ impl Lzx {
         let st = &self.st;
         let codes = [&st.main, &st.length, &st.aligned]
             .iter()
-            .map(|h| h.symbols.capacity().saturating_mul(2))
+            .map(|h| {
+                h.symbols
+                    .capacity()
+                    .saturating_add(h.fast.capacity())
+                    .saturating_mul(2)
+            })
             .fold(0, usize::saturating_add);
         self.hist
             .len()
@@ -1051,8 +1113,9 @@ mod tests {
             verify_checkpoints(|| Box::new(LzxStream::new(params)), &content, 4096, 1).unwrap();
         // After every frame but the last.
         assert_eq!(checked, (len as usize).div_ceil(FRAME) - 1);
-        // The window, the tables, the decoder itself.
-        assert!((1 << 16..(1 << 16) + 4096).contains(&largest), "{largest}");
+        // The window, the tables (with three 2 KiB lookup tables), the
+        // decoder itself.
+        assert!((1 << 16..(1 << 16) + 10 * 1024).contains(&largest), "{largest}");
         // A WIM chunk: one frame, so no checkpoint inside it.
         let chunk = read("wim-chunk.lzx");
         verify_checkpoints(
