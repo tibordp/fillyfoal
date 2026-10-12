@@ -12,6 +12,8 @@ pub mod elc;
 pub mod hermes;
 pub mod il2cpp;
 pub mod lua;
+#[rustfmt::skip]
+mod lua_ops;
 pub mod luajit;
 pub mod ocaml;
 pub mod opcache;
