@@ -1393,8 +1393,13 @@ pub struct PostFilter {
 
 impl PostFilter {
     pub fn new(kind: Post) -> Self {
+        Self::with_start(kind, 0)
+    }
+
+    /// A filter whose stream starts at address `start`.
+    pub fn with_start(kind: Post, start: u32) -> Self {
         PostFilter {
-            state: PostState::new(kind),
+            state: PostState::with_start(kind, start),
             at: 0,
             buf: Vec::new(),
         }

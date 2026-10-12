@@ -37,6 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 196  [0x16+0x4]
           File name length: 15  [0x1a+0x2]
           Extra field length: 0  [0x1c+0x2]
+        Local file name: "DOMDocument.xml"  [0x1e+0xf]
       ▾ Content — XML document, root <DOMDocument>  [0x2d+0x95]
         ▾ XML declaration  [#1:0x0+0x15]
             Version: "1.0"  [#1:0xf+0x3]
@@ -82,6 +83,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 17  [0xd8+0x4]
           File name length: 19  [0xdc+0x2]
           Extra field length: 0  [0xde+0x2]
+        Local file name: "PublishSettings.xml"  [0xe0+0x13]
       ▾ Content — XML document, root <flash_profiles>  [0xf3+0x13]
           flash_profiles  [#2:0x0+0x11]
     ▾ mimetype — deflate, 27 → 25 bytes  [0x1c5+0x36]
@@ -117,6 +119,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 25  [0x11c+0x4]
           File name length: 8  [0x120+0x2]
           Extra field length: 0  [0x122+0x2]
+        Local file name: "mimetype"  [0x124+0x8]
       ▾ Content — UTF-8 text, 1 line  [0x12c+0x1b]
           Encoding: "UTF-8"
           Line endings: "none" — 0 LF, 0 CRLF, 0 CR

@@ -274,6 +274,12 @@ pub enum Codec {
     /// A BCJ (x86, ARM, ARM64, PowerPC, IA-64, ARM Thumb, SPARC, RISC-V) or Delta filter, decoding direction, on its
     /// own (7-Zip folders chain it after their decompressor).
     PostFilter(lzma::Post),
+    /// A [`Codec::PostFilter`] branch converter whose stream starts at
+    /// address `start` (7-Zip's ARM64 and RISC-V coder property).
+    PostFilterAt {
+        post: lzma::Post,
+        start: u32,
+    },
     /// Nintendo Yaz0 LZ77 (the body after the 16-byte header), decoding to
     /// `size` bytes.
     Yaz0 {
@@ -411,6 +417,7 @@ impl Codec {
             Codec::PostFilter(lzma::Post::Sparc) => "bcj-sparc",
             Codec::PostFilter(lzma::Post::RiscV) => "bcj-riscv",
             Codec::PostFilter(lzma::Post::Delta(_)) => "delta",
+            Codec::PostFilterAt { .. } => "bcj-start",
             Codec::Yaz0 { .. } => "yaz0",
             Codec::BinHex => "binhex",
             Codec::Base64 => "base64",
@@ -506,6 +513,7 @@ impl Codec {
             Codec::PostFilter(lzma::Post::Sparc) => "bcj-sparc (lazy)",
             Codec::PostFilter(lzma::Post::RiscV) => "bcj-riscv (lazy)",
             Codec::PostFilter(lzma::Post::Delta(_)) => "delta (lazy)",
+            Codec::PostFilterAt { .. } => "bcj-start (lazy)",
             Codec::Yaz0 { .. } => "yaz0 (lazy)",
             Codec::BinHex => "binhex (lazy)",
             Codec::Base64 => "base64 (lazy)",
@@ -580,7 +588,7 @@ impl Codec {
             Codec::Rar(_) | Codec::Ppmd7 { .. } | Codec::Bcj2(_) | Codec::Yaz0 { .. } => {
                 "decompressed"
             }
-            Codec::PostFilter(_) | Codec::BinHex => "decoded",
+            Codec::PostFilter(_) | Codec::PostFilterAt { .. } | Codec::BinHex => "decoded",
             Codec::AsciiHex
             | Codec::Ascii85
             | Codec::PngPredictor { .. }
@@ -705,7 +713,7 @@ impl Codec {
             Codec::Lzh(p) => p.max_ratio(),
             // zlib or LZMA blocks, or stored ones.
             Codec::Psarc(_) => 7_000,
-            Codec::PostFilter(_) => 1,
+            Codec::PostFilter(_) | Codec::PostFilterAt { .. } => 1,
             // A 3-byte back-reference (and a ninth of a group byte) copies
             // up to 273 bytes.
             Codec::Yaz0 { .. } => 128,
@@ -821,6 +829,9 @@ impl Codec {
             Codec::Lzh(params) => Box::new(Streaming(lzh::Lzh::new(*params))),
             Codec::Psarc(entry) => Box::new(psarc::Decoder::new(entry.clone())),
             Codec::PostFilter(post) => Box::new(lzma::PostFilter::new(*post)),
+            Codec::PostFilterAt { post, start } => {
+                Box::new(lzma::PostFilter::with_start(*post, *start))
+            }
             Codec::Yaz0 { size } => Box::new(Streaming(yaz0::Yaz0::new(*size))),
             Codec::BinHex => Box::new(Streaming(binhex::BinHex::default())),
             Codec::Base64 => Box::new(Streaming(filters::Bytes::new(filters::Base64::default()))),

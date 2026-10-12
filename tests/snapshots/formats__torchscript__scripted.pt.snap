@@ -37,6 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 23  [0x16+0x4]
           File name length: 16  [0x1a+0x2]
           Extra field length: 0  [0x1c+0x2]
+        Local file name: "archive/data.pkl"  [0x1e+0x10]
       ▾ Content — Python pickle, protocol 2  [0x2e+0x17]
           PROTO: 2  [0x2e+0x2]
           EMPTY_DICT  [0x30+0x1]
@@ -79,6 +80,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 108  [0x5b+0x4]
           File name length: 31  [0x5f+0x2]
           Extra field length: 0  [0x61+0x2]
+        Local file name: "archive/code/__torch__/model.py"  [0x63+0x1f]
       ▾ Content — UTF-8 text, LF line endings, 4 lines  [0x82+0x6c]
           Encoding: "UTF-8"
           Line endings: "LF" — 4 LF, 0 CRLF, 0 CR
@@ -120,6 +122,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 4  [0x104+0x4]
           File name length: 21  [0x108+0x2]
           Extra field length: 0  [0x10a+0x2]
+        Local file name: "archive/constants.pkl"  [0x10c+0x15]
       ▾ Content — Python pickle, protocol 2  [0x121+0x4]
           PROTO: 2  [0x121+0x2]
           EMPTY_TUPLE  [0x123+0x1]
@@ -157,6 +160,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 2  [0x13b+0x4]
           File name length: 15  [0x13f+0x2]
           Extra field length: 0  [0x141+0x2]
+        Local file name: "archive/version"  [0x143+0xf]
       ▾ Content — UTF-8 text, LF line endings, 1 line  [0x152+0x2]
           Encoding: "UTF-8"
           Line endings: "LF" — 1 LF, 0 CRLF, 0 CR

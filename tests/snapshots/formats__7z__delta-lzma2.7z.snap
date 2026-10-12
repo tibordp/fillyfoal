@@ -18,6 +18,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 4000 — 3.9 KiB
         Folder: 0
       ▾ Content — 0xfa0 bytes decompressed  [0x20+0x94]
+          CRC32: 0xa1180571 — valid
           Data  [#1:0x0+0xfa0]
   ▾ Folders — 1 folder  [0x20+0x94]
     ▾ Folder 0 — LZMA2 + Delta, 148 bytes → 3.9 KiB, 1 stream  [0x20+0x94]

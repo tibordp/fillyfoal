@@ -242,8 +242,7 @@ async fn next_block4(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Block4> {
         let bytes = header
             .get(name_at..name_at.saturating_add(len))
             .unwrap_or_default();
-        // The ASCII part before the NUL of a (possibly Unicode-encoded) name.
-        name = Some(crate::text::until_nul(bytes));
+        name = Some(name4(bytes, flags));
         if kind == 0x74 {
             let block = cur.span(u64::from(size).saturating_add(add));
             part = part4(&header, block, flags, add, unpacked);
@@ -432,7 +431,7 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
                 None
             };
             let raw = r.bytes("Name", name_len.into()).ok_or_else(bad)?;
-            let name = crate::text::until_nul(raw);
+            let name = name4(raw, flags);
             r.with(|n| n.value(text(name.clone())));
             if flags & 0x400 != 0 {
                 r.bytes("Salt", 8);
@@ -1049,7 +1048,7 @@ fn time_record(r: &mut ByteReader<'_>) -> Option<()> {
 
 /// Files whose CRC32 is checked when their content is expanded (larger ones
 /// would be read in full just for that).
-const CRC_LIMIT: u64 = 32 << 20;
+pub(crate) const CRC_LIMIT: u64 = 32 << 20;
 
 /// A node for a file's content, decoded and checked when expanded.
 fn content_node(name: &'static str, input: Input, part: Part) -> Node {
@@ -1270,7 +1269,7 @@ async fn content(cx: Cx, (input, part): (Input, Part)) -> Result<()> {
 }
 
 /// CRC32 and length of what `span` holds.
-async fn crc_of(cx: &Cx, span: Span) -> Result<(u32, u64)> {
+pub(crate) async fn crc_of(cx: &Cx, span: Span) -> Result<(u32, u64)> {
     let mut crc = 0xffff_ffffu32;
     let mut pos = 0u64;
     while pos < span.len {
@@ -1285,4 +1284,123 @@ async fn crc_of(cx: &Cx, span: Span) -> Result<(u32, u64)> {
         pos = pos.saturating_add(to_u64(data.len()));
     }
     Ok((crc ^ 0xffff_ffff, pos))
+}
+
+/// A RAR 4.x file name. With flag 0x200 and a NUL in the field, the field
+/// holds the name in the archiver's 8-bit code page, the NUL, then the
+/// Unicode name compressed against it; this follows libarchive's
+/// `read_header` (`archive_read_support_format_rar.c`, BSD-2-Clause, see
+/// `THIRD-PARTY.md`): a high byte, then 2-bit opcodes taken from the top of
+/// a flag byte for a low byte with high byte 0, a low byte with the stored
+/// high byte, a whole UTF-16 unit, or a run of bytes copied from the field
+/// at the current unit index (with a correction added and the high byte
+/// when the top bit of the run length is set). With 0x200 and no NUL the
+/// field is UTF-8, as libarchive reads it. Otherwise the 8-bit name is
+/// UTF-8 when valid (RAR for Unix writes the locale's encoding) and the IBM
+/// OEM code page otherwise (RAR for DOS and Windows).
+fn name4(field: &[u8], flags: u16) -> String {
+    let end = field.iter().position(|&b| b == 0);
+    let oem = field.get(..end.unwrap_or(field.len())).unwrap_or_default();
+    if flags & 0x200 != 0
+        && let Some(nul) = end
+        && let Some(name) = decode_unicode_name(field, nul.saturating_add(1))
+    {
+        return name;
+    }
+    match std::str::from_utf8(oem) {
+        Ok(s) => s.to_owned(),
+        Err(_) => crate::codec::charset::Charset::Cp437.decode(oem),
+    }
+}
+
+/// The compressed Unicode part of a RAR 4.x name field, starting at byte
+/// `start` (after the NUL). As in libarchive, the output is at most as
+/// many UTF-16 units as the field has bytes, and a run copies the field's
+/// byte at the index of the unit it produces. Where libarchive would read
+/// past the field for a truncated opcode, this stops; an empty result (no
+/// encoded bytes) falls back to the 8-bit name.
+fn decode_unicode_name(field: &[u8], start: usize) -> Option<String> {
+    let max = field.len();
+    let mut units: Vec<u16> = Vec::new();
+    let mut it = field.get(start..)?.iter().copied();
+    let high = it.next()?;
+    let mut flag_byte = 0u8;
+    let mut flag_bits = 0u32;
+    while units.len() < max {
+        if flag_bits == 0 {
+            let Some(f) = it.next() else { break };
+            flag_byte = f;
+            flag_bits = 8;
+        }
+        flag_bits = flag_bits.saturating_sub(2);
+        match flag_byte.checked_shr(flag_bits).unwrap_or(0) & 3 {
+            0 => {
+                let Some(b) = it.next() else { break };
+                units.push(u16::from_be_bytes([0, b]));
+            }
+            1 => {
+                let Some(b) = it.next() else { break };
+                units.push(u16::from_be_bytes([high, b]));
+            }
+            2 => {
+                let (Some(lo), Some(hi)) = (it.next(), it.next()) else {
+                    break;
+                };
+                units.push(u16::from_be_bytes([hi, lo]));
+            }
+            _ => {
+                let Some(length) = it.next() else { break };
+                let (extra, hi) = if length & 0x80 != 0 {
+                    let Some(e) = it.next() else { break };
+                    (e, high)
+                } else {
+                    (0, 0)
+                };
+                for _ in 0..(length & 0x7f).saturating_add(2) {
+                    if units.len() >= max {
+                        break;
+                    }
+                    let b = field.get(units.len()).copied().unwrap_or(0);
+                    units.push(u16::from_be_bytes([hi, b.wrapping_add(extra)]));
+                }
+            }
+        }
+    }
+    if units.is_empty() {
+        return None;
+    }
+    Some(String::from_utf16_lossy(&units))
+}
+
+#[cfg(test)]
+mod name_tests {
+    use super::name4;
+
+    #[test]
+    fn unicode_names() {
+        // From RAR 6.23 (`rar a -ma4`): tests/fixtures/external/rar/v4-unicode.rar.
+        let mut field = b"docs\\Gr\xc3\xbc\xc3\x9fe.txt\0".to_vec();
+        field.extend_from_slice(&[
+            0x01, 0xc0, 0x05, 0xfc, 0xdf, 0x65, 0x00, 0x2e, 0x74, 0x78, 0x74,
+        ]);
+        assert_eq!(name4(&field, 0x200), "docs\\Grüße.txt");
+        let mut field = "日本語.txt\0".as_bytes().to_vec();
+        field.extend_from_slice(&[
+            0x65, 0x68, 0xe5, 0x2c, 0x67, 0x9e, 0x8a, 0x2e, 0x00, 0x74, 0x78, 0x74,
+        ]);
+        assert_eq!(name4(&field, 0x200), "日本語.txt");
+        // A run with a correction: OEM 0x80 0x81 plus 0x50, high byte 0x04.
+        let field = [0x80, 0x81, 0, 0x04, 0xc0, 0x80, 0x50];
+        assert_eq!(name4(&field, 0x200), "\u{4d0}\u{4d1}");
+        // As in libarchive: a run copies the field's bytes by unit index
+        // (past the 8-bit name too), and the output stops at as many units
+        // as the field has bytes.
+        let field = [b'a', 0, 0x00, 0xc0, 0x05];
+        assert_eq!(name4(&field, 0x200), "a\0\0\u{c0}\u{5}");
+        // 0x200 without a NUL: the field is UTF-8.
+        assert_eq!(name4("Grüße".as_bytes(), 0x200), "Grüße");
+        // No Unicode part: UTF-8, else code page 437.
+        assert_eq!(name4(b"plain.txt", 0), "plain.txt");
+        assert_eq!(name4(b"\x8e\x99.txt", 0), "ÄÖ.txt");
+    }
 }

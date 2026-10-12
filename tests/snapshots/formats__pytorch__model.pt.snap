@@ -37,6 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 86  [0x16+0x4]
           File name length: 16  [0x1a+0x2]
           Extra field length: 0  [0x1c+0x2]
+        Local file name: "archive/data.pkl"  [0x1e+0x10]
       ▾ Content — Python pickle, protocol 2  [0x2e+0x56]
           PROTO: 2  [0x2e+0x2]
           EMPTY_DICT  [0x30+0x1]
@@ -94,6 +95,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 6  [0x9a+0x4]
           File name length: 17  [0x9e+0x2]
           Extra field length: 0  [0xa0+0x2]
+        Local file name: "archive/byteorder"  [0xa2+0x11]
       ▾ Content — UTF-8 text, 1 line  [0xb3+0x6]
           Encoding: "UTF-8"
           Line endings: "none" — 0 LF, 0 CRLF, 0 CR
@@ -132,6 +134,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 8  [0xcf+0x4]
           File name length: 14  [0xd3+0x2]
           Extra field length: 0  [0xd5+0x2]
+        Local file name: "archive/data/0"  [0xd7+0xe]
       ▾ Content — 0x8 bytes  [0xe5+0x8]
           Data  [0xe5+0x8]
     ▾ archive/data/1 — stored, 4 → 4 bytes  [0x205+0x3c]
@@ -167,6 +170,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 4  [0x103+0x4]
           File name length: 14  [0x107+0x2]
           Extra field length: 0  [0x109+0x2]
+        Local file name: "archive/data/1"  [0x10b+0xe]
       ▾ Content — 0x4 bytes  [0x119+0x4]
           Data  [0x119+0x4]
     ▾ archive/version — stored, 2 → 2 bytes  [0x241+0x3d]
@@ -202,6 +206,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 2  [0x133+0x4]
           File name length: 15  [0x137+0x2]
           Extra field length: 0  [0x139+0x2]
+        Local file name: "archive/version"  [0x13b+0xf]
       ▾ Content — UTF-8 text, LF line endings, 1 line  [0x14a+0x2]
           Encoding: "UTF-8"
           Line endings: "LF" — 1 LF, 0 CRLF, 0 CR

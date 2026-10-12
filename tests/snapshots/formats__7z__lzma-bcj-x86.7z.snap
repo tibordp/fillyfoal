@@ -26,6 +26,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 530 — 530 bytes
         Folder: 0
       ▾ Content — UTF-8 text, LF line endings, 60 lines  [0x20+0x487]
+          CRC32: 0x7bdf5fb7 — valid
           Encoding: "UTF-8"
           Line endings: "LF" — 60 LF, 0 CRLF, 0 CR
         ▾ Lines — 60 lines  [#2:0x0+0x212]
@@ -95,6 +96,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 3013 — 2.9 KiB
         Folder: 0
       ▾ Content — 0xbc5 bytes decompressed  [0x20+0x487]
+          CRC32: 0x9d56378c — valid
           Data  [#2:0x212+0xbc5]
   ▾ Folders — 1 folder  [0x20+0x507]
     ▾ Folder 0 — LZMA + BCJ x86, 1.1 KiB → 3.5 KiB, 2 streams  [0x20+0x487]

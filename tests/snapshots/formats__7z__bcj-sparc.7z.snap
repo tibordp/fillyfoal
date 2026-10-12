@@ -18,6 +18,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 8192 — 8 KiB
         Folder: 0
       ▾ Content — 0x2000 bytes decompressed  [0x20+0x1469]
+          CRC32: 0x308f5345 — valid
           Data  [#1:0x0+0x2000]
   ▾ Folders — 1 folder  [0x20+0x1469]
     ▾ Folder 0 — LZMA2 + BCJ SPARC, 5.1 KiB → 8 KiB, 1 stream  [0x20+0x1469]

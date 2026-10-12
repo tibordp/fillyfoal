@@ -27,4 +27,8 @@ xz -k -c --format=xz --check=crc64 --riscv=start=4096 --lzma2=preset=6 code.bin 
 7zz a -t7z -m0=ARMT -m1=LZMA2 -mhc=off bcj-armthumb.7z code.bin > /dev/null
 7zz a -t7z -m0=SPARC -m1=LZMA2 -mhc=off bcj-sparc.7z code.bin > /dev/null
 7zz a -t7z -m0=RISCV -m1=LZMA2 -mhc=off bcj-riscv.7z code.bin > /dev/null
+# 7z coder properties with a start offset (7-Zip takes one for ARM64 and
+# RISC-V).
+7zz a -t7z -m0=ARM64:4096 -m1=LZMA2 -mhc=off bcj-arm64-start.7z code.bin > /dev/null
+7zz a -t7z -m0=RISCV:4096 -m1=LZMA2 -mhc=off bcj-riscv-start.7z code.bin > /dev/null
 ls -l ./*.xz ./*.7z

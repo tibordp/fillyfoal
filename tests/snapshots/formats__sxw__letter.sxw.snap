@@ -37,6 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 30  [0x16+0x4]
           File name length: 8  [0x1a+0x2]
           Extra field length: 0  [0x1c+0x2]
+        Local file name: "mimetype"  [0x1e+0x8]
       ▾ Content — UTF-8 text, 1 line  [0x26+0x1e]
           Encoding: "UTF-8"
           Line endings: "none" — 0 LF, 0 CRLF, 0 CR
@@ -75,6 +76,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 239  [0x5a+0x4]
           File name length: 11  [0x5e+0x2]
           Extra field length: 0  [0x60+0x2]
+        Local file name: "content.xml"  [0x62+0xb]
       ▾ Content — XML document, root <office:document-content>  [0x6d+0x85]
         ▾ XML declaration  [#1:0x0+0x15]
             Version: "1.0"  [#1:0xf+0x3]
@@ -116,6 +118,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 114  [0x108+0x4]
           File name length: 8  [0x10c+0x2]
           Extra field length: 0  [0x10e+0x2]
+        Local file name: "meta.xml"  [0x110+0x8]
       ▾ Content — XML document, root <office:document-meta>  [0x118+0x57]
         ▾ XML declaration  [#2:0x0+0x15]
             Version: "1.0"  [#2:0xf+0x3]
@@ -155,6 +158,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 206  [0x185+0x4]
           File name length: 21  [0x189+0x2]
           Extra field length: 0  [0x18b+0x2]
+        Local file name: "META-INF/manifest.xml"  [0x18d+0x15]
       ▾ Content — XML document, root <manifest:manifest>  [0x1a2+0x93]
         ▾ XML declaration  [#3:0x0+0x26]
             Version: "1.0"  [#3:0xf+0x3]

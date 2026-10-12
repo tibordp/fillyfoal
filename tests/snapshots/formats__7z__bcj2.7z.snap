@@ -18,6 +18,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 25408 — 24.8 KiB
         Folder: 0
       ▾ Content — Mach-O x86_64 executable, macOS 11.0, 1 dylib, PIE, 4 symbols  [0x20+0x84f]
+          CRC32: 0xfa7d6965 — valid
         ▾ Mach Header — MH_EXECUTE, x86_64  [#2:0x0+0x20]
             magic: 0xfeedfacf  [#2:0x0+0x4]
             cputype: X86_64 (0x1000007)  [#2:0x4+0x4]
