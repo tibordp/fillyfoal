@@ -925,6 +925,8 @@ pub static FORMATS: &[&Format] = &[
     &disk::ufs::FORMAT,
     // Boot sectors ending in 0x55AA, before the plain MBR.
     #[cfg(feature = "archive")]
+    &disk::redsea::FORMAT,
+    #[cfg(feature = "archive")]
     &disk::ntfs::FORMAT,
     #[cfg(feature = "archive")]
     &disk::exfat::FORMAT,

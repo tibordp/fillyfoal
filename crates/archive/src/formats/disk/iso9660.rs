@@ -12,8 +12,10 @@
 //! names, symbolic links, device numbers, timestamps and relocated
 //! directories, and zisofs compression, whose files are decompressed. El
 //! Torito boot records point at a boot catalog whose images are dissected
-//! too. UDF volumes (UDF-only discs and the UDF side of bridge discs) are
-//! handed to [`super::udf`]. An image layout node accounts for every sector.
+//! too. TempleOS's distribution ISO is an empty shell around a RedSea
+//! volume at block 88, exposed as a child (see [`super::redsea`]). UDF
+//! volumes (UDF-only discs and the UDF side of bridge discs) are handed to
+//! [`super::udf`]. An image layout node accounts for every sector.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -30,7 +32,7 @@ use crate::formats::util::fmt;
 use crate::formats::util::fmt::count;
 use crate::formats::util::fmt::{capitalize, plural};
 use crate::formats::util::val::{text, uint};
-use crate::formats::{Codec, Format, Head, Input, Probe, embedded};
+use crate::formats::{Codec, Format, Head, Input, Probe, embedded, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
@@ -1816,6 +1818,7 @@ struct LayoutState {
     roots: Vec<(Span, bool)>,
     block_size: u64,
     catalog: Option<Span>,
+    redsea: Option<Span>,
     udf: bool,
 }
 
@@ -1832,6 +1835,9 @@ async fn layout(cx: Cx, s: Arc<LayoutState>) -> Result<()> {
     );
     for pt in &s.path_tables {
         r.span(file, round(*pt, file), "Path table");
+    }
+    if let Some(v) = s.redsea {
+        r.span(file, v, "TempleOS RedSea volume");
     }
     if let Some(c) = s.catalog {
         r.span(file, c, "Boot catalog");
@@ -2114,6 +2120,26 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .lazy(boot_catalog, (input, span, block_size)),
         );
     }
+    // TempleOS's ISO: an empty ISO 9660 shell around a RedSea volume at a
+    // fixed place (`RedSeaISO` in DskISORedSea.HC).
+    let redsea_at = super::redsea::ISO_DRV_OFFSET.saturating_mul(512);
+    let sector = cx.read_avail(file.sub(redsea_at, 512)).await?;
+    let mut redsea = None;
+    if let Some(b) =
+        super::redsea::boot(&sector).filter(|b| b.drv_offset == super::redsea::ISO_DRV_OFFSET)
+    {
+        let span = file.sub(redsea_at, b.sects.saturating_mul(512));
+        features.push("TempleOS RedSea".to_owned());
+        redsea = Some(span);
+        cx.emit(
+            embedded_as(
+                "RedSea file system",
+                input.nested(span),
+                &super::redsea::FORMAT,
+            )
+            .summary(fmt::size(span.len)),
+        );
+    }
     let mut udf_summary = None;
     if udf {
         match super::udf::load(&cx, input).await? {
@@ -2168,6 +2194,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                         roots,
                         block_size,
                         catalog: catalog_span,
+                        redsea,
                         udf,
                     }),
                 ),
