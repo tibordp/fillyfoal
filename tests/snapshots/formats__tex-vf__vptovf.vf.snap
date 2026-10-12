@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ vptovf.vf — TeX virtual font, 1 fonts, 2 characters  [0x0+0x50]
+    Preamble: "fillyfoal virtual font" — checksum 0x1f58d1, design size 10pt  [0x0+0x21]
+    Font 0: "pltotf"  [0x21+0x16]
+    Char 0x41 'A' — 1 bytes of DVI, width 0.7500  [0x37+0x6]
+    Char 0x42 'B' — 10 bytes of DVI, width 0.8500  [0x3d+0xf]
+    Postamble  [0x4c+0x4]

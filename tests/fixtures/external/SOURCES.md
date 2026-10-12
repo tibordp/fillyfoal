@@ -941,9 +941,14 @@ Stored whole as `.raw.zst` (zstd -19).
 | `cups-raster/gs-pwgraster.ras` | Ghostscript 10.00.0 (Debian bookworm `ghostscript`) | `sh tests/data/cups-raster/make.sh OUTDIR`: `-sDEVICE=pwgraster -r72` on a 1 x 0.75 inch page with three bars; reproduced byte-for-byte |
 | `cups-raster/gs-cups.ras` | Ghostscript 10.00.0 | same script, `-sDEVICE=cups` (little-endian `3SaR`); reproduced byte-for-byte |
 | `urf/gs-urf.urf` | Ghostscript 10.00.0 | same script, `-sDEVICE=urf` (Apple raster, `UNIRAST`); reproduced byte-for-byte |
+| `djvu/c44.djvu` | DjVuLibre 3.5.28 (Debian bookworm `djvulibre-bin`) | `sh tests/data/djvu/make.sh OUTDIR`: `c44` of a generated 64x48 colour gradient (IW44 BG44 chunks); reproduced byte-for-byte |
+| `djvu/cjb2.djvu` | DjVuLibre 3.5.28 | same script: `cjb2` of a generated 64x48 checkerboard (JB2 Sjbz); reproduced byte-for-byte |
+| `djvu/djvm-bundled.djvu` | DjVuLibre 3.5.28 | same script: `djvm -c` of the two pages (bundled DJVM with DIRM); reproduced byte-for-byte |
 | `chm/chmcmd.chm` | chmcmd from Free Pascal 3.2.2 (Debian bookworm `fp-utils`) | `sh tests/data/chm/make.sh OUTDIR`: a project of 40 generated HTML pages (about 130 KB, several LZX reset intervals), a contents and an index file, title and default topic; the ITSF header and the `#SYSTEM` timestamp record take the time of the run, so a re-run differs in those bytes |
 | `cff/fonttools.cff` | fontTools 4.66.1 (`FontBuilder.setupCFF`) | `uv run --with fonttools==4.66.1 python3 tests/data/cff/cff1.py fonttools.cff`: the CFF table of a three-glyph OpenType font with a Private DICT (BlueValues, OtherBlues, StdHW/StdVW, StemSnapH, widths) and one local subroutine; reproduced byte-for-byte |
 | `mobi/calibre-kf8.azw3` | calibre 6.13 (Debian bookworm) | `sh tests/data/mobi/calibre-kf8.sh OUTDIR`: `ebook-convert book.txt x.azw3` on ~3 KB of generated sentences (KF8 only, MOBI header version 8); calibre records the conversion time and a random UUID, so a re-run differs in those bytes |
 | `mobi/calibre-both.mobi` | calibre 6.13 | same script, `--mobi-file-type both`: MOBI 6, a BOUNDARY record, then the KF8 half (EXTH 121 = 6); not byte-reproducible (time, UUID) |
 | `lrf/calibre.lrf` | calibre 6.13 | same script, `ebook-convert book.txt x.lrf`; not byte-reproducible (time, UUID) |
 | `palm-pdb/calibre-ereader.pdb` | calibre 6.13 | same script, `--format ereader` (calibre's zTXT writer fails on Python 3); not byte-reproducible (time) |
+| `tex-tfm/pltotf.tfm` | PLtoTF 3.6 (TeX Live 2026) | `sh tests/data/tex-tfm/make.sh OUTDIR`: a property list written by the script (three characters, a kern and a ligature, seven parameters, design size 10pt); reproduced byte-for-byte |
+| `tex-vf/vptovf.vf` | VPtoVF (TeX Live 2026) | same script: a virtual property list mapping two characters onto `pltotf` (a SETCHAR, a SETCHAR plus SETRULE); reproduced byte-for-byte |
