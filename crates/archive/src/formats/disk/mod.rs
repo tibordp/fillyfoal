@@ -8,7 +8,7 @@
 //! its fragments ([`Cx::add_pieces`]) otherwise.
 //!
 //! Also here: Apple disk images (`dmg`), ISO 9660 and SquashFS/CramFS, and
-//! TempleOS's RedSea (`redsea`).
+//! TempleOS's RedSea (`redsea`) and its ISOs (`templeos_iso`).
 
 pub mod acl;
 pub mod apfs;
@@ -41,6 +41,7 @@ pub mod qcow;
 pub mod redsea;
 pub mod squashfs;
 pub mod swap;
+pub mod templeos_iso;
 pub mod udf;
 pub mod uefi;
 pub mod ufs;

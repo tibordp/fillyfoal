@@ -114,7 +114,7 @@ fn generated_images() {
     for (rel, deleted) in [
         ("synthetic/redsea/templeos.img.gz", true),
         ("synthetic/mbr/templeos-redsea.img.gz", true),
-        ("synthetic/iso9660/templeos.iso.gz", false),
+        ("synthetic/templeos-iso/templeos.iso.gz", false),
     ] {
         let mut host = Host::named("t", fixture(rel), Limits::default());
         if rel.contains("mbr") {
@@ -155,7 +155,7 @@ fn generated_images() {
 fn templeos_written_iso() {
     let mut host = Host::named(
         "t.iso",
-        fixture("external/iso9660/templeos-redseaiso.iso.gz"),
+        fixture("external/templeos-iso/templeos-redseaiso.iso.gz"),
         Limits::default(),
     );
     let entries = list(&mut host);
@@ -229,6 +229,9 @@ fn templeos_iso() {
     let data = std::fs::read(iso).unwrap();
     let mut host = Host::named("TempleOS.ISO", data, Limits::default());
     let entries = list(&mut host);
+    let root = host.root;
+    let format = host.session.interpretation(root).unwrap().format;
+    assert_eq!(format.map(|f| f.name), Some("templeos-iso"));
     let manifest = std::fs::read_to_string(manifest).unwrap();
     let mut want: Vec<(String, bool)> = manifest
         .lines()
@@ -249,19 +252,24 @@ fn templeos_iso() {
     eprintln!("{} files, {} entries", files.len(), want.len());
 }
 
-/// TempleOS's volume descriptor quirks are one note on its ISOs; the same
-/// bytes without the RedSea volume are an ordinary, damaged ISO and warn.
+/// A TempleOS ISO is `templeos-iso`, its `CISOPriDesc` fields read as
+/// TempleOS writes them; the same bytes without the RedSea volume fall
+/// through to `iso9660`, as an ordinary but damaged ISO that warns.
 #[test]
-fn templeos_iso_quirks_only_with_redsea() {
-    let iso = fixture("external/iso9660/templeos-redseaiso.iso.gz");
+fn templeos_iso_needs_redsea() {
+    let iso = fixture("external/templeos-iso/templeos-redseaiso.iso.gz");
     let tree = common::explore("t.iso", &iso);
-    assert!(tree.contains("note: written by TempleOS"), "{tree}");
-    assert!(!tree.contains("copies differ"), "{tree}");
-    assert!(!tree.contains("Path table ("), "{tree}");
+    assert!(
+        tree.contains("TempleOS RedSea ISO, 48 KiB, El Torito"),
+        "{tree}"
+    );
+    assert!(tree.contains("publisher_id: \"TempleOS RedSea\""), "{tree}");
+    assert!(!tree.contains("warning"), "{tree}");
     let mut plain = iso;
     plain[0xb000..0xb200].fill(0);
     let tree = common::explore("t.iso", &plain);
-    assert!(!tree.contains("written by TempleOS"), "{tree}");
+    assert!(!tree.contains("TempleOS RedSea ISO"), "{tree}");
+    assert!(tree.contains("ISO 9660 image"), "{tree}");
     assert!(tree.contains("copies differ"), "{tree}");
     assert!(tree.contains("Path table (optional M)"), "{tree}");
 }

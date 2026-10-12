@@ -9,8 +9,8 @@
 //! (`drv_offset`): the partition's start on a hard disk, block 88 in the
 //! distribution ISO (an ISO 9660 shell with an empty primary volume
 //! descriptor and El Torito boot, written by `RedSeaISO9660` in
-//! `Adam/Opt/Boot/DskISORedSea.HC`; [`super::iso9660`] hands that volume
-//! here). The bitmap's bit *i* (LSB first) stands for block
+//! `Adam/Opt/Boot/DskISORedSea.HC`; [`super::templeos_iso`]
+//! hands that volume here). The bitmap's bit *i* (LSB first) stands for block
 //! `drv_offset + bitmap_sects + i`, the bitmap's own last block, which
 //! formatting marks used.
 //!
