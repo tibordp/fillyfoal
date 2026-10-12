@@ -16,6 +16,8 @@ pub mod luajit;
 pub mod ocaml;
 pub mod opcache;
 pub mod pyc;
+#[rustfmt::skip]
+mod pyc_ops;
 pub mod qvm;
 pub mod spirv;
 pub mod wasm;
