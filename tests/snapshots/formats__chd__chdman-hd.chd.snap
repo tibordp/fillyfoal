@@ -1,0 +1,49 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ chdman-hd.chd — CHD v5, hard disk, 64 KiB in 16 hunks of 4 KiB, lzma/zlib/huff/flac, 1 metadata entries  [0x0+0x7b9]
+  ▾ Header — version 5  [0x0+0x7c]
+      Magic: "MComprHD"  [0x0+0x8]
+      Header length: 124  [0x8+0x4]
+      Version: 5  [0xc+0x4]
+      Compressor 0: "lzma"  [0x10+0x4]
+      Compressor 1: "zlib"  [0x14+0x4]
+      Compressor 2: "huff"  [0x18+0x4]
+      Compressor 3: "flac"  [0x1c+0x4]
+      Logical size: 65536  [0x20+0x8]
+      Map offset: 0x77c  [0x28+0x8]
+      Metadata offset: 0x7c  [0x30+0x8]
+      Hunk size: 4096  [0x38+0x4]
+      Unit size: 512  [0x3c+0x4]
+      Raw SHA-1: 1d a1 65 af b9 60 e8 69 15 2f a5 5c b3 f5 e5 b9 …  |..e..`.i./.\....|  [0x40+0x14]
+      SHA-1: 22 31 7a f4 a4 c5 a4 35 5a 3c 14 3e f0 b3 ae dc …  |"1z....5Z<.>....|  [0x54+0x14]
+      Parent SHA-1: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x68+0x14]
+  ▾ Metadata — 1 entries  [0x7c+0x10]
+      GDDD: hard disk geometry (GDDD) (0x47444444) — CYLS:1,HEADS:4,SECS:32,BPS:512  [0x7c+0x2f] → 0x8c+0x1f
+  ▾ Hunk map (compressed) — 16 hunks  [0x77c+0x3d]
+    ▾ Map header  [0x77c+0x10]
+        Compressed map length: 45  [0x77c+0x4]
+        First block offset: 0xab  [0x780+0x6]
+        Map CRC-16: 0x7a77  [0x786+0x2]
+        Bits for compressed length: 8  [0x788+0x1]
+        Bits for self references: 4  [0x789+0x1]
+        Bits for parent references: 0  [0x78a+0x1]
+        Reserved: 0  [0x78b+0x1]
+    ▾ Hunks — 16 hunks, Huffman-coded types then bit-packed fields  [0x78c+0x2d]
+        Hunk 0: 0xab — lzma, 169 bytes at 0xab, CRC-16 0xc06b → 0xab+0xa9
+        Hunk 1: 0x154 — lzma, 171 bytes at 0x154, CRC-16 0xcc08 → 0x154+0xab
+        Hunk 2: 0x1ff — lzma, 171 bytes at 0x1ff, CRC-16 0xd8ad → 0x1ff+0xab
+        Hunk 3: 0x2aa — lzma, 171 bytes at 0x2aa, CRC-16 0xd4ce → 0x2aa+0xab
+        Hunk 4: 0x355 — lzma, 171 bytes at 0x355, CRC-16 0xf1e7 → 0x355+0xab
+        Hunk 5: 0x2 — same as hunk 2
+        Hunk 6: 0x400 — lzma, 171 bytes at 0x400, CRC-16 0xe921 → 0x400+0xab
+        Hunk 7: 0x4ab — lzma, 171 bytes at 0x4ab, CRC-16 0xe542 → 0x4ab+0xab
+        Hunk 8: 0x556 — lzma, 171 bytes at 0x556, CRC-16 0xa373 → 0x556+0xab
+        Hunk 9: 0x2 — same as hunk 2
+        Hunk 10: 0x601 — lzma, 194 bytes at 0x601, CRC-16 0x62e7 → 0x601+0xc2
+        Hunk 11: 0x6c3 — lzma, 170 bytes at 0x6c3, CRC-16 0x6e84 → 0x6c3+0xaa
+        Hunk 12: 0x76d — flac, 15 bytes at 0x76d, CRC-16 0xefdf → 0x76d+0xf
+        Hunk 13: 0xc — same as hunk 12
+        Hunk 14: 0xc — same as hunk 12
+        Hunk 15: 0xc — same as hunk 12

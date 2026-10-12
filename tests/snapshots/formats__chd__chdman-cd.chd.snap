@@ -1,0 +1,56 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ chdman-cd.chd — CHD v5, CD-ROM, 439.9 KiB in 23 hunks of 19.1 KiB, cdlz/cdzl/cdfl, 1 metadata entries  [0x0+0x36d]
+  ▾ Header — version 5  [0x0+0x7c]
+      Magic: "MComprHD"  [0x0+0x8]
+      Header length: 124  [0x8+0x4]
+      Version: 5  [0xc+0x4]
+      Compressor 0: "cdlz"  [0x10+0x4]
+      Compressor 1: "cdzl"  [0x14+0x4]
+      Compressor 2: "cdfl"  [0x18+0x4]
+      Compressor 3: "none"  [0x1c+0x4]
+      Logical size: 450432  [0x20+0x8]
+      Map offset: 0x349  [0x28+0x8]
+      Metadata offset: 0x7c  [0x30+0x8]
+      Hunk size: 19584  [0x38+0x4]
+      Unit size: 2448  [0x3c+0x4]
+      Raw SHA-1: e6 1f 2a 88 77 fb 25 7c 10 bf 65 a8 fc 50 2b cd …  |..*.w.%|..e..P+.|  [0x40+0x14]
+      SHA-1: b6 cb b6 22 bd d5 37 47 bc 52 1b 01 5f 87 d1 bd …  |..."..7G.R.._...|  [0x54+0x14]
+      Parent SHA-1: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x68+0x14]
+  ▾ Metadata — 1 entries  [0x7c+0x10]
+      CHT2: CD-ROM track v2 (CHT2) (0x43485432) — TRACK:1 TYPE:MODE1 SUBTYPE:NONE FRAMES:184 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0  [0x7c+0x66] → 0x8c+0x56
+  ▾ Hunk map (compressed) — 23 hunks  [0x349+0x24]
+    ▾ Map header  [0x349+0x10]
+        Compressed map length: 20  [0x349+0x4]
+        First block offset: 0xe2  [0x34d+0x6]
+        Map CRC-16: 0x3a40  [0x353+0x2]
+        Bits for compressed length: 9  [0x355+0x1]
+        Bits for self references: 0  [0x356+0x1]
+        Bits for parent references: 0  [0x357+0x1]
+        Reserved: 0  [0x358+0x1]
+    ▾ Hunks — 23 hunks, Huffman-coded types then bit-packed fields  [0x359+0x14]
+        Hunk 0: 0xe2 — cdfl, 41 bytes at 0xe2, CRC-16 0xef26 → 0xe2+0x29
+        Hunk 1: 0x0 — same as hunk 0
+        Hunk 2: 0x10b — cdzl, 504 bytes at 0x10b, CRC-16 0x3850 → 0x10b+0x1f8
+        Hunk 3: 0x0 — same as hunk 0
+        Hunk 4: 0x303 — cdzl, 70 bytes at 0x303, CRC-16 0x2603 → 0x303+0x46
+        Hunk 5: 0x0 — same as hunk 0
+        Hunk 6: 0x0 — same as hunk 0
+        Hunk 7: 0x0 — same as hunk 0
+        Hunk 8: 0x0 — same as hunk 0
+        Hunk 9: 0x0 — same as hunk 0
+        Hunk 10: 0x0 — same as hunk 0
+        Hunk 11: 0x0 — same as hunk 0
+        Hunk 12: 0x0 — same as hunk 0
+        Hunk 13: 0x0 — same as hunk 0
+        Hunk 14: 0x0 — same as hunk 0
+        Hunk 15: 0x0 — same as hunk 0
+        Hunk 16: 0x0 — same as hunk 0
+        Hunk 17: 0x0 — same as hunk 0
+        Hunk 18: 0x0 — same as hunk 0
+        Hunk 19: 0x0 — same as hunk 0
+        Hunk 20: 0x0 — same as hunk 0
+        Hunk 21: 0x0 — same as hunk 0
+        Hunk 22: 0x0 — same as hunk 0

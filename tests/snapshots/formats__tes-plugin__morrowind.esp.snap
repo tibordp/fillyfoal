@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ morrowind.esp — Morrowind plugin, fillyfoal v1.30, 1 records, masters: Morrowind.esm  [0x0+0x19a]
+  ▾ TES3 — 346 bytes  [0x0+0x16a]
+    ▾ Record header  [0x0+0x10]
+        Type: "TES3"  [0x0+0x4]
+        Data size: 346  [0x4+0x4]
+        Reserved: 0x0  [0x8+0x4]
+        Flags: 0x0 []  [0xc+0x4]
+      HEDR — 300 bytes  [0x10+0x134]
+      MAST: "Morrowind.esm"  [0x144+0x16]
+      DATA — 8 bytes  [0x15a+0x10]
+  ▾ GMST — 32 bytes  [0x16a+0x30]
+    ▾ Record header  [0x16a+0x10]
+        Type: "GMST"  [0x16a+0x4]
+        Data size: 32  [0x16e+0x4]
+        Reserved: 0x0  [0x172+0x4]
+        Flags: 0x0 []  [0x176+0x4]
+      NAME: "sFillyfoal"  [0x17a+0x13]
+      STRV: "Hello"  [0x18d+0xd]

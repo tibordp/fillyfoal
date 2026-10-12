@@ -10,6 +10,7 @@
 pub mod archives;
 pub mod bethesda;
 pub mod blizzard;
+pub mod bsa;
 pub mod consoles;
 pub mod dweep;
 pub mod engine_data;
@@ -21,3 +22,5 @@ pub mod nw4;
 pub mod packages;
 pub mod packfiles;
 pub mod unity;
+pub mod unreal;
+pub mod unreal_pak;

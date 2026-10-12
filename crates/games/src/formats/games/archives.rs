@@ -496,31 +496,39 @@ const UPAK_VERSIONS: crate::value::EnumTable = &[
 ];
 
 /// FPakInfo, from the key GUID (v7+) or the encrypted-index byte (v4+) to
-/// the end of the file. Returns the index offset and size.
-fn upak_info(f: &mut Fields<'_>, &(version, back): &(u32, usize)) -> Result<(u64, u64)> {
+/// the end of the file.
+fn upak_info(
+    f: &mut Fields<'_>,
+    &(version, back): &(u32, usize),
+) -> Result<super::unreal_pak::PakFooter> {
     if version >= 7 {
         f.guid("Encryption key GUID").emit()?;
     }
-    if version >= 4 {
-        f.u8("Encrypted index").emit()?;
-    }
+    let encrypted = version >= 4 && f.u8("Encrypted index").emit()? != 0;
     f.u32("Magic").hex().emit()?;
     f.u32("Version").enumeration(UPAK_VERSIONS).emit()?;
-    let offset = f.u64("Index offset").hex().emit()?;
-    let size = f.u64("Index size").emit()?;
+    let index_offset = f.u64("Index offset").hex().emit()?;
+    let index_size = f.u64("Index size").emit()?;
     f.bytes("Index hash (SHA-1)", 20).emit()?;
-    if back == 205 {
-        f.u8("Frozen index").emit()?;
-    }
+    let frozen = back == 205 && f.u8("Frozen index").emit()? != 0;
     let names = match back {
         172 => 4,
         204 | 205 => 5,
         _ => 0,
     };
+    let mut methods = Vec::new();
     for _ in 0..names {
-        f.ascii("Compression method", 32).emit()?;
+        methods.push(f.ascii("Compression method", 32).emit()?);
     }
-    Ok((offset, size))
+    Ok(super::unreal_pak::PakFooter {
+        version,
+        narrow_method: back == 172,
+        encrypted,
+        frozen,
+        index_offset,
+        index_size,
+        methods: methods.into(),
+    })
 }
 
 async fn unreal_pak(cx: Cx, input: Input) -> Result<()> {
@@ -539,15 +547,24 @@ async fn unreal_pak(cx: Cx, input: Input) -> Result<()> {
     };
     let footer_len = crate::bytes::to_u64(back).saturating_add(prefix);
     let footer = file.sub(file.len.saturating_sub(footer_len), footer_len);
-    let (index_offset, index_size) =
-        crate::fields::parse(&cx, footer, LE, &(version, back), upak_info).await?;
-    cx.emit(Node::new("Data").span(file.sub(0, index_offset)));
-    cx.emit(Node::new("Index").span(file.sub(index_offset, index_size)));
+    let info = crate::fields::parse(&cx, footer, LE, &(version, back), upak_info).await?;
+    cx.emit(Node::new("Data").span(file.sub(0, info.index_offset)));
+    let index = file.sub(info.index_offset, info.index_size);
+    let note = format!(
+        "Unreal pak v{version}, index {} bytes{}",
+        info.index_size,
+        if info.encrypted {
+            ", encrypted index"
+        } else {
+            ""
+        }
+    );
+    cx.emit(super::unreal_pak::pak_index_node(input, index, info));
     cx.emit(
         crate::fields::struct_node("Footer", footer, LE, (version, back), upak_info)
             .summary(format!("version {version}")),
     );
-    cx.annotate(format!("Unreal pak v{version}, index {index_size} bytes"));
+    cx.annotate(note);
     Ok(())
 }
 
@@ -555,68 +572,10 @@ async fn unreal_pak(cx: Cx, input: Input) -> Result<()> {
 // Bethesda BSA / BA2, Blizzard MPQ, RPG Maker RGSSAD
 
 declare_format!(pub BSA = "bsa", "Bethesda archive (BSA)", ["bsa"], "application/x-bsa",
-    Probe::Magic(&[(0, b"BSA\0")]), bsa);
-
-record! {
-    pub struct BsaHeader {
-        magic: ascii[4] "Magic",
-        version: u32 "Version" .enumeration(&[(103, "Oblivion"), (104, "Fallout 3 / Skyrim"), (105, "Skyrim SE")]),
-        offset: u32 "Folder records offset",
-        flags: u32 "Archive flags" .hex(),
-        folders: u32 "Folders",
-        files: u32 "Files",
-        folder_names: u32 "Total folder name length",
-        file_names: u32 "Total file name length",
-        content: u16 "Content flags" .hex(),
-        _padding: u16 "Padding",
-    }
-}
-
-async fn bsa(cx: Cx, input: Input) -> Result<()> {
-    let h: BsaHeader = emit_record(&cx, input.span.sub(0, BsaHeader::SIZE), LE).await?;
-    cx.emit(Node::new("Records and data").span(input.span.tail(BsaHeader::SIZE)));
-    let game = match h.version {
-        103 => "Oblivion",
-        104 => "Fallout 3 / Skyrim",
-        105 => "Skyrim SE",
-        _ => "unknown game",
-    };
-    cx.annotate(format!(
-        "BSA v{} ({game}), {} folders, {} files{}",
-        h.version,
-        h.folders,
-        h.files,
-        if h.flags & 4 != 0 { ", compressed" } else { "" }
-    ));
-    Ok(())
-}
+    Probe::Magic(&[(0, b"BSA\0")]), super::bsa::bsa);
 
 declare_format!(pub BA2 = "ba2", "Bethesda archive 2 (BA2)", ["ba2"], "application/x-ba2",
-    Probe::Magic(&[(0, b"BTDX")]), ba2);
-
-record! {
-    pub struct Ba2Header {
-        magic: ascii[4] "Magic",
-        version: u32 "Version",
-        kind: ascii[4] "Type" .desc("GNRL (general) or DX10 (textures)"),
-        files: u32 "Files",
-        names: u64 "Name table offset" .hex(),
-    }
-}
-
-async fn ba2(cx: Cx, input: Input) -> Result<()> {
-    let h: Ba2Header = emit_record(&cx, input.span.sub(0, Ba2Header::SIZE), LE).await?;
-    cx.emit(
-        Node::new("File records and data").span(
-            input
-                .span
-                .sub(Ba2Header::SIZE, h.names.saturating_sub(Ba2Header::SIZE)),
-        ),
-    );
-    cx.emit(Node::new("Name table").span(input.span.tail(h.names)));
-    cx.annotate(format!("BA2 v{} {}, {} files", h.version, h.kind, h.files));
-    Ok(())
-}
+    Probe::Magic(&[(0, b"BTDX")]), super::bsa::ba2);
 
 declare_format!(pub MPQ = "mpq", "Blizzard MPQ archive", ["mpq", "sc2map", "w3x", "w3m"], "application/x-mpq",
     Probe::Magic(&[(0, b"MPQ\x1a"), (0, b"MPQ\x1b")]), mpq);

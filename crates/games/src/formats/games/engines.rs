@@ -11,7 +11,6 @@ use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::Value;
 
 const LE: Endian = Endian::Little;
 
@@ -525,79 +524,4 @@ async fn md3(cx: Cx, input: Input) -> Result<()> {
 // Unreal packages
 
 declare_format!(pub UNREAL = "unreal-package", "Unreal Engine package", ["u", "upk", "uasset", "umap", "utx", "uax", "unr"],
-    "application/x-unreal-package", Probe::Magic(&[(0, b"\xc1\x83\x2a\x9e")]), unreal);
-
-async fn unreal(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.read(file.sub(0, 8)).await?;
-    let version = u32_le(&head, 4).unwrap_or(0);
-    let legacy = version & 0xffff;
-    let licensee = version >> 16;
-    // Since UE4 the second field is a negative "legacy file version".
-    if (version as i32) < 0 {
-        cx.emit(Node::new("Tag").span(file.sub(0, 4)));
-        cx.emit(
-            Node::new("Legacy file version")
-                .span(file.sub(4, 4))
-                .value(Value::Int {
-                    value: (version as i32).into(),
-                    bits: 32,
-                }),
-        );
-        cx.annotate(format!(
-            "Unreal Engine 4/5 package (legacy version {})",
-            version as i32
-        ));
-        return Ok(());
-    }
-    let table = cx.read(file.sub(8, 28)).await?;
-    cx.emit(Node::new("Tag").span(file.sub(0, 4)));
-    cx.emit(
-        Node::new("File version")
-            .span(file.sub(4, 2))
-            .value(Value::UInt {
-                value: legacy.into(),
-                bits: 16,
-                radix: crate::value::Radix::Dec,
-            }),
-    );
-    cx.emit(
-        Node::new("Licensee version")
-            .span(file.sub(6, 2))
-            .value(Value::UInt {
-                value: licensee.into(),
-                bits: 16,
-                radix: crate::value::Radix::Dec,
-            }),
-    );
-    let field = |at: usize| u32_le(&table, at).unwrap_or(0);
-    let offset = if legacy >= 249 { 4usize } else { 0 };
-    let names = (
-        field(offset.saturating_add(4)),
-        field(offset.saturating_add(8)),
-    );
-    let exports = (
-        field(offset.saturating_add(12)),
-        field(offset.saturating_add(16)),
-    );
-    let imports = (
-        field(offset.saturating_add(20)),
-        field(offset.saturating_add(24)),
-    );
-    cx.emit(
-        Node::new("Name table")
-            .summary(format!("{} names at {:#x}", names.0, names.1))
-            .span(file.tail(names.1.into()).sub(0, 0)),
-    );
-    cx.emit(
-        Node::new("Export table").summary(format!("{} exports at {:#x}", exports.0, exports.1)),
-    );
-    cx.emit(
-        Node::new("Import table").summary(format!("{} imports at {:#x}", imports.0, imports.1)),
-    );
-    cx.annotate(format!(
-        "Unreal package v{legacy}, {} names, {} exports",
-        names.0, exports.0
-    ));
-    Ok(())
-}
+    "application/x-unreal-package", Probe::Magic(&[(0, b"\xc1\x83\x2a\x9e")]), super::unreal::package);
