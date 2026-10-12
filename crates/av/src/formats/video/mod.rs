@@ -2,16 +2,20 @@
 //! IVF, Y4M, raw elementary streams (`annexb` for H.264/HEVC, `rawvideo`),
 //! Bink and Smacker (`rad`), Flash movies (`swf`), game and multimedia video
 //! (`gamevideo`, `movies`), smaller containers (`containers`: NSV,
-//! NuppelVideo, RED, Deluxe Paint animations), NUT, and subtitles (`pgs`,
-//! `subtitles`).
+//! NuppelVideo, RED, Deluxe Paint animations), NUT, subtitles (`pgs`,
+//! `subtitles`), and disc navigation: DVD-Video IFO files (`dvd`) and
+//! Blu-ray index, movie object, playlist and clip information files
+//! (`bluray`).
 //!
 //! ISO BMFF (MP4, MOV, HEIF) lives in [`super::isobmff`], MPEG program and
 //! transport streams in [`super::mpeg`], AVI in [`super::iff`].
 
 pub mod annexb;
 pub mod asf;
+pub mod bluray;
 pub mod coded;
 pub mod containers;
+pub mod dvd;
 pub mod flv;
 pub mod gamevideo;
 pub mod ivf;
