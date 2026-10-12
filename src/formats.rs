@@ -2962,6 +2962,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "data")]
     &mysql::redo::FORMAT,
     #[cfg(feature = "data")]
+    &mysql::mypack::FORMAT,
+    #[cfg(feature = "data")]
     &mysql::myd::FORMAT,
     #[cfg(feature = "data")]
     &postgres::control::FORMAT,

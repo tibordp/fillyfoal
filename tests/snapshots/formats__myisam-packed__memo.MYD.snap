@@ -1,0 +1,62 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ memo.MYD — MyISAM data file compressed by myisampack (version 2), 3 columns, records of 3 to 158 bytes  [0x0+0x109]
+  ▾ Header — version 2, 41 bytes of column descriptions and trees, 1 Huffman tree  [0x0+0x20]
+      Magic: fe fe 08  |...|  [0x0+0x3]
+      Version: 2  [0x3+0x1]
+      Header length: 73  [0x4+0x4]
+      Shortest record: 3  [0x8+0x4]
+      Longest record: 158  [0xc+0x4]
+      Tree elements: 17  [0x10+0x4]
+      Distinct values length: 0  [0x14+0x4]
+      Trees: 1  [0x18+0x2]
+      Reference length: 6  [0x1a+0x1]
+      Record pointer length: 2  [0x1b+0x1]
+  ▾ Columns — 3 columns, bit-packed  [0x20+0x7]
+      Column 0 (null flags): normal (0x0) — tree 0  [0x20+0x3]
+      Column 1: normal (0x0) — tree 0, zero fill, 3-bit space counts  [0x22+0x3]
+      Column 2: BLOB (0x4) — tree 0, 9-bit space counts  [0x24+0x3]
+  ▾ Huffman trees — 1 tree, 17 elements in all  [0x27+0x22]
+    ▾ Tree 0 — 17 byte values from 0x01  [0x27+0x22]
+        Codes: "byte values"
+        Elements: 17
+        Value bits: 8
+        Offset bits: 5
+      ▾ Code list — 17 codes
+          10100010: 0x1
+          10100011: 0x2
+          1010000: 0x3
+          10101110: 0x4
+          110: 0x20
+          000: 0x65
+          001: 0x67
+          1010110: 0x68
+          1110: 0x6c
+          1111: 0x6e
+          100: 0x6f
+          1010100: 0x72
+          1010101: 0x73
+          01: 0x74
+          1011: 0x78
+          101001: 0xfe
+          10101111: 0xff
+  ▾ Records — 192 bytes  [0x49+0xc0]
+    ▾ Record 0 — 7 bytes of coded columns, 5 bytes of BLOB data  [0x49+0x9]
+        Length: 7  [0x49+0x1]
+        BLOB length: 5  [0x4a+0x1]
+        Coded columns  [0x4b+0x7]
+    ▾ Record 1 — 3 bytes of coded columns, 0 bytes of BLOB data  [0x52+0x5]
+        Length: 3  [0x52+0x1]
+        BLOB length: 0  [0x53+0x1]
+        Coded columns  [0x54+0x3]
+    ▾ Record 2 — 158 bytes of coded columns, 400 bytes of BLOB data  [0x57+0xa2]
+        Length: 158  [0x57+0x1]
+        BLOB length: 400  [0x58+0x3]
+        Coded columns  [0x5b+0x9e]
+    ▾ Record 3 — 7 bytes of coded columns, 5 bytes of BLOB data  [0xf9+0x9]
+        Length: 7  [0xf9+0x1]
+        BLOB length: 5  [0xfa+0x1]
+        Coded columns  [0xfb+0x7]
+      Padding — 7 bytes  [0x102+0x7]

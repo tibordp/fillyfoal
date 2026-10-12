@@ -1,0 +1,188 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ crate.MYD — MyISAM data file compressed by myisampack (version 2), 8 columns, records of 11 to 19 bytes  [0x0+0x277]
+  ▾ Header — version 2, 202 bytes of column descriptions and trees, 2 Huffman trees  [0x0+0x20]
+      Magic: fe fe 08  |...|  [0x0+0x3]
+      Version: 2  [0x3+0x1]
+      Header length: 234  [0x4+0x4]
+      Shortest record: 11  [0x8+0x4]
+      Longest record: 19  [0xc+0x4]
+      Tree elements: 77  [0x10+0x4]
+      Distinct values length: 16  [0x14+0x4]
+      Trees: 2  [0x18+0x2]
+      Reference length: 1  [0x1a+0x1]
+      Record pointer length: 2  [0x1b+0x1]
+  ▾ Columns — 8 columns, bit-packed  [0x20+0x11]
+      Column 0 (null flags): normal (0x0) — tree 0  [0x20+0x3]
+      Column 1: normal (0x0) — tree 0, zero fill, 3-bit space counts  [0x22+0x3]
+      Column 2: skip end spaces (0x1) — tree 0, 6-bit space counts  [0x24+0x3]
+      Column 3: VARCHAR (0x8) — tree 0, 4-bit space counts  [0x26+0x3]
+      Column 4: normal (0x0) — tree 0  [0x28+0x3]
+      Column 5: constant (0x5) — tree 1, 4-bit space counts  [0x2a+0x3]
+      Column 6: normal (0x0) — tree 0, zero fill, 2-bit space counts  [0x2c+0x3]
+      Column 7: skip zeros (0x3) — tree 0  [0x2e+0x3]
+  ▾ Huffman trees — 2 trees, 77 elements in all  [0x31+0xb9]
+    ▾ Tree 0 — 76 byte values from 0x00  [0x31+0xa3]
+        Codes: "byte values"
+        Elements: 76
+        Value bits: 8
+        Offset bits: 7
+      ▾ Code list — 76 codes
+          101101: 0x0
+          00001: 0x1
+          111111: 0x2
+          111110: 0x3
+          0011101: 0x4
+          0011110: 0x5
+          0000011: 0x6
+          0000010: 0x7
+          0111111: 0x8
+          01110111: 0x9
+          011101101: 0xa
+          011100010: 0xb
+          011110010: 0xc
+          011111011: 0xd
+          011111001: 0xe
+          11110: 0xf
+          011010100: 0x10
+          011101011: 0x11
+          011110110: 0x12
+          011101100: 0x13
+          01111010: 0x14
+          011110000: 0x15
+          011110001: 0x16
+          011100011: 0x17
+          011100101: 0x18
+          1110: 0x20
+          010111101: 0x22
+          010111110: 0x23
+          011111000: 0x24
+          011011000: 0x25
+          011011001: 0x26
+          011010110: 0x28
+          011011111: 0x29
+          011010101: 0x2a
+          011101010: 0x2b
+          01110100: 0x2c
+          011011010: 0x2e
+          011110111: 0x2f
+          0011100: 0x30
+          01100: 0x31
+          101100: 0x32
+          0011010: 0x33
+          000000: 0x34
+          0011011: 0x35
+          0101100: 0x36
+          0101101: 0x37
+          0101110: 0x38
+          01110000: 0x39
+          011100100: 0x40
+          011100110: 0x4c
+          011100111: 0x58
+          010111100: 0x60
+          0100: 0x61
+          0001: 0x63
+          011111010: 0x64
+          1100: 0x65
+          010111111: 0x6c
+          10100: 0x6e
+          10101: 0x6f
+          0010: 0x72
+          1101: 0x74
+          100: 0x78
+          011110011: 0x84
+          011010111: 0x90
+          011011110: 0x98
+          011010000: 0xa4
+          011010001: 0xb0
+          011010010: 0xbc
+          011010011: 0xc8
+          10111: 0xd0
+          01010: 0xf8
+          0011001: 0xf9
+          0011111: 0xfa
+          011011011: 0xfb
+          0011000: 0xfc
+          01101110: 0xfd
+    ▾ Tree 1 — 1 distinct values, 16 bytes of them  [0xd4+0x16]
+        Codes: "distinct column values"
+        Elements: 1
+        Value bits: 1
+        Offset bits: 2
+      ▾ Code list — 0 codes
+  ▾ Records — 397 bytes  [0xea+0x18d]
+    ▾ Record 0 — 15 bytes of coded columns  [0xea+0x10]
+        Length: 15  [0xea+0x1]
+        Coded columns  [0xeb+0xf]
+    ▾ Record 1 — 16 bytes of coded columns  [0xfa+0x11]
+        Length: 16  [0xfa+0x1]
+        Coded columns  [0xfb+0x10]
+    ▾ Record 2 — 16 bytes of coded columns  [0x10b+0x11]
+        Length: 16  [0x10b+0x1]
+        Coded columns  [0x10c+0x10]
+    ▾ Record 3 — 12 bytes of coded columns  [0x11c+0xd]
+        Length: 12  [0x11c+0x1]
+        Coded columns  [0x11d+0xc]
+    ▾ Record 4 — 17 bytes of coded columns  [0x129+0x12]
+        Length: 17  [0x129+0x1]
+        Coded columns  [0x12a+0x11]
+    ▾ Record 5 — 15 bytes of coded columns  [0x13b+0x10]
+        Length: 15  [0x13b+0x1]
+        Coded columns  [0x13c+0xf]
+    ▾ Record 6 — 18 bytes of coded columns  [0x14b+0x13]
+        Length: 18  [0x14b+0x1]
+        Coded columns  [0x14c+0x12]
+    ▾ Record 7 — 11 bytes of coded columns  [0x15e+0xc]
+        Length: 11  [0x15e+0x1]
+        Coded columns  [0x15f+0xb]
+    ▾ Record 8 — 15 bytes of coded columns  [0x16a+0x10]
+        Length: 15  [0x16a+0x1]
+        Coded columns  [0x16b+0xf]
+    ▾ Record 9 — 16 bytes of coded columns  [0x17a+0x11]
+        Length: 16  [0x17a+0x1]
+        Coded columns  [0x17b+0x10]
+    ▾ Record 10 — 16 bytes of coded columns  [0x18b+0x11]
+        Length: 16  [0x18b+0x1]
+        Coded columns  [0x18c+0x10]
+    ▾ Record 11 — 11 bytes of coded columns  [0x19c+0xc]
+        Length: 11  [0x19c+0x1]
+        Coded columns  [0x19d+0xb]
+    ▾ Record 12 — 17 bytes of coded columns  [0x1a8+0x12]
+        Length: 17  [0x1a8+0x1]
+        Coded columns  [0x1a9+0x11]
+    ▾ Record 13 — 17 bytes of coded columns  [0x1ba+0x12]
+        Length: 17  [0x1ba+0x1]
+        Coded columns  [0x1bb+0x11]
+    ▾ Record 14 — 17 bytes of coded columns  [0x1cc+0x12]
+        Length: 17  [0x1cc+0x1]
+        Coded columns  [0x1cd+0x11]
+    ▾ Record 15 — 13 bytes of coded columns  [0x1de+0xe]
+        Length: 13  [0x1de+0x1]
+        Coded columns  [0x1df+0xd]
+    ▾ Record 16 — 19 bytes of coded columns  [0x1ec+0x14]
+        Length: 19  [0x1ec+0x1]
+        Coded columns  [0x1ed+0x13]
+    ▾ Record 17 — 14 bytes of coded columns  [0x200+0xf]
+        Length: 14  [0x200+0x1]
+        Coded columns  [0x201+0xe]
+    ▾ Record 18 — 16 bytes of coded columns  [0x20f+0x11]
+        Length: 16  [0x20f+0x1]
+        Coded columns  [0x210+0x10]
+    ▾ Record 19 — 13 bytes of coded columns  [0x220+0xe]
+        Length: 13  [0x220+0x1]
+        Coded columns  [0x221+0xd]
+    ▾ Record 20 — 16 bytes of coded columns  [0x22e+0x11]
+        Length: 16  [0x22e+0x1]
+        Coded columns  [0x22f+0x10]
+    ▾ Record 21 — 17 bytes of coded columns  [0x23f+0x12]
+        Length: 17  [0x23f+0x1]
+        Coded columns  [0x240+0x11]
+    ▾ Record 22 — 18 bytes of coded columns  [0x251+0x13]
+        Length: 18  [0x251+0x1]
+        Coded columns  [0x252+0x12]
+    ▾ Record 23 — 11 bytes of coded columns  [0x264+0xc]
+        Length: 11  [0x264+0x1]
+        Coded columns  [0x265+0xb]
+      Padding — 7 bytes  [0x270+0x7]

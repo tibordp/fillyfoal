@@ -7,5 +7,6 @@
 
 pub mod innodb;
 pub mod myd;
+pub mod mypack;
 pub mod redo;
 mod redo108;

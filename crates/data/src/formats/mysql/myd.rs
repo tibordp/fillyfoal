@@ -175,6 +175,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.annotate("MyISAM data file, empty");
         return Ok(());
     }
+    // Opened by its extension, a file myisampack compressed.
+    let head = cx.read_avail(file.sub(0, 8)).await?;
+    if super::mypack::is_packed(&head) {
+        let _ = cx.hand_off(&input, &super::mypack::FORMAT);
+        return super::mypack::dissect(cx, input).await;
+    }
     if is_dynamic(&cx, file).await? {
         cx.emit(
             Node::new("Blocks")
