@@ -362,6 +362,11 @@ fn guess_multi(data: &[u8]) -> Option<MultiByte> {
 /// How well `data` reads as `m` (per mille of its non-ASCII characters
 /// that are common ones), or `None` if it does not.
 fn multi_score(m: MultiByte, data: &[u8]) -> Option<u64> {
+    if m == MultiByte::Big5Hkscs {
+        // Named by labels only: unlabelled Big5 is guessed as code page
+        // 950, which it shares its frequent characters with.
+        return None;
+    }
     let in_range = |code: u16, lead: (u8, u8), trail: (u8, u8)| {
         let [l, t] = code.to_be_bytes();
         (lead.0..=lead.1).contains(&l) && (trail.0..=trail.1).contains(&t)
@@ -407,7 +412,7 @@ fn multi_score(m: MultiByte, data: &[u8]) -> Option<u64> {
                     in_range(code, (0xb0, 0xd7), (0xa1, 0xfe))
                         || in_range(code, (0xa1, 0xa3), (0xa1, 0xfe))
                 }
-                MultiByte::Cp950 => {
+                MultiByte::Cp950 | MultiByte::Big5Hkscs => {
                     (0xa140..=0xa3bf).contains(&code) || (0xa440..=0xc67e).contains(&code)
                 }
                 MultiByte::Cp949 => {
@@ -445,7 +450,7 @@ fn multi_score(m: MultiByte, data: &[u8]) -> Option<u64> {
     let plausible = match m {
         MultiByte::Cp932 | MultiByte::EucJp => kana.saturating_mul(10) >= chars,
         MultiByte::Cp949 => hangul.saturating_mul(2) >= chars && spaced_out,
-        MultiByte::Cp936 | MultiByte::Cp950 => !spaced_out,
+        MultiByte::Cp936 | MultiByte::Cp950 | MultiByte::Big5Hkscs => !spaced_out,
     };
     plausible.then(|| common.saturating_mul(1000).checked_div(chars).unwrap_or(0))
 }

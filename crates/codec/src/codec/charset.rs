@@ -1,5 +1,5 @@
 //! Character sets: single-byte code pages and the double-byte East Asian
-//! code pages ([`MultiByte`]: Shift_JIS, GBK, EUC-KR/UHC, Big5, EUC-JP) decoded to
+//! code pages ([`MultiByte`]: Shift_JIS, GBK, EUC-KR/UHC, Big5, Big5-HKSCS, EUC-JP) decoded to
 //! text, and the lookup of charset names (`charset=` in MIME, `encoding=`
 //! in XML, `<meta charset>`) by the labels of the WHATWG Encoding Standard.
 //!
@@ -394,8 +394,13 @@ const LABELS: &[(Label, &[&str])] = {
         ),
         (U("gb18030"), &["gb18030"]),
         (
-            M(Cp950),
+            M(Big5Hkscs),
             &["big5", "big5-hkscs", "cn-big5", "csbig5", "x-x-big5"],
+        ),
+        // Not WHATWG labels: Windows' Big5, without HKSCS.
+        (
+            M(Cp950),
+            &["cp950", "ms950", "windows-950", "x-windows-950"],
         ),
         (M(EucJp), &["cseucpkdfmtjapanese", "euc-jp", "x-euc-jp"]),
         (U("ISO-2022-JP"), &["csiso2022jp", "iso-2022-jp"]),
@@ -483,10 +488,8 @@ const ALIASES: &[(&str, &str)] = &[
     ("ms949", "euc-kr"),
     ("uhc", "euc-kr"),
     ("euckr", "euc-kr"),
-    ("cp950", "big5"),
-    ("windows-950", "big5"),
-    ("ms950", "big5"),
-    ("x-windows-950", "big5"),
+    // CPython's codec name, which its email package writes in headers.
+    ("big5hkscs", "big5-hkscs"),
 ];
 
 /// The encoding a charset label names (ASCII case-insensitive, surrounding
@@ -537,7 +540,12 @@ mod tests {
         assert_eq!(lookup("Shift_JIS"), Some(Label::Multi(MultiByte::Cp932)));
         assert_eq!(lookup("windows-949"), Some(Label::Multi(MultiByte::Cp949)));
         assert_eq!(lookup("cp936"), Some(Label::Multi(MultiByte::Cp936)));
-        assert_eq!(lookup("big5-hkscs"), Some(Label::Multi(MultiByte::Cp950)));
+        assert_eq!(
+            lookup("big5-hkscs"),
+            Some(Label::Multi(MultiByte::Big5Hkscs))
+        );
+        assert_eq!(lookup("big5"), Some(Label::Multi(MultiByte::Big5Hkscs)));
+        assert_eq!(lookup("cp950"), Some(Label::Multi(MultiByte::Cp950)));
         assert_eq!(lookup("euc-jp"), Some(Label::Multi(MultiByte::EucJp)));
         assert_eq!(lookup("latin-1"), Some(Label::Single(Charset::Windows1252)));
         assert_eq!(lookup("ibm437"), Some(Label::Single(Charset::Cp437)));

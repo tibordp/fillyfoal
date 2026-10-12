@@ -281,6 +281,7 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `asset-catalog/actool.car` | Xcode 26.6 actool (CoreUI 975, CoreThemeDefinition 653.4) | reproduced byte-for-byte by `sh tests/data/asset-catalog/make.sh` (`--platform macosx --minimum-deployment-target 14.0`): an image set (1x/2x PNGs from `png.py`), a color set with a dark appearance and a data set; renditions, keys, TLVs, colour components, facets and appearances checked against `xcrun assetutil --info` |
 | `bplist/keyed-archive.plist` | CPython plistlib | reproduced byte-for-byte: `plistlib.dumps(plistlib.loads(data), fmt=FMT_BINARY)`; the NSKeyedArchiver structure inside was assembled by hand |
 | `eml/charsets.eml` | CPython email package | `email.mime` generator output (`===============N==` boundaries, header order); the encoded words in the headers were chosen by us |
+| `eml/big5-hkscs.eml` | CPython 3.13.13 email package and `big5hkscs` codec | reproduced byte for byte by `uv run --python 3.13 python3 -I tests/data/eml/big5_hkscs.py OUT.eml`: a Big5-HKSCS subject and body with characters code page 950 lacks (U+2010C, U+00CA U+0304) |
 
 ## Libraries
 
