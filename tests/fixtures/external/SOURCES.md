@@ -935,3 +935,8 @@ Stored whole as `.raw.zst` (zstd -19).
 ## Robotics recordings
 | `mcap/zstd.mcap` | Python `mcap` 1.2.2 `Writer` (zstandard 0.25.0) | `uv run --with mcap==1.2.2 --with zstandard==0.25.0 --with lz4==4.4.5 python3 -I tests/data/mcap/make.py OUTDIR`; reproduced byte-for-byte; one zstd chunk with a schema, two channels and nine JSON messages, then the summary section |
 | `mcap/lz4.mcap` | Python `mcap` 1.2.2 `Writer` (lz4 4.4.5) | same script; the same records in one LZ4-frame chunk |
+## Documents, e-books and printer rasters (Debian bookworm tools in Docker)
+| `mobi/calibre-kf8.azw3` | calibre 6.13 (Debian bookworm) | `sh tests/data/mobi/calibre-kf8.sh OUTDIR`: `ebook-convert book.txt x.azw3` on ~3 KB of generated sentences (KF8 only, MOBI header version 8); calibre records the conversion time and a random UUID, so a re-run differs in those bytes |
+| `mobi/calibre-both.mobi` | calibre 6.13 | same script, `--mobi-file-type both`: MOBI 6, a BOUNDARY record, then the KF8 half (EXTH 121 = 6); not byte-reproducible (time, UUID) |
+| `lrf/calibre.lrf` | calibre 6.13 | same script, `ebook-convert book.txt x.lrf`; not byte-reproducible (time, UUID) |
+| `palm-pdb/calibre-ereader.pdb` | calibre 6.13 | same script, `--format ereader` (calibre's zTXT writer fails on Python 3); not byte-reproducible (time) |

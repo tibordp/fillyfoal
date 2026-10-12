@@ -1,0 +1,38 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ calibre-ereader.pdb — eReader e-book: "Fillyfoal-Sample"  [0x0+0x2c2]
+  ▾ Database header  [0x0+0x4e]
+      Name: "Fillyfoal-Sample"  [0x0+0x20]
+      Attributes: 0x0  [0x20+0x2]
+      Version: 0  [0x22+0x2]
+      Creation date: 2026-10-11 23:29:47 UTC  [0x24+0x4]
+      Modification date: 2026-10-11 23:29:47 UTC  [0x28+0x4]
+      Last backup date: 0 — not set  [0x2c+0x4]
+      Modification number: 0  [0x30+0x4]
+      App info offset: 0x0  [0x34+0x4]
+      Sort info offset: 0x0  [0x38+0x4]
+      Type: "PNRd"  [0x3c+0x4]
+      Creator: "PPrs"  [0x40+0x4]
+      Unique ID seed: 6  [0x44+0x4]
+      Next record list: 0  [0x48+0x4]
+      Number of records: 6  [0x4c+0x2]
+  ▾ Records — 6 records  [0x4e+0x30]
+    ▾ Record 0 — 132 bytes  [0x80+0x84]
+        Data  [0x80+0x84]
+    ▾ Record 1 — 384 bytes  [0x104+0x180]
+        Data  [0x104+0x180]
+    ▾ Record 2 — 19 bytes  [0x284+0x13]
+        Data  [0x284+0x13]
+    ▾ Record 3 — 30 bytes  [0x297+0x1e]
+        Data  [0x297+0x1e]
+    ▾ Record 4 — UTF-8 text, CR line endings, 3 lines  [0x2b5+0x4]
+        Encoding: "UTF-8"
+        Line endings: "CR" — 0 LF, 0 CRLF, 2 CR
+      ▾ Lines — 3 lines  [0x2b5+0x4]
+          Line 1: ""  [0x2b5+0x0]
+          Line 2: "I"  [0x2b6+0x1]
+          Line 3: "I"  [0x2b8+0x1]
+    ▾ Record 5 — 9 bytes  [0x2b9+0x9]
+        Data  [0x2b9+0x9]
