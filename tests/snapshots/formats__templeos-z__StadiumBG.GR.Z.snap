@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ StadiumBG.GR.Z — TempleOS compressed file (stored), 4.6 KiB → 4.6 KiB  [0x0+0x1273]
+  ▾ Header  [0x0+0x11]
+      compressed_size: 4723 — 4.6 KiB  [0x0+0x8]
+      expanded_size: 4706 — 4.6 KiB  [0x8+0x8]
+      compression_type: CT_NONE (0x1)  [0x10+0x1]
+  ▾ Expanded — 0x1262 bytes decompressed  [0x0+0x1273]
+      Data  [#1:0x0+0x1262]
+    Stored data  [0x11+0x1262]

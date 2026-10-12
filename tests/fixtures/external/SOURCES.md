@@ -1296,3 +1296,24 @@ storage (`.raw.zst`).
 | `mdraid/r5-a.img.raw.zst` | as above | same script: first member of a three-disk RAID5, metadata 1.2, left-symmetric, 512 KiB chunks |
 | `android-super/super-avb.img.raw.zst` | AOSP lpmake (system/extras `partition_tools` fc2494a2abd7ab21774d03deb09c1362bbb0bba8, system/core `fs_mgr/liblp` a3b721a32242006b59cb12bd62c9133632af3a2d, built by `build-lptools.sh` against Ubuntu's android-libbase 34.0.5), AOSP avbtool 1.4.0 (platform/external/avb c5066a96caa7bf4150c0a8cc8cc14ab81733fdc7, MIT; fetched into /tmp, not committed), OpenSSL 3.5.5 | `make-super.sh`: a 4 MiB super device with two 8 KiB metadata slots, group `main` with `system` (48 KiB of filler with an AVB hashtree footer, no FEC, in 128 KiB) and `vendor` (48 KiB of filler with an AVB hash footer in 128 KiB), then `avbtool add_hash_footer` over the whole image in a 5 MiB partition `super`, signed SHA256_RSA2048 with a throwaway key; checked against `lpdump` and `avbtool info_image`. The key is new per run, so key and signature bytes differ between runs |
 | `android-super/super-ab.img.raw.zst` | AOSP lpmake (as above) | same script: three metadata slots, groups `main_a`/`main_b`, `system_a`/`vendor_a` with the images above and empty `system_b`/`vendor_b`; no footer; reproduced byte-for-byte; checked against `lpdump` |
+
+## TempleOS V5.03 distribution ISO: `.Z` files
+
+Files copied unchanged out of the official TempleOS V5.03 ISO
+(`TempleOS.ISO`, 17,350,656 bytes, SHA-256
+`5d0fc944e5d89c155c0fc17c148646715bc1db6fa5750c0b913772cfec19ba26`, from
+<https://web.archive.org/web/2017id_/http://www.templeos.org/Downloads/TempleOS.ISO>)
+with `tests/data/redsea/extract.py`, which walks the RedSea file system
+inside it. Written by TempleOS's own `CompressBuf` (`Kernel/Compress.HC`)
+when the distribution was built. Public domain (TempleOS). For each,
+`tests/data/templeos-z/` holds what TOSZ (`Linux/TOSZ.CPP` from the same
+source tree, built with the host `c++`) expands it to; the codec's tests
+check those byte for byte, and all 645 `.Z` files of the ISO were checked
+the same way locally (`TEMPLEOS_Z_DIRS`).
+
+| Fixture | Path in the ISO | Evidence |
+| --- | --- | --- |
+| `templeos-z/DateTime.HC.Z` | `/Demo/DateTime.HC.Z` | `CT_7_BIT`, 210 bytes |
+| `templeos-z/FileLowLevel.DD.Z` | `/Doc/FileLowLevel.DD.Z` | `CT_8_BIT` (DolDoc with bytes above 0x7f) |
+| `templeos-z/FileSysRedSea.HC.Z` | `/Kernel/BlkDev/FileSysRedSea.HC.Z` | `CT_7_BIT`, long enough that string slots are recycled at 12 bits |
+| `templeos-z/StadiumBG.GR.Z` | `/Demo/Games/Stadium/StadiumBG.GR.Z` | `CT_NONE` (stored: LZW did not shrink it) |

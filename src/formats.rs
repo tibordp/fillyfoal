@@ -973,6 +973,9 @@ pub static FORMATS: &[&Format] = &[
     &compression::lz4::LEGACY,
     #[cfg(feature = "archive")]
     &compression::lz4::SNAPPY,
+    // No magic, but an exact 64-bit length; before Unix compress.
+    #[cfg(feature = "archive")]
+    &compression::templeos::FORMAT,
     #[cfg(feature = "archive")]
     &compression::compress::COMPRESS,
     #[cfg(feature = "archive")]

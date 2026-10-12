@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ FileLowLevel.DD.Z — TempleOS compressed file (LZW, 8-bit characters), 339 bytes → 554 bytes  [0x0+0x153]
+  ▾ Header  [0x0+0x11]
+      compressed_size: 339 — 339 bytes  [0x0+0x8]
+      expanded_size: 554 — 554 bytes  [0x8+0x8]
+      compression_type: CT_8_BIT (0x3)  [0x10+0x1]
+  ▾ Expanded — 0x22a bytes decompressed  [0x0+0x153]
+      Data  [#1:0x0+0x22a]
+    Compressed data  [0x11+0x142]
