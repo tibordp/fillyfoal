@@ -10,7 +10,7 @@ use crate::node::Node;
 use crate::span::Span;
 
 use super::decode::preview;
-use super::encoding::prepare;
+use super::encoding::prepare_resuming;
 use super::scan::{LineBuf, Lines};
 use super::{plural, probe, text_node};
 
@@ -209,10 +209,29 @@ enum Line {
     Other,
 }
 
-/// Walks a section: its own blocks, then its subsections.
+/// A resume mark in a section walk, taken where no block is pending: the
+/// position and number of the next line, the closing marker of an open
+/// fence, and the open subsection (start, level, title).
+type Mark = (u64, u64, Option<&'static [u8]>, Option<(u64, u8, String)>);
+
+/// Walks a subsection (see [`walk`]).
 async fn section(cx: Cx, s: Section) -> Result<()> {
-    let mut lines = Lines::new(&cx, s.span);
-    if s.level > 0 {
+    let resumed = cx.resume::<Mark>();
+    walk(&cx, &s, resumed).await
+}
+
+/// Walks a section: its own blocks, then its subsections; from a resume
+/// mark if given.
+async fn walk(cx: &Cx, s: &Section, resumed: Option<Mark>) -> Result<()> {
+    let mut lines = Lines::new(cx, s.span);
+    let mut in_fence: Option<&'static [u8]> = None;
+    // An open subsection: (start, level, title).
+    let mut sub: Option<(u64, u8, String)> = None;
+    if let Some((pos, number, fence, open)) = resumed {
+        lines.seek(pos, number);
+        in_fence = fence;
+        sub = open;
+    } else if s.level > 0 {
         // The heading itself (and a setext underline).
         let first = lines.next().await?;
         if first.as_ref().is_some_and(|f| atx(&f.bytes).is_none())
@@ -228,11 +247,13 @@ async fn section(cx: Cx, s: Section) -> Result<()> {
     // Content bytes kept in `block`; past BLOCK_CAP only the spans of
     // further lines are kept.
     let mut kept = 0usize;
-    let mut in_fence: Option<&'static [u8]> = None;
-    // An open subsection: (start, level, title).
-    let mut sub: Option<(u64, u8, String)> = None;
     loop {
         let before = lines.pos();
+        if block.is_empty() {
+            // Nothing pending: the next child comes from this state.
+            let number = lines.number();
+            cx.mark(|| (before, number, in_fence, sub.clone()));
+        }
         let Some(line) = lines.next().await? else {
             break;
         };
@@ -269,9 +290,9 @@ async fn section(cx: Cx, s: Section) -> Result<()> {
             let closes = sub.as_ref().is_some_and(|(_, l, _)| level <= *l);
             if sub.is_none() || closes {
                 if let Some((start, l, title)) = sub.take() {
-                    push_section(&cx, &s, start, before, l, &title).await;
+                    push_section(cx, s, start, before, l, &title).await;
                 } else {
-                    flush(&cx, &mut block).await;
+                    flush(cx, &mut block).await;
                 }
                 let title = if atx(&line.bytes).is_some() {
                     heading_text(&line)
@@ -291,7 +312,7 @@ async fn section(cx: Cx, s: Section) -> Result<()> {
         if kind == Line::Blank && in_fence.is_none() && !block.is_empty() {
             let fenced = block.first().is_some_and(|l| fence(&l.bytes).is_some());
             if !fenced {
-                flush(&cx, &mut block).await;
+                flush(cx, &mut block).await;
                 kept = 0;
                 continue;
             }
@@ -308,17 +329,17 @@ async fn section(cx: Cx, s: Section) -> Result<()> {
             && block.first().is_some_and(|l| fence(&l.bytes).is_some())
             && block.last().is_some_and(|l| fence(&l.bytes).is_some())
         {
-            flush(&cx, &mut block).await;
+            flush(cx, &mut block).await;
             kept = 0;
         }
         if block.len() > 10_000 {
-            flush(&cx, &mut block).await;
+            flush(cx, &mut block).await;
             kept = 0;
         }
     }
-    flush(&cx, &mut block).await;
+    flush(cx, &mut block).await;
     if let Some((start, l, title)) = sub.take() {
-        push_section(&cx, &s, start, lines.pos(), l, &title).await;
+        push_section(cx, s, start, lines.pos(), l, &title).await;
     }
     Ok(())
 }
@@ -543,7 +564,9 @@ async fn table(cx: Cx, span: Span) -> Result<()> {
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
-    let prepared = prepare(&cx, input).await?;
+    // A resumed run continues the top-level walk (the byte order mark and
+    // front matter came before it).
+    let (prepared, resumed) = prepare_resuming::<Mark>(&cx, input).await?;
     let inner = prepared.input(input);
     let span = prepared.span;
     let mut lines = Lines::new(&cx, span);
@@ -560,10 +583,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     } else {
                         &super::toml::FORMAT
                     };
-                    cx.emit(
-                        embedded_as("Front matter", inner.nested(content), format)
-                            .summary(if marker == b"---" { "YAML" } else { "TOML" }),
-                    );
+                    if resumed.is_none() {
+                        cx.emit(
+                            embedded_as("Front matter", inner.nested(content), format)
+                                .summary(if marker == b"---" { "YAML" } else { "TOML" }),
+                        );
+                    }
                     body = line.next;
                     break;
                 }
@@ -589,13 +614,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         );
     }
     cx.annotate(summary);
-    section(
-        cx,
-        Section {
-            input: inner,
-            span: span.tail(body),
-            level: 0,
-        },
-    )
-    .await
+    let top = Section {
+        input: inner,
+        span: span.tail(body),
+        level: 0,
+    };
+    walk(&cx, &top, resumed).await
 }

@@ -1,29 +1,35 @@
 //! Double-byte East Asian code pages: Windows code pages 932 (Shift_JIS),
 //! 936 (GBK), 949 (Unified Hangul Code, a superset of EUC-KR) and 950
-//! (Big5), the encodings browsers decode these labels as; and EUC-JP, whose
+//! (Big5); Big5-HKSCS, which WHATWG's `big5` label names; and EUC-JP, whose
 //! JIS X 0208 pairs are looked up in the code page 932 table (the WHATWG
 //! decoder uses one JIS X 0208 index for both). EUC-JP's three-byte JIS X
 //! 0212 sequences (`8F xx xx`) are not decoded (U+FFFD).
 //!
-//! WHATWG's `big5` is Big5-HKSCS; it is decoded here as code page 950, so
-//! HKSCS characters (4,912 pairs where CPython's `big5hkscs` differs from
-//! `cp950`) come out as U+FFFD. Adding them needs a different table
-//! layout: 1,693 of them are outside the BMP and 4 are two code points,
-//! while a table entry here is one `u16`.
+//! Big5-HKSCS is CPython's `big5hkscs` (HKSCS-2004 over Big5) plus the
+//! euro sign at A3E1. It differs from code page 950 in 4,911 pairs: 4,657
+//! HKSCS pairs code page 950 leaves unmapped (1,693 of them outside the
+//! BMP, and 4 that decode to a letter and a combining accent, e.g. 8862 =
+//! U+00CA U+0304), and 254 that map differently (C6A1..C7FC, a few
+//! punctuation marks in A1xx and A2xx, F9FE).
 //!
-//! The tables (`cp9xx.bin`) are generated from CPython's codecs by
-//! `tests/data/charset/multibyte.py`, which documents their layout and
-//! checks them; they are read in place (a binary search over a few hundred
-//! segments per lookup), nothing is built at run time. Malformed input is
+//! The tables (`cp9xx.bin`, `big5hkscs.bin`) are generated from CPython's
+//! codecs by `tests/data/charset/multibyte.py`, which documents their
+//! layout and checks them; they are read in place (a binary search over a
+//! few hundred segments per lookup), nothing is built at run time. Malformed input is
 //! handled as in the WHATWG Encoding Standard: an invalid sequence becomes
 //! U+FFFD, and an ASCII byte after a lead byte is not swallowed.
 
-use crate::bytes::u16_le;
+use crate::bytes::{u16_le, u32_le};
 
 static CP932: &[u8] = include_bytes!("cp932.bin");
 static CP936: &[u8] = include_bytes!("cp936.bin");
 static CP949: &[u8] = include_bytes!("cp949.bin");
 static CP950: &[u8] = include_bytes!("cp950.bin");
+/// The one wide table: u32 entries (see the generator).
+static BIG5_HKSCS: &[u8] = include_bytes!("big5hkscs.bin");
+
+/// A decoded pair: one code point, or two.
+type Chars = (char, Option<char>);
 
 /// Offsets in a table file.
 const SINGLE: usize = 4;
@@ -41,6 +47,9 @@ pub enum MultiByte {
     Cp949,
     /// Big5 (code page 950).
     Cp950,
+    /// Big5-HKSCS (HKSCS-2004 over Big5, as CPython's `big5hkscs`): what
+    /// the WHATWG `big5` label names.
+    Big5Hkscs,
     /// EUC-JP: JIS X 0208 pairs (`A1..FE A1..FE`) and half-width katakana
     /// (`8E A1..DF`).
     EucJp,
@@ -52,6 +61,7 @@ impl MultiByte {
         MultiByte::Cp936,
         MultiByte::Cp949,
         MultiByte::Cp950,
+        MultiByte::Big5Hkscs,
         MultiByte::EucJp,
     ];
 
@@ -62,6 +72,7 @@ impl MultiByte {
             MultiByte::Cp936 => "GBK",
             MultiByte::Cp949 => "EUC-KR",
             MultiByte::Cp950 => "Big5",
+            MultiByte::Big5Hkscs => "Big5-HKSCS",
             MultiByte::EucJp => "EUC-JP",
         }
     }
@@ -74,6 +85,7 @@ impl MultiByte {
             MultiByte::Cp936 => "from GBK",
             MultiByte::Cp949 => "from EUC-KR",
             MultiByte::Cp950 => "from Big5",
+            MultiByte::Big5Hkscs => "from Big5-HKSCS",
             MultiByte::EucJp => "from EUC-JP",
         }
     }
@@ -84,6 +96,7 @@ impl MultiByte {
             MultiByte::Cp936 => CP936,
             MultiByte::Cp949 => CP949,
             MultiByte::Cp950 => CP950,
+            MultiByte::Big5Hkscs => BIG5_HKSCS,
         }
     }
 
@@ -102,11 +115,18 @@ impl MultiByte {
         b >= 0x80 && self.single(b) == LEAD
     }
 
-    /// The character of the pair `lead`, `trail`, if mapped.
+    /// The character of the pair `lead`, `trail`, if mapped. A pair that
+    /// decodes to two code points (four in Big5-HKSCS) gives the first.
     pub fn pair(self, lead: u8, trail: u8) -> Option<char> {
+        self.pair_chars(lead, trail).map(|(c, _)| c)
+    }
+
+    /// The code point(s) of the pair `lead`, `trail`, if mapped.
+    fn pair_chars(self, lead: u8, trail: u8) -> Option<Chars> {
         if self == MultiByte::EucJp {
-            return euc_jp_pair(lead, trail);
+            return euc_jp_pair(lead, trail).map(|c| (c, None));
         }
+        let wide = self == MultiByte::Big5Hkscs;
         let t = self.table();
         let &[lead_min, lead_max, trail_min, trail_max, ..] = t else {
             return None;
@@ -144,31 +164,53 @@ impl MultiByte {
         if off >= kind_len & 0x3fff {
             return None;
         }
-        let code = match kind_len >> 14 {
-            1 => value.checked_add(off)?,
-            2 => {
-                let data = SEGMENTS
-                    .saturating_add(2)
-                    .saturating_add(count.saturating_mul(6));
-                let at = usize::from(value)
-                    .saturating_add(usize::from(off))
-                    .saturating_mul(2);
-                u16_le(t, data.saturating_add(at))?
+        let data = SEGMENTS
+            .saturating_add(2)
+            .saturating_add(count.saturating_mul(6));
+        // A data entry: u16 in the narrow tables, u32 in the wide one.
+        let entry = |i: usize| -> Option<u32> {
+            if wide {
+                u32_le(t, data.saturating_add(i.saturating_mul(4)))
+            } else {
+                u16_le(t, data.saturating_add(i.saturating_mul(2))).map(u32::from)
             }
+        };
+        let code = match kind_len >> 14 {
+            // A run from `value` (narrow) or from data[value] (wide).
+            1 if wide => entry(usize::from(value))?.checked_add(u32::from(off))?,
+            1 => u32::from(value.checked_add(off)?),
+            2 => entry(usize::from(value).saturating_add(usize::from(off)))?,
             _ => return None,
         };
-        (code != 0xffff)
-            .then(|| char::from_u32(u32::from(code)))
-            .flatten()
+        if code == if wide { u32::MAX } else { 0xffff } {
+            return None;
+        }
+        if wide && code & 0x8000_0000 != 0 {
+            // Two code points, stored after the entries.
+            let i = usize::try_from(code & 0x7fff_ffff).ok()?;
+            let first = char::from_u32(entry(i)?)?;
+            let second = char::from_u32(entry(i.saturating_add(1))?)?;
+            return Some((first, Some(second)));
+        }
+        char::from_u32(code).map(|c| (c, None))
     }
 
     /// The character at the start of `bytes` (`None` for an invalid
     /// sequence) and how many bytes it takes; `None` for empty input or a
     /// lead byte at the very end (the rest of the character may follow).
+    /// Of a pair that decodes to two code points (four in Big5-HKSCS),
+    /// only the first; [`MultiByte::decode_partial`] gives both.
     pub fn next(self, bytes: &[u8]) -> Option<(Option<char>, usize)> {
+        self.next_chars(bytes)
+            .map(|(c, n)| (c.map(|(first, _)| first), n))
+    }
+
+    /// [`MultiByte::next`] with the second code point of a pair that has
+    /// two.
+    fn next_chars(self, bytes: &[u8]) -> Option<(Option<Chars>, usize)> {
         let &b = bytes.first()?;
         if b < 0x80 {
-            return Some((Some(char::from(b)), 1));
+            return Some((Some((char::from(b), None)), 1));
         }
         if self == MultiByte::EucJp && b == 0x8f {
             // JIS X 0212: three bytes, not decoded.
@@ -185,7 +227,7 @@ impl MultiByte {
             }
             let &trail = bytes.get(1)?;
             return Some(match euc_jp_pair(b, trail) {
-                Some(c) => (Some(c), 2),
+                Some(c) => (Some((c, None)), 2),
                 None if trail < 0x80 => (None, 1),
                 None => (None, 2),
             });
@@ -193,14 +235,19 @@ impl MultiByte {
         match self.single(b) {
             LEAD => {
                 let &trail = bytes.get(1)?;
-                Some(match self.pair(b, trail) {
+                Some(match self.pair_chars(b, trail) {
                     Some(c) => (Some(c), 2),
                     // An ASCII byte after a lead stands for itself.
                     None if trail < 0x80 => (None, 1),
                     None => (None, 2),
                 })
             }
-            u => Some((char::from_u32(u32::from(u)).filter(|_| u < 0xfffe), 1)),
+            u => Some((
+                char::from_u32(u32::from(u))
+                    .filter(|_| u < 0xfffe)
+                    .map(|c| (c, None)),
+                1,
+            )),
         }
     }
 
@@ -209,8 +256,10 @@ impl MultiByte {
     /// chunk gives the same text as decoding everything at once.
     pub fn decode_partial(self, bytes: &[u8], out: &mut String) -> usize {
         let mut pos = 0usize;
-        while let Some((c, n)) = self.next(bytes.get(pos..).unwrap_or_default()) {
-            out.push(c.unwrap_or(char::REPLACEMENT_CHARACTER));
+        while let Some((c, n)) = self.next_chars(bytes.get(pos..).unwrap_or_default()) {
+            let (first, second) = c.unwrap_or((char::REPLACEMENT_CHARACTER, None));
+            out.push(first);
+            out.extend(second);
             pos = pos.saturating_add(n);
         }
         pos
@@ -315,6 +364,26 @@ mod tests {
         assert_eq!(euc.decode(b"\x8f\xb0"), "\u{fffd}");
     }
 
+    /// Big5-HKSCS against CPython 3.13's `big5hkscs`: a BMP character, one
+    /// outside it (8845 = U+2010C), a pair that decodes to two code points, a pair
+    /// that differs from code page 950 (C6A1), and the euro sign it adds.
+    #[test]
+    fn big5_hkscs_decodes_like_python() {
+        let hk = MultiByte::Big5Hkscs;
+        assert_eq!(
+            hk.decode(&hex("a4a488628845c6a1a3e1")),
+            "中\u{ca}\u{304}\u{2010c}①€"
+        );
+        assert_eq!(hk.pair(0x88, 0x62), Some('\u{ca}'));
+        assert_eq!(hk.next(&hex("8862")), Some((Some('\u{ca}'), 2)));
+        // Code page 950 leaves the HKSCS pairs unmapped.
+        assert_eq!(MultiByte::Cp950.decode(&hex("8862")), "\u{fffd}b");
+        // A lead at the end waits; an ASCII byte after a lead is kept.
+        let mut out = String::new();
+        assert_eq!(hk.decode_partial(&hex("886288"), &mut out), 2);
+        assert_eq!(hk.decode(b"\x88 "), "\u{fffd} ");
+    }
+
     #[test]
     fn malformed_input_follows_whatwg() {
         let sjis = MultiByte::Cp932;
@@ -337,6 +406,7 @@ mod tests {
             (MultiByte::Cp936, 21791),
             (MultiByte::Cp949, 17048),
             (MultiByte::Cp950, 13752),
+            (MultiByte::Big5Hkscs, 18403),
         ] {
             let mut n = 0;
             for lead in 0x80..=0xffu8 {

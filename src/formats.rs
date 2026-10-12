@@ -100,6 +100,10 @@ pub static DEEP: &[&DeepProbe] = &[
     &publishing::adobe::ACT_DEEP,
     #[cfg(feature = "system")]
     &forensics::windows::USN_DEEP,
+    #[cfg(feature = "science")]
+    &geo::survey::SHX_DEEP,
+    #[cfg(feature = "science")]
+    &geo::survey::SHP_DEEP,
 ];
 
 /// Every format.

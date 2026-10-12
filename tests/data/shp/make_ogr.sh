@@ -13,6 +13,8 @@
 #   an unset M ("no data").
 # - multipointz.shp: SHPT=MULTIPOINTZ; one record of three points.
 # - point.shp: plain points and a null shape.
+# - empty.shp/.shx: SHPT=POINT with no features; the two files are the
+#   same 100-byte header, told apart only by their names.
 set -e
 
 cat > polygonz.csv <<'EOF'
@@ -40,5 +42,7 @@ ogr2ogr -oo KEEP_GEOM_COLUMNS=NO -f "ESRI Shapefile" -lco SHPT=POLYGONZ polygonz
 ogr2ogr -oo KEEP_GEOM_COLUMNS=NO -f "ESRI Shapefile" -lco SHPT=ARCM arcm.shp arcm.csv
 ogr2ogr -oo KEEP_GEOM_COLUMNS=NO -f "ESRI Shapefile" -lco SHPT=MULTIPOINTZ multipointz.shp multipointz.csv
 ogr2ogr -oo KEEP_GEOM_COLUMNS=NO -f "ESRI Shapefile" -lco SHPT=POINT point.shp point.csv
-for f in polygonz arcm multipointz point; do ogrinfo -al "$f.shp"; done > ogrinfo.txt
+printf 'id,WKT\n' > empty.csv
+ogr2ogr -oo KEEP_GEOM_COLUMNS=NO -f "ESRI Shapefile" -lco SHPT=POINT empty.shp empty.csv
+for f in polygonz arcm multipointz point empty; do ogrinfo -al "$f.shp"; done > ogrinfo.txt
 rm -f ./*.csv
