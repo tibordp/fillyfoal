@@ -24,6 +24,10 @@ pub enum Make {
     Pentax,
     Samsung,
     Leica,
+    /// "Leica Camera AG" exactly: Leica's own models (M8, M9, M Monochrom,
+    /// S2, M10 ...), whose notes ExifTool tells from Panasonic-made ones
+    /// (Make "LEICA") by this spelling.
+    LeicaCamera,
     Casio,
     Ricoh,
     Sigma,
@@ -33,6 +37,9 @@ pub enum Make {
 }
 
 pub fn make_of(make: &str) -> Make {
+    if make.trim().starts_with("Leica Camera AG") {
+        return Make::LeicaCamera;
+    }
     let m = make.trim().to_ascii_uppercase();
     let starts = |p: &str| m.starts_with(p);
     if starts("CANON") {
@@ -177,6 +184,9 @@ pub enum Base {
     Outer,
     /// A position within the note (its own TIFF header, or its start).
     Note(u64),
+    /// The start of the file the Exif stream is embedded in (Leica M
+    /// Monochrom Typ 246: absolute file offsets).
+    Absolute,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -222,8 +232,38 @@ fn order(b: &[u8]) -> Option<Endian> {
     }
 }
 
+/// The smallest offset of a value stored outside the IFD at `ifd` in
+/// `head` (of the entries `head` holds), which ExifTool's FixLeicaBase
+/// looks at to choose a note's offset base.
+fn value_start(head: &[u8], ifd: usize, e: Endian) -> Option<u64> {
+    let count = u16::decode(head.get(ifd..ifd.checked_add(2)?)?, e)?;
+    let mut min: Option<u64> = None;
+    for i in 0..usize::from(count) {
+        let at = ifd.checked_add(2)?.checked_add(i.checked_mul(12)?)?;
+        let Some(entry) = head.get(at..at.saturating_add(12)) else {
+            break;
+        };
+        let kind = u16::decode(entry.get(2..4)?, e)?;
+        let n = u32::decode(entry.get(4..8)?, e)?;
+        let size = super::type_size(kind).saturating_mul(u64::from(n));
+        if size > 4 {
+            let off = u64::from(u32::decode(entry.get(8..12)?, e)?);
+            min = Some(min.map_or(off, |m| m.min(off)));
+        }
+    }
+    min
+}
+
+/// Where the values of the IFD at `ifd` in `head` start when they follow
+/// it directly, relative to the IFD.
+fn after_ifd(head: &[u8], ifd: usize, e: Endian) -> Option<u64> {
+    let count = u16::decode(head.get(ifd..ifd.checked_add(2)?)?, e)?;
+    Some(u64::from(count).saturating_mul(12).saturating_add(6))
+}
+
 /// Finds the layout of a maker note from its first bytes and the Make.
-pub fn layout(head: &[u8], make: Make, outer: Endian) -> Option<Layout> {
+/// `note_at` is where the note starts relative to the enclosing TIFF header.
+pub fn layout(head: &[u8], make: Make, outer: Endian, note_at: u64) -> Option<Layout> {
     let at = |a: usize, b: usize| head.get(a..b);
     let l = |note: Note,
              label: &'static str,
@@ -332,6 +372,35 @@ pub fn layout(head: &[u8], make: Make, outer: Endian) -> Option<Layout> {
             Some(e),
         );
     }
+    // Leica M8 (MakerNoteLeica2): offsets from the IFD after the header in
+    // JPEGs, from the note's start in DNGs, which ExifTool's FixLeicaBase
+    // tells apart by where the first value lies.
+    if make == Make::LeicaCamera && head.starts_with(b"LEICA\0\0\0") {
+        let e = guess_order(head, 8, outer);
+        let dng = value_start(head, 8, e)
+            .zip(after_ifd(head, 8, e))
+            .is_some_and(|(v, end)| v.checked_sub(end) == Some(8));
+        let base = if dng { Base::Note(0) } else { Base::Note(8) };
+        return l(Note::Leica, "Leica M8", 8, 8, base, Some(e));
+    }
+    // M Monochrom Typ 246 (MakerNoteLeica7): absolute file offsets. The S2
+    // and M (Typ 240), which ExifTool tells apart by Model, write the same
+    // header with Exif offsets when the note is in the Exif block; their
+    // values then follow the IFD.
+    if make == Make::LeicaCamera && head.starts_with(b"LEICA\0\x02\xff") {
+        let e = guess_order(head, 8, outer);
+        let exif = value_start(head, 8, e)
+            .zip(after_ifd(head, 8, e))
+            .is_some_and(|(v, end)| {
+                Some(v) == note_at.checked_add(8).map(|a| a.saturating_add(end))
+            });
+        let (label, base) = if exif {
+            ("Leica S2/M (Typ 240)", Base::Outer)
+        } else {
+            ("Leica M Monochrom (Typ 246)", Base::Absolute)
+        };
+        return l(Note::Leica, label, 8, 8, base, Some(e));
+    }
     if head.starts_with(b"LEICA") {
         let e = guess_order(head, 8, outer);
         return match at(5, 8)? {
@@ -350,7 +419,6 @@ pub fn layout(head: &[u8], make: Make, outer: Endian) -> Option<Layout> {
             }
             [0, 0x08..=0x0a, 0] => l(Note::Leica, "Leica Q/SL/CL", 8, 8, Base::Outer, Some(e)),
             [0, 0x02, 0] => l(Note::Leica, "Leica M10/S", 8, 8, Base::Outer, Some(e)),
-            // The M Monochrom (Typ 246) uses absolute file offsets.
             _ => None,
         };
     }

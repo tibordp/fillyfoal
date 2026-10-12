@@ -362,7 +362,90 @@ fn find<'a>(props: &'a [Prop], name: &str) -> Option<&'a Prop> {
     props.iter().find(|p| p.name == name)
 }
 
-fn summarize(props: &[Prop]) -> String {
+const HDR_GAIN_MAP: &str = "http://ns.adobe.com/hdr-gain-map/1.0/";
+const CONTAINER_ITEM: &str = "http://ns.google.com/photos/1.0/container/item/";
+
+/// The prefix the packet declares for namespace `uri`.
+fn prefix_of<'a>(parsed: &'a Parsed, uri: &str) -> Option<&'a str> {
+    parsed
+        .ns
+        .iter()
+        .find(|(_, u)| u.as_str() == uri)
+        .map(|(p, _)| p.as_str())
+}
+
+/// The value of field `field` of the first structure, at any depth, whose
+/// `key` field is `value` (a Google Container item by its semantic).
+fn struct_field(
+    props: &[Prop],
+    key: &str,
+    value: &str,
+    field: &str,
+    depth: usize,
+) -> Option<String> {
+    if depth > MAX_DEPTH {
+        return None;
+    }
+    if find(props, key).and_then(text_of).as_deref() == Some(value)
+        && let Some(v) = find(props, field).and_then(text_of)
+    {
+        return Some(v);
+    }
+    props.iter().find_map(|p| match &p.value {
+        Val::Struct(inner) | Val::Array(_, inner) => {
+            struct_field(inner, key, value, field, depth.saturating_add(1))
+        }
+        _ => None,
+    })
+}
+
+/// Gain-map metadata as Adobe's hdrgm XMP gives it (Ultra HDR, the variant
+/// before ISO 21496-1): in the gain-map image the gain map's parameters, in
+/// the primary image the version and, from the Google Container directory,
+/// the gain map's length.
+fn gain_map(parsed: &Parsed) -> Option<String> {
+    let hdrgm = prefix_of(parsed, HDR_GAIN_MAP)?;
+    let get = |local: &str| {
+        find(&parsed.props, &format!("{hdrgm}:{local}"))
+            .and_then(text_of)
+            .filter(|t| !t.is_empty())
+    };
+    let version = get("Version").map_or_else(String::new, |v| format!(" {v}"));
+    let mut parts = Vec::new();
+    if let Some(max) = get("GainMapMax") {
+        // Defaults from Adobe's gain map specification.
+        let min = get("GainMapMin").unwrap_or_else(|| "0".to_owned());
+        parts.push(format!("hdrgm{version} gain map: log2 gain {min} to {max}"));
+        if let Some(cap) = get("HDRCapacityMax") {
+            let low = get("HDRCapacityMin").unwrap_or_else(|| "0".to_owned());
+            parts.push(format!("HDR capacity {low} to {cap}"));
+        }
+        if let Some(g) = get("Gamma").filter(|g| g != "1") {
+            parts.push(format!("gamma {g}"));
+        }
+        if get("BaseRenditionIsHDR").is_some_and(|b| b.eq_ignore_ascii_case("true")) {
+            parts.push("HDR base rendition".to_owned());
+        }
+    } else {
+        parts.push(format!("hdrgm{version} primary image"));
+        if let Some(item) = prefix_of(parsed, CONTAINER_ITEM) {
+            let length = struct_field(
+                &parsed.props,
+                &format!("{item}:Semantic"),
+                "GainMap",
+                &format!("{item}:Length"),
+                0,
+            );
+            if let Some(len) = length {
+                parts.push(format!("gain map {len} bytes"));
+            }
+        }
+    }
+    Some(parts.join(", "))
+}
+
+fn summarize(parsed: &Parsed) -> String {
+    let props = &parsed.props;
     let get = |name: &str| {
         find(props, name)
             .and_then(text_of)
@@ -405,6 +488,9 @@ fn summarize(props: &[Prop]) -> String {
     if let Some(tool) = get("xmp:CreatorTool") {
         parts.push(clip(&tool, 60));
     }
+    if let Some(g) = gain_map(parsed) {
+        parts.push(g);
+    }
     let n = props.len();
     let count = if n == 1 {
         "1 property".to_owned()
@@ -420,7 +506,7 @@ fn summarize(props: &[Prop]) -> String {
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let parsed = parse(&cx, input.span).await?;
-    cx.annotate(summarize(&parsed.props));
+    cx.annotate(summarize(&parsed));
     // Group by namespace prefix, in order of first appearance.
     let mut order: Vec<(String, Vec<Prop>)> = Vec::new();
     let mut index: BTreeMap<String, usize> = BTreeMap::new();

@@ -14,6 +14,9 @@
 #                          a Brotli-compressed Exif box (brob) and the last jxlp
 # cjxl-exif.jxl            container (--container=1) with an Exif box ExifTool
 #                          appended
+# cjxl-upsampling-nn.jxl   bare codestream of an already 2x-downsampled image
+#                          with nearest-neighbour upsampling: custom 2x, 4x
+#                          and 8x upsampling weights in CustomTransformData
 set -eu
 root=$(cd "${1:-.}" && pwd)
 work=/tmp/fixtures/image-jxl-make
@@ -39,9 +42,12 @@ cjxl -d 1 anim.gif cjxl-anim-jxlp.jxl --container=1 --quiet
 cjxl rgb.jpg cjxl-jpeg-recon.jxl --lossless_jpeg=1 --quiet
 cjxl -q 90 rgb.png cjxl-exif.jxl --container=1 --quiet
 exiftool -m -q -overwrite_original -Artist=fillyfoal cjxl-exif.jxl
+cjxl -d 1 rgb.png cjxl-upsampling-nn.jxl --resampling=2 --already_downsampled \
+    --upsampling_mode=0 --quiet
 EOF
 docker run --rm -v "$work":/w debian:trixie-slim sh /w/run.sh
 mkdir -p "$root/tests/fixtures/external/jxl"
-for f in cjxl-alpha-lossless cjxl-grey16 cjxl-anim-jxlp cjxl-jpeg-recon cjxl-exif; do
+for f in cjxl-alpha-lossless cjxl-grey16 cjxl-anim-jxlp cjxl-jpeg-recon cjxl-exif \
+    cjxl-upsampling-nn; do
     cp "$work/$f.jxl" "$root/tests/fixtures/external/jxl/"
 done
