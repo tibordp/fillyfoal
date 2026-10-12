@@ -26,6 +26,7 @@ mod rec;
 mod sprm;
 mod thumbs;
 mod vba;
+mod visio;
 mod word;
 
 use std::collections::BTreeSet;
@@ -136,10 +137,46 @@ cfb_format!(
     }
 );
 cfb_format!(
+    VSD,
+    "vsd",
+    "Microsoft Visio 2003-2010 drawing",
+    ["vsd", "vss", "vst", "vsw"],
+    "application/vnd.visio",
+    |h| has_root_names(h, &["VisioDocument"])
+);
+cfb_format!(
+    SOLIDWORKS,
+    "solidworks",
+    "SolidWorks document (2014 and earlier)",
+    ["sldprt", "sldasm", "slddrw"],
+    "application/sldworks",
+    |h| has_root_names(h, &["SwDocContentMgr", "SwDocMgrTempStorage"])
+);
+cfb_format!(
+    INVENTOR,
+    "inventor",
+    "Autodesk Inventor document",
+    ["ipt", "iam", "ipn", "idw"],
+    "application/x-autodesk-inventor",
+    |h| has_root_names(h, &["RSeStorage", "RSeDb"])
+);
+cfb_format!(
+    REVIT,
+    "revit",
+    "Autodesk Revit project or family",
+    ["rvt", "rfa", "rte", "rft"],
+    "application/x-autodesk-revit",
+    |h| {
+        let n = probe_names(h);
+        has_names(&n, &["BasicFileInfo"])
+            && (has_names(&n, &["TransmissionData"]) || has_names(&n, &["Global", "Partitions"]))
+    }
+);
+cfb_format!(
     FORMAT,
     "cfb",
     "OLE2 Compound File",
-    ["ole", "ole2", "cfb", "vsd", "pub", "mpp", "wps", "sldprt"],
+    ["ole", "ole2", "cfb", "pub", "mpp", "wps"],
     "application/x-ole-storage",
     |h| h.starts_with(MAGIC)
 );
@@ -262,6 +299,18 @@ fn probe_names(h: &Head<'_>) -> Vec<String> {
         stack.extend(u32_le(e, 72));
     }
     names
+}
+
+/// Whether the root storage has children with all of `wanted`'s names
+/// (compared ignoring ASCII case, as Windows compares them).
+fn has_root_names(h: &Head<'_>, wanted: &[&str]) -> bool {
+    has_names(&probe_names(h), wanted)
+}
+
+fn has_names(names: &[String], wanted: &[&str]) -> bool {
+    wanted
+        .iter()
+        .all(|w| names.iter().any(|n| n.eq_ignore_ascii_case(w)))
 }
 
 fn probe_root_clsid(h: &Head<'_>) -> Option<[u8; 16]> {

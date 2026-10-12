@@ -698,6 +698,14 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "docs")]
     &cfb::PUBLISHER,
     #[cfg(feature = "docs")]
+    &cfb::VSD,
+    #[cfg(feature = "docs")]
+    &cfb::SOLIDWORKS,
+    #[cfg(feature = "docs")]
+    &cfb::INVENTOR,
+    #[cfg(feature = "docs")]
+    &cfb::REVIT,
+    #[cfg(feature = "docs")]
     &cfb::FORMAT,
     #[cfg(feature = "docs")]
     &cfb::propstore::FORMAT,

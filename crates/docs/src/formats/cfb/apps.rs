@@ -107,6 +107,7 @@ pub async fn application(
         }
     }
     let has = |n: &str| names.iter().any(|(name, _)| name == n);
+    let has_ci = |n: &str| names.iter().any(|(name, _)| name.eq_ignore_ascii_case(n));
     let (kind, context) = if has("WordDocument") {
         // Word 6.0/95 files carry their own class, CLSID_WordDocument6;
         // Word 97 and later use {00020906-...}.
@@ -131,6 +132,28 @@ pub async fn application(
         ("Thumbs.db thumbnail cache", Context::Thumbs)
     } else if has("VisioDocument") {
         ("Visio drawing", Context::Plain)
+    } else if has_ci("SwDocContentMgr") && has_ci("SwDocMgrTempStorage") {
+        ("SolidWorks document", Context::Plain)
+    } else if has_ci("RSeStorage") && has_ci("RSeDb") {
+        // The class of part documents (libmagic's ole2compounddocs).
+        let part = root.clsid.data1 == 0x4d29_b490
+            && root.clsid.data2 == 0x49b2
+            && root.clsid.data3 == 0x11d0
+            && root.clsid.data4 == [0x93, 0xc3, 0x7e, 0x07, 0x06, 0, 0, 0];
+        if part {
+            ("Inventor part", Context::Plain)
+        } else {
+            ("Inventor document", Context::Plain)
+        }
+    } else if has_ci("BasicFileInfo")
+        && (has_ci("TransmissionData") || (has_ci("Global") && has_ci("Partitions")))
+    {
+        // Only family files carry PartAtom.
+        if has_ci("PartAtom") {
+            ("Revit family", Context::Plain)
+        } else {
+            ("Revit project", Context::Plain)
+        }
     } else if has("Quill") {
         ("Publisher document", Context::Plain)
     } else if has("VBA") && has("PROJECT") {
@@ -294,6 +317,11 @@ pub fn label(
         "EncryptionInfo" => Some("encryption parameters and password verifier"),
         "EncryptedPackage" => Some("the encrypted Office Open XML package"),
         "\u{6}DataSpaces" => Some("data space definitions (how the package is transformed)"),
+        "VisioDocument" => Some("Visio document stream"),
+        "BasicFileInfo" => Some("Revit file information (version, build, worksharing, paths)"),
+        "PartAtom" => Some("Revit family types and parameters (Atom XML)"),
+        "TransmissionData" => Some("Revit external reference states"),
+        "RevitPreview4.0" => Some("Revit preview (PNG image)"),
         _ => None,
     };
     if context == Context::Thumbs && !raw.is_empty() && raw.chars().all(|c| c.is_ascii_digit()) {
@@ -342,6 +370,8 @@ pub async fn content(cx: &Cx, state: &StreamState, span: Span) -> Result<()> {
         (Context::Plain, "Current User" | "Pictures" | "EscherStm" | "EscherDelayStm") => {
             super::officeart::walk(cx.clone(), (input, span, 0, None)).await
         }
+        (Context::Plain, "VisioDocument") => super::visio::document(cx, input, span).await,
+        (Context::Plain, "RevitPreview4.0") => png_after_header(cx, input, span).await,
         (Context::Plain, "PROJECT") => super::vba::project_stream(cx, span).await,
         (Context::Plain, "PROJECTwm") => super::vba::project_wm(cx, span).await,
         (Context::Vba, "dir") => super::vba::dir(cx, span).await,
@@ -393,6 +423,33 @@ pub async fn content(cx: &Cx, state: &StreamState, span: Span) -> Result<()> {
             Ok(())
         }
     }
+}
+
+/// A stream holding a PNG image after a header of its own (Revit's
+/// `RevitPreview4.0`): the header is not documented, so the image is found
+/// by its signature in the first 64 KiB.
+async fn png_after_header(cx: &Cx, input: Input, span: Span) -> Result<()> {
+    const PNG: &[u8] = b"\x89PNG\r\n\x1a\n";
+    let head = cx.read_avail(span.sub(0, 0x10000)).await?;
+    let found = head.windows(PNG.len()).position(|w| w == PNG);
+    let Some(at) = found.map(crate::bytes::to_u64) else {
+        cx.emit(raw_content(input, span));
+        return Ok(());
+    };
+    if at > 0 {
+        cx.emit(
+            Node::new("Header")
+                .span(span.sub(0, at))
+                .summary(format!("{at} bytes")),
+        );
+    }
+    let image = span.tail(at);
+    cx.emit(crate::formats::embedded_as(
+        "Preview image",
+        input.nested(image),
+        &crate::formats::image::png::FORMAT,
+    ));
+    Ok(())
 }
 
 /// The stream's bytes, identified and dissected on expansion.

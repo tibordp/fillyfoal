@@ -71,6 +71,9 @@ pub enum Method {
     Lz5,
     /// SZDD and KWAJ method 2 (4 KiB ring of spaces).
     Szdd,
+    /// Visio's compressed streams (4 KiB ring of zeros, written from 4078;
+    /// libvisio's `VSDInternalStream`).
+    Visio,
     /// ZOO method 1.
     ZooLzw,
     /// KWAJ method 4.
@@ -116,7 +119,7 @@ impl Params {
             Method::Lh { .. } | Method::Arj | Method::Lh1 => 2_048,
             Method::ArjFastest => 128,
             // 18 bytes per 2 bytes (and a flag bit).
-            Method::Lz5 | Method::Szdd | Method::Lzs => 16,
+            Method::Lz5 | Method::Szdd | Method::Visio | Method::Lzs => 16,
             Method::ZooLzw => 4_096,
             Method::KwajMszip => 1_032,
             Method::KwajXor => 1,
@@ -607,6 +610,11 @@ impl Lzh {
                 pos: 4096 - 16,
                 flags: 1,
             },
+            Method::Visio => State::Ring {
+                ring: vec![0; 4096],
+                pos: 4096 - 18,
+                flags: 1,
+            },
             Method::ZooLzw => State::Lzw {
                 table: Vec::new(),
                 bits: 9,
@@ -987,7 +995,7 @@ impl Lzh {
                     self.bit = bits.pos;
                     true
                 }
-                Method::Lzs | Method::Lz5 | Method::Szdd => {
+                Method::Lzs | Method::Lz5 | Method::Szdd | Method::Visio => {
                     match self.ring_token(input, out) {
                         Ok(more) => more,
                         // A partial item at the end is padding.
@@ -1178,5 +1186,19 @@ mod tests {
             checked_all += checked;
         }
         assert!(checked_all > 30, "{checked_all}");
+    }
+
+    /// Visio's LZSS: three literals, a match back to output 0 (ring 4078,
+    /// overlapping), and a match before the start reading the ring's zeros.
+    #[test]
+    fn visio_ring_starts_at_4078_with_zeros() {
+        let data = [0x07, b'a', b'b', b'c', 0xee, 0xf3, 0xeb, 0xf0];
+        let mut d = crate::codec::pipeline::Streaming(Lzh::new(Params::new(
+            Method::Visio,
+            None,
+            Check::None,
+        )));
+        let out = crate::codec::pipeline::decode_all(&mut d, &data, 1 << 20).unwrap();
+        assert_eq!(out, b"abcabcabc\0\0\0");
     }
 }
