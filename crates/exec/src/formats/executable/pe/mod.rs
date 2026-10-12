@@ -330,6 +330,8 @@ async fn load(cx: &Cx, input: Input, lfanew: u64) -> Result<Pe> {
         symbols: (header.symptr, header.nsyms),
         rva_index,
         directories,
+        lfanew,
+        directories_at: optional.directories.offset.saturating_sub(file.offset),
     }))
 }
 
@@ -342,11 +344,29 @@ struct Overview {
     delay_dlls: u64,
     exports: u64,
     dotnet: Option<String>,
+    /// The load configuration points to ARM64EC metadata.
+    hybrid: bool,
+}
+
+/// Whether a PE32+ image's load configuration has a `CHPEMetadataPointer`
+/// (at 0xc8): an ARM64EC image (x64 machine) or an ARM64X one (ARM64).
+async fn has_hybrid_metadata(cx: &Cx, pe: &Pe) -> Option<bool> {
+    const CHPE_AT: u64 = 0xc8;
+    let (rva, size) = pe.directory(DIR_LOAD_CONFIG);
+    if !pe.wide || u64::from(size) < CHPE_AT.saturating_add(8) {
+        return Some(false);
+    }
+    let span = pe.rva_span(rva, CHPE_AT.saturating_add(8)).ok()?;
+    let data = cx.read(span.sub_exact(CHPE_AT, 8).ok()?).await.ok()?;
+    Some(crate::bytes::u64_le(&data, 0)? != 0)
 }
 
 /// Counts what the summary reports: a bounded number of small reads.
 async fn overview(cx: &Cx, pe: &Pe) -> Overview {
-    let mut out = Overview::default();
+    let mut out = Overview {
+        hybrid: has_hybrid_metadata(cx, pe).await.unwrap_or(false),
+        ..Overview::default()
+    };
     if let Ok(count) = imports::count(cx, pe).await {
         out.imports = count;
     }
@@ -358,7 +378,13 @@ async fn overview(cx: &Cx, pe: &Pe) -> Overview {
 
 fn summary(pe: &PeInfo, o: &Overview) -> String {
     let format = if pe.wide { "PE32+" } else { "PE32" };
-    let machine = name_or(MACHINE_SHORT, pe.machine.into(), "machine");
+    // As LLVM names them: hybrid metadata makes an x64 image ARM64EC and
+    // an ARM64 one ARM64X.
+    let machine = match (pe.machine, o.hybrid) {
+        (MACHINE_AMD64, true) => "ARM64EC".to_owned(),
+        (MACHINE_ARM64, true) => "ARM64X".to_owned(),
+        _ => name_or(MACHINE_SHORT, pe.machine.into(), "machine"),
+    };
     let dll = pe.characteristics & IMAGE_FILE_DLL != 0;
     let kind = match (pe.subsystem, dll) {
         (10, _) => "EFI application",
@@ -428,6 +454,9 @@ struct PeInfo {
     /// The sections' RVA ranges, for [`PeInfo::rva_offset`].
     rva_index: RangeIndex,
     directories: [(u32, u32); 16],
+    /// File offsets of the NT headers and of the data directory array.
+    lfanew: u64,
+    directories_at: u64,
 }
 
 impl Section {
@@ -524,6 +553,26 @@ impl PeInfo {
         self.rva_index
             .find(rva.into())
             .and_then(|i| self.sections.get(i))
+    }
+
+    /// The header field at file offset `offset` (= its RVA), for the fields
+    /// ARM64X dynamic relocations rewrite: the machine, the entry point and
+    /// the data directories.
+    fn header_field(&self, offset: u64) -> Option<String> {
+        let optional = self.lfanew.checked_add(24)?;
+        if offset == self.lfanew.checked_add(4)? {
+            return Some("FileHeader.Machine".to_owned());
+        }
+        if offset == optional.checked_add(16)? {
+            return Some("AddressOfEntryPoint".to_owned());
+        }
+        let rel = offset.checked_sub(self.directories_at)?;
+        let name = tables::DATA_DIRECTORIES.get(crate::bytes::to_usize(rel / 8))?;
+        Some(match rel % 8 {
+            0 => format!("{name}.VirtualAddress"),
+            4 => format!("{name}.Size"),
+            _ => return None,
+        })
     }
 
     /// "RVA 0x1234 (.text)".
@@ -1241,7 +1290,7 @@ fn directory(pe: &Pe, index: usize, name: &'static str, rva: u32, size: u32) -> 
         DIR_IMPORT => node.lazy(imports::imports, (pe, dir)),
         DIR_RESOURCE => node.lazy(resdir::root, (pe, rva)),
         DIR_EXCEPTION => node.lazy(unwind::exceptions, (pe, dir)),
-        DIR_SECURITY => node.lazy(extra::certificates, (pe.input, dir)),
+        DIR_SECURITY => node.lazy(extra::certificates, (pe, dir)),
         DIR_BASERELOC => node.lazy(extra::base_relocations, (pe, dir)),
         DIR_DEBUG => node.lazy(debug::directory, (pe, dir)),
         DIR_TLS => node.lazy(loadcfg::tls, (pe, dir)),

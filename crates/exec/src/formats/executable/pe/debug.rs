@@ -215,6 +215,8 @@ fn pogo_kind(signature: u32) -> &'static str {
         0x5047_5500 | 0x0055_4750 => "PGU (profile-guided, optimized)",
         0x5047_4900 | 0x0049_4750 => "PGI (profile-guided, instrumented)",
         0x4c54_4347 | 0x4743_544c => "LTCG",
+        // MSVC 14.4x/14.5x write 0 for an ordinary (non-/GL) link.
+        0 => "plain link (no LTCG or PGO)",
         _ => "unknown kind",
     }
 }

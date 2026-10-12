@@ -733,6 +733,15 @@ fn member(f: &mut Fields<'_>, _: &()) -> Result<(String, String)> {
 // ---------------------------------------------------------------------------
 // Symbol records
 
+/// `S_FASTLINK` flags, as link 14.44 sets them (undocumented).
+const FASTLINK_FLAGS: FlagTable = &[
+    flag(0x1, "STATIC"),
+    flag(0x2, "DATA"),
+    flag(0x4, "UDT"),
+    flag(0x10, "CONSTANT"),
+    flag(0x40, "NAMESPACE"),
+];
+
 pub(super) const SYMBOL_KINDS: EnumTable = &[
     (0x0006, "S_END"),
     (0x0007, "S_SKIP"),
@@ -1250,6 +1259,36 @@ pub(super) fn symbol_record(f: &mut Fields<'_>, _: &()) -> Result<(String, Strin
         0x1108 => {
             let t = ti(f, "Type")?;
             (name(f)?, type_name(t))
+        }
+        0x1167 => {
+            // S_FASTLINK, the /DEBUG:FASTLINK stand-in for a symbol whose
+            // record stays in the object file. Undocumented; the layout and
+            // the flag meanings are read off link 14.44's output, where
+            // the index is the type of UDTs and a small number otherwise.
+            let index = f
+                .u32("Index")
+                .hex()
+                .desc("Type index for a user-defined type (flag 0x4); otherwise not a type index")
+                .emit()?;
+            let flags = f
+                .u16("Flags")
+                .flags(FASTLINK_FLAGS)
+                .desc("As observed: 0 function, 0x1 static, 0x2 data, 0x4 user-defined type, 0x10 constant, 0x40 namespace")
+                .emit()?;
+            let kind = match flags & !0x1 {
+                0 => "function".to_owned(),
+                0x2 => "data".to_owned(),
+                0x4 => format!("type {}", type_name(index)),
+                0x10 => "constant".to_owned(),
+                0x40 => "namespace".to_owned(),
+                other => format!("flags {other:#x}"),
+            };
+            let what = if flags & 0x1 != 0 {
+                format!("static {kind}")
+            } else {
+                kind
+            };
+            (name(f)?, what)
         }
         0x110c | 0x110d | 0x1112 | 0x1113 | 0x111c | 0x111d => {
             let t = ti(f, "Type")?;
@@ -1785,9 +1824,104 @@ async fn subsections(cx: Cx, (span, tables): (Span, NameTables)) -> Result<()> {
             0xf6 => node.lazy(inlinee_lines, (body, tables)),
             0xf3 => node.lazy(crate::formats::util::binutil::cstrings, body),
             0xf1 => node.lazy(records, (body, Records::Symbols(0))),
+            0xfd => node
+                .summary(plural(body.len / 4, "RVA"))
+                .lazy(symbol_rvas, body),
             _ => node,
         };
         cx.push(node).await;
+    }
+    Ok(())
+}
+
+/// The CodeView signature that starts `.debug$S` and `.debug$T` sections.
+async fn object_signature(cx: &Cx, span: Span) -> Result<()> {
+    let sig = cx.read_avail(span.sub(0, 4)).await?;
+    let value = u32_le(&sig, 0).unwrap_or(0);
+    let mut node = Node::new("Signature")
+        .span(span.sub(0, 4))
+        .value(uint(value, 32))
+        .desc("CV_SIGNATURE_C13 (4)");
+    if value != 4 {
+        node = node.diag(Diagnostic::unsupported(format!(
+            "CodeView signature {value} (only C13, 4, is decoded)"
+        )));
+    }
+    cx.emit(node);
+    if value == 4 {
+        Ok(())
+    } else {
+        Err(Diagnostic::unsupported("pre-C13 CodeView"))
+    }
+}
+
+/// An object file's `.debug$S` section: the signature, then C13
+/// subsections as in a PDB module stream (names come from the section's
+/// own string table subsection).
+pub(in crate::formats::executable) async fn object_symbols(cx: Cx, span: Span) -> Result<()> {
+    object_signature(&cx, span).await?;
+    let body = span.tail(4);
+    let mut names = None;
+    let mut pos = 0u64;
+    let mut n = 0u32;
+    while pos.saturating_add(8) <= body.len && n < 0x10000 {
+        cx.checkpoint().await;
+        let head = cx.read(body.sub_exact(pos, 8)?).await?;
+        let kind = u32_le(&head, 0).unwrap_or(0);
+        let len = u32_le(&head, 4).unwrap_or(0);
+        if kind == 0xf3 {
+            names = Some(body.sub(pos.saturating_add(8), len.into()));
+            break;
+        }
+        pos = pos
+            .saturating_add(8)
+            .saturating_add(u64::from(len).next_multiple_of(4));
+        n = n.saturating_add(1);
+    }
+    subsections(
+        cx,
+        (
+            body,
+            NameTables {
+                names,
+                symbols: None,
+            },
+        ),
+    )
+    .await
+}
+
+/// An object file's `.debug$T` (or precompiled-header `.debug$P`)
+/// section: the signature, then type records from 0x1000 (for `/Zi`
+/// objects just an LF_TYPESERVER2 naming the compiler's PDB).
+pub(in crate::formats::executable) async fn object_types(cx: Cx, span: Span) -> Result<()> {
+    object_signature(&cx, span).await?;
+    let body = span.tail(4);
+    let summary = records_summary(&cx, body).await;
+    cx.emit(
+        Node::new("Type records")
+            .span(body)
+            .summary(summary)
+            .lazy(records, (body, Records::Types(FIRST_TYPE))),
+    );
+    Ok(())
+}
+
+/// `DEBUG_S_COFF_SYMBOL_RVA`: an array of 32-bit RVAs (LLVM's
+/// `DebugSymbolRVASubsection`), which link writes into the module streams
+/// of import libraries and CRT objects.
+async fn symbol_rvas(cx: Cx, span: Span) -> Result<()> {
+    let n = span.len / 4;
+    cx.set_count(Count::Exact(n));
+    for i in 0..n {
+        let at = span.sub(i.saturating_mul(4), 4);
+        let data = cx.read(at).await?;
+        cx.push(
+            Node::new(format!("#{i}"))
+                .span(at)
+                .value(hex(u32_le(&data, 0).unwrap_or(0), 32)),
+        )
+        .await;
     }
     Ok(())
 }

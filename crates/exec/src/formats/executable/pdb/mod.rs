@@ -19,7 +19,7 @@
 
 use std::sync::Arc;
 
-mod codeview;
+pub(in crate::formats::executable) mod codeview;
 mod dbi;
 mod tables;
 
@@ -202,6 +202,21 @@ async fn pdb(cx: Cx, input: Input) -> Result<()> {
         let machine = crate::bytes::u16_le(&header, 58).unwrap_or(0);
         if let Some(m) = lookup(MACHINE_SHORT, machine.into()) {
             summary = format!("{summary}, {m}");
+        }
+    } else if streams.get(3).is_some_and(|(_, dbi)| dbi.len == 0)
+        && streams.get(2).is_some_and(|(_, tpi)| tpi.len > 56)
+    {
+        // cl /Zi's own PDB (mspdbsrv), the type server objects refer to
+        // with LF_TYPESERVER2: types and IDs, no modules.
+        summary = format!("{summary}, types only (compiler PDB)");
+    }
+    if let Some((_, info)) = streams.get(1)
+        && let Ok(map) = named_streams(&cx, *info).await
+    {
+        let features = info.tail(map.features);
+        let data = cx.read_avail(features.sub(0, 64)).await?;
+        if data.chunks(4).any(|c| c == 0x494e_494du32.to_le_bytes()) {
+            summary = format!("{summary}, /DEBUG:FASTLINK");
         }
     }
     cx.emit(

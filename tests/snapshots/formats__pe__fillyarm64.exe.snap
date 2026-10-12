@@ -279,7 +279,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Header: 0x8000007 — function 28 bytes, version 0, 0 epilogs, 1 code words  [0xb1c+0x4]
           Code @0: "save_reg_x: str x30, [sp, #-16]!"  [0xb20+0x2]
           Code @2: "end"  [0xb22+0x1]
-          Code @3: "nop"  [0xb23+0x1]
+          Padding — 1 bytes  [0xb23+0x1]
   ▾ Base Relocation Table — 3 pages, 14 entries  [0x1400+0x34]
     ▾ Page 0x2000 — 8 entries, RVA 0x2000 (.rdata)  [0x1400+0x18]
         VirtualAddress: 0x2000 — .rdata  [0x1400+0x4] → 0x800+0x0
