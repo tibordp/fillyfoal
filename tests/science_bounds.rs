@@ -45,11 +45,12 @@ fn big_ply(faces: u32) -> Vec<u8> {
             out.extend_from_slice(&c.to_le_bytes());
         }
     }
+    let mut face = vec![3u8];
+    for i in [0i32, 1, 2] {
+        face.extend_from_slice(&i.to_le_bytes());
+    }
     for _ in 0..faces {
-        out.push(3);
-        for i in [0i32, 1, 2] {
-            out.extend_from_slice(&i.to_le_bytes());
-        }
+        out.extend_from_slice(&face);
     }
     out.extend_from_slice(&7i32.to_le_bytes());
     out.extend_from_slice(&9i32.to_le_bytes());
