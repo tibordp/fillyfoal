@@ -137,7 +137,9 @@ fn unknown_length_does_not_change_the_tree() {
         let explored = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let file = Span::new(SourceId::default_host(), 0, wrapped.len() as u64);
             let mut host = Host::named(&name, wrapped.clone(), limits());
-            host.max_polls = 200_000;
+            // 64-byte chunks: a fixture with thousands of small records
+            // (an NT Kernel Logger trace) takes about 200k polls.
+            host.max_polls = 400_000;
             let root = host
                 .session
                 .add_root(Node::new(name.clone()).lazy(unsized_root, file));

@@ -481,13 +481,32 @@ async fn item_fields(cx: Cx, span: Span) -> Result<()> {
             if !f.pos().is_multiple_of(2) {
                 f.skip(1);
             }
-            if f.remaining() > 8 {
+            // Extension blocks follow, each with its size, version and
+            // signature: 0xBEEF0004 (long name, times, MFT reference),
+            // and on Windows 10 and later more (0xBEEF001A: the file
+            // type's ProgID).
+            let data: &[u8] = &block.data;
+            for _ in 0..16 {
+                let at = f.pos();
+                let size = u64::from(u16_le(data, crate::bytes::to_usize(at)).unwrap_or(0));
+                if size < 8 || size > f.remaining() {
+                    break;
+                }
+                let signature =
+                    u32_le(data, crate::bytes::to_usize(at.saturating_add(4))).unwrap_or(0);
+                let span = f.peek_span(size);
+                f.node(if signature == 0xbeef_0004 {
+                    Node::new("Extension block").span(span).lazy(beef0004, span)
+                } else {
+                    Node::new(format!("Extension block {signature:#010x}"))
+                        .span(span)
+                        .lazy(extension_block, span)
+                });
+                f.skip(size);
+            }
+            if f.remaining() > 0 && f.remaining() < 8 {
                 let rest = f.remaining();
-                f.node(
-                    Node::new("Extension block")
-                        .span(f.peek_span(rest))
-                        .lazy(beef0004, f.peek_span(rest)),
-                );
+                f.bytes("Padding", rest).emit()?;
             }
         }
         _ => {
@@ -545,7 +564,31 @@ async fn beef0004(cx: Cx, span: Span) -> Result<()> {
         f.seek(end);
     }
     if f.remaining() >= 2 {
-        f.u16("First extension block offset").hex().emit()?;
+        f.u16("Block offset").hex().emit()?;
+    }
+    Ok(())
+}
+
+/// An extension block other than 0xBEEF0004: size, version, signature,
+/// data, and the block's own offset in its item. 0xBEEF001A (Windows 10
+/// and later) holds the ProgID of the file's type association.
+async fn extension_block(cx: Cx, span: Span) -> Result<()> {
+    let block = cx.block(span).await?;
+    let mut f = Fields::emitting(&cx, &block, LE);
+    let size = f.u16("Size").emit()?;
+    f.u16("Version").emit()?;
+    let signature = f.u32("Signature").hex().emit()?;
+    let end = u64::from(size).saturating_sub(2);
+    if signature == 0xbeef_001a {
+        f.u16("Unknown").emit()?;
+        f.utf16z("ProgID").emit()?;
+    }
+    if f.pos() < end {
+        let n = end.saturating_sub(f.pos());
+        f.bytes("Data", n).emit()?;
+    }
+    if f.remaining() >= 2 {
+        f.u16("Block offset").hex().emit()?;
     }
     Ok(())
 }

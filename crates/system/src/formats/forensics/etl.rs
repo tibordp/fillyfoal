@@ -5,13 +5,22 @@
 //! with a 72-byte `WMI_BUFFER_HEADER` (sizes and offsets of the data in
 //! use, a timestamp, sequence number, clock type, the processor and logger
 //! in `ClientContext`, state, flags and type, and a reference clock). The
-//! events follow, 8-byte aligned, up to `SavedOffset`; the rest is `0xFF`
-//! filler. The first event of the first buffer is the log's header: a
-//! system event (group `EventTrace`, type 0) whose payload is a
-//! `TRACE_LOGFILE_HEADER` (buffer size, versions, processor count, start
-//! and end times, timer resolution, file mode, pointer size, events and
-//! buffers lost, time zone, boot time, performance counter frequency and
-//! clock type) followed by the logger and log file names.
+//! events follow, 8-byte aligned, up to `SavedOffset` (relogged files may
+//! record the end in `Offset` instead); the rest is `0xFF` filler. The
+//! first event of the first buffer is the log's header: a system event
+//! (group `EventTrace`, type 0) whose payload is a `TRACE_LOGFILE_HEADER`
+//! (buffer size, versions, processor count, start and end times, timer
+//! resolution, file mode, pointer size, events and buffers lost, time
+//! zone, boot time, performance counter frequency and clock type) followed
+//! by the logger and log file names.
+//!
+//! A log written with `EVENT_TRACE_COMPRESSED_MODE` (by a live session or a
+//! relogger such as `xperf -merge -compress`) keeps its first buffer
+//! uncompressed; every other buffer is stored with `BufferSize` = its
+//! stored size (not 8-aligned), flag `0x40`, and its data after the header
+//! compressed with Xpress (plain LZ77, [MS-XCA] 2.4); `SavedOffset` is then
+//! the end of the data once decompressed. Those buffers are decompressed
+//! lazily and their events walked as usual.
 //!
 //! Events start with one of several headers, told apart by the header type
 //! in their third byte: `SYSTEM_TRACE_HEADER` (kernel events: hook ID =
@@ -21,12 +30,13 @@
 //! event descriptor, thread, process, timestamp, activity ID, then extended
 //! data items when flagged), and the classic `EVENT_TRACE_HEADER` and
 //! `EVENT_INSTANCE_HEADER` of MOF events. User data follows the header and
-//! is shown as bytes, except for TraceLogging events: their schema
-//! (extended item type 11) is decoded into the event name and fields, and
-//! simple field values are decoded from the user data. Timestamps in
-//! performance-counter or CPU-cycle units are converted with the header's
-//! frequency, relative to its start time and the header event's own
-//! timestamp.
+//! is shown as bytes, except for TraceLogging events (their schema,
+//! extended item type 11, is decoded into the event name and fields, and
+//! the values, arrays and nested structs are decoded from the user data)
+//! and the kernel's Process and Thread events (image name, command line,
+//! user SID, thread names and stacks). Timestamps in performance-counter or
+//! CPU-cycle units are converted with the header's frequency, relative to
+//! its start time and the header event's own timestamp.
 //!
 //! Sources: the field layouts of `TRACE_LOGFILE_HEADER`, `EVENT_HEADER`,
 //! `EVENT_DESCRIPTOR`, `EVENT_TRACE_HEADER`, `EVENT_INSTANCE_HEADER` and
@@ -37,14 +47,16 @@
 //! type and marker byte values, the extended data item framing in the file
 //! (`Reserved1`, `ExtType`, linkage, `DataSize`, then data padded to 8
 //! bytes), buffer types/flags/states and the kernel group and event type
-//! names are from memory of documented ETL parsing knowledge (`ntwmi.h`
-//! as reproduced by public ETL parsers), not checked against a real log:
-//! there is no ETL writer on macOS, and the fixture is our own encoding of
-//! these layouts. Compressed buffers (Windows 8 and later) are reported,
-//! not decoded. WPP (`MESSAGE_TRACE_HEADER`) and other rare header types
-//! stop the walk of their buffer with an `Unsupported` note.
+//! names follow `ntwmi.h` as reproduced by public ETL parsers. All of it
+//! was checked against logs written by Windows 11 (build 26200: logman,
+//! xperf, the NT Kernel Logger, a compressed session) and decoded by
+//! tracerpt (event counts, names and opcodes), see
+//! `tests/fixtures/external/etl/`. WPP (`MESSAGE_TRACE_HEADER`) and other
+//! rare header types stop the walk of their buffer with an `Unsupported`
+//! note.
 
 use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
+use crate::codec::Codec;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
@@ -53,6 +65,7 @@ use crate::formats::forensics::evtx::LEVELS;
 use crate::formats::util::datakit::guid_le;
 use crate::formats::util::datakit::{hex, text, uint};
 use crate::formats::util::fmt::plural;
+use crate::formats::util::winsec::sid_node;
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -189,6 +202,21 @@ const EXT_TYPES: EnumTable = &[
     (18, "STACK_KEY64"),
 ];
 
+/// Standard opcodes (`winmeta.xml`), which manifests mostly reuse.
+const OPCODES: EnumTable = &[
+    (0, "Info"),
+    (1, "Start"),
+    (2, "Stop"),
+    (3, "DC_Start"),
+    (4, "DC_Stop"),
+    (9, "Extension"),
+    (10, "Reply"),
+    (11, "Resume"),
+    (12, "Suspend"),
+    (13, "Send"),
+    (240, "Receive"),
+];
+
 /// Kernel event groups (high byte of the hook ID).
 const GROUPS: EnumTable = &[
     (0x00, "EventTrace"),
@@ -226,10 +254,15 @@ const GROUPS: EnumTable = &[
 /// Kernel event types by hook ID (group << 8 | type).
 const HOOKS: EnumTable = &[
     (0x0000, "Header"),
+    (0x0005, "Extension"),
+    (0x0008, "RDComplete"),
+    (0x0020, "EndExtension"),
+    (0x0050, "PartitionInfoExtensionV2"),
     (0x0301, "Start"),
     (0x0302, "End"),
     (0x0303, "DCStart"),
     (0x0304, "DCEnd"),
+    (0x030b, "Terminate"),
     (0x0327, "Defunct"),
     (0x0501, "Start"),
     (0x0502, "End"),
@@ -237,6 +270,7 @@ const HOOKS: EnumTable = &[
     (0x0504, "DCEnd"),
     (0x0524, "CSwitch"),
     (0x0532, "ReadyThread"),
+    (0x0548, "SetName"),
     (0x010a, "Read"),
     (0x010b, "Write"),
     (0x010c, "ReadInit"),
@@ -255,6 +289,33 @@ const HOOKS: EnumTable = &[
     (0x060b, "Recv"),
     (0x060c, "Connect"),
     (0x060d, "Disconnect"),
+];
+
+/// TraceLogging field output types (`TlgOut_t`), how a value is shown.
+const TL_OUT_TYPES: EnumTable = &[
+    (0, "NULL"),
+    (1, "NOPRINT"),
+    (2, "STRING"),
+    (3, "BOOLEAN"),
+    (4, "HEX"),
+    (5, "PID"),
+    (6, "TID"),
+    (7, "PORT"),
+    (8, "IPV4"),
+    (9, "IPV6"),
+    (10, "SOCKETADDRESS"),
+    (11, "XML"),
+    (12, "JSON"),
+    (13, "WIN32ERROR"),
+    (14, "NTSTATUS"),
+    (15, "HRESULT"),
+    (16, "FILETIME"),
+    (17, "SIGNED"),
+    (18, "UNSIGNED"),
+    (35, "UTF8"),
+    (36, "PKCS7_WITH_TYPE_INFO"),
+    (37, "CODE_POINTER"),
+    (38, "DATETIME_UTC"),
 ];
 
 /// TraceLogging field input types (`TlgIn_t`).
@@ -307,17 +368,25 @@ fn probe(h: &Head<'_>) -> bool {
     }
     // The first event is a system header (32- or 64-bit) of the EventTrace
     // group, type 0 (the logfile header), whose payload repeats the buffer
-    // size.
+    // size. In a compressed log the header's size is the in-memory buffer
+    // size, and the first (uncompressed) buffer is stored shorter.
     let first = usize::try_from(BUFFER_HEADER).unwrap_or(0);
     let at = |o: usize| first.saturating_add(o);
+    let compressed = u32_le(d, at(0x40)).is_some_and(|m| m & COMPRESSED_MODE != 0);
     matches!(d.get(at(2)), Some(1 | 2))
         && d.get(at(3)).is_some_and(|f| f & 0xc0 == 0xc0)
         && u16_le(d, at(6)) == Some(0)
         && u16_le(d, at(4)).is_some_and(|s| {
             u64::from(s) >= 0x130 && u64::from(s) <= saved.saturating_sub(BUFFER_HEADER)
         })
-        && u32_le(d, at(0x20)).is_some_and(|b| u64::from(b) == size)
+        && u32_le(d, at(0x20)).is_some_and(|b| {
+            let b = u64::from(b);
+            b == size || (compressed && b > size && b <= 0x0100_0000)
+        })
 }
+
+/// `EVENT_TRACE_COMPRESSED_MODE` in the header's `LogFileMode`.
+const COMPRESSED_MODE: u32 = 0x0400_0000;
 
 declare_format!(pub FORMAT = "etl", "Windows Event Trace Log", ["etl"], "application/x-ms-etl",
     Probe::Custom(probe), dissect);
@@ -363,6 +432,7 @@ struct Logfile {
     events_lost: u32,
     buffers_lost: u32,
     buffers_written: u32,
+    mode: u32,
     clock: Clock,
     logger: String,
 }
@@ -393,7 +463,7 @@ fn logfile_layout(f: &mut Fields<'_>, pointer: &u8) -> Result<Logfile> {
     f.u32("MaximumFileSize")
         .desc("In megabytes (or kilobytes with USE_KBYTES_FOR_SIZE)")
         .emit()?;
-    f.u32("LogFileMode").flags(LOG_FILE_MODE).emit()?;
+    l.mode = f.u32("LogFileMode").flags(LOG_FILE_MODE).emit()?;
     l.buffers_written = f.u32("BuffersWritten").emit()?;
     f.u32("StartBuffers").emit()?;
     let declared = f.u32("PointerSize").emit()?;
@@ -543,11 +613,21 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if !lf.logger.is_empty() {
         summary = format!("{summary}, logger \"{}\"", lf.logger);
     }
-    let buffers = file.len.div_ceil(size);
-    summary = format!(
-        "{summary}, {} of {size:#x} bytes",
-        plural(buffers, "buffer")
-    );
+    let compressed = lf.mode & COMPRESSED_MODE != 0;
+    summary = if compressed {
+        // Buffers are stored compressed, each with its own size.
+        format!(
+            "{summary}, {} of {:#x} bytes, compressed",
+            plural(lf.buffers_written, "buffer"),
+            lf.buffer_size
+        )
+    } else {
+        let buffers = file.len.div_ceil(size);
+        format!(
+            "{summary}, {} of {size:#x} bytes",
+            plural(buffers, "buffer")
+        )
+    };
     if lf.events_lost > 0 {
         summary = format!("{summary}, {} events lost", lf.events_lost);
     }
@@ -558,7 +638,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             unix_seconds: crate::text::filetime_to_unix(lf.clock.start),
         });
     }
-    if u64::from(lf.buffer_size) != size {
+    if u64::from(lf.buffer_size) != size && !compressed {
         node = node.diag(Diagnostic::warning(format!(
             "BufferSize {:#x} differs from the first buffer's {size:#x}",
             lf.buffer_size
@@ -604,9 +684,13 @@ async fn walk_buffers(cx: Cx, (input, clock): (Input, Clock)) -> Result<()> {
         if let Some(t) = lookup(BUFFER_TYPES, kind.into()) {
             parts.push(t.to_owned());
         }
-        parts.push(format!("{saved:#x} bytes used"));
-        if flags & 0x40 != 0 {
-            parts.push("compressed".to_owned());
+        if flags & COMPRESSED_BUFFER != 0 {
+            parts.push(format!(
+                "compressed, {:#x} bytes used",
+                saved.saturating_sub(BUFFER_HEADER)
+            ));
+        } else {
+            parts.push(format!("{saved:#x} bytes used"));
         }
         if flags & 0x02 != 0 {
             parts.push("events lost".to_owned());
@@ -636,6 +720,8 @@ async fn walk_buffers(cx: Cx, (input, clock): (Input, Clock)) -> Result<()> {
 #[derive(Clone, Copy, Debug)]
 struct EventHead {
     header_type: u8,
+    /// The system or perfinfo header's event version.
+    version: u16,
     size: u64,
     header_len: u64,
     timestamp: u64,
@@ -656,6 +742,7 @@ fn event_head(d: &[u8]) -> Option<EventHead> {
     Some(match header_type {
         0x01..=0x04 => EventHead {
             header_type,
+            version: u16_at(0)?,
             size: u64::from(u16_at(4)?),
             header_len: if header_type <= 2 { 0x20 } else { 0x18 },
             timestamp: u64_at(0x10)?,
@@ -665,6 +752,7 @@ fn event_head(d: &[u8]) -> Option<EventHead> {
         },
         0x10 | 0x11 => EventHead {
             header_type,
+            version: u16_at(0)?,
             size: u64::from(u16_at(4)?),
             header_len: 0x10,
             timestamp: u64_at(8)?,
@@ -674,6 +762,7 @@ fn event_head(d: &[u8]) -> Option<EventHead> {
         },
         0x12 | 0x13 => EventHead {
             header_type,
+            version: 0,
             size: u64::from(u16_at(0)?),
             header_len: 0x50,
             timestamp: u64_at(16)?,
@@ -683,6 +772,7 @@ fn event_head(d: &[u8]) -> Option<EventHead> {
         },
         0x0a | 0x14 => EventHead {
             header_type,
+            version: 0,
             size: u64::from(u16_at(0)?),
             header_len: 0x30,
             timestamp: u64_at(16)?,
@@ -692,6 +782,7 @@ fn event_head(d: &[u8]) -> Option<EventHead> {
         },
         0x0b | 0x15 => EventHead {
             header_type,
+            version: 0,
             size: u64::from(u16_at(0)?),
             header_len: 0x38,
             timestamp: u64_at(16)?,
@@ -713,17 +804,40 @@ fn hook_name(hook: u16) -> String {
     }
 }
 
+/// `BufferFlag` bit of a buffer stored compressed.
+const COMPRESSED_BUFFER: u16 = 0x40;
+
 async fn walk_buffer(cx: Cx, (input, pos, clock, first): (Input, u64, Clock, bool)) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(pos, BUFFER_HEADER)).await?;
     let size = u64::from(u32_le(&head, 0).unwrap_or(0));
     let span = file.sub(pos, size);
-    let saved =
-        u64::from(u32_le(&head, 4).unwrap_or(0)).clamp(BUFFER_HEADER, size.max(BUFFER_HEADER));
+    let saved = u64::from(u32_le(&head, 4).unwrap_or(0));
+    let offset = u64::from(u32_le(&head, 0x30).unwrap_or(0));
     let flags = u16_le(&head, 0x34).unwrap_or(0);
-    let (mut at, mut index) = cx.resume::<(u64, u64)>().unwrap_or((0, 0));
-    if at == 0 {
-        cx.mark(|| (0u64, 0u64));
+    let compressed = flags & COMPRESSED_BUFFER != 0;
+    // The events: after the header, up to the end of the data in use. A
+    // compressed buffer (Xpress, [MS-XCA] 2.4) stores its data after the
+    // header; `SavedOffset` is then the end of the data once decompressed.
+    // Relogged files (xperf) may leave `SavedOffset` short of `Offset` in
+    // their uncompressed first buffer, so the larger of the two counts.
+    let (events, packed) = if compressed {
+        let len = saved.saturating_sub(BUFFER_HEADER);
+        let packed = span.sub(BUFFER_HEADER, size.saturating_sub(BUFFER_HEADER));
+        let codec = Codec::Xpress { size: Some(len) };
+        (cx.decode_lazy(packed, &codec, len)?, Some(packed))
+    } else {
+        let end = saved
+            .max(offset)
+            .clamp(BUFFER_HEADER, size.max(BUFFER_HEADER));
+        (
+            span.sub(BUFFER_HEADER, end.saturating_sub(BUFFER_HEADER)),
+            None,
+        )
+    };
+    let (started, mut at, mut index) = cx.resume::<(bool, u64, u64)>().unwrap_or_default();
+    if !started {
+        cx.mark(|| (false, 0u64, 0u64));
         cx.push(struct_node(
             "Buffer header",
             span.sub(0, BUFFER_HEADER),
@@ -732,30 +846,35 @@ async fn walk_buffer(cx: Cx, (input, pos, clock, first): (Input, u64, Clock, boo
             buffer_layout,
         ))
         .await;
-        if flags & 0x40 != 0 {
+        if let Some(packed) = packed {
             cx.push(
                 Node::new("Compressed data")
-                    .span(span.sub(BUFFER_HEADER, saved.saturating_sub(BUFFER_HEADER)))
-                    .diag(Diagnostic::unsupported("compressed ETW buffer")),
+                    .span(packed)
+                    .summary(format!(
+                        "Xpress, {:#x} bytes, {:#x} decompressed",
+                        packed.len, events.len
+                    ))
+                    .desc("The buffer's events follow, decompressed"),
             )
             .await;
-            cx.set_count(Count::Exact(2));
-            return Ok(());
         }
-        at = BUFFER_HEADER;
     }
-    while at.saturating_add(8) <= saved {
-        let mark = (at, index);
+    let fixed: u64 = if compressed { 2 } else { 1 };
+    while at.saturating_add(8) <= events.len {
+        let mark = (true, at, index);
         cx.mark(move || mark);
-        cx.progress_in(span, span.offset.saturating_add(at));
-        let d = cx.read(span.sub(at, 0x18)).await?;
+        cx.progress_in(
+            span,
+            span.offset.saturating_add(if compressed { 0 } else { at }),
+        );
+        let d = cx.read(events.sub(at, 0x18)).await?;
         if d.len() < 8 || u32_le(&d, 0) == Some(0xffff_ffff) || u32_le(&d, 0) == Some(0) {
             break;
         }
         let Some(h) = event_head(&d) else {
             cx.push(
                 Node::new("Unknown event header")
-                    .span(span.sub(at, saved.saturating_sub(at)))
+                    .span(events.sub(at, events.len.saturating_sub(at)))
                     .value(hex(d.get(2).copied().unwrap_or(0), 8))
                     .diag(Diagnostic::unsupported(format!(
                         "header type {:#04x}",
@@ -769,7 +888,7 @@ async fn walk_buffer(cx: Cx, (input, pos, clock, first): (Input, u64, Clock, boo
         if h.size < h.header_len {
             cx.push(
                 Node::new("Event")
-                    .span(span.sub(at, 8))
+                    .span(events.sub(at, 8))
                     .diag(Diagnostic::malformed(format!(
                         "event size {:#x} below its header",
                         h.size
@@ -779,13 +898,13 @@ async fn walk_buffer(cx: Cx, (input, pos, clock, first): (Input, u64, Clock, boo
             index = index.saturating_add(1);
             break;
         }
-        let espan = span.sub(at, h.size);
-        let node = event_node(&cx, espan, &h, clock, first && at == BUFFER_HEADER).await?;
+        let espan = events.sub(at, h.size);
+        let node = event_node(&cx, espan, &h, clock, first && at == 0).await?;
         cx.push(node).await;
         index = index.saturating_add(1);
         at = at.saturating_add(h.size).next_multiple_of(8);
     }
-    cx.set_count(Count::Exact(index.saturating_add(1)));
+    cx.set_count(Count::Exact(index.saturating_add(fixed)));
     Ok(())
 }
 
@@ -801,13 +920,22 @@ async fn event_node(
         None => "Event".to_owned(),
     };
     let mut parts = Vec::new();
+    // Kernel payloads name their own process and thread; the header's are
+    // the logging context's.
+    let mut own_ids = false;
     match h.header_type {
         0x12 | 0x13 => {
             let d = cx.read(span.sub(0, 0x50)).await?;
             let id = u16_le(&d, 40).unwrap_or(0);
             let provider = guid_le(d.get(24..40).unwrap_or_default());
             let flags = u16_le(&d, 4).unwrap_or(0);
-            name = format!("Event {id}");
+            name = match d.get(45).filter(|&&o| o != 0) {
+                Some(&o) => match lookup(OPCODES, o.into()) {
+                    Some(op) => format!("Event {id} ({op})"),
+                    None => format!("Event {id} (opcode {o})"),
+                },
+                None => format!("Event {id}"),
+            };
             if flags & 1 != 0 {
                 let ext = read_ext(cx, span, h).await?;
                 if let Some(tl) = ext
@@ -842,12 +970,22 @@ async fn event_node(
             }
             name = format!("Classic event type {kind}");
         }
-        _ => {}
+        _ => {
+            if let Some(k) = kernel_of(h, &clock)
+                && !logfile
+            {
+                let user = span.tail(h.header_len);
+                if let Ok(said) = parse(cx, user, LE, &k, kernel_layout).await {
+                    own_ids = !said.summary.is_empty();
+                    parts.extend(said.summary);
+                }
+            }
+        }
     }
     if logfile {
         name = "EventTrace/Header (logfile header)".to_owned();
     }
-    if let (Some(pid), Some(tid)) = (h.pid, h.tid) {
+    if let (Some(pid), Some(tid), false) = (h.pid, h.tid, own_ids) {
         parts.push(format!("pid {pid}, tid {tid}"));
     }
     parts.push(format!("{:#x} bytes", h.size));
@@ -916,7 +1054,7 @@ fn event_header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
         })
         .emit()?;
     f.u8("Level").enumeration(LEVELS).emit()?;
-    f.u8("Opcode").emit()?;
+    f.u8("Opcode").enumeration(OPCODES).emit()?;
     f.u16("Task").emit()?;
     f.u64("Keyword").hex().emit()?;
     f.u32("KernelTime").emit()?;
@@ -1037,6 +1175,13 @@ async fn expand_event(cx: Cx, (span, clock, logfile): (Span, Clock, bool)) -> Re
         ));
         return Ok(());
     }
+    if let Some(k) = kernel_of(&h, &clock) {
+        cx.emit(
+            struct_node("User data", user, LE, k, kernel_layout)
+                .summary(format!("{:#x} bytes", user.len)),
+        );
+        return Ok(());
+    }
     let mut node = Node::new("User data")
         .span(user)
         .summary(format!("{:#x} bytes", user.len));
@@ -1094,6 +1239,147 @@ fn ext_node(e: &Ext) -> Node {
 }
 
 // ---------------------------------------------------------------------------
+// Kernel (MOF) event payloads
+
+/// A kernel event whose payload layout is known: its hook ID, the header's
+/// version and the log's pointer size.
+#[derive(Clone, Copy, Debug)]
+struct Kernel {
+    hook: u16,
+    version: u16,
+    pointer: u8,
+}
+
+/// What a kernel event's payload says about itself, for its summary.
+#[derive(Debug, Default)]
+struct KernelSummary {
+    summary: Vec<String>,
+}
+
+/// The payload layout of a system or perfinfo event, if it is one we know:
+/// Process (`Process_V3`..`V5` Start/End/DCStart/DCEnd/Defunct and
+/// Terminate) and Thread (`Thread_V3` Start/End/DCStart/DCEnd and
+/// `Thread_SetName`), with the classes' field layouts as Microsoft's
+/// kernel MOF schema publishes them, checked against NT Kernel Logger
+/// files decoded by tracerpt.
+fn kernel_of(h: &EventHead, clock: &Clock) -> Option<Kernel> {
+    if !matches!(h.header_type, 0x01..=0x04 | 0x10 | 0x11) {
+        return None;
+    }
+    let hook = h.hook?;
+    let version = h.version;
+    let known = match hook {
+        0x0301..=0x0304 | 0x0327 => version >= 3,
+        0x030b | 0x0548 => true,
+        0x0501..=0x0504 => version == 3,
+        _ => false,
+    };
+    let pointer = if matches!(h.header_type, 0x01 | 0x03 | 0x10) {
+        4
+    } else {
+        clock.pointer.max(4)
+    };
+    known.then_some(Kernel {
+        hook,
+        version,
+        pointer,
+    })
+}
+
+fn kernel_layout(f: &mut Fields<'_>, k: &Kernel) -> Result<KernelSummary> {
+    let wide = k.pointer == 8;
+    let mut out = KernelSummary::default();
+    match k.hook {
+        0x030b => {
+            let pid = f.u32("ProcessId").emit()?;
+            out.summary.push(format!("pid {pid}"));
+        }
+        0x0548 => {
+            let pid = f.u32("ProcessId").emit()?;
+            let tid = f.u32("ThreadId").emit()?;
+            let name = f.utf16z("ThreadName").emit()?;
+            out.summary
+                .push(format!("\"{name}\", pid {pid}, tid {tid}"));
+        }
+        0x0501..=0x0504 => {
+            let pid = f.u32("ProcessId").emit()?;
+            let tid = f.u32("TThreadId").emit()?;
+            out.summary.push(format!("pid {pid}, tid {tid}"));
+            for name in [
+                "StackBase",
+                "StackLimit",
+                "UserStackBase",
+                "UserStackLimit",
+                "Affinity",
+                "Win32StartAddr",
+                "TebBase",
+            ] {
+                f.uword(name, wide).hex().emit()?;
+            }
+            f.u32("SubProcessTag").hex().emit()?;
+            f.u8("BasePriority").emit()?;
+            f.u8("PagePriority").emit()?;
+            f.u8("IoPriority").emit()?;
+            f.u8("ThreadFlags").hex().emit()?;
+        }
+        _ => {
+            f.uword("UniqueProcessKey", wide).hex().emit()?;
+            let pid = f.u32("ProcessId").emit()?;
+            let ppid = f.u32("ParentId").emit()?;
+            f.u32("SessionId").emit()?;
+            f.i32("ExitStatus").emit()?;
+            f.uword("DirectoryTableBase", wide).hex().emit()?;
+            if k.version >= 4 {
+                f.u32("Flags").hex().emit()?;
+            }
+            user_sid(f, k.pointer)?;
+            let image = f.cstr("ImageFileName").emit()?;
+            out.summary
+                .push(format!("{image}, pid {pid}, parent {ppid}"));
+            f.utf16z("CommandLine").emit()?;
+            if k.version >= 4 {
+                f.utf16z("PackageFullName").emit()?;
+                f.utf16z("ApplicationId").emit()?;
+            }
+            if k.version >= 5 && f.remaining() >= 8 {
+                f.u64("ExitTime").filetime().emit()?;
+            }
+        }
+    }
+    if f.remaining() > 0 {
+        let n = f.remaining();
+        f.bytes("Remaining", n).emit()?;
+    }
+    Ok(out)
+}
+
+/// A kernel event's `UserSID`: zero when there is none, otherwise a
+/// `TOKEN_USER` (a pointer and attributes, two pointers wide) followed by
+/// the SID itself.
+fn user_sid(f: &mut Fields<'_>, pointer: u8) -> Result<()> {
+    let at = f.pos();
+    if f.u32("UserSID").get()? == 0 {
+        f.seek(at);
+        f.u32("UserSID").summary("none").emit()?;
+        return Ok(());
+    }
+    f.seek(at);
+    let token = u64::from(pointer).saturating_mul(2);
+    f.bytes("TOKEN_USER", token)
+        .desc("Pointer to the SID, and attributes")
+        .emit()?;
+    let start = f.pos();
+    let head = f.bytes("UserSID", 8).get()?;
+    let count = u64::from(head.get(1).copied().unwrap_or(0));
+    f.seek(start);
+    let len = count.saturating_mul(4).saturating_add(8);
+    let span = f.peek_span(len);
+    let sid = f.bytes("UserSID", len).get()?;
+    f.node(sid_node("UserSID", span, &sid));
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // TraceLogging
 
 /// A field of a TraceLogging schema.
@@ -1102,8 +1388,8 @@ struct TlField {
     name: String,
     in_type: u8,
     out_type: u8,
-    /// 0: single value, 0x20: variable count, 0x40: constant count,
-    /// 0x60: custom.
+    /// 0: single value, 0x20: constant count (in the schema), 0x40:
+    /// variable count (a `UINT16` before the values), 0x60: custom.
     count_kind: u8,
     count: u16,
     /// Offsets of the field's metadata within the schema blob.
@@ -1159,7 +1445,7 @@ fn tl_schema(d: &[u8]) -> Option<TlSchema> {
         let count_kind = in_raw & 0x60;
         let mut count = 1u16;
         match count_kind {
-            0x40 => {
+            0x20 => {
                 count = u16_le(d, at)?;
                 at = at.saturating_add(2);
             }
@@ -1190,11 +1476,18 @@ fn provider_name(d: &[u8]) -> Option<String> {
 fn tl_type(f: &TlField) -> String {
     let base = lookup(TL_IN_TYPES, f.in_type.into())
         .map_or_else(|| format!("type {}", f.in_type), str::to_owned);
+    let base = if f.in_type == 24 {
+        format!("STRUCT of {}", plural(f.out_type, "field"))
+    } else {
+        match lookup(TL_OUT_TYPES, f.out_type.into()) {
+            Some(out) if f.out_type != 0 => format!("{base} as {out}"),
+            _ => base,
+        }
+    };
     match f.count_kind {
-        0x20 => format!("{base}[]"),
-        0x40 => format!("{base}[{}]", f.count),
+        0x20 => format!("{base}[{}]", f.count),
+        0x40 => format!("{base}[]"),
         0x60 => format!("{base} (custom)"),
-        _ if f.in_type == 24 => format!("STRUCT of {} fields", f.out_type),
         _ => base,
     }
 }
@@ -1223,7 +1516,7 @@ fn tl_fixed(in_type: u8, pointer: u8) -> Option<usize> {
     })
 }
 
-fn tl_scalar(in_type: u8, b: &[u8]) -> Value {
+fn tl_scalar(in_type: u8, out_type: u8, b: &[u8]) -> Value {
     let u = |n: usize| {
         let mut buf = [0u8; 8];
         for (dst, &x) in buf.iter_mut().zip(b.iter().take(n)) {
@@ -1231,9 +1524,18 @@ fn tl_scalar(in_type: u8, b: &[u8]) -> Value {
         }
         u64::from_le_bytes(buf)
     };
+    // Output types that change how an integer reads: BOOLEAN and HEX.
+    match (in_type, out_type) {
+        (3..=10 | 13, 3) => return Value::Bool(u(8) != 0),
+        (4, 4) => return hex(u(1), 8),
+        (6, 4) => return hex(u(2), 16),
+        (8, 4) => return hex(u(4), 32),
+        (10, 4) => return hex(u(8), 64),
+        _ => {}
+    }
     match in_type {
         3 => Value::Int {
-            value: i64::from(b.first().copied().unwrap_or(0) as i8),
+            value: i64::from(u(1) as u8 as i8),
             bits: 8,
         },
         5 => Value::Int {
@@ -1261,6 +1563,16 @@ fn tl_scalar(in_type: u8, b: &[u8]) -> Value {
         17 => Value::Timestamp {
             unix_seconds: crate::text::filetime_to_unix(u(8)),
         },
+        18 => {
+            let mut w = [0u16; 8];
+            for (i, dst) in w.iter_mut().enumerate() {
+                *dst = u16_le(b, i.saturating_mul(2)).unwrap_or(0);
+            }
+            match crate::formats::util::civil::systemtime(w) {
+                Some(t) => Value::Timestamp { unix_seconds: t },
+                None => Value::Bytes(b.to_vec()),
+            }
+        }
         _ => Value::Bytes(b.to_vec()),
     }
 }
@@ -1283,101 +1595,260 @@ fn show(v: &Value) -> String {
     }
 }
 
+/// A decoded TraceLogging field: a value, an array (shown as one text
+/// value), or a struct with its members.
+#[derive(Clone, Debug)]
+struct TlItem {
+    name: String,
+    start: usize,
+    end: usize,
+    value: Option<Value>,
+    summary: Option<String>,
+    members: Vec<TlItem>,
+    problem: Option<Diagnostic>,
+}
+
+/// Most values (and struct members) decoded per event.
+const TL_MAX_STEPS: usize = 16_384;
+/// Deepest struct nesting followed.
+const TL_MAX_DEPTH: u8 = 32;
+
+/// Index just past field `i` and, for a struct, its members.
+fn tl_after(fields: &[TlField], i: usize, depth: u8) -> usize {
+    let next = i.saturating_add(1);
+    match fields.get(i) {
+        Some(f) if f.in_type == 24 && depth < TL_MAX_DEPTH => {
+            let mut j = next;
+            for _ in 0..f.out_type {
+                j = tl_after(fields, j, depth.saturating_add(1));
+            }
+            j
+        }
+        _ => next,
+    }
+}
+
+/// Decodes TraceLogging values from an event's user data, following the
+/// schema's fields in order; a struct's members are the fields after it
+/// (as many as its out-type says). Stops at the first value it cannot
+/// decode (custom types, unknown types, too little data).
+struct TlDecoder<'d> {
+    data: &'d [u8],
+    fields: &'d [TlField],
+    pointer: u8,
+    at: usize,
+    steps: usize,
+    stopped: bool,
+}
+
+impl TlDecoder<'_> {
+    /// Decodes `n` fields (a struct with its members counting as one)
+    /// starting at field `i`.
+    fn fields(&mut self, mut i: usize, n: usize, depth: u8) -> Vec<TlItem> {
+        let mut items = Vec::new();
+        for _ in 0..n {
+            if self.stopped {
+                break;
+            }
+            let Some(f) = self.fields.get(i) else {
+                break;
+            };
+            items.push(self.field(f, i, depth));
+            i = tl_after(self.fields, i, 0);
+        }
+        items
+    }
+
+    fn stop(&mut self, mut item: TlItem, problem: Diagnostic) -> TlItem {
+        self.stopped = true;
+        item.end = self.at;
+        item.problem = Some(problem);
+        item
+    }
+
+    fn field(&mut self, f: &TlField, i: usize, depth: u8) -> TlItem {
+        let mut item = TlItem {
+            name: f.name.clone(),
+            start: self.at,
+            end: self.at,
+            value: None,
+            summary: (f.count_kind != 0 || f.in_type == 24).then(|| tl_type(f)),
+            members: Vec::new(),
+            problem: None,
+        };
+        let count = match f.count_kind {
+            0 => 1usize,
+            0x20 => usize::from(f.count),
+            0x40 => match u16_le(self.data, self.at) {
+                Some(n) => {
+                    self.at = self.at.saturating_add(2);
+                    usize::from(n)
+                }
+                None => {
+                    let e = Diagnostic::malformed("user data ends before the array count");
+                    return self.stop(item, e);
+                }
+            },
+            _ => {
+                let e = Diagnostic::unsupported(format!("custom-typed field {}", f.name));
+                return self.stop(item, e);
+            }
+        };
+        if f.in_type == 24 {
+            if depth >= TL_MAX_DEPTH {
+                return self.stop(item, Diagnostic::limit("structs nested too deep"));
+            }
+            let n = usize::from(f.out_type);
+            let first = i.saturating_add(1);
+            if f.count_kind == 0 {
+                item.members = self.fields(first, n, depth.saturating_add(1));
+            } else {
+                for e in 0..count {
+                    if self.stopped {
+                        break;
+                    }
+                    let start = self.at;
+                    let members = self.fields(first, n, depth.saturating_add(1));
+                    item.members.push(TlItem {
+                        name: format!("[{e}]"),
+                        start,
+                        end: self.at,
+                        value: None,
+                        summary: None,
+                        members,
+                        problem: None,
+                    });
+                }
+            }
+            item.end = self.at;
+            return item;
+        }
+        let mut values = Vec::new();
+        for _ in 0..count {
+            self.steps = self.steps.saturating_add(1);
+            if self.steps > TL_MAX_STEPS {
+                return self.stop(item, Diagnostic::limit("too many TraceLogging values"));
+            }
+            match self.one(f) {
+                Ok(v) => values.push(v),
+                Err(e) => {
+                    if f.count_kind != 0 {
+                        item.value =
+                            Some(text(values.iter().map(show).collect::<Vec<_>>().join(", ")));
+                    }
+                    return self.stop(item, e);
+                }
+            }
+        }
+        item.end = self.at;
+        item.value = if f.count_kind == 0 {
+            values.into_iter().next()
+        } else {
+            Some(text(values.iter().map(show).collect::<Vec<_>>().join(", ")))
+        };
+        item
+    }
+
+    /// One value of field `f`'s type at the current position.
+    fn one(&mut self, f: &TlField) -> std::result::Result<Value, Diagnostic> {
+        let data = self.data;
+        let at = self.at;
+        let short = || Diagnostic::malformed(format!("user data ends inside {}", f.name));
+        let (value, next) = match f.in_type {
+            1 => {
+                let rest = data.get(at..).unwrap_or_default();
+                let (s, len, terminated) = crate::text::utf16z(rest, LE);
+                if !terminated {
+                    return Err(short());
+                }
+                (text(s), at.saturating_add(len))
+            }
+            2 => match cstr_at(data, at) {
+                Some((s, next)) => (text(s), next),
+                None => return Err(short()),
+            },
+            22 | 23 | 14 | 25 => {
+                let n = usize::from(u16_le(data, at).ok_or_else(short)?);
+                let from = at.saturating_add(2);
+                let body = data.get(from..from.saturating_add(n)).ok_or_else(short)?;
+                let v = match f.in_type {
+                    22 => text(crate::text::utf16z(body, LE).0),
+                    23 => text(String::from_utf8_lossy(body).into_owned()),
+                    _ => Value::Bytes(body.to_vec()),
+                };
+                (v, from.saturating_add(n))
+            }
+            19 => {
+                let n = 8usize.saturating_add(
+                    usize::from(data.get(at.saturating_add(1)).copied().ok_or_else(short)?)
+                        .saturating_mul(4),
+                );
+                let b = data.get(at..at.saturating_add(n)).ok_or_else(short)?;
+                let v = match crate::formats::util::winsec::parse_sid(b) {
+                    Some((sid, _)) => text(sid),
+                    None => Value::Bytes(b.to_vec()),
+                };
+                (v, at.saturating_add(n))
+            }
+            t => match tl_fixed(t, self.pointer) {
+                Some(n) => {
+                    let b = data.get(at..at.saturating_add(n)).ok_or_else(short)?;
+                    (tl_scalar(t, f.out_type, b), at.saturating_add(n))
+                }
+                None => {
+                    return Err(Diagnostic::unsupported(format!("TraceLogging type {t}")));
+                }
+            },
+        };
+        self.at = next;
+        Ok(value)
+    }
+}
+
+fn tl_item_node(span: Span, item: TlItem) -> Node {
+    let mut node = Node::new(item.name).span(span.sub(
+        to_u64(item.start),
+        to_u64(item.end.saturating_sub(item.start)),
+    ));
+    if let Some(v) = item.value {
+        node = node.value(v);
+    }
+    if let Some(s) = item.summary {
+        node = node.summary(s);
+    }
+    if let Some(p) = item.problem {
+        node = node.diag(p);
+    }
+    if !item.members.is_empty() {
+        node = node.lazy(tl_items, (span, item.members));
+    }
+    node
+}
+
+async fn tl_items(cx: Cx, (span, items): (Span, Vec<TlItem>)) -> Result<()> {
+    for item in items {
+        cx.emit(tl_item_node(span, item));
+    }
+    Ok(())
+}
+
 /// Decodes TraceLogging field values from user data, as far as the types
 /// allow (unknown or custom types stop the decoding).
 async fn tl_values(cx: Cx, (span, fields, pointer): (Span, Vec<TlField>, u8)) -> Result<()> {
     let data = cx.read(span.sub(0, 0x1_0000)).await?;
-    let mut at = 0usize;
-    let node_at =
-        |start: usize, end: usize| span.sub(to_u64(start), to_u64(end.saturating_sub(start)));
-    for f in &fields {
-        cx.checkpoint().await;
-        if f.in_type == 24 {
-            cx.emit(Node::new(f.name.clone()).summary(tl_type(f)));
-            continue;
-        }
-        let count = match f.count_kind {
-            0 => 1usize,
-            0x40 => usize::from(f.count),
-            0x20 => {
-                let n = usize::from(u16_le(&data, at).unwrap_or(0));
-                at = at.saturating_add(2);
-                n
-            }
-            _ => {
-                cx.diag(Diagnostic::unsupported(format!(
-                    "custom-typed field {}",
-                    f.name
-                )));
-                return Ok(());
-            }
-        };
-        let start = at;
-        let mut values = Vec::new();
-        for _ in 0..count.min(4096) {
-            let (value, next) = match f.in_type {
-                1 => {
-                    let rest = data.get(at..).unwrap_or_default();
-                    let (s, len, _) = crate::text::utf16z(rest, LE);
-                    (text(s), at.saturating_add(len))
-                }
-                2 => match cstr_at(&data, at) {
-                    Some((s, next)) => (text(s), next),
-                    None => break,
-                },
-                22 | 23 | 14 | 25 => {
-                    let n = usize::from(u16_le(&data, at).unwrap_or(0));
-                    let body = data
-                        .get(at.saturating_add(2)..at.saturating_add(2).saturating_add(n))
-                        .unwrap_or_default();
-                    let v = match f.in_type {
-                        22 => text(crate::text::utf16z(body, LE).0),
-                        23 => text(String::from_utf8_lossy(body).into_owned()),
-                        _ => Value::Bytes(body.to_vec()),
-                    };
-                    (v, at.saturating_add(2).saturating_add(n))
-                }
-                19 => {
-                    let n = 8usize.saturating_add(
-                        usize::from(data.get(at.saturating_add(1)).copied().unwrap_or(0))
-                            .saturating_mul(4),
-                    );
-                    let b = data.get(at..at.saturating_add(n)).unwrap_or_default();
-                    (Value::Bytes(b.to_vec()), at.saturating_add(n))
-                }
-                t => match tl_fixed(t, pointer) {
-                    Some(n) => {
-                        let Some(b) = data.get(at..at.saturating_add(n)) else {
-                            break;
-                        };
-                        (tl_scalar(t, b), at.saturating_add(n))
-                    }
-                    None => {
-                        cx.diag(Diagnostic::unsupported(format!("TraceLogging type {t}")));
-                        return Ok(());
-                    }
-                },
-            };
-            if next > data.len() {
-                break;
-            }
-            values.push(value);
-            at = next;
-        }
-        let node = Node::new(f.name.clone()).span(node_at(start, at));
-        let node = if f.count_kind == 0 {
-            match values.into_iter().next() {
-                Some(v) => node.value(v),
-                None => node.diag(Diagnostic::truncated(
-                    node_at(start, start.saturating_add(1)),
-                    0,
-                )),
-            }
-        } else {
-            let shown: Vec<String> = values.iter().map(show).collect();
-            node.value(text(shown.join(", "))).summary(tl_type(f))
-        };
-        cx.emit(node);
+    let mut dec = TlDecoder {
+        data: &data,
+        fields: &fields,
+        pointer,
+        at: 0,
+        steps: 0,
+        stopped: false,
+    };
+    let items = dec.fields(0, fields.len(), 0);
+    let (at, steps) = (dec.at, dec.steps);
+    cx.charge(to_u64(steps.saturating_add(fields.len()))).await;
+    for item in items {
+        cx.emit(tl_item_node(span, item));
     }
     if at < data.len() {
         cx.emit(
@@ -1398,7 +1869,7 @@ mod tests {
         // Size, one extension byte, "E", fields "a" (UINT32) and "b"
         // (UINT16[2], constant count) and "c" (ANSISTRING with an out-type).
         let mut d = vec![0, 0, 0x00];
-        d.extend_from_slice(b"E\0a\0\x08b\0\x46\x02\x00c\0\x82\x01");
+        d.extend_from_slice(b"E\0a\0\x08b\0\x26\x02\x00c\0\x82\x01");
         let n = d.len() as u16;
         d[..2].copy_from_slice(&n.to_le_bytes());
         let s = tl_schema(&d).unwrap();

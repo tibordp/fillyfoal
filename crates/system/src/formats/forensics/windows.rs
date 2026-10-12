@@ -2165,7 +2165,7 @@ fn destlist_probe(h: &Head<'_>) -> bool {
     // The first entry's NetBIOS name: printable, NUL-padded.
     let host = h.data.get(32 + 72..32 + 88).unwrap_or_default();
     let end = host.iter().position(|&b| b == 0).unwrap_or(host.len());
-    matches!(version, 1 | 3 | 4)
+    matches!(version, 1 | 3 | 4 | 6)
         && (1..100_000).contains(&entries)
         && pinned <= entries
         && end > 0

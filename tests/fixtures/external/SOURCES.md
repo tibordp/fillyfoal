@@ -1173,3 +1173,73 @@ Made by `sh tests/data/audio-codecs/make.sh OUTDIR` (fedora:42, `tests/data/audi
 | `macho/shapes-arm64.dwarf` | Apple clang 21.0.0 + ld + dsymutil (Apple LLVM 21.0.0) | reproduced byte-for-byte by `sh tests/data/macho/build-dsym.sh <repo>` from `tests/data/dwarf/shapes.c` and `shapes.h` (built in `/tmp/fixtures/dwarf-macho` with prefix maps to `/src`, `-oso_prefix`, `ZERO_AR_DATE=1`): the DWARF companion file (`MH_DSYM`) from inside `shapes.dSYM`, an arm64 `-g -O1` executable's DWARF 4 in the `__DWARF` segment; checked with `llvm-dwarfdump --verify` and against `llvm-dwarfdump --debug-info` |
 | `coff/shapes-mingw-x64.o` | Debian trixie mingw-w64 GCC 14 (`14-win32`, Docker `debian:trixie`, `gcc-mingw-w64-x86-64`) | reproduced byte-for-byte by `sh tests/data/coff/make-dwarf.sh <repo>` from `tests/data/dwarf/shapes.c` (`x86_64-w64-mingw32-gcc -g -O1 -c` with prefix maps, built in the container's `/build/dwarf`): x64 object with DWARF 5 `.debug_*` sections (long names in the string table) and their SECREL/ADDR64 relocations, `.debug_frame`; checked with `llvm-dwarfdump --verify` and against `llvm-dwarfdump --debug-info` |
 | `coff/shapes-clang-arm64.o` | Debian clang 19.1.7 (Docker, Debian trixie `clang llvm` packages) | same script: `clang --target=aarch64-w64-windows-gnu -g -O1 -c`; ARM64 object with DWARF 4 and relocations against section symbols and against `shape_counter` (value 4); checked as above |
+
+## Windows VM fixtures: ETW logs
+
+Written on a Windows 11 Pro 25H2 ARM64 VM (build 10.0.26200.9457, local
+account `fillyfoal`, computer `FILLYFOAL-VM`, time zone UTC); see
+`tests/data/windows/etl/` (`gen_etl.ps1` and `gen_kernel_procthread.ps1`,
+run elevated through `elevate.ps1`; the helper programs `fillyfoal_tlg.c`,
+`ff_comp.c` and `ff_klog.c` built by `build_tlg.cmd` with MSVC cl 19.51
+for ARM64). Each file was decoded by `tracerpt` 10.0.26100.1 and our event
+counts per provider, group and opcode match its summary. The files are
+unchanged (the larger ones stored as `.raw.zst`); not byte-for-byte
+reproducible (times, process IDs, whatever ran on the machine).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `etl/kernel-process-manifest.etl.raw.zst` | Windows ETW, logman.exe 10.0.26100.1 | `logman start ff-kproc -p Microsoft-Windows-Kernel-Process 0x10 0x4 -bs 16 -nb 2 8 -ets`, two `cmd /c echo`, stop: 9 buffers of 16 KiB, manifest events ProcessStart (id 1, v4) ×25 and ProcessStop (id 2, v2) ×21, header and PartitionInfoExtensionV2; LogFileMode 0. tracerpt: 48 events |
+| `etl/tracelogging-fillyfoal.etl.raw.zst` | Windows ETW, logman.exe; events from `fillyfoal_tlg.exe` (TraceLoggingProvider.h, Windows SDK 10.0.26100) | `logman start ff-tlg -p {a946bbbd-88e8-5895-7beb-4d343c1d945f} 0xFFFFFFFFFFFFFFFF 0x5 ...`: 3 × 3 TraceLogging events of provider `fillyfoal-test` (scalars incl. BOOLEAN and HEX out-types, ANSI/UTF-16/counted strings, GUID, FILETIME, SYSTEMTIME, binary, constant- and variable-count INT32 arrays, a nested struct). tracerpt: 11 events; every value checked against `fillyfoal_tlg.c` |
+| `etl/tracelogging-fillyfoal-xperf-compressed.etl` | xperf.exe 10.0.26100.8249 (Windows Performance Toolkit) | `xperf -merge tracelogging-fillyfoal.etl <out> -mergeonly -compress`: LogFileMode 0x04010001 (COMPRESSED, RELOG, SEQUENTIAL); a 1 KiB uncompressed first buffer, then 3 Xpress-compressed buffers. tracerpt: 12 events |
+| `etl/compressed-session-kproc-tlg.etl.raw.zst` | Windows ETW session started by `ff_comp.exe` (StartTrace with EVENT_TRACE_COMPRESSED_MODE) | `ff_comp.exe <out> fillyfoal_tlg.exe`: 64 KiB buffers compressed by the live session (LogFileMode 0x04000001), Kernel-Process and fillyfoal-test events. tracerpt: 9 buffers, 41 events |
+| `etl/kernel-logger-procthread-raw.etl.raw.zst` | NT Kernel Logger, controlled by `ff_klog.exe` | `ff_klog.exe kernel <out> 10000003 500` (PROCESS \| THREAD \| NO_SYSCONFIG, 8 KiB buffers, 0.5 s): MOF Process (v4 rundown of 187 processes, Start/End/Terminate, v5 Defunct) and Thread (v3, SetName) events with compact and perfinfo headers. tracerpt: 103 buffers, 5064 events. Every command line was reviewed by hand (only Windows, Program Files and `C:\Users\fillyfoal` paths) |
+| `etl/kernel-logger-thread-merged.etl.raw.zst` | xperf.exe 10.0.26100.8249 | `xperf -merge kernel-logger-thread-raw.etl <out> -suppresspii` of a thread-only kernel log (`ff_klog.exe kernel <raw> 10000002 500`): the thread events plus xperf's own FULL_HEADER64 events (provider {9b79ee91-b5fd-41c0-a243-4248e266e9d0}, opcodes 32-37), LogFileMode 0x00010001; the relogged header buffer records its end in `Offset`, not `SavedOffset`. tracerpt: 117 buffers, 6976 events |
+
+## Windows VM fixtures: kernel crash dump
+
+Written on the same Windows 11 Pro 25H2 ARM64 VM (build 10.0.26200.9457);
+see `tests/data/windows/kernel-dump/` (`setup.ps1` arms a SYSTEM startup
+task, `crashloop.ps1` crashes with Sysinternals NotMyFault and collects the
+dump; run elevated through `elevate.ps1`). Unchanged, stored as `.raw.zst`;
+not reproducible (a crash).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `windows-kernel-dump/minidump-small-memory-dump.dmp.raw.zst` | Windows kernel crash dump writer (CrashDumpEnabled=3, small memory dump), crash by NotMyFault v4.60 (`notmyfaultc64a.exe /crash 0x01`, `myfault.sys`, no user logged on) | `C:\Windows\Minidump\101226-6203-01.dmp`, renamed: `PAGEDU64` header, DumpType 4 (triage), bug check 0xD1, then `TRIAGE_DUMP64` (context, PRCB, process, thread, call stack, 188 drivers with a string pool, 6 unloaded drivers, KDDEBUGGER_DATA64, 61 data blocks, the `TRGD` marker) and, past SizeOfDump, the `DumpBlob` secondary data (17 blobs). Every header and `TRIAGE_DUMP64` field checked against WinDbg 10.0.29661.1004 `kd -z <dump> -c ".dumpdebug; vertarget"` |
+
+## Windows VM fixtures: shell links and jump lists
+
+Written on the same Windows 11 Pro 25H2 ARM64 VM (build 10.0.26200.9457;
+explorer.exe 10.0.26100.8117, windows.storage.dll 10.0.26100.9278,
+wshom.ocx 10.0.26100.4768) to `C:\fillyfoal\note.txt` and the folder
+`C:\fillyfoal\notes\`; see `tests/data/windows/lnk/jumplist.ps1`. The links
+carry the VM's volume serial and a TrackerDataBlock (machine `fillyfoal-vm`,
+droids embedding the VM's virtual NIC MAC). Unchanged; not reproducible
+(times, object IDs).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `lnk/explorer-file-note.txt.lnk` | Windows Explorer shell ("Create shortcut" verb) | `(New-Object -ComObject Shell.Application).Namespace('C:\fillyfoal').ParseName('note.txt').InvokeVerb('link')`, renamed: ID list with 0xBEEF0004 blocks (v9, 8.3 name `FILLYF~2`), LinkInfo, relative path, working dir, TrackerDataBlock, PropertyStoreDataBlock (4 storages) |
+| `lnk/explorer-folder-notes.lnk` | Windows Explorer shell | the same verb on the folder `C:\fillyfoal\notes`: a directory target |
+| `lnk/wscript-file-note.txt.lnk` | Windows Script Host `WScript.Shell` (wshom.ocx), from Windows PowerShell 5.1 | `CreateShortcut(...)`, TargetPath `C:\fillyfoal\note.txt`, WorkingDirectory `C:\fillyfoal`, Description `fillyfoal test`, `Save()`: NAME_STRING, one property storage |
+| `lnk/recent-note.lnk` | Windows shell recent-documents tracking (`SHAddToRecentDocs`) | written by Windows into `%APPDATA%\Microsoft\Windows\Recent\note.lnk` by `jumplist.ps1`; a relative path climbing out of the profile |
+| `custom-destinations/6b16a059c2e70543.customDestinations-ms` | Windows `ICustomDestinationList` (windows.storage.dll) | `jumplist.ps1` with AppUserModelID `fillyfoal.test`: custom category "fillyfoal" (2 links with PKEY_Title), user tasks (1 link), known category Recent, 0xBABFFBAB footers |
+| `cfb/a61657a5e5dfbdc.automaticDestinations-ms` | Windows 11 jump-list machinery for Notepad 11.2607.14.0 | `Start-Process C:\fillyfoal\note.txt`, then `C:\fillyfoal\notes\readme.txt`, Notepad closed; copied from `AutomaticDestinations\`: compound file with a version 6 `DestList` (2 entries), link streams `1` and `2` (with a 0xBEEF001A ProgID extension block) and an empty `DestListPropertyStore` |
+
+## Windows VM fixtures: NTFS volumes
+
+Written on the same Windows 11 Pro 25H2 ARM64 VM (build 10.0.26200.9457) by
+`tests/data/windows/ntfs/build.ps1` (run elevated through `elevate.ps1`):
+DiskPart 10.0.26100.1 creates a 16 MiB fixed VHD (`diskpart-create.txt`:
+MBR, one primary partition at LBA 128, `format fs=ntfs quick
+label=FILLYFOAL`: NTFS 3.1, 4 KiB clusters, 1 KiB records), the script
+populates it with PowerShell, `compact.exe` and `fsutil.exe`, and
+`diskpart-detach.txt` detaches it; `mftdump.py` checked each detached image
+(output in the rows below). Unchanged, stored as `.raw.zst`; not
+reproducible (times, serial numbers, the VHD's random UUID).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `vhd/ntfs-attrlist.vhd.raw.zst` | Windows NTFS driver (DiskPart, PowerShell) | `$ATTRIBUTE_LIST` four ways: `attrlist-resident.txt` (6 named streams, resident list of 9 entries over records 38-39), `attrlist-nonresident.txt` (60 streams, non-resident list of 63 entries over records 40-54), `attrlist-resident-hardlinks\target.txt` (7 names over records 56-61) and `attrlist-nonresident-hardlinks\target.txt` (11 names over records 63-70); every stream, name and record matches `mftdump.py` and `fsutil file layout` |
+| `vhd/ntfs-wof.vhd.raw.zst` | Windows NTFS driver, `compact.exe` (wof.sys) | `compact /c /exe:xpress4k`, `xpress8k`, `xpress16k`, `lzx` on four 320 KiB text files (sparse unnamed `$DATA`, `WofCompressedData` stream, `IO_REPARSE_TAG_WOF` reparse point, algorithms 0/2/3/1) and an uncompressed control file; every decompressed file matches the text `build.ps1` wrote, line for line |
+| `vhd/ntfs-lznt1.vhd.raw.zst` | Windows NTFS driver, `compact.exe` | `compact /c` on a 320 KiB file and on a directory before a file was written into it (inherited compression): LZNT1, compression unit 2^4 clusters; both decompressed files match the text `build.ps1` wrote |
