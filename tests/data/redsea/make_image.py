@@ -13,14 +13,14 @@ writes
       first partition of an MBR disk, at block 63 as DskPrt puts it, with the
       FAT32 type RedSeaFmt gives it ("to fool BIOS"); block numbers are
       absolute, so the volume is written for drv_offset 63
-  tests/fixtures/synthetic/iso9660/templeos.iso.gz   an ISO as RedSeaISO
+  tests/fixtures/synthetic/templeos-iso/templeos.iso.gz   an ISO as RedSeaISO
       writes it: sized by RedSeaISOPass1, an empty ISO 9660 shell
       (RedSeaISO9660: TempleOS's CISOPriDesc layout, El Torito catalog)
       with the RedSea volume at block 88 (no stage-2 loader, so the boot
       image sector stays empty)
 
 Checked against TempleOS itself: for the tree of
-tests/fixtures/external/iso9660/templeos-redseaiso.iso.gz (written by
+tests/fixtures/external/templeos-iso/templeos-redseaiso.iso.gz (written by
 RedSeaISO in QEMU, see qemu_redseaiso.py), with its times and volume ID,
 iso() builds the same bytes except for the slack after each file's last
 block, which TempleOS fills from an uninitialised buffer.
@@ -394,7 +394,7 @@ def main():
     save(os.path.join(fx, 'redsea/templeos.img.gz'), bytes(volume(entries, 0).img))
     # DskPrt's first partition starts at DRV_HEADER (63).
     save(os.path.join(fx, 'mbr/templeos-redsea.img.gz'), mbr(volume(entries, 63)))
-    save(os.path.join(fx, 'iso9660/templeos.iso.gz'), iso(entries))
+    save(os.path.join(fx, 'templeos-iso/templeos.iso.gz'), iso(entries))
 
 
 if __name__ == "__main__":
