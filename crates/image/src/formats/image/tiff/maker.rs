@@ -97,7 +97,16 @@ pub enum Note {
     Apple,
     Pentax,
     Samsung,
+    /// The M9 and M Monochrom (ExifTool's `Leica4`: subdirectories only).
     Leica,
+    /// The M8 (ExifTool's `Leica2` table).
+    Leica2,
+    /// The X1, X2, X Vario, T, Q, SL and CL (`Leica5`).
+    Leica5,
+    /// The S2, M (Typ 240) and M Monochrom (Typ 246) (`Leica6`).
+    Leica6,
+    /// The M10 and S (`Leica9`).
+    Leica9,
     Casio,
     Casio2,
     Ricoh,
@@ -126,7 +135,9 @@ impl Note {
             Note::Apple => "Apple maker note",
             Note::Pentax => "Pentax maker note",
             Note::Samsung => "Samsung maker note",
-            Note::Leica => "Leica maker note",
+            Note::Leica | Note::Leica2 | Note::Leica5 | Note::Leica6 | Note::Leica9 => {
+                "Leica maker note"
+            }
             Note::Casio | Note::Casio2 => "Casio maker note",
             Note::Ricoh => "Ricoh maker note",
             Note::Sigma => "Sigma maker note",
@@ -159,6 +170,10 @@ impl Note {
             Note::Sigma => SIGMA,
             Note::Dji => DJI,
             Note::Minolta => MINOLTA,
+            Note::Leica2 => LEICA2,
+            Note::Leica5 => LEICA5,
+            Note::Leica6 => LEICA6,
+            Note::Leica9 => LEICA9,
             Note::Leica | Note::Huawei | Note::Unknown => &[],
         }
     }
@@ -381,7 +396,7 @@ pub fn layout(head: &[u8], make: Make, outer: Endian, note_at: u64) -> Option<La
             .zip(after_ifd(head, 8, e))
             .is_some_and(|(v, end)| v.checked_sub(end) == Some(8));
         let base = if dng { Base::Note(0) } else { Base::Note(8) };
-        return l(Note::Leica, "Leica M8", 8, 8, base, Some(e));
+        return l(Note::Leica2, "Leica M8", 8, 8, base, Some(e));
     }
     // M Monochrom Typ 246 (MakerNoteLeica7): absolute file offsets. The S2
     // and M (Typ 240), which ExifTool tells apart by Model, write the same
@@ -399,7 +414,7 @@ pub fn layout(head: &[u8], make: Make, outer: Endian, note_at: u64) -> Option<La
         } else {
             ("Leica M Monochrom (Typ 246)", Base::Absolute)
         };
-        return l(Note::Leica, label, 8, 8, base, Some(e));
+        return l(Note::Leica6, label, 8, 8, base, Some(e));
     }
     if head.starts_with(b"LEICA") {
         let e = guess_order(head, 8, outer);
@@ -415,10 +430,10 @@ pub fn layout(head: &[u8], make: Make, outer: Endian, note_at: u64) -> Option<La
             ),
             [b'0', ..] => l(Note::Leica, "Leica M9", 8, 8, Base::Note(0), Some(e)),
             [0, 0x01 | 0x04..=0x07 | 0x10 | 0x1a, 0] => {
-                l(Note::Leica, "Leica X/T", 8, 8, Base::Note(0), Some(e))
+                l(Note::Leica5, "Leica X/T", 8, 8, Base::Note(0), Some(e))
             }
-            [0, 0x08..=0x0a, 0] => l(Note::Leica, "Leica Q/SL/CL", 8, 8, Base::Outer, Some(e)),
-            [0, 0x02, 0] => l(Note::Leica, "Leica M10/S", 8, 8, Base::Outer, Some(e)),
+            [0, 0x08..=0x0a, 0] => l(Note::Leica5, "Leica Q/SL/CL", 8, 8, Base::Outer, Some(e)),
+            [0, 0x02, 0] => l(Note::Leica9, "Leica M10/S", 8, 8, Base::Outer, Some(e)),
             _ => None,
         };
     }
@@ -1855,6 +1870,70 @@ const SIGMA: EnumTable = &[
     (0x011f, "CameraCalibration"),
     (0x0120, "WBSettings"),
     (0x0121, "WBSettings2"),
+];
+
+/// ExifTool's `Panasonic::Leica2` table.
+const LEICA2: EnumTable = &[
+    (0x0300, "Quality"),
+    (0x0302, "UserProfile"),
+    (0x0303, "SerialNumber"),
+    (0x0304, "WhiteBalance"),
+    (0x0310, "LensType"),
+    (0x0311, "ExternalSensorBrightnessValue"),
+    (0x0312, "MeasuredLV"),
+    (0x0313, "ApproximateFNumber"),
+    (0x0320, "CameraTemperature"),
+    (0x0321, "ColorTemperature"),
+    (0x0322, "WBRedLevel"),
+    (0x0323, "WBGreenLevel"),
+    (0x0324, "WBBlueLevel"),
+    (0x0325, "UV-IRFilterCorrection"),
+    (0x0330, "CCDVersion"),
+    (0x0331, "CCDBoardVersion"),
+    (0x0332, "ControllerBoardVersion"),
+    (0x0333, "M16CVersion"),
+    (0x0340, "ImageIDNumber"),
+];
+
+/// ExifTool's `Panasonic::Leica5` table.
+const LEICA5: EnumTable = &[
+    (0x0303, "LensType"),
+    (0x0305, "SerialNumber"),
+    (0x0407, "OriginalFileName"),
+    (0x0408, "OriginalDirectory"),
+    (0x040a, "FocusInfo"),
+    (0x040d, "ExposureMode"),
+    (0x0410, "ShotInfo"),
+    (0x0412, "FilmMode"),
+    (0x0413, "WB_RGBLevels"),
+    (0x0500, "InternalSerialNumber"),
+    (0x05ff, "CameraIFD"),
+];
+
+/// ExifTool's `Panasonic::Leica6` table.
+const LEICA6: EnumTable = &[
+    (0x0300, "PreviewImage"),
+    (0x0301, "UnknownBlock"),
+    (0x0303, "LensType"),
+    (0x0304, "FocusDistance"),
+    (0x0311, "ExternalSensorBrightnessValue"),
+    (0x0312, "MeasuredLV"),
+    (0x0320, "FirmwareVersion"),
+    (0x0321, "LensSerialNumber"),
+];
+
+/// ExifTool's `Panasonic::Leica9` table.
+const LEICA9: EnumTable = &[
+    (0x0304, "FocusDistance"),
+    (0x0311, "ExternalSensorBrightnessValue"),
+    (0x0312, "MeasuredLV"),
+    (0x034c, "UserProfile"),
+    (0x0359, "ISOSelected"),
+    (0x035a, "FNumber"),
+    (0x035b, "CorrelatedColorTemp"),
+    (0x035c, "ColorTint"),
+    (0x035d, "WhitePoint"),
+    (0x0370, "LensProfileName"),
 ];
 
 const DJI: EnumTable = &[
