@@ -730,6 +730,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .lazy(special_inodes, (fs.clone(), Arc::new(special))),
         );
     }
+    if let Some(node) = crate::formats::disk::trailing_node(&input, blocks.saturating_mul(block)) {
+        cx.emit(node);
+    }
     Ok(())
 }
 

@@ -495,6 +495,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .lazy(xattr::prefix_table, (fs.clone(), Arc::new(prefix_spans))),
         );
     }
+    let end = u64::from(sb.blocks).saturating_mul(blk);
+    if let Some(node) = crate::formats::disk::trailing_node(&input, end) {
+        cx.emit(node);
+    }
     Ok(())
 }
 

@@ -282,6 +282,12 @@ async fn lp_super(cx: Cx, input: Input) -> Result<()> {
         };
         cx.push(node).await;
     }
+    // Past the first block device (`LpMetadataBlockDevice::size`): an AVB
+    // footer with its vbmeta and hash tree, or other trailing data.
+    let device_end = u64_le(&devices, 16).unwrap_or(0);
+    if device_end > 0 && device_end < file.len {
+        crate::formats::system::platform::avb_trailer(&cx, input, device_end).await?;
+    }
     cx.annotate(format!(
         "Android super image, {} partitions: {} ({slots} metadata slots of {})",
         names.len(),
