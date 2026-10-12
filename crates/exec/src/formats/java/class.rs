@@ -9,6 +9,8 @@
 
 use std::sync::Arc;
 
+mod attrs;
+
 use super::opcodes::{ARRAY_TYPE, OPCODES, Operands};
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::{Block, Cx};
@@ -843,6 +845,9 @@ enum Owner {
     Method(usize),
     /// The attributes of a `Code` attribute (offset of the Code attribute).
     Code(usize),
+    /// The attributes of a record component (offset of the `Record`
+    /// attribute, component index).
+    Component(usize, usize),
 }
 
 fn attributes_of(c: &ClassInfo, owner: Owner) -> Vec<Attribute> {
@@ -863,6 +868,7 @@ fn attributes_of(c: &ClassInfo, owner: Owner) -> Vec<Attribute> {
         Owner::Code(offset) => code_parts(c, offset)
             .map(|p| p.attributes)
             .unwrap_or_default(),
+        Owner::Component(offset, index) => attrs::component_attributes(c, offset, index),
     }
 }
 
@@ -922,71 +928,21 @@ fn attribute_summary(c: &ClassInfo, name: &str, a: &Attribute) -> String {
         | "StackMapTable"
         | "ModulePackages" => format!("{} entries", u16_at(0)),
         "RuntimeVisibleAnnotations" | "RuntimeInvisibleAnnotations" => {
-            annotation_types(c, b).join(", ")
+            attrs::annotation_types(c, b).join(", ")
         }
         "MethodParameters" => format!("{} entries", b.first().copied().unwrap_or(0)),
+        "RuntimeVisibleParameterAnnotations" | "RuntimeInvisibleParameterAnnotations" => {
+            format!("{} parameters", b.first().copied().unwrap_or(0))
+        }
+        "RuntimeVisibleTypeAnnotations" | "RuntimeInvisibleTypeAnnotations" => {
+            format!("{} annotations", u16_at(0))
+        }
+        "Record" => format!("{} components", u16_at(0)),
+        "AnnotationDefault" => attrs::default_value(c, b),
+        "Module" => c.resolve(u16_at(0)),
         // 1 KiB holds well over the 80 characters shown.
         "SourceDebugExtension" => clip(&String::from_utf8_lossy(b.get(..1024).unwrap_or(b)), 80),
         _ => format!("{} bytes", b.len()),
-    }
-}
-
-/// The type names of the annotations in a `Runtime*Annotations` body. Only
-/// the first annotation's type can be found without decoding element values,
-/// so this decodes them, skipping values.
-fn annotation_types(c: &ClassInfo, b: &[u8]) -> Vec<String> {
-    let mut r = Reader::new(b);
-    let mut out = Vec::new();
-    let Some(n) = r.int::<u16>(BE) else {
-        return out;
-    };
-    for _ in 0..n.min(64) {
-        let Some(kind) = r.int::<u16>(BE) else { break };
-        out.push(c.utf8(kind).map_or_else(
-            || format!("#{kind}"),
-            |s| {
-                s.trim_start_matches('L')
-                    .trim_end_matches(';')
-                    .replace('/', ".")
-            },
-        ));
-        let Some(pairs) = r.int::<u16>(BE) else { break };
-        for _ in 0..pairs {
-            if r.int::<u16>(BE).is_none() || !skip_element(&mut r, 0) {
-                return out;
-            }
-        }
-    }
-    out
-}
-
-fn skip_element(r: &mut Reader<'_>, depth: u32) -> bool {
-    if depth > 16 {
-        return false;
-    }
-    let Some(tag) = r.u8() else { return false };
-    match tag {
-        b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' | b's' | b'c' => {
-            r.int::<u16>(BE).is_some()
-        }
-        b'e' => r.int::<u32>(BE).is_some(),
-        b'@' => {
-            if r.int::<u16>(BE).is_none() {
-                return false;
-            }
-            let Some(pairs) = r.int::<u16>(BE) else {
-                return false;
-            };
-            (0..pairs)
-                .all(|_| r.int::<u16>(BE).is_some() && skip_element(r, depth.saturating_add(1)))
-        }
-        b'[' => {
-            let Some(n) = r.int::<u16>(BE) else {
-                return false;
-            };
-            (0..n).all(|_| skip_element(r, depth.saturating_add(1)))
-        }
-        _ => false,
     }
 }
 
@@ -1035,6 +991,9 @@ async fn attribute(cx: Cx, (c, owner, depth, index): (Class, Owner, u32, usize))
     let class_ref = |f: &mut Fields<'_>, label: &'static str| -> Result<u16> {
         f.u16(label).with(|&v, n| n.summary(c.class_name(v))).emit()
     };
+    if attrs::expand(&cx, &c, &mut f, &name, a, depth).await? {
+        return Ok(());
+    }
     match name.as_str() {
         "SourceFile" => {
             reference(&mut f, "sourcefile_index")?;

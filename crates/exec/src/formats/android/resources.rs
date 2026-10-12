@@ -1136,28 +1136,168 @@ async fn package(cx: Cx, (doc, c, pool): (Doc, Chunk, Arc<Vec<String>>)) -> Resu
     Ok(())
 }
 
-/// A short rendering of a `ResTable_config` (`default`, `fr-rCA-v21`, ...).
+/// A short rendering of a `ResTable_config` (`default`, `fr-rCA-v21`,
+/// `b+sr+Latn`, `sw600dp-night`, ...): the qualifiers in the order and
+/// spelling of `ResTable_config::toString` (AOSP `ResourceTypes.cpp`).
+/// Fields past the config's own `size` count as unset.
 fn config_summary(data: &[u8], at: usize) -> String {
-    let byte = |o: usize| data.get(at.saturating_add(o)).copied().unwrap_or(0);
-    let half = |o: usize| u16_le(data, at.saturating_add(o)).unwrap_or(0);
-    let mut parts = Vec::new();
-    let language = [byte(8), byte(9)];
-    if language[0] != 0 && language[0] & 0x80 == 0 {
-        parts.push(String::from_utf8_lossy(&language).into_owned());
+    let size = to_usize(u32_le(data, at).unwrap_or(0).into());
+    let byte = |o: usize| {
+        if o < size {
+            data.get(at.saturating_add(o)).copied().unwrap_or(0)
+        } else {
+            0
+        }
+    };
+    let half = |o: usize| u16::from(byte(o)) | (u16::from(byte(o.saturating_add(1))) << 8);
+    let chars = |o: usize, n: usize| -> String {
+        (0..n)
+            .map(|i| byte(o.saturating_add(i)))
+            .take_while(|&b| b != 0)
+            .map(char::from)
+            .collect()
+    };
+    let pick = |v: u8, table: &[(u8, &str)], other: &str| -> String {
+        table
+            .iter()
+            .find(|&&(k, _)| k == v)
+            .map_or_else(|| format!("{other}={v}"), |&(_, n)| n.to_owned())
+    };
+    let mut parts: Vec<String> = Vec::new();
+    let mcc = half(4);
+    if mcc != 0 {
+        parts.push(format!("mcc{mcc}"));
     }
-    let country = [byte(10), byte(11)];
-    if country[0] != 0 && country[0] & 0x80 == 0 {
-        parts.push(format!("r{}", String::from_utf8_lossy(&country)));
+    match half(6) {
+        0 => {}
+        0xffff => parts.push("mnc00".to_owned()),
+        mnc => parts.push(format!("mnc{mnc}")),
     }
-    match byte(12) {
-        1 => parts.push("port".to_owned()),
-        2 => parts.push("land".to_owned()),
-        _ => {}
+    // Locale: the legacy `ll-rCC` form, or the modified BCP 47 `b+` tag
+    // when a script, variant or numbering system is present.
+    if byte(8) != 0 {
+        let language = unpack_locale([byte(8), byte(9)], b'a');
+        let region = (byte(10) != 0).then(|| unpack_locale([byte(10), byte(11)], b'0'));
+        let script = chars(36, 4);
+        let script_given = !script.is_empty() && byte(52) == 0;
+        let variant = chars(40, 8);
+        let numbering = chars(53, 8);
+        if !script_given && variant.is_empty() && numbering.is_empty() {
+            parts.push(match region {
+                Some(r) => format!("{language}-r{r}"),
+                None => language,
+            });
+        } else {
+            let mut tag = format!("b+{language}");
+            if script_given {
+                tag.push('+');
+                tag.push_str(&script);
+            }
+            if let Some(r) = region {
+                tag.push('+');
+                tag.push_str(&r);
+            }
+            if !variant.is_empty() {
+                tag.push('+');
+                tag.push_str(&variant);
+            }
+            if !numbering.is_empty() {
+                tag.push_str("+u+nu+");
+                tag.push_str(&numbering);
+            }
+            parts.push(tag);
+        }
+    }
+    let gender = byte(19);
+    if gender != 0 {
+        parts.push(pick(
+            gender,
+            &[(1, "neuter"), (2, "feminine"), (3, "masculine")],
+            "grammaticalGender",
+        ));
+    }
+    let layout = byte(28);
+    if layout & 0xc0 != 0 {
+        parts.push(pick(
+            layout & 0xc0,
+            &[(0x40, "ldltr"), (0x80, "ldrtl")],
+            "layoutDir",
+        ));
+    }
+    for (o, prefix) in [(30, "sw"), (32, "w"), (34, "h")] {
+        let dp = half(o);
+        if dp != 0 {
+            parts.push(format!("{prefix}{dp}dp"));
+        }
+    }
+    if layout & 0x0f != 0 {
+        parts.push(pick(
+            layout & 0x0f,
+            &[(1, "small"), (2, "normal"), (3, "large"), (4, "xlarge")],
+            "screenLayoutSize",
+        ));
+    }
+    if layout & 0x30 != 0 {
+        parts.push(pick(
+            layout & 0x30,
+            &[(0x10, "notlong"), (0x20, "long")],
+            "screenLayoutLong",
+        ));
+    }
+    let layout2 = byte(48);
+    if layout2 & 0x03 != 0 {
+        parts.push(pick(
+            layout2 & 0x03,
+            &[(1, "notround"), (2, "round")],
+            "screenRound",
+        ));
+    }
+    let color = byte(49);
+    if color & 0x03 != 0 {
+        parts.push(pick(
+            color & 0x03,
+            &[(1, "nowidecg"), (2, "widecg")],
+            "wideColorGamut",
+        ));
+    }
+    if color & 0x0c != 0 {
+        parts.push(pick(color & 0x0c, &[(4, "lowdr"), (8, "highdr")], "hdr"));
+    }
+    let orientation = byte(12);
+    if orientation != 0 {
+        parts.push(pick(
+            orientation,
+            &[(1, "port"), (2, "land"), (3, "square")],
+            "orientation",
+        ));
+    }
+    let ui = byte(29);
+    if ui & 0x0f != 0 {
+        parts.push(pick(
+            ui & 0x0f,
+            &[
+                (2, "desk"),
+                (3, "car"),
+                (4, "television"),
+                (5, "appliance"),
+                (6, "watch"),
+                (7, "vrheadset"),
+            ],
+            "uiModeType",
+        ));
+    }
+    if ui & 0x30 != 0 {
+        parts.push(pick(
+            ui & 0x30,
+            &[(0x10, "notnight"), (0x20, "night")],
+            "uiModeNight",
+        ));
     }
     match half(14) {
         0 => {}
         120 => parts.push("ldpi".to_owned()),
         160 => parts.push("mdpi".to_owned()),
+        213 => parts.push("tvdpi".to_owned()),
         240 => parts.push("hdpi".to_owned()),
         320 => parts.push("xhdpi".to_owned()),
         480 => parts.push("xxhdpi".to_owned()),
@@ -1166,15 +1306,83 @@ fn config_summary(data: &[u8], at: usize) -> String {
         0xffff => parts.push("nodpi".to_owned()),
         d => parts.push(format!("{d}dpi")),
     }
+    let touch = byte(13);
+    if touch != 0 {
+        parts.push(pick(
+            touch,
+            &[(1, "notouch"), (2, "stylus"), (3, "finger")],
+            "touchscreen",
+        ));
+    }
+    let input = byte(18);
+    if input & 0x03 != 0 {
+        parts.push(pick(
+            input & 0x03,
+            &[(1, "keysexposed"), (2, "keyshidden"), (3, "keyssoft")],
+            "keysHidden",
+        ));
+    }
+    let keyboard = byte(16);
+    if keyboard != 0 {
+        parts.push(pick(
+            keyboard,
+            &[(1, "nokeys"), (2, "qwerty"), (3, "12key")],
+            "keyboard",
+        ));
+    }
+    if input & 0x0c != 0 {
+        parts.push(pick(
+            input & 0x0c,
+            &[(4, "navexposed"), (8, "navhidden")],
+            "inputFlagsNavHidden",
+        ));
+    }
+    let navigation = byte(17);
+    if navigation != 0 {
+        parts.push(pick(
+            navigation,
+            &[(1, "nonav"), (2, "dpad"), (3, "trackball"), (4, "wheel")],
+            "navigation",
+        ));
+    }
+    let (width, height) = (half(20), half(22));
+    if width != 0 || height != 0 {
+        parts.push(format!("{width}x{height}"));
+    }
     let sdk = half(24);
     if sdk != 0 {
-        parts.push(format!("v{sdk}"));
+        let minor = half(26);
+        parts.push(if minor != 0 {
+            format!("v{sdk}.{minor}")
+        } else {
+            format!("v{sdk}")
+        });
     }
     if parts.is_empty() {
         "default".to_owned()
     } else {
         parts.join("-")
     }
+}
+
+/// A 2-letter language or region code, or a 3-letter one packed into two
+/// bytes (high bit set, three 5-bit letters counted from `base`).
+fn unpack_locale(b: [u8; 2], base: u8) -> String {
+    let [hi, lo] = b;
+    if hi & 0x80 == 0 {
+        return [hi, lo]
+            .iter()
+            .take_while(|&&c| c != 0)
+            .map(|&c| char::from(c))
+            .collect();
+    }
+    let first = lo & 0x1f;
+    let second = ((lo & 0xe0) >> 5) | ((hi & 0x03) << 3);
+    let third = (hi & 0x7c) >> 2;
+    [first, second, third]
+        .iter()
+        .map(|&v| char::from(base.saturating_add(v)))
+        .collect()
 }
 
 const SPEC_FLAGS: FlagTable = &[
@@ -1314,7 +1522,7 @@ fn config_fields(f: &mut Fields<'_>, _: &()) -> Result<()> {
     field!("keyboard", u8);
     field!("navigation", u8);
     field!("inputFlags", u8);
-    field!("inputPad0", u8);
+    field!("grammaticalInflection", u8);
     field!("screenWidth", u16);
     field!("screenHeight", u16);
     field!("sdkVersion", u16);
@@ -1328,8 +1536,7 @@ fn config_fields(f: &mut Fields<'_>, _: &()) -> Result<()> {
     field!("localeVariant", ascii 8);
     field!("screenLayout2", u8);
     field!("colorMode", u8);
-    field!("grammaticalInflection", u8);
-    field!("screenConfigPad2", u8);
+    field!("screenConfigPad2", u16);
     field!("localeScriptWasComputed", u8);
     field!("localeNumberingSystem", ascii 8);
     let rest = left(f);

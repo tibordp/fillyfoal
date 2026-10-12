@@ -154,14 +154,28 @@ struct Unmarshal<'a> {
     tree: Tree,
     /// Short descriptions of objects flagged as references.
     refs: Vec<String>,
+    /// Python 2: the strings marshalled as interned (`'t'`), which `'R'`
+    /// refers back to by index.
+    interned: Vec<String>,
 }
 
 /// A decoded object: its node in the tree and a one-line description.
+#[derive(Default)]
 struct Obj {
     node: usize,
     short: String,
     text: Option<String>,
+    /// A sequence's items' short descriptions and texts (names unquoted),
+    /// up to `MAX_ITEMS` each: what a disassembly resolves arguments
+    /// against.
+    items: Vec<String>,
+    texts: Vec<String>,
+    /// A byte string's contents: offset and length in the marshal data.
+    data: Option<(usize, usize)>,
 }
+
+/// Items of a sequence kept for the disassembly.
+const MAX_ITEMS: usize = 1 << 16;
 
 impl Unmarshal<'_> {
     fn at(&self, start: usize) -> Span {
@@ -207,7 +221,7 @@ impl Unmarshal<'_> {
         Obj {
             node,
             short,
-            text: None,
+            ..Obj::default()
         }
     }
 
@@ -255,6 +269,7 @@ impl Unmarshal<'_> {
         len: u64,
         bytes: bool,
     ) -> Step<Obj> {
+        let at = self.r.pos();
         let data = self.bytes(len)?;
         if bytes {
             let preview = data.get(..64).unwrap_or(data).to_vec();
@@ -269,7 +284,8 @@ impl Unmarshal<'_> {
             Ok(Obj {
                 node,
                 short,
-                text: None,
+                data: Some((at, usize::try_from(len).unwrap_or(0))),
+                ..Obj::default()
             })
         } else {
             let s = String::from_utf8_lossy(data).into_owned();
@@ -281,6 +297,7 @@ impl Unmarshal<'_> {
                 format!("{:?}", clip(&s, 40)),
             );
             obj.text = Some(s);
+            obj.data = Some((at, usize::try_from(len).unwrap_or(0)));
             Ok(obj)
         }
     }
@@ -298,12 +315,19 @@ impl Unmarshal<'_> {
     ) -> Step<Obj> {
         let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
         let mut items = Vec::new();
+        let mut all = Vec::new();
+        let mut texts = Vec::new();
         for i in 0..n {
             let obj = self
                 .object(cx, node, &format!("[{i}]"), depth.saturating_add(1))
                 .await?;
             if items.len() < 8 {
-                items.push(obj.short);
+                items.push(obj.short.clone());
+            }
+            if all.len() < MAX_ITEMS {
+                let plain = obj.text.filter(|t| !t.contains('\0'));
+                texts.push(plain.unwrap_or_else(|| obj.short.clone()));
+                all.push(obj.short);
             }
         }
         let span = self.at(start);
@@ -316,7 +340,9 @@ impl Unmarshal<'_> {
         Ok(Obj {
             node,
             short: format!("{kind}[{n}]"),
-            text: None,
+            items: all,
+            texts,
+            ..Obj::default()
         })
     }
 
@@ -426,7 +452,11 @@ impl Unmarshal<'_> {
             }
             b't' | b'u' | b'a' | b'A' => {
                 let len = self.u32()?;
-                self.string(parent, label, start, len.into(), false)
+                let obj = self.string(parent, label, start, len.into(), false)?;
+                if code == b't' && self.version.0 < 3 {
+                    self.interned.push(obj.short.clone());
+                }
+                Ok(obj)
             }
             b'z' | b'Z' => {
                 let len = self.r.u8().ok_or_else(|| self.fail("string"))?;
@@ -434,8 +464,14 @@ impl Unmarshal<'_> {
             }
             b'R' | b'r' => {
                 let index = self.u32()?;
-                let target = self
-                    .refs
+                // Python 2's 'R' (TYPE_STRINGREF) names an interned string;
+                // from 3.4 'r' names an object flagged FLAG_REF.
+                let table = if code == b'R' && self.version.0 < 3 {
+                    &self.interned
+                } else {
+                    &self.refs
+                };
+                let target = table
                     .get(usize::try_from(index).unwrap_or(usize::MAX))
                     .cloned()
                     .unwrap_or_else(|| "?".to_owned());
@@ -483,7 +519,7 @@ impl Unmarshal<'_> {
                 Ok(Obj {
                     node,
                     short: format!("dict[{n}]"),
-                    text: None,
+                    ..Obj::default()
                 })
             }
             b':' => {
@@ -497,7 +533,7 @@ impl Unmarshal<'_> {
                 Ok(Obj {
                     node,
                     short: "slice".to_owned(),
-                    text: None,
+                    ..Obj::default()
                 })
             }
             b'c' => self.code(cx, parent, label, start, depth).await,
@@ -556,16 +592,40 @@ impl Unmarshal<'_> {
         for name in ints {
             self.int_field(node, name)?;
         }
-        let code = self.object(cx, node, "co_code", deeper).await?;
-        let consts = self.object(cx, node, "co_consts", deeper).await?;
-        self.object(cx, node, "co_names", deeper).await?;
-        if v >= (3, 11) {
-            self.object(cx, node, "co_localsplusnames", deeper).await?;
+        let mut code = self.object(cx, node, "co_code", deeper).await?;
+        let mut consts = self.object(cx, node, "co_consts", deeper).await?;
+        let names = self.object(cx, node, "co_names", deeper).await?;
+        let (locals, cells) = if v >= (3, 11) {
+            let locals = self.object(cx, node, "co_localsplusnames", deeper).await?;
             self.object(cx, node, "co_localspluskinds", deeper).await?;
+            (locals.texts, Vec::new())
         } else {
-            self.object(cx, node, "co_varnames", deeper).await?;
-            self.object(cx, node, "co_freevars", deeper).await?;
-            self.object(cx, node, "co_cellvars", deeper).await?;
+            let locals = self.object(cx, node, "co_varnames", deeper).await?;
+            let free = self.object(cx, node, "co_freevars", deeper).await?;
+            let cell = self.object(cx, node, "co_cellvars", deeper).await?;
+            // Cell and free variable opcodes index cells, then free ones.
+            let mut cells = cell.texts;
+            cells.extend(free.texts);
+            (locals.texts, cells)
+        };
+        if let Some((at, len)) = code.data.take()
+            && let Some(ops) = super::pyc_ops::TABLES.iter().position(|t| t.version == v)
+        {
+            let span = self.span.sub(to_u64(at), to_u64(len));
+            let tables = Arc::new(Disasm {
+                ops,
+                code: span,
+                consts: std::mem::take(&mut consts.items),
+                names: names.texts,
+                locals,
+                cells,
+            });
+            self.tree.add(
+                Some(node),
+                Node::new("disassembly")
+                    .span(span)
+                    .lazy(disassemble, tables),
+            );
         }
         let filename = self.object(cx, node, "co_filename", deeper).await?;
         let name = self.object(cx, node, "co_name", deeper).await?;
@@ -603,6 +663,7 @@ impl Unmarshal<'_> {
             node,
             short: format!("<code {name}>"),
             text: Some(format!("{name}\0{filename}")),
+            ..Obj::default()
         })
     }
 }
@@ -631,6 +692,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         version: v,
         tree: Tree::default(),
         refs: Vec::new(),
+        interned: Vec::new(),
     };
     let root = u.tree.add(None, Node::new("root"));
     u.tree
@@ -658,5 +720,175 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(summary);
     let tree = Arc::new(u.tree);
     Tree::emit_children(&cx, &tree, root).await;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Disassembly
+
+/// What a code object's disassembly needs: the opcode table (an index into
+/// `pyc_ops::TABLES`), the bytecode and the tables arguments index.
+struct Disasm {
+    ops: usize,
+    code: Span,
+    consts: Vec<String>,
+    names: Vec<String>,
+    /// `co_varnames`, or `co_localsplusnames` from 3.11.
+    locals: Vec<String>,
+    /// `co_cellvars` + `co_freevars` before 3.11.
+    cells: Vec<String>,
+}
+
+fn item(list: &[String], index: u32) -> String {
+    usize::try_from(index)
+        .ok()
+        .and_then(|i| list.get(i))
+        .cloned()
+        .unwrap_or_else(|| format!("#{index}?"))
+}
+
+/// How an argument reads: a constant, a name, a jump target, ...
+fn argument(d: &Disasm, t: &super::pyc_ops::Ops, op: u8, arg: u32, next: u64) -> Option<String> {
+    use super::pyc_ops::{K_COMPARE, K_CONST, K_FREE, K_JABS, K_JREL, K_JUMP, K_LOCAL, K_NAME};
+    let v = t.version;
+    let name = t.names.get(usize::from(op)).copied().unwrap_or("");
+    let kind = t.kinds.get(usize::from(op)).copied().unwrap_or(0);
+    if kind & K_CONST != 0 {
+        return Some(item(&d.consts, arg));
+    }
+    if kind & K_NAME != 0 {
+        return Some(match name {
+            "LOAD_GLOBAL" if v >= (3, 11) => {
+                let n = item(&d.names, arg >> 1);
+                if arg & 1 != 0 {
+                    format!("NULL + {n}")
+                } else {
+                    n
+                }
+            }
+            "LOAD_ATTR" if v >= (3, 12) => {
+                let n = item(&d.names, arg >> 1);
+                if arg & 1 != 0 {
+                    format!("{n} (method)")
+                } else {
+                    n
+                }
+            }
+            "LOAD_SUPER_ATTR" => item(&d.names, arg >> 2),
+            _ => item(&d.names, arg),
+        });
+    }
+    if kind & K_LOCAL != 0 {
+        // 3.13: two locals packed into one argument.
+        if v >= (3, 13) && name.matches("_FAST").count() == 2 {
+            return Some(format!(
+                "{}, {}",
+                item(&d.locals, arg >> 4),
+                item(&d.locals, arg & 15)
+            ));
+        }
+        return Some(item(&d.locals, arg));
+    }
+    if kind & K_FREE != 0 {
+        return Some(if v >= (3, 11) {
+            item(&d.locals, arg)
+        } else {
+            item(&d.cells, arg)
+        });
+    }
+    if kind & (K_JREL | K_JABS | K_JUMP) != 0 {
+        let units = if v >= (3, 10) { 2u64 } else { 1 };
+        let delta = u64::from(arg).saturating_mul(units);
+        let target = if kind & K_JABS != 0 && v < (3, 11) {
+            Some(delta)
+        } else if v >= (3, 11)
+            && (name.contains("JUMP_BACKWARD") || name == "END_ASYNC_FOR" && v >= (3, 14))
+        {
+            next.checked_sub(delta)
+        } else {
+            next.checked_add(delta)
+        };
+        return target.map(|t| format!("to {t}"));
+    }
+    if kind & K_COMPARE != 0 {
+        let index = if v >= (3, 13) {
+            arg >> 5
+        } else if v >= (3, 12) {
+            arg >> 4
+        } else {
+            arg
+        };
+        return t
+            .cmp_op
+            .get(usize::try_from(index).unwrap_or(usize::MAX))
+            .map(|s| (*s).to_owned());
+    }
+    None
+}
+
+/// Lists the instructions of a code object.
+async fn disassemble(cx: Cx, d: Arc<Disasm>) -> Result<()> {
+    let t = super::pyc_ops::TABLES
+        .get(d.ops)
+        .ok_or_else(|| Diagnostic::internal("opcode table out of range"))?;
+    let code = cx.read(d.code).await?;
+    let wordcode = t.version >= (3, 6);
+    let (mut pc, mut ext) = cx.resume::<(usize, u32)>().unwrap_or((0, 0));
+    while pc < code.len() {
+        let at = (pc, ext);
+        cx.mark(move || at);
+        let start = pc;
+        let op = code.get(pc).copied().unwrap_or(0);
+        let mut arg = None;
+        if wordcode {
+            if op >= t.have_argument {
+                arg = Some(u32::from(
+                    code.get(pc.saturating_add(1)).copied().unwrap_or(0),
+                ));
+            }
+            pc = pc.saturating_add(2);
+        } else {
+            pc = pc.saturating_add(1);
+            if op >= t.have_argument {
+                arg = code
+                    .get(pc..pc.saturating_add(2))
+                    .and_then(|b| u16_le(b, 0))
+                    .map(u32::from);
+                pc = pc.saturating_add(2);
+            }
+        }
+        let caches = usize::from(t.caches.get(usize::from(op)).copied().unwrap_or(0));
+        pc = pc
+            .saturating_add(caches.saturating_mul(2))
+            .min(code.len().max(pc));
+        let full = arg.map(|a| {
+            let shift = if wordcode { 8 } else { 16 };
+            ext.checked_shl(shift).unwrap_or(0) | a
+        });
+        let name = t.names.get(usize::from(op)).copied().unwrap_or("");
+        let mut node = Node::new(format!("{start}"))
+            .span(d.code.sub(to_u64(start), to_u64(pc.saturating_sub(start))))
+            .value(text(if name.is_empty() {
+                format!("<{op}>")
+            } else {
+                name.to_owned()
+            }));
+        if op == t.extended_arg && arg.is_some() {
+            ext = full.unwrap_or(0);
+            node = node.summary(format!("{:#x}", ext));
+        } else {
+            if let Some(a) = full {
+                node = node.summary(match argument(&d, t, op, a, to_u64(pc)) {
+                    Some(shown) => format!("{a} ({})", clip(&shown, 80)),
+                    None => a.to_string(),
+                });
+            }
+            ext = 0;
+        }
+        if caches > 0 {
+            node = node.desc(format!("followed by {caches} inline cache entries"));
+        }
+        cx.push(node).await;
+    }
     Ok(())
 }

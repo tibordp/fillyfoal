@@ -74,6 +74,7 @@ const MODULE_CODES: EnumTable = &[
     (12, "COMDAT"),
     (13, "VSTOFFSET"),
     (14, "ALIAS"),
+    (15, "METADATA_VALUES_UNUSED"),
     (16, "SOURCE_FILENAME"),
     (17, "HASH"),
     (18, "IFUNC"),
@@ -91,23 +92,194 @@ const TYPE_CODES: EnumTable = &[
     (6, "OPAQUE"),
     (7, "INTEGER"),
     (8, "POINTER"),
+    (9, "FUNCTION_OLD"),
+    (10, "HALF"),
     (11, "ARRAY"),
     (12, "VECTOR"),
+    (13, "X86_FP80"),
+    (14, "FP128"),
+    (15, "PPC_FP128"),
     (16, "METADATA"),
+    (17, "X86_MMX"),
     (18, "STRUCT_ANON"),
     (19, "STRUCT_NAME"),
     (20, "STRUCT_NAMED"),
     (21, "FUNCTION"),
+    (22, "TOKEN"),
+    (23, "BFLOAT"),
+    (24, "X86_AMX"),
     (25, "OPAQUE_POINTER"),
+    (26, "TARGET_TYPE"),
 ];
+const PARAMATTR_CODES: EnumTable = &[(1, "ENTRY_OLD"), (2, "ENTRY"), (3, "GRP_ENTRY")];
+const VST_CODES: EnumTable = &[
+    (1, "ENTRY"),
+    (2, "BBENTRY"),
+    (3, "FNENTRY"),
+    (5, "COMBINED_ENTRY"),
+];
+const CONSTANTS_CODES: EnumTable = &[
+    (1, "SETTYPE"),
+    (2, "NULL"),
+    (3, "UNDEF"),
+    (4, "INTEGER"),
+    (5, "WIDE_INTEGER"),
+    (6, "FLOAT"),
+    (7, "AGGREGATE"),
+    (8, "STRING"),
+    (9, "CSTRING"),
+    (10, "CE_BINOP"),
+    (11, "CE_CAST"),
+    (12, "CE_GEP_OLD"),
+    (13, "CE_SELECT"),
+    (14, "CE_EXTRACTELT"),
+    (15, "CE_INSERTELT"),
+    (16, "CE_SHUFFLEVEC"),
+    (17, "CE_CMP"),
+    (18, "INLINEASM_OLD"),
+    (19, "CE_SHUFVEC_EX"),
+    (20, "CE_INBOUNDS_GEP"),
+    (21, "BLOCKADDRESS"),
+    (22, "DATA"),
+    (23, "INLINEASM_OLD2"),
+    (24, "CE_GEP_WITH_INRANGE_INDEX_OLD"),
+    (25, "CE_UNOP"),
+    (26, "POISON"),
+    (27, "DSO_LOCAL_EQUIVALENT"),
+    (28, "INLINEASM_OLD3"),
+    (29, "NO_CFI_VALUE"),
+    (30, "INLINEASM"),
+    (31, "CE_GEP_WITH_INRANGE"),
+    (32, "CE_GEP"),
+    (33, "PTRAUTH"),
+];
+const FUNCTION_CODES: EnumTable = &[
+    (1, "DECLAREBLOCKS"),
+    (2, "INST_BINOP"),
+    (3, "INST_CAST"),
+    (4, "INST_GEP_OLD"),
+    (5, "INST_SELECT"),
+    (6, "INST_EXTRACTELT"),
+    (7, "INST_INSERTELT"),
+    (8, "INST_SHUFFLEVEC"),
+    (9, "INST_CMP"),
+    (10, "INST_RET"),
+    (11, "INST_BR"),
+    (12, "INST_SWITCH"),
+    (13, "INST_INVOKE"),
+    (15, "INST_UNREACHABLE"),
+    (16, "INST_PHI"),
+    (19, "INST_ALLOCA"),
+    (20, "INST_LOAD"),
+    (23, "INST_VAARG"),
+    (24, "INST_STORE_OLD"),
+    (26, "INST_EXTRACTVAL"),
+    (27, "INST_INSERTVAL"),
+    (28, "INST_CMP2"),
+    (29, "INST_VSELECT"),
+    (30, "INST_INBOUNDS_GEP_OLD"),
+    (31, "INST_INDIRECTBR"),
+    (33, "DEBUG_LOC_AGAIN"),
+    (34, "INST_CALL"),
+    (35, "DEBUG_LOC"),
+    (36, "INST_FENCE"),
+    (37, "INST_CMPXCHG_OLD"),
+    (38, "INST_ATOMICRMW_OLD"),
+    (39, "INST_RESUME"),
+    (40, "INST_LANDINGPAD_OLD"),
+    (41, "INST_LOADATOMIC"),
+    (42, "INST_STOREATOMIC_OLD"),
+    (43, "INST_GEP"),
+    (44, "INST_STORE"),
+    (45, "INST_STOREATOMIC"),
+    (46, "INST_CMPXCHG"),
+    (47, "INST_LANDINGPAD"),
+    (48, "INST_CLEANUPRET"),
+    (49, "INST_CATCHRET"),
+    (50, "INST_CATCHPAD"),
+    (51, "INST_CLEANUPPAD"),
+    (52, "INST_CATCHSWITCH"),
+    (55, "OPERAND_BUNDLE"),
+    (56, "INST_UNOP"),
+    (57, "INST_CALLBR"),
+    (58, "INST_FREEZE"),
+    (59, "INST_ATOMICRMW"),
+    (60, "BLOCKADDR_USERS"),
+    (61, "DEBUG_RECORD_VALUE"),
+    (62, "DEBUG_RECORD_DECLARE"),
+    (63, "DEBUG_RECORD_ASSIGN"),
+    (64, "DEBUG_RECORD_VALUE_SIMPLE"),
+    (65, "DEBUG_RECORD_LABEL"),
+];
+const METADATA_CODES: EnumTable = &[
+    (1, "STRING_OLD"),
+    (2, "VALUE"),
+    (3, "NODE"),
+    (4, "NAME"),
+    (5, "DISTINCT_NODE"),
+    (6, "KIND"),
+    (7, "LOCATION"),
+    (8, "OLD_NODE"),
+    (9, "OLD_FN_NODE"),
+    (10, "NAMED_NODE"),
+    (11, "ATTACHMENT"),
+    (12, "GENERIC_DEBUG"),
+    (13, "SUBRANGE"),
+    (14, "ENUMERATOR"),
+    (15, "BASIC_TYPE"),
+    (16, "FILE"),
+    (17, "DERIVED_TYPE"),
+    (18, "COMPOSITE_TYPE"),
+    (19, "SUBROUTINE_TYPE"),
+    (20, "COMPILE_UNIT"),
+    (21, "SUBPROGRAM"),
+    (22, "LEXICAL_BLOCK"),
+    (23, "LEXICAL_BLOCK_FILE"),
+    (24, "NAMESPACE"),
+    (25, "TEMPLATE_TYPE"),
+    (26, "TEMPLATE_VALUE"),
+    (27, "GLOBAL_VAR"),
+    (28, "LOCAL_VAR"),
+    (29, "EXPRESSION"),
+    (30, "OBJC_PROPERTY"),
+    (31, "IMPORTED_ENTITY"),
+    (32, "MODULE"),
+    (33, "MACRO"),
+    (34, "MACRO_FILE"),
+    (35, "STRINGS"),
+    (36, "GLOBAL_DECL_ATTACHMENT"),
+    (37, "GLOBAL_VAR_EXPR"),
+    (38, "INDEX_OFFSET"),
+    (39, "INDEX"),
+    (40, "LABEL"),
+    (41, "STRING_TYPE"),
+    (44, "COMMON_BLOCK"),
+    (45, "GENERIC_SUBRANGE"),
+    (46, "ARG_LIST"),
+    (47, "ASSIGN_ID"),
+];
+const USELIST_CODES: EnumTable = &[(1, "DEFAULT"), (2, "BB")];
+const MODULE_STRTAB_CODES: EnumTable = &[(1, "ENTRY"), (2, "HASH")];
+const TAG_CODES: EnumTable = &[(1, "TAG")];
+const SYNC_SCOPE_CODES: EnumTable = &[(1, "NAME")];
 
+/// Record names per block ID (LLVM `LLVMBitCodes.h`).
 fn record_names(block: u64) -> EnumTable {
     match block {
         0 => BLOCKINFO_CODES,
         8 => MODULE_CODES,
+        9 | 10 => PARAMATTR_CODES,
+        11 => CONSTANTS_CODES,
+        12 => FUNCTION_CODES,
         13 => IDENTIFICATION_CODES,
+        14 => VST_CODES,
+        15 | 16 | 22 => METADATA_CODES,
         17 => TYPE_CODES,
+        18 => USELIST_CODES,
+        19 => MODULE_STRTAB_CODES,
+        21 => TAG_CODES,
         23 | 25 => BLOB_CODES,
+        26 => SYNC_SCOPE_CODES,
         _ => &[],
     }
 }
@@ -359,6 +531,28 @@ async fn abbreviated(cx: &Cx, b: &mut Bits<'_>, abbrev: &Abbrev) -> Option<Recor
 struct Stream {
     data: Arc<Vec<u8>>,
     span: Span,
+    /// Byte range of the top-level STRTAB blob (bitcode version 2).
+    strtab: Option<(u64, u64)>,
+}
+
+impl Stream {
+    /// `len` bytes at `start` (fewer at the end of the stream).
+    fn bytes(&self, start: u64, len: u64) -> &[u8] {
+        let from = crate::bytes::to_usize(start).min(self.data.len());
+        let to = crate::bytes::to_usize(start.saturating_add(len)).min(self.data.len());
+        self.data.get(from..to).unwrap_or_default()
+    }
+
+    /// The string-table name an `[offset, size, ...]` record starts with.
+    fn strtab_name(&self, ops: &[u64]) -> Option<String> {
+        let (start, len) = self.strtab?;
+        let (&offset, &size) = (ops.first()?, ops.get(1)?);
+        if size == 0 || offset.checked_add(size)? > len {
+            return None;
+        }
+        let name = self.bytes(start.checked_add(offset)?, size.min(1024));
+        Some(clip(&String::from_utf8_lossy(name), 200))
+    }
 }
 
 #[derive(Clone)]
@@ -541,33 +735,120 @@ async fn walk(
 
 fn record_node(s: &BlockState, r: &Record, span: Span) -> Node {
     let name = name_or(record_names(s.id), r.code, "record");
-    let mut node = Node::new(name).span(span);
+    let node = Node::new(name).span(span);
     if let Some((start, len)) = r.blob {
         let blob = s.stream.span.sub(start, len);
-        let preview = s
-            .stream
-            .data
-            .get(crate::bytes::to_usize(start)..crate::bytes::to_usize(start.saturating_add(len)))
-            .unwrap_or_default();
+        let preview = s.stream.bytes(start, len);
+        if s.id == 15 && r.code == 35 {
+            // METADATA_STRINGS: [count, offset size] + a blob of VBR6
+            // lengths followed by the characters.
+            let count = r.operands.first().copied().unwrap_or(0);
+            let lengths = r.operands.get(1).copied().unwrap_or(0);
+            return node
+                .summary(format!("{count} strings in {len} bytes"))
+                .target(blob)
+                .lazy(
+                    crate::expander!(self::metadata_strings: (Stream, u64, u64, u64, u64)),
+                    (s.stream.clone(), start, len, count, lengths),
+                );
+        }
+        if s.id == 23 {
+            // The string table names are concatenated without separators.
+            let shown = preview.get(..1024).unwrap_or(preview);
+            return node
+                .value(text(clip(&String::from_utf8_lossy(shown), 120)))
+                .summary(format!("string table of {len} bytes"))
+                .target(blob);
+        }
         let shown = preview.get(..64).unwrap_or(preview).to_vec();
         return node
             .value(Value::Bytes(shown))
             .summary(format!("blob of {len} bytes"))
             .target(blob);
     }
-    let textual = matches!((s.id, r.code), (8, 2 | 3 | 4 | 5 | 6 | 11 | 16) | (13, 1))
-        || (s.id == 0 && matches!(r.code, 2 | 3));
-    if textual && let Some(t) = as_text(&r.operands) {
-        node = node.value(text(t));
-    } else {
-        let shown: Vec<String> = r.operands.iter().take(16).map(u64::to_string).collect();
-        let mut s = shown.join(", ");
-        if r.operands.len() > 16 {
-            s.push_str(&format!(", … ({} operands)", r.operands.len()));
-        }
-        node = node.maybe_summary(s);
+    // Module records of bitcode version 2 start with a name as an offset
+    // and size in the string table.
+    if s.id == 8
+        && matches!(r.code, 7 | 8 | 12 | 14 | 18)
+        && let Some(name) = s.stream.strtab_name(&r.operands)
+    {
+        return node
+            .value(text(name))
+            .maybe_summary(operand_list(r.operands.get(2..).unwrap_or_default()));
     }
-    node
+    // Records whose operands (after a prefix of numbers) are characters.
+    let prefix = match (s.id, r.code) {
+        (8, 2 | 3 | 4 | 5 | 6 | 11 | 16)
+        | (13, 1)
+        | (0, 2 | 3)
+        | (11, 8 | 9)
+        | (15, 1 | 4)
+        | (17, 19)
+        | (21, 1)
+        | (26, 1) => Some(0),
+        (14, 1 | 2) | (15 | 22, 6) => Some(1),
+        (14, 3) => Some(2),
+        _ => None,
+    };
+    if let Some(k) = prefix
+        && let (Some(head), Some(rest)) = (r.operands.get(..k), r.operands.get(k..))
+        && let Some(t) = as_text(rest)
+    {
+        return node.value(text(t)).maybe_summary(operand_list(head));
+    }
+    node.maybe_summary(operand_list(&r.operands))
+}
+
+/// Up to 16 operands, comma-separated.
+fn operand_list(ops: &[u64]) -> String {
+    let shown: Vec<String> = ops.iter().take(16).map(u64::to_string).collect();
+    let mut s = shown.join(", ");
+    if ops.len() > 16 {
+        s.push_str(&format!(", … ({} operands)", ops.len()));
+    }
+    s
+}
+
+/// The strings of a METADATA_STRINGS blob at `start` (`len` bytes): `count`
+/// VBR6 lengths in the first `lengths` bytes, then the characters.
+async fn metadata_strings(
+    cx: Cx,
+    (stream, start, len, count, lengths): (Stream, u64, u64, u64, u64),
+) -> Result<()> {
+    let data = stream.bytes(start, len);
+    let table = data
+        .get(..crate::bytes::to_usize(lengths))
+        .unwrap_or_default();
+    let mut b = Bits::new(table);
+    let mut pos = lengths;
+    for i in 0..count {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+        let at = stream.span.sub(start.saturating_add(pos), 0);
+        let Some(n) = b.vbr(6) else {
+            cx.diag(Diagnostic::malformed(format!("string length {i} is missing")).at(at));
+            break;
+        };
+        let end = pos.saturating_add(n);
+        if end > len {
+            cx.diag(Diagnostic::truncated(
+                stream.span.sub(start.saturating_add(pos), n),
+                len.saturating_sub(pos),
+            ));
+            break;
+        }
+        let bytes = stream.bytes(start.saturating_add(pos), n);
+        let shown = bytes.get(..1024).unwrap_or(bytes);
+        cx.push(
+            Node::new(format!("[{i}]"))
+                .span(stream.span.sub(start.saturating_add(pos), n))
+                .value(text(clip(&String::from_utf8_lossy(shown), 200))),
+        )
+        .await;
+        pos = end;
+    }
+    Ok(())
 }
 
 async fn block(cx: Cx, s: BlockState) -> Result<()> {
@@ -613,9 +894,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .span(stream_span.sub(0, 4))
             .value(text("BC 0xC0DE")),
     );
-    let stream = Stream {
+    let mut stream = Stream {
         data,
         span: stream_span,
+        strtab: None,
     };
     let top = BlockState {
         stream: stream.clone(),
@@ -631,6 +913,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut producer = None;
     let mut triple = None;
     let mut source = None;
+    let mut strtab = None;
     {
         let mut b = Bits {
             data: &stream.data,
@@ -651,11 +934,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 width,
                 ..top.clone()
             };
-            if id == 13 || id == 8 {
+            if matches!(id, 8 | 13 | 23) {
                 let _ = walk(&cx, &state, false, &mut |block, r| match (block, r.code) {
                     (13, 1) => producer = as_text(&r.operands),
                     (8, 2) => triple = as_text(&r.operands),
                     (8, 16) => source = as_text(&r.operands),
+                    (23, 1) if strtab.is_none() => strtab = r.blob,
                     _ => {}
                 })
                 .await;
@@ -675,5 +959,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         summary.push_str(&format!(", from {}", clip(&s, 60)));
     }
     cx.annotate(summary);
+    stream.strtab = strtab;
+    let top = BlockState { stream, ..top };
     walk(&cx, &top, true, &mut |_, _| {}).await
 }

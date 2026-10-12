@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ Foal.class — Java class net.fillyfoal.Foal (Java 17), 6 fields, 6 methods  [0x0+0x885]
   ▾ Header  [0x0+0xa]
@@ -674,7 +674,8 @@ expression: "common::explore(&name, &data)"
     ▾ RuntimeVisibleAnnotations — java.lang.Deprecated  [0x857+0xc]
         attribute_name_index: 98 — RuntimeVisibleAnnotations  [0x857+0x2]
         attribute_length: 6  [0x859+0x4]
-        info  [0x85d+0x6]
+        num_annotations: 1  [0x85d+0x2]
+        @java.lang.Deprecated: "@java.lang.Deprecated"  [0x85f+0x4]
     ▾ BootstrapMethods — 1 entries  [0x863+0x12]
         attribute_name_index: 99 — BootstrapMethods  [0x863+0x2]
         attribute_length: 12  [0x865+0x4]
