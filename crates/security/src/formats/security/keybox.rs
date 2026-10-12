@@ -8,7 +8,10 @@
 //! blob for X.509), signature expiry slots, trust bytes and times, then the
 //! keyblock or certificate itself and a SHA-1 of everything before it.
 //! Layout as documented in GnuPG's `kbx/keybox-blob.c` and checked against
-//! `kbxutil` on files written by GnuPG 2.2 and 2.4.
+//! `kbxutil` on files written by GnuPG 2.2 and 2.4. GnuPG 2.3+ writes a
+//! version 2 blob for a keyblock with a v5 key: its key table entries hold
+//! 32-byte fingerprints (a 20-byte one right-padded with zeros, flag bit 7
+//! clear), no key ID offset, and a 20-byte keygrip slot (zeros so far).
 
 use crate::bytes::{to_u64, to_usize, u16_be, u32_be};
 use crate::codec::crypto::Md5;
@@ -47,7 +50,25 @@ const HEADER_FLAGS: FlagTable = &[flag(0x2, "OPENPGP")];
 
 const BLOB_FLAGS: FlagTable = &[flag(0x1, "SECRET"), flag(0x2, "EPHEMERAL")];
 
-const KEY_FLAGS: FlagTable = &[flag(0x1, "QUALIFIED")];
+const KEY_FLAGS: FlagTable = &[flag(0x1, "QUALIFIED"), flag(0x80, "FPR32")];
+
+/// Bytes of a key table entry: version 1 (fingerprint, key ID offset,
+/// flags, reserved) and version 2 (32-byte fingerprint, flags, reserved,
+/// keygrip).
+const KEY_ENTRY_V1: u16 = 28;
+const KEY_ENTRY_V2: u16 = 56;
+
+/// The fingerprint of a key table entry starting at `at` in blob `p` of
+/// blob version `version`: 20 bytes, or in a version 2 blob 32 when the
+/// entry's flags say so.
+fn entry_fpr(p: &[u8], at: usize, version: u8) -> Option<&[u8]> {
+    let len = if version == 2 && u16_be(p, at.checked_add(32)?)? & 0x80 != 0 {
+        32
+    } else {
+        20
+    };
+    p.get(at..at.checked_add(len)?)
+}
 
 /// Signature expiry slots: special values, else a time.
 const SIG_EXPIRY: EnumTable = &[
@@ -100,8 +121,10 @@ async fn keybox(cx: Cx, input: Input) -> Result<()> {
 fn blob_summary(p: &[u8], kind: u8) -> Option<String> {
     let keys = usize::from(u16_be(p, 16)?);
     let key_size = usize::from(u16_be(p, 18)?);
-    let fpr = (keys > 0 && key_size >= 20)
-        .then(|| p.get(20..40))
+    let version = p.get(5).copied().unwrap_or(0);
+    let min = if version == 2 { KEY_ENTRY_V2 } else { 20 };
+    let fpr = (keys > 0 && key_size >= usize::from(min))
+        .then(|| entry_fpr(p, 20, version))
         .flatten()
         .map(hex_upper);
     let uid = (|| {
@@ -241,16 +264,14 @@ async fn tables(cx: &Cx, f: &mut Fields<'_>, span: Span, version: u8, x509: bool
     for i in 0..keys {
         let at = f.pos();
         let entry = span.sub(at, key_size.into());
-        let fpr = f
-            .block()
-            .data
-            .get(to_usize(at)..to_usize(at).saturating_add(20));
+        let fpr = entry_fpr(&f.block().data, to_usize(at), version);
         let mut node = Node::new(format!("Key {i}")).span(entry);
-        if version == 1 && key_size >= 28 {
+        if (version == 1 && key_size >= KEY_ENTRY_V1) || (version == 2 && key_size >= KEY_ENTRY_V2)
+        {
             let fpr = fpr.unwrap_or_default();
             node = node
                 .summary(hex_upper(fpr))
-                .lazy(key_entry, (entry, span, x509));
+                .lazy(key_entry, (entry, span, x509, version));
         } else {
             node = node.desc("Key table entry of a blob version or size not decoded");
         }
@@ -341,9 +362,28 @@ async fn tables(cx: &Cx, f: &mut Fields<'_>, span: Span, version: u8, x509: bool
     Ok(())
 }
 
-async fn key_entry(cx: Cx, (entry, blob, x509): (Span, Span, bool)) -> Result<()> {
+async fn key_entry(cx: Cx, (entry, blob, x509, version): (Span, Span, bool, u8)) -> Result<()> {
     let block = cx.block(entry).await?;
     let mut f = Fields::emitting(&cx, &block, BE);
+    if version == 2 {
+        let long = u16_be(&block.data, 32).is_some_and(|v| v & 0x80 != 0);
+        f.bytes("Fingerprint", 32)
+            .desc(if long {
+                "OpenPGP v5 fingerprint (SHA-256)"
+            } else {
+                "OpenPGP v4 fingerprint, right-padded with zeros"
+            })
+            .emit()?;
+        f.u16("Key flags").flags(KEY_FLAGS).emit()?;
+        f.u16("Reserved").emit()?;
+        f.bytes("Keygrip", 20)
+            .desc("Slot for the key's keygrip (GnuPG 2.4 writes zeros)")
+            .emit()?;
+        if f.remaining() > 0 {
+            f.bytes("Filler", f.remaining()).emit()?;
+        }
+        return Ok(());
+    }
     f.bytes("Fingerprint", 20)
         .desc(if x509 {
             "SHA-1 of the certificate"
