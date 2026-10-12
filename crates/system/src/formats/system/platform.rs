@@ -1,18 +1,21 @@
 //! Platform artifacts: Linux tooling, Android boot security, firmware
 //! images, Java module files and Mac resource forks.
 
-use crate::bytes::{u16_be, u32_be, u32_le, u64_be};
+use std::sync::Arc;
+
+use crate::bytes::{u16_be, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
-use crate::fields::{Endian, Fields};
+use crate::fields::{Endian, Fields, Layout, parse, struct_node};
+use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::val::text;
-use crate::formats::{Head, Input, Probe, embedded};
+use crate::formats::{Head, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, lookup};
+use crate::value::{EnumTable, FlagTable, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -254,13 +257,38 @@ async fn vbmeta(cx: Cx, input: Input) -> Result<()> {
     cx.emit(VbmetaHeader::node("Header", file.sub(0, 256), BE));
     let auth = file.sub(256, h.auth_size);
     let aux = file.sub(256u64.saturating_add(h.auth_size), h.aux_size);
-    cx.emit(Node::new("Authentication block").span(auth));
+    let mut auth_parts = Vec::new();
+    for (name, offset, size) in [
+        ("Hash", h.hash_offset, h.hash_size),
+        ("Signature", h.signature_offset, h.signature_size),
+    ] {
+        if size > 0 {
+            auth_parts.push(Node::new(name).span(auth.sub(offset, size)));
+        }
+    }
+    cx.emit(
+        Node::new("Authentication block")
+            .span(auth)
+            .lazy(emit_nodes, Arc::new(auth_parts)),
+    );
     let descriptors = aux.sub(h.descriptors_offset, h.descriptors_size);
     cx.emit(
         Node::new("Descriptors")
             .span(descriptors)
             .lazy(avb_descriptors, descriptors),
     );
+    for (name, offset, size) in [
+        ("Public key", h.key_offset, h.key_size),
+        (
+            "Public key metadata",
+            h.key_metadata_offset,
+            h.key_metadata_size,
+        ),
+    ] {
+        if size > 0 {
+            cx.emit(Node::new(name).span(aux.sub(offset, size)));
+        }
+    }
     cx.annotate(format!(
         "vbmeta {}.{}, {}, {}",
         h.major,
@@ -271,35 +299,240 @@ async fn vbmeta(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
+/// Bytes of one descriptor decoded at most; longer ones (no real
+/// descriptor comes close) are shown truncated.
+const MAX_DESCRIPTOR: u64 = 1 << 16;
+
 async fn avb_descriptors(cx: Cx, span: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, BE);
+    // Resume marks: (position, index).
+    let (pos, first) = cx.resume::<(u64, u64)>().unwrap_or((0, 0));
+    cur.seek(pos);
+    let mut index = first;
     while cur.remaining() >= 16 {
         let start = cur.pos();
+        let mark = (start, index);
+        cx.mark(move || mark);
         let tag = cur.u64().await?;
         let len = cur.u64().await?;
-        let body = cur.span(len);
         cur.skip(len);
-        let mut node = Node::new(lookup(AVB_DESCRIPTORS, tag).unwrap_or("Unknown descriptor"))
-            .span(cur.since(start));
-        if tag == 0 {
-            let b = cx.read_avail(body.sub(0, 4096)).await?;
-            let key_len = crate::bytes::to_usize(u64_be(&b, 0).unwrap_or(0));
-            let value_len = crate::bytes::to_usize(u64_be(&b, 8).unwrap_or(0));
-            let key = String::from_utf8_lossy(
-                b.get(16..16usize.saturating_add(key_len))
-                    .unwrap_or_default(),
-            )
-            .into_owned();
-            let value_at = 16usize.saturating_add(key_len).saturating_add(1);
-            let value = String::from_utf8_lossy(
-                b.get(value_at..value_at.saturating_add(value_len))
-                    .unwrap_or_default(),
-            )
-            .into_owned();
-            node = node.summary(format!("{key} = {value}"));
-        }
+        let whole = cur.since(start);
+        let name = lookup(AVB_DESCRIPTORS, tag).unwrap_or("Unknown descriptor");
+        let layout: Option<Layout<(), String>> = match tag {
+            0 => Some(avb_property),
+            1 => Some(avb_hashtree),
+            2 => Some(avb_hash),
+            3 => Some(avb_cmdline),
+            4 => Some(avb_chain),
+            _ => None,
+        };
+        let node = match layout {
+            Some(layout) => {
+                let shown = whole.sub(0, MAX_DESCRIPTOR);
+                match parse(&cx, shown, BE, &(), layout).await {
+                    Ok(summary) => struct_node(name, shown, BE, (), layout).summary(summary),
+                    Err(e) => struct_node(name, shown, BE, (), layout).diag(e),
+                }
+                .span(whole)
+            }
+            None => Node::new(name).span(whole).summary(format!("tag {tag}")),
+        };
         cx.push(node).await;
+        index = index.saturating_add(1);
     }
+    Ok(())
+}
+
+/// The tag and length every descriptor starts with.
+fn avb_descriptor_header(f: &mut Fields<'_>) -> Result<()> {
+    f.u64("Tag").enumeration(AVB_DESCRIPTORS).emit()?;
+    f.u64("Length").emit()?;
+    Ok(())
+}
+
+/// `AvbPropertyDescriptor`: key and value, each NUL-terminated.
+fn avb_property(f: &mut Fields<'_>, _: &()) -> Result<String> {
+    avb_descriptor_header(f)?;
+    let key_len = f.u64("Key length").emit()?;
+    let value_len = f.u64("Value length").emit()?;
+    let key = f.ascii("Key", key_len).emit()?;
+    f.skip(1);
+    let value = f.ascii("Value", value_len).emit()?;
+    Ok(format!("{key} = {}", text_clip(&value)))
+}
+
+fn text_clip(s: &str) -> String {
+    crate::formats::util::fmt::clip(s, 200)
+}
+
+/// `AvbHashtreeDescriptor`: dm-verity parameters, then the partition
+/// name, salt and root digest.
+fn avb_hashtree(f: &mut Fields<'_>, _: &()) -> Result<String> {
+    avb_descriptor_header(f)?;
+    f.u32("dm-verity version").emit()?;
+    let image = f
+        .u64("Image size")
+        .with(|&s, n| n.summary(crate::formats::util::fmt::size(s)))
+        .emit()?;
+    f.u64("Tree offset").hex().emit()?;
+    f.u64("Tree size").emit()?;
+    f.u32("Data block size").emit()?;
+    f.u32("Hash block size").emit()?;
+    f.u32("FEC roots").emit()?;
+    f.u64("FEC offset").hex().emit()?;
+    f.u64("FEC size").emit()?;
+    let alg = f.ascii("Hash algorithm", 32).emit()?;
+    let name_len = f.u32("Partition name length").emit()?;
+    let salt_len = f.u32("Salt length").emit()?;
+    let digest_len = f.u32("Root digest length").emit()?;
+    f.u32("Flags").flags(AVB_HASHTREE_FLAGS).emit()?;
+    f.bytes("Reserved", 60).emit()?;
+    let name = f.ascii("Partition name", name_len.into()).emit()?;
+    f.bytes("Salt", salt_len.into()).emit()?;
+    f.bytes("Root digest", digest_len.into()).emit()?;
+    Ok(format!(
+        "{name}, {}, {}",
+        crate::formats::util::fmt::size(image),
+        alg.trim_end_matches('\0')
+    ))
+}
+
+const AVB_HASHTREE_FLAGS: FlagTable = &[flag(1, "DO_NOT_USE_AB"), flag(2, "CHECK_AT_MOST_ONCE")];
+
+/// `AvbHashDescriptor`: the image's size and digest, then the partition
+/// name, salt and digest.
+fn avb_hash(f: &mut Fields<'_>, _: &()) -> Result<String> {
+    avb_descriptor_header(f)?;
+    let image = f
+        .u64("Image size")
+        .with(|&s, n| n.summary(crate::formats::util::fmt::size(s)))
+        .emit()?;
+    let alg = f.ascii("Hash algorithm", 32).emit()?;
+    let name_len = f.u32("Partition name length").emit()?;
+    let salt_len = f.u32("Salt length").emit()?;
+    let digest_len = f.u32("Digest length").emit()?;
+    f.u32("Flags").flags(AVB_HASH_FLAGS).emit()?;
+    f.bytes("Reserved", 60).emit()?;
+    let name = f.ascii("Partition name", name_len.into()).emit()?;
+    f.bytes("Salt", salt_len.into()).emit()?;
+    f.bytes("Digest", digest_len.into()).emit()?;
+    Ok(format!(
+        "{name}, {}, {}",
+        crate::formats::util::fmt::size(image),
+        alg.trim_end_matches('\0')
+    ))
+}
+
+const AVB_HASH_FLAGS: FlagTable = &[flag(1, "DO_NOT_USE_AB")];
+
+/// `AvbKernelCmdlineDescriptor`.
+fn avb_cmdline(f: &mut Fields<'_>, _: &()) -> Result<String> {
+    avb_descriptor_header(f)?;
+    f.u32("Flags").flags(AVB_CMDLINE_FLAGS).emit()?;
+    let len = f.u32("Command line length").emit()?;
+    let cmdline = f.ascii("Command line", len.into()).emit()?;
+    Ok(text_clip(&cmdline))
+}
+
+const AVB_CMDLINE_FLAGS: FlagTable = &[
+    flag(1, "USE_ONLY_IF_HASHTREE_NOT_DISABLED"),
+    flag(2, "USE_ONLY_IF_HASHTREE_DISABLED"),
+];
+
+/// `AvbChainPartitionDescriptor`: the partition whose vbmeta is signed by
+/// the given public key.
+fn avb_chain(f: &mut Fields<'_>, _: &()) -> Result<String> {
+    avb_descriptor_header(f)?;
+    let location = f.u32("Rollback index location").emit()?;
+    let name_len = f.u32("Partition name length").emit()?;
+    let key_len = f.u32("Public key length").emit()?;
+    f.u32("Flags").flags(AVB_CHAIN_FLAGS).emit()?;
+    f.bytes("Reserved", 60).emit()?;
+    let name = f.ascii("Partition name", name_len.into()).emit()?;
+    f.bytes("Public key", key_len.into()).emit()?;
+    Ok(format!("{name}, rollback index location {location}"))
+}
+
+const AVB_CHAIN_FLAGS: FlagTable = &[flag(1, "DO_NOT_USE_AB")];
+
+record! {
+    /// `AvbFooter`, the last 64 bytes of a partition whose image is
+    /// followed by its vbmeta.
+    pub struct AvbFooter {
+        magic: ascii[4] "Magic",
+        major: u32 "Footer major version",
+        minor: u32 "Footer minor version",
+        original_size: u64 "Original image size",
+        vbmeta_offset: u64 "VBMeta offset" .hex(),
+        vbmeta_size: u64 "VBMeta size",
+        _reserved: bytes[28] "Reserved",
+    }
+}
+
+/// Nodes for what follows an Android image's payloads, from `end` to the
+/// end of the file: with an AVB footer (avbtool `add_hash_footer`), the
+/// vbmeta it points to, the padding around it and the footer; otherwise
+/// the trailing bytes as embedded content.
+pub async fn avb_trailer(cx: &Cx, input: Input, end: u64) -> Result<()> {
+    let file = input.span;
+    if end >= file.len {
+        return Ok(());
+    }
+    let at = file.len.saturating_sub(AvbFooter::SIZE);
+    let footer = file.sub(at, AvbFooter::SIZE);
+    let found = if at >= end && cx.read(footer.sub(0, 4)).await?.as_slice() == b"AVBf" {
+        Some(read_record::<AvbFooter>(cx, footer, BE).await?)
+    } else {
+        None
+    };
+    let Some(f) = found else {
+        let rest = file.tail(end);
+        cx.emit(
+            embedded("Trailing data", input.nested(rest))
+                .summary(crate::formats::util::fmt::size(rest.len)),
+        );
+        return Ok(());
+    };
+    let gap = |from: u64, to: u64| {
+        if to > from {
+            let span = file.sub(from, to.saturating_sub(from));
+            cx.emit(
+                Node::new("Padding")
+                    .span(span)
+                    .summary(crate::formats::util::fmt::size(span.len)),
+            );
+        }
+    };
+    let vb_end = f.vbmeta_offset.saturating_add(f.vbmeta_size);
+    if f.vbmeta_offset >= end && vb_end <= at {
+        gap(end, f.vbmeta_offset);
+        let span = file.sub(f.vbmeta_offset, f.vbmeta_size);
+        cx.emit(
+            embedded_as("AVB metadata", input.nested(span), &VBMETA)
+                .summary(crate::formats::util::fmt::size(span.len)),
+        );
+        gap(vb_end, at);
+    } else {
+        gap(end, at);
+    }
+    let mut node = AvbFooter::node("AVB footer", footer, BE).summary(format!(
+        "image {}, vbmeta at {:#x}",
+        crate::formats::util::fmt::size(f.original_size),
+        f.vbmeta_offset
+    ));
+    if f.vbmeta_offset < end || vb_end > at {
+        node = node.diag(
+            Diagnostic::malformed("vbmeta lies outside the space after the image")
+                .at(footer.sub(20, 16)),
+        );
+    }
+    if f.original_size != end {
+        node = node.diag(Diagnostic::note(format!(
+            "original image size {:#x}, payloads end at {end:#x}",
+            f.original_size
+        )));
+    }
+    cx.emit(node);
     Ok(())
 }
 

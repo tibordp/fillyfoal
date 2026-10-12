@@ -613,9 +613,8 @@ async fn vendor_boot(cx: Cx, input: Input) -> Result<()> {
         .max(table_pad.1)
         .max(dtb_pad.1)
         .max(ramdisk_pad.1);
-    if end < file.len {
-        let rest = file.tail(end);
-        cx.emit(embedded("Trailing data", input.nested(rest)).summary(size(rest.len)));
+    if let Err(e) = crate::formats::system::platform::avb_trailer(&cx, input, end).await {
+        cx.diag(e);
     }
     cx.annotate(format!(
         "Android vendor boot image v{}, ramdisk {}, DTB {}",

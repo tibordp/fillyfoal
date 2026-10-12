@@ -5,6 +5,7 @@
 //! files (kernels, gzip/lz4 ramdisks, filesystem images), which are
 //! dissected as embedded content.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, u32_be};
@@ -13,11 +14,12 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::disk::PieceList;
 use crate::formats::util::arcutil::{count, emit_nodes, human_size, uint};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
-use crate::span::Span;
+use crate::span::{Origin, Span};
 use crate::value::{EnumTable, Value};
 
 const LE: Endian = Endian::Little;
@@ -92,46 +94,192 @@ pub async fn dissect_sparse(cx: Cx, input: Input) -> Result<()> {
         human_size(image),
         count(h.chunks.into(), "chunk", "chunks")
     ));
+    let layout = Sparse {
+        input,
+        at: h.header_size,
+        chunk_header: h.chunk_header_size,
+        chunks: h.chunks,
+        block_size: h.block_size,
+        blocks: h.blocks,
+    };
     cx.emit(
         Node::new("Chunks")
             .span(file.tail(h.header_size.into()))
             .summary(count(h.chunks.into(), "chunk", "chunks"))
-            .lazy(
-                sparse_chunks,
-                (
-                    input,
-                    h.header_size,
-                    h.chunk_header_size,
-                    h.chunks,
-                    h.block_size,
-                ),
-            ),
+            .lazy(sparse_chunks, layout),
+    );
+    cx.emit(
+        Node::new("Expanded image")
+            .summary(human_size(image))
+            .desc("The image the chunks describe, as simg2img writes it")
+            .lazy(sparse_image, layout),
     );
     Ok(())
 }
 
-async fn sparse_chunks(
-    cx: Cx,
-    (input, at, chunk_header, chunks, block_size): (Input, u16, u16, u32, u32),
-) -> Result<()> {
+/// Where the chunks of a sparse image are and how big they are.
+#[derive(Clone, Copy, Debug)]
+struct Sparse {
+    input: Input,
+    at: u16,
+    chunk_header: u16,
+    chunks: u32,
+    block_size: u32,
+    blocks: u32,
+}
+
+/// One chunk header.
+struct Chunk {
+    kind: u16,
+    blocks: u32,
+    total: u32,
+}
+
+/// Reads the chunk header at the cursor and moves past the chunk.
+async fn read_chunk(cur: &mut Cursor<'_>, chunk_header: u16) -> Result<Chunk> {
+    let start = cur.pos();
+    let kind = cur.u16().await?;
+    cur.skip(2);
+    let blocks = cur.u32().await?;
+    let total = cur.u32().await?;
+    if u64::from(total) < u64::from(chunk_header) {
+        return Err(Diagnostic::malformed("chunk smaller than its header").at(cur.since(start)));
+    }
+    cur.seek(start.saturating_add(total.into()));
+    Ok(Chunk {
+        kind,
+        blocks,
+        total,
+    })
+}
+
+/// Bytes of a non-zero fill pattern derived per fill value: fills map onto
+/// repeats of that buffer.
+const FILL_PATTERN: u64 = 1 << 20;
+/// Pieces the expanded image may have; past this (a terabyte of non-zero
+/// fill, or a million raw chunks) the rest is left out.
+const MAX_PIECES: usize = 1 << 20;
+
+/// The expanded image: raw chunks map onto the file, "don't care" chunks
+/// and zero fills are holes, other fills repeat a derived pattern.
+async fn sparse_image(cx: Cx, s: Sparse) -> Result<()> {
+    let file = s.input.span;
+    let image = u64::from(s.blocks).saturating_mul(s.block_size.into());
+    let mut list = PieceList::new(file.sub(0, s.at.into()));
+    let mut patterns: BTreeMap<u32, Span> = BTreeMap::new();
+    let mut cur = Cursor::new(&cx, file, LE);
+    cur.seek(s.at.into());
+    let mut problem = None;
+    for _ in 0..s.chunks {
+        if cur.at_end() {
+            problem = Some(Diagnostic::truncated(cur.span(12), 0));
+            break;
+        }
+        if list.pieces().len() >= MAX_PIECES {
+            problem = Some(Diagnostic::limit("too many pieces; the rest is left out"));
+            break;
+        }
+        let start = cur.pos();
+        let chunk = match read_chunk(&mut cur, s.chunk_header).await {
+            Ok(c) => c,
+            Err(e) => {
+                problem = Some(e);
+                break;
+            }
+        };
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
+        let span = cur.since(start);
+        let data = span.tail(s.chunk_header.into());
+        let bytes = u64::from(chunk.blocks).saturating_mul(s.block_size.into());
+        if bytes > image.saturating_sub(list.len()) {
+            problem = Some(
+                Diagnostic::malformed("chunks describe more blocks than the image has").at(span),
+            );
+            break;
+        }
+        match chunk.kind {
+            0xcac1 => {
+                let got = data.len.min(bytes);
+                list.data(data.sub(0, got));
+                if got < bytes {
+                    problem = Some(Diagnostic::truncated(data, bytes));
+                    list.hole(&cx, bytes.saturating_sub(got))?;
+                }
+            }
+            0xcac2 => {
+                let raw = cx.read(data.sub_exact(0, 4)?).await?;
+                let value = crate::bytes::u32_le(&raw, 0).unwrap_or(0);
+                if value == 0 {
+                    list.hole(&cx, bytes)?;
+                    continue;
+                }
+                let pattern = match patterns.get(&value) {
+                    Some(p) => *p,
+                    None => {
+                        let words = (bytes.min(FILL_PATTERN) / 4).try_into().unwrap_or(0);
+                        let buf = value.to_le_bytes().repeat(words);
+                        cx.checkpoint().await;
+                        let origin = Origin {
+                            parent: data.sub(0, 4),
+                            transform: "sparse-fill",
+                        };
+                        let p = cx.add_derived(origin, buf, 4, None)?.span;
+                        patterns.insert(value, p);
+                        p
+                    }
+                };
+                let mut left = bytes;
+                while left > 0 && !pattern.is_empty() && list.pieces().len() < MAX_PIECES {
+                    let take = left.min(pattern.len);
+                    list.data(pattern.sub(0, take));
+                    left = left.saturating_sub(take);
+                    if list.pieces().len().is_multiple_of(4096) {
+                        cx.checkpoint().await;
+                    }
+                }
+                list.hole(&cx, left)?;
+            }
+            0xcac3 => list.hole(&cx, bytes)?,
+            _ => {}
+        }
+    }
+    if list.len() < image {
+        list.hole(&cx, image.saturating_sub(list.len()))?;
+    }
+    if let Some(d) = problem {
+        cx.diag(d);
+    }
+    let span = list.finish(&cx, "android-sparse").await?;
+    crate::formats::dissect_or_data(cx, s.input.nested(span)).await
+}
+
+async fn sparse_chunks(cx: Cx, s: Sparse) -> Result<()> {
+    let Sparse {
+        input,
+        at,
+        chunk_header,
+        chunks,
+        block_size,
+        ..
+    } = s;
     cx.set_count(Count::Exact(chunks.into()));
     let mut cur = Cursor::new(&cx, input.span, LE);
-    cur.seek(at.into());
-    let mut block = 0u64;
-    for i in 0..chunks {
+    // Resume marks: (position, chunk index, output block).
+    let (pos, first, mut block) = cx.resume::<(u64, u32, u64)>().unwrap_or((at.into(), 0, 0));
+    cur.seek(pos);
+    for i in first..chunks {
         if cur.at_end() {
             cx.diag(Diagnostic::truncated(cur.span(12), 0));
             break;
         }
         let start = cur.pos();
-        let kind = cur.u16().await?;
-        cur.skip(2);
-        let blocks = cur.u32().await?;
-        let total = cur.u32().await?;
-        if u64::from(total) < u64::from(chunk_header) {
-            return Err(Diagnostic::malformed("chunk smaller than its header").at(cur.since(start)));
-        }
-        cur.seek(start.saturating_add(total.into()));
+        let mark = (start, i, block);
+        cx.mark(move || mark);
+        let Chunk {
+            kind,
+            blocks,
+            total,
+        } = read_chunk(&mut cur, chunk_header).await?;
         let span = cur.since(start);
         let data = span.tail(chunk_header.into());
         let name = crate::value::lookup(CHUNK_TYPE, kind.into()).unwrap_or("unknown");
@@ -153,7 +301,11 @@ async fn sparse_chunks(
                 .value(uint(total.into())),
         ];
         match kind {
-            0xcac1 => fields.push(embedded("Data", input.nested(data))),
+            // A raw chunk is a piece of the expanded image, dissected there.
+            0xcac1 => fields.push(Node::new("Data").span(data).summary(format!(
+                "image offset {:#x}",
+                block.saturating_mul(block_size.into())
+            ))),
             0xcac2 => fields.push(Node::new("Fill value").span(data)),
             0xcac4 => fields.push(Node::new("CRC32").span(data)),
             _ => {}
@@ -322,9 +474,8 @@ pub async fn dissect_boot(cx: Cx, input: Input) -> Result<()> {
         at = at.saturating_add(size.div_ceil(page).saturating_mul(page));
         padding(&cx, file, end, at, "Padding");
     }
-    if at < file.len {
-        let rest = file.tail(at);
-        cx.emit(embedded("Trailing data", input.nested(rest)).summary(human_size(rest.len)));
+    if let Err(e) = super::platform::avb_trailer(&cx, input, at).await {
+        cx.diag(e);
     }
     cx.annotate(format!(
         "Android boot image v{}{}, {}",
