@@ -935,3 +935,9 @@ Stored whole as `.raw.zst` (zstd -19).
 ## Robotics recordings
 | `mcap/zstd.mcap` | Python `mcap` 1.2.2 `Writer` (zstandard 0.25.0) | `uv run --with mcap==1.2.2 --with zstandard==0.25.0 --with lz4==4.4.5 python3 -I tests/data/mcap/make.py OUTDIR`; reproduced byte-for-byte; one zstd chunk with a schema, two channels and nine JSON messages, then the summary section |
 | `mcap/lz4.mcap` | Python `mcap` 1.2.2 `Writer` (lz4 4.4.5) | same script; the same records in one LZ4-frame chunk |
+## Tracker modules (Schism Tracker, MilkyTracker)
+Made by `sh tests/data/tracker/make.sh OUTDIR` (debian:trixie-slim, `tests/data/tracker/inside.sh`): our seed `song.mod` (`tests/data/tracker/song.py`: four channels, two looped samples, two patterns with common effects) is loaded into each tracker and saved through its user interface on a virtual X display (Xvfb, xdotool), since neither has a command-line save. Schism Tracker writes its build date and the save time (IT edit history, two S3M reserved bytes) into its files, so those bytes differ on a re-run; the rest reproduces.
+| `it/schism.it` | Schism Tracker 20250313 (Debian `schism 2:20250313-2`) | Save Module (F10), format IT: sample mode, 235 sample headers (Schism counts up to its internal preview slot), edit history entry, no MIDI configuration |
+| `s3m/schism.s3m` | Schism Tracker 20250313 | Save Module, format S3M: 99 instrument headers, two packed patterns, Schism version date in the reserved bytes |
+| `mod/schism.mod` | Schism Tracker 20250313 | Save Module, format MOD (M.K., 31 samples) |
+| `xm/milkytracker.xm` | MilkyTracker 1.05.01 (Debian source `1.05.01+dfsg-1`, built without ALSA/JACK MIDI) | disk operations (Ctrl+Shift+S), type `.xm`: XM 1.04, two instruments of one sample each, packed patterns; reproduced byte-for-byte |
