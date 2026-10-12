@@ -678,11 +678,7 @@ const MIN_VARIANTS: usize = 30;
 /// Fixtures whose exploration costs far more time than the units it is
 /// charged, so [`HEAVY_WORK`] cannot see it, with the reason. Each is swept
 /// as if heavy. Remove an entry once its cost is charged.
-pub const SLOW_SWEEPS: &[(&str, &str)] = &[(
-    "bam__many-blocks.bam",
-    "BGZF/BAM: about 7.7k units for 0.14 s per exploration (~20 us a unit); \
-     the sweep took 190-220 s",
-)];
+pub const SLOW_SWEEPS: &[(&str, &str)] = &[];
 
 /// How many truncations and mutated copies the robustness sweep makes of
 /// a fixture of `len` bytes whose unmodified exploration costs `work`

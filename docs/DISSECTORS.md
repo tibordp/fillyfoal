@@ -243,8 +243,15 @@ it: the core has no clock and no preemption, by design. Budget units are
 the only signal, so work that is not charged is invisible.
 
 - Suspension points: a read (`cx.read`, `read_avail`, `block`, `cstr`),
-  `cx.push`, and `cx.checkpoint().await` (1 unit). Reads charge for their
-  size, and reads of lazily decoded sources charge as they decode.
+  `cx.push`, `cx.checkpoint().await` (1 unit) and `cx.charge(n).await`
+  (n units, for bounded synchronous work already done). Reads charge for
+  their size, and reads of lazily decoded sources charge as they decode.
+  Identification charges for the custom probes it ran over the head
+  (about 1,500 units when nothing matches a full head), so content
+  identified many times over (one node per BGZF block) is not free.
+  Probes run on every identification: keep them cheap, and remember that
+  dozens of them see the same head (text probes share one memoized
+  encoding check, `text::encoding::classify`).
 - Any loop whose iteration count depends on the input must reach one every
   iteration or every few hundred to few thousand cheap iterations. A single
   read does not pay for a loop over what it returned: reading 16 MiB costs

@@ -1743,6 +1743,24 @@ impl Cx {
         .await
     }
 
+    /// Charges `units` of work done synchronously (a bounded computation
+    /// over data already read), suspending first if the budget is used
+    /// up, like [`Cx::checkpoint`] (which charges 1). Aim for a unit per
+    /// microsecond of work.
+    pub async fn charge(&self, units: u64) {
+        poll_fn(|_| {
+            let mut sh = lock(&self.shared);
+            if sh.budget == 0 {
+                sh.stop = Some(Stop::Budget);
+                Poll::Pending
+            } else {
+                sh.charge(units.max(1));
+                Poll::Ready(())
+            }
+        })
+        .await
+    }
+
     /// Emits a child immediately, regardless of paging. Use for a small, fixed
     /// set of children; use [`Cx::push`] for collections.
     pub fn emit(&self, node: Node) {

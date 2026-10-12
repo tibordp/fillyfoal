@@ -184,6 +184,20 @@ fn next_data_skips_zero_pieces_and_declared_holes() {
     assert_eq!(host.bytes_supplied, 8);
 }
 
+/// Identification runs hundreds of custom probes over a 66 KiB head, a few
+/// milliseconds when none matches (zeros are the slowest seen); it is
+/// charged, so a dissector that identifies many nested pieces (BGZF
+/// blocks) is not mostly free. Without it, the 0x10800-byte head read cost
+/// 17 units.
+#[test]
+fn identification_is_charged() {
+    let mut host = Host::new(vec![0; 0x10800], Limits::default());
+    host.session.expand(host.root, 10);
+    host.run();
+    let work = host.session.work_done();
+    assert!((1_000..3_000).contains(&work), "{work} units");
+}
+
 /// A tarball whose middle member is 2 MiB of zeros: listing the first entry
 /// must not decompress the whole stream.
 #[test]
