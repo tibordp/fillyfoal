@@ -10,8 +10,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Type — 1 entries, 0xa bytes  [0x8+0xc]
       id: Type (0x7)  [0x8+0x1]
       size: 10  [0x9+0x1]
-      Contents — 1 entry  [0xa+0xa]
-        ! unsupported: decoding component type section entries
+      [0]: "func (msg: string)"  [0xb+0x9]
   ▾ Import — 1 entries, 0x1d bytes  [0x14+0x1f]
       id: Import (0xa)  [0x14+0x1]
       size: 29  [0x15+0x1]
@@ -19,8 +18,9 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Type — 1 entries, 0x12 bytes  [0x33+0x14]
       id: Type (0x7)  [0x33+0x1]
       size: 18  [0x34+0x1]
-      Contents — 1 entry  [0x35+0x12]
-        ! unsupported: decoding component type section entries
+    ▾ [0]: "instance type, 2 declarations"  [0x36+0x11]
+        type: "func () -> u32"
+        export level: "func (type 0)"
   ▾ Import — 2 entries, 0x17 bytes  [0x47+0x19]
       id: Import (0xa)  [0x47+0x1]
       size: 23  [0x48+0x1]
@@ -138,8 +138,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Core instance — 1 entries, 0x4 bytes  [0x145+0x6]
       id: Core instance (0x2)  [0x145+0x1]
       size: 4  [0x146+0x1]
-      Contents — 1 entry  [0x147+0x4]
-        ! unsupported: decoding component core instance section entries
+      [0]: "instantiate core module 1" — 0 arguments  [0x148+0x3]
   ▾ Alias — 2 entries, 0x18 bytes  [0x14b+0x1a]
       id: Alias (0x6)  [0x14b+0x1]
       size: 24  [0x14c+0x1]
@@ -148,18 +147,18 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Canon — 1 entries, 0x9 bytes  [0x165+0xb]
       id: Canon (0x8)  [0x165+0x1]
       size: 9  [0x166+0x1]
-      Contents — 1 entry  [0x167+0x9]
-        ! unsupported: decoding component canon section entries
+      [0]: "lower func 0" — core memory 0, realloc core func 0  [0x168+0x8]
   ▾ Core instance — 2 entries, 0x13 bytes  [0x170+0x15]
       id: Core instance (0x2)  [0x170+0x1]
       size: 19  [0x171+0x1]
-      Contents — 2 entries  [0x172+0x13]
-        ! unsupported: decoding component core instance section entries
+    ▾ [0]: "inline exports" — 1 export  [0x173+0x8]
+        log: "core func 1"
+    ▾ [1]: "instantiate core module 0" — 1 argument  [0x17b+0xa]
+        with host: "core instance 1"
   ▾ Type — 1 entries, 0xb bytes  [0x185+0xd]
       id: Type (0x7)  [0x185+0x1]
       size: 11  [0x186+0x1]
-      Contents — 1 entry  [0x187+0xb]
-        ! unsupported: decoding component type section entries
+      [0]: "func (a: s32, b: s32) -> s32"  [0x188+0xa]
   ▾ Alias — 1 entries, 0x9 bytes  [0x192+0xb]
       id: Alias (0x6)  [0x192+0x1]
       size: 9  [0x193+0x1]
@@ -167,13 +166,11 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Canon — 1 entries, 0x6 bytes  [0x19d+0x8]
       id: Canon (0x8)  [0x19d+0x1]
       size: 6  [0x19e+0x1]
-      Contents — 1 entry  [0x19f+0x6]
-        ! unsupported: decoding component canon section entries
+      [0]: "lift core func 2 as type 3"  [0x1a0+0x5]
   ▾ Type — 1 entries, 0x5 bytes  [0x1a5+0x7]
       id: Type (0x7)  [0x1a5+0x1]
       size: 5  [0x1a6+0x1]
-      Contents — 1 entry  [0x1a7+0x5]
-        ! unsupported: decoding component type section entries
+      [0]: "func ()"  [0x1a8+0x4]
   ▾ Alias — 1 entries, 0xb bytes  [0x1ac+0xd]
       id: Alias (0x6)  [0x1ac+0x1]
       size: 11  [0x1ad+0x1]
@@ -181,8 +178,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Canon — 1 entries, 0x6 bytes  [0x1b9+0x8]
       id: Canon (0x8)  [0x1b9+0x1]
       size: 6  [0x1ba+0x1]
-      Contents — 1 entry  [0x1bb+0x6]
-        ! unsupported: decoding component canon section entries
+      [0]: "lift core func 3 as type 4"  [0x1bc+0x5]
   ▾ Component — 0x4a bytes  [0x1c1+0x4c]
       id: Component (0x4)  [0x1c1+0x1]
       size: 74  [0x1c2+0x1]
@@ -194,8 +190,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ Type — 1 entries, 0xb bytes  [0x1cb+0xd]
           id: Type (0x7)  [0x1cb+0x1]
           size: 11  [0x1cc+0x1]
-          Contents — 1 entry  [0x1cd+0xb]
-            ! unsupported: decoding component type section entries
+          [0]: "func (a: s32, b: s32) -> s32"  [0x1ce+0xa]
       ▾ Import — 1 entries, 0x8 bytes  [0x1d8+0xa]
           id: Import (0xa)  [0x1d8+0x1]
           size: 8  [0x1d9+0x1]
@@ -212,8 +207,8 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Instance — 1 entries, 0xa bytes  [0x20d+0xc]
       id: Instance (0x5)  [0x20d+0x1]
       size: 10  [0x20e+0x1]
-      Contents — 1 entry  [0x20f+0xa]
-        ! unsupported: decoding component instance section entries
+    ▾ [0]: "instantiate component 0" — 1 argument  [0x210+0x9]
+        with add: "func 1"
   ▾ Alias — 1 entries, 0x8 bytes  [0x219+0xa]
       id: Alias (0x6)  [0x219+0x1]
       size: 8  [0x21a+0x1]
