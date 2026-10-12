@@ -615,7 +615,10 @@ async fn dissect_as(cx: Cx, (input, given): (Input, &'static Format)) -> Result<
     }
 }
 
-async fn dissect_named(cx: Cx, (input, name): (Input, &'static str)) -> Result<()> {
+/// Dissects `input` as the format registered as `name` (as identification
+/// would, if no such format is registered). A host's "inspect as" choice
+/// still overrides it.
+pub async fn dissect_named(cx: Cx, (input, name): (Input, &'static str)) -> Result<()> {
     match cx.registry().by_name(name) {
         Some(format) => dissect_as(cx, (input, format)).await,
         None => dissect(cx, input).await,

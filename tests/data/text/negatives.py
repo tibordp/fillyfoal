@@ -205,3 +205,17 @@ urllib3==2.2.1
 idna==3.6
 certifi==2024.2.2
 """)
+
+# A text/html part is HTML even when it starts like plain text.
+write("eml", "html-part.eml", """From: a@example.com
+To: b@example.com
+Subject: Notes
+Date: Mon, 1 Jan 2024 12:00:00 +0000
+Message-ID: <2@example.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+Hello Bob,<br>
+see you <b>soon</b>.<br>
+-- <i>Ana</i>
+""")

@@ -14,7 +14,7 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::Value;
 
-use super::decode::{self, Transform, decoded_text_node, preview};
+use super::decode::{self, Transform, decoded_text_node, decoded_text_node_as, preview};
 use super::encoding::{decode_8bit, prepare, prepare_resuming};
 use super::scan::Lines;
 use super::{parse_datetime, plural, probe, text_node};
@@ -552,6 +552,11 @@ fn body_node(fields: &[Field], ctype: &Params, input: Input, body: Span, depth: 
         );
     }
     let charset = ctype.get("charset").and_then(crate::codec::charset::lookup);
+    // A declared HTML part is HTML even when it does not start like it.
+    if ctype.value.eq_ignore_ascii_case("text/html") {
+        return decoded_text_node_as(name, input, body, transform, charset, "html")
+            .summary(summary);
+    }
     decoded_text_node(name, input, body, transform, charset).summary(summary)
 }
 

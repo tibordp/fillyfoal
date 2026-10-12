@@ -284,7 +284,24 @@ pub fn decoded_text_node(
 ) -> Node {
     Node::new(name)
         .span(span)
-        .lazy(expand_decoded, (input, span, transform, charset))
+        .lazy(expand_decoded, (input, span, transform, charset, None))
+}
+
+/// [`decoded_text_node`] whose content is dissected as the format
+/// registered as `format` (a MIME part's declared type) instead of being
+/// identified.
+pub fn decoded_text_node_as(
+    name: impl Into<std::borrow::Cow<'static, str>>,
+    input: Input,
+    span: Span,
+    transform: Transform,
+    charset: Option<Label>,
+    format: &'static str,
+) -> Node {
+    Node::new(name).span(span).lazy(
+        expand_decoded,
+        (input, span, transform, charset, Some(format)),
+    )
 }
 
 /// A node for a `data:` URL whose raw text (as stored at `span`, without
@@ -395,7 +412,13 @@ pub async fn derive_with(
 
 async fn expand_decoded(
     cx: Cx,
-    (input, span, transform, charset): (Input, Span, Transform, Option<Label>),
+    (input, span, transform, charset, format): (
+        Input,
+        Span,
+        Transform,
+        Option<Label>,
+        Option<&'static str>,
+    ),
 ) -> Result<()> {
     let (mut decoded, error) = derive_with(&cx, span, transform).await?;
     if let Some(e) = error {
@@ -431,7 +454,12 @@ async fn expand_decoded(
             ));
         }
     }
-    crate::formats::dissect_or_data(cx, input.nested(decoded)).await
+    match format {
+        Some(name) if !decoded.is_empty() => {
+            crate::formats::dissect_named(cx, (input.nested(decoded), name)).await
+        }
+        _ => crate::formats::dissect_or_data(cx, input.nested(decoded)).await,
+    }
 }
 
 /// Value-sized text: the first `max` characters, and whether any were cut.
