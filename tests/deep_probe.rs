@@ -52,3 +52,20 @@ fn the_name_does_not_override_a_signature() {
     png.resize(768, 0);
     assert_eq!(root_format("palette.act", png), Some("png"));
 }
+
+#[test]
+fn a_change_journal_padded_past_the_tail_is_identified_by_its_name() {
+    // Sparse head, records, then 8 KiB of zeros: the first phase sees zeros
+    // at both ends, the deep tail holds the record chain.
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/synthetic/usn-journal/padded-tail.$J.gz");
+    let journal = common::fixture_bytes(&path);
+    assert_eq!(root_format("$J", journal.clone()), Some("usn-journal"));
+    assert_eq!(
+        root_format("C:/case/$Extend/$UsnJrnl:$J", journal.clone()),
+        Some("usn-journal")
+    );
+    // The name alone is not enough, and neither are the records alone.
+    assert_eq!(root_format("$J", vec![0; journal.len()]), None);
+    assert_eq!(root_format("padded-tail.bin", journal), None);
+}

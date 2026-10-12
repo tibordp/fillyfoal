@@ -9,6 +9,7 @@ pub mod credentials;
 pub mod encryption;
 pub mod keepass;
 pub mod kerberos;
+pub mod keybox;
 pub mod keychain;
 pub mod keyrings;
 pub mod krl;

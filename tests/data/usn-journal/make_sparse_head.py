@@ -6,6 +6,11 @@ page and the gap is zeros. Hand-built from the documented USN_RECORD_V2 and
 V3 layouts (synthetic). The fixture is stored gzipped (`gzip -n`
 equivalent) only for size; the harness dissects the decompressed bytes.
 
+Also writes `padded-tail.$J.gz`: the same journal followed by 8 KiB of
+zeros (an export padded to its allocation), so the 1 KiB tail the first
+probe phase sees is all zeros and only the second phase (the deep tail and
+the `$J` name) recognises it.
+
 Usage: python3 make_sparse_head.py OUT_DIR
 """
 
@@ -76,6 +81,10 @@ def main():
     path = os.path.join(out, "sparse-head.$J.gz")
     with open(path, "wb") as f:
         f.write(gzip.compress(bytes(data), compresslevel=9, mtime=0))
+    padded = bytes(data) + bytes(0x2000)
+    path = os.path.join(out, "padded-tail.$J.gz")
+    with open(path, "wb") as f:
+        f.write(gzip.compress(padded, compresslevel=9, mtime=0))
 
 
 if __name__ == "__main__":

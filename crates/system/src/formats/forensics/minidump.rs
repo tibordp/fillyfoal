@@ -1523,7 +1523,25 @@ fn exception_parameter(code: u32, i: usize, v: u64) -> String {
 async fn list(cx: &Cx, span: Span, size: u64) -> Result<impl Iterator<Item = Span>> {
     let head = cx.block(span.sub(0, 4)).await?;
     let n = Fields::emitting(cx, &head, LE).u32("Count").emit()?;
-    let table = span.tail(4);
+    // Breakpad's and rust-minidump's readers accept the thread, module and
+    // memory lists with 4 bytes of padding after the count ("may be padded
+    // with 4 bytes on 64bit ABIs"), when the stream is exactly that much
+    // longer than the table.
+    let padded = u64::from(n)
+        .checked_mul(size)
+        .and_then(|t| t.checked_add(8))
+        .is_some_and(|t| t == span.len);
+    let table = if padded {
+        let pad = cx.block(span.sub(4, 4)).await?;
+        let mut f = Fields::emitting(cx, &pad, LE);
+        f.u32("Padding")
+            .hex()
+            .desc("Alignment padding some 64-bit writers put after the count")
+            .emit()?;
+        span.tail(8)
+    } else {
+        span.tail(4)
+    };
     let count = u64::from(n).min(table.len.checked_div(size).unwrap_or(0));
     if count < n.into() {
         cx.diag(Diagnostic::truncated(table, table.len));
