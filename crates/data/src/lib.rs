@@ -16,5 +16,8 @@ pub mod formats {
     pub(crate) use fillyfoal_text::formats::text;
 
     pub mod data;
+    pub mod mssql;
+    pub mod mysql;
+    pub mod postgres;
     pub mod sqlite;
 }

@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ mysql-dynamic.MYD — MyISAM data file, dynamic rows, 60 bytes  [0x0+0x3c]
+  ▾ Blocks — dynamic rows  [0x0+0x3c]
+    ▾ Row at 0x0 — whole row with unused space: 16 bytes  [0x0+0x14]
+        Block type: whole row with unused space (0x3)  [0x0+0x1]
+        Data length: 16  [0x1+0x2]
+        Unused length: 0  [0x3+0x1]
+        Row data — 16 bytes  [0x4+0x10]
+    ▾ Row at 0x14 — whole row with unused space: 11 bytes  [0x14+0x14]
+        Block type: whole row with unused space (0x3)  [0x14+0x1]
+        Data length: 11  [0x15+0x2]
+        Unused length: 5  [0x17+0x1]
+        Row data — 11 bytes  [0x18+0xb]
+        Unused  [0x23+0x5]
+    ▾ Row at 0x28 — whole row with unused space: 16 bytes  [0x28+0x14]
+        Block type: whole row with unused space (0x3)  [0x28+0x1]
+        Data length: 16  [0x29+0x2]
+        Unused length: 0  [0x2b+0x1]
+        Row data — 16 bytes  [0x2c+0x10]

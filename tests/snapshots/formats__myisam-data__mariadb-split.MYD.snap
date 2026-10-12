@@ -1,0 +1,30 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ mariadb-split.MYD — MyISAM data file, dynamic rows, 88 bytes  [0x0+0x58]
+  ▾ Blocks — dynamic rows  [0x0+0x58]
+    ▾ Row at 0x0 — whole row with unused space: 16 bytes  [0x0+0x14]
+        Block type: whole row with unused space (0x3)  [0x0+0x1]
+        Data length: 16  [0x1+0x2]
+        Unused length: 0  [0x3+0x1]
+        Row data — 16 bytes  [0x4+0x10]
+    ▾ Row at 0x14 — first part of a row: 7 bytes of a 29-byte row, continues at 0x3c  [0x14+0x14]
+        Block type: first part of a row (0x5)  [0x14+0x1]
+        Row length: 29  [0x15+0x2]
+        Data length: 7  [0x17+0x2]
+        Next part: 0x3c — 0x3c  [0x19+0x8] → 0x3c+0x1
+        Row data — 7 bytes  [0x21+0x7]
+      ▾ Whole row — 29 bytes from its parts  [#1:0x0+0x1d]
+          Data  [#1:0x0+0x1d]
+    ▾ Row at 0x28 — whole row with unused space: 16 bytes  [0x28+0x14]
+        Block type: whole row with unused space (0x3)  [0x28+0x1]
+        Data length: 16  [0x29+0x2]
+        Unused length: 0  [0x2b+0x1]
+        Row data — 16 bytes  [0x2c+0x10]
+    ▾ Block at 0x3c — last part with unused space: 22 bytes  [0x3c+0x1c]
+        Block type: last part with unused space (0x9)  [0x3c+0x1]
+        Data length: 22  [0x3d+0x2]
+        Unused length: 2  [0x3f+0x1]
+        Row data — 22 bytes  [0x40+0x16]
+        Unused  [0x56+0x2]

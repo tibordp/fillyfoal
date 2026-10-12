@@ -1,7 +1,7 @@
 //! Constructors for the [`Value`]s dissectors emit most: the canonical
 //! versions of helpers that used to be copied into every family.
 
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::{EnumTable, FlagTable, Radix, Value, decode_flags, lookup};
 
 /// An unsigned decimal value.
 pub fn uint(value: impl Into<u64>, bits: u8) -> Value {
@@ -41,6 +41,18 @@ pub fn enumv(raw: impl Into<u64>, bits: u8, table: EnumTable) -> Value {
         raw,
         bits,
         name: lookup(table, raw),
+    }
+}
+
+/// A set of flags, named from `table`.
+pub fn flagsv(raw: impl Into<u64>, bits: u8, table: FlagTable) -> Value {
+    let raw = raw.into();
+    let (set, unknown) = decode_flags(table, raw);
+    Value::Flags {
+        raw,
+        bits,
+        set,
+        unknown,
     }
 }
 
