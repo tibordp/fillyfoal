@@ -271,7 +271,10 @@ pub enum Codec {
     PostFilter(lzma::Post),
     /// A [`Codec::PostFilter`] branch converter whose stream starts at
     /// address `start` (7-Zip's ARM64 and RISC-V coder property).
-    PostFilterAt { post: lzma::Post, start: u32 },
+    PostFilterAt {
+        post: lzma::Post,
+        start: u32,
+    },
     /// Nintendo Yaz0 LZ77 (the body after the 16-byte header), decoding to
     /// `size` bytes.
     Yaz0 {

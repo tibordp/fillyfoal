@@ -240,10 +240,60 @@ impl Scheme {
             return content(label, input, data, Codec::Stored, Some(r.original));
         }
         match self.codec(r) {
-            Some(codec) => content(label, input, data, codec, Some(r.original)),
+            Some(codec) => Node::new(label)
+                .span(data)
+                .lazy(resource_content, (input, data, codec, r.original)),
             None => unsupported(label, data, name),
         }
     }
+}
+
+/// Seeds at most this many chunk starts of a resource decoded on demand.
+const MAX_SEEDS: u64 = 4096;
+
+/// Expander: a compressed non-solid resource, decoded on demand from the
+/// nearest chunk start when large (see [`resource_seeds`]).
+async fn resource_content(
+    cx: Cx,
+    (input, data, codec, original): (Input, Span, Codec, u64),
+) -> Result<()> {
+    if !crate::formats::decodes_lazily(data, &codec, original) {
+        return crate::formats::expand_content(cx, (input, data, codec, Some(original))).await;
+    }
+    let seeds = resource_seeds(&cx, data, &codec).await;
+    crate::formats::expand_content_seeded(cx, (input, data, codec, original), seeds).await
+}
+
+/// Where a WIM resource can be decoded from: chunks are compressed on
+/// their own, so every chunk start in its chunk table is a point to start
+/// a decoder (at most [`MAX_SEEDS`], evenly spread). A read deep into a
+/// large resource (a file late in a solid ESD resource, the end of a big
+/// file) then decodes from the chunk before it, not from the start.
+async fn resource_seeds(cx: &Cx, span: Span, codec: &Codec) -> Vec<crate::cx::Seed> {
+    let Codec::WimResource(r) = codec else {
+        return Vec::new();
+    };
+    let chunks = r.original.div_ceil(u64::from(r.chunk.max(1)));
+    let (entry, header) = if r.solid {
+        (4u64, to_u64(wim::SOLID_HEADER))
+    } else if r.original > u64::from(u32::MAX) {
+        (8, 0)
+    } else {
+        (4, 0)
+    };
+    let table = chunks.saturating_mul(entry).saturating_add(header);
+    let Ok(head) = cx.read(span.sub(0, table)).await else {
+        return Vec::new();
+    };
+    let every = (chunks / MAX_SEEDS).max(1);
+    wim::WimDecoder::seeds(*r, &head, every)
+        .into_iter()
+        .map(|(out_pos, in_pos, decoder)| crate::cx::Seed {
+            out_pos,
+            in_pos,
+            decoder: Box::new(decoder),
+        })
+        .collect()
 }
 
 /// A compressed lookup table: decompressed, then listed.
@@ -629,7 +679,8 @@ async fn solid_stream(cx: Cx, (input, run, offset, size): (Input, Run, u64, u64)
     let Some(codec) = h.codec() else {
         return Err(Diagnostic::unsupported(format!("solid compression {}", h.format)).at(*span));
     };
-    let decoded = cx.decode_lazy(*span, &codec, h.size)?;
+    let seeds = resource_seeds(&cx, *span, &codec).await;
+    let decoded = cx.decode_lazy_seeded(*span, &codec, h.size, seeds)?;
     dissect_or_data(cx, input.nested(decoded.sub(within, size))).await
 }
 
@@ -723,22 +774,40 @@ async fn security_data(cx: Cx, data: Span) -> Result<()> {
     let head = cx.read(data.sub_exact(0, 8)?).await?;
     let total = u64::from(u32_le(&head, 0).unwrap_or(0));
     let n = u64::from(u32_le(&head, 4).unwrap_or(0));
-    cx.emit(Node::new("Total length").span(data.sub(0, 4)).value(uint(total, 64)));
-    cx.emit(Node::new("Descriptor count").span(data.sub(4, 4)).value(uint(n, 64)));
+    cx.emit(
+        Node::new("Total length")
+            .span(data.sub(0, 4))
+            .value(uint(total, 64)),
+    );
+    cx.emit(
+        Node::new("Descriptor count")
+            .span(data.sub(4, 4))
+            .value(uint(n, 64)),
+    );
     let sizes_span = data.sub_exact(8, n.saturating_mul(8))?;
     if n.saturating_mul(8).saturating_add(8) > total {
-        return Err(Diagnostic::malformed("descriptor sizes run past the security data").at(sizes_span));
+        return Err(
+            Diagnostic::malformed("descriptor sizes run past the security data").at(sizes_span),
+        );
     }
     let sizes = cx.read(sizes_span).await?;
     cx.emit(Node::new("Descriptor sizes").span(sizes_span));
     cx.set_count(Count::Exact(n.saturating_add(3)));
     let mut at = sizes_span.len.saturating_add(8);
-    for (i, size) in sizes.as_chunks::<8>().0.iter().map(|b| u64::from_le_bytes(*b)).enumerate() {
+    for (i, size) in sizes
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|b| u64::from_le_bytes(*b))
+        .enumerate()
+    {
         let span = data.sub(at, size);
         if at.saturating_add(size) > total {
-            cx.push(Node::new(format!("Descriptor {i}")).span(span).diag(
-                Diagnostic::malformed("runs past the security data"),
-            ))
+            cx.push(
+                Node::new(format!("Descriptor {i}"))
+                    .span(span)
+                    .diag(Diagnostic::malformed("runs past the security data")),
+            )
             .await;
             break;
         }
@@ -768,7 +837,10 @@ async fn descriptor_span(cx: &Cx, data: Span, id: u32) -> Option<Span> {
         return None;
     }
     let count = u64::from(id).saturating_add(1);
-    let sizes = cx.read(data.sub_exact(8, count.saturating_mul(8)).ok()?).await.ok()?;
+    let sizes = cx
+        .read(data.sub_exact(8, count.saturating_mul(8)).ok()?)
+        .await
+        .ok()?;
     let mut at = u64::from(n).saturating_mul(8).saturating_add(8);
     let mut size = 0;
     for (i, chunk) in sizes.as_chunks::<8>().0.iter().enumerate() {
@@ -846,8 +918,10 @@ async fn read_dentry(cx: &Cx, data: Span, offset: u64) -> Result<Option<Dentry>>
         let head = cx.read(data.sub(next, STREAM_ENTRY)).await?;
         let len = u64_le(&head, 0).unwrap_or(0);
         if len < STREAM_ENTRY {
-            return Err(Diagnostic::malformed("extra stream entry shorter than 38 bytes")
-                .at(data.sub(next, 8)));
+            return Err(
+                Diagnostic::malformed("extra stream entry shorter than 38 bytes")
+                    .at(data.sub(next, 8)),
+            );
         }
         let s = data.sub_exact(next, len)?;
         let n = u64::from(u16_le(&head, 36).unwrap_or(0));
@@ -873,7 +947,11 @@ async fn read_dentry(cx: &Cx, data: Span, offset: u64) -> Result<Option<Dentry>>
 
 /// A lazy node for a directory entry, named `name` (its own name if empty).
 fn dentry_node(meta: &Meta, d: &Dentry, name: &str, path: Path) -> Node {
-    let label = if name.is_empty() { d.name.clone() } else { name.to_owned() };
+    let label = if name.is_empty() {
+        d.name.clone()
+    } else {
+        name.to_owned()
+    };
     let summary = if d.is_dir() {
         "directory".to_owned()
     } else {
@@ -882,10 +960,10 @@ fn dentry_node(meta: &Meta, d: &Dentry, name: &str, path: Path) -> Node {
             .map_or_else(|| "empty".to_owned(), |e| fmt::size(e.size()))
     };
     let offset = d.span.offset.saturating_sub(meta.data.offset);
-    Node::new(label)
-        .span(d.span)
-        .summary(summary)
-        .lazy(crate::expander!(self::dentry: (Meta, u64, Path)), (meta.clone(), offset, path))
+    Node::new(label).span(d.span).summary(summary).lazy(
+        crate::expander!(self::dentry: (Meta, u64, Path)),
+        (meta.clone(), offset, path),
+    )
 }
 
 /// Expander: a directory entry's fields, security descriptor and streams,
@@ -919,15 +997,18 @@ async fn dentry(cx: Cx, (meta, offset, path): (Meta, u64, Path)) -> Result<()> {
         };
         let mut node = struct_node(name, s.span, LE, (), stream_entry_layout);
         if s.hash != [0; 20] {
-            node = node.summary(
-                meta.table
-                    .find(&s.hash)
-                    .map_or_else(|| "not in the lookup table".to_owned(), |e| fmt::size(e.size())),
-            );
+            node = node.summary(meta.table.find(&s.hash).map_or_else(
+                || "not in the lookup table".to_owned(),
+                |e| fmt::size(e.size()),
+            ));
         }
         cx.emit(node);
         if s.hash != [0; 20] {
-            let label = if s.name.is_empty() { "Content" } else { "Stream content" };
+            let label = if s.name.is_empty() {
+                "Content"
+            } else {
+                "Stream content"
+            };
             cx.emit(stream_node(&meta, label, &s.hash));
         }
     }
@@ -952,7 +1033,9 @@ async fn dentry(cx: Cx, (meta, offset, path): (Meta, u64, Path)) -> Result<()> {
 /// A node for the stream with SHA-1 `hash`, from the lookup table.
 fn stream_node(meta: &Meta, name: &'static str, hash: &[u8; 20]) -> Node {
     match meta.table.find(hash) {
-        Some(e) => meta.table.content(e, meta.input, meta.scheme, meta.codec, name),
+        Some(e) => meta
+            .table
+            .content(e, meta.input, meta.scheme, meta.codec, name),
         None => Node::new(name).diag(Diagnostic::malformed("stream not in the lookup table")),
     }
 }

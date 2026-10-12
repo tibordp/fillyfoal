@@ -905,10 +905,19 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
                 let start = match c.props.len() {
                     0 => 0,
                     4 => u32_le(&c.props, 0).unwrap_or(0),
-                    _ => return Err(format!("{} with {} property bytes", method_name(id), c.props.len())),
+                    _ => {
+                        return Err(format!(
+                            "{} with {} property bytes",
+                            method_name(id),
+                            c.props.len()
+                        ));
+                    }
                 };
                 if start.checked_rem(kind.alignment()) != Some(0) {
-                    return Err(format!("{} with a misaligned start offset", method_name(id)));
+                    return Err(format!(
+                        "{} with a misaligned start offset",
+                        method_name(id)
+                    ));
                 }
                 (kind, start)
             }

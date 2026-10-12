@@ -276,7 +276,10 @@ async fn next_stream(cx: &Cx, rest: Span) -> Option<char> {
 /// The end-of-stream marker at bit `start` of `body`.
 async fn eos_node(cx: &Cx, body: Span, start: u64) -> Node {
     let first = start / 8;
-    let span = body.sub(first, start.saturating_add(80).div_ceil(8).saturating_sub(first));
+    let span = body.sub(
+        first,
+        start.saturating_add(80).div_ceil(8).saturating_sub(first),
+    );
     let crc = match cx.read_avail(span).await {
         Ok(data) => bits(&data, (start % 8).saturating_add(48), 32).unwrap_or(0),
         Err(_) => 0,

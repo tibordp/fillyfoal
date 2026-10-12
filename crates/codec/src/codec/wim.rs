@@ -122,6 +122,51 @@ impl WimDecoder {
         }
     }
 
+    /// Decoders that start at every `every`-th chunk boundary (from chunk
+    /// `every` on) of the resource whose input starts with `head` (its
+    /// header and chunk table, or more): each chunk is compressed on its
+    /// own, so a decoder needs no history. With each, its output position
+    /// and its offset in the resource's input. Empty when `head` does not
+    /// hold the whole table, or chunks start out of order.
+    pub fn seeds(resource: Resource, head: &[u8], every: u64) -> Vec<(u64, u64, WimDecoder)> {
+        let base = WimDecoder::new(resource);
+        let Ok(Some(table)) = base.read_table(head, false) else {
+            return Vec::new();
+        };
+        if !table.ascending {
+            return Vec::new();
+        }
+        let chunk = u64::from(resource.chunk);
+        let mut seeds = Vec::new();
+        let mut k = every.max(1);
+        while k < base.chunks() {
+            let Some(&start) = usize::try_from(k).ok().and_then(|i| table.starts.get(i)) else {
+                break;
+            };
+            let in_pos = start.saturating_add(u64::try_from(table.len).unwrap_or(u64::MAX));
+            let (Ok(released_in), Some(out_pos)) = (usize::try_from(in_pos), k.checked_mul(chunk))
+            else {
+                break;
+            };
+            let Ok(released_out) = usize::try_from(out_pos) else {
+                break;
+            };
+            seeds.push((
+                out_pos,
+                in_pos,
+                WimDecoder {
+                    table: Some(table.clone()),
+                    index: k,
+                    released_in,
+                    released_out,
+                    ..WimDecoder::new(resource)
+                },
+            ));
+            k = k.saturating_add(every.max(1));
+        }
+        seeds
+    }
+
     fn chunks(&self) -> u64 {
         // The empty resource is one empty chunk.
         self.resource
@@ -412,6 +457,21 @@ mod tests {
             verify_checkpoints(|| Box::new(WimDecoder::new(resource)), &input, 1, 1).unwrap();
         assert_eq!(checked, 7);
         assert_eq!(largest, std::mem::size_of::<WimDecoder>());
+
+        // Decoders seeded at chunk boundaries give the tail of the output.
+        let whole = pipeline::decode_all(&mut WimDecoder::new(resource), &input, 1 << 20).unwrap();
+        let seeds = WimDecoder::seeds(resource, &input, 2);
+        assert_eq!(
+            seeds.iter().map(|s| s.0).collect::<Vec<_>>(),
+            [65536, 131072, 196608]
+        );
+        for (out_pos, in_pos, mut decoder) in seeds {
+            let tail =
+                pipeline::decode_all(&mut decoder, &input[in_pos as usize..], 1 << 20).unwrap();
+            assert_eq!(tail, whole[out_pos as usize..], "seed at {out_pos:#x}");
+        }
+        // Not without the whole table.
+        assert!(WimDecoder::seeds(resource, &input[..10], 2).is_empty());
     }
 
     fn le64(b: &[u8], at: usize) -> u64 {

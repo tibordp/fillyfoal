@@ -1246,7 +1246,10 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
         local.name_len.into(),
     );
     let local_extra = file.sub(
-        local_name.offset.saturating_sub(file.offset).saturating_add(local_name.len),
+        local_name
+            .offset
+            .saturating_sub(file.offset)
+            .saturating_add(local_name.len),
         local.extra_len.into(),
     );
     let local_extra_bytes = cx.read_avail(local_extra).await?;

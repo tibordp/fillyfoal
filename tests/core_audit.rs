@@ -712,3 +712,76 @@ fn an_index_that_disagrees_with_the_stream_is_dropped() {
     let (bytes, _) = read_in_steps(&mut session, body, decoded.sub(at, 1000), 1 << 20);
     assert_eq!(bytes, content[at as usize..at as usize + 1000]);
 }
+
+async fn wim_seeded_source(
+    cx: Cx,
+    (span, codec, len, head): (Span, Codec, u64, Vec<u8>),
+) -> Result<()> {
+    let Codec::WimResource(r) = codec else {
+        unreachable!()
+    };
+    let seeds = fillyfoal::codec::wim::WimDecoder::seeds(r, &head, 1)
+        .into_iter()
+        .map(|(out_pos, in_pos, decoder)| fillyfoal::Seed {
+            out_pos,
+            in_pos,
+            decoder: Box::new(decoder),
+        })
+        .collect();
+    let decoded = cx.decode_lazy_seeded(span, &codec, len, seeds)?;
+    cx.emit(Node::new("decoded").span(decoded));
+    Ok(())
+}
+
+/// A WIM resource of 64 LZX chunks (the one in `tests/data/cab`, 32 KiB
+/// each), seeded at its chunk starts as `wim.rs` does: a read in the last
+/// chunk decodes that chunk, not the 63 before it.
+#[test]
+fn wim_resources_decode_from_the_chunk_before_a_read() {
+    use fillyfoal::codec::wim;
+    let lzx = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/data/cab/wim-chunk.lzx"
+    ))
+    .unwrap();
+    let (mut table, mut body) = (Vec::new(), Vec::new());
+    for i in 0..64 {
+        if i > 0 {
+            table.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        }
+        body.extend_from_slice(&lzx);
+    }
+    let encoded = [table.clone(), body].concat();
+    let len = 64 * 32768u64;
+    let codec = Codec::WimResource(wim::Resource {
+        kind: wim::Kind::Lzx,
+        chunk: 32768,
+        original: len,
+        solid: false,
+    });
+    let mut lzx_decoder = Codec::Lzx(fillyfoal::codec::lzx::Params::wim_chunk(32768))
+        .decoder()
+        .unwrap();
+    let one = fillyfoal::codec::pipeline::decode_all(lzx_decoder.as_mut(), &lzx, 1 << 20).unwrap();
+    let measure = |head: Vec<u8>| {
+        let mut session = Session::new(checkpoint_limits());
+        let source = session.add_source(encoded.len() as u64);
+        let span = Span::new(source, 0, encoded.len() as u64);
+        let root = session
+            .add_root(Node::new("wim").lazy(wim_seeded_source, (span, codec.clone(), len, head)));
+        session.expand(root, 10);
+        run(&mut session, &encoded, 1_000_000, 100);
+        let child = session.children(root).unwrap().ids[0];
+        let decoded = session.node(child).unwrap().span.unwrap();
+        let (bytes, steps) =
+            read_in_steps(&mut session, &encoded, decoded.sub(len - 1000, 1000), 50);
+        assert_eq!(bytes, one[one.len() - 1000..]);
+        steps
+    };
+    let seeded = measure(table);
+    let unseeded = measure(Vec::new());
+    assert!(
+        seeded <= 2 && seeded * 5 <= unseeded,
+        "seeded {seeded} steps of 50 units, from the start {unseeded}"
+    );
+}
