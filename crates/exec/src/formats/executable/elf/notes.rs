@@ -515,12 +515,146 @@ fn prpsinfo(f: &mut Fields<'_>, c: &Class) -> Result<()> {
     Ok(())
 }
 
-fn siginfo(f: &mut Fields<'_>, _: &Class) -> Result<()> {
-    f.i32("si_signo")
+/// `si_code` values every signal shares (sent by a process or the kernel).
+const SI_CODES: EnumTable = &[
+    (0, "SI_USER"),
+    (0x80, "SI_KERNEL"),
+    (0xffff_ffff, "SI_QUEUE"),
+    (0xffff_fffe, "SI_TIMER"),
+    (0xffff_fffd, "SI_MESGQ"),
+    (0xffff_fffc, "SI_ASYNCIO"),
+    (0xffff_fffb, "SI_SIGIO"),
+    (0xffff_fffa, "SI_TKILL"),
+    (0xffff_fff9, "SI_DETHREAD"),
+    (0xffff_fff8, "SI_ASYNCNL"),
+];
+
+/// The signal-specific `si_code` names (Linux `uapi/asm-generic/siginfo.h`).
+fn si_code_name(signo: i32, code: i32) -> Option<&'static str> {
+    if code <= 0 || code == 0x80 {
+        return crate::value::lookup(SI_CODES, u64::from(code.cast_unsigned()));
+    }
+    let table: &[&str] = match signo {
+        4 => &[
+            "ILL_ILLOPC",
+            "ILL_ILLOPN",
+            "ILL_ILLADR",
+            "ILL_ILLTRP",
+            "ILL_PRVOPC",
+            "ILL_PRVREG",
+            "ILL_COPROC",
+            "ILL_BADSTK",
+            "ILL_BADIADDR",
+        ],
+        5 => &[
+            "TRAP_BRKPT",
+            "TRAP_TRACE",
+            "TRAP_BRANCH",
+            "TRAP_HWBKPT",
+            "TRAP_UNK",
+            "TRAP_PERF",
+        ],
+        7 => &[
+            "BUS_ADRALN",
+            "BUS_ADRERR",
+            "BUS_OBJERR",
+            "BUS_MCEERR_AR",
+            "BUS_MCEERR_AO",
+        ],
+        8 => &[
+            "FPE_INTDIV",
+            "FPE_INTOVF",
+            "FPE_FLTDIV",
+            "FPE_FLTOVF",
+            "FPE_FLTUND",
+            "FPE_FLTRES",
+            "FPE_FLTINV",
+            "FPE_FLTSUB",
+            "FPE_FLTUNK",
+            "FPE_CONDTRAP",
+        ],
+        11 => &[
+            "SEGV_MAPERR",
+            "SEGV_ACCERR",
+            "SEGV_BNDERR",
+            "SEGV_PKUERR",
+            "SEGV_ACCADI",
+            "SEGV_ADIDERR",
+            "SEGV_ADIPERR",
+            "SEGV_MTEAERR",
+            "SEGV_MTESERR",
+            "SEGV_CPERR",
+        ],
+        17 => &[
+            "CLD_EXITED",
+            "CLD_KILLED",
+            "CLD_DUMPED",
+            "CLD_TRAPPED",
+            "CLD_STOPPED",
+            "CLD_CONTINUED",
+        ],
+        29 => &[
+            "POLL_IN", "POLL_OUT", "POLL_MSG", "POLL_ERR", "POLL_PRI", "POLL_HUP",
+        ],
+        31 => &["SYS_SECCOMP", "SYS_USER_DISPATCH"],
+        _ => return None,
+    };
+    table
+        .get(usize::try_from(code).ok()?.checked_sub(1)?)
+        .copied()
+}
+
+/// `NT_SIGINFO`: the kernel's `siginfo_t` for the signal that caused the
+/// dump. The union after the first three fields (aligned to the word
+/// size) is decoded by what the signal and code say it holds: the faulting
+/// address of a fault, the sender of a signal sent by a process, a child's
+/// status for `SIGCHLD`, the system call for `SIGSYS`. (MIPS swaps
+/// `si_errno` and `si_code`.)
+fn siginfo(f: &mut Fields<'_>, c: &Class) -> Result<()> {
+    let signo = f
+        .i32("si_signo")
         .with(|&v, n| n.summary(name_or(SIGNAL, u64::try_from(v).unwrap_or(0), "")))
         .emit()?;
     f.i32("si_errno").emit()?;
-    f.i32("si_code").emit()?;
+    let code = f
+        .i32("si_code")
+        .with(|&v, n| match si_code_name(signo, v) {
+            Some(name) => n.summary(name),
+            None => n,
+        })
+        .emit()?;
+    if c.wide {
+        f.skip(4);
+    }
+    // The layouts of the kernel's `siginfo_layout()`.
+    let specific = code > 0 && code < 0x80;
+    if specific && matches!(signo, 4 | 5 | 7 | 8 | 11) {
+        f.uword("si_addr", c.wide)
+            .hex()
+            .desc("The faulting address")
+            .emit()?;
+    } else if specific && signo == 31 {
+        f.uword("si_call_addr", c.wide).hex().emit()?;
+        f.i32("si_syscall").emit()?;
+        f.u32("si_arch").hex().emit()?;
+    } else if specific && signo == 17 {
+        f.i32("si_pid").emit()?;
+        f.u32("si_uid").emit()?;
+        f.i32("si_status").emit()?;
+    } else if (specific && code <= 6) || code == -5 {
+        f.uword("si_band", c.wide).hex().emit()?;
+        f.i32("si_fd").emit()?;
+    } else if code == -2 {
+        f.i32("si_tid").desc("Timer ID").emit()?;
+        f.i32("si_overrun").emit()?;
+        f.uword("si_value", c.wide).hex().emit()?;
+    } else if !specific {
+        f.i32("si_pid").desc("Sending process").emit()?;
+        f.u32("si_uid").desc("Sending user").emit()?;
+        if code < 0 {
+            f.uword("si_value", c.wide).hex().emit()?;
+        }
+    }
     Ok(())
 }
 

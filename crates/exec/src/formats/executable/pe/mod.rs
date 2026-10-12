@@ -16,7 +16,7 @@
 //!   heaps), `signature` (blobs), `managed` (manifest resources).
 
 mod clr;
-mod debug;
+pub(crate) mod debug;
 mod exports;
 mod extra;
 mod imports;

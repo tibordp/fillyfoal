@@ -38,3 +38,4 @@ expression: "common::explore(&display_name(&path), &data)"
         StorageClass: EXTERNAL (0x2)  [0x84+0x1]
         NumberOfAuxSymbols: 0  [0x85+0x1]
   ▾ String Table  [0x86+0x4]
+      Size: 4  [0x86+0x4]

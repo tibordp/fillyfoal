@@ -215,7 +215,20 @@ expression: "common::explore(&display_name(&path), &data)"
         sh_info: 0  [0xf7c+0x4]
         sh_addralign: 0x1  [0xf80+0x8]
         sh_entsize: 0x0  [0xf88+0x8]
-        Contents  [0xc4+0x28]
+      ▾ Location Lists — addresses before relocation  [0xc4+0x28]
+        ▾ Contribution at 0x0 — version 5, 2 offsets  [0xc4+0x28]
+            unit_length: 0x24  [0xc4+0x4]
+            version: 5  [0xc8+0x2]
+            address_size: 8  [0xca+0x1]
+            segment_selector_size: 0  [0xcb+0x1]
+            offset_entry_count: 2  [0xcc+0x4]
+            offset[0]: 0x8 — list at 0x14  [0xd0+0x4] → 0xd8+0x0
+            offset[1]: 0x16 — list at 0x22  [0xd4+0x4] → 0xe6+0x0
+            DW_LLE_offset_pair: "0x0, 0x24: DW_OP_reg0" — 0x14  [0xd8+0x5]
+            DW_LLE_offset_pair: "0x24, 0x34: DW_OP_entry_value (DW_OP_reg0), DW_OP_stack_value" — 0x19  [0xdd+0x8]
+            DW_LLE_end_of_list — 0x21  [0xe5+0x1]
+            DW_LLE_offset_pair: "0x50, 0x54: DW_OP_reg9" — 0x22  [0xe6+0x5]
+            DW_LLE_end_of_list — 0x27  [0xeb+0x1]
     ▾ .debug_abbrev — PROGBITS, ---, 0xc9 bytes  [0xf90+0x40]
         sh_name: 0x4 — ".debug_abbrev"  [0xf90+0x4]
         sh_type: PROGBITS (0x1)  [0xf94+0x4]
@@ -233,8 +246,106 @@ expression: "common::explore(&display_name(&path), &data)"
             ch_reserved: 0  [0xf0+0x4]
             ch_size: 0x100  [0xf4+0x8]
             ch_addralign: 0x1  [0xfc+0x8]
-        ▾ Decompressed — 0x100 bytes decompressed  [0x104+0xb1]
-            Data  [#1:0x0+0x100]
+        ▾ Abbreviations  [#1:0x0+0x100]
+          ▾ [1]: "DW_TAG_compile_unit" — DW_CHILDREN_yes, 10 attributes  [#1:0x0+0x1a]
+              DW_AT_producer: "DW_FORM_strx1"
+              DW_AT_language: "DW_FORM_data2"
+              DW_AT_name: "DW_FORM_strx1"
+              DW_AT_str_offsets_base: "DW_FORM_sec_offset"
+              DW_AT_stmt_list: "DW_FORM_sec_offset"
+              DW_AT_comp_dir: "DW_FORM_strx1"
+              DW_AT_low_pc: "DW_FORM_addrx"
+              DW_AT_high_pc: "DW_FORM_data4"
+              DW_AT_addr_base: "DW_FORM_sec_offset"
+              DW_AT_loclists_base: "DW_FORM_sec_offset"
+          ▾ [2]: "DW_TAG_variable" — DW_CHILDREN_no, 6 attributes  [#1:0x1a+0x11]
+              DW_AT_name: "DW_FORM_strx1"
+              DW_AT_type: "DW_FORM_ref4"
+              DW_AT_external: "DW_FORM_flag_present"
+              DW_AT_decl_file: "DW_FORM_data1"
+              DW_AT_decl_line: "DW_FORM_data1"
+              DW_AT_location: "DW_FORM_exprloc"
+          ▾ [3]: "DW_TAG_array_type" — DW_CHILDREN_yes, 1 attributes  [#1:0x2b+0x7]
+              DW_AT_type: "DW_FORM_ref4"
+          ▾ [4]: "DW_TAG_subrange_type" — DW_CHILDREN_no, 2 attributes  [#1:0x32+0x9]
+              DW_AT_type: "DW_FORM_ref4"
+              DW_AT_count: "DW_FORM_data1"
+          ▾ [5]: "DW_TAG_base_type" — DW_CHILDREN_no, 3 attributes  [#1:0x3b+0xb]
+              DW_AT_name: "DW_FORM_strx1"
+              DW_AT_encoding: "DW_FORM_data1"
+              DW_AT_byte_size: "DW_FORM_data1"
+          ▾ [6]: "DW_TAG_base_type" — DW_CHILDREN_no, 3 attributes  [#1:0x46+0xb]
+              DW_AT_name: "DW_FORM_strx1"
+              DW_AT_byte_size: "DW_FORM_data1"
+              DW_AT_encoding: "DW_FORM_data1"
+          ▾ [7]: "DW_TAG_variable" — DW_CHILDREN_no, 4 attributes  [#1:0x51+0xd]
+              DW_AT_type: "DW_FORM_ref4"
+              DW_AT_decl_file: "DW_FORM_data1"
+              DW_AT_decl_line: "DW_FORM_data1"
+              DW_AT_location: "DW_FORM_exprloc"
+          ▾ [8]: "DW_TAG_pointer_type" — DW_CHILDREN_no, 1 attributes  [#1:0x5e+0x7]
+              DW_AT_type: "DW_FORM_ref4"
+          ▾ [9]: "DW_TAG_const_type" — DW_CHILDREN_no, 1 attributes  [#1:0x65+0x7]
+              DW_AT_type: "DW_FORM_ref4"
+          ▾ [10]: "DW_TAG_variable" — DW_CHILDREN_no, 5 attributes  [#1:0x6c+0xf]
+              DW_AT_name: "DW_FORM_strx1"
+              DW_AT_type: "DW_FORM_ref4"
+              DW_AT_decl_file: "DW_FORM_data1"
+              DW_AT_decl_line: "DW_FORM_data1"
+              DW_AT_location: "DW_FORM_exprloc"
+          ▾ [11]: "DW_TAG_subprogram" — DW_CHILDREN_yes, 5 attributes  [#1:0x7b+0xf]
+              DW_AT_low_pc: "DW_FORM_addrx"
+              DW_AT_high_pc: "DW_FORM_data4"
+              DW_AT_frame_base: "DW_FORM_exprloc"
+              DW_AT_call_all_calls: "DW_FORM_flag_present"
+              DW_AT_abstract_origin: "DW_FORM_ref4"
+          ▾ [12]: "DW_TAG_formal_parameter" — DW_CHILDREN_no, 2 attributes  [#1:0x8a+0x9]
+              DW_AT_location: "DW_FORM_loclistx"
+              DW_AT_abstract_origin: "DW_FORM_ref4"
+          ▾ [13]: "DW_TAG_subprogram" — DW_CHILDREN_yes, 7 attributes  [#1:0x93+0x14]
+              DW_AT_name: "DW_FORM_strx1"
+              DW_AT_decl_file: "DW_FORM_data1"
+              DW_AT_decl_line: "DW_FORM_data1"
+              DW_AT_prototyped: "DW_FORM_flag_present"
+              DW_AT_type: "DW_FORM_ref4"
+              DW_AT_external: "DW_FORM_flag_present"
+              DW_AT_inline: "DW_FORM_implicit_const" — 1
+          ▾ [14]: "DW_TAG_formal_parameter" — DW_CHILDREN_no, 4 attributes  [#1:0xa7+0xd]
+              DW_AT_name: "DW_FORM_strx1"
+              DW_AT_decl_file: "DW_FORM_data1"
+              DW_AT_decl_line: "DW_FORM_data1"
+              DW_AT_type: "DW_FORM_ref4"
+          ▾ [15]: "DW_TAG_subprogram" — DW_CHILDREN_yes, 9 attributes  [#1:0xb4+0x17]
+              DW_AT_low_pc: "DW_FORM_addrx"
+              DW_AT_high_pc: "DW_FORM_data4"
+              DW_AT_frame_base: "DW_FORM_exprloc"
+              DW_AT_call_all_calls: "DW_FORM_flag_present"
+              DW_AT_name: "DW_FORM_strx1"
+              DW_AT_decl_file: "DW_FORM_data1"
+              DW_AT_decl_line: "DW_FORM_data1"
+              DW_AT_prototyped: "DW_FORM_flag_present"
+              DW_AT_external: "DW_FORM_flag_present"
+          ▾ [16]: "DW_TAG_inlined_subroutine" — DW_CHILDREN_yes, 6 attributes  [#1:0xcb+0x11]
+              DW_AT_abstract_origin: "DW_FORM_ref4"
+              DW_AT_low_pc: "DW_FORM_addrx"
+              DW_AT_high_pc: "DW_FORM_data4"
+              DW_AT_call_file: "DW_FORM_data1"
+              DW_AT_call_line: "DW_FORM_data1"
+              DW_AT_call_column: "DW_FORM_data1"
+          ▾ [17]: "DW_TAG_call_site" — DW_CHILDREN_no, 2 attributes  [#1:0xdc+0x9]
+              DW_AT_call_origin: "DW_FORM_ref4"
+              DW_AT_call_return_pc: "DW_FORM_addrx"
+          ▾ [18]: "DW_TAG_subprogram" — DW_CHILDREN_yes, 7 attributes  [#1:0xe5+0x13]
+              DW_AT_name: "DW_FORM_strx1"
+              DW_AT_decl_file: "DW_FORM_data1"
+              DW_AT_decl_line: "DW_FORM_data1"
+              DW_AT_prototyped: "DW_FORM_flag_present"
+              DW_AT_type: "DW_FORM_ref4"
+              DW_AT_declaration: "DW_FORM_flag_present"
+              DW_AT_external: "DW_FORM_flag_present"
+          ▾ [19]: "DW_TAG_formal_parameter" — DW_CHILDREN_no, 1 attributes  [#1:0xf8+0x7]
+              DW_AT_type: "DW_FORM_ref4"
+            Table end: 0  [#1:0xff+0x1]
     ▾ .debug_info — PROGBITS, ---, 0xab bytes  [0xfd0+0x40]
         sh_name: 0xa6 — ".debug_info"  [0xfd0+0x4]
         sh_type: PROGBITS (0x1)  [0xfd4+0x4]
@@ -252,8 +363,139 @@ expression: "common::explore(&display_name(&path), &data)"
             ch_reserved: 0  [0x1b9+0x4]
             ch_size: 0xd9  [0x1bd+0x8]
             ch_addralign: 0x1  [0x1c5+0x8]
-        ▾ Decompressed — 0xd9 bytes decompressed  [0x1cd+0x93]
-            Data  [#2:0x0+0xd9]
+        ▾ Debug Information — addresses before relocation  [#2:0x0+0xd9]
+          ▾ Compile unit at 0x0: "obj.c" — DWARF 5, 0xd9 bytes  [#2:0x0+0xd9]
+            ▾ Header — DWARF 5, 32-bit, address size 8  [#2:0x0+0xc]
+                unit_length: 0xd5  [#2:0x0+0x4]
+                version: 5  [#2:0x4+0x2]
+                unit_type: DW_UT_compile (0x1)  [#2:0x6+0x1]
+                address_size: 8  [#2:0x7+0x1]
+                debug_abbrev_offset: 0x0  [#2:0x8+0x4]
+            ▾ DW_TAG_compile_unit: "obj.c" — 0x0000000c  [#2:0xc+0x1b]
+                DW_AT_producer: "Apple clang version 21.0.0 (clang-2100.1.1.101)" — DW_FORM_strx1 [0]  [#2:0xd+0x1]
+                DW_AT_language: DW_LANG_C11 (0x1d) — DW_FORM_data2  [#2:0xe+0x2]
+                DW_AT_name: "obj.c" — DW_FORM_strx1 [1]  [#2:0x10+0x1]
+                DW_AT_str_offsets_base: 0x8 — DW_FORM_sec_offset  [#2:0x11+0x4] → #3:0x8+0x0
+                DW_AT_stmt_list: 0x0 — DW_FORM_sec_offset  [#2:0x15+0x4] → 0x3f0+0x0
+                DW_AT_comp_dir: "/build/fillyfoal/tests/fixtures/external/elf/aarch64-debug" — DW_FORM_strx1 [2]  [#2:0x19+0x1]
+                DW_AT_low_pc: 0x0 — DW_FORM_addrx [4]  [#2:0x1a+0x1]
+                DW_AT_high_pc: 0x60 — DW_FORM_data4, ends at 0x60  [#2:0x1b+0x4]
+                DW_AT_addr_base: 0x8 — DW_FORM_sec_offset  [#2:0x1f+0x4] → #5:0x8+0x0
+                DW_AT_loclists_base: 0xc — DW_FORM_sec_offset  [#2:0x23+0x4] → 0xd0+0x0
+              ▾ DW_TAG_variable: "table" — 0x00000027  [#2:0x27+0xb]
+                  DW_AT_name: "table" — DW_FORM_strx1 [3]  [#2:0x28+0x1]
+                  DW_AT_type: 0x32 — DW_FORM_ref4, DW_TAG_array_type  [#2:0x29+0x4] → #2:0x32+0x0
+                  DW_AT_external: true — DW_FORM_flag_present  [#2:0x2d+0x0]
+                  DW_AT_decl_file: 0x0 — DW_FORM_data1  [#2:0x2d+0x1]
+                  DW_AT_decl_line: 0x4 — DW_FORM_data1  [#2:0x2e+0x1]
+                  DW_AT_location: "DW_OP_addrx 0x0" — DW_FORM_exprloc, 2 bytes  [#2:0x2f+0x3]
+              ▾ DW_TAG_array_type — 0x00000032  [#2:0x32+0x5]
+                  DW_AT_type: 0x3e — DW_FORM_ref4, DW_TAG_base_type "int"  [#2:0x33+0x4] → #2:0x3e+0x0
+                ▾ DW_TAG_subrange_type — 0x00000037  [#2:0x37+0x6]
+                    DW_AT_type: 0x42 — DW_FORM_ref4, DW_TAG_base_type "__ARRAY_SIZE_TYPE__"  [#2:0x38+0x4] → #2:0x42+0x0
+                    DW_AT_count: 0x4 — DW_FORM_data1  [#2:0x3c+0x1]
+                  NULL — 0x0000003d  [#2:0x3d+0x1]
+              ▾ DW_TAG_base_type: "int" — 0x0000003e  [#2:0x3e+0x4]
+                  DW_AT_name: "int" — DW_FORM_strx1 [4]  [#2:0x3f+0x1]
+                  DW_AT_encoding: DW_ATE_signed (0x5) — DW_FORM_data1  [#2:0x40+0x1]
+                  DW_AT_byte_size: 0x4 — DW_FORM_data1  [#2:0x41+0x1]
+              ▾ DW_TAG_base_type: "__ARRAY_SIZE_TYPE__" — 0x00000042  [#2:0x42+0x4]
+                  DW_AT_name: "__ARRAY_SIZE_TYPE__" — DW_FORM_strx1 [5]  [#2:0x43+0x1]
+                  DW_AT_byte_size: 0x8 — DW_FORM_data1  [#2:0x44+0x1]
+                  DW_AT_encoding: DW_ATE_unsigned (0x7) — DW_FORM_data1  [#2:0x45+0x1]
+              ▾ DW_TAG_variable — 0x00000046  [#2:0x46+0xa]
+                  DW_AT_type: 0x50 — DW_FORM_ref4, DW_TAG_array_type  [#2:0x47+0x4] → #2:0x50+0x0
+                  DW_AT_decl_file: 0x0 — DW_FORM_data1  [#2:0x4b+0x1]
+                  DW_AT_decl_line: 0x5 — DW_FORM_data1  [#2:0x4c+0x1]
+                  DW_AT_location: "DW_OP_addrx 0x1" — DW_FORM_exprloc, 2 bytes  [#2:0x4d+0x3]
+              ▾ DW_TAG_array_type — 0x00000050  [#2:0x50+0x5]
+                  DW_AT_type: 0x5c — DW_FORM_ref4, DW_TAG_base_type "char"  [#2:0x51+0x4] → #2:0x5c+0x0
+                ▾ DW_TAG_subrange_type — 0x00000055  [#2:0x55+0x6]
+                    DW_AT_type: 0x42 — DW_FORM_ref4, DW_TAG_base_type "__ARRAY_SIZE_TYPE__"  [#2:0x56+0x4] → #2:0x42+0x0
+                    DW_AT_count: 0xc — DW_FORM_data1  [#2:0x5a+0x1]
+                  NULL — 0x0000005b  [#2:0x5b+0x1]
+              ▾ DW_TAG_base_type: "char" — 0x0000005c  [#2:0x5c+0x4]
+                  DW_AT_name: "char" — DW_FORM_strx1 [6]  [#2:0x5d+0x1]
+                  DW_AT_encoding: DW_ATE_unsigned_char (0x8) — DW_FORM_data1  [#2:0x5e+0x1]
+                  DW_AT_byte_size: 0x1 — DW_FORM_data1  [#2:0x5f+0x1]
+              ▾ DW_TAG_variable: "message" — 0x00000060  [#2:0x60+0xb]
+                  DW_AT_name: "message" — DW_FORM_strx1 [7]  [#2:0x61+0x1]
+                  DW_AT_type: 0x6b — DW_FORM_ref4, DW_TAG_pointer_type  [#2:0x62+0x4] → #2:0x6b+0x0
+                  DW_AT_external: true — DW_FORM_flag_present  [#2:0x66+0x0]
+                  DW_AT_decl_file: 0x0 — DW_FORM_data1  [#2:0x66+0x1]
+                  DW_AT_decl_line: 0x5 — DW_FORM_data1  [#2:0x67+0x1]
+                  DW_AT_location: "DW_OP_addrx 0x2" — DW_FORM_exprloc, 2 bytes  [#2:0x68+0x3]
+              ▾ DW_TAG_pointer_type — 0x0000006b  [#2:0x6b+0x5]
+                  DW_AT_type: 0x70 — DW_FORM_ref4, DW_TAG_const_type  [#2:0x6c+0x4] → #2:0x70+0x0
+              ▾ DW_TAG_const_type — 0x00000070  [#2:0x70+0x5]
+                  DW_AT_type: 0x5c — DW_FORM_ref4, DW_TAG_base_type "char"  [#2:0x71+0x4] → #2:0x5c+0x0
+              ▾ DW_TAG_variable: "calls" — 0x00000075  [#2:0x75+0xb]
+                  DW_AT_name: "calls" — DW_FORM_strx1 [8]  [#2:0x76+0x1]
+                  DW_AT_type: 0x3e — DW_FORM_ref4, DW_TAG_base_type "int"  [#2:0x77+0x4] → #2:0x3e+0x0
+                  DW_AT_decl_file: 0x0 — DW_FORM_data1  [#2:0x7b+0x1]
+                  DW_AT_decl_line: 0x3 — DW_FORM_data1  [#2:0x7c+0x1]
+                  DW_AT_location: "DW_OP_addrx 0x3" — DW_FORM_exprloc, 2 bytes  [#2:0x7d+0x3]
+              ▾ DW_TAG_subprogram — 0x00000080  [#2:0x80+0xc]
+                  DW_AT_low_pc: 0x0 — DW_FORM_addrx [4]  [#2:0x81+0x1]
+                  DW_AT_high_pc: 0x34 — DW_FORM_data4, ends at 0x34  [#2:0x82+0x4]
+                  DW_AT_frame_base: "DW_OP_reg31" — DW_FORM_exprloc, 1 bytes  [#2:0x86+0x2]
+                  DW_AT_call_all_calls: true — DW_FORM_flag_present  [#2:0x88+0x0]
+                  DW_AT_abstract_origin: 0x93 — DW_FORM_ref4, DW_TAG_subprogram "compute"  [#2:0x88+0x4] → #2:0x93+0x0
+                ▾ DW_TAG_formal_parameter — 0x0000008c  [#2:0x8c+0x6]
+                    DW_AT_location: 0x14 — DW_FORM_loclistx [0]  [#2:0x8d+0x1] → 0xd8+0x0
+                    DW_AT_abstract_origin: 0x9b — DW_FORM_ref4, DW_TAG_formal_parameter "x"  [#2:0x8e+0x4] → #2:0x9b+0x0
+                  NULL — 0x00000092  [#2:0x92+0x1]
+              ▾ DW_TAG_subprogram: "compute" — 0x00000093  [#2:0x93+0x8]
+                  DW_AT_name: "compute" — DW_FORM_strx1 [9]  [#2:0x94+0x1]
+                  DW_AT_decl_file: 0x0 — DW_FORM_data1  [#2:0x95+0x1]
+                  DW_AT_decl_line: 0x6 — DW_FORM_data1  [#2:0x96+0x1]
+                  DW_AT_prototyped: true — DW_FORM_flag_present  [#2:0x97+0x0]
+                  DW_AT_type: 0x3e — DW_FORM_ref4, DW_TAG_base_type "int"  [#2:0x97+0x4] → #2:0x3e+0x0
+                  DW_AT_external: true — DW_FORM_flag_present  [#2:0x9b+0x0]
+                  DW_AT_inline: DW_INL_inlined (0x1) — DW_FORM_implicit_const  [#2:0x9b+0x0]
+                ▾ DW_TAG_formal_parameter: "x" — 0x0000009b  [#2:0x9b+0x8]
+                    DW_AT_name: "x" — DW_FORM_strx1 [10]  [#2:0x9c+0x1]
+                    DW_AT_decl_file: 0x0 — DW_FORM_data1  [#2:0x9d+0x1]
+                    DW_AT_decl_line: 0x6 — DW_FORM_data1  [#2:0x9e+0x1]
+                    DW_AT_type: 0x3e — DW_FORM_ref4, DW_TAG_base_type "int"  [#2:0x9f+0x4] → #2:0x3e+0x0
+                  NULL — 0x000000a3  [#2:0xa3+0x1]
+              ▾ DW_TAG_subprogram: "hello" — 0x000000a4  [#2:0xa4+0xb]
+                  DW_AT_low_pc: 0x34 — DW_FORM_addrx [5]  [#2:0xa5+0x1]
+                  DW_AT_high_pc: 0x2c — DW_FORM_data4, ends at 0x60  [#2:0xa6+0x4]
+                  DW_AT_frame_base: "DW_OP_reg29" — DW_FORM_exprloc, 1 bytes  [#2:0xaa+0x2]
+                  DW_AT_call_all_calls: true — DW_FORM_flag_present  [#2:0xac+0x0]
+                  DW_AT_name: "hello" — DW_FORM_strx1 [12]  [#2:0xac+0x1]
+                  DW_AT_decl_file: 0x0 — DW_FORM_data1  [#2:0xad+0x1]
+                  DW_AT_decl_line: 0x7 — DW_FORM_data1  [#2:0xae+0x1]
+                  DW_AT_prototyped: true — DW_FORM_flag_present  [#2:0xaf+0x0]
+                  DW_AT_external: true — DW_FORM_flag_present  [#2:0xaf+0x0]
+                ▾ DW_TAG_inlined_subroutine — 0x000000af  [#2:0xaf+0xd]
+                    DW_AT_abstract_origin: 0x93 — DW_FORM_ref4, DW_TAG_subprogram "compute"  [#2:0xb0+0x4] → #2:0x93+0x0
+                    DW_AT_low_pc: 0x50 — DW_FORM_addrx [6]  [#2:0xb4+0x1]
+                    DW_AT_high_pc: 0x8 — DW_FORM_data4, ends at 0x58  [#2:0xb5+0x4]
+                    DW_AT_call_file: 0x0 — DW_FORM_data1  [#2:0xb9+0x1]
+                    DW_AT_call_line: 0x7 — DW_FORM_data1  [#2:0xba+0x1]
+                    DW_AT_call_column: 0x23 — DW_FORM_data1  [#2:0xbb+0x1]
+                  ▾ DW_TAG_formal_parameter — 0x000000bc  [#2:0xbc+0x6]
+                      DW_AT_location: 0x22 — DW_FORM_loclistx [1]  [#2:0xbd+0x1] → 0xe6+0x0
+                      DW_AT_abstract_origin: 0x9b — DW_FORM_ref4, DW_TAG_formal_parameter "x"  [#2:0xbe+0x4] → #2:0x9b+0x0
+                    NULL — 0x000000c2  [#2:0xc2+0x1]
+                ▾ DW_TAG_call_site — 0x000000c3  [#2:0xc3+0x6]
+                    DW_AT_call_origin: 0xca — DW_FORM_ref4, DW_TAG_subprogram "puts"  [#2:0xc4+0x4] → #2:0xca+0x0
+                    DW_AT_call_return_pc: 0x48 — DW_FORM_addrx [7]  [#2:0xc8+0x1]
+                  NULL — 0x000000c9  [#2:0xc9+0x1]
+              ▾ DW_TAG_subprogram: "puts" — 0x000000ca  [#2:0xca+0x8]
+                  DW_AT_name: "puts" — DW_FORM_strx1 [11]  [#2:0xcb+0x1]
+                  DW_AT_decl_file: 0x0 — DW_FORM_data1  [#2:0xcc+0x1]
+                  DW_AT_decl_line: 0x1 — DW_FORM_data1  [#2:0xcd+0x1]
+                  DW_AT_prototyped: true — DW_FORM_flag_present  [#2:0xce+0x0]
+                  DW_AT_type: 0x3e — DW_FORM_ref4, DW_TAG_base_type "int"  [#2:0xce+0x4] → #2:0x3e+0x0
+                  DW_AT_declaration: true — DW_FORM_flag_present  [#2:0xd2+0x0]
+                  DW_AT_external: true — DW_FORM_flag_present  [#2:0xd2+0x0]
+                ▾ DW_TAG_formal_parameter — 0x000000d2  [#2:0xd2+0x5]
+                    DW_AT_type: 0x6b — DW_FORM_ref4, DW_TAG_pointer_type  [#2:0xd3+0x4] → #2:0x6b+0x0
+                  NULL — 0x000000d7  [#2:0xd7+0x1]
+                NULL — 0x000000d8  [#2:0xd8+0x1]
     ▾ .rela.debug_info — RELA, ---, 0x78 bytes  [0x1010+0x40]
         sh_name: 0xa1 — ".rela.debug_info"  [0x1010+0x4]
         sh_type: RELA (0x4)  [0x1014+0x4]
@@ -303,8 +545,24 @@ expression: "common::explore(&display_name(&path), &data)"
             ch_reserved: 0  [0x264+0x4]
             ch_size: 0x3c  [0x268+0x8]
             ch_addralign: 0x1  [0x270+0x8]
-        ▾ Decompressed — 0x3c bytes decompressed  [0x278+0x10]
-            Data  [#3:0x0+0x3c]
+        ▾ String Offsets  [#3:0x0+0x3c]
+          ▾ Contribution at 0x0 — version 5, 13 string offsets  [#3:0x0+0x3c]
+              unit_length: 0x38  [#3:0x0+0x4]
+              version: 5  [#3:0x4+0x2]
+              padding: 0  [#3:0x6+0x2]
+              [0]: "Apple clang version 21.0.0 (clang-2100.1.1.101)" — at 0x0  [#3:0x8+0x4] → #4:0x0+0x0
+              [1]: "obj.c" — at 0x30  [#3:0xc+0x4] → #4:0x30+0x0
+              [2]: "/build/fillyfoal/tests/fixtures/external/elf/aarch64-debug" — at 0x36  [#3:0x10+0x4] → #4:0x36+0x0
+              [3]: "table" — at 0x71  [#3:0x14+0x4] → #4:0x71+0x0
+              [4]: "int" — at 0x77  [#3:0x18+0x4] → #4:0x77+0x0
+              [5]: "__ARRAY_SIZE_TYPE__" — at 0x7b  [#3:0x1c+0x4] → #4:0x7b+0x0
+              [6]: "char" — at 0x8f  [#3:0x20+0x4] → #4:0x8f+0x0
+              [7]: "message" — at 0x94  [#3:0x24+0x4] → #4:0x94+0x0
+              [8]: "calls" — at 0x9c  [#3:0x28+0x4] → #4:0x9c+0x0
+              [9]: "compute" — at 0xa2  [#3:0x2c+0x4] → #4:0xa2+0x0
+              [10]: "x" — at 0xaa  [#3:0x30+0x4] → #4:0xaa+0x0
+              [11]: "puts" — at 0xac  [#3:0x34+0x4] → #4:0xac+0x0
+              [12]: "hello" — at 0xb1  [#3:0x38+0x4] → #4:0xb1+0x0
     ▾ .rela.debug_str_offsets — RELA, ---, 0x138 bytes  [0x1090+0x40]
         sh_name: 0x3b — ".rela.debug_str_offsets"  [0x1090+0x4]
         sh_type: RELA (0x4)  [0x1094+0x4]
@@ -386,8 +644,20 @@ expression: "common::explore(&display_name(&path), &data)"
             ch_reserved: 0  [0x28c+0x4]
             ch_size: 0xb7  [0x290+0x8]
             ch_addralign: 0x1  [0x298+0x8]
-        ▾ Decompressed — 0xb7 bytes decompressed  [0x2a0+0x9e]
-            Data  [#4:0x0+0xb7]
+        ▾ Strings  [#4:0x0+0xb7]
+            0x0: "Apple clang version 21.0.0 (clang-2100.1.1.101)"  [#4:0x0+0x30]
+            0x30: "obj.c"  [#4:0x30+0x6]
+            0x36: "/build/fillyfoal/tests/fixtures/external/elf/aarch64-debug"  [#4:0x36+0x3b]
+            0x71: "table"  [#4:0x71+0x6]
+            0x77: "int"  [#4:0x77+0x4]
+            0x7b: "__ARRAY_SIZE_TYPE__"  [#4:0x7b+0x14]
+            0x8f: "char"  [#4:0x8f+0x5]
+            0x94: "message"  [#4:0x94+0x8]
+            0x9c: "calls"  [#4:0x9c+0x6]
+            0xa2: "compute"  [#4:0xa2+0x8]
+            0xaa: "x"  [#4:0xaa+0x2]
+            0xac: "puts"  [#4:0xac+0x5]
+            0xb1: "hello"  [#4:0xb1+0x6]
     ▾ .debug_addr — PROGBITS, ---, 0x2a bytes  [0x1110+0x40]
         sh_name: 0x8f — ".debug_addr"  [0x1110+0x4]
         sh_type: PROGBITS (0x1)  [0x1114+0x4]
@@ -405,8 +675,20 @@ expression: "common::explore(&display_name(&path), &data)"
             ch_reserved: 0  [0x342+0x4]
             ch_size: 0x48  [0x346+0x8]
             ch_addralign: 0x1  [0x34e+0x8]
-        ▾ Decompressed — 0x48 bytes decompressed  [0x356+0x12]
-            Data  [#5:0x0+0x48]
+        ▾ Addresses — addresses before relocation  [#5:0x0+0x48]
+          ▾ Contribution at 0x0 — version 5, 8 addresses  [#5:0x0+0x48]
+              unit_length: 0x44  [#5:0x0+0x4]
+              version: 5  [#5:0x4+0x2]
+              address_size: 8  [#5:0x6+0x1]
+              segment_selector_size: 0  [#5:0x7+0x1]
+              [0]: 0x0  [#5:0x8+0x8]
+              [1]: 0x0  [#5:0x10+0x8]
+              [2]: 0x10  [#5:0x18+0x8]
+              [3]: 0x0  [#5:0x20+0x8]
+              [4]: 0x0  [#5:0x28+0x8]
+              [5]: 0x34  [#5:0x30+0x8]
+              [6]: 0x50  [#5:0x38+0x8]
+              [7]: 0x48  [#5:0x40+0x8]
     ▾ .rela.debug_addr — RELA, ---, 0xc0 bytes  [0x1150+0x40]
         sh_name: 0x8a — ".rela.debug_addr"  [0x1150+0x4]
         sh_type: RELA (0x4)  [0x1154+0x4]
@@ -497,21 +779,40 @@ expression: "common::explore(&display_name(&path), &data)"
             return_address_register: 30  [0x3ae+0x1]
             augmentation_length: 1  [0x3af+0x1]
             fde_encoding: 0x1b — DW_EH_PE_sdata4 | pcrel  [0x3b0+0x1]
-            Call Frame Instructions — 3 bytes  [0x3b1+0x3]
+          ▾ Call Frame Instructions — 3 bytes  [0x3b1+0x3]
+              DW_CFA_def_cfa: "reg31 +0"  [0x3b1+0x3]
         ▾ FDE — 0x1c..0x50  [0x3b4+0x14]
             length: 0x10  [0x3b4+0x4]
             CIE_pointer: 0x18 — CIE at 0x0  [0x3b8+0x4] → 0x3a0+0x0
             pc_begin: 0x1c — 0x1c  [0x3bc+0x4]
             pc_range: 0x34  [0x3c0+0x4]
             augmentation_length: 0  [0x3c4+0x1]
-            Call Frame Instructions — 3 bytes  [0x3c5+0x3]
+          ▾ Call Frame Instructions — 3 bytes  [0x3c5+0x3]
+              DW_CFA_nop  [0x3c5+0x1]
+              DW_CFA_nop  [0x3c6+0x1]
+              DW_CFA_nop  [0x3c7+0x1]
         ▾ FDE — 0x30..0x5c  [0x3c8+0x28]
             length: 0x24  [0x3c8+0x4]
             CIE_pointer: 0x2c — CIE at 0x0  [0x3cc+0x4] → 0x3a0+0x0
             pc_begin: 0x30 — 0x30  [0x3d0+0x4]
             pc_range: 0x2c  [0x3d4+0x4]
             augmentation_length: 0  [0x3d8+0x1]
-            Call Frame Instructions — 23 bytes  [0x3d9+0x17]
+          ▾ Call Frame Instructions — 23 bytes  [0x3d9+0x17]
+              DW_CFA_advance_loc: "4 to 0x34"  [0x3d9+0x1]
+              DW_CFA_def_cfa_offset: "+16"  [0x3da+0x2]
+              DW_CFA_advance_loc: "4 to 0x38"  [0x3dc+0x1]
+              DW_CFA_def_cfa: "reg29 +16"  [0x3dd+0x3]
+              DW_CFA_offset: "reg30 -8"  [0x3e0+0x2]
+              DW_CFA_offset: "reg29 -16"  [0x3e2+0x2]
+              DW_CFA_advance_loc: "28 to 0x54"  [0x3e4+0x1]
+              DW_CFA_def_cfa: "reg31 +16"  [0x3e5+0x3]
+              DW_CFA_advance_loc: "4 to 0x58"  [0x3e8+0x1]
+              DW_CFA_def_cfa_offset: "+0"  [0x3e9+0x2]
+              DW_CFA_restore: "reg30"  [0x3eb+0x1]
+              DW_CFA_restore: "reg29"  [0x3ec+0x1]
+              DW_CFA_nop  [0x3ed+0x1]
+              DW_CFA_nop  [0x3ee+0x1]
+              DW_CFA_nop  [0x3ef+0x1]
     ▾ .rela.eh_frame — RELA, ---, 0x30 bytes  [0x1250+0x40]
         sh_name: 0xe9 — ".rela.eh_frame"  [0x1250+0x4]
         sh_type: RELA (0x4)  [0x1254+0x4]
@@ -543,7 +844,82 @@ expression: "common::explore(&display_name(&path), &data)"
         sh_info: 0  [0x12bc+0x4]
         sh_addralign: 0x1  [0x12c0+0x8]
         sh_entsize: 0x0  [0x12c8+0x8]
-        Contents  [0x3f0+0x89]
+      ▾ Line Tables — addresses before relocation  [0x3f0+0x89]
+        ▾ Line table at 0x0 — version 5, 0x89 bytes  [0x3f0+0x89]
+            unit_length: 0x85 — DWARF32  [0x3f0+0x4]
+            version: 5  [0x3f4+0x2]
+            address_size: 8  [0x3f6+0x1]
+            seg_select_size: 0  [0x3f7+0x1]
+            header_length: 0x37  [0x3f8+0x4]
+            minimum_instruction_length: 1  [0x3fc+0x1]
+            maximum_operations_per_instruction: 1  [0x3fd+0x1]
+            default_is_stmt: true  [0x3fe+0x1]
+            line_base: -5  [0x3ff+0x1]
+            line_range: 14  [0x400+0x1]
+            opcode_base: 13  [0x401+0x1]
+          ▾ standard_opcode_lengths  [0x402+0xc]
+              DW_LNS_copy: 0  [0x402+0x1]
+              DW_LNS_advance_pc: 1  [0x403+0x1]
+              DW_LNS_advance_line: 1  [0x404+0x1]
+              DW_LNS_set_file: 1  [0x405+0x1]
+              DW_LNS_set_column: 1  [0x406+0x1]
+              DW_LNS_negate_stmt: 0  [0x407+0x1]
+              DW_LNS_set_basic_block: 0  [0x408+0x1]
+              DW_LNS_const_add_pc: 0  [0x409+0x1]
+              DW_LNS_fixed_advance_pc: 1  [0x40a+0x1]
+              DW_LNS_set_prologue_end: 0  [0x40b+0x1]
+              DW_LNS_set_epilogue_begin: 0  [0x40c+0x1]
+              DW_LNS_set_isa: 1  [0x40d+0x1]
+          ▾ include_directories  [0x40e+0x8]
+            ▾ [0]: "/build/fillyfoal/tests/fixtures/external/elf/aarch64-debug"  [0x412+0x4]
+                DW_LNCT_path: "/build/fillyfoal/tests/fixtures/external/elf/aarch64-debug" — DW_FORM_line_strp at 0x0  [0x412+0x4]
+          ▾ file_names  [0x416+0x1d]
+            ▾ [0]: "obj.c"  [0x41e+0x15]
+                DW_LNCT_path: "obj.c" — DW_FORM_line_strp at 0x3b  [0x41e+0x4]
+                DW_LNCT_directory_index: 0 — DW_FORM_udata  [0x422+0x1]
+                DW_LNCT_MD5: ce d0 e3 bd f4 10 39 d0 fd ae a2 4e b6 d2 08 c1  |......9....N....| — DW_FORM_data16  [0x423+0x10]
+          ▾ Program — 0x46 bytes  [0x433+0x46]
+              DW_LNS_set_file: "0" — 0x00000043  [0x433+0x2]
+              DW_LNS_set_column: "42" — 0x00000045  [0x435+0x2]
+              DW_LNS_set_prologue_end — 0x00000047  [0x437+0x1]
+              DW_LNE_set_address: "0x0" — 0x00000048  [0x438+0xb]
+              special opcode 0x17: "address += 0, line += 5: row 0x0 line 6 column 42 file 0 is_stmt prologue_end" — 0x00000053  [0x443+0x1]
+              DW_LNS_set_column: "50" — 0x00000054  [0x444+0x2]
+              DW_LNS_negate_stmt — 0x00000056  [0x446+0x1]
+              special opcode 0x82: "address += 8, line += 0: row 0x8 line 6 column 50 file 0" — 0x00000057  [0x447+0x1]
+              DW_LNS_set_column: "42" — 0x00000058  [0x448+0x2]
+              special opcode 0x4a: "address += 4, line += 0: row 0xc line 6 column 42 file 0" — 0x0000005a  [0x44a+0x1]
+              DW_LNS_set_column: "57" — 0x0000005b  [0x44b+0x2]
+              special opcode 0x4a: "address += 4, line += 0: row 0x10 line 6 column 57 file 0" — 0x0000005d  [0x44d+0x1]
+              DW_LNS_set_column: "27" — 0x0000005e  [0x44e+0x2]
+              special opcode 0x4a: "address += 4, line += 0: row 0x14 line 6 column 27 file 0" — 0x00000060  [0x450+0x1]
+              DW_LNS_set_column: "57" — 0x00000061  [0x451+0x2]
+              special opcode 0x4a: "address += 4, line += 0: row 0x18 line 6 column 57 file 0" — 0x00000063  [0x453+0x1]
+              DW_LNS_set_column: "55" — 0x00000064  [0x454+0x2]
+              special opcode 0x82: "address += 8, line += 0: row 0x20 line 6 column 55 file 0" — 0x00000066  [0x456+0x1]
+              DW_LNS_set_column: "27" — 0x00000067  [0x457+0x2]
+              special opcode 0x4a: "address += 4, line += 0: row 0x24 line 6 column 27 file 0" — 0x00000069  [0x459+0x1]
+              DW_LNS_set_column: "31" — 0x0000006a  [0x45a+0x2]
+              special opcode 0xba: "address += 12, line += 0: row 0x30 line 6 column 31 file 0" — 0x0000006c  [0x45c+0x1]
+              DW_LNS_set_column: "0" — 0x0000006d  [0x45d+0x2]
+              DW_LNS_negate_stmt — 0x0000006f  [0x45f+0x1]
+              special opcode 0x4b: "address += 4, line += 1: row 0x34 line 7 column 0 file 0 is_stmt" — 0x00000070  [0x460+0x1]
+              DW_LNS_set_column: "25" — 0x00000071  [0x461+0x2]
+              DW_LNS_set_prologue_end — 0x00000073  [0x463+0x1]
+              special opcode 0x82: "address += 8, line += 0: row 0x3c line 7 column 25 file 0 is_stmt prologue_end" — 0x00000074  [0x464+0x1]
+              DW_LNS_set_column: "20" — 0x00000075  [0x465+0x2]
+              DW_LNS_negate_stmt — 0x00000077  [0x467+0x1]
+              special opcode 0x82: "address += 8, line += 0: row 0x44 line 7 column 20 file 0" — 0x00000078  [0x468+0x1]
+              DW_LNS_set_column: "43" — 0x00000079  [0x469+0x2]
+              special opcode 0x4a: "address += 4, line += 0: row 0x48 line 7 column 43 file 0" — 0x0000007b  [0x46b+0x1]
+              DW_LNS_set_column: "27" — 0x0000007c  [0x46c+0x2]
+              DW_LNS_negate_stmt — 0x0000007e  [0x46e+0x1]
+              special opcode 0x81: "address += 8, line += -1: row 0x50 line 6 column 27 file 0 is_stmt" — 0x0000007f  [0x46f+0x1]
+              DW_LNS_set_column: "51" — 0x00000080  [0x470+0x2]
+              DW_LNS_set_epilogue_begin — 0x00000082  [0x472+0x1]
+              special opcode 0x83: "address += 8, line += 1: row 0x58 line 7 column 51 file 0 is_stmt epilogue_begin" — 0x00000083  [0x473+0x1]
+              DW_LNS_advance_pc: "address += 8" — 0x00000084  [0x474+0x2]
+              DW_LNE_end_sequence: "row 0x60 line 7 column 51 file 0 is_stmt end_sequence" — 0x00000086  [0x476+0x3]
     ▾ .rela.debug_line — RELA, ---, 0x48 bytes  [0x12d0+0x40]
         sh_name: 0xd8 — ".rela.debug_line"  [0x12d0+0x4]
         sh_type: RELA (0x4)  [0x12d4+0x4]
@@ -579,7 +955,9 @@ expression: "common::explore(&display_name(&path), &data)"
         sh_info: 0  [0x133c+0x4]
         sh_addralign: 0x1  [0x1340+0x8]
         sh_entsize: 0x1  [0x1348+0x8]
-        Contents  [0x479+0x41]
+      ▾ Strings  [0x479+0x41]
+          0x0: "/build/fillyfoal/tests/fixtures/external/elf/aarch64-debug"  [0x479+0x3b]
+          0x3b: "obj.c"  [0x4b4+0x6]
     ▾ .llvm_addrsig — LLVM_ADDRSIG, ---, 0x0 bytes  [0x1350+0x40]
         sh_name: 0xc2 — ".llvm_addrsig"  [0x1350+0x4]
         sh_type: LLVM_ADDRSIG (0x6fff4c03)  [0x1354+0x4]

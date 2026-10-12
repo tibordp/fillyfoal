@@ -452,6 +452,9 @@ fn stream_node(node: Node, input: &Input, span: Span, role: Option<Role>, layout
         },
         Some(Role::Names) => node.lazy(tables::names, span),
         Some(Role::Debug(5 | 10)) => node.lazy(dbi::section_headers, span),
+        Some(Role::Debug(0)) => node.lazy(crate::formats::executable::pe::debug::fpo, span),
+        Some(Role::Debug(3 | 4)) => node.lazy(dbi::omap, span),
+        Some(Role::Debug(9)) => node.lazy(dbi::new_fpo, (span, tables.names)),
         Some(Role::Module(i)) => match layout.modules.get(i) {
             Some(m) => node.lazy(
                 codeview::module_stream,

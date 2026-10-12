@@ -983,6 +983,140 @@ fn address_range(f: &mut Fields<'_>) -> Result<String> {
     Ok(out)
 }
 
+/// A compressed unsigned integer of binary annotations (`CVUncompressData`
+/// in `cvinfo.h`): 1, 2 or 4 bytes chosen by the top bits of the first.
+fn cv_uint(f: &mut Fields<'_>) -> Result<Option<u32>> {
+    let b = u32::from(f.u8("byte").get()?);
+    let mut more = |n: u32, mut v: u32| -> Result<u32> {
+        for _ in 0..n {
+            v = (v << 8) | u32::from(f.u8("byte").get()?);
+        }
+        Ok(v)
+    };
+    Ok(match b {
+        0..=0x7f => Some(b),
+        0x80..=0xbf => Some(more(1, b & 0x3f)?),
+        0xc0..=0xdf => Some(more(3, b & 0x1f)?),
+        _ => None,
+    })
+}
+
+/// A signed operand of binary annotations: the sign in the low bit.
+fn cv_signed(v: u32) -> i64 {
+    let m = i64::from(v >> 1);
+    if v & 1 != 0 { m.saturating_neg() } else { m }
+}
+
+/// The binary annotations of an inline site (`BinaryAnnotationsOpcode` in
+/// `cvinfo.h`): opcodes with compressed operands that describe the inlined
+/// code's ranges and line numbers relative to the inlinee's start, shown
+/// with the running code offset and line delta as `llvm-pdbutil` does.
+/// Bounded by the record (at most 64 KiB).
+fn binary_annotations(f: &mut Fields<'_>) -> Result<()> {
+    let mut code = 0u64;
+    let mut line = 0i64;
+    while f.remaining() > 0 {
+        let start = f.pos();
+        // Opcode 0 pads the record to its alignment; an unknown opcode or a
+        // short operand ends the decoding, and the rest is shown raw.
+        let decoded = match cv_uint(f) {
+            Ok(Some(op)) if op != 0 => annotation(f, op, &mut code, &mut line)
+                .ok()
+                .flatten()
+                .map(|s| (op, s)),
+            _ => None,
+        };
+        let Some((op, shown)) = decoded else {
+            f.seek(start);
+            return rest(f);
+        };
+        let len = f.pos().saturating_sub(start);
+        f.seek(start);
+        let span = f.peek_span(len);
+        f.skip(len);
+        f.node(
+            Node::new(name_or(ANNOTATION_OPS, op.into(), "annotation"))
+                .span(span)
+                .value(text(shown)),
+        );
+    }
+    Ok(())
+}
+
+/// One binary annotation's operands, described with the running state.
+fn annotation(
+    f: &mut Fields<'_>,
+    op: u32,
+    code: &mut u64,
+    line: &mut i64,
+) -> Result<Option<String>> {
+    let mut arg = || -> Result<u32> { cv_uint(f)?.ok_or_else(|| Diagnostic::malformed("operand")) };
+    Ok(Some(match op {
+        1 => {
+            *code = arg()?.into();
+            format!("code offset {:#x}", *code)
+        }
+        2 => format!("code offset base {:#x}", arg()?),
+        3 => {
+            let d = arg()?;
+            *code = code.saturating_add(d.into());
+            format!("code {:#x} (+{d:#x})", *code)
+        }
+        4 => {
+            // The range ends here; later offsets count from its end.
+            let d = arg()?;
+            *code = code.saturating_add(d.into());
+            format!("code end {:#x} (+{d:#x})", *code)
+        }
+        5 => format!("file {:#x}", arg()?),
+        6 => {
+            let d = cv_signed(arg()?);
+            *line = line.saturating_add(d);
+            format!("line {} ({d:+})", *line)
+        }
+        7 => format!("line end delta {}", arg()?),
+        8 => format!("range kind {}", arg()?),
+        9 => format!("column start {}", arg()?),
+        10 => format!("column end delta {:+}", cv_signed(arg()?)),
+        11 => {
+            let v = arg()?;
+            let dc = v & 0xf;
+            let dl = cv_signed(v >> 4);
+            *code = code.saturating_add(dc.into());
+            *line = line.saturating_add(dl);
+            format!("code {:#x} (+{dc:#x}) line {} ({dl:+})", *code, *line)
+        }
+        12 => {
+            let len = arg()?;
+            let dc = arg()?;
+            *code = code.saturating_add(dc.into());
+            format!(
+                "code {:#x} (+{dc:#x}), end {:#x} (+{len:#x})",
+                *code,
+                code.saturating_add(len.into())
+            )
+        }
+        13 => format!("column end {}", arg()?),
+        _ => return Ok(None),
+    }))
+}
+
+const ANNOTATION_OPS: EnumTable = &[
+    (1, "CodeOffset"),
+    (2, "ChangeCodeOffsetBase"),
+    (3, "ChangeCodeOffset"),
+    (4, "ChangeCodeLength"),
+    (5, "ChangeFile"),
+    (6, "ChangeLineOffset"),
+    (7, "ChangeLineEndDelta"),
+    (8, "ChangeRangeKind"),
+    (9, "ChangeColumnStart"),
+    (10, "ChangeColumnEndDelta"),
+    (11, "ChangeCodeOffsetAndLineOffset"),
+    (12, "ChangeCodeLengthAndCodeOffset"),
+    (13, "ChangeColumnEnd"),
+];
+
 /// Decodes one symbol record (length and kind included); returns its
 /// name (empty if it has none) and summary.
 pub(super) fn symbol_record(f: &mut Fields<'_>, _: &()) -> Result<(String, String)> {
@@ -1220,11 +1354,14 @@ pub(super) fn symbol_record(f: &mut Fields<'_>, _: &()) -> Result<(String, Strin
             (String::new(), format!("frame {off:+}"))
         }
         0x1124 => (name(f)?, String::new()),
-        0x114d => {
+        0x114d | 0x115d => {
             f.u32("Parent").hex().emit()?;
             f.u32("End").hex().emit()?;
             let id = f.u32("Inlinee").hex().desc("An IPI record").emit()?;
-            rest(f)?;
+            if kind == 0x115d {
+                f.u32("Invocations").emit()?;
+            }
+            binary_annotations(f)?;
             (String::new(), format!("inlinee {id:#x}"))
         }
         0x1141 | 0x1143 => {

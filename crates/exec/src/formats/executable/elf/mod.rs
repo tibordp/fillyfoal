@@ -7,6 +7,7 @@
 //! from these and decoded only when expanded. A few small notes are read
 //! eagerly for the summary (interpreter, build ID, ABI tag).
 
+mod debug;
 mod hash;
 mod notes;
 mod symbols;
@@ -20,6 +21,7 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
+use crate::formats::executable::dwarf::Sec;
 use crate::formats::util::binutil::{RangeIndex, data_node, get_at, perms};
 use crate::formats::util::val::{name_or, text};
 use crate::formats::{Codec, Format, Head, Input, Probe, content, embedded};
@@ -1108,7 +1110,13 @@ async fn section_contents(cx: &Cx, elf: &Elf, section: &Section) -> Result<Optio
             ".nv_fatbin" | "__nv_relfatbin" => embedded("Fat Binary", elf.input.nested(data)),
             ".eh_frame" => lazy("Call Frame Information").lazy(eh_frame, (elf.clone(), index)),
             ".eh_frame_hdr" => lazy("Frame Index").lazy(eh_frame_hdr, (elf.clone(), index)),
-            _ => raw,
+            ".debug_frame" => {
+                lazy("Call Frame Information").lazy(debug_frame, (elf.clone(), index))
+            }
+            name => match Sec::from_name(name) {
+                Some(sec) => dwarf_node(sec, data, elf),
+                None => raw,
+            },
         },
     };
     Ok(Some(node))
@@ -1148,6 +1156,33 @@ async fn eh_frame(cx: Cx, (elf, index): (Elf, u32)) -> Result<()> {
     crate::formats::executable::eh_frame::walk(&cx, &*elf, span, section.addr).await
 }
 
+/// A DWARF section's decoded contents over `span` (its bytes, or the
+/// decompressed bytes of a compressed section).
+fn dwarf_node(sec: Sec, span: Span, elf: &Elf) -> Node {
+    Node::new(sec.label())
+        .span(span)
+        .lazy(dwarf_section, (elf.clone(), sec))
+}
+
+async fn dwarf_section(cx: Cx, (elf, sec): (Elf, Sec)) -> Result<()> {
+    let dw = debug::dwarf(&cx, &elf).await;
+    crate::formats::executable::dwarf::section(cx, (dw, sec)).await
+}
+
+/// `.debug_frame`: CIEs and FDEs in the DWARF (not the `.eh_frame`) form.
+async fn debug_frame(cx: Cx, (elf, index): (Elf, u32)) -> Result<()> {
+    let section = elf
+        .section(index)
+        .ok_or_else(|| Diagnostic::internal("section index out of range"))?;
+    let Some(span) = debug::section_span(&cx, &elf, section).await else {
+        return Ok(());
+    };
+    if elf.header.kind == ET_REL {
+        cx.annotate("addresses before relocation");
+    }
+    crate::formats::executable::eh_frame::walk_debug_frame(&cx, &*elf, span).await
+}
+
 /// `.eh_frame_hdr`: the binary search table over `.eh_frame`'s FDEs.
 async fn eh_frame_hdr(cx: Cx, (elf, index): (Elf, u32)) -> Result<()> {
     let section = elf
@@ -1169,15 +1204,29 @@ async fn compressed(cx: &Cx, elf: &Elf, section: &Section, data: Span) -> Result
     }
     let size = f.uword("ch_size", wide).get()?;
     let payload = data.tail(header_size);
-    let node = match kind {
+    let codec = match kind {
         // ELFCOMPRESS_ZLIB: a zlib stream; ELFCOMPRESS_ZSTD: Zstandard frames.
-        1 => content("Decompressed", elf.input, payload, Codec::Zlib, Some(size)),
-        2 => content("Decompressed", elf.input, payload, Codec::Zstd, Some(size)),
-        _ => data_node("Compressed data", payload, payload.len).diag(Diagnostic::unsupported(
+        1 => Some(Codec::Zlib),
+        2 => Some(Codec::Zstd),
+        _ => None,
+    };
+    let dwarf = Sec::from_name(&section.name);
+    let node = match codec {
+        // A DWARF section is decoded as DWARF over its decompressed bytes.
+        Some(codec) if dwarf.is_some() || section.name == ".debug_frame" => {
+            let decoded = cx.decode_lazy(payload, &codec, size).unwrap_or(payload);
+            match dwarf {
+                Some(sec) => dwarf_node(sec, decoded, elf),
+                None => Node::new("Call Frame Information")
+                    .span(decoded)
+                    .lazy(debug_frame, (elf.clone(), section.index)),
+            }
+        }
+        Some(codec) => content("Decompressed", elf.input, payload, codec, Some(size)),
+        None => data_node("Compressed data", payload, payload.len).diag(Diagnostic::unsupported(
             format!("{} compression", name_or(COMPRESSION, kind.into(), "type")),
         )),
     };
-    let _ = section;
     Ok(Node::new("Compressed Section")
         .span(data)
         .summary(format!(

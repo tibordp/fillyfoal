@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ x86_64.core — ELF 64-bit LSB core file, x86-64, GNU/Linux, from 'crashy'  [0x0+0x490]
   ▾ ELF Header — ET_CORE (core dump), x86-64  [0x0+0x40]
@@ -115,7 +115,8 @@ expression: "common::explore(&name, &data)"
           ▾ siginfo  [0x2c4+0x80]
               si_signo: 11 — SIGSEGV  [0x2c4+0x4]
               si_errno: 0  [0x2c8+0x4]
-              si_code: 1  [0x2cc+0x4]
+              si_code: 1 — SEGV_MAPERR  [0x2cc+0x4]
+              si_addr: 0x0  [0x2d4+0x8]
         ▾ NT_AUXV — 0x80 bytes  [0x344+0x94]
             n_namesz: 5  [0x344+0x4]
             n_descsz: 128  [0x348+0x4]
@@ -228,7 +229,8 @@ expression: "common::explore(&name, &data)"
       ▾ siginfo  [0x2c4+0x80]
           si_signo: 11 — SIGSEGV  [0x2c4+0x4]
           si_errno: 0  [0x2c8+0x4]
-          si_code: 1  [0x2cc+0x4]
+          si_code: 1 — SEGV_MAPERR  [0x2cc+0x4]
+          si_addr: 0x0  [0x2d4+0x8]
     ▾ NT_AUXV — 0x80 bytes  [0x344+0x94]
         n_namesz: 5  [0x344+0x4]
         n_descsz: 128  [0x348+0x4]

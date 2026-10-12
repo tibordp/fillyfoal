@@ -21,7 +21,7 @@ use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::executable::pe::tables::{
     FILE_CHARACTERISTICS, MACHINE, SECTION_CHARACTERISTICS,
 };
-use crate::formats::util::binutil::{cstrings, data_node};
+use crate::formats::util::binutil::data_node;
 use crate::formats::util::fmt::clip;
 use crate::formats::util::val::{hex, name_or, text};
 use crate::formats::{Format, Head, Input, Probe};
@@ -662,8 +662,35 @@ fn symbol_nodes(c: &Coff) -> [Node; 2] {
             .lazy(symbol_list, c.clone()),
         Node::new("String Table")
             .span(strtab)
-            .lazy(cstrings, strtab.tail(4)),
+            .lazy(string_table, (strtab, LE)),
     ]
+}
+
+/// A COFF-style string table (COFF, XCOFF, `a.out`): a 4-byte size that
+/// counts itself, then NUL-terminated strings. Names refer to strings by
+/// their offset from the start of the table, size field included, so the
+/// strings are labelled with that offset.
+pub(crate) async fn string_table(cx: Cx, (span, endian): (Span, Endian)) -> Result<()> {
+    let head = cx.read_avail(span.sub(0, 4)).await?;
+    if let Some(size) = crate::formats::util::binutil::get_at::<u32>(&head, 0, endian) {
+        cx.emit(
+            Node::new("Size")
+                .span(span.sub(0, 4))
+                .value(crate::formats::util::val::uint(size, 32))
+                .desc("Bytes in the table, this field included"),
+        );
+    }
+    let mut cur = crate::dsl::Cursor::new(&cx, span.tail(4), Endian::Little);
+    while !cur.at_end() {
+        let start = cur.pos().saturating_add(4);
+        let (s, at) = cur.cstr(4096).await?;
+        if s.is_empty() {
+            continue;
+        }
+        cx.push(Node::new(format!("{start:#x}")).span(at).value(text(s)))
+            .await;
+    }
+    Ok(())
 }
 
 /// The COFF symbol table of an image (MinGW's PE images keep one after the

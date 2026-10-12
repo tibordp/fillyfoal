@@ -9,7 +9,7 @@ use crate::bytes::{to_u64, u16_be, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::util::binutil::{cstrings, data_node};
+use crate::formats::util::binutil::data_node;
 use crate::formats::util::val::{hex, name_or};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -318,7 +318,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("String Table")
                 .span(strings)
-                .lazy(cstrings, strings.tail(4)),
+                .lazy(super::coff::string_table, (strings, Endian::Big)),
         );
     }
     Ok(())
