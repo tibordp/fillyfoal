@@ -77,7 +77,8 @@ fn header(f: &mut Fields<'_>, version: &u8) -> Result<Sizes> {
                 f.u8(name).emit()?;
             }
             s.number = size_field(f, "sizeof(lua_Number)")?;
-            f.f64("test number").emit()?;
+            // TEST_NUMBER, in the chunk's byte order and number type.
+            test_number(f, s.number, s.endian, "test number", TEST_NUMBER)?;
         }
         0x51 | 0x52 => {
             f.u8("format").desc("0: official format").emit()?;
@@ -102,7 +103,7 @@ fn header(f: &mut Fields<'_>, version: &u8) -> Result<Sizes> {
             s.integer = size_field(f, "sizeof(lua_Integer)")?;
             s.number = size_field(f, "sizeof(lua_Number)")?;
             s.endian = test_integer(f, s.integer)?;
-            test_number(f, s.number, s.endian)?;
+            test_number(f, s.number, s.endian, "LUAC_NUM", LUAC_NUM)?;
             f.u8("sizeupvalues").emit()?;
         }
         0x54 => {
@@ -112,7 +113,7 @@ fn header(f: &mut Fields<'_>, version: &u8) -> Result<Sizes> {
             s.integer = size_field(f, "sizeof(lua_Integer)")?;
             s.number = size_field(f, "sizeof(lua_Number)")?;
             s.endian = test_integer(f, s.integer)?;
-            test_number(f, s.number, s.endian)?;
+            test_number(f, s.number, s.endian, "LUAC_NUM", LUAC_NUM)?;
             f.u8("sizeupvalues").emit()?;
         }
         _ => {
@@ -126,7 +127,7 @@ fn header(f: &mut Fields<'_>, version: &u8) -> Result<Sizes> {
             s.integer = size_field(f, "sizeof(lua_Integer)")?;
             s.endian = test_integer(f, s.integer)?;
             s.number = size_field(f, "sizeof(lua_Number)")?;
-            test_number(f, s.number, s.endian)?;
+            test_number(f, s.number, s.endian, "LUAC_NUM", LUAC_NUM)?;
             f.u8("sizeupvalues").emit()?;
         }
     }
@@ -182,9 +183,18 @@ fn sign_extend(bytes: &[u8], big: bool) -> [u8; 8] {
     out
 }
 
-fn test_number(f: &mut Fields<'_>, size: u8, endian: Endian) -> Result<()> {
+const LUAC_NUM: &str = "370.5 (or -370.5 in 5.5)";
+const TEST_NUMBER: &str = "3.14159265358979323846e7";
+
+fn test_number(
+    f: &mut Fields<'_>,
+    size: u8,
+    endian: Endian,
+    name: &'static str,
+    desc: &'static str,
+) -> Result<()> {
     let span = f.peek_span(size.into());
-    let bytes = f.bytes("LUAC_NUM", size.into()).get()?;
+    let bytes = f.bytes(name, size.into()).get()?;
     let value = match (size, endian) {
         (8, Endian::Little) => bytes.as_slice().try_into().ok().map(f64::from_le_bytes),
         (8, Endian::Big) => bytes.as_slice().try_into().ok().map(f64::from_be_bytes),
@@ -200,9 +210,9 @@ fn test_number(f: &mut Fields<'_>, size: u8, endian: Endian) -> Result<()> {
             .map(|b| f64::from(f32::from_be_bytes(b))),
         _ => None,
     };
-    let node = Node::new("LUAC_NUM").span(span);
+    let node = Node::new(name).span(span);
     f.node(match value {
-        Some(v) => node.value(Value::Float(v)).desc("370.5 (or -370.5 in 5.5)"),
+        Some(v) => node.value(Value::Float(v)).desc(desc),
         None => node.value(Value::Bytes(bytes)),
     });
     Ok(())
@@ -241,8 +251,13 @@ struct Proto {
     /// Index in `fields` of the code node, and the instruction array
     /// (offset in the chunk body, count).
     code: Option<(usize, usize, u64)>,
+    /// Index in `fields` of the code node, disassembled or not.
+    code_at: Option<usize>,
     /// Constants rendered for the disassembly's comments.
     kstr: Vec<String>,
+    /// Upvalue names from the debug information (for 5.0 and 5.1's
+    /// comments).
+    upnames: Vec<String>,
 }
 
 const SEEN_CONSTANTS: u8 = 1;
@@ -255,6 +270,9 @@ struct Index {
     span: Span,
     version: u8,
     endian: Endian,
+    /// `sizeof(Instruction)`: 4, or 8 for 5.0 on LP64 (an `unsigned long`
+    /// whose low 32 bits hold the instruction).
+    instruction: u8,
     protos: Vec<Proto>,
 }
 
@@ -444,7 +462,9 @@ fn constant(p: &mut Parser<'_>, tag: u8) -> Step<(&'static str, Value)> {
         }
         (0x54.., 1) => ("boolean", text("false")),
         (0x54.., 0x11) => ("boolean", text("true")),
-        (0x50..=0x52, 3) | (0x53, 3) | (0x54.., 0x13) => ("float", p.number()?),
+        // Before 5.3 there is one number type, lua_Number.
+        (0x50..=0x52, 3) => ("number", p.number()?),
+        (0x53, 3) | (0x54.., 0x13) => ("float", p.number()?),
         (0x53, 0x13) | (0x54.., 3) => ("integer", p.integer()?),
         (0x50..=0x52, 4) => ("string", string(p)?),
         (0x53.., 4) => ("short string", string(p)?),
@@ -605,9 +625,10 @@ fn code(p: &mut Parser<'_>, index: usize) -> Step<()> {
         .value(uint(n, 32))
         .summary(format!("{n} instructions of {} bytes", p.s.instruction));
     let proto = p.protos.get_mut(index)?;
-    if p.s.instruction == 4 && n > 0 {
+    if matches!(p.s.instruction, 4 | 8) && n > 0 {
         proto.code = Some((proto.fields.len(), array, n));
     }
+    proto.code_at = Some(proto.fields.len());
     proto.fields.push(node);
     proto.instructions = n;
     Some(())
@@ -629,7 +650,7 @@ async fn constants(
         let at = p.r.pos();
         let tag = p.r.u8()?;
         let (kind, value) = constant(p, tag)?;
-        kstr.push(constant_text(kind, &value));
+        kstr.push(constant_text(p.version, kind, &value));
         items.push(
             Node::new(format!("[{i}]"))
                 .span(p.at(at))
@@ -808,10 +829,12 @@ async fn debug(cx: &Cx, p: &mut Parser<'_>, index: usize) -> Step<()> {
             .map_or(0, |proto| to_u64(proto.upvalues.2.len()));
     }
     let mut names = Vec::new();
+    let mut upnames = Vec::new();
     for i in 0..n {
         p.tick(cx).await;
         let one = p.r.pos();
         let name = p.string()?.unwrap_or_default();
+        upnames.push(name.clone());
         names.push(
             Node::new(format!("[{i}]"))
                 .span(p.at(one))
@@ -825,6 +848,7 @@ async fn debug(cx: &Cx, p: &mut Parser<'_>, index: usize) -> Step<()> {
     let span = (start, p.r.pos().saturating_sub(start));
     if let Some(proto) = p.protos.get_mut(index) {
         proto.debug = (span.0, span.1, Arc::new(items));
+        proto.upnames = upnames;
         proto.seen |= SEEN_DEBUG;
     }
     Some(())
@@ -846,16 +870,34 @@ async fn prototype_node(cx: Cx, (index, i): (Arc<Index>, usize)) -> Result<()> {
         .protos
         .get(i)
         .ok_or_else(|| Diagnostic::internal("prototype index out of range"))?;
+    // 5.0 stores the code last, after the debug information, constants and
+    // nested functions; the nodes follow the file's order.
+    let code_last = index.version == 0x50;
+    let mut code = None;
     for (n, node) in proto.fields.iter().enumerate() {
-        cx.emit(match proto.code {
+        let node = match proto.code {
             Some((at, _, _)) if at == n => node.clone().lazy(
                 crate::expander!(disassemble: (Arc<Index>, usize)),
                 (index.clone(), i),
             ),
             _ => node.clone(),
-        });
+        };
+        if code_last && proto.code_at == Some(n) {
+            code = Some(node);
+        } else {
+            cx.emit(node);
+        }
     }
     let span = |(start, len): (usize, usize)| index.span.sub(to_u64(start), to_u64(len));
+    let (start, len, items) = &proto.debug;
+    let mut debug = (proto.seen & SEEN_DEBUG != 0).then(|| {
+        Node::new("debug")
+            .span(span((*start, *len)))
+            .lazy(emit_nodes, items.clone())
+    });
+    if code_last && let Some(node) = debug.take() {
+        cx.emit(node);
+    }
     let (start, len, items) = &proto.constants;
     if proto.seen & SEEN_CONSTANTS != 0 {
         cx.emit(group(
@@ -885,13 +927,8 @@ async fn prototype_node(cx: Cx, (index, i): (Arc<Index>, usize)) -> Result<()> {
             node.lazy(prototype_list, (index.clone(), i))
         });
     }
-    let (start, len, items) = &proto.debug;
-    if proto.seen & SEEN_DEBUG != 0 {
-        cx.emit(
-            Node::new("debug")
-                .span(span((*start, *len)))
-                .lazy(emit_nodes, items.clone()),
-        );
+    for node in [code, debug].into_iter().flatten() {
+        cx.emit(node);
     }
     Ok(())
 }
@@ -966,6 +1003,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         span: body,
         version: p.version,
         endian: p.s.endian,
+        instruction: p.s.instruction,
         protos: std::mem::take(&mut p.protos),
     });
     if let Some(main) = index.protos.first() {
@@ -1012,13 +1050,49 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 const DISASM_BLOCK: u64 = 1024;
 
 /// A constant as `luac -l` shows it in comments.
-fn constant_text(kind: &str, value: &Value) -> String {
+fn constant_text(version: u8, kind: &str, value: &Value) -> String {
     match value {
         Value::Text(s) if kind.ends_with("string") => format!("\"{}\"", clip(s, 40)),
         Value::Text(s) => s.clone(),
+        // LUA_NUMBER_FMT before 5.3.
+        Value::Float(f) if version <= 0x52 => fmt_g14(*f),
         Value::Float(f) => format!("{f:?}"),
         Value::Int { value, .. } => value.to_string(),
         _ => "?".to_owned(),
+    }
+}
+
+/// `v` as C's `printf("%.14g")` prints it.
+fn fmt_g14(v: f64) -> String {
+    if v.is_nan() {
+        return if v.is_sign_negative() { "-nan" } else { "nan" }.to_owned();
+    }
+    if v.is_infinite() {
+        return if v < 0.0 { "-inf" } else { "inf" }.to_owned();
+    }
+    if v == 0.0 {
+        return if v.is_sign_negative() { "-0" } else { "0" }.to_owned();
+    }
+    // The exponent of the value rounded to 14 significant digits picks the
+    // style, as in C.
+    let sci = format!("{v:.13e}");
+    let Some((mantissa, exp)) = sci.split_once('e') else {
+        return sci;
+    };
+    let exp: i32 = exp.parse().unwrap_or(0);
+    let trim = |s: &str| -> String {
+        if s.contains('.') {
+            s.trim_end_matches('0').trim_end_matches('.').to_owned()
+        } else {
+            s.to_owned()
+        }
+    };
+    if !(-4..14).contains(&exp) {
+        let sign = if exp < 0 { '-' } else { '+' };
+        format!("{}e{sign}{:02}", trim(mantissa), exp.unsigned_abs())
+    } else {
+        let decimals = usize::try_from(13i32.saturating_sub(exp)).unwrap_or(0);
+        trim(&format!("{v:.decimals$}"))
     }
 }
 
@@ -1070,7 +1144,13 @@ fn fields(version: u8, i: u32) -> Word {
 
 /// One instruction: opcode name, operands and a comment (constants, jump
 /// targets), as `luac -l` lists them; `pc` counts from 0.
-fn render(version: u8, pc: u64, word: u32, kstr: &[String]) -> (String, String, String) {
+fn render(
+    version: u8,
+    pc: u64,
+    word: u32,
+    kstr: &[String],
+    upnames: &[String],
+) -> (String, String, String) {
     let f = fields(version, word);
     let table = super::lua_ops::table(version);
     let Some((name, pattern)) = usize::try_from(f.op).ok().and_then(|op| table.get(op)) else {
@@ -1082,17 +1162,58 @@ fn render(version: u8, pc: u64, word: u32, kstr: &[String]) -> (String, String, 
     let sj = i64::from(f.ax).saturating_sub(0xff_ffff);
     let signed8 = |v: u32| i64::from(v).saturating_sub(127);
     let neg = |v: u32| (-1i64).saturating_sub(i64::from(v));
-    let mut notes: Vec<String> = Vec::new();
-    let mut constant = |index: i64| {
-        let s = usize::try_from(index)
+    let kget = |index: i64| -> &str {
+        usize::try_from(index)
             .ok()
             .and_then(|i| kstr.get(i))
-            .map_or("?", String::as_str);
-        notes.push(s.to_owned());
+            .map_or("?", String::as_str)
     };
+    let mut notes: Vec<String> = Vec::new();
+    let mut constant = |index: i64| notes.push(kget(index).to_owned());
+    // 5.0's register-or-constant operands (constants from MAXSTACK).
+    const MAXSTACK: u32 = 250;
+    let rk50 = |v: u32| (v >= MAXSTACK).then(|| kget(i64::from(v.saturating_sub(MAXSTACK))));
+    let (mut xb, mut xc): (Option<Option<&str>>, Option<Option<&str>>) = (None, None);
+    // A global's name: the string constant, unquoted.
+    let global = |index: u32| {
+        let s = kget(i64::from(index));
+        s.strip_prefix('"')
+            .and_then(|s| s.strip_suffix('"'))
+            .unwrap_or(s)
+            .to_owned()
+    };
+    let mut extra: Option<String> = None;
     let mut ops: Vec<String> = Vec::new();
     for token in pattern.split_whitespace() {
         ops.push(match token {
+            "xB" => {
+                xb = Some(rk50(f.b));
+                f.b.to_string()
+            }
+            "xC" => {
+                xc = Some(rk50(f.c));
+                f.c.to_string()
+            }
+            "GBx" => {
+                extra = Some(global(f.bx));
+                f.bx.to_string()
+            }
+            "GNBx" => {
+                extra = Some(global(f.bx));
+                neg(f.bx).to_string()
+            }
+            "UB" => {
+                // luac prints "-" without debug information.
+                extra = Some(if upnames.is_empty() {
+                    "-".to_owned()
+                } else {
+                    usize::try_from(f.b)
+                        .ok()
+                        .and_then(|b| upnames.get(b))
+                        .map_or_else(|| "?".to_owned(), Clone::clone)
+                });
+                f.b.to_string()
+            }
             "A" => f.a.to_string(),
             "B" => f.b.to_string(),
             "C" => f.c.to_string(),
@@ -1145,10 +1266,22 @@ fn render(version: u8, pc: u64, word: u32, kstr: &[String]) -> (String, String, 
             _ => String::new(),
         });
     }
+    notes.extend(extra);
+    match (xb, xc) {
+        // 5.0: `B C`, `-` for a register B, nothing for a register C.
+        (Some(b), Some(c)) if b.is_some() || c.is_some() => {
+            notes.push(b.unwrap_or("-").to_owned());
+            notes.extend(c.map(str::to_owned));
+        }
+        (None, Some(Some(c))) => notes.push(c.to_owned()),
+        _ => {}
+    }
     // Jump targets, counted from 1 like luac's listing.
     let at = i64::try_from(pc).unwrap_or(i64::MAX);
     let bx = i64::from(f.bx);
     let target = match *name {
+        // An iABC instruction before 5.2: no target.
+        "TFORLOOP" if version <= 0x51 => None,
         "JMP" if !old => Some(("to", at.saturating_add(2).saturating_add(sj))),
         "JMP" | "FORLOOP" | "FORPREP" | "TFORLOOP" | "TFORPREP" if old => {
             Some(("to", at.saturating_add(2).saturating_add(sbx)))
@@ -1174,27 +1307,41 @@ async fn disassemble(cx: Cx, (index, i): (Arc<Index>, usize)) -> Result<()> {
     let Some((_, offset, count)) = proto.code else {
         return Ok(());
     };
+    // 4 bytes, or 8 (5.0 on LP64) of which the low 32 bits are the
+    // instruction.
+    let width = usize::from(index.instruction);
+    let w = to_u64(width);
+    let low = match index.endian {
+        Endian::Little => 0,
+        Endian::Big => width.saturating_sub(4),
+    };
     let array = index
         .span
-        .sub_exact(to_u64(offset), count.saturating_mul(4))?;
+        .sub_exact(to_u64(offset), count.saturating_mul(w))?;
     cx.set_count(Count::Exact(count));
     let mut pc = cx.resume::<u64>().unwrap_or(0);
     while pc < count {
         let n = DISASM_BLOCK.min(count.saturating_sub(pc));
         let block = cx
-            .read(array.sub(pc.saturating_mul(4), n.saturating_mul(4)))
+            .read(array.sub(pc.saturating_mul(w), n.saturating_mul(w)))
             .await?;
-        if block.len() < 4 {
+        if block.len() < width {
             break;
         }
-        for bytes in block.as_chunks::<4>().0 {
-            let word = match index.endian {
-                Endian::Little => u32::from_le_bytes(*bytes),
-                Endian::Big => u32::from_be_bytes(*bytes),
+        for chunk in block.chunks_exact(width) {
+            let Some(bytes) = chunk
+                .get(low..low.saturating_add(4))
+                .and_then(|b| <[u8; 4]>::try_from(b).ok())
+            else {
+                break;
             };
-            let (name, ops, note) = render(index.version, pc, word, &proto.kstr);
+            let word = match index.endian {
+                Endian::Little => u32::from_le_bytes(bytes),
+                Endian::Big => u32::from_be_bytes(bytes),
+            };
+            let (name, ops, note) = render(index.version, pc, word, &proto.kstr, &proto.upnames);
             let mut node = Node::new(format!("[{}]", pc.saturating_add(1)))
-                .span(array.sub(pc.saturating_mul(4), 4))
+                .span(array.sub(pc.saturating_mul(w), w))
                 .value(text(if ops.is_empty() {
                     name
                 } else {
@@ -1210,4 +1357,28 @@ async fn disassemble(cx: Cx, (index, i): (Arc<Index>, usize)) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn numbers_print_like_printf_g14() {
+        for (v, s) in [
+            (1.0, "1"),
+            (-7.0, "-7"),
+            (2.5, "2.5"),
+            (1e100, "1e+100"),
+            (31_415_926.535_897_933, "31415926.535898"),
+            (0.0001, "0.0001"),
+            (1e-5, "1e-05"),
+            (123_456_789_012_345_680.0, "1.2345678901235e+17"),
+            (99_999_999_999_999.5, "1e+14"),
+            (0.1, "0.1"),
+            (-0.0, "-0"),
+        ] {
+            assert_eq!(fmt_g14(v), s, "{v:?}");
+        }
+    }
 }
