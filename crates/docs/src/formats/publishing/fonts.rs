@@ -351,6 +351,12 @@ const CFF2_DICT: &[(u16, &str)] = &[
 /// Operators whose single operand is a string ID.
 const SID_OPS: &[u16] = &[0, 1, 2, 3, 4, 1200, 1221, 1222, 1238];
 
+/// Private DICT operators whose operands are a delta array (each value
+/// relative to the previous one; CFF specification, "delta" type):
+/// BlueValues, OtherBlues, FamilyBlues, FamilyOtherBlues, StemSnapH and
+/// StemSnapV.
+const DELTA_OPS: &[u16] = &[6, 7, 8, 9, 1212, 1213];
+
 fn op_name(op: u16, cff2: bool) -> String {
     let cff2_ops = if cff2 { CFF2_DICT } else { &[] };
     TOP_DICT
@@ -627,13 +633,34 @@ async fn dict(cx: Cx, (cff, span): (Cff, Span)) -> Result<()> {
             .span(span.sub(to_u64(e.start), to_u64(e.end.saturating_sub(e.start))));
         let mut node = match e.args.as_slice() {
             [v] if SID_OPS.contains(&e.op) => node.value(text(sid(&cx, &cff, *v).await?)),
+            _ if DELTA_OPS.contains(&e.op) => {
+                // Shown as absolute values; the stored deltas in the summary.
+                let mut sum = 0.0;
+                let absolute: Vec<String> = e
+                    .args
+                    .iter()
+                    .map(|d| {
+                        sum += d;
+                        num(sum)
+                    })
+                    .collect();
+                node.value(text(absolute.join(" ")))
+            }
             [v] => node.value(Value::Float(*v)),
             _ => node.value(text(
                 e.args.iter().map(|v| num(*v)).collect::<Vec<_>>().join(" "),
             )),
         };
+        let mut notes = Vec::new();
+        if DELTA_OPS.contains(&e.op) {
+            let raw: Vec<String> = e.args.iter().map(|v| num(*v)).collect();
+            notes.push(format!("stored as deltas: {}", raw.join(" ")));
+        }
         if !e.blend.is_empty() {
-            node = node.summary(format!("blended: {}", e.blend.join(", ")));
+            notes.push(format!("blended: {}", e.blend.join(", ")));
+        }
+        if !notes.is_empty() {
+            node = node.summary(notes.join("; "));
         }
         cx.push(node).await;
     }
