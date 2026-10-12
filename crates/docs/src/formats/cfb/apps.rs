@@ -25,7 +25,7 @@ pub enum Context {
     /// A Windows Installer transform (the root of an .mst, or a storage
     /// inside a package or patch): its tables are stored row by row, each
     /// row with a mask of the columns it changes, against its own string
-    /// pool, so they are not decoded with the package's schema.
+    /// pool (see [`super::msi::transform_table`]).
     MsiTransform,
     /// The top level of an Outlook message.
     MsgRoot,
@@ -87,14 +87,19 @@ pub async fn application(
     root: &DirEntry,
 ) -> (Option<String>, Context) {
     if let Some(kind) = installer_kind(&root.clsid) {
-        let title = match super::msi::product(cx, cfb).await {
-            Some(p) => Some(p),
-            None => summary_title(cx, cfb, root).await,
-        };
         let context = if root.clsid.data1 == 0x000c_1082 {
             Context::MsiTransform
         } else {
             Context::Msi
+        };
+        // A transform's Property stream holds changes, not the product.
+        let product = match context {
+            Context::Msi => super::msi::product(cx, cfb).await,
+            _ => None,
+        };
+        let title = match product {
+            Some(p) => Some(p),
+            None => summary_title(cx, cfb, root).await,
         };
         return (Some(with_title(kind, title)), context);
     }
@@ -371,19 +376,27 @@ pub async fn content(cx: &Cx, state: &StreamState, span: Span) -> Result<()> {
             msg::value_stream(cx, cfb, input, n, span).await
         }
         (Context::Msi, n) => match msi_name(n).as_deref().and_then(|d| d.strip_prefix('!')) {
-            Some("_StringPool") => super::msi::string_pool(cx, cfb, span).await,
-            Some("_StringData") => super::msi::string_data(cx, cfb, span).await,
+            Some("_StringPool") => super::msi::string_pool(cx, cfb, (0, false), span).await,
+            Some("_StringData") => super::msi::string_data(cx, cfb, (0, false), span).await,
             Some(table) => super::msi::table(cx, cfb, table, span).await,
             None => {
                 cx.emit(raw_content(input, span));
                 Ok(())
             }
         },
-        (Context::MsiTransform, _) => {
-            cx.emit(raw_content(input, span).desc(
-                "A transform's table: rows that each start with a mask of the columns they change, against the transform's own string pool (not decoded)",
-            ));
-            Ok(())
+        (Context::MsiTransform, n) => {
+            let at = (state.parent, true);
+            match msi_name(n).as_deref().and_then(|d| d.strip_prefix('!')) {
+                Some("_StringPool") => super::msi::string_pool(cx, cfb, at, span).await,
+                Some("_StringData") => super::msi::string_data(cx, cfb, at, span).await,
+                Some(table) => {
+                    super::msi::transform_table(cx, cfb, state.parent, table, span).await
+                }
+                None => {
+                    cx.emit(raw_content(input, span));
+                    Ok(())
+                }
+            }
         }
         (Context::Thumbs, "Catalog") => super::thumbs::catalog(cx, span).await,
         (Context::Thumbs, n) if n.chars().all(|c| c.is_ascii_digit()) => {
