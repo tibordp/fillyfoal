@@ -1591,7 +1591,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ SummaryInfo — database document in Databases  [0x11654+0x61]  (+22 nodes elided)
     ▾ UserDefined — database document in Databases  [0x115f3+0x61]  (+22 nodes elided)
     ▾ f_12D7448B56564D8AAE333BCC9B3718E5_Data — table, 0 rows, 8 columns, system  [0x11566+0x8d]  (+129 nodes elided)
-    ▾ MSysAccessStorage — table, 23 rows, 7 columns, system  [0x11505+0x61]  (+323 nodes, 1 diagnostic elided)
+    ▾ MSysAccessStorage — table, 23 rows, 7 columns, system  [0x11505+0x61]  (+328 nodes elided)
     ▾ MSysNavPaneGroupCategories — table, 3 rows, 7 columns, system  [0x11452+0xb3]  (+121 nodes elided)
     ▾ MSysNavPaneGroups — table, 9 rows, 7 columns, system  [0x113b1+0xa1]  (+177 nodes elided)
     ▾ MSysNavPaneGroupToObjects — table, 13 rows, 7 columns, system  [0x11300+0xb1]  (+209 nodes elided)

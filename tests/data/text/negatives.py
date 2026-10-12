@@ -219,3 +219,21 @@ Hello Bob,<br>
 see you <b>soon</b>.<br>
 -- <i>Ana</i>
 """)
+
+# A VBA PROJECT stream (MS-OVBA 2.3.1) as Access keeps it in
+# MSysAccessStorage, where no VBA storage context names it: `key="value"`
+# lines start like TOML, but `[Host Extender Info]` is no TOML table.
+write("text", "vba-PROJECT", "".join(line + "\r\n" for line in [
+    'ID="{4C1E1D2A-6F5B-4E3C-9A8D-1B2C3D4E5F60}"',
+    'Name="Database1"',
+    'HelpContextID="0"',
+    'VersionCompatible32="393222000"',
+    'CMG="0A08B8E2BCE2BCE2BCE2BC"',
+    'DPB="1E1CAEF6AFF6AFF6"',
+    'GC="2C2E9CC49DC59DC562"',
+    "",
+    "[Host Extender Info]",
+    "&H00000001={3832D640-CF90-11CF-8E43-00A0C911005A};VBE;&H00000000",
+    "",
+    "[Workspace]",
+]))
