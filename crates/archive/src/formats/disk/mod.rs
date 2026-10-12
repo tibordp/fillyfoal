@@ -16,6 +16,7 @@ pub mod bfs;
 pub mod bitlocker;
 pub mod bsdlabel;
 pub mod btrfs;
+pub mod decmpfs;
 pub mod dmg;
 pub mod erofs;
 pub mod exfat;

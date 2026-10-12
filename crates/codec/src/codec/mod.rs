@@ -110,6 +110,8 @@ pub enum Codec {
     Brotli,
     /// Apple LZFSE (with LZVN blocks).
     Lzfse,
+    /// A bare LZVN stream ending in its end-of-stream opcode (decmpfs).
+    Lzvn,
     /// Apple's chunked wrapper (`pbzx`/`pbze`/`pbz4`/`pbzz`).
     Pbz,
     /// A compressed WIM resource (chunk table, then XPRESS, LZX or LZMS
@@ -371,6 +373,7 @@ impl Codec {
             Codec::Lzx(_) => "lzx",
             Codec::CabFolder(_) => "cab-folder",
             Codec::Lzfse => "lzfse",
+            Codec::Lzvn => "lzvn",
             Codec::Pbz => "pbz",
             Codec::WimResource(_) => "wim-resource",
             Codec::Brotli => "brotli",
@@ -464,6 +467,7 @@ impl Codec {
             Codec::Lzx(_) => "lzx (lazy)",
             Codec::CabFolder(_) => "cab-folder (lazy)",
             Codec::Lzfse => "lzfse (lazy)",
+            Codec::Lzvn => "lzvn (lazy)",
             Codec::Pbz => "pbz (lazy)",
             Codec::WimResource(_) => "wim-resource (lazy)",
             Codec::Brotli => "brotli (lazy)",
@@ -555,6 +559,7 @@ impl Codec {
             | Codec::Lzx(_)
             | Codec::CabFolder(_)
             | Codec::Lzfse
+            | Codec::Lzvn
             | Codec::Pbz
             | Codec::WimResource(_)
             | Codec::Brotli
@@ -670,6 +675,8 @@ impl Codec {
             Codec::CabFolder(f) if f.method() == 0 => 1,
             Codec::CabFolder(_) => 32_768,
             Codec::Lzfse => 4_096,
+            // A 1-byte opcode copies at most 15 bytes, a 2-byte one 271.
+            Codec::Lzvn => 256,
             Codec::Pbz => 7_000,
             // A 1 GiB LZMS match costs a few dozen bits, and a solid
             // chunk can be that large.
@@ -733,6 +740,7 @@ impl Codec {
                 filters::TiffPredictor::new(*bpp, *row),
             ))),
             Codec::Lzfse => Box::new(Streaming(lzfse::Lzfse::default())),
+            Codec::Lzvn => Box::new(Streaming(lzfse::Lzvn::default())),
             Codec::Pbz => Box::new(pbz::Pbz::default()),
             Codec::WimResource(r) => Box::new(wim::WimDecoder::new(*r)),
             Codec::Brotli => Box::new(Streaming(brotli::Stream::default())),

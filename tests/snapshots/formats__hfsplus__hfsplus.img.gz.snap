@@ -119,6 +119,9 @@ expression: "common::explore(&display_name(&path), &data)"
           Extended Finder info: 00 00 00 00 6a c4 36 6d 00 00 00 00 00 00 00 01  |....j.6m........|  [0x1b1a8+0x10]
           Text encoding: 0  [0x1b1b8+0x4]
           Reserved: 0  [0x1b1bc+0x4]
+      ▾ Extended attributes — 1 attribute
+        ▾ com.apple.provenance — 11 bytes  [0xc1ee+0xb]
+            Data  [0xc1ee+0xb]
     ▾ A file with a rather long name.txt — 31 bytes  [0x1b2ac+0xf8]
       ▾ Catalog record  [0x1b2ac+0x58]
           Record type: 2  [0x1b2ac+0x2]
@@ -155,6 +158,9 @@ expression: "common::explore(&display_name(&path), &data)"
           Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
         ▾ Lines — 1 line  [0x74000+0x1f]
             Line 1: "a file with a rather long name"  [0x74000+0x1e]
+      ▾ Extended attributes — 1 attribute
+        ▾ com.apple.provenance — 11 bytes  [0xc14a+0xb]
+            Data  [0xc14a+0xb]
     ▾ binary.bin — 6 KiB  [0x1b3c0+0xf8]
       ▾ Catalog record  [0x1b3c0+0x58]
           Record type: 2  [0x1b3c0+0x2]
@@ -188,6 +194,9 @@ expression: "common::explore(&display_name(&path), &data)"
           Fragment 0 — file offset 0x0, 6 KiB  [0x75000+0x1800]
       ▾ Content — 6 KiB  [0x75000+0x1800]
           Data  [0x75000+0x1800]
+      ▾ Extended attributes — 1 attribute
+        ▾ com.apple.provenance — 11 bytes  [0xc19c+0xb]
+            Data  [0xc19c+0xb]
     ▾ hello.txt — 16 bytes  [0x1b4d2+0xf8]
       ▾ Catalog record  [0x1b4d2+0x58]
           Record type: 2  [0x1b4d2+0x2]
@@ -224,6 +233,9 @@ expression: "common::explore(&display_name(&path), &data)"
           Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
         ▾ Lines — 1 line  [0x72000+0x10]
             Line 1: "hello from HFS+"  [0x72000+0xf]
+      ▾ Extended attributes — 1 attribute
+        ▾ com.apple.provenance — 11 bytes  [0xc054+0xb]
+            Data  [0xc054+0xb]
     ▾ Sub directory — folder, 1 items  [0x1b5ec+0x58]
       ▾ Catalog record  [0x1b5ec+0x58]
           Record type: 1  [0x1b5ec+0x2]
@@ -244,6 +256,9 @@ expression: "common::explore(&display_name(&path), &data)"
           Finder user info: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x1b61c+0x10]
           Finder info: 00 00 00 00 6a c4 36 6d 00 00 00 00 00 00 00 02  |....j.6m........|  [0x1b62c+0x10]
           Text encoding: 0  [0x1b63c+0x4]
+      ▾ Extended attributes — 1 attribute
+        ▾ com.apple.provenance — 11 bytes  [0xc0a6+0xb]
+            Data  [0xc0a6+0xb]
       ▾ nested.md — 12 bytes  [0x1b7c0+0xf8]
         ▾ Catalog record  [0x1b7c0+0x58]
             Record type: 2  [0x1b7c0+0x2]
@@ -280,6 +295,9 @@ expression: "common::explore(&display_name(&path), &data)"
             Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
           ▾ Lines — 1 line  [0x73000+0xc]
               Line 1: "nested file"  [0x73000+0xb]
+        ▾ Extended attributes — 1 attribute
+          ▾ com.apple.provenance — 11 bytes  [0xc0f8+0xb]
+              Data  [0xc0f8+0xb]
     ▾ ␀␀␀␀HFS+ Private Data — folder, 0 items  [0x1b676+0x58]
       ▾ Catalog record  [0x1b676+0x58]
           Record type: 1  [0x1b676+0x2]

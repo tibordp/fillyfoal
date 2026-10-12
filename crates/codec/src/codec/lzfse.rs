@@ -346,67 +346,8 @@ fn block_v2(block: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<usize> {
 /// Decodes an LZVN stream of `payload` bytes into `out` (`n_raw` bytes).
 fn lzvn(payload: &[u8], n_raw: usize, out: &mut Vec<u8>, limit: usize) -> Result<()> {
     let start = out.len();
-    let mut pos = 0usize;
-    let mut d = 0usize;
-    let byte = |pos: usize| -> Result<usize> {
-        payload
-            .get(pos)
-            .map(|&b| usize::from(b))
-            .ok_or_else(|| bad("truncated LZVN stream"))
-    };
-    loop {
-        let opc = byte(pos)?;
-        // (literal count, match length, new distance, opcode length)
-        let (l, m, nd, len): (usize, usize, Option<usize>, usize) = match opc {
-            0x06 => break,
-            0x0e | 0x16 => (0, 0, None, 1),
-            0xa0..=0xbf => {
-                let (b1, b2) = (byte(pos.saturating_add(1))?, byte(pos.saturating_add(2))?);
-                (
-                    (opc >> 3) & 3,
-                    ((opc & 7) << 2 | (b1 & 3)).saturating_add(3),
-                    Some(b2 << 6 | b1 >> 2),
-                    3,
-                )
-            }
-            0xe0 => (byte(pos.saturating_add(1))?.saturating_add(16), 0, None, 2),
-            0xe1..=0xef => (opc & 0x0f, 0, None, 1),
-            0xf0 => (0, byte(pos.saturating_add(1))?.saturating_add(16), None, 2),
-            0xf1..=0xff => (0, opc & 0x0f, None, 1),
-            0x70..=0x7f | 0xd0..=0xdf | 0x1e | 0x26 | 0x2e | 0x36 | 0x3e => {
-                return Err(bad("undefined LZVN opcode"));
-            }
-            _ if opc & 7 == 6 => (opc >> 6, ((opc >> 3) & 7).saturating_add(3), None, 1),
-            _ if opc & 7 == 7 => {
-                let dist = byte(pos.saturating_add(1))? | byte(pos.saturating_add(2))? << 8;
-                (opc >> 6, ((opc >> 3) & 7).saturating_add(3), Some(dist), 3)
-            }
-            _ => (
-                (opc >> 6),
-                ((opc >> 3) & 7).saturating_add(3),
-                Some((opc & 7) << 8 | byte(pos.saturating_add(1))?),
-                2,
-            ),
-        };
-        pos = pos.saturating_add(len);
-        let lits = payload
-            .get(pos..pos.saturating_add(l))
-            .ok_or_else(|| bad("truncated LZVN literals"))?;
-        out.extend_from_slice(lits);
-        pos = pos.saturating_add(l);
-        if let Some(nd) = nd {
-            d = nd;
-        }
-        if m > 0 {
-            if d == 0 || d > out.len() {
-                return Err(bad("LZVN distance outside the output"));
-            }
-            let from = out.len().saturating_sub(d);
-            for i in 0..m {
-                let b = out.get(from.saturating_add(i)).copied().unwrap_or(0);
-                out.push(b);
-            }
-        }
+    let mut state = (0usize, 0usize);
+    while lzvn_op(payload, &mut state, out)? {
         if out.len() > limit || out.len().saturating_sub(start) > n_raw {
             return Err(bad("LZVN output exceeds the block size"));
         }
@@ -415,6 +356,76 @@ fn lzvn(payload: &[u8], n_raw: usize, out: &mut Vec<u8>, limit: usize) -> Result
         return Err(bad("LZVN block produced the wrong number of bytes"));
     }
     Ok(())
+}
+
+/// Decodes one LZVN opcode at `state.0` (the input position; `state.1` is
+/// the current match distance). False at the end-of-stream opcode.
+fn lzvn_op(payload: &[u8], state: &mut (usize, usize), out: &mut Vec<u8>) -> Result<bool> {
+    let (mut pos, mut d) = *state;
+    let byte = |pos: usize| -> Result<usize> {
+        payload
+            .get(pos)
+            .map(|&b| usize::from(b))
+            .ok_or_else(|| bad("truncated LZVN stream"))
+    };
+    let opc = byte(pos)?;
+    // (literal count, match length, new distance, opcode length)
+    let (l, m, nd, len): (usize, usize, Option<usize>, usize) = match opc {
+        0x06 => {
+            // The opcode and seven bytes of padding end the stream.
+            state.0 = pos.saturating_add(8).min(payload.len());
+            return Ok(false);
+        }
+        0x0e | 0x16 => (0, 0, None, 1),
+        0xa0..=0xbf => {
+            let (b1, b2) = (byte(pos.saturating_add(1))?, byte(pos.saturating_add(2))?);
+            (
+                (opc >> 3) & 3,
+                ((opc & 7) << 2 | (b1 & 3)).saturating_add(3),
+                Some(b2 << 6 | b1 >> 2),
+                3,
+            )
+        }
+        0xe0 => (byte(pos.saturating_add(1))?.saturating_add(16), 0, None, 2),
+        0xe1..=0xef => (opc & 0x0f, 0, None, 1),
+        0xf0 => (0, byte(pos.saturating_add(1))?.saturating_add(16), None, 2),
+        0xf1..=0xff => (0, opc & 0x0f, None, 1),
+        0x70..=0x7f | 0xd0..=0xdf | 0x1e | 0x26 | 0x2e | 0x36 | 0x3e => {
+            return Err(bad("undefined LZVN opcode"));
+        }
+        _ if opc & 7 == 6 => (opc >> 6, ((opc >> 3) & 7).saturating_add(3), None, 1),
+        _ if opc & 7 == 7 => {
+            let dist = byte(pos.saturating_add(1))? | byte(pos.saturating_add(2))? << 8;
+            (opc >> 6, ((opc >> 3) & 7).saturating_add(3), Some(dist), 3)
+        }
+        _ => (
+            (opc >> 6),
+            ((opc >> 3) & 7).saturating_add(3),
+            Some((opc & 7) << 8 | byte(pos.saturating_add(1))?),
+            2,
+        ),
+    };
+    pos = pos.saturating_add(len);
+    let lits = payload
+        .get(pos..pos.saturating_add(l))
+        .ok_or_else(|| bad("truncated LZVN literals"))?;
+    out.extend_from_slice(lits);
+    pos = pos.saturating_add(l);
+    if let Some(nd) = nd {
+        d = nd;
+    }
+    if m > 0 {
+        if d == 0 || d > out.len() {
+            return Err(bad("LZVN distance outside the output"));
+        }
+        let from = out.len().saturating_sub(d);
+        for i in 0..m {
+            let b = out.get(from.saturating_add(i)).copied().unwrap_or(0);
+            out.push(b);
+        }
+    }
+    *state = (pos, d);
+    Ok(true)
 }
 
 /// The farthest a match reaches back: `bvx2` distances are at most
@@ -525,11 +536,87 @@ impl Decode for Lzfse {
     }
 }
 
+/// A bare LZVN stream (no `bvxn` block header), up to its end-of-stream
+/// opcode: the form decmpfs (HFS+, APFS) chunks take. Decoded an opcode at
+/// a time; matches reach back at most 16 bits.
+#[derive(Clone, Default)]
+pub struct Lzvn {
+    /// Input position and current match distance.
+    state: (usize, usize),
+    done: bool,
+}
+
+impl Decode for Lzvn {
+    fn step(
+        &mut self,
+        input: &[u8],
+        _eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
+        let mark = out.len();
+        while !self.done {
+            if !lzvn_op(input, &mut self.state, out)? {
+                self.done = true;
+            } else if out.len() > limit {
+                return Err(Diagnostic::output_limit(limit));
+            } else if out.len().saturating_sub(mark) >= step {
+                return Ok(Step::More);
+            }
+        }
+        Ok(Step::Done)
+    }
+
+    fn consumed(&self) -> usize {
+        self.state.0
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.state.0
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.state.0 = self.state.0.saturating_sub(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len.saturating_sub(1 << 16)
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::arithmetic_side_effects)]
 mod tests {
     use super::*;
     use crate::codec::pipeline::{Streaming, verify_checkpoints};
+
+    #[test]
+    fn bare_lzvn_stream() {
+        // Three literals, a 9-byte match at distance 3 (small-distance
+        // opcode), the end-of-stream opcode and its padding.
+        let data = [0xe3, b'a', b'b', b'c', 0x30, 3, 0x06, 0, 0, 0, 0, 0, 0, 0];
+        let mut d = Lzvn::default();
+        let mut out = Vec::new();
+        let mut steps = 0;
+        while d.step(&data, true, &mut out, 1, 1 << 20).unwrap() == Step::More {
+            steps += 1;
+        }
+        assert_eq!(out, b"abcabcabcabc");
+        assert_eq!(d.consumed(), data.len());
+        assert_eq!(steps, 2);
+        // Truncated: an error (rolled back and retried by `Streaming`).
+        let mut d = Lzvn::default();
+        let mut out = Vec::new();
+        assert!(
+            d.step(&data[..5], false, &mut out, 1 << 20, 1 << 20)
+                .is_err()
+        );
+    }
 
     #[test]
     fn checkpoints_resume_between_blocks() {
