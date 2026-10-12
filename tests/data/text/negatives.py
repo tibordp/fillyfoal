@@ -112,7 +112,7 @@ write("text", "ls.man", "".join(
     for word, bold in [("NAME", True), ("\n     ", False), ("ls", True),
                        (" - list directory contents\n\n", False), ("SYNOPSIS", True),
                        ("\n     ", False), ("ls", True), (" [OPTION]... [FILE]...\n", False)]))
-write("text", "nul.log", "".join(
+write("text", "nul-bytes.log", "".join(
     f"log line {n} before the crash\n" for n in range(1, 21)).encode() + b"\0" * 4 + "".join(
     f"log line {n} after the crash\n" for n in range(21, 181)).encode())
 

@@ -466,6 +466,22 @@ fn fixtures_are_identified_correctly() {
 /// Every fixture is either external or synthetic (never both, never
 /// neither), sits at `<tree>/<format>/<file>`, and every external one is
 /// accounted for in `external/SOURCES.md` (whose entries must all exist).
+/// Whether a file name can be checked out on Windows: no reserved device
+/// names (`nul.log` is `NUL`), no reserved characters, no trailing dot or
+/// space.
+fn portable(name: &str) -> bool {
+    const DEVICES: &[&str] = &["CON", "PRN", "AUX", "NUL"];
+    let stem = name.split('.').next().unwrap_or(name).to_ascii_uppercase();
+    let device = DEVICES.contains(&stem.as_str())
+        || ((stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.len() == 4
+            && stem.as_bytes()[3].is_ascii_digit());
+    let bad_char = name
+        .chars()
+        .any(|c| c.is_control() || "<>:\"|?*\\".contains(c));
+    !device && !bad_char && !name.ends_with(['.', ' '])
+}
+
 #[test]
 fn fixtures_are_classified() {
     let root = fixtures_root();
@@ -487,6 +503,13 @@ fn fixtures_are_classified() {
             let name = entry.file_name().unwrap().to_string_lossy().into_owned();
             if entry.is_dir() {
                 for file in sorted_entries(&entry) {
+                    let file_name = file.file_name().unwrap().to_string_lossy().into_owned();
+                    if !portable(&file_name) {
+                        problems.push(format!(
+                            "{tree}/{name}/{file_name}: not a valid Windows file name \
+                             (reserved device name, character or trailing dot/space)"
+                        ));
+                    }
                     if file.is_dir() {
                         problems.push(format!(
                             "{tree}/{name}/{}: nested directory (use <format>/<file>)",

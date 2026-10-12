@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ nul.log — UTF-8 text, LF line endings, 180 lines  [0x0+0x1410]
+▾ nul-bytes.log — UTF-8 text, LF line endings, 180 lines  [0x0+0x1410]
     Encoding: "UTF-8"
     Line endings: "LF" — 180 LF, 0 CRLF, 0 CR
   ▾ Lines — 180 lines  [0x0+0x1410]
