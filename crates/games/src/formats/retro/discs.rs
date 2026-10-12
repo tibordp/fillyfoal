@@ -1728,18 +1728,60 @@ declare_format!(pub SATURN = "saturn", "Sega Saturn disc", ["iso", "bin"],
 declare_format!(pub DREAMCAST = "dreamcast", "Dreamcast disc (IP.BIN)", ["iso", "bin", "gdi"],
     "application/x-dreamcast-rom", Probe::Custom(dreamcast_probe), dreamcast);
 
-/// Raw 2352-byte-sector dumps start with a 16-byte sync and header.
-async fn sega_base(cx: &Cx, file: Span, magic: &[u8]) -> Result<(u64, Span)> {
+/// Bytes per raw CD sector.
+const RAW_SECTOR: u64 = 2352;
+
+/// The system area to read the headers from. A 2048-byte-sector image is
+/// used as is. A raw (2352-byte-sector) dump frames every 2048 bytes of
+/// user data with a sync, a header (and for Mode 2 a subheader) and
+/// EDC/ECC, and the system areas run over many sectors (the Saturn IP to
+/// 0x1800, the Dreamcast IP to 0x8000, the Sega CD IP and SP), so the user
+/// data of every sector is gathered into one piecewise source, which is
+/// also offered whole when it carries an ISO 9660 file system.
+async fn sega_base(cx: &Cx, input: Input, magic: &[u8]) -> Result<Span> {
+    let file = input.span;
     let head = cx.read_avail(file.sub(0, 0x20)).await?;
     if head.starts_with(magic) {
-        return Ok((0, file));
+        return Ok(file);
     }
+    let user: u64 = if head.get(15) == Some(&2) { 24 } else { 16 };
     cx.emit(
         Node::new("Sector sync and header")
-            .span(file.sub(0, 0x10))
+            .span(file.sub(0, user))
             .desc("Raw (2352-byte) sector dump"),
     );
-    Ok((0x10, file.tail(0x10)))
+    let sectors = file.len.div_ceil(RAW_SECTOR);
+    let mut pieces = Vec::new();
+    for i in 0..sectors {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        let data = file.sub(i.saturating_mul(RAW_SECTOR).saturating_add(user), 2048);
+        if data.len > 0 {
+            pieces.push(data);
+        }
+    }
+    let area = cx
+        .add_pieces_stepped(
+            crate::span::Origin {
+                parent: file,
+                transform: "cd-user-data",
+            },
+            &pieces,
+        )
+        .await?;
+    // Offered whole only when it holds a file system: the headers below
+    // already cover a bare system area.
+    let id = cx.read_avail(area.sub(0x8001, 5)).await?;
+    if id.as_slice() != b"CD001" {
+        return Ok(area);
+    }
+    cx.emit(embedded("User data", input.nested(area)).summary(format!(
+        "{} of {} sectors",
+        size(area.len),
+        sectors
+    )));
+    Ok(area)
 }
 
 record! {
@@ -1771,7 +1813,7 @@ async fn sega_cd(cx: Cx, input: Input) -> Result<()> {
     } else {
         b"SEGADISCSYSTEM  "
     };
-    let (_, area) = sega_base(&cx, input.span, magic).await?;
+    let area = sega_base(&cx, input, magic).await?;
     let span = area.sub(0, SegaCdVolume::SIZE);
     let v: SegaCdVolume = read_record(&cx, span, BE).await?;
     cx.emit(SegaCdVolume::node("Volume header", span, BE));
@@ -1842,7 +1884,7 @@ record! {
 }
 
 async fn saturn(cx: Cx, input: Input) -> Result<()> {
-    let (_, area) = sega_base(&cx, input.span, b"SEGA SEGASATURN ").await?;
+    let area = sega_base(&cx, input, b"SEGA SEGASATURN ").await?;
     let span = area.sub(0, SaturnHeader::SIZE);
     let h: SaturnHeader = read_record(&cx, span, BE).await?;
     cx.emit(SaturnHeader::node("System ID", span, BE));
@@ -1881,7 +1923,7 @@ record! {
 }
 
 async fn dreamcast(cx: Cx, input: Input) -> Result<()> {
-    let (_, area) = sega_base(&cx, input.span, b"SEGA SEGAKATANA ").await?;
+    let area = sega_base(&cx, input, b"SEGA SEGAKATANA ").await?;
     let span = area.sub(0, DreamcastHeader::SIZE);
     let h: DreamcastHeader = read_record(&cx, span, LE).await?;
     cx.emit(DreamcastHeader::node("Meta information", span, LE));
