@@ -840,3 +840,6 @@ closely enough to credit:
   `cp950` and `big5hkscs` codecs (PSF License 2.0), whose mappings follow the Unicode
   Consortium's and Microsoft's published code page tables and the Hong Kong SAR
   government's HKSCS-2004.
+- TempleOS formats (`crates/exec/src/formats/executable/templeos.rs` and the other TempleOS
+  dissectors) and test fixtures from the TempleOS V5.03 distribution: Terry A. Davis's
+  TempleOS (public domain).

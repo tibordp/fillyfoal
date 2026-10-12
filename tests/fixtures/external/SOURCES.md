@@ -1296,3 +1296,17 @@ storage (`.raw.zst`).
 | `mdraid/r5-a.img.raw.zst` | as above | same script: first member of a three-disk RAID5, metadata 1.2, left-symmetric, 512 KiB chunks |
 | `android-super/super-avb.img.raw.zst` | AOSP lpmake (system/extras `partition_tools` fc2494a2abd7ab21774d03deb09c1362bbb0bba8, system/core `fs_mgr/liblp` a3b721a32242006b59cb12bd62c9133632af3a2d, built by `build-lptools.sh` against Ubuntu's android-libbase 34.0.5), AOSP avbtool 1.4.0 (platform/external/avb c5066a96caa7bf4150c0a8cc8cc14ab81733fdc7, MIT; fetched into /tmp, not committed), OpenSSL 3.5.5 | `make-super.sh`: a 4 MiB super device with two 8 KiB metadata slots, group `main` with `system` (48 KiB of filler with an AVB hashtree footer, no FEC, in 128 KiB) and `vendor` (48 KiB of filler with an AVB hash footer in 128 KiB), then `avbtool add_hash_footer` over the whole image in a 5 MiB partition `super`, signed SHA256_RSA2048 with a throwaway key; checked against `lpdump` and `avbtool info_image`. The key is new per run, so key and signature bytes differ between runs |
 | `android-super/super-ab.img.raw.zst` | AOSP lpmake (as above) | same script: three metadata slots, groups `main_a`/`main_b`, `system_a`/`vendor_a` with the images above and empty `system_b`/`vendor_b`; no footer; reproduced byte-for-byte; checked against `lpdump` |
+
+## TempleOS V5.03: binary modules and the kernel
+
+From the official TempleOS V5.03 distribution ISO (`TempleOS.ISO`,
+17,350,656 bytes, SHA-256
+`5d0fc944e5d89c155c0fc17c148646715bc1db6fa5750c0b913772cfec19ba26`,
+<https://web.archive.org/web/2017id_/http://www.templeos.org/Downloads/TempleOS.ISO>).
+Public domain (TempleOS). Extracted from its RedSea file system by
+`tests/data/templeos-bin/extract_iso.py`; unchanged.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `templeos-kernel/0000Kernel.BIN.C` | TempleOS V5.03 HolyC compiler (`Cmp` of `Kernel/Kernel.PRJ`) | `/0000Boot/0000Kernel.BIN.C` in the ISO, stored contiguous and uncompressed; SHA-256 `5ee34ca1bcda574028d15c414a02541aa3d55d6981ac2f83aea0c75b9447ed5b` |
+| `templeos-bin/Compiler.BIN` | TempleOS V5.03 HolyC compiler (`Cmp` of `Compiler/Compiler.PRJ`) | `/Compiler/Compiler.BIN.Z` in the ISO, expanded with `TOSZ` built from the TempleOS sources' `Linux/TOSZ.CPP` (host `c++`); SHA-256 `1107033cc1c6bb508f9995d5ea1ad5e440b18c0ff2ac1fea69cc5b4d3d9f7d97` |

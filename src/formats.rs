@@ -216,6 +216,10 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "exec")]
     &executable::pef::FORMAT,
     #[cfg(feature = "exec")]
+    &executable::templeos::KERNEL,
+    #[cfg(feature = "exec")]
+    &executable::templeos::FORMAT,
+    #[cfg(feature = "exec")]
     &bytecode::ocaml::FORMAT,
     #[cfg(feature = "exec")]
     &bytecode::hermes::FORMAT,
