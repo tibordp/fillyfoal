@@ -839,6 +839,10 @@ Generated in `/tmp/fixtures/<format>` with the scripts named below
 | `avro/events-deflate.avro` | fastavro 1.12.1 | same script, deflate codec; reproduced byte-for-byte |
 | `parquet/_metadata` | pyarrow 26.0.0 (parquet-cpp-arrow 26.0.0) | `tests/data/parquet/make_fixtures.py`: `pq.write_metadata` summary file of a one-file dataset, column chunks pointing into `part0.parquet` (`ColumnChunk.file_path`; that file is written and deleted again); reproduced byte-for-byte |
 | `parquet/plaintext-footer.parquet` | pyarrow 26.0.0 (parquet-cpp-arrow 26.0.0) | `tests/data/parquet/make_plaintext_footer.py`: modular encryption with a plaintext (signed) footer, `PAR1` at both ends, AES-GCM, one encrypted column (its page headers encrypted too) and one plaintext column, throwaway keys from a toy in-memory KMS; data keys and nonces are random, so not byte-reproducible; read back with pyarrow |
+| `r-serialized/ascii.rds` | R 4.4.1 | `tests/data/r-serialized/make_r.R`: `saveRDS(..., ascii = TRUE, compress = FALSE)` (`A\n` format) of a named list with escaped strings, NA, Inf, NaN, logicals, a complex and a raw vector; reproduced byte-for-byte |
+| `r-serialized/ascii.RData` | R 4.4.1 | same script: `save(..., ascii = TRUE, compress = FALSE)` (RDA3); reproduced byte-for-byte |
+| `r-serialized/native.rds` | R 4.4.1 | same script: `serialize(..., xdr = FALSE)` (`B\n`, little-endian) of the same list, written with `writeBin`; reproduced byte-for-byte |
+| `r-serialized/closure.rds` | R 4.4.1 | same script: a list of a closure, an environment (`new.env()`, hashed) and a byte-compiled closure (`compiler::cmpfun`); reproduced byte-for-byte |
 ## Embedded databases and torrents
 | `gdbm/dbm-gnu.gdbm` | GNU dbm 1.23 via Python 3.12 `dbm.gnu` (python:3.12-slim, Debian) | `tests/data/gdbm/make.sh`: 5 keys, 64-bit offsets (magic 0x13579acf), 4 KiB blocks; reproduced byte-for-byte |
 | `gdbm/numsync.gdbm` | GNU dbm 1.23 `gdbmtool -n -x -b 512` (debian:bookworm-slim) | same script: extended (numsync) header, magic 0x13579ad1, 512-byte blocks, 3 keys; reproduced byte-for-byte |
