@@ -589,7 +589,7 @@ async fn scan(cx: &Cx, ts: &Ts) -> Result<Psi> {
     let mut psi = Psi::default();
     let limit = ts.count.min(SCAN_PACKETS);
     let mut asm: BTreeMap<u16, Assembly> = BTreeMap::new();
-    let mut seen: BTreeSet<(u16, u8, u16, u8, u8)> = BTreeSet::new();
+    let mut seen: BTreeSet<SectionKey> = BTreeSet::new();
     let mut captures: BTreeMap<u16, Capture> = BTreeMap::new();
     let m2ts = ts.m2ts();
     let mut i = 0u64;
@@ -724,11 +724,17 @@ fn es_detail(codec: &str, d: &[u8]) -> Option<String> {
     }
 }
 
+/// What makes a section distinct: PID, table id, and for sections with
+/// syntax the extension, version and section number; SCTE-35 sections,
+/// which have none of those, are told apart by their CRC (each splice
+/// command differs; a repeated one is the same section sent again).
+type SectionKey = (u16, u8, u16, u8, u8, u32);
+
 /// Files a reassembled section: PAT, PMT and SDT feed the program model,
 /// the rest is kept for display.
 fn take_section(
     psi: &mut Psi,
-    seen: &mut BTreeSet<(u16, u8, u16, u8, u8)>,
+    seen: &mut BTreeSet<SectionKey>,
     pid: u16,
     d: &[u8],
     span: Span,
@@ -746,9 +752,13 @@ fn take_section(
             u16_be(d, 3).unwrap_or(0),
             (d.get(5).copied().unwrap_or(0) >> 1) & 0x1f,
             d.get(6).copied().unwrap_or(0),
+            0,
         )
+    } else if table == 0xfc {
+        let crc = u32_be(d, d.len().saturating_sub(4)).unwrap_or(0);
+        (pid, table, 0, 0, 0, crc)
     } else {
-        (pid, table, 0, 0, 0)
+        (pid, table, 0, 0, 0, 0)
     };
     if !seen.insert(key) {
         return;
