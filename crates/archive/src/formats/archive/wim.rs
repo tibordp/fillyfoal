@@ -14,12 +14,13 @@
 //! stream at an offset into the run's resources' decoded data, one after
 //! another (wimlib's `blob_table.c`).
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
 use crate::codec::{Codec, wim};
 use crate::cx::Cx;
-use crate::dsl::Record;
+use crate::dsl::{Path, Record};
 use crate::error::Diagnostic;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, struct_node};
@@ -226,13 +227,21 @@ impl Scheme {
     }
 
     /// A node for a resource's (possibly compressed) data.
-    fn data(self, input: Input, data: Span, r: &Resource, name: &'static str) -> Node {
+    fn data(
+        self,
+        input: Input,
+        data: Span,
+        r: &Resource,
+        name: &'static str,
+        label: &'static str,
+    ) -> Node {
         if r.flags & FLAG_COMPRESSED == 0 {
-            return embedded("Data", input.nested(data));
+            // Like a stream in a solid resource: unrecognised content is plain data.
+            return content(label, input, data, Codec::Stored, Some(r.original));
         }
         match self.codec(r) {
-            Some(codec) => content("Data", input, data, codec, Some(r.original)),
-            None => unsupported("Data", data, name),
+            Some(codec) => content(label, input, data, codec, Some(r.original)),
+            None => unsupported(label, data, name),
         }
     }
 }
@@ -299,7 +308,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     .lazy(compressed_lookup, (input, data, codec, scheme, c)),
                 None => unsupported("Data", data, codec),
             },
-            (_, true) => scheme.data(input, data, &r, codec),
+            (_, true) => scheme.data(input, data, &r, codec, "Data"),
             ("Lookup table", false) => Node::new("Entries")
                 .span(data)
                 .summary(count(r.size / LOOKUP_ENTRY, "entry", "entries"))
@@ -352,24 +361,92 @@ struct SolidRun {
     resources: Vec<(Span, Option<SolidHeader>, u64)>,
 }
 
-async fn lookup_table(
-    cx: Cx,
-    (input, span, codec, scheme): (Input, Span, &'static str, Scheme),
-) -> Result<()> {
+/// One lookup table entry.
+#[derive(Clone, Debug)]
+struct Entry {
+    r: Resource,
+    part: u16,
+    refs: u32,
+    hash: [u8; 20],
+    /// Whether it is part of a solid run.
+    solid: bool,
+    /// The solid run it is in (an index into [`Table::runs`]).
+    run: Option<usize>,
+}
+
+impl Entry {
+    /// Whether it is a stream in solid resources (not a resource).
+    fn in_solid(&self) -> bool {
+        self.solid && self.r.original != SOLID_RESOURCE
+    }
+
+    /// The stream's decoded size.
+    fn size(&self) -> u64 {
+        if self.in_solid() {
+            self.r.size
+        } else {
+            self.r.original
+        }
+    }
+}
+
+/// A lookup table, read once per expansion that needs it: its entries,
+/// solid runs, and the streams by SHA-1.
+struct Table {
+    file: Span,
+    entries: Vec<Entry>,
+    runs: Vec<Run>,
+    by_hash: BTreeMap<[u8; 20], usize>,
+}
+
+impl Table {
+    fn find(&self, hash: &[u8; 20]) -> Option<&Entry> {
+        self.entries.get(*self.by_hash.get(hash)?)
+    }
+
+    /// A node for an entry's data.
+    fn content(
+        &self,
+        e: &Entry,
+        input: Input,
+        scheme: Scheme,
+        codec: &'static str,
+        label: &'static str,
+    ) -> Node {
+        let r = e.r;
+        let stream = self.file.sub(r.offset, r.size);
+        match e.run.and_then(|i| self.runs.get(i)) {
+            Some(run) if e.in_solid() => Node::new(label)
+                .summary(fmt::size(r.size))
+                .lazy(solid_stream, (input, run.clone(), r.offset, r.size)),
+            _ if e.solid => Node::new("Solid resource")
+                .span(stream)
+                .lazy(solid_resource, (input, stream)),
+            _ => scheme.data(input, stream, &r, codec, label),
+        }
+    }
+}
+
+/// The lookup table decoded at `span` (cached).
+async fn table(cx: &Cx, file: Span, span: Span, scheme: Scheme) -> Result<Arc<Table>> {
+    if let Some(t) = cx.cached::<Table>(span, "wim-lookup") {
+        return Ok(t);
+    }
     let n = span.len / LOOKUP_ENTRY;
-    cx.set_count(Count::Exact(n));
     let data = cx.read(span.sub(0, n.saturating_mul(LOOKUP_ENTRY))).await?;
-    let file = input.span;
     let entry_at = |i: u64| crate::bytes::to_usize(i.saturating_mul(LOOKUP_ENTRY));
+    let mut entries = Vec::new();
+    let mut runs: Vec<Run> = Vec::new();
+    let mut by_hash = BTreeMap::new();
     // The run the current entry is in, and the index after its last entry.
-    let mut run: Option<(u64, Run)> = None;
+    let mut run: Option<(u64, usize)> = None;
     for i in 0..n {
         let at = entry_at(i);
         let Some(r) = resource(&data, at) else {
             break;
         };
         let solid = scheme.solid(&r);
-        if solid && run.as_ref().is_none_or(|(end, _)| i >= *end) {
+        if solid && run.is_none_or(|(end, _)| i >= end) {
             // A new run: find its end and its resources.
             let mut resources = Vec::new();
             let mut j = i;
@@ -389,31 +466,56 @@ async fn lookup_table(
                 i.saturating_mul(LOOKUP_ENTRY),
                 j.saturating_sub(i).saturating_mul(LOOKUP_ENTRY),
             );
-            run = Some((
-                j,
-                Run {
-                    entries,
-                    resources: resources.into(),
-                },
-            ));
+            runs.push(Run {
+                entries,
+                resources: resources.into(),
+            });
+            run = Some((j, runs.len().saturating_sub(1)));
         }
-        let entry = span.sub(i.saturating_mul(LOOKUP_ENTRY), LOOKUP_ENTRY);
-        let part = u16_le(&data, at.saturating_add(24)).unwrap_or(0);
-        let refs = u32_le(&data, at.saturating_add(26)).unwrap_or(0);
-        let hash = data
-            .get(at.saturating_add(30)..at.saturating_add(50))
-            .unwrap_or_default()
-            .to_vec();
-        let stream = file.sub(r.offset, r.size);
-        let in_solid = solid && r.original != SOLID_RESOURCE;
-        let content = match &run {
-            Some((_, run)) if in_solid => Node::new("Data")
-                .summary(fmt::size(r.size))
-                .lazy(solid_stream, (input, run.clone(), r.offset, r.size)),
-            _ if solid => Node::new("Solid resource")
+        let e = Entry {
+            r,
+            part: u16_le(&data, at.saturating_add(24)).unwrap_or(0),
+            refs: u32_le(&data, at.saturating_add(26)).unwrap_or(0),
+            hash: hash20(&data, at.saturating_add(30)),
+            solid,
+            run: run.filter(|_| solid).map(|(_, k)| k),
+        };
+        if !(solid && r.original == SOLID_RESOURCE) && e.hash != [0; 20] {
+            by_hash.entry(e.hash).or_insert(entries.len());
+        }
+        entries.push(e);
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+    }
+    let t = Arc::new(Table {
+        file,
+        entries,
+        runs,
+        by_hash,
+    });
+    cx.cache(span, "wim-lookup", Arc::clone(&t));
+    Ok(t)
+}
+
+async fn lookup_table(
+    cx: Cx,
+    (input, span, codec, scheme): (Input, Span, &'static str, Scheme),
+) -> Result<()> {
+    let table = table(&cx, input.span, span, scheme).await?;
+    cx.set_count(Count::Exact(to_u64(table.entries.len())));
+    for (i, e) in table.entries.iter().enumerate() {
+        let r = e.r;
+        let entry = span.sub(to_u64(i).saturating_mul(LOOKUP_ENTRY), LOOKUP_ENTRY);
+        let in_solid = e.in_solid();
+        let content = if r.flags & 0x02 != 0 && !e.solid {
+            let stream = input.span.sub(r.offset, r.size);
+            Node::new("Image metadata")
                 .span(stream)
-                .lazy(solid_resource, (input, stream)),
-            _ => scheme.data(input, stream, &r, codec),
+                .summary("security data and directory tree")
+                .lazy(metadata, (input, stream, r, scheme, codec, span))
+        } else {
+            table.content(e, input, scheme, codec, "Data")
         };
         let children = vec![
             struct_node(
@@ -425,17 +527,17 @@ async fn lookup_table(
             ),
             Node::new("Part number")
                 .span(entry.sub(24, 2))
-                .value(uint(part, 64)),
+                .value(uint(e.part, 64)),
             Node::new("Reference count")
                 .span(entry.sub(26, 4))
-                .value(uint(refs, 64)),
+                .value(uint(e.refs, 64)),
             Node::new("SHA-1")
                 .span(entry.sub(30, 20))
-                .value(Value::Bytes(hash.clone())),
+                .value(Value::Bytes(e.hash.to_vec())),
             content,
         ];
-        let hex_hash: String = hash.iter().take(6).map(|b| format!("{b:02x}")).collect();
-        let (name, summary) = if solid && !in_solid {
+        let hex_hash: String = e.hash.iter().take(6).map(|b| format!("{b:02x}")).collect();
+        let (name, summary) = if e.solid && !in_solid {
             (
                 "solid resource".to_string(),
                 format!("{} compressed", fmt::size(r.size)),
@@ -529,4 +631,377 @@ async fn solid_stream(cx: Cx, (input, run, offset, size): (Input, Run, u64, u64)
     };
     let decoded = cx.decode_lazy(*span, &codec, h.size)?;
     dissect_or_data(cx, input.nested(decoded.sub(within, size))).await
+}
+
+// ---------------------------------------------------------------------------
+// Metadata resources: an image's security data and directory tree
+// (wimlib's `security.c` and `dentry.c`; Microsoft documents neither).
+//
+// The decoded resource starts with the security data: a 32-bit total
+// length, a 32-bit descriptor count, a 64-bit size per descriptor, then the
+// self-relative security descriptors back to back. The root directory
+// entry follows at the total length rounded up to 8. A directory entry is
+// a 102-byte fixed part (its length, attributes, security ID, the offset of
+// its children's list, three FILETIMEs, the SHA-1 of its unnamed stream,
+// reparse tag or hard link group, the count of extra stream entries and the
+// sizes of its UTF-16 names), the long and short names (each followed by a
+// NUL unit), padding to 8 bytes, then the extra stream entries (length,
+// reserved, SHA-1, name size, name; each padded to 8). A list of children
+// is a run of entries ended by one whose length is under 102 (0 or 8).
+
+/// Size of the fixed part of a directory entry.
+const DENTRY: u64 = 102;
+/// Size of the fixed part of an extra stream entry.
+const STREAM_ENTRY: u64 = 38;
+/// Deepest directory nesting followed.
+const MAX_DEPTH: usize = 256;
+
+fn align8(n: u64) -> u64 {
+    n.saturating_add(7) & !7
+}
+
+/// What the expanders of a metadata resource share.
+#[derive(Clone)]
+struct Meta {
+    input: Input,
+    /// The decoded resource.
+    data: Span,
+    table: Arc<Table>,
+    scheme: Scheme,
+    codec: &'static str,
+}
+
+/// Expander: a metadata resource, decoded, with its security data and
+/// directory tree.
+async fn metadata(
+    cx: Cx,
+    (input, stream, r, scheme, codec, lookup): (Input, Span, Resource, Scheme, &'static str, Span),
+) -> Result<()> {
+    let data = if r.flags & FLAG_COMPRESSED == 0 {
+        stream
+    } else {
+        let Some(c) = scheme.codec(&r) else {
+            return Err(Diagnostic::unsupported(format!("{codec} compression")).at(stream));
+        };
+        if crate::formats::decodes_lazily(stream, &c, r.original) {
+            cx.decode_lazy(stream, &c, r.original)?
+        } else {
+            let decoded = crate::codec::decode_span(&cx, stream, &c, Some(r.original)).await?;
+            if let Some(e) = decoded.error {
+                cx.diag(e);
+            }
+            decoded.span
+        }
+    };
+    let table = table(&cx, input.span, lookup, scheme).await?;
+    let meta = Meta {
+        input,
+        data,
+        table,
+        scheme,
+        codec,
+    };
+    let head = cx.read(data.sub_exact(0, 8)?).await?;
+    let total = u64::from(u32_le(&head, 0).unwrap_or(0));
+    let entries = u64::from(u32_le(&head, 4).unwrap_or(0));
+    cx.emit(
+        Node::new("Security data")
+            .span(data.sub(0, total))
+            .summary(count(entries, "descriptor", "descriptors"))
+            .lazy(security_data, data),
+    );
+    let root = align8(total);
+    let d = read_dentry(&cx, data, root)
+        .await?
+        .ok_or_else(|| Diagnostic::malformed("no root directory entry").at(data.sub(root, 8)))?;
+    cx.emit(dentry_node(&meta, &d, "Root directory", Path::new()));
+    Ok(())
+}
+
+/// Expander: the security data at the start of a metadata resource.
+async fn security_data(cx: Cx, data: Span) -> Result<()> {
+    let head = cx.read(data.sub_exact(0, 8)?).await?;
+    let total = u64::from(u32_le(&head, 0).unwrap_or(0));
+    let n = u64::from(u32_le(&head, 4).unwrap_or(0));
+    cx.emit(Node::new("Total length").span(data.sub(0, 4)).value(uint(total, 64)));
+    cx.emit(Node::new("Descriptor count").span(data.sub(4, 4)).value(uint(n, 64)));
+    let sizes_span = data.sub_exact(8, n.saturating_mul(8))?;
+    if n.saturating_mul(8).saturating_add(8) > total {
+        return Err(Diagnostic::malformed("descriptor sizes run past the security data").at(sizes_span));
+    }
+    let sizes = cx.read(sizes_span).await?;
+    cx.emit(Node::new("Descriptor sizes").span(sizes_span));
+    cx.set_count(Count::Exact(n.saturating_add(3)));
+    let mut at = sizes_span.len.saturating_add(8);
+    for (i, size) in sizes.as_chunks::<8>().0.iter().map(|b| u64::from_le_bytes(*b)).enumerate() {
+        let span = data.sub(at, size);
+        if at.saturating_add(size) > total {
+            cx.push(Node::new(format!("Descriptor {i}")).span(span).diag(
+                Diagnostic::malformed("runs past the security data"),
+            ))
+            .await;
+            break;
+        }
+        // Descriptors are small (at most 64 KiB); read each one for its summary.
+        let bytes = cx.read(span.sub(0, 0x1_0000)).await?;
+        cx.push(
+            Node::new(format!("Descriptor {i}"))
+                .span(span)
+                .summary(crate::formats::util::winsec::sd_summary(&bytes))
+                .lazy(
+                    crate::formats::util::winsec::security_descriptor,
+                    (span, crate::formats::util::winsec::FILE_RIGHTS),
+                ),
+        )
+        .await;
+        at = at.saturating_add(size);
+    }
+    Ok(())
+}
+
+/// The span of security descriptor `id` of a metadata resource.
+async fn descriptor_span(cx: &Cx, data: Span, id: u32) -> Option<Span> {
+    let head = cx.read(data.sub_exact(0, 8).ok()?).await.ok()?;
+    let total = u64::from(u32_le(&head, 0)?);
+    let n = u32_le(&head, 4)?;
+    if id >= n {
+        return None;
+    }
+    let count = u64::from(id).saturating_add(1);
+    let sizes = cx.read(data.sub_exact(8, count.saturating_mul(8)).ok()?).await.ok()?;
+    let mut at = u64::from(n).saturating_mul(8).saturating_add(8);
+    let mut size = 0;
+    for (i, chunk) in sizes.as_chunks::<8>().0.iter().enumerate() {
+        size = u64::from_le_bytes(*chunk);
+        if to_u64(i) < u64::from(id) {
+            at = at.saturating_add(size);
+        }
+    }
+    (at.saturating_add(size) <= total).then(|| data.sub(at, size))
+}
+
+/// An extra stream entry of a directory entry.
+#[derive(Clone, Debug)]
+struct ExtraStream {
+    span: Span,
+    hash: [u8; 20],
+    name: String,
+}
+
+/// A directory entry, as read.
+#[derive(Clone, Debug)]
+struct Dentry {
+    /// The fixed part, names and padding (not the extra stream entries).
+    span: Span,
+    attributes: u32,
+    security_id: i32,
+    subdir: u64,
+    hash: [u8; 20],
+    name: String,
+    streams: Vec<ExtraStream>,
+    /// Offset of the next entry in the list.
+    next: u64,
+}
+
+impl Dentry {
+    fn is_dir(&self) -> bool {
+        self.attributes & 0x10 != 0
+    }
+
+    /// The SHA-1 of the unnamed data stream: the default one, or (when
+    /// there are named streams, as wimlib writes them) the extra stream
+    /// entry with no name.
+    fn unnamed(&self) -> [u8; 20] {
+        if self.hash != [0; 20] {
+            return self.hash;
+        }
+        self.streams
+            .iter()
+            .find(|s| s.name.is_empty())
+            .map_or([0; 20], |s| s.hash)
+    }
+}
+
+fn hash20(b: &[u8], at: usize) -> [u8; 20] {
+    b.get(at..at.saturating_add(20))
+        .and_then(|h| h.try_into().ok())
+        .unwrap_or([0; 20])
+}
+
+/// The directory entry at `offset` of `data`, or `None` for the end of a
+/// list.
+async fn read_dentry(cx: &Cx, data: Span, offset: u64) -> Result<Option<Dentry>> {
+    let first = cx.read(data.sub(offset, 8)).await?;
+    let length = u64_le(&first, 0).unwrap_or(0);
+    if length < DENTRY {
+        return Ok(None);
+    }
+    let span = data.sub_exact(offset, length)?;
+    let b = cx.read(span.sub(0, DENTRY)).await?;
+    let name_len = u64::from(u16_le(&b, 100).unwrap_or(0));
+    let name_bytes = cx.read(span.sub(DENTRY, name_len)).await?;
+    let mut next = offset.saturating_add(align8(length));
+    let mut streams = Vec::new();
+    for _ in 0..u16_le(&b, 96).unwrap_or(0) {
+        let head = cx.read(data.sub(next, STREAM_ENTRY)).await?;
+        let len = u64_le(&head, 0).unwrap_or(0);
+        if len < STREAM_ENTRY {
+            return Err(Diagnostic::malformed("extra stream entry shorter than 38 bytes")
+                .at(data.sub(next, 8)));
+        }
+        let s = data.sub_exact(next, len)?;
+        let n = u64::from(u16_le(&head, 36).unwrap_or(0));
+        let name = crate::text::utf16(&cx.read(s.sub(STREAM_ENTRY, n)).await?, Endian::Little);
+        streams.push(ExtraStream {
+            span: s,
+            hash: hash20(&head, 16),
+            name,
+        });
+        next = next.saturating_add(align8(len));
+    }
+    Ok(Some(Dentry {
+        span,
+        attributes: u32_le(&b, 8).unwrap_or(0),
+        security_id: u32_le(&b, 12).unwrap_or(u32::MAX).cast_signed(),
+        subdir: u64_le(&b, 16).unwrap_or(0),
+        hash: hash20(&b, 64),
+        name: crate::text::utf16(&name_bytes, Endian::Little),
+        streams,
+        next,
+    }))
+}
+
+/// A lazy node for a directory entry, named `name` (its own name if empty).
+fn dentry_node(meta: &Meta, d: &Dentry, name: &str, path: Path) -> Node {
+    let label = if name.is_empty() { d.name.clone() } else { name.to_owned() };
+    let summary = if d.is_dir() {
+        "directory".to_owned()
+    } else {
+        meta.table
+            .find(&d.unnamed())
+            .map_or_else(|| "empty".to_owned(), |e| fmt::size(e.size()))
+    };
+    let offset = d.span.offset.saturating_sub(meta.data.offset);
+    Node::new(label)
+        .span(d.span)
+        .summary(summary)
+        .lazy(crate::expander!(self::dentry: (Meta, u64, Path)), (meta.clone(), offset, path))
+}
+
+/// Expander: a directory entry's fields, security descriptor and streams,
+/// then (for a directory) its children.
+async fn dentry(cx: Cx, (meta, offset, path): (Meta, u64, Path)) -> Result<()> {
+    let Some(d) = read_dentry(&cx, meta.data, offset).await? else {
+        return Err(Diagnostic::malformed("not a directory entry").at(meta.data.sub(offset, 8)));
+    };
+    cx.emit(struct_node("Entry", d.span, LE, (), dentry_layout));
+    if let Ok(id) = u32::try_from(d.security_id)
+        && let Some(span) = descriptor_span(&cx, meta.data, id).await
+    {
+        cx.emit(
+            Node::new("Security descriptor")
+                .span(span)
+                .value(uint(id, 64))
+                .lazy(
+                    crate::formats::util::winsec::security_descriptor,
+                    (span, crate::formats::util::winsec::FILE_RIGHTS),
+                ),
+        );
+    }
+    if !d.is_dir() && d.hash != [0; 20] {
+        cx.emit(stream_node(&meta, "Content", &d.hash));
+    }
+    for s in &d.streams {
+        let name = if s.name.is_empty() {
+            "Unnamed stream".to_owned()
+        } else {
+            format!("Stream \"{}\"", s.name)
+        };
+        let mut node = struct_node(name, s.span, LE, (), stream_entry_layout);
+        if s.hash != [0; 20] {
+            node = node.summary(
+                meta.table
+                    .find(&s.hash)
+                    .map_or_else(|| "not in the lookup table".to_owned(), |e| fmt::size(e.size())),
+            );
+        }
+        cx.emit(node);
+        if s.hash != [0; 20] {
+            let label = if s.name.is_empty() { "Content" } else { "Stream content" };
+            cx.emit(stream_node(&meta, label, &s.hash));
+        }
+    }
+    if !d.is_dir() || d.subdir == 0 {
+        return Ok(());
+    }
+    let path = path.enter(d.subdir, MAX_DEPTH)?;
+    let mut at = d.subdir;
+    while at < meta.data.len {
+        let Some(child) = read_dentry(&cx, meta.data, at).await? else {
+            break;
+        };
+        cx.push(dentry_node(&meta, &child, "", path.clone())).await;
+        if child.next <= at {
+            break;
+        }
+        at = child.next;
+    }
+    Ok(())
+}
+
+/// A node for the stream with SHA-1 `hash`, from the lookup table.
+fn stream_node(meta: &Meta, name: &'static str, hash: &[u8; 20]) -> Node {
+    match meta.table.find(hash) {
+        Some(e) => meta.table.content(e, meta.input, meta.scheme, meta.codec, name),
+        None => Node::new(name).diag(Diagnostic::malformed("stream not in the lookup table")),
+    }
+}
+
+fn dentry_layout(f: &mut Fields<'_>, (): &()) -> Result<()> {
+    f.u64("Length").emit()?;
+    let attributes = f
+        .u32("Attributes")
+        .flags(crate::formats::disk::ntfs::FILE_ATTRIBUTES)
+        .emit()?;
+    f.i32("Security ID")
+        .with(|&id, n| if id < 0 { n.summary("none") } else { n })
+        .emit()?;
+    f.u64("Subdirectory offset").hex().emit()?;
+    f.u64("Unused 1").emit()?;
+    f.u64("Unused 2").emit()?;
+    f.u64("Creation time").filetime().emit()?;
+    f.u64("Last access time").filetime().emit()?;
+    f.u64("Last write time").filetime().emit()?;
+    f.bytes("SHA-1 of the unnamed stream", 20).emit()?;
+    f.u32("Unknown").hex().emit()?;
+    if attributes & 0x400 != 0 {
+        f.u32("Reparse tag").hex().emit()?;
+        f.u16("Reparse reserved").emit()?;
+        f.u16("Reparse flags").hex().emit()?;
+    } else {
+        f.u64("Hard link group").hex().emit()?;
+    }
+    f.u16("Extra stream entries").emit()?;
+    let short = f.u16("Short name size").emit()?;
+    let long = f.u16("Name size").emit()?;
+    if long > 0 {
+        f.utf16("Name", u64::from(long / 2)).emit()?;
+        f.skip(2);
+    }
+    if short > 0 {
+        f.utf16("Short name", u64::from(short / 2)).emit()?;
+        f.skip(2);
+    }
+    Ok(())
+}
+
+fn stream_entry_layout(f: &mut Fields<'_>, (): &()) -> Result<()> {
+    f.u64("Length").emit()?;
+    f.u64("Reserved").emit()?;
+    f.bytes("SHA-1", 20).emit()?;
+    let n = f.u16("Name size").emit()?;
+    if n > 0 {
+        f.utf16("Name", u64::from(n / 2)).emit()?;
+    }
+    Ok(())
 }
