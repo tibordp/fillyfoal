@@ -11,7 +11,9 @@ use std::sync::Arc;
 use super::ptg::{self, Names};
 use super::rec::{self, K, LE, Spec, StrForm, cell_name, column_name, number, quoted, xl_string};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
-use crate::codec::crypto::office::Rc4Key;
+use crate::codec::Codec;
+use crate::codec::crypto::Key;
+use crate::codec::crypto::office::{self, Rc4Key};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
@@ -1401,15 +1403,14 @@ async fn walk_workbook(cx: &Cx, input: Input, stream: Span, decrypted: bool) -> 
     }
     if let Some((body, _)) = filepass
         && !decrypted
-        && biff8
     {
         cx.push(
             Node::new("Decrypted workbook")
                 .span(stream)
                 .summary("the workbook stream decrypted with the password")
                 .lazy(
-                    crate::expander!(self::decrypted_workbook: (Input, Span, Span)),
-                    (input, stream, body),
+                    crate::expander!(self::decrypted_workbook: (Input, Span, Span, bool)),
+                    (input, stream, body, biff8),
                 ),
         )
         .await;
@@ -3434,19 +3435,32 @@ pub async fn early_stream(cx: Cx, input: Input) -> Result<()> {
 /// that is only write-protected).
 const DEFAULT_PASSWORD: &str = "VelvetSweatshop";
 
-/// The key FILEPASS describes, if it is RC4 or RC4 CryptoAPI: a function of
-/// the password, and the verifier check.
-fn filepass_key(data: &[u8], password: &str) -> Option<(Rc4Key, bool)> {
+/// The decryption FILEPASS describes (XOR obfuscation, RC4 or RC4
+/// CryptoAPI) as a codec for the password, and the verifier check; `None`
+/// for an unknown scheme. BIFF5's FILEPASS is XOR obfuscation without the
+/// type field.
+fn filepass_key(data: &[u8], password: &str, biff8: bool) -> Option<(Codec, bool)> {
     let utf16: Vec<u8> = password.encode_utf16().flat_map(u16::to_le_bytes).collect();
-    if u16_le(data, 0)? != 1 {
+    let kind = if biff8 { u16_le(data, 0)? } else { 0 };
+    if kind == 0 {
+        // XOR obfuscation (MS-OFFCRYPTO 2.3.7): key, then verifier.
+        let verifier = u16_le(data, if biff8 { 4 } else { 2 })?;
+        let Some(bytes) = office::xor_password(password) else {
+            return Some((Codec::XlsXor(Key::new(Vec::new())), false));
+        };
+        let ok = office::xor_verifier(&bytes) == verifier;
+        let array = office::xor_array(&bytes);
+        return Some((Codec::XlsXor(Key::new(array.to_vec())), ok));
+    }
+    if kind != 1 {
         return None;
     }
-    match (u16_le(data, 2)?, u16_le(data, 4)?) {
+    let (key, ok) = match (u16_le(data, 2)?, u16_le(data, 4)?) {
         (1, 1) => {
             let salt = data.get(6..22)?;
             let key = Rc4Key::rc4(&utf16, salt);
             let ok = key.verify(data.get(22..38)?, data.get(38..54)?);
-            Some((key, ok))
+            (key, ok)
         }
         (2..=4, 2) => {
             // Flags, header size, then the header: KeySize at offset 16.
@@ -3463,32 +3477,36 @@ fn filepass_key(data: &[u8], password: &str) -> Option<(Rc4Key, bool)> {
             let hash = data.get(h_at..h_at.checked_add(hash_len)?)?;
             let key = Rc4Key::cryptoapi(&utf16, salt, bits);
             let ok = key.verify(encrypted_verifier, hash);
-            Some((key, ok))
+            (key, ok)
         }
-        _ => None,
-    }
+        _ => return None,
+    };
+    Some((Codec::XlsRc4(key), ok))
 }
 
-/// An RC4-encrypted workbook decrypted: Excel's default password is tried
+/// An encrypted workbook decrypted: Excel's default password is tried
 /// first, then the user is asked; the stream is decrypted lazily, as far as
 /// reads reach, and walked like any workbook.
-async fn decrypted_workbook(cx: Cx, (input, stream, filepass): (Input, Span, Span)) -> Result<()> {
+async fn decrypted_workbook(
+    cx: Cx,
+    (input, stream, filepass, biff8): (Input, Span, Span, bool),
+) -> Result<()> {
     let data = cx.read(filepass).await?;
-    let Some((default, ok)) = filepass_key(&data, DEFAULT_PASSWORD) else {
-        return Err(Diagnostic::unsupported(
-            "decrypting this workbook (XOR obfuscation or an unknown scheme)",
-        )
-        .at(filepass));
+    let Some((default, ok)) = filepass_key(&data, DEFAULT_PASSWORD, biff8) else {
+        return Err(
+            Diagnostic::unsupported("decrypting this workbook (an unknown scheme)").at(filepass),
+        );
     };
-    let key = if ok {
+    let codec = if ok {
         default
     } else {
-        let check = |s: &crate::secret::Secret| {
-            filepass_key(&data, &String::from_utf8_lossy(s.expose())).is_some_and(|(_, ok)| ok)
+        let key = |s: &crate::secret::Secret| {
+            filepass_key(&data, &String::from_utf8_lossy(s.expose()), biff8)
         };
+        let check = |s: &crate::secret::Secret| key(s).is_some_and(|(_, ok)| ok);
         match cx.unlock(stream, "Password for the workbook", check).await {
-            Some(secret) => match filepass_key(&data, &String::from_utf8_lossy(secret.expose())) {
-                Some((key, true)) => key,
+            Some(secret) => match key(&secret) {
+                Some((codec, true)) => codec,
                 _ => return Err(Diagnostic::unsupported("encrypted (wrong password)").at(filepass)),
             },
             None => {
@@ -3496,6 +3514,6 @@ async fn decrypted_workbook(cx: Cx, (input, stream, filepass): (Input, Span, Spa
             }
         }
     };
-    let plain = cx.decode_lazy(stream, &crate::codec::Codec::XlsRc4(key), stream.len)?;
+    let plain = cx.decode_lazy(stream, &codec, stream.len)?;
     walk_workbook(&cx, input, plain, true).await
 }

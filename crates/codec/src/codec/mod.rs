@@ -245,6 +245,9 @@ pub enum Codec {
     /// An Excel BIFF8 workbook stream encrypted with RC4 or RC4 CryptoAPI
     /// (see [`crypto::office`]): records after FILEPASS are decrypted.
     XlsRc4(crypto::office::Rc4Key),
+    /// An Excel BIFF5 or BIFF8 workbook stream with XOR obfuscation, with
+    /// this 16-byte XOR array (see [`crypto::office::xor_array`]).
+    XlsXor(crypto::Key),
     /// AES-CBC with this key; the IV is the first 16 bytes and the data is
     /// PKCS#7-padded (PDF AESV2/AESV3).
     AesCbc(crypto::Key),
@@ -348,6 +351,7 @@ impl Codec {
             Codec::AesCtrLe(_) => "aes-ctr",
             Codec::Rc4(_) => "rc4",
             Codec::XlsRc4(_) => "xls-rc4",
+            Codec::XlsXor(_) => "xls-xor",
             Codec::AesCbc(_) => "aes-cbc",
             Codec::AsciiHex => "asciihex",
             Codec::Ascii85 => "ascii85",
@@ -444,6 +448,7 @@ impl Codec {
             Codec::AesCtrLe(_) => "aes-ctr (lazy)",
             Codec::Rc4(_) => "rc4 (lazy)",
             Codec::XlsRc4(_) => "xls-rc4 (lazy)",
+            Codec::XlsXor(_) => "xls-xor (lazy)",
             Codec::AesCbc(_) => "aes-cbc (lazy)",
             Codec::AsciiHex => "asciihex (lazy)",
             Codec::Ascii85 => "ascii85 (lazy)",
@@ -537,6 +542,7 @@ impl Codec {
             | Codec::AesCtrLe(_)
             | Codec::Rc4(_)
             | Codec::XlsRc4(_)
+            | Codec::XlsXor(_)
             | Codec::AesCbc(_)
             | Codec::Eexec { .. } => "decrypted",
             Codec::Lzw { .. }
@@ -616,6 +622,7 @@ impl Codec {
             | Codec::AesCtrLe(_)
             | Codec::Rc4(_)
             | Codec::XlsRc4(_)
+            | Codec::XlsXor(_)
             | Codec::AesCbc(_)
             | Codec::Eexec { .. }
             | Codec::AsciiHex
@@ -817,6 +824,9 @@ impl Codec {
             Codec::Rc4(key) => Box::new(Streaming(crypto::stream::Rc4::new(key))),
             Codec::XlsRc4(key) => Box::new(Streaming(filters::Bytes::new(
                 crypto::office::XlsRc4::new(key),
+            ))),
+            Codec::XlsXor(array) => Box::new(Streaming(filters::Bytes::new(
+                crypto::office::XlsRc4::xor(array),
             ))),
             Codec::AesCbc(key) => Box::new(Streaming(filters::Bytes::new(
                 crypto::stream::AesCbcIvPrefixed::new(key),
