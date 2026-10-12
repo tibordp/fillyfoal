@@ -20,6 +20,8 @@ use crate::value::{EnumTable, Value};
 const BE: Endian = Endian::Big;
 /// Largest entry we read in one block.
 const MAX_ENTRY: u64 = 1 << 20;
+/// Bytes read ahead of the entry walk at first.
+const WINDOW: u64 = 64 << 10;
 
 pub static FORMAT: Format = Format {
     name: "jks",
@@ -168,22 +170,44 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let kind = if ctx.jceks { "JCEKS" } else { "JKS" };
     let mut offset = 12u64;
     let mut entries = Vec::new();
-    for _ in 0..count {
+    // Entries are decoded from a window read ahead of them, so each byte
+    // is read about once; an entry that does not fit is retried from its
+    // start with a window twice as large, up to MAX_ENTRY.
+    let mut window = WINDOW;
+    let mut base = offset;
+    let mut block = cx.block(file.sub(base, window)).await?;
+    'entries: for _ in 0..count {
         if offset >= file.len {
             break;
         }
-        let region = file.sub(offset, MAX_ENTRY);
-        let block = cx.block(region).await?;
-        let mut f = Fields::new(&block, BE);
-        match entry(&cx, &mut f, &ctx).await {
-            Ok(info) => {
-                let span = file.sub(offset, f.pos());
-                entries.push((span, info));
-                offset = offset.saturating_add(f.pos());
-            }
-            Err(e) => {
-                cx.diag(e);
-                break;
+        loop {
+            let rel = offset.saturating_sub(base);
+            let mut f = Fields::new(&block, BE);
+            f.seek(rel);
+            let result = entry(&cx, &mut f, &ctx).await;
+            let end = base.saturating_add(to_u64(block.data.len()));
+            match result {
+                Ok(info) if f.pos() <= to_u64(block.data.len()) => {
+                    let len = f.pos().saturating_sub(rel);
+                    entries.push((file.sub(offset, len), info));
+                    offset = offset.saturating_add(len);
+                    break;
+                }
+                Err(_) | Ok(_) if end < file.len && (base != offset || window < MAX_ENTRY) => {
+                    if base == offset {
+                        window = window.saturating_mul(2).min(MAX_ENTRY);
+                    }
+                    base = offset;
+                    block = cx.block(file.sub(base, window)).await?;
+                }
+                Err(e) => {
+                    cx.diag(e);
+                    break 'entries;
+                }
+                Ok(_) => {
+                    cx.diag(Diagnostic::truncated(file.sub(offset, 1), 0));
+                    break 'entries;
+                }
             }
         }
     }
