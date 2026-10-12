@@ -276,4 +276,8 @@ impl super::eh_frame::Image for CoffDebug {
         let data = s.data(self.file, 0)?;
         (off < data.len).then(|| data.sub(off, 0))
     }
+
+    fn arch(&self, _eh: bool) -> Arch {
+        Arch::from_coff(self.machine)
+    }
 }

@@ -16,6 +16,7 @@ use crate::node::Node;
 use crate::value::{Value, lookup};
 
 use super::expr::{self, Sizes};
+use super::line;
 use super::tables::{
     ACCESSIBILITY, ATTRIBUTES, CALLING_CONVENTIONS, ENCODINGS, FORMS, INLINE, LANGUAGES, TAGS,
     UNIT_TYPES, VIRTUALITY,
@@ -238,6 +239,10 @@ pub(super) struct Unit {
     pub rnglists_base: Option<u64>,
     pub loclists_base: Option<u64>,
     pub low_pc: Option<u64>,
+    /// `DW_AT_stmt_list`: the unit's line table, whose file list
+    /// `DW_AT_decl_file` and `DW_AT_call_file` index.
+    pub stmt_list: Option<u64>,
+    pub comp_dir: Option<String>,
 }
 
 impl Unit {
@@ -246,6 +251,7 @@ impl Unit {
             address: self.address_size,
             offset: self.offset_size,
             endian: dw.endian,
+            arch: dw.arch,
         }
     }
 
@@ -377,6 +383,10 @@ async fn load_unit(cx: &Cx, dw: &Dwarf, sec: Sec, offset: u64) -> Result<Arc<Uni
         unit.loclists_base = base(get(0x8c));
         if let Some(a) = get(0x11) {
             unit.low_pc = address(cx, dw, &unit, a).await;
+        }
+        unit.stmt_list = base(get(0x10));
+        if let Some(a) = get(0x1b) {
+            unit.comp_dir = string_value(cx, dw, &unit, a).await;
         }
     }
     let unit = Arc::new(unit);
@@ -929,8 +939,16 @@ async fn attr_node(
             }
         }
         Val::S(v) => {
-            node = node.value(match u64::try_from(*v) {
-                Ok(u) if has_table(a.at) => interpret(a.at, a.form, u),
+            let file = match (a.at, resolve, u64::try_from(*v)) {
+                (0x3a | 0x58, true, Ok(u)) => file_path(cx, dw, unit, u).await,
+                _ => None,
+            };
+            node = node.value(match (u64::try_from(*v), file) {
+                (_, Some(path)) => {
+                    summary = format!("{form}, file {v}");
+                    text(path)
+                }
+                (Ok(u), None) if has_table(a.at) => interpret(a.at, a.form, u),
                 _ => int(*v, 64),
             });
         }
@@ -991,6 +1009,12 @@ async fn attr_node(
                 {
                     node = node.target(span.sub(v.saturating_add(base), 0));
                 }
+            } else if let (0x3a | 0x58, true) = (a.at, resolve)
+                && let Some(path) = file_path(cx, dw, unit, v).await
+            {
+                // A file number, named through the unit's line table.
+                node = node.value(text(path));
+                summary = format!("{form}, file {v}");
             } else {
                 node = node.value(interpret(a.at, a.form, v));
                 if a.at == 0x12
@@ -1002,6 +1026,12 @@ async fn attr_node(
         }
     }
     node.summary(summary)
+}
+
+/// The path of file `index` of the unit's line table.
+async fn file_path(cx: &Cx, dw: &Dwarf, unit: &Unit, index: u64) -> Option<String> {
+    let files = line::file_names(cx, dw, unit.stmt_list?).await?;
+    files.path(index, unit.comp_dir.as_deref())
 }
 
 /// Which section a `DW_FORM_sec_offset` attribute points into, and the base

@@ -245,6 +245,7 @@ async fn contribution_node(cx: Cx, (dw, sec, c): (Arc<Dwarf>, Sec, Contribution)
                 address: c.address_size,
                 offset: c.offset_size,
                 endian: e,
+                arch: dw.arch,
             };
             list_entries(&cx, &dw, sec, pos, c.end, sizes).await?;
         }
@@ -509,6 +510,7 @@ async fn pairs(cx: &Cx, dw: &Dwarf, sec: Sec) -> Result<()> {
         address: a,
         offset: 4,
         endian: e,
+        arch: dw.arch,
     };
     let mut pos = cx.resume::<u64>().unwrap_or(0);
     while pos.saturating_add(pair) <= section.len {

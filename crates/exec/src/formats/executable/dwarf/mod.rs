@@ -100,6 +100,9 @@ pub(crate) enum Arch {
     #[default]
     Unknown,
     X86,
+    /// i386 as Darwin numbers it in `__eh_frame` (esp and ebp swapped;
+    /// its `__debug_*` sections use the usual numbers).
+    X86DarwinEh,
     X86_64,
     Arm,
     Aarch64,

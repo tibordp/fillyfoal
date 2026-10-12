@@ -19,6 +19,9 @@ use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::Value;
 
+use super::dwarf::Arch;
+use super::dwarf::tables::{register, register_name};
+
 /// What the walker needs from the image the section belongs to.
 pub(crate) trait Image {
     fn endian(&self) -> Endian;
@@ -28,6 +31,12 @@ pub(crate) trait Image {
     fn describe(&self, addr: u64) -> String;
     /// The file bytes at an address, for navigation.
     fn target(&self, addr: u64) -> Option<Span>;
+    /// The architecture whose register numbers the CFI uses (`eh` for
+    /// `.eh_frame`, which Darwin i386 numbers differently).
+    fn arch(&self, eh: bool) -> Arch {
+        let _ = eh;
+        Arch::Unknown
+    }
 }
 
 fn bits(img: &dyn Image) -> u8 {
@@ -143,6 +152,7 @@ fn parse_cie(
     img: &dyn Image,
     at: &dyn Fn(usize, usize) -> Span,
     addr: u64,
+    arch: Arch,
 ) -> (Cie, Vec<Node>, String, usize) {
     let mut cie = Cie {
         fde_encoding: 0,
@@ -231,11 +241,13 @@ fn parse_cie(
         r.uleb()
     };
     if let Some(v) = ra {
-        nodes.push(
-            Node::new("return_address_register")
-                .span(at(s, r.pos()))
-                .value(uint(v, 64)),
-        );
+        let mut node = Node::new("return_address_register")
+            .span(at(s, r.pos()))
+            .value(uint(v, 64));
+        if let Some(name) = register_name(arch, v) {
+            node = node.summary(name);
+        }
+        nodes.push(node);
     }
     if aug.starts_with('z') {
         cie.augmented = true;
@@ -336,6 +348,7 @@ async fn walk_mode(
     let mut cies: BTreeMap<u64, Cie> = BTreeMap::new();
     let mut pos = 0u64;
     let endian = img.endian();
+    let arch = img.arch(mode == Mode::Eh);
     while pos < span.len {
         let head = cx.read_avail(span.sub(pos, 12)).await?;
         let len32 = get_at::<u32>(&head, 0, endian).unwrap_or(0);
@@ -393,7 +406,7 @@ async fn walk_mode(
                     .span(at(id_at, id_end))
                     .value(hex(id, id_bits)),
             );
-            let (cie, fields, summary, end) = parse_cie(&data, id_end, img, &at, record_addr);
+            let (cie, fields, summary, end) = parse_cie(&data, id_end, img, &at, record_addr, arch);
             cies.insert(pos, cie);
             nodes.extend(fields);
             (("CIE", summary), end, cie, None)
@@ -432,6 +445,7 @@ async fn walk_mode(
                         img,
                         &cat,
                         section_addr.saturating_add(cie_pos),
+                        arch,
                     )
                     .0;
                     cies.insert(cie_pos, cie);
@@ -534,6 +548,7 @@ async fn walk_mode(
                 wide: img.wide(),
                 endian,
                 pc,
+                arch,
             };
             nodes.push(
                 Node::new("Call Frame Instructions")
@@ -566,6 +581,8 @@ struct Cfi {
     endian: Endian,
     /// The FDE's initial location (CIE instructions have none).
     pc: Option<u64>,
+    /// For register names.
+    arch: Arch,
 }
 
 /// Bytes read per instruction (an expression longer than this is shown
@@ -582,6 +599,7 @@ async fn cfi_instructions(cx: Cx, c: Cfi) -> Result<()> {
         address: c.address_size,
         offset: if c.wide { 8 } else { 4 },
         endian: c.endian,
+        arch: c.arch,
     };
     let factored = |v: u64| -> i64 {
         i64::try_from(v)
@@ -616,12 +634,13 @@ async fn cfi_instructions(cx: Cx, c: Cfi) -> Result<()> {
             r.bytes(bytes.len());
             Some(describe(bytes, sizes))
         };
+        let reg = |n: u64| register(c.arch, n);
         let operands: Option<String> = match op >> 6 {
             1 => Some(advance(u64::from(op & 0x3f), &mut pc)),
             2 => r
                 .uleb()
-                .map(|off| format!("reg{} {:+}", op & 0x3f, factored(off))),
-            3 => Some(format!("reg{}", op & 0x3f)),
+                .map(|off| format!("{} {:+}", reg(u64::from(op & 0x3f)), factored(off))),
+            3 => Some(reg(u64::from(op & 0x3f))),
             _ => match op {
                 0x00 | 0x0a | 0x0b | 0x2c | 0x2d => Some(String::new()),
                 0x01 => {
@@ -638,37 +657,38 @@ async fn cfi_instructions(cx: Cx, c: Cfi) -> Result<()> {
                 0x03 => r.int::<u16>(c.endian).map(|d| advance(d.into(), &mut pc)),
                 0x04 => r.int::<u32>(c.endian).map(|d| advance(d.into(), &mut pc)),
                 0x05 | 0x14 => (|| {
-                    let reg = r.uleb()?;
-                    Some(format!("reg{reg} {:+}", factored(r.uleb()?)))
+                    let n = r.uleb()?;
+                    Some(format!("{} {:+}", reg(n), factored(r.uleb()?)))
                 })(),
-                0x06 | 0x07 | 0x08 | 0x0d => r.uleb().map(|reg| format!("reg{reg}")),
+                0x06 | 0x07 | 0x08 | 0x0d => r.uleb().map(reg),
                 0x09 => (|| {
-                    let reg = r.uleb()?;
-                    Some(format!("reg{reg} reg{}", r.uleb()?))
+                    let n = r.uleb()?;
+                    Some(format!("{} {}", reg(n), reg(r.uleb()?)))
                 })(),
                 0x0c => (|| {
-                    let reg = r.uleb()?;
-                    Some(format!("reg{reg} {:+}", r.uleb()?))
+                    let n = r.uleb()?;
+                    Some(format!("{} {:+}", reg(n), r.uleb()?))
                 })(),
                 0x0e => r.uleb().map(|off| format!("{off:+}")),
                 0x0f => expression(&mut r, &mut skip),
                 0x10 | 0x16 => (|| {
-                    let reg = r.uleb()?;
-                    Some(format!("reg{reg} {}", expression(&mut r, &mut skip)?))
+                    let n = r.uleb()?;
+                    Some(format!("{} {}", reg(n), expression(&mut r, &mut skip)?))
                 })(),
                 0x11 | 0x12 | 0x15 => (|| {
-                    let reg = r.uleb()?;
+                    let n = r.uleb()?;
                     let off = r.sleb()?.saturating_mul(c.data_align);
-                    Some(format!("reg{reg} {off:+}"))
+                    Some(format!("{} {off:+}", reg(n)))
                 })(),
                 0x13 => r
                     .sleb()
                     .map(|off| format!("{:+}", off.saturating_mul(c.data_align))),
                 0x2e => r.uleb().map(|n| format!("{n}")),
                 0x2f => (|| {
-                    let reg = r.uleb()?;
+                    let n = r.uleb()?;
                     Some(format!(
-                        "reg{reg} {:+}",
+                        "{} {:+}",
+                        reg(n),
                         factored(r.uleb()?).saturating_neg()
                     ))
                 })(),
@@ -732,6 +752,10 @@ impl<T: Image + ?Sized> Image for Arc<T> {
 
     fn target(&self, addr: u64) -> Option<Span> {
         (**self).target(addr)
+    }
+
+    fn arch(&self, eh: bool) -> Arch {
+        (**self).arch(eh)
     }
 }
 
