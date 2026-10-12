@@ -600,10 +600,22 @@ fn dbf_probe(h: &Head<'_>) -> bool {
 declare_format!(pub DBF = "dbf", "dBase table", ["dbf"], "application/x-dbf",
     Probe::Custom(dbf_probe), dbf);
 
+/// The last-update year: dBase counts from 1900 (126 is 2026), Visual
+/// FoxPro and Python's `dbf` for VFP tables store the year modulo 100 (26).
+fn dbf_year(y: u8) -> u16 {
+    if y < 80 {
+        2000u16.saturating_add(y.into())
+    } else {
+        1900u16.saturating_add(y.into())
+    }
+}
+
 record! {
     pub struct DbfHeader {
         version: u8 "Version" .enumeration(DBF_VERSIONS),
-        year: u8 "Last update: year (since 1900)",
+        year: u8 "Last update: year"
+            .desc("Years since 1900 as dBase, shapelib and GDAL write it; Visual FoxPro writes the year modulo 100, so values below 80 are read as 20xx (as dbfread does)")
+            .with(|&y, node| node.summary(dbf_year(y).to_string())),
         month: u8 "Last update: month",
         day: u8 "Last update: day",
         records: u32 "Records",
