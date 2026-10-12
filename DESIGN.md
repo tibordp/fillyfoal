@@ -71,6 +71,7 @@ exploration pays for additional work only as needed.
     (+ BCJ x86/ARM/ARM64, Delta), Zstandard, Brotli, LZ4, Snappy,
     LZFSE/LZVN and Apple `pbz*`, Unix `.Z`, LZO1X/lzop, LZF;
   - archivers: RAR 2.9/3.x and 5/7 (LZ, PPMd var. H, standard filters),
+    7z PPMd (var. H) and BCJ2, ZIP PPMd (var. I rev. 1),
     MSZIP/LZX/Quantum (CAB, CHM, WIM), LZMS (WIM/ESD, solid resources),
     XPRESS (plain, Huffman) and LZNT1,
     PKWARE implode and DCL implode, the LHA/ARJ/ZOO/`COMPRESS.EXE` LZSS and
