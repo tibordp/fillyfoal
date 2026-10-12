@@ -115,6 +115,11 @@ enum Bundle {
     Colour,
     ToneMapping,
     Metadata,
+    /// CustomTransformData; whether the image is XYB-encoded.
+    Transform(bool),
+    OpsinInverse,
+    /// Upsampling weights: how many.
+    Weights(u16),
 }
 
 /// Reads (and, if emitting, shows) the fields of the codestream headers.
@@ -139,7 +144,7 @@ impl<'a> Jx<'a> {
         self.b.pos()
     }
 
-    fn show(&self, name: &'static str, start: u64, value: Value) {
+    fn show(&self, name: impl Into<std::borrow::Cow<'static, str>>, start: u64, value: Value) {
         self.b.node(
             Node::new(name)
                 .span(self.b.span_of(start, self.pos()))
@@ -209,7 +214,7 @@ impl<'a> Jx<'a> {
     }
 
     /// A binary16 float.
-    fn f16(&mut self, name: &'static str) -> Option<f64> {
+    fn f16(&mut self, name: impl Into<std::borrow::Cow<'static, str>>) -> Option<f64> {
         let start = self.pos();
         let raw = u16::try_from(self.b.read(16)?).ok()?;
         let v = half(raw);
@@ -282,7 +287,69 @@ fn bundle(j: &mut Jx<'_>, kind: Bundle) -> Option<String> {
         Bundle::Colour => colour_encoding(j),
         Bundle::ToneMapping => tone_mapping(j),
         Bundle::Metadata => image_metadata(j).map(|m| m.summary),
+        Bundle::Transform(xyb) => transform_data(j, xyb),
+        Bundle::OpsinInverse => opsin_inverse(j),
+        Bundle::Weights(n) => weights(j, n),
     }
+}
+
+/// CustomTransformData (ISO/IEC 18181-1 A.6): the inverse opsin matrix of
+/// an XYB image and custom upsampling weights.
+fn transform_data(j: &mut Jx<'_>, xyb: bool) -> Option<String> {
+    let st = state(j);
+    if j.bool("All default")? {
+        return Some("all default".to_owned());
+    }
+    let mut parts = Vec::new();
+    if xyb {
+        let opsin = j.nested("Opsin inverse matrix", Bundle::OpsinInverse, st)?;
+        if opsin != "default" {
+            parts.push("custom opsin inverse matrix".to_owned());
+        }
+    }
+    let mask = j.bits("Custom weights mask", 3, 0)?;
+    for (bit, n, name, label) in [
+        (1, 15, "2× upsampling weights", "2×"),
+        (2, 55, "4× upsampling weights", "4×"),
+        (4, 210, "8× upsampling weights", "8×"),
+    ] {
+        if mask & bit != 0 {
+            j.nested(name, Bundle::Weights(n), st)?;
+            parts.push(format!("custom {label} upsampling weights"));
+        }
+    }
+    if parts.is_empty() {
+        parts.push("default".to_owned());
+    }
+    Some(parts.join(", "))
+}
+
+/// OpsinInverseMatrix: the inverse matrix, opsin biases and quantisation
+/// biases, binary16 each.
+fn opsin_inverse(j: &mut Jx<'_>) -> Option<String> {
+    if j.bool("All default")? {
+        return Some("default".to_owned());
+    }
+    for row in 0..3 {
+        for col in 0..3 {
+            j.f16(format!("Inverse matrix [{row}][{col}]"))?;
+        }
+    }
+    for i in 0..3 {
+        j.f16(format!("Opsin bias {i}"))?;
+    }
+    for i in 0..4 {
+        j.f16(format!("Quantisation bias {i}"))?;
+    }
+    Some("custom".to_owned())
+}
+
+/// `n` binary16 upsampling weights.
+fn weights(j: &mut Jx<'_>, n: u16) -> Option<String> {
+    for i in 0..n {
+        j.f16(format!("Weight {i}"))?;
+    }
+    Some(format!("{n} weights"))
 }
 
 /// SizeHeader: width and height.
@@ -535,9 +602,13 @@ fn state(j: &Jx<'_>) -> (Span, Span) {
 fn image_metadata(j: &mut Jx<'_>) -> Option<Metadata> {
     let st = state(j);
     if j.bool("All default")? {
-        j.bool("Transform data: all default")?;
+        let transform = j.nested("Transform data", Bundle::Transform(true), st)?;
+        let mut summary = "all default (8-bit sRGB, XYB)".to_owned();
+        if !matches!(transform.as_str(), "all default" | "default") {
+            summary = format!("{summary}, {transform}");
+        }
         return Some(Metadata {
-            summary: "all default (8-bit sRGB, XYB)".to_owned(),
+            summary,
             icc: false,
         });
     }
@@ -595,15 +666,16 @@ fn image_metadata(j: &mut Jx<'_>) -> Option<Metadata> {
                 .summary(format!("{total} bits")),
         );
     }
-    // CustomTransformData (opsin matrix, upsampling weights) when not all
-    // default is not decoded: the rest is shown as a region from here.
-    j.bool("Transform data: all default")?;
+    let transform = j.nested("Transform data", Bundle::Transform(xyb), st)?;
     let icc = colour.contains("ICC profile");
     let mut summary = vec![depth, colour];
     summary.extend(channels.iter().map(|c| format!("+{c}")));
     summary.extend(parts);
     if !xyb {
         summary.push("not XYB (lossless-capable)".to_owned());
+    }
+    if !matches!(transform.as_str(), "all default" | "default") {
+        summary.push(transform);
     }
     Some(Metadata {
         summary: summary.join(", "),

@@ -22,5 +22,6 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Colour encoding — sRGB  [0x4+0x1]
         All default (sRGB): true  [0x4+0x1]
       Extensions: 0  [0x4+0x1]
-      Transform data: all default: true  [0x4+0x1]
+    ▾ Transform data — all default  [0x4+0x1]
+        All default: true  [0x4+0x1]
     Frames  [0x5+0xaf]

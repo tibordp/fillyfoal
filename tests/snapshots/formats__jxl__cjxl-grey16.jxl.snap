@@ -26,5 +26,6 @@ expression: "common::explore(&display_name(&path), &data)"
         Transfer function: sRGB (0xd)  [0x5+0x2]
         Rendering intent: Relative (0x1)  [0x6+0x1]
       Extensions: 0  [0x6+0x2]
-      Transform data: all default: true  [0x7+0x1]
+    ▾ Transform data — all default  [0x7+0x1]
+        All default: true  [0x7+0x1]
     Frames  [0x8+0x20]
