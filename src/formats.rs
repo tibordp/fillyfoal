@@ -2112,6 +2112,10 @@ pub static FORMATS: &[&Format] = &[
     &system::platform::LDSO_CACHE,
     #[cfg(feature = "system")]
     &system::platform::SELINUX,
+    // By its last 64 bytes: after the formats of the partitions it ends,
+    // before vbmeta (which starts what follows a one-block image).
+    #[cfg(feature = "system")]
+    &system::platform::AVB_FOOTER,
     #[cfg(feature = "system")]
     &system::platform::VBMETA,
     #[cfg(feature = "system")]

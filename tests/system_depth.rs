@@ -119,12 +119,14 @@ fn huge_sparse_fills_cost_little() {
 /// The object ID of the object an ofs-delta at `offset` rebuilds: the
 /// hash of `"<type> <size>\0"` and the content, as git computes it.
 fn rebuilt_id<H: fillyfoal::codec::crypto::Hash>(pack: &str, offset: u64, kind: &str) -> String {
+    rebuilt::<H>(pack, &format!("ofs-delta at {offset:#x}"), kind)
+}
+
+/// The object ID of the object the delta named `node` rebuilds.
+fn rebuilt<H: fillyfoal::codec::crypto::Hash>(pack: &str, node: &str, kind: &str) -> String {
     let data = fixture(&format!("tests/fixtures/external/git-pack/{pack}"));
     let mut host = Host::named(pack, data, Limits::default());
-    let id = open(
-        &mut host,
-        &[&format!("ofs-delta at {offset:#x}"), "Resolved object"],
-    );
+    let id = open(&mut host, &[node, "Resolved object"]);
     let node = host
         .child(id, "Object")
         .unwrap_or_else(|| panic!("no object under:\n{}", host.render()));
@@ -162,6 +164,94 @@ fn ofs_deltas_rebuild_their_objects() {
         rebuilt_id::<Sha256>("sha256.pack", 0x50f, "blob"),
         "5a4abaa40b063a557620b4face82b7ebe661e7f09faedf90274dc75e9f960c6b"
     );
+}
+
+#[test]
+fn ref_deltas_find_their_bases_by_object_id() {
+    use fillyfoal::codec::crypto::Sha1;
+    // `git verify-pack -v` of ref-delta.pack
+    // (tests/data/git-pack/inside-ref-delta.sh): a chain of three
+    // ref-deltas, each naming the one before as its base.
+    for (offset, id) in [
+        (0x66d, "945267efe68a88f80090c89187dfe05ebf3f61bd"),
+        (0x747, "4b790851668b0a3bab6f9efad93786bd6a2c3c6b"),
+        (0x826, "30a8d2c2a21f0654d4a91f98a91989426b4f3343"),
+    ] {
+        assert_eq!(
+            rebuilt::<Sha1>(
+                "ref-delta.pack",
+                &format!("ref-delta at {offset:#x}"),
+                "blob"
+            ),
+            id
+        );
+    }
+    // A thin pack's base is in the receiving repository: the scan of the
+    // pack ends without it, and says so.
+    let data = fixture("tests/fixtures/external/git-pack/thin.pack");
+    let mut host = Host::named("thin.pack", data, Limits::default());
+    let id = open(&mut host, &["ref-delta at 0xf4", "Resolved object"]);
+    let error = host.session.children(id).unwrap().error.unwrap();
+    assert_eq!(error.kind, fillyfoal::DiagKind::Unsupported, "{error:?}");
+    assert!(
+        error
+            .message
+            .contains("945267efe68a88f80090c89187dfe05ebf3f61bd is not in this pack"),
+        "{error:?}"
+    );
+}
+
+/// A pack of `n` small blobs and a ref-delta naming a base that is not in
+/// it, then the cost of resolving that delta (which hashes every object
+/// looking for the base).
+fn missing_base_work(n: u32) -> u64 {
+    // zlib with one stored block.
+    fn zlib(data: &[u8]) -> Vec<u8> {
+        let mut out = vec![0x78, 0x01, 0x01];
+        out.extend((data.len() as u16).to_le_bytes());
+        out.extend((!(data.len() as u16)).to_le_bytes());
+        out.extend(data);
+        let (mut a, mut b) = (1u32, 0u32);
+        for &x in data {
+            a = (a + u32::from(x)) % 65521;
+            b = (b + a) % 65521;
+        }
+        out.extend((b << 16 | a).to_be_bytes());
+        out
+    }
+    let mut pack = b"PACK\0\0\0\x02".to_vec();
+    pack.extend((n + 1).to_be_bytes());
+    for i in 0..n {
+        let blob = format!("blob number {i:08}\n");
+        pack.push(0x80 | 0x30 | blob.len() as u8 & 0x0f);
+        pack.push(blob.len() as u8 >> 4);
+        pack.extend(zlib(blob.as_bytes()));
+    }
+    // A ref-delta (type 7) of 4 bytes: source 1, target 1, insert 1 byte.
+    let delta = [1u8, 1, 1, b'x'];
+    pack.push(0x70 | delta.len() as u8);
+    pack.extend([0xab; 20]);
+    pack.extend(zlib(&delta));
+    let sum = fillyfoal::codec::crypto::Sha1::digest(&pack);
+    pack.extend(sum);
+    let mut host = Host::named("missing.pack", pack, Limits::default());
+    let last = format!("ref-delta at {:#x}", 12 + u64::from(n) * 34);
+    open(&mut host, &[&last]);
+    let before = host.session.work_done();
+    let id = open(&mut host, &[&last, "Resolved object"]);
+    let error = host.session.children(id).unwrap().error.unwrap();
+    assert!(error.message.contains("is not in this pack"), "{error:?}");
+    host.session.work_done() - before
+}
+
+#[test]
+fn ref_delta_base_scan_is_linear() {
+    let small = missing_base_work(1000);
+    let large = missing_base_work(4000);
+    // Every object is hashed once: four times the objects, about four
+    // times the work.
+    assert!(large < small * 5, "{small} then {large} units");
+    assert!(large < 4000 * 200, "{large} units for 4000 objects");
 }
 
 /// What a window of children shows: names, summaries, spans.

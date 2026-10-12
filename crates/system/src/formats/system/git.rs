@@ -12,10 +12,15 @@
 //! nothing in these files says which, so each file's trailing checksum
 //! decides (and, for pack indexes, the table sizes).
 
+use std::collections::BTreeMap;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
+
 use crate::bytes::{to_u64, to_usize, u16_be, u32_be, u64_be};
 use crate::codec::crypto::{Hash, Sha1, Sha256};
 use crate::codec::inflate_span;
-use crate::cx::Cx;
+use crate::cx::{Cx, lock};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::datakit::{clip, hex_string, size};
@@ -389,14 +394,11 @@ async fn object(cx: Cx, o: Object) -> Result<()> {
     match o.header.kind {
         6 | 7 => {
             cx.emit(Node::new("Delta").span(data).lazy(delta, data));
-            cx.emit(match o.header.base {
-                Base::Named(_) => Node::new("Resolved object").diag(Diagnostic::unsupported(
-                    "ref-delta: the base is named by object ID, not located in the pack",
-                )),
-                _ => Node::new("Resolved object")
+            cx.emit(
+                Node::new("Resolved object")
                     .summary("the delta applied to its base")
                     .lazy(resolved, (o.pack, o.pos)),
-            });
+            );
             Ok(())
         }
         kind => show(&cx, o.pack, kind, data).await,
@@ -432,7 +434,7 @@ async fn show(cx: &Cx, pack: Pack, kind: u8, data: Span) -> Result<()> {
 /// `--depth` is 50).
 const MAX_DELTA_DEPTH: usize = 64;
 
-/// The object an ofs-delta chain rebuilds.
+/// The object a delta chain rebuilds.
 async fn resolved(cx: Cx, (pack, pos): (Pack, u64)) -> Result<()> {
     let (kind, data) = resolve(&cx, pack, pos).await?;
     let name = lookup(OBJECT_TYPES, kind.into()).unwrap_or("?");
@@ -453,37 +455,81 @@ async fn resolved(cx: Cx, (pack, pos): (Pack, u64)) -> Result<()> {
 /// The delta's transform name in derived-source origins.
 const DELTA: &str = "git-delta";
 
-/// Rebuilds the object at `pos`: follows ofs-delta bases back to a whole
-/// object, then applies the deltas in turn. Each rebuilt object is kept
-/// (keyed by its delta's header), so chains sharing bases rebuild them
-/// once. Returns the base object's type and the rebuilt bytes.
+/// Rebuilds the object at `pos`: follows delta bases (ofs-deltas by
+/// offset, ref-deltas through the pack's object names, see [`Names`]) back
+/// to a whole object, then applies the deltas in turn. Each rebuilt object
+/// is kept (keyed by its delta's header), so chains sharing bases rebuild
+/// them once. Returns the base object's type and the rebuilt bytes.
 async fn resolve(cx: &Cx, pack: Pack, pos: u64) -> Result<(u8, Span)> {
+    match walk_chain(cx, pack, pos, Lookup::Scan).await? {
+        Walk::Chain(kind, base, chain) => Ok((kind, rebuild(cx, pack, base, &chain).await?)),
+        Walk::Missing(at, name) => Err(Diagnostic::unsupported(format!(
+            "ref-delta base {} is not in this pack (a thin pack's bases are in the receiving repository)",
+            hex_string(&name)
+        ))
+        .at(pack.file().sub(at, 1))),
+    }
+}
+
+/// How a chain walk finds ref-delta bases: by scanning the pack for the
+/// name as far as needed, or only among the names already found (while
+/// scanning, so the scan never recurses into itself).
+#[derive(Clone, Copy, PartialEq)]
+enum Lookup {
+    Scan,
+    Known,
+}
+
+/// A delta chain: the base object's type, the base (offset and header)
+/// and the deltas from the object asked for back to the base, newest
+/// first; or the offset of a ref-delta whose base was not found, and its
+/// name.
+enum Walk {
+    Chain(u8, (u64, Header), Vec<(u64, Header)>),
+    Missing(u64, Vec<u8>),
+}
+
+async fn walk_chain(cx: &Cx, pack: Pack, pos: u64, lookup: Lookup) -> Result<Walk> {
     let file = pack.file();
-    // The deltas from `pos` back to the base, newest first.
     let mut chain: Vec<(u64, Header)> = Vec::new();
     let mut at = pos;
-    let (kind, base) = loop {
+    loop {
         let h = read_header(cx, file, at, pack.hash_len).await?;
-        match h.base {
-            Base::None => break (h.kind, (at, h)),
-            Base::At(base) => {
-                if chain.len() >= MAX_DELTA_DEPTH {
-                    return Err(Diagnostic::limit(format!(
-                        "delta chain deeper than {MAX_DELTA_DEPTH}"
-                    ))
-                    .at(file.sub(pos, 1)));
+        let next = match &h.base {
+            Base::None => return Ok(Walk::Chain(h.kind, (at, h), chain)),
+            Base::At(base) => *base,
+            Base::Named(name) => {
+                let found = match lookup {
+                    Lookup::Scan => find_name(cx, pack, name).await?,
+                    Lookup::Known => {
+                        names(cx, pack).and_then(|n| lock(&n).found.get(name).copied())
+                    }
+                };
+                match found {
+                    Some(base) => base,
+                    None => return Ok(Walk::Missing(at, name.clone())),
                 }
-                chain.push((at, h));
-                at = base;
             }
-            Base::Named(_) => {
-                return Err(Diagnostic::unsupported(
-                    "a ref-delta base (named by object ID) in the chain",
-                )
-                .at(file.sub(at, 1)));
-            }
+        };
+        if chain.len() >= MAX_DELTA_DEPTH {
+            return Err(
+                Diagnostic::limit(format!("delta chain deeper than {MAX_DELTA_DEPTH}"))
+                    .at(file.sub(pos, 1)),
+            );
         }
-    };
+        chain.push((at, h));
+        at = next;
+    }
+}
+
+/// Applies a walked delta `chain` to its `base`.
+async fn rebuild(
+    cx: &Cx,
+    pack: Pack,
+    base: (u64, Header),
+    chain: &[(u64, Header)],
+) -> Result<Span> {
+    let file = pack.file();
     let origin = |at: u64, h: &Header| Origin {
         parent: file.sub(at, h.len),
         transform: DELTA,
@@ -512,7 +558,152 @@ async fn resolve(cx: &Cx, pack: Pack, pos: u64) -> Result<(u8, Span)> {
             .add_derived(origin(*at, h), out, delta.span.len, None)?
             .span;
     }
-    Ok((kind, data))
+    Ok(data)
+}
+
+/// The object names of a pack's objects, found lazily: a ref-delta names
+/// its base only by object ID (the hash of `"<type> <size>\0"` and the
+/// content), and nothing in the pack maps names to offsets (the `.idx`
+/// does, but it is a separate file). So objects are hashed in pack order,
+/// one per step, until the name sought turns up; git writes a delta's base
+/// before the delta (`write_one` in `pack-objects.c`), so this usually
+/// stops short of the end. A delta whose base is not found yet waits for
+/// that name and is hashed when it turns up. Shared by every lookup in the
+/// pack (`cx.cache`).
+#[derive(Default)]
+struct Names {
+    /// Names found: name → offset in the pack.
+    found: BTreeMap<Vec<u8>, u64>,
+    /// The next object to hash (offset, and objects left), until the scan
+    /// is done.
+    next: Option<(u64, u32)>,
+    /// Deltas waiting for a base: base name → their offsets.
+    waiting: BTreeMap<Vec<u8>, Vec<u64>>,
+}
+
+const NAMES: &str = "git-object-names";
+
+/// The pack's name index, if a lookup created one.
+fn names(cx: &Cx, pack: Pack) -> Option<Arc<Mutex<Names>>> {
+    cx.cached::<Mutex<Names>>(pack.file(), NAMES)
+}
+
+/// The offset of the object named `name` in the pack, scanning for it as
+/// far as needed (`None`: not in the pack).
+async fn find_name(cx: &Cx, pack: Pack, name: &[u8]) -> Result<Option<u64>> {
+    let index = match names(cx, pack) {
+        Some(index) => index,
+        None => {
+            let head = cx.read(pack.file().sub_exact(8, 4)?).await?;
+            let count = u32_be(&head, 0).unwrap_or(0);
+            let index = Arc::new(Mutex::new(Names {
+                next: (count > 0).then_some((12, count)),
+                ..Names::default()
+            }));
+            cx.cache(pack.file(), NAMES, index.clone());
+            index
+        }
+    };
+    loop {
+        let next = {
+            let names = lock(&index);
+            if let Some(&at) = names.found.get(name) {
+                return Ok(Some(at));
+            }
+            names.next
+        };
+        let Some((pos, left)) = next else {
+            return Ok(None);
+        };
+        // An object that cannot be read ends the scan (its length, and so
+        // the next object's offset, is unknown); one that cannot be
+        // rebuilt or hashed is left out.
+        let step = name_step_boxed(cx, pack, &index, pos).await;
+        let mut names = lock(&index);
+        if names.next == next {
+            names.next = match step {
+                Ok(end) if left > 1 && end > pos && end < pack.body_end() => {
+                    Some((end, left.saturating_sub(1)))
+                }
+                _ => None,
+            };
+        }
+    }
+}
+
+/// [`name_step`] boxed: it walks chains (in [`Lookup::Known`] mode, which
+/// never scans), but the compiler sees the cycle through [`find_name`].
+fn name_step_boxed<'a>(
+    cx: &'a Cx,
+    pack: Pack,
+    index: &'a Mutex<Names>,
+    pos: u64,
+) -> Pin<Box<dyn Future<Output = Result<u64>> + Send + 'a>> {
+    Box::pin(name_step(cx, pack, index, pos))
+}
+
+/// Hashes the object at `pos` (and the deltas that were waiting for it),
+/// returning where the next object starts.
+async fn name_step(cx: &Cx, pack: Pack, index: &Mutex<Names>, pos: u64) -> Result<u64> {
+    let h = read_header(cx, pack.file(), pos, pack.hash_len).await?;
+    let start = pos.saturating_add(h.len);
+    let decoded = inflate_span(cx, pack.stream(start, h.size), true, Some(h.size)).await?;
+    let end = start.saturating_add(decoded.consumed);
+    // Each object is hashed once, plus once per missing ref-delta base in
+    // its chain (at most the chain depth), so the scan stays linear.
+    let mut todo = vec![pos];
+    while let Some(at) = todo.pop() {
+        cx.checkpoint().await;
+        let (kind, data) = match walk_chain(cx, pack, at, Lookup::Known).await {
+            Ok(Walk::Chain(kind, base, chain)) => match rebuild(cx, pack, base, &chain).await {
+                Ok(data) => (kind, data),
+                Err(_) => continue,
+            },
+            Ok(Walk::Missing(_, base)) => {
+                lock(index).waiting.entry(base).or_default().push(at);
+                continue;
+            }
+            Err(_) => continue,
+        };
+        let Ok(name) = object_name(cx, pack, kind, data).await else {
+            continue;
+        };
+        let mut names = lock(index);
+        if let Some(waiting) = names.waiting.remove(&name) {
+            todo.extend(waiting);
+        }
+        names.found.entry(name).or_insert(at);
+    }
+    Ok(end)
+}
+
+/// The object name of an object of type `kind` whose content is `data`.
+async fn object_name(cx: &Cx, pack: Pack, kind: u8, data: Span) -> Result<Vec<u8>> {
+    if pack.hash_len == SHA256_LEN {
+        hash_object::<Sha256>(cx, kind, data).await
+    } else {
+        hash_object::<Sha1>(cx, kind, data).await
+    }
+}
+
+async fn hash_object<H: Hash>(cx: &Cx, kind: u8, data: Span) -> Result<Vec<u8>> {
+    // Hashed a chunk per read, so each step stays bounded.
+    const CHUNK: u64 = 1 << 16;
+    let mut h = H::new();
+    let name = lookup(OBJECT_TYPES, kind.into()).unwrap_or("?");
+    h.update(format!("{name} {}\0", data.len).as_bytes());
+    let mut done = 0u64;
+    while done < data.len {
+        let chunk = cx.read(data.sub(done, CHUNK)).await?;
+        if chunk.is_empty() {
+            break;
+        }
+        h.update(&chunk);
+        // Roughly a microsecond of hashing per 256 bytes.
+        cx.charge(to_u64(chunk.len()) / 256).await;
+        done = done.saturating_add(to_u64(chunk.len()));
+    }
+    Ok(h.finish())
 }
 
 /// Applies git delta `instructions` (`patch-delta.c`) to `source`.

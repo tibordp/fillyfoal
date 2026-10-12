@@ -478,10 +478,8 @@ pub async fn avb_trailer(cx: &Cx, input: Input, end: u64) -> Result<()> {
     if end >= file.len {
         return Ok(());
     }
-    let at = file.len.saturating_sub(AvbFooter::SIZE);
-    let footer = file.sub(at, AvbFooter::SIZE);
-    let found = if at >= end && cx.read(footer.sub(0, 4)).await?.as_slice() == b"AVBf" {
-        Some(read_record::<AvbFooter>(cx, footer, BE).await?)
+    let found = if file.len.saturating_sub(AvbFooter::SIZE) >= end {
+        read_footer(cx, file).await?
     } else {
         None
     };
@@ -493,47 +491,208 @@ pub async fn avb_trailer(cx: &Cx, input: Input, end: u64) -> Result<()> {
         );
         return Ok(());
     };
-    let gap = |from: u64, to: u64| {
-        if to > from {
-            let span = file.sub(from, to.saturating_sub(from));
-            cx.emit(
-                Node::new("Padding")
-                    .span(span)
-                    .summary(crate::formats::util::fmt::size(span.len)),
-            );
+    avb_parts(cx, input, 0, end, &f).await
+}
+
+/// The AVB footer in the last 64 bytes of `file`, if there is one.
+async fn read_footer(cx: &Cx, file: Span) -> Result<Option<AvbFooter>> {
+    let footer = file.sub(file.len.saturating_sub(AvbFooter::SIZE), AvbFooter::SIZE);
+    if file.len < AvbFooter::SIZE || cx.read(footer.sub(0, 4)).await?.as_slice() != b"AVBf" {
+        return Ok(None);
+    }
+    Ok(Some(read_record::<AvbFooter>(cx, footer, BE).await?))
+}
+
+/// The nodes from `end` to the end of `input`, which holds a partition
+/// from its offset `base` on and ends with the AVB footer `f` (offsets in
+/// the footer and the vbmeta count from the start of the partition): the
+/// hash tree and FEC data a hashtree descriptor places there, the vbmeta,
+/// the padding between them and the footer.
+async fn avb_parts(cx: &Cx, input: Input, base: u64, end: u64, f: &AvbFooter) -> Result<()> {
+    let file = input.span;
+    let at = file.len.saturating_sub(AvbFooter::SIZE);
+    let footer = file.sub(at, AvbFooter::SIZE);
+    let local = |offset: u64| offset.checked_sub(base);
+    // The vbmeta, where it fits between `end` and the footer.
+    let vbmeta = local(f.vbmeta_offset)
+        .filter(|&o| o >= end && o.saturating_add(f.vbmeta_size) <= at)
+        .map(|o| file.sub(o, f.vbmeta_size));
+    let mut parts: Vec<(u64, Node)> = Vec::new();
+    if let Some(span) = vbmeta {
+        let extents = hashtree_extents(cx, span).await.unwrap_or_default();
+        for (name, offset, size) in extents {
+            if let Some(o) = local(offset).filter(|&o| {
+                size > 0
+                    && o >= end
+                    && o.saturating_add(size) <= span.offset.saturating_sub(file.offset)
+            }) {
+                let span = file.sub(o, size);
+                parts.push((
+                    o,
+                    Node::new(name)
+                        .span(span)
+                        .summary(crate::formats::util::fmt::size(size)),
+                ));
+            }
         }
-    };
-    let vb_end = f.vbmeta_offset.saturating_add(f.vbmeta_size);
-    if f.vbmeta_offset >= end && vb_end <= at {
-        gap(end, f.vbmeta_offset);
-        let span = file.sub(f.vbmeta_offset, f.vbmeta_size);
-        cx.emit(
+        parts.push((
+            span.offset.saturating_sub(file.offset),
             embedded_as("AVB metadata", input.nested(span), &VBMETA)
                 .summary(crate::formats::util::fmt::size(span.len)),
-        );
-        gap(vb_end, at);
-    } else {
-        gap(end, at);
+        ));
     }
+    parts.sort_by_key(|(o, _)| *o);
+    let mut pos = end;
+    for (o, node) in parts {
+        if o < pos {
+            continue;
+        }
+        padding(cx, file, pos, o);
+        pos = node.span.map_or(o, |s| s.end().saturating_sub(file.offset));
+        cx.emit(node);
+    }
+    padding(cx, file, pos, at);
+    let vb_end = f.vbmeta_offset.saturating_add(f.vbmeta_size);
     let mut node = AvbFooter::node("AVB footer", footer, BE).summary(format!(
         "image {}, vbmeta at {:#x}",
         crate::formats::util::fmt::size(f.original_size),
         f.vbmeta_offset
     ));
-    if f.vbmeta_offset < end || vb_end > at {
+    if vbmeta.is_none() {
         node = node.diag(
-            Diagnostic::malformed("vbmeta lies outside the space after the image")
-                .at(footer.sub(20, 16)),
+            Diagnostic::malformed(format!(
+                "vbmeta at {:#x}..{vb_end:#x} lies outside the space after the image",
+                f.vbmeta_offset
+            ))
+            .at(footer.sub(20, 16)),
         );
     }
-    if f.original_size != end {
+    if local(f.original_size) != Some(end) {
         node = node.diag(Diagnostic::note(format!(
-            "original image size {:#x}, payloads end at {end:#x}",
-            f.original_size
+            "original image size {:#x}, the image ends at {:#x}",
+            f.original_size,
+            base.saturating_add(end)
         )));
     }
     cx.emit(node);
     Ok(())
+}
+
+/// A "Padding" node for `from..to` of `file`, if not empty.
+fn padding(cx: &Cx, file: Span, from: u64, to: u64) {
+    if to > from {
+        let span = file.sub(from, to.saturating_sub(from));
+        cx.emit(
+            Node::new("Padding")
+                .span(span)
+                .summary(crate::formats::util::fmt::size(span.len)),
+        );
+    }
+}
+
+/// Descriptors read at most when looking for a hashtree descriptor.
+const MAX_DESCRIPTORS: u64 = 1 << 16;
+
+/// The hash tree and FEC data a hashtree descriptor of the vbmeta at
+/// `span` places in its partition: (name, offset, size) each.
+async fn hashtree_extents(cx: &Cx, span: Span) -> Result<Vec<(&'static str, u64, u64)>> {
+    let h: VbmetaHeader = read_record(cx, span.sub(0, VbmetaHeader::SIZE), BE).await?;
+    let aux = span.sub(256u64.saturating_add(h.auth_size), h.aux_size);
+    let descriptors = aux.sub(
+        h.descriptors_offset,
+        h.descriptors_size.min(MAX_DESCRIPTORS),
+    );
+    let data = cx.read(descriptors).await?;
+    let mut out = Vec::new();
+    let mut at = 0usize;
+    while let (Some(tag), Some(len)) = (
+        crate::bytes::u64_be(&data, at),
+        crate::bytes::u64_be(&data, at.saturating_add(8)),
+    ) {
+        let d = at.saturating_add(16);
+        if tag == 1 {
+            let field = |off: usize| crate::bytes::u64_be(&data, d.saturating_add(off));
+            // AvbHashtreeDescriptor: version (4), image size (8), tree
+            // offset and size, block sizes (4 + 4), FEC roots (4), FEC
+            // offset and size.
+            if let (Some(to), Some(ts), Some(fo), Some(fs)) =
+                (field(12), field(20), field(40), field(48))
+            {
+                out.push(("Hash tree", to, ts));
+                out.push(("FEC data", fo, fs));
+            }
+        }
+        let next = usize::try_from(len)
+            .ok()
+            .and_then(|l| d.checked_add(l))
+            .filter(|&n| n > at);
+        match next {
+            Some(n) => at = n,
+            None => break,
+        }
+    }
+    Ok(out)
+}
+
+declare_format!(pub AVB_FOOTER = "avb-footer", "Android Verified Boot footer", ["img"], "application/x-android-avb-footer",
+    Probe::Custom(avb_footer_probe), avb_footer);
+
+/// The 64-byte footer avbtool's `add_hash_footer` and
+/// `add_hashtree_footer` put at the end of a partition. A partition's
+/// own format (ext4, erofs, a boot image) is identified first, so this
+/// claims the data its dissector finds after the file system (from the
+/// hash tree to the footer) or a partition image nothing else claims.
+fn avb_footer_probe(h: &Head<'_>) -> bool {
+    let at = h.tail.len().saturating_sub(64);
+    let footer = h.tail.get(at..).unwrap_or_default();
+    let field = |off: usize| crate::bytes::u64_be(footer, off).unwrap_or(0);
+    h.len_known
+        && footer.len() == 64
+        && footer.starts_with(b"AVBf")
+        && u32_be(footer, 4) == Some(1)
+        // A sane vbmeta size.
+        && (256..=1 << 20).contains(&field(28))
+}
+
+/// Whether the vbmeta the footer `f` points to starts in `file` when
+/// `file` holds its partition from offset `base` on.
+async fn vbmeta_at(cx: &Cx, file: Span, f: &AvbFooter, base: u64) -> bool {
+    let Some(o) = f.vbmeta_offset.checked_sub(base) else {
+        return false;
+    };
+    if o.saturating_add(f.vbmeta_size) > file.len {
+        return false;
+    }
+    cx.read(file.sub(o, 4))
+        .await
+        .is_ok_and(|m| m.as_slice() == b"AVB0")
+}
+
+/// A partition ending in an AVB footer, or the part of one after its
+/// image: offsets in the footer count from the start of the partition, so
+/// the vbmeta's magic settles which this is.
+async fn avb_footer(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let f = read_footer(&cx, file).await?.ok_or_else(|| {
+        Diagnostic::malformed("no AVB footer").at(file.tail(file.len.saturating_sub(4)))
+    })?;
+    let whole = vbmeta_at(&cx, file, &f, 0).await;
+    cx.annotate(format!(
+        "AVB footer, image {}, vbmeta at {:#x}",
+        crate::formats::util::fmt::size(f.original_size),
+        f.vbmeta_offset
+    ));
+    if whole && f.original_size > 0 {
+        let image = file.sub(0, f.original_size);
+        cx.emit(
+            // Dissected if recognised, otherwise a data leaf.
+            crate::formats::content("Image", input, image, crate::codec::Codec::Stored, None)
+                .summary(crate::formats::util::fmt::size(image.len)),
+        );
+        return avb_parts(&cx, input, 0, image.len, &f).await;
+    }
+    let base = if whole { 0 } else { f.original_size };
+    avb_parts(&cx, input, base, 0, &f).await
 }
 
 declare_format!(pub DTBO = "dtbo", "Android device tree overlay table", ["img"], "application/x-android-dtbo",

@@ -254,6 +254,18 @@ impl PieceList {
     }
 }
 
+/// The bytes of `input` after a file system that ends at `end`, as
+/// embedded content (`None` if there are none): on Android partitions an
+/// AVB hash tree, vbmeta and footer (identified as `avb-footer`), on
+/// others whatever the partition holds past the file system.
+pub fn trailing_node(input: &Input, end: u64) -> Option<Node> {
+    let file = input.span;
+    (end > 0 && end < file.len).then(|| {
+        let rest = file.tail(end);
+        embedded("Data after the file system", input.nested(rest)).summary(size(rest.len))
+    })
+}
+
 /// Assembled file content: dissected if recognised, otherwise a data leaf.
 pub fn content_node(input: &Input, span: Span) -> Node {
     content("Content", *input, span, Codec::Stored, None).summary(size(span.len))
