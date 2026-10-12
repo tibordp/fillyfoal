@@ -7,8 +7,10 @@
 //! rooted at page 4) lists the tables with their columns, indexes and
 //! long-value trees; records are decoded with those column definitions
 //! (fixed, variable and tagged columns, multi-values and separated long
-//! values). The page view shows every page's header, checksum and nodes.
+//! values, compressed values). The page view shows every page's header,
+//! checksum and nodes.
 
+mod compress;
 mod page;
 mod record;
 
@@ -1148,12 +1150,37 @@ async fn record_fields(cx: Cx, (db, cat, table, at): (D, C, Option<usize>, At)) 
             .await
             .span(full);
         } else if header & 0x02 != 0 {
-            n = n
-                .value(Value::Bytes(b.get(..32).unwrap_or(b).to_vec()))
-                .summary(format!("{tname}, compressed, {} bytes", b.len()))
-                .diag(Diagnostic::unsupported(
-                    "compressed column value (7-bit or Xpress)",
-                ));
+            // Compressed: decompressed into a derived source.
+            let decoded = match compress::value(&cx, vspan, b).await {
+                Ok((scheme, data)) => cx.read(data).await.map(|bytes| (scheme, data, bytes)),
+                Err(e) => Err(e),
+            };
+            n = match decoded {
+                Ok((scheme, data, bytes)) => {
+                    let value = match record::value(c, &bytes) {
+                        Value::Text(t) => Value::Text(clip(&t, 200)),
+                        other => other,
+                    };
+                    n.value(value.clone())
+                        .summary(format!(
+                            "{tname}, {scheme}, {} bytes from {}",
+                            bytes.len(),
+                            b.len()
+                        ))
+                        .lazy(
+                            crate::formats::util::arcutil::emit_nodes,
+                            Arc::new(vec![
+                                header_node(span(v.at.saturating_sub(1), 1), header),
+                                Node::new("Compressed").span(vspan),
+                                Node::new("Data").span(data).value(value),
+                            ]),
+                        )
+                }
+                Err(e) => n
+                    .value(Value::Bytes(b.get(..32).unwrap_or(b).to_vec()))
+                    .summary(format!("{tname}, compressed, {} bytes", b.len()))
+                    .diag(e),
+            };
         } else {
             let mut s = format!("{tname}, {} bytes", b.len());
             if v.header.is_some() && header != 0 {
@@ -1216,22 +1243,19 @@ async fn long_value(
             let mut node = node.summary(format!(
                 "{tname}, long value {lid:#x}, {size} bytes in {chunks} chunks"
             ));
-            if total != u64::from(size) {
-                children.push(
-                    Node::new("Data").diag(Diagnostic::unsupported("compressed long value chunks")),
-                );
-                return node.value(hex(lid, 64)).lazy(
-                    crate::formats::util::arcutil::emit_nodes,
-                    Arc::new(children),
-                );
-            }
-            match cx.add_pieces(
-                Origin {
-                    parent: vspan,
-                    transform: "ese-long-value",
-                },
-                pieces,
-            ) {
+            let data = if total == u64::from(size) {
+                cx.add_pieces(
+                    Origin {
+                        parent: vspan,
+                        transform: "ese-long-value",
+                    },
+                    pieces,
+                )
+            } else {
+                // Chunks shorter than the value: compressed one by one.
+                compressed_chunks(cx, vspan, &pieces, size).await
+            };
+            match data {
                 Ok(data) => {
                     let preview = cx.read_avail(data.sub(0, 0x1000)).await.unwrap_or_default();
                     let value = record::value(c, &preview);
@@ -1254,6 +1278,49 @@ async fn long_value(
             .summary(format!("{tname}, separated long value {lid:#x}"))
             .diag(e),
     }
+}
+
+/// A long value whose chunks are each compressed: every chunk
+/// decompressed, joined into one source that must have the recorded size.
+async fn compressed_chunks(cx: &Cx, vspan: Span, pieces: &[Span], size: u32) -> Result<Span> {
+    let size = u64::from(size);
+    if size > compress::MAX_LONG {
+        return Err(Diagnostic::unsupported(format!(
+            "compressed long value of {size} bytes"
+        )));
+    }
+    let mut out = Vec::new();
+    for piece in pieces {
+        let b = cx.read(*piece).await?;
+        if compress::scheme_name(&b).is_none() {
+            return Err(Diagnostic::unsupported(
+                "long value chunks shorter than the value and not in a known compression scheme",
+            )
+            .at(*piece));
+        }
+        let (_, data) = compress::value(cx, *piece, &b).await?;
+        out.extend(cx.read(data).await?);
+        if to_u64(out.len()) > size {
+            break;
+        }
+    }
+    if to_u64(out.len()) != size {
+        return Err(Diagnostic::malformed(format!(
+            "decompressed long value has {} of {size} bytes",
+            out.len()
+        )));
+    }
+    let consumed = pieces.iter().map(|p| p.len).fold(0u64, u64::saturating_add);
+    cx.add_derived(
+        Origin {
+            parent: vspan,
+            transform: "ese-long-value-compressed",
+        },
+        out,
+        consumed,
+        None,
+    )
+    .map(|d| d.span)
 }
 
 /// Size, chunk spans and chunk count of the long value with key `key`.

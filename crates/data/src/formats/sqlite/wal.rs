@@ -79,7 +79,7 @@ record! {
 
 /// The WAL checksum (`walChecksumBytes`): pairs of 32-bit words in the byte
 /// order the magic selects, accumulated into `(s1, s2)`.
-fn wal_checksum(data: &[u8], big: bool, (mut s1, mut s2): (u32, u32)) -> (u32, u32) {
+pub(super) fn wal_checksum(data: &[u8], big: bool, (mut s1, mut s2): (u32, u32)) -> (u32, u32) {
     for pair in data.as_chunks::<8>().0 {
         let [a0, a1, a2, a3, b0, b1, b2, b3] = *pair;
         let (x0, x1) = if big {

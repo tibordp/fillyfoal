@@ -22,6 +22,7 @@
 
 mod btree;
 mod record;
+mod shm;
 mod wal;
 
 use std::collections::BTreeMap;
@@ -30,6 +31,7 @@ use std::sync::Arc;
 use btree::{CellState, Columns, Db, DbRef, Kind, Page, Walker};
 use record::{Column, Encoding, Table, Val};
 
+pub use shm::SHM;
 pub use wal::{JOURNAL, WAL};
 
 use crate::bytes::{to_u64, u32_be};

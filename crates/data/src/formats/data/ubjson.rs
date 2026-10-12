@@ -629,6 +629,7 @@ async fn members(
         }
         let at = (pos, index);
         cx.mark(move || at);
+        let member = pos;
         let name = if object {
             let (klen, n) = key_head(&mut r, pos).await?;
             let text = r.bytes(pos.saturating_add(n), klen.min(0x200)).await?;
@@ -638,7 +639,10 @@ async fn members(
             format!("[{index}]")
         };
         let end = end_of(&mut r, pos, h.elem).await?;
-        let node = item_node(&mut r, pos, end, h.elem, name, &path).await?;
+        // An object member spans its key and its value.
+        let node = item_node(&mut r, pos, end, h.elem, name, &path)
+            .await?
+            .span(r.span(member, end.saturating_sub(member)));
         cx.push(node).await;
         pos = end;
         index = index.saturating_add(1);
