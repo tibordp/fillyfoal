@@ -107,6 +107,83 @@ pub fn systemtime(fields: [u16; 8]) -> Option<i64> {
         .checked_add(i64::from(second))
 }
 
+/// `YearStartDate` in TempleOS's `Kernel/KDate.HC`: days since 1 January
+/// of year 0 (which has 365 days), with the Gregorian leap years and
+/// TempleOS's own skipped leap day every 4000 years.
+fn templeos_year_start(year: i64) -> i64 {
+    let y1 = year.saturating_sub(1);
+    year.saturating_mul(365)
+        .saturating_add(y1 / 4)
+        .saturating_sub(y1 / 100)
+        .saturating_add(y1 / 400)
+        .saturating_sub(y1 / 4000)
+}
+
+/// TempleOS `mon_start_days1` / `mon_start_days2`, with the year length
+/// appended.
+const TEMPLEOS_MONTHS: [i64; 13] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365];
+const TEMPLEOS_MONTHS_LEAP: [i64; 13] =
+    [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366];
+
+/// Unix seconds of a TempleOS `CDate` (`time`: the time of day in units of
+/// 2^-32 day; `date`: days since 1 January of year 0, `YearStartDate(1970)`
+/// being 719527), as the date and time TempleOS shows for it (a port of
+/// `Date2Struct` in `Kernel/KDate.HC`, including its rounding of
+/// ten-thousandths of a second). TempleOS keeps local time, so the result
+/// is a local time with no known offset.
+pub fn templeos_cdate(time: u32, date: i32) -> i64 {
+    let date = i64::from(date);
+    let mut year = date.saturating_add(1).saturating_mul(100_000) / 36_524_225;
+    let mut start = templeos_year_start(year);
+    for _ in 0..8 {
+        if start <= date {
+            break;
+        }
+        year = year.saturating_sub(1);
+        start = templeos_year_start(year);
+    }
+    let mut day = date.saturating_sub(start);
+    let table = if templeos_year_start(year.saturating_add(1)).saturating_sub(start) == 365 {
+        &TEMPLEOS_MONTHS
+    } else {
+        &TEMPLEOS_MONTHS_LEAP
+    };
+    let mut month = 0usize;
+    while month < 11
+        && table
+            .get(month.saturating_add(1))
+            .is_some_and(|&s| day >= s)
+    {
+        month = month.saturating_add(1);
+    }
+    day = day.saturating_sub(table.get(month).copied().unwrap_or(0));
+    // Ten-thousandths of a second, as `Date2Struct` rounds them.
+    let k = (421_875u64.saturating_mul(time.into()) >> 21).saturating_add(1);
+    let secs = k / 10_000;
+    let hour = u32::try_from(secs / 3600).unwrap_or(0);
+    let min = u32::try_from(secs / 60 % 60).unwrap_or(0);
+    let sec = u32::try_from(secs % 60).unwrap_or(0);
+    let unix = civil_to_unix(
+        year,
+        u32::try_from(month.saturating_add(1)).unwrap_or(1),
+        1,
+        hour,
+        min,
+        sec,
+    );
+    // Days past the first of the month (a day number may run past the
+    // month's end in a damaged value; it simply carries on).
+    unix.saturating_add(day.saturating_mul(86_400))
+}
+
+/// [`templeos_cdate`] of a whole `CDate` as stored (an `I64`: `time` in the
+/// low 32 bits, the signed `date` in the high 32).
+pub fn templeos_cdate_raw(raw: u64) -> i64 {
+    let time = u32::try_from(raw & 0xffff_ffff).unwrap_or(0);
+    let date = i32::from_le_bytes(u32::try_from(raw >> 32).unwrap_or(0).to_le_bytes());
+    templeos_cdate(time, date)
+}
+
 /// `YYYY-MM-DD` of a Unix timestamp, for summaries.
 pub fn date(unix_seconds: i64) -> String {
     let (year, month, day) = civil(unix_seconds.div_euclid(86_400));
@@ -133,5 +210,12 @@ mod tests {
         // Exact across the range of an i64 count of seconds.
         assert_eq!(civil(i64::MAX / 86_400), (292_277_026_596, 12, 4));
         assert_eq!(civil(-719_468), (0, 3, 1));
+        // TempleOS: day 719527 is 1970-01-01; 12:00 is 2^31.
+        assert_eq!(templeos_cdate(0, 719_527), 0);
+        assert_eq!(templeos_cdate(1 << 31, 719_528), 86_400 + 43_200);
+        // One second as `Struct2Date` stores it (truncated to 49710)
+        // still reads back as one second.
+        assert_eq!(templeos_cdate(49_710, 719_527), 1);
+        assert_eq!(templeos_cdate_raw((719_527u64 << 32) | 49_710), 1);
     }
 }

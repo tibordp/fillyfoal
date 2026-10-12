@@ -179,22 +179,6 @@ fn short(kind: u8) -> &'static str {
     lookup(IET, kind.into()).map_or("unknown", |n| n.strip_prefix("IET_").unwrap_or(n))
 }
 
-/// A `CDate` (`I64`: low half the time of day in 2^-32 days, high half
-/// the day number since AD 0 as `YearStartDate` counts it) as Unix
-/// seconds. `Now` is local time on the building machine.
-fn cdate_unix(raw: u64) -> i64 {
-    /// `YearStartDate(1970)`.
-    const UNIX_DAY: i64 = 719_527;
-    let time = raw & 0xffff_ffff;
-    let date = i64::from(i32::from_le_bytes(
-        u32::try_from(raw >> 32).unwrap_or(0).to_le_bytes(),
-    ));
-    let secs = time.saturating_mul(86_400) >> 32;
-    date.saturating_sub(UNIX_DAY)
-        .saturating_mul(86_400)
-        .saturating_add(i64::try_from(secs).unwrap_or(0))
-}
-
 record! {
     /// `CBinFile`
     struct BinHeader {
@@ -216,7 +200,7 @@ record! {
         boot_blk: u32 "boot_blk" .desc("Set at boot"),
         patch_base: u32 "boot_patch_table_base" .hex() .desc("Set at boot"),
         run_level: u32 "sys_run_level" .flags(RUN_LEVEL) .desc("Set at boot"),
-        compile_time: u64 "compile_time" .hex() .desc("CDate of the build, local time; boot loaders match it to find their kernel") .with(|&v, n| n.value(Value::Timestamp { unix_seconds: cdate_unix(v) })),
+        compile_time: u64 "compile_time" .hex() .desc("CDate of the build, local time; boot loaders match it to find their kernel") .with(|&v, n| n.value(Value::Timestamp { unix_seconds: civil::templeos_cdate_raw(v) })),
     }
 }
 
@@ -256,7 +240,7 @@ async fn dissect_as(cx: Cx, input: Input, kernel: bool) -> Result<()> {
         let mut node = KernelHeader::node("Kernel Header", kspan, LE);
         match crate::fields::parse(&cx, kspan, LE, &(), KernelHeader::layout).await {
             Ok(k) => {
-                let built = civil::date(cdate_unix(k.compile_time));
+                let built = civil::date(civil::templeos_cdate_raw(k.compile_time));
                 summary.push_str(&format!(", built {built}"));
                 node = node.summary(format!("built {built}"));
             }

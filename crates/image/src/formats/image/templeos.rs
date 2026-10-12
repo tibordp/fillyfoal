@@ -30,6 +30,7 @@ use crate::codec::charset::Charset;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::civil;
 use crate::formats::util::fmt::{clip, plural};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -693,23 +694,6 @@ fn gr_probe(h: &Head<'_>) -> bool {
         && body.saturating_add(csize) <= h.len
 }
 
-/// `CDate`: `time` is the fraction of the day in units of 2^-32, `date`
-/// days since 1 January of year 0 in TempleOS's calendar (whose year 0 has
-/// 365 days, `YearStartDate` in `Kernel/KDate.HC`). `None` for the zero
-/// date `DCSave` leaves when nothing set it.
-pub fn cdate_unix(time: u32, date: i32) -> Option<i64> {
-    /// `YearStartDate(1970)`.
-    const UNIX_DAY: i64 = 719_527;
-    if time == 0 && date == 0 {
-        return None;
-    }
-    let secs = i64::try_from(u64::from(time).saturating_mul(86_400) >> 32).unwrap_or(0);
-    i64::from(date)
-        .checked_sub(UNIX_DAY)?
-        .checked_mul(86_400)?
-        .checked_add(secs)
-}
-
 fn dc_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     let time = f
         .u32("Time")
@@ -718,13 +702,17 @@ fn dc_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
         .emit()?;
     let date = f
         .int::<i32>("Date")
-        .desc("CDate.date: days since 1 January of year 0")
+        .desc("CDate.date: days since 1 January of year 0 (TempleOS keeps local time)")
         .emit()?;
-    if let Some(unix) = cdate_unix(time, date) {
+    // `DCSave` leaves a zero date when nothing set it.
+    if time != 0 || date != 0 {
         f.node(
             Node::new("Timestamp")
                 .span(f.peek_span(0))
-                .value(Value::Timestamp { unix_seconds: unix }),
+                .value(Value::Timestamp {
+                    unix_seconds: civil::templeos_cdate(time, date),
+                })
+                .desc("TempleOS local time"),
         );
     }
     f.i32("X origin").emit()?;
