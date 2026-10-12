@@ -3,8 +3,10 @@
 //! Names and order follow `lopcodes.h` of each release (5.0.3, 5.1.5,
 //! 5.2.4, 5.3.6, 5.4.x, 5.5.x); the order for 5.1 to 5.5 was checked against
 //! the opcode name tables in the `luac` binaries of Docker `alpine:edge`
-//! (`lua5.1` .. `lua5.5`). Each entry's operand pattern is what `luac -l`
-//! prints for it (`PrintCode` in `luac.c`):
+//! (`lua5.1` .. `lua5.5`), and 5.0's against `luac -l -l` of a 5.0.3 built
+//! from lua.org's tarball (`tests/data/lua/make-5.0.sh`). Each entry's
+//! operand pattern is what `luac -l` prints for it (`PrintCode` in `luac.c`
+//! or `print.c`):
 //!
 //! - `A`, `B`, `C`, `Bx`, `Ax`, `k`: the raw fields; `vB`, `vC`: the
 //!   variable-width fields of 5.5's `ivABC` format;
@@ -15,48 +17,57 @@
 //! - `KB`, `KC`, `KBx`: a constant index, printed as is;
 //! - `Ck`: `C` with a `k` suffix when the k bit is set; `KCk`: the same,
 //!   and a constant when the k bit is set;
-//! - `KBx1` (5.5 `ERRNNIL`): constant `Bx - 1`.
+//! - `KBx1` (5.5 `ERRNNIL`): constant `Bx - 1`;
+//! - `xB`, `xC` (5.0): a register, or a constant `field - 250`
+//!   (`MAXSTACK`) printed as is; with both, the comment is `B C` with `-`
+//!   for a register `B` (and nothing for a register `C`);
+//! - `GBx` (5.0), `GNBx` (5.1): `Bx` as is or as `-1 - Bx`, with the
+//!   global's name (the string constant, unquoted);
+//! - `UB` (5.0, 5.1): `B`, with the upvalue's name when the debug
+//!   information has it.
 
 /// One version's opcode names and operand patterns, by opcode.
 pub type Table = &'static [(&'static str, &'static str)];
 
 const ARITH: &str = "A rkB rkC";
+/// 5.0 prints every field of its format (`iABC`, `iABx`, `iAsBx`).
+const ARITH50: &str = "A xB xC";
 
 pub static LUA50: Table = &[
-    ("MOVE", "A B"),
+    ("MOVE", "A B C"),
     ("LOADK", "A KBx"),
     ("LOADBOOL", "A B C"),
-    ("LOADNIL", "A B"),
-    ("GETUPVAL", "A B"),
-    ("GETGLOBAL", "A KBx"),
-    ("GETTABLE", "A B C"),
-    ("SETGLOBAL", "A KBx"),
-    ("SETUPVAL", "A B"),
-    ("SETTABLE", "A B C"),
+    ("LOADNIL", "A B C"),
+    ("GETUPVAL", "A UB C"),
+    ("GETGLOBAL", "A GBx"),
+    ("GETTABLE", "A B xC"),
+    ("SETGLOBAL", "A GBx"),
+    ("SETUPVAL", "A UB C"),
+    ("SETTABLE", ARITH50),
     ("NEWTABLE", "A B C"),
-    ("SELF", "A B C"),
-    ("ADD", "A B C"),
-    ("SUB", "A B C"),
-    ("MUL", "A B C"),
-    ("DIV", "A B C"),
-    ("POW", "A B C"),
-    ("UNM", "A B"),
-    ("NOT", "A B"),
+    ("SELF", "A B xC"),
+    ("ADD", ARITH50),
+    ("SUB", ARITH50),
+    ("MUL", ARITH50),
+    ("DIV", ARITH50),
+    ("POW", ARITH50),
+    ("UNM", "A B C"),
+    ("NOT", "A B C"),
     ("CONCAT", "A B C"),
-    ("JMP", "sBx"),
-    ("EQ", "A B C"),
-    ("LT", "A B C"),
-    ("LE", "A B C"),
+    ("JMP", "A sBx"),
+    ("EQ", ARITH50),
+    ("LT", ARITH50),
+    ("LE", ARITH50),
     ("TEST", "A B C"),
     ("CALL", "A B C"),
     ("TAILCALL", "A B C"),
-    ("RETURN", "A B"),
+    ("RETURN", "A B C"),
     ("FORLOOP", "A sBx"),
-    ("TFORLOOP", "A C"),
+    ("TFORLOOP", "A B C"),
     ("TFORPREP", "A sBx"),
     ("SETLIST", "A Bx"),
     ("SETLISTO", "A Bx"),
-    ("CLOSE", "A"),
+    ("CLOSE", "A B C"),
     ("CLOSURE", "A Bx"),
 ];
 
@@ -65,11 +76,11 @@ pub static LUA51: Table = &[
     ("LOADK", "A NBx"),
     ("LOADBOOL", "A B C"),
     ("LOADNIL", "A B"),
-    ("GETUPVAL", "A B"),
-    ("GETGLOBAL", "A NBx"),
+    ("GETUPVAL", "A UB"),
+    ("GETGLOBAL", "A GNBx"),
     ("GETTABLE", "A B rkC"),
-    ("SETGLOBAL", "A NBx"),
-    ("SETUPVAL", "A B"),
+    ("SETGLOBAL", "A GNBx"),
+    ("SETUPVAL", "A UB"),
     ("SETTABLE", ARITH),
     ("NEWTABLE", "A B C"),
     ("SELF", "A B rkC"),
