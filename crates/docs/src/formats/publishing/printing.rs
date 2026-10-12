@@ -557,6 +557,123 @@ const XL_OPERATORS: &[(u8, &str)] = &[
     (0xba, "PassThrough"),
 ];
 
+/// Attribute IDs, as Ghostscript 10.0's `base/gdevpxat.h` numbers them (the
+/// PCL XL Feature Reference's; the gaps are reserved).
+const XL_ATTRIBUTES: &[(u16, &str)] = &[
+    (2, "PaletteDepth"),
+    (3, "ColorSpace"),
+    (4, "NullBrush"),
+    (5, "NullPen"),
+    (6, "PaletteData"),
+    (8, "PatternSelectID"),
+    (9, "GrayLevel"),
+    (10, "Lightness"),
+    (11, "RGBColor"),
+    (12, "PatternOrigin"),
+    (13, "NewDestinationSize"),
+    (14, "PrimaryArray"),
+    (15, "PrimaryDepth"),
+    (16, "Saturation"),
+    (17, "ColorimetricColorSpace"),
+    (18, "XYChromaticities"),
+    (19, "WhiteReferencePoint"),
+    (20, "CRGBMinMax"),
+    (21, "GammaGain"),
+    (29, "AllObjectTypes"),
+    (30, "TextObjects"),
+    (31, "VectorObjects"),
+    (32, "RasterObjects"),
+    (33, "DeviceMatrix"),
+    (34, "DitherMatrixDataType"),
+    (35, "DitherOrigin"),
+    (36, "MediaDestination"),
+    (37, "MediaSize"),
+    (38, "MediaSource"),
+    (39, "MediaType"),
+    (40, "Orientation"),
+    (41, "PageAngle"),
+    (42, "PageOrigin"),
+    (43, "PageScale"),
+    (44, "ROP3"),
+    (45, "TxMode"),
+    (47, "CustomMediaSize"),
+    (48, "CustomMediaSizeUnits"),
+    (49, "PageCopies"),
+    (50, "DitherMatrixSize"),
+    (51, "DitherMatrixDepth"),
+    (52, "SimplexPageMode"),
+    (53, "DuplexPageMode"),
+    (54, "DuplexPageSide"),
+    (65, "ArcDirection"),
+    (66, "BoundingBox"),
+    (67, "DashOffset"),
+    (68, "EllipseDimension"),
+    (69, "EndPoint"),
+    (70, "FillMode"),
+    (71, "LineCapStyle"),
+    (72, "LineJoinStyle"),
+    (73, "MiterLength"),
+    (74, "LineDashStyle"),
+    (75, "PenWidth"),
+    (76, "Point"),
+    (77, "NumberOfPoints"),
+    (78, "SolidLine"),
+    (79, "StartPoint"),
+    (80, "PointType"),
+    (81, "ControlPoint1"),
+    (82, "ControlPoint2"),
+    (83, "ClipRegion"),
+    (84, "ClipMode"),
+    (98, "ColorDepth"),
+    (99, "BlockHeight"),
+    (100, "ColorMapping"),
+    (101, "CompressMode"),
+    (102, "DestinationBox"),
+    (103, "DestinationSize"),
+    (104, "PatternPersistence"),
+    (105, "PatternDefineID"),
+    (107, "SourceHeight"),
+    (108, "SourceWidth"),
+    (109, "StartLine"),
+    (110, "PadBytesMultiple"),
+    (111, "BlockByteLength"),
+    (115, "NumberOfScanLines"),
+    (120, "ColorTreatment"),
+    (129, "CommentData"),
+    (130, "DataOrg"),
+    (134, "Measure"),
+    (136, "SourceType"),
+    (137, "UnitsPerMeasure"),
+    (139, "StreamName"),
+    (140, "StreamDataLength"),
+    (141, "PCLSelectFont"),
+    (143, "ErrorReport"),
+    (145, "VUExtension"),
+    (146, "VUDataLength"),
+    (147, "VUAttr1"),
+    (148, "VUAttr2"),
+    (149, "VUAttr3"),
+    (150, "VUAttr4"),
+    (151, "VUAttr5"),
+    (152, "VUAttr6"),
+    (161, "CharAngle"),
+    (162, "CharCode"),
+    (163, "CharDataSize"),
+    (164, "CharScale"),
+    (165, "CharShear"),
+    (166, "CharSize"),
+    (167, "FontHeaderLength"),
+    (168, "FontName"),
+    (169, "FontFormat"),
+    (170, "SymbolSet"),
+    (171, "TextData"),
+    (172, "CharSubModeArray"),
+    (173, "WritingMode"),
+    (175, "XSpacingData"),
+    (176, "YSpacingData"),
+    (177, "CharBoldValue"),
+];
+
 /// Element size of a PCL XL data type, and how many elements a scalar,
 /// xy pair or box holds; arrays are marked with `None`.
 fn xl_type(t: u8) -> Option<(u64, Option<u64>, &'static str)> {
@@ -689,7 +806,12 @@ async fn pclxl(cx: Cx, input: Input) -> Result<()> {
                 let n: u64 = if tag == 0xf9 { 2 } else { 1 };
                 let b = scan.bytes(pos, pos.saturating_add(n), 2).await?;
                 let id = xl_number(&b, if tag == 0xf9 { 1 } else { 0 }, little);
-                attrs.push(format!("{id}={}", last.take().unwrap_or_default()));
+                let name = id
+                    .parse::<u16>()
+                    .ok()
+                    .and_then(|n| XL_ATTRIBUTES.iter().find(|(k, _)| *k == n))
+                    .map_or(id, |(_, v)| (*v).to_owned());
+                attrs.push(format!("{name}={}", last.take().unwrap_or_default()));
                 pos = pos.saturating_add(n);
             }
             0xfa | 0xfb => {
@@ -1753,7 +1875,19 @@ async fn run_length_end(
 // Apple raster (URF)
 
 declare_format!(pub URF = "urf", "Apple raster (URF)", ["urf"], "image/urf",
-    Probe::Custom(|h| h.starts_with(b"UNIRAST\0") && u32_be(h.data, 8).is_some_and(|n| n > 0 && n < 100_000)), urf);
+    Probe::Custom(urf_probe), urf);
+
+/// `UNIRAST\0`, a page count, and a first page header whose bits per
+/// pixel are plausible. A count of 0 means "not known when the header was
+/// written" (libcups' Apple raster stream, used by Ghostscript's `urf`
+/// device, writes it so); the pages then run to the end of the file.
+fn urf_probe(h: &Head<'_>) -> bool {
+    h.starts_with(b"UNIRAST\0")
+        && u32_be(h.data, 8).is_some_and(|n| n < 100_000)
+        && h.data
+            .get(12)
+            .is_some_and(|b| matches!(b, 1 | 8 | 16 | 24 | 32 | 48 | 64))
+}
 
 const URF_SPACES: &[(u8, &str)] = &[
     (0, "sGray"),
@@ -1776,26 +1910,26 @@ async fn urf(cx: Cx, input: Input) -> Result<()> {
     );
     let mut pos = 12u64;
     let mut first = String::new();
-    for i in 0..count {
+    let mut pages = 0u32;
+    // A count of 0: pages up to the end of the file.
+    let limit = if count == 0 { u32::MAX } else { count };
+    for i in 0..limit {
         if pos >= file.len {
             break;
         }
+        pages = i.saturating_add(1);
         let h = cx.read(file.sub_exact(pos, 32)?).await?;
         let bpp = h.first().copied().unwrap_or(0);
         let space = h.get(1).copied().unwrap_or(0);
         let width = u32_be(&h, 12).unwrap_or(0);
         let height = u32_be(&h, 16).unwrap_or(0);
         let dpi = u32_be(&h, 20).unwrap_or(0);
+        // Rows are packed in units of whole bytes per pixel (one byte below
+        // 8 bits per pixel, as libcups packs them), over the row's bytes.
         let pixel = u64::from(bpp.max(8).div_ceil(8));
-        let end = run_length_end(
-            &cx,
-            file,
-            pos.saturating_add(32),
-            u64::from(width).saturating_mul(pixel),
-            pixel,
-            height.into(),
-        )
-        .await?;
+        let row = u64::from(width).saturating_mul(bpp.into()).div_ceil(8);
+        let end =
+            run_length_end(&cx, file, pos.saturating_add(32), row, pixel, height.into()).await?;
         let space_name = URF_SPACES
             .iter()
             .find(|(k, _)| *k == space)
@@ -1818,7 +1952,7 @@ async fn urf(cx: Cx, input: Input) -> Result<()> {
         .await;
         pos = end;
     }
-    cx.annotate(format!("Apple raster, {count} pages, {first}"));
+    cx.annotate(format!("Apple raster, {pages} pages, {first}"));
     Ok(())
 }
 
