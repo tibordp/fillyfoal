@@ -422,7 +422,16 @@ async fn section(cx: Cx, (d, i): (Arc<Drawing>, usize)) -> Result<()> {
         );
     }
     if s.encrypted == 1 {
-        return Err(Diagnostic::unsupported("encrypted section").at(s.data));
+        // LibreDWG (copying AutoCAD) flags AppInfo and FileDepList as
+        // encrypted in every drawing, and dwgread reads them as plain data;
+        // only a password-protected drawing (with an AcDb:Security section)
+        // really encrypts its sections.
+        if d.sections.iter().any(|s| s.name == "AcDb:Security") {
+            return Err(Diagnostic::unsupported("encrypted section").at(s.data));
+        }
+        cx.diag(Diagnostic::note(
+            "flagged as encrypted, but the drawing has no AcDb:Security section: read as plain data",
+        ));
     }
     match s.kind {
         Kind::Header => dwg_data::header_vars(&cx, &d, s.data).await,
@@ -615,6 +624,7 @@ async fn r2004(cx: Cx, input: Input, ver: Ver) -> Result<()> {
         }
     }
     let mut sections = Vec::new();
+    let mut systems = Vec::new();
     let mut pos = 20usize;
     for _ in 0..count {
         cx.checkpoint().await;
@@ -651,7 +661,30 @@ async fn r2004(cx: Cx, input: Input, ver: Ver) -> Result<()> {
             });
             pos = pos.saturating_add(16);
         }
-        let data = assemble(&cx, file, desc_span, size, max_size, compressed, &pages).await?;
+        // LibreDWG lists the section map and the section page map as
+        // unnamed sections; their pages are system pages (shown above),
+        // not data pages.
+        let system_page = |p: &Page| {
+            if p.number == section_map_id {
+                Some("the section map")
+            } else if p.number == map_id {
+                Some("the section page map")
+            } else {
+                None
+            }
+        };
+        let system = if name.is_empty() {
+            pages.first().and_then(system_page)
+        } else {
+            None
+        }
+        .filter(|_| pages.iter().all(|p| system_page(p).is_some()));
+        let data = if system.is_some() {
+            desc_span
+        } else {
+            assemble(&cx, file, desc_span, size, max_size, compressed, &pages).await?
+        };
+        systems.push(system);
         sections.push(Section {
             kind: kind_of_name(&name),
             name,
@@ -679,6 +712,16 @@ async fn r2004(cx: Cx, input: Input, ver: Ver) -> Result<()> {
         } else {
             s.name.clone()
         };
+        if let Some(Some(what)) = systems.get(i) {
+            let numbers: Vec<String> = s.pages.iter().map(|p| p.number.to_string()).collect();
+            cx.emit(
+                Node::new(name)
+                    .span(s.data)
+                    .summary(format!("system page {}: {what}", numbers.join(", ")))
+                    .desc("LibreDWG lists its system pages in the section map; they hold no section data"),
+            );
+            continue;
+        }
         let pages = s.pages.len();
         let how = if s.compressed { "compressed" } else { "stored" };
         cx.emit(
