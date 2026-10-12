@@ -452,6 +452,19 @@ pub async fn prepare(cx: &Cx, input: Input) -> Result<Prepared> {
     prepare_declared(cx, input, None).await
 }
 
+/// [`prepare`] for a walker that records resume marks (see `Cx::mark`):
+/// takes the resume key before anything is emitted, and on a resumed run
+/// does not emit the byte order mark again (the next child must be the one
+/// the mark was taken before).
+pub async fn prepare_resuming<K: std::any::Any + Send + Sync + Clone>(
+    cx: &Cx,
+    input: Input,
+) -> Result<(Prepared, Option<K>)> {
+    let resumed = cx.resume::<K>();
+    let prepared = prepare_with(cx, input, None, resumed.is_none()).await?;
+    Ok((prepared, resumed))
+}
+
 /// Whether `data` is UTF-8 (allowing a character cut off at the end).
 fn is_utf8(data: &[u8]) -> bool {
     match std::str::from_utf8(data) {
@@ -494,6 +507,15 @@ fn declared_legacy(cx: Option<&Cx>, head: &[u8], declared: Option<Label>) -> Opt
 /// The decision is made from the head of the text: if that is plain ASCII
 /// (or valid UTF-8), the text is used as it is.
 pub async fn prepare_declared(cx: &Cx, input: Input, declared: Option<Label>) -> Result<Prepared> {
+    prepare_with(cx, input, declared, true).await
+}
+
+async fn prepare_with(
+    cx: &Cx,
+    input: Input,
+    declared: Option<Label>,
+    emit_bom: bool,
+) -> Result<Prepared> {
     let span = input.span;
     let head = cx.read_avail(span.sub(0, 512)).await?;
     let (encoding, bom_len) = match bom(&head) {
@@ -526,7 +548,7 @@ pub async fn prepare_declared(cx: &Cx, input: Input, declared: Option<Label>) ->
         }
     }
     let bom = (bom_len > 0).then(|| span.sub(0, bom_len));
-    if let Some(b) = bom {
+    if let Some(b) = bom.filter(|_| emit_bom) {
         cx.emit(
             Node::new("Byte order mark")
                 .span(b)

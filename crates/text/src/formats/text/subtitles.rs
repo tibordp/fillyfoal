@@ -11,7 +11,7 @@ use crate::span::Span;
 use crate::value::Value;
 
 use super::decode::preview;
-use super::encoding::prepare;
+use super::encoding::{prepare, prepare_resuming};
 use super::piece::Piece;
 use super::scan::{LineBuf, Lines};
 use super::{plural, probe, text_node};
@@ -274,13 +274,19 @@ async fn cue(cx: Cx, c: Cue) -> Result<()> {
     Ok(())
 }
 
+/// A resume mark: (byte position, lines so far, cues so far, the last cue's
+/// end time).
+type SrtMark = (u64, u64, u64, Option<String>);
+
 pub async fn dissect_srt(cx: Cx, input: Input) -> Result<()> {
-    let prepared = prepare(&cx, input).await?;
+    let (prepared, resumed) = prepare_resuming::<SrtMark>(&cx, input).await?;
     cx.annotate(format!("SubRip subtitles{}", prepared.note()));
     let mut lines = Lines::new(&cx, prepared.span);
-    let mut count = 0u64;
-    let mut last_end = None;
+    let (pos, number, mut count, mut last_end) = resumed.unwrap_or((0, 0, 0, None));
+    lines.seek(pos, number);
     loop {
+        let at = (lines.pos(), lines.number(), count, last_end.clone());
+        cx.mark(move || at);
         let block = block(&mut lines).await?;
         let Some(span) = block_span(&block) else {
             break;
@@ -322,10 +328,12 @@ pub async fn dissect_srt(cx: Cx, input: Input) -> Result<()> {
 }
 
 pub async fn dissect_vtt(cx: Cx, input: Input) -> Result<()> {
-    let prepared = prepare(&cx, input).await?;
+    // Resume marks: (byte position, lines so far, cues so far).
+    let (prepared, resumed) = prepare_resuming::<(u64, u64, u64)>(&cx, input).await?;
     let mut lines = Lines::new(&cx, prepared.span);
     let header = block(&mut lines).await?;
-    if let Some(span) = block_span(&header) {
+    // A resumed run continues with the blocks after the header.
+    if let Some(span) = block_span(&header).filter(|_| resumed.is_none()) {
         let first = header.first().map(LineBuf::text).unwrap_or_default();
         cx.emit(text_node("Header", span, &first));
         for line in header.iter().skip(1) {
@@ -339,7 +347,13 @@ pub async fn dissect_vtt(cx: Cx, input: Input) -> Result<()> {
         }
     }
     let mut cues = 0u64;
+    if let Some((pos, number, n)) = resumed {
+        lines.seek(pos, number);
+        cues = n;
+    }
     loop {
+        let at = (lines.pos(), lines.number(), cues);
+        cx.mark(move || at);
         let block = block(&mut lines).await?;
         let Some(span) = block_span(&block) else {
             break;

@@ -15,7 +15,7 @@ use crate::span::Span;
 use crate::value::Value;
 
 use super::decode::{self, Transform, decoded_text_node, preview};
-use super::encoding::{decode_8bit, prepare};
+use super::encoding::{decode_8bit, prepare, prepare_resuming};
 use super::scan::Lines;
 use super::{parse_datetime, plural, probe, text_node};
 
@@ -782,14 +782,16 @@ pub async fn dissect_emlx(cx: Cx, input: Input) -> Result<()> {
 
 /// mbox: messages separated by `From ` lines.
 pub async fn dissect_mbox(cx: Cx, input: Input) -> Result<()> {
-    let prepared = prepare(&cx, input).await?;
+    // Resume marks: (start of the message's `From ` line, messages before).
+    let (prepared, resumed) = prepare_resuming::<(u64, u64)>(&cx, input).await?;
     let input = prepared.input(input);
     let span = prepared.span;
     cx.annotate("Mailbox (mbox)");
     let mut lines = Lines::new(&cx, span);
+    let (resume_at, mut count) = resumed.unwrap_or((0, 0));
+    lines.seek(resume_at, 0);
     let mut current: Option<(u64, String, u64)> = None; // (separator start, envelope, message start)
     let mut prev_blank = true;
-    let mut count = 0u64;
     loop {
         let before = lines.pos();
         let line = lines.next().await?;
@@ -803,6 +805,8 @@ pub async fn dissect_mbox(cx: Cx, input: Input) -> Result<()> {
             continue;
         }
         if let Some((sep, envelope, start)) = current.take() {
+            let at = (sep, count);
+            cx.mark(move || at);
             count = count.saturating_add(1);
             let message = span.sub(start, before.saturating_sub(start));
             let (fields, _) = headers(&cx, message.sub(0, 256 * 1024)).await?;

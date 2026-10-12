@@ -17,7 +17,7 @@ use crate::span::Span;
 use crate::value::Value;
 
 use super::decode::preview;
-use super::encoding::prepare;
+use super::encoding::prepare_resuming;
 use super::probe;
 use super::scan::{Lines, Scanner};
 use super::{VALUE_CAP, plural, text_node};
@@ -636,8 +636,13 @@ fn item_node(name: String, item: Item, span: Span, walk: &Walk) -> Node {
 }
 
 async fn walk(cx: Cx, w: Walk) -> Result<()> {
-    walk_members(&cx, &w).await.map(|_| ())
+    let resumed = cx.resume::<Mark>();
+    walk_members(&cx, &w, resumed).await.map(|_| ())
 }
+
+/// A resume mark in a container: the lexer position before the next
+/// member, the members so far and the flavored collection's size.
+type Mark = (u64, u64, Option<u64>);
 
 /// What walking a container found.
 struct Walked {
@@ -648,8 +653,9 @@ struct Walked {
     collection: Option<u64>,
 }
 
-/// Pushes the members of the container at the start of `w.span`.
-async fn walk_members(cx: &Cx, w: &Walk) -> Result<Walked> {
+/// Pushes the members of the container at the start of `w.span`, from a
+/// resume mark if given.
+async fn walk_members(cx: &Cx, w: &Walk, resumed: Option<Mark>) -> Result<Walked> {
     let mut lex = Lexer::new(cx, w.span);
     let open = lex.next().await?;
     let object = match open.kind {
@@ -662,7 +668,14 @@ async fn walk_members(cx: &Cx, w: &Walk) -> Result<Walked> {
         members: 0,
         collection: None,
     };
+    if let Some((pos, members, collection)) = resumed {
+        lex.pos = pos;
+        walked.members = members;
+        walked.collection = collection;
+    }
     loop {
+        let at = (lex.pos, walked.members, walked.collection);
+        cx.mark(move || at);
         let mut t = lex.next().await?;
         while t.kind == Kind::Comma {
             t = lex.next().await?;
@@ -873,7 +886,7 @@ async fn describe(cx: &Cx, flavor: Flavor, span: Span) -> Result<Option<String>>
 /// Dissects a JSON document: the members of the top-level value are the
 /// top-level nodes. Returns the walk result, if the value was a container.
 async fn document(cx: &Cx, input: Input, flavor: Flavor) -> Result<Option<Walked>> {
-    let prepared = prepare(cx, input).await?;
+    let (prepared, resumed) = prepare_resuming::<Mark>(cx, input).await?;
     let mut lex = Lexer::new(cx, prepared.span);
     let first = lex.next().await?;
     let walked = match first.kind {
@@ -883,7 +896,7 @@ async fn document(cx: &Cx, input: Input, flavor: Flavor) -> Result<Option<Walked
                 span: prepared.span.tail(first.start),
                 flavor,
             };
-            let walked = walk_members(cx, &walk).await?;
+            let walked = walk_members(cx, &walk, resumed).await?;
             lex.pos = first.start.saturating_add(walked.end);
             Some(walked)
         }
@@ -1088,12 +1101,19 @@ pub async fn dissect_har(cx: Cx, input: Input) -> Result<()> {
 
 /// JSON Lines: one document per line, as a paged collection.
 pub async fn dissect_lines(cx: Cx, input: Input) -> Result<()> {
-    let prepared = prepare(&cx, input).await?;
+    // Resume marks: (byte position, lines so far, records so far).
+    let (prepared, resumed) = prepare_resuming::<(u64, u64, u64)>(&cx, input).await?;
     let walk_input = prepared.input(input);
     cx.annotate(format!("JSON Lines{}", prepared.note()));
     let mut lines = Lines::new(&cx, prepared.span);
-    let mut records = 0u64;
-    while let Some(line) = lines.next().await? {
+    let (pos, number, mut records) = resumed.unwrap_or((0, 0, 0));
+    lines.seek(pos, number);
+    loop {
+        let at = (lines.pos(), lines.number(), records);
+        cx.mark(move || at);
+        let Some(line) = lines.next().await? else {
+            break;
+        };
         if line.is_blank() {
             continue;
         }
