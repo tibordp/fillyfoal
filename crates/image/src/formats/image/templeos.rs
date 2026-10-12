@@ -26,6 +26,7 @@
 //! Ported from the public-domain TempleOS V5.03 source.
 
 use crate::bytes::{i32_le, to_u64, to_usize, u32_le, u64_le};
+use crate::codec::Codec;
 use crate::codec::charset::Charset;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
@@ -814,6 +815,13 @@ async fn gr(cx: Cx, input: Input) -> Result<()> {
             )));
         }
         cx.emit(node.lazy(arc_fields, arc));
+        // The codec takes the whole `CArcCompress` block and expands only
+        // as far as the rows read from it.
+        let decoded = cx.decode_lazy(arc, &Codec::TempleOsZ, pixel_count)?;
+        cx.emit(
+            pixels("Pixels", decoded, w, wi.into(), h)
+                .desc("Expanded from the compressed block on demand"),
+        );
         line.push_str(", compressed");
         pos.saturating_add(arc.len)
     } else {
