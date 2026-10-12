@@ -20,7 +20,7 @@ while [ $i -lt 5120 ]; do
   printf '0123456789abcdef'
   i=$((i + 1))
 done > content/Game/Content/Maps/Level.txt
-for spec in V3:Zlib V8B:Zlib V11:Zlib V11:Zstd; do
+for spec in V3:Zlib V8B:Zlib V11:Zlib V11:Zstd V8A:LZ4 V9:Gzip; do
   v=${spec%%:*}; c=${spec#*:}
   lower=$(echo "$v-$c" | tr 'A-Z' 'a-z')
   /tools/repak/bin/repak pack -q --version "$v" --compression "$c" content "out/repak-$lower.pak"

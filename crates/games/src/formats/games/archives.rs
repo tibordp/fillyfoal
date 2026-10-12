@@ -267,7 +267,10 @@ async fn psarc_toc(cx: Cx, (span, entry_size, count): (Span, u64, u32)) -> Resul
 /// entries' paths one per line; entries are decoded through
 /// [`crate::codec::psarc`]. From memory of the community documentation.
 async fn psarc(cx: Cx, input: Input) -> Result<()> {
-    use crate::codec::{Codec, psarc::Entry};
+    use crate::codec::{
+        Codec,
+        psarc::{BlockCodec, Entry},
+    };
     use crate::formats::util::fmt::size as human_size;
     let file = input.span;
     let h: PsarcHeader = emit_record(&cx, file.sub(0, PsarcHeader::SIZE), BE).await?;
@@ -355,6 +358,7 @@ async fn psarc(cx: Cx, input: Input) -> Result<()> {
             block_size,
             size,
             blocks: blocks.into(),
+            codec: BlockCodec::Sniff,
         });
         (file.sub(offset, stored), codec)
     };

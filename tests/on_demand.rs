@@ -2146,6 +2146,7 @@ mod bounded_steps {
             block_size: block as u32,
             size: data.len() as u64,
             blocks: vec![0, z.len() as u32, block as u32].into(),
+            codec: fillyfoal::codec::psarc::BlockCodec::Sniff,
         });
         let (out, calls) = stepped(&codec, &input);
         assert!(out == data && calls > 3 * 64, "{calls} calls");
