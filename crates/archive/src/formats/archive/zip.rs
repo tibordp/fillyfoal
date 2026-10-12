@@ -200,6 +200,31 @@ zip_variant!(
     |h| has_entry(h, b"document.json") && has_entry(h, b"meta.json")
 );
 zip_variant!(
+    PKPASS,
+    "pkpass",
+    "Apple Wallet pass",
+    ["pkpass", "pkpasses"],
+    "application/vnd.apple.pkpass",
+    // PassKit: the pass, a manifest of SHA-1 digests of every file, and a
+    // detached PKCS #7 signature of the manifest.
+    |h| has_entry(h, b"pass.json")
+        && (has_entry(h, b"manifest.json") || has_entry(h, b"signature"))
+);
+zip_variant!(
+    OLM,
+    "olm",
+    "Outlook for Mac archive",
+    ["olm"],
+    "application/x-outlook-mac-archive",
+    // Items live under `Accounts/<account>/com.microsoft.__Messages/...`
+    // (and `Local/` for items on this Mac), one XML file each.
+    |h| is_zip(h)
+        && entry_names(h).any(|n| {
+            (n.starts_with(b"Accounts/") || n.starts_with(b"Local/"))
+                && crate::bytes::contains(n, b"/com.microsoft.__")
+        })
+);
+zip_variant!(
     USDZ,
     "usdz",
     "Universal Scene Description (zipped)",

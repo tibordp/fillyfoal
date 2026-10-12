@@ -1,0 +1,41 @@
+%!PS-Adobe-3.0 EPSF-3.0
+%%Creator: Adobe Illustrator(R) 8.0
+%%AI8_CreatorVersion: 8.0
+%%For: (fillyfoal) ()
+%%Title: (legacy.ai)
+%%CreationDate: (1/1/2026) (12:00 AM)
+%%BoundingBox: 0 0 200 100
+%%HiResBoundingBox: 0 0 200 100
+%%DocumentProcessColors: Cyan Magenta
+%AI5_FileFormat 4.0
+%AI3_ColorUsage: Color
+%AI3_TemplateBox: 100.5 50.5 100.5 50.5
+%AI3_TileBox: 0 0 200 100
+%AI3_DocumentPreview: None
+%AI5_ArtSize: 200 100
+%AI5_RulerUnits: 2
+%AI5_NumLayers: 1
+%%EndComments
+%%BeginProlog
+/fillyfoal-placeholder-procset 10 dict def
+%%EndProlog
+%%BeginSetup
+%AI5_BeginPalette
+%AI5_EndPalette
+%%EndSetup
+%AI5_BeginLayer
+1 1 1 1 0 0 0 79 128 255 Lb
+(Layer 1) Ln
+0 A
+1 0 0 0 k
+20 20 m
+180 20 L
+180 80 L
+20 80 L
+20 20 L
+f
+LB
+%AI5_EndLayer--
+%%PageTrailer
+%%Trailer
+%%EOF

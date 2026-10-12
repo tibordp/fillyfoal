@@ -1,0 +1,301 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ compat.ai — Adobe Illustrator artwork; PDF 1.6, 1 page  [0x0+0x746]
+    Header: "1.6"  [0x0+0x8]
+    Binary marker: e2 e3 cf d3  |....|  [0x9+0x5]
+  ▾ Illustrator data — 2 entries  [0x3bc+0x36]
+      /LastModified: "D:20260101000000Z"  [0x3bf+0x21]
+    ▾ /Private: "7 0 R" — 7 entries  [0x3e1+0xe] → 0x3fa+0x0
+      ▾ /AIMetaData: "8 0 R" — stream, 1 entries, 186 bytes  [0x405+0x11] → 0x497+0x0
+          /Length: 186  [0x4a2+0xb]
+        ▾ Stream data — Adobe Illustrator artwork (PostScript): compat.ai, 200×100 pt (Adobe Illustrator(R) 24.0)  [0x4b8+0xba]
+          ▾ Header  [0x4b8+0xba]
+              Version: "%!PS-Adobe-3.0 "  [0x4b8+0xf]
+              Creator: "Adobe Illustrator(R) 24.0"  [0x4d3+0x19]
+              AI8_CreatorVersion: "24.0.0"  [0x503+0x6]
+              For: "(fillyfoal) ()"  [0x511+0xe]
+              Title: "(compat.ai)"  [0x529+0xb]
+              CreationDate: "1/1/2026 12:00 AM"  [0x545+0x11]
+              BoundingBox: "0 0 200 100" — 200×100 pt at (0, 0)  [0x566+0xb]
+        ▾ Operators
+      ▾ /AIPrivateData1: "9 0 R" — stream, 1 entries, 133 bytes  [0x417+0x15] → 0x584+0x0
+          /Length: 133  [0x58f+0xb]
+        ▾ Stream data — 133 bytes  [0x5a5+0x85]
+            Data  [0x5a5+0x85]
+        ▾ Operators
+            r�S3�sRR���u�+�  [0x602+0x14]
+              ! warning: unknown operator
+        /ContainerVersion: 12  [0x42d+0x14]
+        /CreatorVersion: 24  [0x442+0x12]
+        /NumBlock: 1  [0x455+0xb]
+        /RoundtripStreamType: 1  [0x461+0x16]
+        /RoundtripVersion: 24  [0x478+0x14]
+  ▾ Trailer — 2 entries  [0x70e+0x22]
+      /Size: 10  [0x719+0x8]
+      /Root: "1 0 R"  [0x722+0xb] → 0xf+0x0
+  ▾ Document Catalog: "1 0 R" — /Catalog, 3 entries  [0x728+0x5] → 0xf+0x0
+      /Type: "/Catalog"  [0x1a+0xe]
+    ▾ /Pages: "3 0 R" — /Pages, 3 entries  [0x29+0xc] → 0x291+0x0
+        /Type: "/Pages"  [0x29c+0xc]
+      ▾ /Kids — [4 0 R]  [0x2a9+0xd]
+        ▾ [0]: "4 0 R" — /Page, 6 entries  [0x2b0+0x5] → 0x2ca+0x0
+            /Type: "/Page"  [0x2d5+0xb]
+            /Parent: "3 0 R"  [0x2e1+0xd] → 0x291+0x0
+          ▾ /MediaBox — [0 0 200 100]  [0x2ef+0x17]
+              [0]: 0  [0x2fa+0x1]
+              [1]: 0  [0x2fc+0x1]
+              [2]: 200  [0x2fe+0x3]
+              [3]: 100  [0x302+0x3]
+          ▾ /Contents: "5 0 R" — stream, 1 entries, 27 bytes  [0x307+0xf] → 0x367+0x0
+              /Length: 27  [0x372+0xa]
+            ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x387+0x1b]
+                Encoding: "UTF-8"
+                Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+              ▾ Lines — 1 line  [0x387+0x1b]
+                  Line 1: "0 0 1 rg 20 20 160 60 re f"  [0x387+0x1a]
+            ▾ Operators
+                rg: "0 0 1" — set non-stroking RGB  [0x387+0x8]
+                re: "20 20 160 60" — rectangle  [0x390+0xf]
+                f — fill  [0x3a0+0x1]
+          ▾ /PieceInfo — 1 entries  [0x317+0x23]
+            ▾ /Illustrator: "6 0 R" — 2 entries  [0x325+0x12] → 0x3b4+0x0
+                /LastModified: "D:20260101000000Z"  [0x3bf+0x21]
+              ▾ /Private: "7 0 R" — 7 entries  [0x3e1+0xe] → 0x3fa+0x0
+                ▾ /AIMetaData: "8 0 R" — stream, 1 entries, 186 bytes  [0x405+0x11] → 0x497+0x0
+                    /Length: 186  [0x4a2+0xb]
+                  ▾ Stream data — Adobe Illustrator artwork (PostScript): compat.ai, 200×100 pt (Adobe Illustrator(R) 24.0)  [0x4b8+0xba]
+                    ▾ Header  [0x4b8+0xba]
+                        Version: "%!PS-Adobe-3.0 "  [0x4b8+0xf]
+                        Creator: "Adobe Illustrator(R) 24.0"  [0x4d3+0x19]
+                        AI8_CreatorVersion: "24.0.0"  [0x503+0x6]
+                        For: "(fillyfoal) ()"  [0x511+0xe]
+                        Title: "(compat.ai)"  [0x529+0xb]
+                        CreationDate: "1/1/2026 12:00 AM"  [0x545+0x11]
+                        BoundingBox: "0 0 200 100" — 200×100 pt at (0, 0)  [0x566+0xb]
+                  ▾ Operators
+                ▾ /AIPrivateData1: "9 0 R" — stream, 1 entries, 133 bytes  [0x417+0x15] → 0x584+0x0
+                    /Length: 133  [0x58f+0xb]
+                  ▾ Stream data — 133 bytes  [0x5a5+0x85]
+                      Data  [0x5a5+0x85]
+                  ▾ Operators
+                      r�S3�sRR���u�+�  [0x602+0x14]
+                        ! warning: unknown operator
+                  /ContainerVersion: 12  [0x42d+0x14]
+                  /CreatorVersion: 24  [0x442+0x12]
+                  /NumBlock: 1  [0x455+0xb]
+                  /RoundtripStreamType: 1  [0x461+0x16]
+                  /RoundtripVersion: 24  [0x478+0x14]
+            /LastModified: "D:20260101000000Z"  [0x33b+0x21]
+        /Count: 1  [0x2b7+0x8]
+    ▾ /Metadata: "2 0 R" — stream, XMP metadata, /Metadata /XML, 3 entries, 496 bytes  [0x36+0xf] → 0x50+0x0
+        /Type: "/Metadata"  [0x5b+0xf]
+        /Subtype: "/XML"  [0x6b+0xd]
+        /Length: 496  [0x79+0xb]
+      ▾ Stream data — XMP metadata, 2 properties: Adobe Illustrator 24.0 (fillyfoal placeholder)  [0x8f+0x1f0]
+        ▾ XMP Basic (xmp) — 1 property
+            xmp:CreatorTool: "Adobe Illustrator 24.0 (fillyfoal placeholder)"  [0x1bb+0x51]
+        ▾ illustrator — 1 property
+            illustrator:Type: "Document"  [0x210+0x2d]
+        ▾ XML — the packet as an XML tree  [0x8f+0x1f0]
+            ?xpacket: "begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\""  [0x8f+0x35]
+          ▾ x:xmpmeta — 1 element  [0xc5+0x1a6]
+              @xmlns:x: "adobe:ns:meta/"  [0xd9+0xe]
+            ▾ rdf:RDF — 1 element  [0xeb+0x173]
+                @xmlns:rdf: "http://www.w3.org/1999/02/22-rdf-syntax-ns#"  [0xff+0x2b]
+              ▾ rdf:Description — rdf:about="" (2 elements)  [0x12f+0x123]
+                  @rdf:about: ""  [0x14b+0x0]
+                  @xmlns:xmp: "http://ns.adobe.com/xap/1.0/"  [0x15c+0x1c]
+                  @xmlns:illustrator: "http://ns.adobe.com/illustrator/1.0/"  [0x191+0x24]
+                  xmp:CreatorTool: "Adobe Illustrator 24.0 (fillyfoal placeholder)"  [0x1bb+0x51]
+                  illustrator:Type: "Document"  [0x210+0x2d]
+            ?xpacket: "end=\"w\""  [0x26c+0x13]
+  ▾ Pages — 1 page
+    ▾ Page 1 — /Page, 6 entries  [0x2ca+0x9c]
+        /Type: "/Page"  [0x2d5+0xb]
+        /Parent: "3 0 R"  [0x2e1+0xd] → 0x291+0x0
+      ▾ /MediaBox — [0 0 200 100]  [0x2ef+0x17]
+          [0]: 0  [0x2fa+0x1]
+          [1]: 0  [0x2fc+0x1]
+          [2]: 200  [0x2fe+0x3]
+          [3]: 100  [0x302+0x3]
+      ▾ /Contents: "5 0 R" — stream, 1 entries, 27 bytes  [0x307+0xf] → 0x367+0x0
+          /Length: 27  [0x372+0xa]
+        ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x387+0x1b]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [0x387+0x1b]
+              Line 1: "0 0 1 rg 20 20 160 60 re f"  [0x387+0x1a]
+        ▾ Operators
+            rg: "0 0 1" — set non-stroking RGB  [0x387+0x8]
+            re: "20 20 160 60" — rectangle  [0x390+0xf]
+            f — fill  [0x3a0+0x1]
+      ▾ /PieceInfo — 1 entries  [0x317+0x23]
+        ▾ /Illustrator: "6 0 R" — 2 entries  [0x325+0x12] → 0x3b4+0x0
+            /LastModified: "D:20260101000000Z"  [0x3bf+0x21]
+          ▾ /Private: "7 0 R" — 7 entries  [0x3e1+0xe] → 0x3fa+0x0
+            ▾ /AIMetaData: "8 0 R" — stream, 1 entries, 186 bytes  [0x405+0x11] → 0x497+0x0
+                /Length: 186  [0x4a2+0xb]
+              ▾ Stream data — Adobe Illustrator artwork (PostScript): compat.ai, 200×100 pt (Adobe Illustrator(R) 24.0)  [0x4b8+0xba]
+                ▾ Header  [0x4b8+0xba]
+                    Version: "%!PS-Adobe-3.0 "  [0x4b8+0xf]
+                    Creator: "Adobe Illustrator(R) 24.0"  [0x4d3+0x19]
+                    AI8_CreatorVersion: "24.0.0"  [0x503+0x6]
+                    For: "(fillyfoal) ()"  [0x511+0xe]
+                    Title: "(compat.ai)"  [0x529+0xb]
+                    CreationDate: "1/1/2026 12:00 AM"  [0x545+0x11]
+                    BoundingBox: "0 0 200 100" — 200×100 pt at (0, 0)  [0x566+0xb]
+              ▾ Operators
+            ▾ /AIPrivateData1: "9 0 R" — stream, 1 entries, 133 bytes  [0x417+0x15] → 0x584+0x0
+                /Length: 133  [0x58f+0xb]
+              ▾ Stream data — 133 bytes  [0x5a5+0x85]
+                  Data  [0x5a5+0x85]
+              ▾ Operators
+                  r�S3�sRR���u�+�  [0x602+0x14]
+                    ! warning: unknown operator
+              /ContainerVersion: 12  [0x42d+0x14]
+              /CreatorVersion: 24  [0x442+0x12]
+              /NumBlock: 1  [0x455+0xb]
+              /RoundtripStreamType: 1  [0x461+0x16]
+              /RoundtripVersion: 24  [0x478+0x14]
+        /LastModified: "D:20260101000000Z"  [0x33b+0x21]
+  ▾ Objects — 10 entries
+      Object 0: 0 — free, next free object 0, generation 65535
+      Object 1 0: 0xf — /Catalog, 3 entries (in use, generation 0) → 0xf+0x40
+      Object 2 0: 0x50 — stream, XMP metadata, /Metadata /XML, 3 entries, 496 bytes (in use, generation 0) → 0x50+0x240
+      Object 3 0: 0x291 — /Pages, 3 entries (in use, generation 0) → 0x291+0x38
+      Object 4 0: 0x2ca — /Page, 6 entries (in use, generation 0) → 0x2ca+0x9c
+      Object 5 0: 0x367 — stream, 1 entries, 27 bytes (in use, generation 0) → 0x367+0x4c
+      Object 6 0: 0x3b4 — 2 entries (in use, generation 0) → 0x3b4+0x45
+      Object 7 0: 0x3fa — 7 entries (in use, generation 0) → 0x3fa+0x9c
+      Object 8 0: 0x497 — stream, 1 entries, 186 bytes (in use, generation 0) → 0x497+0xec
+      Object 9 0: 0x584 — stream, 1 entries, 133 bytes (in use, generation 0) → 0x584+0xb7
+  ▾ Revisions — 1 cross-reference section
+    ▾ Revision 1 — original: 9 objects, cross-reference table at 0x63c with 10 entries  [0x0+0x746]
+      ▾ Body — 9 objects  [0x0+0x63c]
+        ▾ Object 1 0 — /Catalog, 3 entries  [0xf+0x40]
+            Object header: "1 0 obj"  [0xf+0x8]
+            /Type: "/Catalog"  [0x1a+0xe]
+            /Pages: "3 0 R"  [0x29+0xc] → 0x291+0x0
+            /Metadata: "2 0 R"  [0x36+0xf] → 0x50+0x0
+            End keywords: "endobj"  [0x48+0x7]
+        ▾ Object 2 0 — stream, XMP metadata, /Metadata /XML, 3 entries, 496 bytes  [0x50+0x240]
+            Object header: "2 0 obj"  [0x50+0x8]
+            /Type: "/Metadata"  [0x5b+0xf]
+            /Subtype: "/XML"  [0x6b+0xd]
+            /Length: 496  [0x79+0xb]
+            Stream keyword: "stream"  [0x87+0x8]
+          ▾ Stream data — XMP metadata, 2 properties: Adobe Illustrator 24.0 (fillyfoal placeholder)  [0x8f+0x1f0]
+            ▾ XMP Basic (xmp) — 1 property
+                xmp:CreatorTool: "Adobe Illustrator 24.0 (fillyfoal placeholder)"  [0x1bb+0x51]
+            ▾ illustrator — 1 property
+                illustrator:Type: "Document"  [0x210+0x2d]
+            ▾ XML — the packet as an XML tree  [0x8f+0x1f0]
+                ?xpacket: "begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\""  [0x8f+0x35]
+              ▾ x:xmpmeta — 1 element  [0xc5+0x1a6]
+                  @xmlns:x: "adobe:ns:meta/"  [0xd9+0xe]
+                ▾ rdf:RDF — 1 element  [0xeb+0x173]
+                    @xmlns:rdf: "http://www.w3.org/1999/02/22-rdf-syntax-ns#"  [0xff+0x2b]
+                  ▾ rdf:Description — rdf:about="" (2 elements)  [0x12f+0x123]
+                      @rdf:about: ""  [0x14b+0x0]
+                      @xmlns:xmp: "http://ns.adobe.com/xap/1.0/"  [0x15c+0x1c]
+                      @xmlns:illustrator: "http://ns.adobe.com/illustrator/1.0/"  [0x191+0x24]
+                      xmp:CreatorTool: "Adobe Illustrator 24.0 (fillyfoal placeholder)"  [0x1bb+0x51]
+                      illustrator:Type: "Document"  [0x210+0x2d]
+                ?xpacket: "end=\"w\""  [0x26c+0x13]
+            End keywords: "endstream endobj"  [0x27f+0x11]
+        ▾ Object 3 0 — /Pages, 3 entries  [0x291+0x38]
+            Object header: "3 0 obj"  [0x291+0x8]
+            /Type: "/Pages"  [0x29c+0xc]
+          ▾ /Kids — [4 0 R]  [0x2a9+0xd]
+              [0]: "4 0 R"  [0x2b0+0x5] → 0x2ca+0x0
+            /Count: 1  [0x2b7+0x8]
+            End keywords: "endobj"  [0x2c2+0x7]
+        ▾ Object 4 0 — /Page, 6 entries  [0x2ca+0x9c]
+            Object header: "4 0 obj"  [0x2ca+0x8]
+            /Type: "/Page"  [0x2d5+0xb]
+            /Parent: "3 0 R"  [0x2e1+0xd] → 0x291+0x0
+          ▾ /MediaBox — [0 0 200 100]  [0x2ef+0x17]
+              [0]: 0  [0x2fa+0x1]
+              [1]: 0  [0x2fc+0x1]
+              [2]: 200  [0x2fe+0x3]
+              [3]: 100  [0x302+0x3]
+            /Contents: "5 0 R"  [0x307+0xf] → 0x367+0x0
+          ▾ /PieceInfo — 1 entries  [0x317+0x23]
+              /Illustrator: "6 0 R"  [0x325+0x12] → 0x3b4+0x0
+            /LastModified: "D:20260101000000Z"  [0x33b+0x21]
+            End keywords: "endobj"  [0x35f+0x7]
+        ▾ Object 5 0 — stream, 1 entries, 27 bytes  [0x367+0x4c]
+            Object header: "5 0 obj"  [0x367+0x8]
+            /Length: 27  [0x372+0xa]
+            Stream keyword: "stream"  [0x37f+0x8]
+          ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x387+0x1b]
+              Encoding: "UTF-8"
+              Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+            ▾ Lines — 1 line  [0x387+0x1b]
+                Line 1: "0 0 1 rg 20 20 160 60 re f"  [0x387+0x1a]
+          ▾ Operators
+              rg: "0 0 1" — set non-stroking RGB  [0x387+0x8]
+              re: "20 20 160 60" — rectangle  [0x390+0xf]
+              f — fill  [0x3a0+0x1]
+            End keywords: "endstream endobj"  [0x3a2+0x11]
+        ▾ Object 6 0 — 2 entries  [0x3b4+0x45]
+            Object header: "6 0 obj"  [0x3b4+0x8]
+            /LastModified: "D:20260101000000Z"  [0x3bf+0x21]
+            /Private: "7 0 R"  [0x3e1+0xe] → 0x3fa+0x0
+            End keywords: "endobj"  [0x3f2+0x7]
+        ▾ Object 7 0 — 7 entries  [0x3fa+0x9c]
+            Object header: "7 0 obj"  [0x3fa+0x8]
+            /AIMetaData: "8 0 R"  [0x405+0x11] → 0x497+0x0
+            /AIPrivateData1: "9 0 R"  [0x417+0x15] → 0x584+0x0
+            /ContainerVersion: 12  [0x42d+0x14]
+            /CreatorVersion: 24  [0x442+0x12]
+            /NumBlock: 1  [0x455+0xb]
+            /RoundtripStreamType: 1  [0x461+0x16]
+            /RoundtripVersion: 24  [0x478+0x14]
+            End keywords: "endobj"  [0x48f+0x7]
+        ▾ Object 8 0 — stream, 1 entries, 186 bytes  [0x497+0xec]
+            Object header: "8 0 obj"  [0x497+0x8]
+            /Length: 186  [0x4a2+0xb]
+            Stream keyword: "stream"  [0x4b0+0x8]
+          ▾ Stream data — Adobe Illustrator artwork (PostScript): compat.ai, 200×100 pt (Adobe Illustrator(R) 24.0)  [0x4b8+0xba]
+            ▾ Header  [0x4b8+0xba]
+                Version: "%!PS-Adobe-3.0 "  [0x4b8+0xf]
+                Creator: "Adobe Illustrator(R) 24.0"  [0x4d3+0x19]
+                AI8_CreatorVersion: "24.0.0"  [0x503+0x6]
+                For: "(fillyfoal) ()"  [0x511+0xe]
+                Title: "(compat.ai)"  [0x529+0xb]
+                CreationDate: "1/1/2026 12:00 AM"  [0x545+0x11]
+                BoundingBox: "0 0 200 100" — 200×100 pt at (0, 0)  [0x566+0xb]
+          ▾ Operators
+            End keywords: "endstream endobj"  [0x572+0x11]
+        ▾ Object 9 0 — stream, 1 entries, 133 bytes  [0x584+0xb7]
+            Object header: "9 0 obj"  [0x584+0x8]
+            /Length: 133  [0x58f+0xb]
+            Stream keyword: "stream"  [0x59d+0x8]
+          ▾ Stream data — 133 bytes  [0x5a5+0x85]
+              Data  [0x5a5+0x85]
+          ▾ Operators
+              r�S3�sRR���u�+�  [0x602+0x14]
+                ! warning: unknown operator
+            End keywords: "endstream endobj"  [0x62a+0x11]
+      ▾ Cross-reference table — 10 entries in 1 subsection  [0x63c+0xd2]
+          Keyword: "xref"  [0x63c+0x4]
+        ▾ Objects 0–9 — 10 entries  [0x641+0xcd]
+            Header: "0 10"  [0x641+0x4]
+            Object 0: 0 — free, next free object 0, generation 65535  [0x646+0x14]
+            Object 1: 0xf — in use, generation 0  [0x65a+0x14] → 0xf+0x0
+            Object 2: 0x50 — in use, generation 0  [0x66e+0x14] → 0x50+0x0
+            Object 3: 0x291 — in use, generation 0  [0x682+0x14] → 0x291+0x0
+            Object 4: 0x2ca — in use, generation 0  [0x696+0x14] → 0x2ca+0x0
+            Object 5: 0x367 — in use, generation 0  [0x6aa+0x14] → 0x367+0x0
+            Object 6: 0x3b4 — in use, generation 0  [0x6be+0x14] → 0x3b4+0x0
+            Object 7: 0x3fa — in use, generation 0  [0x6d2+0x14] → 0x3fa+0x0
+            Object 8: 0x497 — in use, generation 0  [0x6e6+0x14] → 0x497+0x0
+            Object 9: 0x584 — in use, generation 0  [0x6fa+0x14] → 0x584+0x0
+      ▾ Trailer — 2 entries  [0x70e+0x22]
+          /Size: 10  [0x719+0x8]
+          /Root: "1 0 R"  [0x722+0xb] → 0xf+0x0
+        startxref: 0x63c  [0x731+0xe] → 0x63c+0x4
+        End-of-file marker: "%%EOF"  [0x740+0x5]

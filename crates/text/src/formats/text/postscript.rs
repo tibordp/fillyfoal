@@ -17,10 +17,59 @@ use super::encoding::{Encoding, decode_8bit};
 use super::scan::Lines;
 use super::{plural, probe, text_node};
 
+/// Adobe Illustrator files before version 9 (and later ones saved without
+/// PDF compatibility): PostScript, usually EPS, whose header carries
+/// `%%Creator: Adobe Illustrator` and Illustrator's own `%AIn_...`
+/// comments.
+pub static AI_PS: Format = Format {
+    name: "ai-ps",
+    title: "Adobe Illustrator artwork (PostScript)",
+    extensions: &["ai"],
+    mime: "application/illustrator",
+    probe: Probe::Custom(|h| {
+        h.starts_with(b"%!PS-Adobe-")
+            && h.data
+                .get(..4096)
+                .unwrap_or(h.data)
+                .split(|&b| b == b'\n' || b == b'\r')
+                .take(64)
+                .any(illustrator_comment)
+    }),
+    dissect: crate::expander!(dissect: Input),
+};
+
+/// Whether a header line marks an Illustrator file: its creator, or one of
+/// its `%AIn_` comments.
+fn illustrator_comment(line: &[u8]) -> bool {
+    ai_comment(line).is_some()
+        || line
+            .strip_prefix(b"%%Creator:")
+            .is_some_and(|v| probe::contains(v, b"Adobe Illustrator"))
+}
+
+/// An Illustrator comment (`%AI5_FileFormat 3`, `%AI3_ColorUsage: Color`):
+/// its key (`AI5_FileFormat`) and value.
+fn ai_comment(line: &[u8]) -> Option<(&[u8], &[u8])> {
+    let rest = line.strip_prefix(b"%")?;
+    let digits = rest.strip_prefix(b"AI")?;
+    let n = digits.iter().take_while(|b| b.is_ascii_digit()).count();
+    if n == 0 || digits.get(n) != Some(&b'_') {
+        return None;
+    }
+    let end = rest
+        .iter()
+        .position(|&b| b == b':' || b.is_ascii_whitespace())
+        .unwrap_or(rest.len());
+    let key = rest.get(..end)?;
+    let value = rest.get(end..).unwrap_or_default();
+    let value = value.strip_prefix(b":").unwrap_or(value);
+    Some((key, probe::trim(value)))
+}
+
 pub static EPS: Format = Format {
     name: "eps",
     title: "Encapsulated PostScript",
-    extensions: &["eps", "epsf", "epsi", "ai"],
+    extensions: &["eps", "epsf", "epsi"],
     mime: "application/postscript",
     probe: Probe::Custom(|h| {
         h.starts_with(b"%!PS-Adobe-")
@@ -183,6 +232,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut pages_declared = None;
     let mut pages = 0u64;
     let mut eps = false;
+    let mut illustrator = false;
     let mut first = true;
     loop {
         let before = lines.pos();
@@ -199,6 +249,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             first = false;
             eps = probe::contains(&head, b"EPSF");
             continue;
+        }
+        if ai_comment(&head).is_some() {
+            illustrator = true;
+            // Illustrator interleaves its own comments with the DSC header.
+            if open.as_ref().is_some_and(|o| o.kind == Kind::Header) {
+                continue;
+            }
         }
         let Some((key, value)) = dsc(&head) else {
             // Plain code: closes the header, opens a code section.
@@ -321,10 +378,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             });
         }
     }
-    let mut summary = if eps {
-        String::from("Encapsulated PostScript")
-    } else {
-        String::from("PostScript document")
+    illustrator |= creator
+        .as_deref()
+        .is_some_and(|c| c.contains("Adobe Illustrator"));
+    let mut summary = match (illustrator, eps) {
+        (true, true) => String::from("Adobe Illustrator artwork (EPS)"),
+        (true, false) => String::from("Adobe Illustrator artwork (PostScript)"),
+        (false, true) => String::from("Encapsulated PostScript"),
+        (false, false) => String::from("PostScript document"),
     };
     if let Some(t) = title.filter(|t| !t.is_empty()) {
         summary = format!("{summary}: {}", preview(&t, 60));
@@ -360,6 +421,18 @@ async fn section(cx: Cx, s: Section) -> Result<()> {
         let p = line.piece();
         if p.starts_with(b"%!") {
             cx.push(text_node("Version", p.span(), &p.text())).await;
+            continue;
+        }
+        if let Some((key, _)) = ai_comment(p.bytes()) {
+            let value = p.from(key.len().saturating_add(1));
+            let value = value.strip_prefix(b":").unwrap_or(value).trim();
+            let name = decode_8bit(key);
+            let node = if value.is_empty() {
+                Node::new(name).span(p.span())
+            } else {
+                text_node(name, value.span(), &value.text())
+            };
+            cx.push(node.desc("Adobe Illustrator comment")).await;
             continue;
         }
         let Some((key, _)) = dsc(p.bytes()) else {

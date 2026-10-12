@@ -3,13 +3,15 @@
 //! images, nested firmware volume sections as firmware volumes.
 
 use crate::bytes::{align_up, u16_le, u24_le, u32_le, u64_le};
+use crate::codec::Codec;
+use crate::codec::lzma::Post;
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{guid_le, size};
 use crate::formats::util::fmt::capitalize;
-use crate::formats::{Format, Input, Probe, embedded, embedded_named};
+use crate::formats::{Format, Input, Probe, decodes_lazily, embedded, embedded_named};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -327,17 +329,37 @@ async fn sections(cx: Cx, (input, area, depth): (Input, Span, u32)) -> Result<()
                 let guid = guid_le(&data);
                 let offset = u64::from(u16_le(&data, 16).unwrap_or(0)).saturating_sub(header);
                 let attributes = u16_le(&data, 18).unwrap_or(0);
-                let node = node.summary(guid.to_string());
-                // Not processing-required: the content is plain sections.
-                if attributes & 1 == 0 && depth < MAX_DEPTH {
+                let known = guided_name(&guid);
+                let node = node.value(Value::Guid(guid)).summary(match known {
+                    Some(name) => format!("{name}, {}", size(body.len)),
+                    None => size(body.len),
+                });
+                let data = body.tail(offset);
+                let lzma = match known {
+                    Some(LZMA_NAME) => Some(false),
+                    Some(LZMA_F86_NAME) => Some(true),
+                    _ => None,
+                };
+                if depth >= MAX_DEPTH {
+                    node.diag(Diagnostic::limit(format!(
+                        "sections nested deeper than {MAX_DEPTH}"
+                    )))
+                } else if attributes & 1 == 0 {
+                    // Not processing-required: the content is plain sections.
                     node.lazy(
                         crate::expander!(self::sections: (Input, Span, u32)),
-                        (input, body.tail(offset), depth.saturating_add(1)),
+                        (input, data, depth.saturating_add(1)),
+                    )
+                } else if let Some(f86) = lzma {
+                    node.lazy(
+                        crate::expander!(self::lzma_sections: (Input, Span, u32, bool)),
+                        (input, data, depth.saturating_add(1), f86),
                     )
                 } else {
-                    node.diag(Diagnostic::unsupported(
-                        "encoded GUID-defined section (e.g. LZMA)",
-                    ))
+                    node.diag(Diagnostic::unsupported(format!(
+                        "encoded GUID-defined section ({})",
+                        known.unwrap_or("unknown GUID")
+                    )))
                 }
             }
             _ => node.summary(size(body.len)),
@@ -346,5 +368,71 @@ async fn sections(cx: Cx, (input, area, depth): (Input, Span, u32)) -> Result<()
         at = align_up(at.saturating_add(len), 4);
         count = count.saturating_add(1);
     }
+    Ok(())
+}
+
+const LZMA_NAME: &str = "LZMA";
+const LZMA_F86_NAME: &str = "LZMA with x86 branch conversion";
+
+/// GUIDs of GUID-defined sections in EDK2 (`MdePkg`, `BaseTools`).
+const GUIDED: &[(&str, &str)] = &[
+    ("ee4e5898-3914-4259-9d6e-dc7bd79403cf", LZMA_NAME),
+    ("d42ae6bd-1352-4bfb-909a-ca72a6eae889", LZMA_F86_NAME),
+    ("a31280ad-481e-41b6-95e8-127f4c984779", "Tiano compression"),
+    ("3d532050-5cda-4fd0-879e-0f7f630d5afb", "Brotli"),
+    ("fc1bcdb0-7d31-49aa-936a-a4600d9dd083", "CRC-32"),
+];
+
+fn guided_name(g: &Guid) -> Option<&'static str> {
+    let text = g.to_string().to_ascii_lowercase();
+    let key = text.trim_matches(|c| c == '{' || c == '}');
+    GUIDED.iter().find(|(k, _)| *k == key).map(|(_, n)| *n)
+}
+
+record! {
+    /// The `.lzma` ("LZMA alone") header EDK2's `LzmaCompress` writes.
+    pub struct LzmaHeader {
+        props: u8 "Properties" .hex() .desc("(pb × 5 + lp) × 9 + lc"),
+        dict: u32 "Dictionary size" .with(|&v, n| n.summary(size(v.into()))),
+        size: u64 "Decoded size",
+    }
+}
+
+/// An LZMA GUID-defined section's data (EDK2's `LzmaCustomDecompress`, or
+/// `LzmaArchCustomDecompress` with the x86 BCJ filter from address 0): the
+/// LZMA header, then the sections it decodes to.
+async fn lzma_sections(cx: Cx, (input, data, depth, f86): (Input, Span, u32, bool)) -> Result<()> {
+    let header = data.sub(0, LzmaHeader::SIZE);
+    cx.emit(LzmaHeader::node("LZMA header", header, LE));
+    let h = parse(&cx, header, LE, &(), LzmaHeader::layout).await?;
+    let codec = if f86 {
+        Codec::chain(
+            "uefi lzma-f86",
+            "uefi lzma-f86 (lazy)",
+            [Codec::LzmaAlone, Codec::PostFilter(Post::X86)],
+        )
+    } else {
+        Codec::LzmaAlone
+    };
+    let expected = (h.size != u64::MAX).then_some(h.size);
+    let decoded = match expected {
+        Some(len) if decodes_lazily(data, &codec, len) => cx.decode_lazy(data, &codec, len)?,
+        _ => {
+            let d = crate::codec::decode_span(&cx, data, &codec, expected).await?;
+            if let Some(e) = d.error {
+                cx.diag(e);
+            }
+            d.span
+        }
+    };
+    cx.emit(
+        Node::new("Decoded sections")
+            .span(decoded)
+            .summary(size(decoded.len))
+            .lazy(
+                crate::expander!(self::sections: (Input, Span, u32)),
+                (input.nested(decoded), decoded, depth),
+            ),
+    );
     Ok(())
 }

@@ -64,9 +64,32 @@ const MAX_SHOWN_TEXT: usize = 64 << 10;
 pub static FORMAT: Format = Format {
     name: "pdf",
     title: "Portable Document Format",
-    extensions: &["pdf", "ai", "fdf"],
+    extensions: &["pdf", "fdf"],
     mime: "application/pdf",
     probe: Probe::Custom(probe),
+    dissect: crate::expander!(dissect: Input),
+};
+
+/// Adobe Illustrator 9 and later ("Create PDF Compatible File"): a PDF
+/// whose first page keeps Illustrator's native data under `/PieceInfo
+/// /Illustrator`. The probe looks for Illustrator's marks in the head: the
+/// `AIPrivateData`/`AIMetaData` keys, or the XMP `illustrator:` namespace
+/// Illustrator writes into the document metadata.
+pub static AI: Format = Format {
+    name: "ai",
+    title: "Adobe Illustrator artwork (PDF)",
+    extensions: &["ai"],
+    mime: "application/illustrator",
+    probe: Probe::Custom(|h| {
+        probe(h)
+            && [
+                b"/AIPrivateData".as_slice(),
+                b"/AIMetaData",
+                b"xmlns:illustrator=\"http://ns.adobe.com/illustrator/1.0/\"",
+            ]
+            .iter()
+            .any(|m| crate::bytes::contains(h.data, m) || crate::bytes::contains(h.tail, m))
+    }),
     dissect: crate::expander!(dissect: Input),
 };
 
@@ -248,6 +271,25 @@ async fn deref_at(cx: &Cx, doc: &Doc, item: &Item, base: Span) -> Option<(Item, 
         Some((num, _)) => resolve(cx, doc, num).await.ok().map(|l| (l.item, l.base)),
         None => Some((item.clone(), base)),
     }
+}
+
+/// Pages trees descended to find the first page.
+const MAX_TREE_DEPTH: usize = 32;
+
+/// The first page's `/PieceInfo /Illustrator` dictionary: where Adobe
+/// Illustrator keeps its native data in a PDF-compatible `.ai` file
+/// (`/Private` with the `AIPrivateData` streams and versions).
+async fn illustrator_data(cx: &Cx, doc: &Doc, catalog: &(Item, Span)) -> Option<(Item, Span)> {
+    let (catalog, base) = catalog;
+    let (mut node, mut base) = deref_at(cx, doc, catalog.get("Pages")?, *base).await?;
+    for _ in 0..MAX_TREE_DEPTH {
+        let Some(kids) = node.get("Kids") else { break };
+        let (kids, kids_base) = deref_at(cx, doc, kids, base).await?;
+        let first = kids.array()?.first()?.clone();
+        (node, base) = deref_at(cx, doc, &first, kids_base).await?;
+    }
+    let (piece, base) = deref_at(cx, doc, node.get("PieceInfo")?, base).await?;
+    deref_at(cx, doc, piece.get("Illustrator")?, base).await
 }
 
 /// An integer, directly or through a reference.
@@ -478,7 +520,28 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         },
         None => None,
     };
-    cx.annotate(annotation(&cx, &doc, &version, catalog.as_ref().map(|c| &c.0), pages).await);
+    let illustrator = match &catalog {
+        Some(c) => illustrator_data(&cx, &doc, c).await,
+        None => None,
+    };
+    let summary = annotation(&cx, &doc, &version, catalog.as_ref().map(|c| &c.0), pages).await;
+    cx.annotate(if illustrator.is_some() {
+        format!("Adobe Illustrator artwork; {summary}")
+    } else {
+        summary
+    });
+    if let Some((item, base)) = &illustrator {
+        cx.emit(
+            item_node(
+                &doc,
+                "Illustrator data".into(),
+                item,
+                *base,
+                &Walk::logical(),
+            )
+            .desc("The first page's /PieceInfo /Illustrator: Illustrator's native artwork (the /Private AIPrivateData streams) kept beside the PDF rendering"),
+        );
+    }
 
     let walk = Walk::logical();
     if let Some(node) = document::linearization_node(&doc) {
