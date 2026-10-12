@@ -999,3 +999,15 @@ Stored whole as `.raw.zst` (zstd -19).
 | `m4a/avconvert.m4a` | macOS 26.5 `avconvert` (AVFoundation, Apple AAC encoder) | same script (`-p PresetAppleM4A`): AAC-LC, `iTunSMPB` gapless tag; not byte-reproducible |
 | `mp4/gpac.mp4` | GPAC MP4Box 2.4.0 (built from the v2.4.0 release tarball in Debian trixie) | `sh tests/data/mp4/make-gpac.sh` (inner commands in `tests/data/mp4/gpac-inner.sh`): `MP4Box -add in.h264:fps=10 -add in.aac -new` of FFmpeg 8.1.2 raw H.264 and ADTS AAC (`iods`, `btrt`, `stss`, GPAC handler names); not byte-reproducible (creation times) |
 | `mp4/gpac-frag.mp4` | GPAC MP4Box 2.4.0 | same script, with `-frag 200`: `mvex`/`mehd`/`trex`, then `moof`/`traf`/`trun` fragments of both tracks; not byte-reproducible |
+## Tracker modules (Schism Tracker, MilkyTracker)
+Made by `sh tests/data/tracker/make.sh OUTDIR` (debian:trixie-slim, `tests/data/tracker/inside.sh`): our seed `song.mod` (`tests/data/tracker/song.py`: four channels, two looped samples, two patterns with common effects) is loaded into each tracker and saved through its user interface on a virtual X display (Xvfb, xdotool), since neither has a command-line save. Schism Tracker writes its build date and the save time (IT edit history, two S3M reserved bytes) into its files, so those bytes differ on a re-run; the rest reproduces.
+| `it/schism.it` | Schism Tracker 20250313 (Debian `schism 2:20250313-2`) | Save Module (F10), format IT: sample mode, 235 sample headers (Schism counts up to its internal preview slot), edit history entry, no MIDI configuration |
+| `s3m/schism.s3m` | Schism Tracker 20250313 | Save Module, format S3M: 99 instrument headers, two packed patterns, Schism version date in the reserved bytes |
+| `mod/schism.mod` | Schism Tracker 20250313 | Save Module, format MOD (M.K., 31 samples) |
+| `xm/milkytracker.xm` | MilkyTracker 1.05.01 (Debian source `1.05.01+dfsg-1`, built without ALSA/JACK MIDI) | disk operations (Ctrl+Shift+S), type `.xm`: XM 1.04, two instruments of one sample each, packed patterns; reproduced byte-for-byte |
+## APE, Musepack and Speex reference encoders (Fedora 42)
+Made by `sh tests/data/audio-codecs/make.sh OUTDIR` (fedora:42, `tests/data/audio-codecs/inside.sh`) from sine tones written by `tests/data/audio-codecs/tone.py` (16-bit PCM WAV: 44.1 kHz stereo 0.1 s; 16 kHz mono 0.25 s).
+| `ape/mac-normal.ape` | Monkey's Audio 12.63 (`mac`, Fedora `mac-12.63-1.fc42`) | `mac tone44.wav mac-normal.ape -c2000`: file version 3.99, one frame, stored WAV header |
+| `ape/mac-extra-high.ape` | Monkey's Audio 12.63 | `mac tone44.wav mac-extra-high.ape -c4000` |
+| `musepack/mpcenc.mpc` | mpcenc 1.30.1 (Fedora `musepack-tools-1.3.0^20110810svn475-3.fc42`) | `mpcenc --silent --standard tone44.wav mpcenc.mpc`: SV8 with stream header, replay gain, encoder info, seek table offset, one audio packet, seek table, stream end |
+| `speex/speexenc.spx` | speexenc (Fedora 42 `speex-tools`, libspeex 1.2.0 per the vendor string) | `speexenc --wideband --quality 6 tone16.wav speexenc.spx`: Ogg Speex, wideband mode; the Ogg serial number is random, so reruns differ in it and in the page CRCs |

@@ -702,23 +702,60 @@ async fn comment_title(cx: &Cx, file: Span, pos: u64, stream: Option<&Stream>) -
     None
 }
 
+/// The length of the page at `p` in `tail` if it is a whole, valid page:
+/// version 0, no undefined header-type bits, its lacing table and body
+/// inside `tail`. The CRC is checked separately.
+fn page_len_at(tail: &[u8], p: usize) -> Option<usize> {
+    let page = tail.get(p..)?;
+    if page.get(..4)? != b"OggS" || *page.get(4)? != 0 || page.get(5)? & !7 != 0 {
+        return None;
+    }
+    let segments = usize::from(*page.get(26)?);
+    let lacing = page.get(27..27usize.saturating_add(segments))?;
+    let len = lacing
+        .iter()
+        .fold(27usize.saturating_add(segments), |n, &l| {
+            n.saturating_add(usize::from(l))
+        });
+    (len <= page.len()).then_some(len)
+}
+
+/// CRC mismatches [`last_granules`] tolerates before giving up: each costs
+/// a hash of at most one page (64 KiB).
+const MAX_BAD_PAGES: u32 = 16;
+
 /// The last granule position of each stream of `link`, from the pages in
-/// its last 64 KiB.
+/// its last 64 KiB. Only whole pages with a valid CRC count: a capture
+/// pattern inside a packet (or trailing junk) must not set the duration.
+/// After a valid page the walk expects the next one right after it, so
+/// hashing stays proportional to the window, plus a few failed candidates.
 async fn last_granules(cx: &Cx, link: Span) -> Result<Vec<(u32, u64)>> {
     let start = link.len.saturating_sub(0x10000);
     let tail = cx.read_avail(link.tail(start)).await?;
     let mut out: Vec<(u32, u64)> = Vec::new();
     let mut i = 0usize;
+    let mut bad = 0u32;
     while let Some(at) = tail
         .get(i..)
         .and_then(|t| t.windows(4).position(|w| w == b"OggS"))
     {
         let p = i.saturating_add(at);
-        if tail.get(p.saturating_add(4)) == Some(&0)
-            && let (Some(g), Some(serial)) = (
-                u64_le(&tail, p.saturating_add(6)),
-                u32_le(&tail, p.saturating_add(14)),
-            )
+        let Some(len) = page_len_at(&tail, p) else {
+            i = p.saturating_add(4);
+            continue;
+        };
+        let bytes = tail.get(p..p.saturating_add(len)).unwrap_or_default();
+        let valid = Some(crc32(bytes)) == u32_le(bytes, 22);
+        cx.checkpoint().await;
+        if !valid {
+            bad = bad.saturating_add(1);
+            if bad >= MAX_BAD_PAGES {
+                break;
+            }
+            i = p.saturating_add(4);
+            continue;
+        }
+        if let (Some(g), Some(serial)) = (u64_le(bytes, 6), u32_le(bytes, 14))
             && g != u64::MAX
         {
             match out.iter_mut().find(|(s, _)| *s == serial) {
@@ -730,7 +767,7 @@ async fn last_granules(cx: &Cx, link: Span) -> Result<Vec<(u32, u64)>> {
                 }
             }
         }
-        i = p.saturating_add(4);
+        i = p.saturating_add(len.max(4));
     }
     Ok(out)
 }

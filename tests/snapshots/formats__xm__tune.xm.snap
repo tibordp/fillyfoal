@@ -1,8 +1,8 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tune.xm — XM, FastTracker v2.00, 2 channels, 2 orders, 1 patterns, 1 instruments, 125 BPM — fillyfoal xm  [0x0+0x2a0]
+▾ tune.xm — XM 1.04, FastTracker v2.00, 2 channels, 2 orders, 1 patterns, 1 instruments, 125 BPM — fillyfoal xm  [0x0+0x2a0]
   ▾ Header  [0x0+0x50]
       ID text: "Extended Module: "  [0x0+0x11]
       Module name: "fillyfoal xm"  [0x11+0x14]
@@ -26,7 +26,10 @@ expression: "common::explore(&name, &data)"
           Packing type: 0  [0x154+0x1]
           Rows: 4  [0x155+0x2]
           Packed data size: 8  [0x157+0x2]
-        Packed data  [0x159+0x8]
+        Row 00 — empty  [0x159+0x2]
+        Row 01 — empty  [0x15b+0x2]
+        Row 02 — empty  [0x15d+0x2]
+        Row 03 — empty  [0x15f+0x2]
   ▾ Instruments — 1 instruments  [0x161+0x13f]
     ▾ Instrument 1 — Lead, 1 samples  [0x161+0x13f]
         Header size: 263  [0x161+0x4]
