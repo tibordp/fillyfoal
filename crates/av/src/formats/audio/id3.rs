@@ -81,6 +81,13 @@ pub fn past_tag(data: &[u8]) -> &[u8] {
     }
 }
 
+/// Whether `data` (what follows the last frame a probe checked) starts a
+/// tag that taggers append to raw streams: ID3v1 or APEv2. A stream of one
+/// frame is then followed by the tag instead of a second frame.
+pub fn starts_trailing_tag(data: &[u8]) -> bool {
+    data.starts_with(b"TAG") || data.starts_with(b"APETAGEX")
+}
+
 /// For formats that some taggers prefix with an ID3v2 tag although their
 /// own tags are APEv2 at the end (APE, WavPack, TTA, Musepack): emits the
 /// tag at the start of `input`, if any, and returns the input after it.

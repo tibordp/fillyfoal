@@ -589,6 +589,8 @@ and reproduce every file byte for byte.
 | `ac3/surround.ac3` | FFmpeg 8.1.2 | written by `tests/data/mp3/make.py`: 5.1 at 192 kbps with dialnorm, mixing level, room type and the alternate bit stream syntax options (`-dmix_mode ltrt`, `-dsurex_mode on`, `-ad_conv_type hdcd`, ...) |
 | `ac3/surround.eac3` | FFmpeg 8.1.2 | written by `tests/data/mp3/make.py`: E-AC-3 5.1 at 192 kbps with mixing metadata (`-dmix_mode loro`, mix levels, room type) |
 | `dts/surround.dts` | FFmpeg 8.1.2 (experimental `dca` encoder) | written by `tests/data/mp3/make.py`: 5.1(side) at 768 kbps, `-f dts` |
+| `ac3/id3v2.ac3` | FFmpeg 8.1.2, mutagen 1.47.0 | written by `tests/data/ac3/tagged.py` (reproduces byte for byte): mono AC-3 at 32 kbps, then an ID3v2.3 tag (title, artist) before it and an ID3v1 tag after it, written by mutagen without padding |
+| `dts/id3v2.dts` | FFmpeg 8.1.2 (experimental `dca` encoder), mutagen 1.47.0 | written by `tests/data/ac3/tagged.py` (reproduces byte for byte): one 5.1(side) DTS frame at 768 kbps, tagged as above |
 
 ## FFmpeg: video and containers
 
