@@ -24,8 +24,9 @@
 //! the layout `Doc2TXT` adds (margins, indentation, cursor movement).
 //! It is assembled from the file's own bytes, so it keeps their
 //! provenance; tags are taken as written, with backslash escapes dropped.
-//! TempleOS's character set is CP437 above 0x7f, but the bytes are left
-//! as they are, so the text detector may guess another code page.
+//! TempleOS's character set is CP437 above 0x7f: text with such bytes is
+//! transcoded to UTF-8 (a derived source) before the text dissector sees
+//! it; pure ASCII text keeps the file's own bytes.
 //!
 //! In map files (`Kernel.MAP`, `Compiler.MAP`) each line is a link to a
 //! function whose bin is a `CDbgInfo` (its source lines' code addresses)
@@ -907,7 +908,7 @@ async fn dissect(cx: Cx, input: Input, kind: Kind) -> Result<()> {
     cx.emit(
         Node::new("Plain text")
             .span(text)
-            .desc("The text and the tags it shows, as Doc2TXT has it, without its layout")
+            .desc("The text and the tags it shows, as Doc2TXT has it, without its layout; CP437 beyond ASCII is transcoded to UTF-8")
             .lazy(plain_text, input),
     );
     if doc.terminated {
@@ -1138,8 +1139,37 @@ async fn plain_text(cx: Cx, input: Input) -> Result<()> {
             &doc.pieces,
         )
         .await?;
+    let span = cp437_to_utf8(&cx, span).await?;
     // As plain text: the text may well show dollar-sign commands it quotes.
     dissect_named(cx, (input.nested(span), "text")).await
+}
+
+/// `span` transcoded from CP437 to UTF-8 as a derived source, or `span`
+/// itself if it is ASCII (or too large to transcode).
+async fn cp437_to_utf8(cx: &Cx, span: Span) -> Result<Span> {
+    const CHUNK: usize = 64 * 1024;
+    let origin = Origin {
+        parent: span,
+        transform: "cp437",
+    };
+    if let Some(found) = cx.derived(origin) {
+        return Ok(found.span);
+    }
+    if span.len > cx.limits().max_derived {
+        return Ok(span);
+    }
+    let data = crate::codec::read_all(cx, span).await?;
+    if data.is_ascii() {
+        return Ok(span);
+    }
+    let mut text = String::with_capacity(data.len());
+    for chunk in data.chunks(CHUNK) {
+        text.push_str(&Charset::Cp437.decode(chunk));
+        cx.checkpoint().await;
+    }
+    Ok(cx
+        .add_derived(origin, text.into_bytes(), to_u64(data.len()), None)?
+        .span)
 }
 
 async fn bin_list(cx: Cx, input: Input) -> Result<()> {
