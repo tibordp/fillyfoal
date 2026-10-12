@@ -902,8 +902,9 @@ fn context_layout(size: u64) -> Option<(&'static [F], &'static str, usize, usize
     }
 }
 
-/// A node for a thread context at `span`.
-async fn context_node(cx: &Cx, span: Span) -> Node {
+/// A node for a thread context at `span` (also used by kernel crash
+/// dumps).
+pub(crate) async fn context_node(cx: &Cx, span: Span) -> Node {
     let Some((layout, arch, pc, sp)) = context_layout(span.len) else {
         return Node::new("Context")
             .span(span)

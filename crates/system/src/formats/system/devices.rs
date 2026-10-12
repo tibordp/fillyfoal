@@ -6,7 +6,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
-use crate::fields::{Endian, Fields};
+use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
@@ -779,7 +779,18 @@ async fn kernel_dump(cx: Cx, input: Input) -> Result<()> {
             .summary(plural(runs, "run"))
             .lazy(memory_runs, (mem, wide)),
     );
-    f.node(Node::new("Context record").span(file.sub(l.context, l.context_len)));
+    let context = context_len(machine).map_or_else(
+        || Node::new("Context record").span(file.sub(l.context, l.context_len)),
+        |len| Node::new("Context record").span(file.sub(l.context, len)),
+    );
+    f.node(match context.span {
+        Some(span) if context_len(machine).is_some() => {
+            crate::formats::forensics::minidump::context_node(&cx, span)
+                .await
+                .renamed("Context record")
+        }
+        _ => context,
+    });
     let exception = file.sub(l.exception, l.exception_len);
     f.node(
         Node::new("Exception record")
@@ -795,13 +806,33 @@ async fn kernel_dump(cx: Cx, input: Input) -> Result<()> {
         f.skip(4);
         f.u64("Required dump space").emit()?;
         f.u64("System time").filetime().emit()?;
-        f.ascii("Comment", 128).emit()?;
-        f.u64("System up time").emit()?;
+        f.ascii("Comment", 128)
+            .with(|c, n| {
+                if !c.is_empty() && c.bytes().all(|b| b"PAGE".contains(&b)) {
+                    n.summary("not set (PAGE filler)")
+                } else {
+                    n
+                }
+            })
+            .emit()?;
+        f.u64("System up time")
+            .desc("In 100-nanosecond units")
+            .with(|&t, n| n.summary(uptime(t)))
+            .emit()?;
         f.u32("Minidump fields").hex().emit()?;
         f.u32("Secondary data state").emit()?;
         f.u32("Product type").enumeration(PRODUCT_TYPES).emit()?;
         f.u32("Suite mask").hex().emit()?;
-        f.u32("Writer status").emit()?;
+        f.u32("Writer status")
+            .hex()
+            .with(|&w, n| {
+                if w == u32::from_le_bytes(*b"PAGE") {
+                    n.summary("not set (PAGE filler)")
+                } else {
+                    n
+                }
+            })
+            .emit()?;
         f.u8("Unused").emit()?;
         f.u8("KD secondary version").emit()?;
         f.skip(2);
@@ -848,7 +879,43 @@ async fn kernel_dump(cx: Cx, input: Input) -> Result<()> {
             pages_at = first;
         }
     }
-    cx.emit(Node::new("Memory pages").span(file.tail(pages_at)));
+    if kind == 4 {
+        // A triage dump (small memory dump): no memory pages, but a
+        // TRIAGE_DUMP header pointing at what was saved, then (Windows 10
+        // and later) secondary data blobs from bug check callbacks.
+        let t = file.sub(l.header, TRIAGE64_LEN);
+        if wide {
+            let size = cx
+                .read(t.sub(4, 4))
+                .await
+                .ok()
+                .and_then(|b| u32_le(&b, 0))
+                .unwrap_or(0);
+            cx.emit(
+                Node::new("Triage dump")
+                    .span(t)
+                    .summary(format!("{:#x} bytes", size))
+                    .lazy(triage_dump, (file, machine)),
+            );
+            let size = u64::from(size);
+            if size > l.header && size < file.len {
+                cx.emit(
+                    Node::new("Dump blobs")
+                        .span(file.tail(size))
+                        .desc("Secondary data from bug check callbacks, after the triage data")
+                        .lazy(dump_blobs, file.tail(size)),
+                );
+            }
+        } else {
+            cx.emit(
+                Node::new("Triage dump")
+                    .span(file.tail(l.header))
+                    .diag(Diagnostic::unsupported("32-bit triage dump layout")),
+            );
+        }
+    } else {
+        cx.emit(Node::new("Memory pages").span(file.tail(pages_at)));
+    }
     cx.annotate(format!(
         "Windows {major}.{minor} {} dump, bug check {code:#x}, {processors} CPU(s), machine {machine:#x}",
         lookup(DUMP_TYPES, kind.into()).unwrap_or("crash")
@@ -900,6 +967,454 @@ async fn memory_runs(cx: Cx, (span, wide): (Span, bool)) -> Result<()> {
                 runs_run = plural(runs, "run")
             ))
             .at(span),
+        );
+    }
+    Ok(())
+}
+
+/// The size of a thread context in a crash dump, by machine.
+fn context_len(machine: u32) -> Option<u64> {
+    match machine {
+        0xaa64 => Some(0x390),
+        0x8664 => Some(0x4d0),
+        0x14c => Some(0x2cc),
+        _ => None,
+    }
+}
+
+/// `h:mm:ss.fff` of a duration in 100-nanosecond units.
+fn uptime(t: u64) -> String {
+    let ms = t / 10_000;
+    let s = ms / 1000;
+    format!(
+        "{}:{:02}:{:02}.{:03}",
+        s / 3600,
+        s / 60 % 60,
+        s % 60,
+        ms % 1000
+    )
+}
+
+const TRIAGE64_LEN: u64 = 0x80;
+
+/// `TRIAGE_DUMP64`: where a small memory dump keeps what it saved, as
+/// offsets from the start of the file. Field names are those WinDbg's
+/// `.dumpdebug` prints, checked against its output for a Windows 11 dump.
+#[derive(Clone, Debug, Default)]
+struct Triage {
+    size: u32,
+    valid: u32,
+    context: u32,
+    exception: u32,
+    mm: u32,
+    unloaded: u32,
+    prcb: u32,
+    process: u32,
+    thread: u32,
+    stack: u32,
+    stack_len: u32,
+    drivers: u32,
+    driver_count: u32,
+    pool: u32,
+    pool_len: u32,
+    top: u64,
+    debugger: u32,
+    debugger_len: u32,
+    blocks: u32,
+    block_count: u32,
+}
+
+fn triage_layout(f: &mut Fields<'_>, _: &()) -> Result<Triage> {
+    let mut t = Triage::default();
+    f.u32("ServicePackBuild").emit()?;
+    t.size = f.u32("SizeOfDump").hex().emit()?;
+    t.valid = f.u32("ValidOffset").hex().emit()?;
+    t.context = f.u32("ContextOffset").hex().emit()?;
+    t.exception = f.u32("ExceptionOffset").hex().emit()?;
+    t.mm = f.u32("MmOffset").hex().emit()?;
+    t.unloaded = f.u32("UnloadedDriversOffset").hex().emit()?;
+    t.prcb = f.u32("PrcbOffset").hex().emit()?;
+    t.process = f.u32("ProcessOffset").hex().emit()?;
+    t.thread = f.u32("ThreadOffset").hex().emit()?;
+    t.stack = f.u32("CallStackOffset").hex().emit()?;
+    t.stack_len = f.u32("SizeOfCallStack").hex().emit()?;
+    t.drivers = f.u32("DriverListOffset").hex().emit()?;
+    t.driver_count = f.u32("DriverCount").emit()?;
+    t.pool = f.u32("StringPoolOffset").hex().emit()?;
+    t.pool_len = f.u32("StringPoolSize").hex().emit()?;
+    f.u32("BrokenDriverOffset").hex().emit()?;
+    f.u32("TriageOptions").hex().emit()?;
+    t.top = f.u64("TopOfStack").hex().emit()?;
+    f.u32("BStoreOffset").hex().emit()?;
+    f.u32("SizeOfBStore").hex().emit()?;
+    f.u64("LimitOfBStore").hex().emit()?;
+    f.u64("DataPageAddress").hex().emit()?;
+    f.u32("DataPageOffset").hex().emit()?;
+    f.u32("DataPageSize").hex().emit()?;
+    t.debugger = f.u32("DebuggerDataOffset").hex().emit()?;
+    t.debugger_len = f.u32("DebuggerDataSize").hex().emit()?;
+    t.blocks = f.u32("DataBlocksOffset").hex().emit()?;
+    t.block_count = f.u32("DataBlocksCount").emit()?;
+    Ok(t)
+}
+
+/// `DUMP_DRIVER_ENTRY64`: a name offset into the string pool, then a
+/// `KLDR_DATA_TABLE_ENTRY64`.
+const DRIVER64_LEN: u64 = 0x90;
+/// `DUMP_UNLOADED_DRIVERS64`: `UNICODE_STRING64`, the first 12 characters
+/// of the name, start and end address.
+const UNLOADED64_LEN: u64 = 0x38;
+/// `TRIAGE_DATA_BLOCK`: address, file offset, size.
+const DATA_BLOCK_LEN: u64 = 0x10;
+
+async fn triage_dump(cx: Cx, (file, machine): (Span, u32)) -> Result<()> {
+    let span = file.sub(0x2000, TRIAGE64_LEN);
+    let t = parse(&cx, span, LE, &(), triage_layout).await?;
+    cx.emit(struct_node("TRIAGE_DUMP64", span, LE, (), triage_layout));
+    // The opaque kernel structures run to the next thing the header
+    // points at.
+    let mut marks: Vec<u64> = [
+        0x2000,
+        t.size,
+        t.valid,
+        t.context,
+        t.exception,
+        t.mm,
+        t.unloaded,
+        t.prcb,
+        t.process,
+        t.thread,
+        t.stack,
+        t.drivers,
+        t.pool,
+        t.debugger,
+        t.blocks,
+    ]
+    .iter()
+    .map(|&o| u64::from(o))
+    .filter(|&o| o > 0)
+    .collect();
+    marks.sort_unstable();
+    let until_next = |at: u32| {
+        let at = u64::from(at);
+        let end = marks
+            .iter()
+            .copied()
+            .find(|&m| m > at)
+            .unwrap_or(u64::from(t.size));
+        file.sub(at, end.saturating_sub(at))
+    };
+    if t.context == 0x348 || t.exception == 0xf00 {
+        // Usually the header's own context and exception records.
+        cx.emit(
+            Node::new("Context and exception")
+                .summary("the dump header's context and exception records"),
+        );
+    }
+    if t.context > 0 && t.context != 0x348 {
+        let len = context_len(machine).unwrap_or(0);
+        let span = file.sub(t.context.into(), len);
+        cx.emit(if len > 0 {
+            crate::formats::forensics::minidump::context_node(&cx, span).await
+        } else {
+            Node::new("Context").span(until_next(t.context))
+        });
+    }
+    if t.exception > 0 && t.exception != 0xf00 {
+        cx.emit(
+            Node::new("Exception record")
+                .span(file.sub(t.exception.into(), 0x98))
+                .desc("EXCEPTION_RECORD64"),
+        );
+    }
+    for (name, at, desc) in [
+        ("Mm information", t.mm, "Memory manager state at the crash"),
+        (
+            "PRCB",
+            t.prcb,
+            "The crashing processor's KPRCB (version-specific)",
+        ),
+        (
+            "Process",
+            t.process,
+            "The current process's EPROCESS (version-specific)",
+        ),
+        (
+            "Thread",
+            t.thread,
+            "The current thread's ETHREAD (version-specific)",
+        ),
+    ] {
+        if at > 0 {
+            cx.emit(Node::new(name).span(until_next(at)).desc(desc));
+        }
+    }
+    if t.stack > 0 {
+        cx.emit(
+            Node::new("Call stack")
+                .span(file.sub(t.stack.into(), t.stack_len.into()))
+                .summary(format!(
+                    "{:#x} bytes of stack from {:#x}",
+                    t.stack_len, t.top
+                )),
+        );
+    }
+    if t.drivers > 0 {
+        cx.emit(
+            Node::new("Drivers")
+                .span(file.sub(
+                    t.drivers.into(),
+                    u64::from(t.driver_count).saturating_mul(DRIVER64_LEN),
+                ))
+                .summary(plural(t.driver_count, "driver"))
+                .lazy(triage_drivers, (file, t.clone())),
+        );
+    }
+    if t.unloaded > 0 {
+        cx.emit(
+            Node::new("Unloaded drivers")
+                .span(until_next(t.unloaded))
+                .lazy(triage_unloaded, until_next(t.unloaded)),
+        );
+    }
+    if t.pool > 0 {
+        cx.emit(
+            Node::new("String pool")
+                .span(file.sub(t.pool.into(), t.pool_len.into()))
+                .desc("Driver names: a character count, UTF-16, a terminator, 8-byte aligned"),
+        );
+    }
+    if t.debugger > 0 {
+        let span = file.sub(t.debugger.into(), t.debugger_len.into());
+        cx.emit(
+            struct_node("Debugger data", span, LE, (), kdbg_layout).summary("KDDEBUGGER_DATA64"),
+        );
+    }
+    if t.blocks > 0 {
+        cx.emit(
+            Node::new("Data blocks")
+                .span(file.sub(
+                    t.blocks.into(),
+                    u64::from(t.block_count).saturating_mul(DATA_BLOCK_LEN),
+                ))
+                .summary(plural(t.block_count, "block"))
+                .lazy(triage_blocks, (file, t.blocks, t.block_count)),
+        );
+    }
+    if t.valid > 0 {
+        let span = file.sub(t.valid.into(), 4);
+        let b = cx.read(span).await?;
+        let mut node = Node::new("Valid marker")
+            .span(span)
+            .value(Value::Text(String::from_utf8_lossy(&b).into_owned()));
+        if b != b"TRGD" {
+            node = node.diag(Diagnostic::warning("not the TRGD marker"));
+        }
+        cx.emit(node);
+    }
+    Ok(())
+}
+
+/// The start of `KDDEBUGGER_DATA64`: its list header, owner tag (`KDBG`)
+/// and size, then the kernel's base address.
+fn kdbg_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.u64("List.Flink").hex().emit()?;
+    f.u64("List.Blink").hex().emit()?;
+    f.ascii("OwnerTag", 4).emit()?;
+    f.u32("Size").hex().emit()?;
+    f.u64("KernBase").hex().emit()?;
+    Ok(())
+}
+
+async fn triage_drivers(cx: Cx, (file, t): (Span, Triage)) -> Result<()> {
+    let list = file.sub_exact(
+        t.drivers.into(),
+        u64::from(t.driver_count).saturating_mul(DRIVER64_LEN),
+    )?;
+    let pool_span = file.sub(t.pool.into(), u64::from(t.pool_len).min(1 << 20));
+    let pool = cx.read(pool_span).await?;
+    let pool_base = u64::from(t.pool);
+    let mut at = 0;
+    for i in 0..t.driver_count {
+        let span = list.sub(at, DRIVER64_LEN);
+        let e = cx.read(span).await?;
+        at = at.saturating_add(DRIVER64_LEN);
+        let name_at = u32_le(&e, 0).unwrap_or(0);
+        let base = u64_le(&e, 0x38).unwrap_or(0);
+        let size = u32_le(&e, 0x48).unwrap_or(0);
+        let name = u64::from(name_at)
+            .checked_sub(pool_base)
+            .and_then(|o| usize::try_from(o).ok())
+            .and_then(|o| {
+                let chars = u32_le(&pool, o)?;
+                let from = o.checked_add(4)?;
+                let bytes = usize::try_from(chars).ok()?.checked_mul(2)?;
+                let b = pool.get(from..from.checked_add(bytes)?)?;
+                Some(crate::text::utf16(b, LE))
+            });
+        let node = Node::new(name.unwrap_or_else(|| format!("Driver {i}")))
+            .span(span)
+            .value(Value::UInt {
+                value: base,
+                bits: 64,
+                radix: crate::value::Radix::Hex,
+            })
+            .summary(format!("{:#x} bytes", size))
+            .lazy(driver_entry, span);
+        cx.push(node).await;
+    }
+    Ok(())
+}
+
+async fn driver_entry(cx: Cx, span: Span) -> Result<()> {
+    let block = cx.block(span).await?;
+    let mut f = Fields::emitting(&cx, &block, LE);
+    f.u32("DriverNameOffset").hex().emit()?;
+    f.skip(4);
+    f.u64("InLoadOrderLinks.Flink").hex().emit()?;
+    f.u64("InLoadOrderLinks.Blink").hex().emit()?;
+    f.u64("ExceptionTable").hex().emit()?;
+    f.u32("ExceptionTableSize").hex().emit()?;
+    f.skip(4);
+    f.u64("GpValue").hex().emit()?;
+    f.u64("NonPagedDebugInfo").hex().emit()?;
+    f.u64("DllBase").hex().emit()?;
+    f.u64("EntryPoint").hex().emit()?;
+    f.u32("SizeOfImage").hex().emit()?;
+    f.skip(4);
+    f.u16("FullDllName.Length").emit()?;
+    f.u16("FullDllName.MaximumLength").emit()?;
+    f.skip(4);
+    f.u64("FullDllName.Buffer").hex().emit()?;
+    f.u16("BaseDllName.Length").emit()?;
+    f.u16("BaseDllName.MaximumLength").emit()?;
+    f.skip(4);
+    f.u64("BaseDllName.Buffer").hex().emit()?;
+    f.u32("Flags").hex().emit()?;
+    f.u16("LoadCount").emit()?;
+    f.skip(2 + 8);
+    f.u32("CheckSum").hex().emit()?;
+    f.skip(4);
+    f.u32("TimeDateStamp")
+        .hex()
+        .desc("The image's link stamp (a hash for reproducible builds)")
+        .emit()?;
+    Ok(())
+}
+
+async fn triage_unloaded(cx: Cx, span: Span) -> Result<()> {
+    let head = cx.read(span.sub(0, 8)).await?;
+    let count = u32_le(&head, 0).unwrap_or(0);
+    cx.emit(Node::new("Count").span(span.sub(0, 4)).value(Value::UInt {
+        value: count.into(),
+        bits: 32,
+        radix: crate::value::Radix::Dec,
+    }));
+    let fits = span.len.saturating_sub(8) / UNLOADED64_LEN;
+    let mut at = 8u64;
+    for _ in 0..u64::from(count).min(fits) {
+        let espan = span.sub(at, UNLOADED64_LEN);
+        at = at.saturating_add(UNLOADED64_LEN);
+        let e = cx.read(espan).await?;
+        let len = usize::from(u16_le(&e, 0).unwrap_or(0)).min(24);
+        let name = crate::text::utf16(
+            e.get(0x10..0x10usize.saturating_add(len))
+                .unwrap_or_default(),
+            LE,
+        );
+        let start = u64_le(&e, 0x28).unwrap_or(0);
+        let end = u64_le(&e, 0x30).unwrap_or(0);
+        cx.push(
+            Node::new(name)
+                .span(espan)
+                .summary(format!("{start:#x}..{end:#x}"))
+                .desc("The first 12 characters of the driver's name, and its address range"),
+        )
+        .await;
+    }
+    if u64::from(count) > fits {
+        cx.diag(Diagnostic::malformed(format!("{count} unloaded drivers do not fit")).at(span));
+    }
+    Ok(())
+}
+
+async fn triage_blocks(cx: Cx, (file, at, count): (Span, u32, u32)) -> Result<()> {
+    let list = file.sub_exact(at.into(), u64::from(count).saturating_mul(DATA_BLOCK_LEN))?;
+    let mut pos = 0;
+    for _ in 0..count {
+        let span = list.sub(pos, DATA_BLOCK_LEN);
+        pos = pos.saturating_add(DATA_BLOCK_LEN);
+        let b = cx.read(span).await?;
+        let address = u64_le(&b, 0).unwrap_or(0);
+        let offset = u32_le(&b, 8).unwrap_or(0);
+        let size = u32_le(&b, 12).unwrap_or(0);
+        cx.push(
+            Node::new(format!("{address:#x}"))
+                .span(span)
+                .target(file.sub(offset.into(), size.into()))
+                .summary(format!("{size:#x} bytes at {offset:#x}"))
+                .desc("Kernel memory saved for the debugger: address, file offset, size"),
+        )
+        .await;
+    }
+    Ok(())
+}
+
+/// The secondary data after the triage data: a file header (`DumpBlob`,
+/// header size, build number), then blobs, each a header (header size, a
+/// GUID tag naming the callback's data, data size, padding before and
+/// after) and its data. The layout is the one this Windows 11 dump shows:
+/// 17 blobs that tile the region exactly; what follows them is left
+/// undecoded.
+async fn dump_blobs(cx: Cx, span: Span) -> Result<()> {
+    let head = cx.read(span.sub(0, 0x10)).await?;
+    if head.get(..8) != Some(b"DumpBlob".as_slice()) {
+        cx.emit(
+            Node::new("Unknown data")
+                .span(span)
+                .diag(Diagnostic::unsupported("no DumpBlob header")),
+        );
+        return Ok(());
+    }
+    let header_len = u64::from(u32_le(&head, 8).unwrap_or(0x10)).max(0x10);
+    cx.emit(
+        Node::new("Blob file header")
+            .span(span.sub(0, header_len))
+            .summary(format!("build {}", u32_le(&head, 12).unwrap_or(0) & 0xffff)),
+    );
+    let mut at = header_len;
+    let mut index = 0u64;
+    while at.saturating_add(0x20) <= span.len {
+        let h = cx.read(span.sub(at, 0x20)).await?;
+        let hlen = u64::from(u32_le(&h, 0).unwrap_or(0));
+        let data = u64::from(u32_le(&h, 0x14).unwrap_or(0));
+        let pre = u64::from(u32_le(&h, 0x18).unwrap_or(0));
+        let post = u64::from(u32_le(&h, 0x1c).unwrap_or(0));
+        let total = hlen
+            .saturating_add(pre)
+            .saturating_add(data)
+            .saturating_add(post);
+        if hlen < 0x20 || total > span.len.saturating_sub(at) {
+            break;
+        }
+        let tag = crate::formats::util::datakit::guid_le(h.get(4..20).unwrap_or_default());
+        let bspan = span.sub(at, total);
+        cx.push(
+            Node::new(format!("Blob {index}"))
+                .span(bspan)
+                .value(Value::Guid(tag))
+                .summary(format!("{data:#x} bytes"))
+                .target(bspan.sub(hlen.saturating_add(pre), data)),
+        )
+        .await;
+        at = at.saturating_add(total);
+        index = index.saturating_add(1);
+    }
+    if at < span.len {
+        cx.emit(
+            Node::new("Remaining data")
+                .span(span.tail(at))
+                .summary("not decoded"),
         );
     }
     Ok(())

@@ -1182,3 +1182,15 @@ reproducible (times, process IDs, whatever ran on the machine).
 | `etl/compressed-session-kproc-tlg.etl.raw.zst` | Windows ETW session started by `ff_comp.exe` (StartTrace with EVENT_TRACE_COMPRESSED_MODE) | `ff_comp.exe <out> fillyfoal_tlg.exe`: 64 KiB buffers compressed by the live session (LogFileMode 0x04000001), Kernel-Process and fillyfoal-test events. tracerpt: 9 buffers, 41 events |
 | `etl/kernel-logger-procthread-raw.etl.raw.zst` | NT Kernel Logger, controlled by `ff_klog.exe` | `ff_klog.exe kernel <out> 10000003 500` (PROCESS \| THREAD \| NO_SYSCONFIG, 8 KiB buffers, 0.5 s): MOF Process (v4 rundown of 187 processes, Start/End/Terminate, v5 Defunct) and Thread (v3, SetName) events with compact and perfinfo headers. tracerpt: 103 buffers, 5064 events. Every command line was reviewed by hand (only Windows, Program Files and `C:\Users\fillyfoal` paths) |
 | `etl/kernel-logger-thread-merged.etl.raw.zst` | xperf.exe 10.0.26100.8249 | `xperf -merge kernel-logger-thread-raw.etl <out> -suppresspii` of a thread-only kernel log (`ff_klog.exe kernel <raw> 10000002 500`): the thread events plus xperf's own FULL_HEADER64 events (provider {9b79ee91-b5fd-41c0-a243-4248e266e9d0}, opcodes 32-37), LogFileMode 0x00010001; the relogged header buffer records its end in `Offset`, not `SavedOffset`. tracerpt: 117 buffers, 6976 events |
+
+## Windows VM fixtures: kernel crash dump
+
+Written on the same Windows 11 Pro 25H2 ARM64 VM (build 10.0.26200.9457);
+see `tests/data/windows/kernel-dump/` (`setup.ps1` arms a SYSTEM startup
+task, `crashloop.ps1` crashes with Sysinternals NotMyFault and collects the
+dump; run elevated through `elevate.ps1`). Unchanged, stored as `.raw.zst`;
+not reproducible (a crash).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `windows-kernel-dump/minidump-small-memory-dump.dmp.raw.zst` | Windows kernel crash dump writer (CrashDumpEnabled=3, small memory dump), crash by NotMyFault v4.60 (`notmyfaultc64a.exe /crash 0x01`, `myfault.sys`, no user logged on) | `C:\Windows\Minidump\101226-6203-01.dmp`, renamed: `PAGEDU64` header, DumpType 4 (triage), bug check 0xD1, then `TRIAGE_DUMP64` (context, PRCB, process, thread, call stack, 188 drivers with a string pool, 6 unloaded drivers, KDDEBUGGER_DATA64, 61 data blocks, the `TRGD` marker) and, past SizeOfDump, the `DumpBlob` secondary data (17 blobs). Every header and `TRIAGE_DUMP64` field checked against WinDbg 10.0.29661.1004 `kd -z <dump> -c ".dumpdebug; vertarget"` |
