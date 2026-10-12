@@ -72,3 +72,44 @@ fn btrfs_truncations_and_mutations_settle() {
         assert!(!common::diagnostic_kinds(&host).contains(&fillyfoal::DiagKind::Internal));
     }
 }
+
+/// The raw section inside each LZMA GUID-defined section of the EDK2
+/// fixture decodes to the payload `tests/data/uefi-fv/mklzma.sh` wrote:
+/// for the `--f86` file this checks the x86 branch conversion is undone.
+#[test]
+fn uefi_lzma_sections_decode_to_the_payload() {
+    let mut payload = Vec::new();
+    for i in 0..24 {
+        payload.extend(format!("fillyfoal UEFI LZMA section payload, line {i:02}\n").bytes());
+    }
+    payload.extend(b"\xe8\x10\x00\x00\x00\x90\x90\xe8\x20\x00\x00\x00\xc3");
+    let data = common::fixture_bytes(std::path::Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/external/uefi-fv/edk2-lzma.fv"
+    )));
+    for file in [
+        "{3a0f4c3e-1d4b-4f6a-9a51-6c5d1e0f0a01}",
+        "{3a0f4c3e-1d4b-4f6a-9a51-6c5d1e0f0a02}",
+    ] {
+        let mut host = Host::named("edk2-lzma.fv", data.clone(), Limits::default());
+        let mut id = host.root;
+        for name in ["Files", file, "GUID defined", "Decoded sections"] {
+            host.session.expand_more(id, 10_000);
+            host.run();
+            id = host
+                .child(id, name)
+                .unwrap_or_else(|| panic!("no {name:?} under:\n{}", host.render()));
+        }
+        host.session.expand_more(id, 10_000);
+        host.run();
+        let raw = host.child(id, "Raw data").expect("raw section");
+        let span = host.session.node(raw).unwrap().span.unwrap();
+        let bytes = loop {
+            match host.session.read(span) {
+                Ok(bytes) => break bytes,
+                Err(requests) => host.supply(requests),
+            }
+        };
+        assert_eq!(bytes, payload, "{file}");
+    }
+}

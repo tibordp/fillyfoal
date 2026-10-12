@@ -169,7 +169,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Attributes: 0x0 []  [0x233+0x1]
           Size: 34 02 00  |4..| — 564 bytes  [0x234+0x3]
           State: 0xf8  [0x237+0x1]
-      ▾ GUID defined — {fc1bcdb0-7d31-49aa-936a-a4600d9dd083}  [0x238+0x21c]
+      ▾ GUID defined: {fc1bcdb0-7d31-49aa-936a-a4600d9dd083} — CRC-32, 536 bytes  [0x238+0x21c]
         ▾ Firmware volume — UEFI firmware volume (FFS v3), 512 bytes  [0x254+0x200]
           ▾ Volume header  [0x254+0x48]
               Zero vector: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x254+0x10]

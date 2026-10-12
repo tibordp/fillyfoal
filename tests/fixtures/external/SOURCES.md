@@ -1056,3 +1056,7 @@ Made by `sh tests/data/audio-codecs/make.sh OUTDIR` (fedora:42, `tests/data/audi
 | `git-pack/sha256.pack` | git 2.47.3 (Debian trixie) | reproduced byte for byte by `sh tests/data/git-pack/sha256.sh` (Docker, `inside-sha256.sh`): a `git init --object-format=sha256` repository of three commits by `fillyfoal <test@example.com>` with fixed dates, `git repack -a -d -f` giving two ofs-deltas (checked against `git verify-pack -v`: the rebuilt blobs hash to the object IDs it lists, `tests/system_depth.rs`) |
 | `git-pack-index/sha256.idx` | git 2.47.3 | same script: the v2 index of `git-pack/sha256.pack` (32-byte object names) |
 | `git-index/sha256.index` | git 2.47.3 | same script: the repository's `.git/index` (32-byte object names; `git ls-files -s`). Its entries hold the container's stat data (times, device, inode), so it differs between runs |
+## Misc formats: UEFI LZMA sections, CAD and Visio compound files, zip and PDF variants
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `uefi-fv/edk2-lzma.fv` | EDK2 BaseTools (edk2-stable202405: GenSec, GenFfs, GenFv, LzmaCompress), built in Docker `debian:bookworm` by `tests/data/uefi-fv/build-tools.sh` | reproduced byte for byte by `tests/data/uefi-fv/mklzma.sh` (Docker, see the script): an FFS v3 volume of three freeform files: a GUID-defined section of the LZMA custom decompression GUID (`LzmaCompress -e`), one of the LZMA x86 GUID (`LzmaCompress --f86 -e`), each holding a raw and a user interface section, and a plain user interface section |
