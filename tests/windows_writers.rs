@@ -94,3 +94,46 @@ fn type_server_object_names_the_compiler_pdb() {
     assert_has(&t, "GUID {5fd1a816-2767-4628-ae8f-26592e1676d6}");
     assert_has(&t, "types only (compiler PDB)");
 }
+
+/// Inno Setup 6.3 to 7.1 (the PE snapshots elide the installer data):
+/// each version's header, settings and file entries parse, and the files'
+/// hashes in the location entries match their decompressed content.
+#[test]
+fn inno_setup_layouts_from_6_3_to_7_1() {
+    for (file, data_version, hash) in [
+        ("6.3.3", "6.3.0", "SHA-1"),
+        ("6.4.3", "6.4.3", "SHA-256"),
+        ("6.5.4", "6.5.2", "SHA-256"),
+        ("6.6.1", "6.6.1", "SHA-256"),
+        ("6.7.3", "6.7.0", "SHA-256"),
+        ("7.1.0", "7.0.0.3", "SHA-256"),
+    ] {
+        let t = tree(&format!("pe/inno-setup-{file}.exe"));
+        assert_has(
+            &t,
+            &format!(
+                "Inno Setup installer — Inno Setup {data_version} (Unicode), fillyfoal test 1.0.0, LZMA2, 3 files"
+            ),
+        );
+        assert_has(&t, "PrivilegesRequired: lowest (0x3)");
+        assert_has(&t, "DestName: \"{app}\\\\readme.txt\"");
+        let checks = t.matches(&format!("{hash} check — valid")).count();
+        assert!(checks >= 2, "{file}: {checks} {hash} checks\n{t}");
+        for bad in [
+            "CRC mismatch",
+            "cannot parse",
+            "not the size we expect",
+            "fixed fields of an unexpected size",
+        ] {
+            assert!(!t.contains(bad), "{file}: {bad}\n{t}");
+        }
+        if file >= "6.5" {
+            assert_has(&t, "EncryptionUse: none (0x0)");
+            assert_has(&t, "KDFIterations: 220000");
+        }
+    }
+    let t = tree("pe/inno-setup-7.1.0.exe");
+    assert_has(&t, "CompiledCodeVersion: 0x7010000 — 7.1.0.0");
+    assert_has(&t, "ArchitecturesAllowed: \"x86compatible\"");
+    assert_has(&t, "Bitness: current process (0x4)");
+}
