@@ -9,10 +9,11 @@
 //! the log records inside (a different set of types for every server
 //! version) are not decoded.
 //!
-//! MariaDB 10.8 replaced this with an unframed log (`Phys` format), which
-//! is not handled here.
+//! MariaDB 10.8 replaced this with an unframed log (`Phys` format), whose
+//! mini-transactions are walked record by record (`redo108`).
 
-use crate::bytes::{to_usize, u16_be, u32_be, u64_be};
+use super::redo108;
+use crate::bytes::{to_u64, to_usize, u16_be, u32_be, u64_be};
 use crate::codec::crc::crc32c;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
@@ -48,6 +49,8 @@ const FORMATS: EnumTable = &[
     (103, "MariaDB 10.3 (encrypted)"),
     (0x5048_5953, "MariaDB 10.5"),
     (0xd048_5953, "MariaDB 10.5 (encrypted)"),
+    (0x5068_7973, "MariaDB 10.8"),
+    (0xd068_7973, "MariaDB 10.8 (encrypted)"),
 ];
 
 /// A header block, a known format, a creator string and a valid checksum.
@@ -92,8 +95,14 @@ fn checksum_node(block: &[u8], span: Span) -> Node {
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let head = cx.read(file.sub(0, HEADER)).await?;
+    let head = cx.read_avail(file.sub(0, HEADER)).await?;
     let format = u32_be(&head, 0).unwrap_or(0);
+    if format == redo108::FORMAT_10_8 || format == redo108::FORMAT_10_8_ENCRYPTED {
+        return redo108::dissect(cx, file, &head, format).await;
+    }
+    if to_u64(head.len()) < HEADER {
+        return Err(Diagnostic::truncated(file.sub(0, HEADER), file.len));
+    }
     let mysql = format <= 6;
     let creator = crate::text::until_nul(head.get(16..48).unwrap_or_default());
     let start_lsn = u64_be(&head, 8).unwrap_or(0);

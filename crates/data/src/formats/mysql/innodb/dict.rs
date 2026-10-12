@@ -34,14 +34,25 @@ pub const MAX_CHAIN: usize = 1 << 16;
 /// stored value needs.
 #[derive(Clone, Debug)]
 pub enum Ty {
-    Int { unsigned: bool },
+    Int {
+        unsigned: bool,
+    },
     Float,
     Double,
-    Decimal { precision: u32, scale: u32 },
+    Decimal {
+        precision: u32,
+        scale: u32,
+    },
     Date,
-    Time { fsp: u32 },
-    DateTime { fsp: u32 },
-    Timestamp { fsp: u32 },
+    Time {
+        fsp: u32,
+    },
+    DateTime {
+        fsp: u32,
+    },
+    Timestamp {
+        fsp: u32,
+    },
     Year,
     Text,
     Binary,
@@ -52,6 +63,9 @@ pub enum Ty {
     TrxId,
     RollPtr,
     RowId,
+    /// Bytes of unknown type (a compressed page's own field description):
+    /// text if they read as text.
+    Raw,
 }
 
 #[derive(Clone, Debug)]
@@ -81,9 +95,15 @@ pub struct IndexDef {
     pub fields: Vec<Field>,
     /// Fields that identify a record in node pointers.
     pub n_uniq: usize,
-    /// The table was altered with instant ADD or DROP COLUMN: records may
-    /// carry a version, so the field list cannot be relied on.
+    /// The table was altered with instant ADD COLUMN before MySQL 8.0.29
+    /// (records may carry a field count), so the field list cannot be
+    /// relied on.
     pub instant: bool,
+    /// MySQL 8.0.29+ row versions (instant ADD or DROP COLUMN): for each
+    /// field, the version that added it and the one that dropped it (0:
+    /// never), with `fields` in physical order and including dropped
+    /// columns. Empty for an index without versions.
+    pub versions: Vec<(u32, u32)>,
 }
 
 #[derive(Default)]
@@ -147,6 +167,7 @@ pub fn sdi_def() -> Arc<IndexDef> {
         ],
         n_uniq: 2,
         instant: false,
+        versions: Vec::new(),
     })
 }
 
@@ -159,9 +180,11 @@ pub struct SdiObject {
     pub id: u64,
     pub ulen: u32,
     pub clen: u32,
-    /// The record's page and origin.
+    /// The record's page and origin, and the bytes the origin is in (the
+    /// page, or a compressed page rebuilt).
     pub page: u32,
     pub origin: u64,
+    pub page_span: Span,
     pub data: Span,
 }
 
@@ -193,14 +216,12 @@ pub async fn objects(cx: &Cx, space: &SpaceRef) -> (Vec<SdiObject>, Vec<Diagnost
             problems.push(Diagnostic::malformed("SDI B-tree loops"));
             return (out, problems);
         }
-        let Some(span) = space.page(no) else {
-            problems.push(Diagnostic::malformed(format!(
-                "SDI page {no} is past the end"
-            )));
-            return (out, problems);
-        };
-        let Ok(p) = cx.read(span).await else {
-            return (out, problems);
+        let p = match index::record_page(cx, space, no).await {
+            Ok((_, p)) => p,
+            Err(e) => {
+                problems.push(e);
+                return (out, problems);
+            }
         };
         let level = u16_be(&p, 64).unwrap_or(0);
         if level == 0 {
@@ -221,10 +242,7 @@ pub async fn objects(cx: &Cx, space: &SpaceRef) -> (Vec<SdiObject>, Vec<Diagnost
         if !visited.insert(no) || visited.len() > MAX_SDI_PAGES || out.len() >= MAX_OBJECTS {
             break;
         }
-        let Some(span) = space.page(no) else {
-            break;
-        };
-        let Ok(p) = cx.read(span).await else {
+        let Ok((span, p)) = index::record_page(cx, space, no).await else {
             break;
         };
         cx.charge(to_u64(p.len()) / 1024).await;
@@ -259,6 +277,7 @@ pub async fn objects(cx: &Cx, space: &SpaceRef) -> (Vec<SdiObject>, Vec<Diagnost
                 clen: u32::try_from(num(5).unwrap_or(0)).unwrap_or(0),
                 page: no,
                 origin,
+                page_span: span,
                 data: data_span,
             });
         }
@@ -290,7 +309,17 @@ pub async fn external_span(cx: &Cx, space: &SpaceRef, page: Span, slot: &Slot) -
             )));
         }
     };
-    if u16_be(&head, 24) == Some(LOB_FIRST) {
+    let head_kind = u16_be(&head, 24).unwrap_or(0);
+    if head_kind == ZBLOB || head_kind == ZSDI_BLOB {
+        let at = (first, u32_be(&refb, 8).unwrap_or(0), head_kind);
+        return zblob(cx, space, page.sub(slot.off, slot.len), at, total).await;
+    }
+    if matches!(head_kind, 25..=29) {
+        return Err(Diagnostic::unsupported(
+            "compressed LOB pages (MySQL 8 compressed tables)",
+        ));
+    }
+    if head_kind == LOB_FIRST {
         lob_pieces(cx, space, first, total, &mut pieces).await?;
     } else {
         let mut no = first;
@@ -327,6 +356,62 @@ pub async fn external_span(cx: &Cx, space: &SpaceRef, page: Span, slot: &Slot) -
         },
         pieces,
     )
+}
+
+/// Compressed BLOB page types: the first page and the later ones, and
+/// MySQL 8's for the SDI (all pages).
+const ZBLOB: u16 = 11;
+const ZBLOB2: u16 = 12;
+const ZSDI_BLOB: u16 = 19;
+
+/// An off-page value of a compressed table (`btr_copy_zblob_prefix`): one
+/// zlib stream over a chain of pages, each holding the next page's number
+/// in its FIL header and stream bytes from the end of the FIL header (the
+/// first page from the reference's offset). MySQL 8 writes the SDI's
+/// long values the same way with a page type of their own. `start` is
+/// the first page, the reference's offset and the first page's type.
+async fn zblob(
+    cx: &Cx,
+    space: &SpaceRef,
+    field: Span,
+    start: (u32, u32, u16),
+    total: u64,
+) -> Result<Span> {
+    let mut pieces = Vec::new();
+    let mut visited = BTreeSet::new();
+    let (mut no, mut at, mut kind) = (start.0, u64::from(start.1), start.2);
+    while no != FIL_NULL {
+        if !visited.insert(no) || visited.len() > MAX_CHAIN {
+            return Err(Diagnostic::malformed("off-page value chain loops"));
+        }
+        let Some(s) = space.page(no) else {
+            return Err(Diagnostic::malformed(format!(
+                "off-page value at page {no}, past the end"
+            )));
+        };
+        let h = cx.read(s.sub(0, 46)).await?;
+        if u16_be(&h, 24) != Some(kind) {
+            return Err(Diagnostic::malformed(format!(
+                "page {no} is not a compressed BLOB page"
+            )));
+        }
+        let next = u32_be(&h, to_usize(at)).unwrap_or(FIL_NULL);
+        let start = if at == 12 { 38 } else { at.saturating_add(4) };
+        pieces.push(s.sub(start, s.len.saturating_sub(start)));
+        if kind == ZBLOB {
+            kind = ZBLOB2;
+        }
+        (no, at) = (next, 12);
+    }
+    let stream = cx.add_pieces(
+        Origin {
+            parent: field,
+            transform: "innodb-off-page",
+        },
+        pieces,
+    )?;
+    let decoded = crate::codec::decode_span(cx, stream, &Codec::Zlib, Some(total)).await?;
+    Ok(decoded.span)
 }
 
 /// MySQL 8 LOBs: the first page's index entries, each naming a page and
@@ -503,7 +588,12 @@ fn decimal_bytes(precision: u32, scale: u32) -> u64 {
 
 /// The field a column gives, or `None` for a type this decoder does not
 /// know the storage of.
-fn column_field(c: &Json, prefix: Option<u64>, hidden_element: bool) -> Option<Field> {
+fn column_field(
+    c: &Json,
+    prefix: Option<u64>,
+    hidden_element: bool,
+    dropped: bool,
+) -> Option<Field> {
     let name = c
         .get("name")
         .and_then(Json::as_str)
@@ -514,7 +604,8 @@ fn column_field(c: &Json, prefix: Option<u64>, hidden_element: bool) -> Option<F
     let char_len = num(c, "char_length");
     let fsp = u32::try_from(num(c, "datetime_precision")).unwrap_or(0);
     let frac = u64::from(fsp.saturating_add(1) / 2);
-    let hidden_se = num(c, "hidden") == 2;
+    // Dropped columns are hidden from the server but keep their types.
+    let hidden_se = num(c, "hidden") == 2 && !dropped;
     let elements = || {
         Arc::new(
             c.get("elements")
@@ -644,16 +735,17 @@ fn table_indexes(dd: &Json) -> Vec<IndexDef> {
         .get("se_private_data")
         .and_then(Json::as_str)
         .unwrap_or("");
-    let instant = private(table_private, "instant_col").is_some()
-        || columns.iter().any(|c| {
-            let p = c
-                .get("se_private_data")
-                .and_then(Json::as_str)
-                .unwrap_or("");
-            p.contains("version_added")
-                || p.contains("version_dropped")
-                || p.contains("physical_pos")
-        });
+    let instant = private(table_private, "instant_col").is_some();
+    let col_private = |c: &Json| {
+        c.get("se_private_data")
+            .and_then(Json::as_str)
+            .unwrap_or("")
+            .to_owned()
+    };
+    let versioned = columns.iter().any(|c| {
+        let p = col_private(c);
+        private(&p, "version_added").is_some() || private(&p, "version_dropped").is_some()
+    });
     for ix in dd
         .get("indexes")
         .and_then(Json::as_array)
@@ -667,27 +759,68 @@ fn table_indexes(dd: &Json) -> Vec<IndexDef> {
             continue;
         };
         let mut fields = Vec::new();
+        // Physical position, version added and dropped of each field.
+        let mut phys = Vec::new();
+        let mut used = BTreeSet::new();
         let mut known = true;
         for e in ix
             .get("elements")
             .and_then(Json::as_array)
             .unwrap_or_default()
         {
-            let Some(c) = columns.get(to_usize(num(e, "column_opx"))) else {
+            let opx = to_usize(num(e, "column_opx"));
+            let Some(c) = columns.get(opx) else {
                 known = false;
                 continue;
             };
             if flag(c, "is_virtual") {
                 continue;
             }
+            used.insert(opx);
             let length = num(e, "length");
             let prefix = (length != u64::from(u32::MAX)).then_some(length);
-            match column_field(c, prefix, flag(e, "hidden")) {
-                Some(f) => fields.push(f),
+            match column_field(c, prefix, flag(e, "hidden"), false) {
+                Some(f) => {
+                    phys.push(column_versions(&col_private(c)));
+                    fields.push(f);
+                }
                 None => known = false,
             }
         }
         let clustered = fields.iter().any(|f| matches!(f.ty, Ty::TrxId));
+        let mut versions = Vec::new();
+        if clustered && versioned && known {
+            // Dropped columns stay in older records: add them, and put
+            // every field in its physical place.
+            for (opx, c) in columns.iter().enumerate() {
+                let p = col_private(c);
+                if used.contains(&opx) || private(&p, "version_dropped").is_none() {
+                    continue;
+                }
+                match column_field(c, None, false, true) {
+                    Some(mut f) => {
+                        f.name = format!("{} (dropped)", dropped_name(&f.name));
+                        f.key = false;
+                        phys.push(column_versions(&p));
+                        fields.push(f);
+                    }
+                    None => known = false,
+                }
+            }
+            if phys.iter().any(|v| v.0.is_none()) {
+                known = false;
+            }
+            let mut order: Vec<usize> = (0..fields.len()).collect();
+            order.sort_by_key(|&i| phys.get(i).and_then(|v| v.0));
+            let mut sorted = Vec::with_capacity(fields.len());
+            for &i in &order {
+                if let (Some(f), Some(v)) = (fields.get(i), phys.get(i)) {
+                    sorted.push(f.clone());
+                    versions.push((v.1, v.2));
+                }
+            }
+            fields = sorted;
+        }
         let n_uniq = if clustered {
             fields
                 .iter()
@@ -698,6 +831,7 @@ fn table_indexes(dd: &Json) -> Vec<IndexDef> {
         };
         if !known {
             fields.clear();
+            versions.clear();
         }
         out.push(IndexDef {
             id,
@@ -711,9 +845,28 @@ fn table_indexes(dd: &Json) -> Vec<IndexDef> {
             fields,
             n_uniq,
             instant,
+            versions,
         });
     }
     out
+}
+
+/// A column's physical position and the row versions that added and
+/// dropped it, from its `se_private_data`.
+fn column_versions(p: &str) -> (Option<u64>, u32, u32) {
+    let v = |k: &str| u32::try_from(private(p, k).unwrap_or(0)).unwrap_or(u32::MAX);
+    (
+        private(p, "physical_pos"),
+        v("version_added"),
+        v("version_dropped"),
+    )
+}
+
+/// A dropped column's original name: `!hidden!_dropped_v2_p4_b` is `b`.
+fn dropped_name(name: &str) -> &str {
+    name.strip_prefix("!hidden!_dropped_")
+        .and_then(|rest| rest.splitn(3, '_').nth(2))
+        .unwrap_or(name)
 }
 
 // ---------------------------------------------------------------------------
@@ -887,7 +1040,15 @@ pub fn value(f: &Field, b: &[u8]) -> (Value, String) {
             let short = format!("'{}'", clip(&s, 40));
             shown(text(s), short)
         }
-        Ty::Binary | Ty::Json | Ty::Bit => {
+        Ty::Raw
+            if std::str::from_utf8(b)
+                .is_ok_and(|s| !s.is_empty() && s.chars().all(|c| !c.is_control())) =>
+        {
+            let s = String::from_utf8_lossy(b).into_owned();
+            let short = format!("'{}'", clip(&s, 40));
+            shown(text(s), short)
+        }
+        Ty::Binary | Ty::Json | Ty::Bit | Ty::Raw => {
             let short = format!(
                 "0x{}",
                 clip(
@@ -968,7 +1129,7 @@ pub async fn sdi_objects(cx: Cx, space: SpaceRef) -> Result<()> {
             Some(n) => format!("{} {n}", crate::formats::util::fmt::capitalize(kind)),
             None => format!("{} {}", crate::formats::util::fmt::capitalize(kind), o.id),
         };
-        let page_span = space.page(o.page).unwrap_or(o.data);
+        let page_span = o.page_span;
         cx.push(
             Node::new(name)
                 .summary(format!(
