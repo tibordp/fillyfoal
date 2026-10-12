@@ -937,3 +937,9 @@ Stored whole as `.raw.zst` (zstd -19).
 | `mcap/lz4.mcap` | Python `mcap` 1.2.2 `Writer` (lz4 4.4.5) | same script; the same records in one LZ4-frame chunk |
 ## Bitmap fonts (fontTools)
 | `sfnt/fonttools-glyf-bitmaps.ttf` | fontTools 4.66.1 `FontBuilder` and TTX import, Pillow 11.3.0 | reproduced byte-for-byte with `SOURCE_DATE_EPOCH=1767225600 uv run --with fonttools==4.66.1 --with pillow==11.3.0 python3 -I tests/data/sfnt/make_bitmap_glyphs.py OUT`: five TrueType glyphs (empty, simple, composite with a scale), hmtx/vmtx, an `sbix` strike (PNG and `dupe`), a `CBDT`/`CBLC` strike (format 17 PNGs, index format 1) and an `EBDT`/`EBLC` strike (format 5, index format 2) |
+## JPEG XL and JPEG metadata
+| `jxl/cjxl-alpha-lossless.jxl` | libjxl cjxl 0.11.2 (Debian trixie `libjxl-tools 0.11.2-0.1~deb13u2`, Docker) | reproduced byte-for-byte: `sh tests/data/jxl/make.sh ROOT` (`cjxl -d 0` of a 40x40 ImageMagick PNG with alpha); bare codestream, not XYB, one alpha extra channel |
+| `jxl/cjxl-grey16.jxl` | libjxl cjxl 0.11.2 | same script: `cjxl -d 0` of a 16-bit greyscale gradient PNG; bare codestream, greyscale colour encoding |
+| `jxl/cjxl-anim-jxlp.jxl` | libjxl cjxl 0.11.2 | same script: `cjxl -d 1 --container=1` of a three-frame ImageMagick GIF; the codestream is split over three `jxlp` boxes; animation header, alpha |
+| `jxl/cjxl-jpeg-recon.jxl` | libjxl cjxl 0.11.2 | same script: `cjxl --lossless_jpeg=1` of a 32x24 ImageMagick JPEG carrying an ExifTool-written Exif block (Artist/Copyright `fillyfoal`): `jxlp`, `jbrd`, `brob` (Brotli Exif), last `jxlp` |
+| `jxl/cjxl-exif.jxl` | libjxl cjxl 0.11.2, ExifTool 13.25 | same script: `cjxl -q 90 --container=1`, then ExifTool appends an `Exif` box (`-Artist=fillyfoal`) |
