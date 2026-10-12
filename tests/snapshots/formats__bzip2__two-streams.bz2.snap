@@ -1,0 +1,33 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ two-streams.bz2 — bzip2, 900k blocks  [0x0+0x75]
+  ▾ Header  [0x0+0x4]
+      Signature: "BZ"  [0x0+0x2]
+      Version: "h"  [0x2+0x1]
+      Block size: "9" — 900k  [0x3+0x1]
+  ▾ First block header — byte-aligned  [0x4+0xe]
+      Block magic: 31 41 59 26 53 59  |1AY&SY|  [0x4+0x6]
+      Block CRC: 0x2a045d38  [0xa+0x4]
+      Randomised: false  [0xe+0x1]
+      Original pointer: 4  [0xe+0x4]
+  ▾ Blocks — 2 blocks in 2 streams  [0x4+0x71]
+      Block 0: 0x2a045d38 — bit offset 0x0, 36 bytes compressed  [0x4+0x25]
+    ▾ End of stream — at bit 0x127 of the compressed data  [0x28+0xb]
+        End-of-stream magic: 0x177245385090 — √π (BCD), bit offset 7 in its first byte  [0x28+0x7]
+        Combined CRC: 0x2a045d38  [0x2e+0x5]
+    ▾ Stream 2 header — 100k blocks  [0x33+0x4]
+        Signature: "BZ"  [0x33+0x2]
+        Version: "h"  [0x35+0x1]
+        Block size: "1" — 100k  [0x36+0x1]
+      Block 1: 0xc261972a — bit offset 0x198, 51 bytes compressed  [0x37+0x34]
+  ▾ Decompressed — UTF-8 text, LF line endings, 2 lines  [0x0+0x75]
+      Encoding: "UTF-8"
+      Line endings: "LF" — 2 LF, 0 CRLF, 0 CR
+    ▾ Lines — 2 lines  [#1:0x0+0x2c]
+        Line 1: "first stream"  [#1:0x0+0xc]
+        Line 2: "second stream, a little longer"  [#1:0xd+0x1e]
+  ▾ End of stream — at bit 0x336 of the compressed data  [0x6a+0xb]
+      End-of-stream magic: 0x177245385090 — √π (BCD), bit offset 6 in its first byte  [0x6a+0x7]
+      Combined CRC: 0xc261972a  [0x70+0x5]

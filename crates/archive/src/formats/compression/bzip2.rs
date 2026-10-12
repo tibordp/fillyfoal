@@ -183,12 +183,17 @@ async fn end_of_stream(cx: Cx, (span, shift, crc): (Span, u64, u64)) -> Result<(
     Ok(())
 }
 
-/// Scans the compressed data for block magics, bit by bit.
+/// Scans the compressed data for block magics, bit by bit. Streams written
+/// back to back (`cat a.bz2 b.bz2`, pbzip2, lbzip2) decompress as one; after
+/// an end-of-stream marker the scan goes on when a stream header and a
+/// block or end-of-stream magic follow on the next byte boundary.
 async fn blocks(cx: Cx, body: Span) -> Result<()> {
     let mut window = 0u64;
-    let mut seen = 0u64; // bits shifted into the window
+    let mut filled = 0u64; // bits shifted into the window since (re)starting
+    let mut bit = 0u64; // offset in `body` of the next bit shifted in
     let mut previous: Option<u64> = None; // bit offset of the last block found
     let mut index = 0u64;
+    let mut streams = 1u64;
     let mut pos = 0u64;
     let mut end_bit = None;
     'scan: while pos < body.len {
@@ -196,24 +201,44 @@ async fn blocks(cx: Cx, body: Span) -> Result<()> {
         for (i, &byte) in chunk.iter().enumerate() {
             for b in (0..8).rev() {
                 window = window << 1 | u64::from((byte >> b) & 1);
-                seen = seen.saturating_add(1);
-                if seen < 48 {
+                filled = filled.saturating_add(1);
+                bit = bit.saturating_add(1);
+                if filled < 48 {
                     continue;
                 }
                 let tag = window & MASK48;
                 if tag != BLOCK_MAGIC && tag != EOS_MAGIC {
                     continue;
                 }
-                let start = seen.saturating_sub(48);
+                let start = bit.saturating_sub(48);
                 if let Some(prev) = previous {
                     push_block(&cx, body, index, prev, start).await;
                     index = index.saturating_add(1);
                 }
-                if tag == EOS_MAGIC {
-                    end_bit = Some(start);
-                    break 'scan;
+                previous = None;
+                if tag == BLOCK_MAGIC {
+                    previous = Some(start);
+                    continue;
                 }
-                previous = Some(start);
+                end_bit = Some(start);
+                // The combined CRC, then padding to a byte boundary.
+                let next = start.saturating_add(80).div_ceil(8);
+                let Some(level) = next_stream(&cx, body.tail(next)).await else {
+                    break 'scan;
+                };
+                cx.push(eos_node(&cx, body, start).await).await;
+                streams = streams.saturating_add(1);
+                cx.push(
+                    Header::node(format!("Stream {streams} header"), body.sub(next, 4), BE)
+                        .summary(format!("{level}00k blocks")),
+                )
+                .await;
+                end_bit = None;
+                pos = next.saturating_add(4);
+                bit = pos.saturating_mul(8);
+                filled = 0;
+                cx.checkpoint().await;
+                continue 'scan;
             }
             if i % 4096 == 0 {
                 cx.checkpoint().await;
@@ -228,8 +253,38 @@ async fn blocks(cx: Cx, body: Span) -> Result<()> {
         }
         cx.diag(Diagnostic::warning("end-of-stream marker not found"));
     }
-    cx.annotate(count(index, "block", "blocks"));
+    let blocks = count(index, "block", "blocks");
+    cx.annotate(if streams > 1 {
+        format!("{blocks} in {streams} streams")
+    } else {
+        blocks
+    });
     Ok(())
+}
+
+/// The block-size digit of the stream starting at `rest`, if one does.
+async fn next_stream(cx: &Cx, rest: Span) -> Option<char> {
+    let head = cx.read_avail(rest.sub(0, 10)).await.ok()?;
+    let level = *head.get(3)?;
+    let magic = bits(&head, 32, 48)?;
+    (head.starts_with(b"BZh")
+        && (b'1'..=b'9').contains(&level)
+        && (magic == BLOCK_MAGIC || magic == EOS_MAGIC))
+        .then_some(char::from(level))
+}
+
+/// The end-of-stream marker at bit `start` of `body`.
+async fn eos_node(cx: &Cx, body: Span, start: u64) -> Node {
+    let first = start / 8;
+    let span = body.sub(first, start.saturating_add(80).div_ceil(8).saturating_sub(first));
+    let crc = match cx.read_avail(span).await {
+        Ok(data) => bits(&data, (start % 8).saturating_add(48), 32).unwrap_or(0),
+        Err(_) => 0,
+    };
+    Node::new("End of stream")
+        .span(span)
+        .summary(format!("at bit {start:#x} of the compressed data"))
+        .lazy(end_of_stream, (span, start % 8, crc))
 }
 
 async fn push_block(cx: &Cx, body: Span, index: u64, start: u64, end: u64) {
