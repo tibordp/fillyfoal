@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ quant.gguf — llama fillyfoal quant test, GGUF v3, 11 tensors, 2 metadata entries  [0x0+0x1c40]
+    Magic: "GGUF"  [0x0+0x4]
+    Version: 3  [0x4+0x4]
+    Tensor count: 11  [0x8+0x8]
+    Metadata count: 2  [0x10+0x8]
+  ▾ Metadata — 2 entries
+      general.architecture: "llama" — string  [0x18+0x2d]
+      general.name: "fillyfoal quant test" — string  [0x45+0x34]
+  ▾ Tensors — 11 tensors
+      f32.weight: F32 (0x0) — [256, 2] F32, at data+0x0, 2 KiB  [0x79+0x32] → 0x2c0+0x800
+      f16.weight: F16 (0x1) — [256, 2] F16, at data+0x800, 1 KiB  [0xab+0x32] → 0xac0+0x400
+      bf16.weight: BF16 (0x1e) — [256, 2] BF16, at data+0xc00, 1 KiB  [0xdd+0x33] → 0xec0+0x400
+      q4_0.weight: Q4_0 (0x2) — [256, 2] Q4_0, at data+0x1000, 288 bytes  [0x110+0x33] → 0x12c0+0x120
+      q4_1.weight: Q4_1 (0x3) — [256, 2] Q4_1, at data+0x1120, 320 bytes  [0x143+0x33] → 0x13e0+0x140
+      q5_0.weight: Q5_0 (0x6) — [256, 2] Q5_0, at data+0x1260, 352 bytes  [0x176+0x33] → 0x1520+0x160
+      q5_1.weight: Q5_1 (0x7) — [256, 2] Q5_1, at data+0x13c0, 384 bytes  [0x1a9+0x33] → 0x1680+0x180
+      q8_0.weight: Q8_0 (0x8) — [256, 2] Q8_0, at data+0x1540, 544 bytes  [0x1dc+0x33] → 0x1800+0x220
+      tq1_0.weight: TQ1_0 (0x22) — [256, 2] TQ1_0, at data+0x1760, 108 bytes  [0x20f+0x34] → 0x1a20+0x6c
+      tq2_0.weight: TQ2_0 (0x23) — [256, 2] TQ2_0, at data+0x17e0, 132 bytes  [0x243+0x34] → 0x1aa0+0x84
+      i8.weight: I8 (0x18) — [256, 1] I8, at data+0x1880, 256 bytes  [0x277+0x31] → 0x1b40+0x100
+      Tensor data — 6.4 KiB, aligned to 32  [0x2c0+0x1980]

@@ -80,6 +80,62 @@ pub(crate) const TENSOR_TYPES: EnumTable = &[
     (39, "MXFP4"),
 ];
 
+/// Elements per block and bytes per block of each ggml tensor type
+/// (`ggml_type_traits` `blck_size`/`type_size`; gguf-py's
+/// `GGML_QUANT_SIZES`).
+fn block_layout(kind: u64) -> Option<(u64, u64)> {
+    Some(match kind {
+        0 | 26 => (1, 4),
+        1 | 25 | 30 => (1, 2),
+        24 => (1, 1),
+        27 | 28 => (1, 8),
+        2 | 20 => (32, 18),
+        3 => (32, 20),
+        6 => (32, 22),
+        7 => (32, 24),
+        8 => (32, 34),
+        9 => (32, 40),
+        39 => (32, 17),
+        10 => (256, 84),
+        11 | 21 => (256, 110),
+        12 => (256, 144),
+        13 => (256, 176),
+        14 => (256, 210),
+        15 => (256, 292),
+        16 | 35 => (256, 66),
+        17 => (256, 74),
+        18 => (256, 98),
+        19 => (256, 50),
+        22 => (256, 82),
+        23 => (256, 136),
+        29 => (256, 56),
+        34 => (256, 54),
+        _ => return None,
+    })
+}
+
+/// The byte size of a tensor of type `kind` and `shape` (innermost
+/// dimension first), or why it has none.
+fn tensor_bytes(kind: u64, shape: &[u64]) -> std::result::Result<u64, String> {
+    let (block, bytes) = block_layout(kind).ok_or_else(|| format!("unknown tensor type {kind}"))?;
+    let first = shape.first().copied().unwrap_or(1);
+    if !first.is_multiple_of(block) {
+        return Err(format!(
+            "first dimension {first} is not a multiple of the block size {block}"
+        ));
+    }
+    let rows = shape
+        .iter()
+        .skip(1)
+        .try_fold(1u64, |a, &d| a.checked_mul(d))
+        .ok_or("shape overflows")?;
+    first
+        .checked_div(block)
+        .and_then(|b| b.checked_mul(bytes))
+        .and_then(|r| r.checked_mul(rows))
+        .ok_or_else(|| "shape overflows".to_owned())
+}
+
 const MAX_STRING: u64 = 1 << 20;
 const MAX_DIMS: u64 = 16;
 
@@ -326,9 +382,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
 async fn metadata(cx: Cx, g: Gguf) -> Result<()> {
     let mut r = ByteReader::new(&cx, g.file);
-    let mut pos = header_size(&g);
     cx.set_count(Count::Exact(g.kvs));
-    for _ in 0..g.kvs {
+    // Resume marks: (position, index).
+    let (mut pos, first) = cx.resume::<(u64, u64)>().unwrap_or((header_size(&g), 0));
+    for i in first..g.kvs {
+        let mark = (pos, i);
+        cx.mark(move || mark);
         let (key, after) = string(&mut r, &g, pos).await?;
         let kind = u32::try_from(r.le(after, 4).await?).unwrap_or(u32::MAX);
         let (v, summary, end) = value(&mut r, &g, kind, after.saturating_add(4)).await?;
@@ -356,12 +415,16 @@ async fn array(cx: Cx, (g, at): (Gguf, u64)) -> Result<()> {
     let mut r = ByteReader::new(&cx, g.file);
     let elem = u32::try_from(r.le(at, 4).await?).unwrap_or(u32::MAX);
     let count = r.le(at.saturating_add(4), g.len_size()).await?;
-    let mut pos = at.saturating_add(4).saturating_add(g.len_size());
+    let body = at.saturating_add(4).saturating_add(g.len_size());
     if let Some(n) = scalar_size(elem) {
-        g.file.sub_exact(pos, count.saturating_mul(n))?;
+        g.file.sub_exact(body, count.saturating_mul(n))?;
     }
     cx.set_count(Count::Exact(count));
-    for i in 0..count {
+    // Resume marks: (position, index).
+    let (mut pos, first) = cx.resume::<(u64, u64)>().unwrap_or((body, 0));
+    for i in first..count {
+        let mark = (pos, i);
+        cx.mark(move || mark);
         let (v, summary, end) = value(&mut r, &g, elem, pos).await?;
         let mut node = Node::new(format!("[{i}]")).span(g.file.sub(pos, end.saturating_sub(pos)));
         if let Some(v) = v {
@@ -380,35 +443,27 @@ async fn array(cx: Cx, (g, at): (Gguf, u64)) -> Result<()> {
 
 async fn tensor_infos(cx: Cx, g: Gguf) -> Result<()> {
     let mut r = ByteReader::new(&cx, g.file);
-    let start = metadata_end(&mut r, &g, header_size(&g)).await?;
-    // The alignment may be overridden by `general.alignment`.
-    let alignment = alignment(&mut r, &g).await.unwrap_or(32).max(1);
-    // First pass: find the end of the descriptors (start of the data).
-    let mut pos = start;
-    for _ in 0..g.tensors {
-        let (_, after) = string(&mut r, &g, pos).await?;
-        let dims = u64::from(u32::try_from(r.le(after, 4).await?).unwrap_or(u32::MAX));
-        if dims > MAX_DIMS {
-            return Err(
-                Diagnostic::malformed(format!("{dims} dimensions")).at(g.file.sub(after, 4))
-            );
-        }
-        pos = after
-            .saturating_add(4)
-            .saturating_add(dims.saturating_mul(g.len_size()))
-            .saturating_add(4 + 8);
-        cx.checkpoint().await;
-    }
-    let data_start = pos.checked_next_multiple_of(alignment).unwrap_or(u64::MAX);
+    // Resume marks: (descriptor position, index, data start, alignment,
+    // end of the previous tensor's bytes).
+    let (mut pos, first, data_start, alignment, mut prev_end) =
+        match cx.resume::<(u64, u64, u64, u64, u64)>() {
+            Some(state) => state,
+            None => {
+                let start = metadata_end(&mut r, &g, header_size(&g)).await?;
+                // The alignment may be overridden by `general.alignment`.
+                let alignment = alignment(&mut r, &g).await.unwrap_or(32).max(1);
+                let data_start = descriptors_end(&cx, &mut r, &g, start)
+                    .await?
+                    .checked_next_multiple_of(alignment)
+                    .unwrap_or(u64::MAX);
+                (start, 0, data_start, alignment, 0)
+            }
+        };
     let data = g.file.tail(data_start);
-    cx.emit(
-        Node::new("Tensor data")
-            .span(data)
-            .summary(format!("{}, aligned to {alignment}", size(data.len))),
-    );
     cx.set_count(Count::Exact(g.tensors.saturating_add(1)));
-    let mut pos = start;
-    for _ in 0..g.tensors {
+    for i in first..g.tensors {
+        let mark = (pos, i, data_start, alignment, prev_end);
+        cx.mark(move || mark);
         let (name, after) = string(&mut r, &g, pos).await?;
         let dims = u32::try_from(r.le(after, 4).await?).unwrap_or(u32::MAX);
         let mut shape = Vec::new();
@@ -423,24 +478,78 @@ async fn tensor_infos(cx: Cx, g: Gguf) -> Result<()> {
         let dims_text: Vec<String> = shape.iter().map(u64::to_string).collect();
         let type_name =
             lookup(TENSOR_TYPES, kind).map_or_else(|| format!("type {kind}"), str::to_owned);
-        cx.push(
-            Node::new(clip(&name, 160))
-                .span(g.file.sub(pos, end.saturating_sub(pos)))
-                .value(Value::Enum {
-                    raw: kind,
-                    bits: 32,
-                    name: lookup(TENSOR_TYPES, kind),
-                })
-                .summary(format!(
-                    "[{}] {type_name}, at data+{offset:#x}",
-                    dims_text.join(", ")
-                ))
-                .target(data.sub(offset, 1)),
-        )
-        .await;
+        let mut node = Node::new(clip(&name, 160))
+            .span(g.file.sub(pos, end.saturating_sub(pos)))
+            .value(Value::Enum {
+                raw: kind,
+                bits: 32,
+                name: lookup(TENSOR_TYPES, kind),
+            });
+        let mut summary = format!(
+            "[{}] {type_name}, at data+{offset:#x}",
+            dims_text.join(", ")
+        );
+        match tensor_bytes(kind, &shape) {
+            Ok(bytes) => {
+                summary = format!("{summary}, {}", size(bytes));
+                match data.sub_exact(offset, bytes) {
+                    Ok(span) => node = node.target(span),
+                    Err(_) => {
+                        node = node
+                            .target(data.sub(offset, bytes))
+                            .diag(Diagnostic::malformed(format!(
+                                "{bytes} bytes at data+{offset:#x} run past the end"
+                            )));
+                    }
+                }
+                if offset < prev_end {
+                    node = node.diag(Diagnostic::malformed(format!(
+                        "overlaps the previous tensor, which ends at data+{prev_end:#x}"
+                    )));
+                }
+                if !offset.is_multiple_of(alignment) {
+                    node = node.diag(Diagnostic::malformed(format!(
+                        "offset not aligned to {alignment}"
+                    )));
+                }
+                prev_end = offset.saturating_add(bytes);
+            }
+            Err(why) => {
+                node = node
+                    .target(data.sub(offset, 1))
+                    .diag(Diagnostic::malformed(why));
+            }
+        }
+        cx.push(node.summary(summary)).await;
         pos = end;
     }
+    cx.push(
+        Node::new("Tensor data")
+            .span(data)
+            .summary(format!("{}, aligned to {alignment}", size(data.len))),
+    )
+    .await;
     Ok(())
+}
+
+/// The end of the tensor descriptors starting at `start`.
+async fn descriptors_end(cx: &Cx, r: &mut ByteReader<'_>, g: &Gguf, start: u64) -> Result<u64> {
+    let mut pos = start;
+    for _ in 0..g.tensors {
+        let (_, after) = string(r, g, pos).await?;
+        let dims = u64::from(u32::try_from(r.le(after, 4).await?).unwrap_or(u32::MAX));
+        if dims > MAX_DIMS {
+            return Err(
+                Diagnostic::malformed(format!("{dims} dimensions")).at(g.file.sub(after, 4))
+            );
+        }
+        pos = after
+            .saturating_add(4)
+            .saturating_add(dims.saturating_mul(g.len_size()))
+            .saturating_add(4 + 8);
+        cx.checkpoint().await;
+    }
+    Ok(pos)
 }
 
 /// `general.alignment`, if present.
