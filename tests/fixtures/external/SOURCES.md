@@ -1194,3 +1194,22 @@ not reproducible (a crash).
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
 | `windows-kernel-dump/minidump-small-memory-dump.dmp.raw.zst` | Windows kernel crash dump writer (CrashDumpEnabled=3, small memory dump), crash by NotMyFault v4.60 (`notmyfaultc64a.exe /crash 0x01`, `myfault.sys`, no user logged on) | `C:\Windows\Minidump\101226-6203-01.dmp`, renamed: `PAGEDU64` header, DumpType 4 (triage), bug check 0xD1, then `TRIAGE_DUMP64` (context, PRCB, process, thread, call stack, 188 drivers with a string pool, 6 unloaded drivers, KDDEBUGGER_DATA64, 61 data blocks, the `TRGD` marker) and, past SizeOfDump, the `DumpBlob` secondary data (17 blobs). Every header and `TRIAGE_DUMP64` field checked against WinDbg 10.0.29661.1004 `kd -z <dump> -c ".dumpdebug; vertarget"` |
+
+## Windows VM fixtures: shell links and jump lists
+
+Written on the same Windows 11 Pro 25H2 ARM64 VM (build 10.0.26200.9457;
+explorer.exe 10.0.26100.8117, windows.storage.dll 10.0.26100.9278,
+wshom.ocx 10.0.26100.4768) to `C:\fillyfoal\note.txt` and the folder
+`C:\fillyfoal\notes\`; see `tests/data/windows/lnk/jumplist.ps1`. The links
+carry the VM's volume serial and a TrackerDataBlock (machine `fillyfoal-vm`,
+droids embedding the VM's virtual NIC MAC). Unchanged; not reproducible
+(times, object IDs).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `lnk/explorer-file-note.txt.lnk` | Windows Explorer shell ("Create shortcut" verb) | `(New-Object -ComObject Shell.Application).Namespace('C:\fillyfoal').ParseName('note.txt').InvokeVerb('link')`, renamed: ID list with 0xBEEF0004 blocks (v9, 8.3 name `FILLYF~2`), LinkInfo, relative path, working dir, TrackerDataBlock, PropertyStoreDataBlock (4 storages) |
+| `lnk/explorer-folder-notes.lnk` | Windows Explorer shell | the same verb on the folder `C:\fillyfoal\notes`: a directory target |
+| `lnk/wscript-file-note.txt.lnk` | Windows Script Host `WScript.Shell` (wshom.ocx), from Windows PowerShell 5.1 | `CreateShortcut(...)`, TargetPath `C:\fillyfoal\note.txt`, WorkingDirectory `C:\fillyfoal`, Description `fillyfoal test`, `Save()`: NAME_STRING, one property storage |
+| `lnk/recent-note.lnk` | Windows shell recent-documents tracking (`SHAddToRecentDocs`) | written by Windows into `%APPDATA%\Microsoft\Windows\Recent\note.lnk` by `jumplist.ps1`; a relative path climbing out of the profile |
+| `custom-destinations/6b16a059c2e70543.customDestinations-ms` | Windows `ICustomDestinationList` (windows.storage.dll) | `jumplist.ps1` with AppUserModelID `fillyfoal.test`: custom category "fillyfoal" (2 links with PKEY_Title), user tasks (1 link), known category Recent, 0xBABFFBAB footers |
+| `cfb/a61657a5e5dfbdc.automaticDestinations-ms` | Windows 11 jump-list machinery for Notepad 11.2607.14.0 | `Start-Process C:\fillyfoal\note.txt`, then `C:\fillyfoal\notes\readme.txt`, Notepad closed; copied from `AutomaticDestinations\`: compound file with a version 6 `DestList` (2 entries), link streams `1` and `2` (with a 0xBEEF001A ProgID extension block) and an empty `DestListPropertyStore` |

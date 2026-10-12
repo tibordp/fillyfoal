@@ -75,6 +75,8 @@ const KNOWN: &[(Guid, u32, &str)] = &[
     (SHELL_DETAILS, 24, "System.ParsingName"),
     (SHELL_DETAILS, 30, "System.ParsingPath"),
     (THUMBNAIL, 100, "System.ThumbnailCacheId"),
+    (THUMBNAIL, 104, "System.VolumeId"),
+    (FOLDER_PATH, 6, "System.ItemFolderPathDisplay"),
 ];
 
 /// `B725F130-47EF-101A-A5F1-02608C9EEBAC`.
@@ -111,6 +113,14 @@ const THUMBNAIL: Guid = Guid {
     data2: 0x8dad,
     data3: 0x4870,
     data4: [0xa7, 0x48, 0x40, 0x2e, 0xa4, 0x3d, 0x78, 0x8c],
+};
+
+/// `E3E0584C-B788-4A5A-BB20-7F5A44C9ACDD`.
+const FOLDER_PATH: Guid = Guid {
+    data1: 0xe3e0_584c,
+    data2: 0xb788,
+    data3: 0x4a5a,
+    data4: [0xbb, 0x20, 0x7f, 0x5a, 0x44, 0xc9, 0xac, 0xdd],
 };
 
 fn property_name(fmtid: &Guid, id: u32) -> String {
@@ -166,7 +176,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("serialized property store, {count} storages"));
+    cx.annotate(format!(
+        "serialized property store, {}",
+        crate::formats::util::fmt::plural(count, "storage")
+    ));
     Ok(())
 }
 

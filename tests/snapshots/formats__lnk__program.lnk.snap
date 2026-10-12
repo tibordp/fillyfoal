@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ program.lnk — shell link → C:\Program Files\fillyfoal viewer.exe --inspect README.md  [0x0+0x34d]
   ▾ ShellLinkHeader  [0x0+0x4c]
@@ -53,7 +53,7 @@ expression: "common::explore(&name, &data)"
           Unknown: 0  [0xb9+0x4]
           Unknown: 0  [0xbd+0x4]
           Long name: "Program Files"  [0xc1+0x1c]
-          First extension block offset: 0x14  [0xdd+0x2]
+          Block offset: 0x14  [0xdd+0x2]
     ▾ File 3 — fillyfoal viewer.exe (FILLYF~1.EXE), 123456 bytes, modified 2026-10-05 12:30:10, attributes 0x20  [0xdf+0x76]
         ItemIDSize: 118  [0xdf+0x2]
         Class type: 0x32  [0xe1+0x1]
@@ -79,7 +79,7 @@ expression: "common::explore(&name, &data)"
           Unknown: 0  [0x121+0x4]
           Unknown: 0  [0x125+0x4]
           Long name: "fillyfoal viewer.exe"  [0x129+0x2a]
-          First extension block offset: 0x14  [0x153+0x2]
+          Block offset: 0x14  [0x153+0x2]
       TerminalID  [0x155+0x2]
   ▾ LinkInfo — C:\Program Files\fillyfoal viewer.exe  [0x157+0x5a]
     ▾ Header  [0x157+0x1c]
