@@ -944,6 +944,8 @@ pub static FORMATS: &[&Format] = &[
     &disk::ufs::FORMAT,
     // Boot sectors ending in 0x55AA, before the plain MBR.
     #[cfg(feature = "archive")]
+    &disk::redsea::FORMAT,
+    #[cfg(feature = "archive")]
     &disk::ntfs::FORMAT,
     #[cfg(feature = "archive")]
     &disk::exfat::FORMAT,
@@ -992,6 +994,9 @@ pub static FORMATS: &[&Format] = &[
     &compression::lz4::LEGACY,
     #[cfg(feature = "archive")]
     &compression::lz4::SNAPPY,
+    // No magic, but an exact 64-bit length; before Unix compress.
+    #[cfg(feature = "archive")]
+    &compression::templeos::FORMAT,
     #[cfg(feature = "archive")]
     &compression::compress::COMPRESS,
     #[cfg(feature = "archive")]

@@ -1329,3 +1329,30 @@ same release (the uncompressed copies in the TempleOS git repository have lost b
 | `templeos-gr/StadiumBG.GR` | `/Demo/Games/Stadium/StadiumBG.GR.Z` | unchanged: 641×473 device context, LZW-compressed body (`CT_8_BIT`), standard palette |
 | `templeos-ac-words/ACWords.DATA` | `/Adam/AutoComplete/ACWords.DATA.Z` | cut to its first 40 words, then the end marker (0) appended |
 | `templeos-ac-defs/ACDefs.DATA` | `/Adam/AutoComplete/ACDefs.DATA.Z` | cut to its first 11 entries ("A" to "Abaca", Webster's 1913), then the end marker (0) appended |
+
+## TempleOS V5.03 distribution ISO: `.Z` files
+
+Files copied unchanged out of the official TempleOS V5.03 ISO
+(`TempleOS.ISO`, 17,350,656 bytes, SHA-256
+`5d0fc944e5d89c155c0fc17c148646715bc1db6fa5750c0b913772cfec19ba26`, from
+<https://web.archive.org/web/2017id_/http://www.templeos.org/Downloads/TempleOS.ISO>)
+with `tests/data/redsea/extract.py`, which walks the RedSea file system
+inside it. Written by TempleOS's own `CompressBuf` (`Kernel/Compress.HC`)
+when the distribution was built. Public domain (TempleOS). For each,
+`tests/data/templeos-z/` holds what TOSZ (`Linux/TOSZ.CPP` from the same
+source tree, built with the host `c++`) expands it to; the codec's tests
+check those byte for byte, and all 645 `.Z` files of the ISO were checked
+the same way locally (`TEMPLEOS_Z_DIRS`).
+
+| Fixture | Path in the ISO | Evidence |
+| --- | --- | --- |
+| `templeos-z/DateTime.HC.Z` | `/Demo/DateTime.HC.Z` | `CT_7_BIT`, 210 bytes |
+| `templeos-z/FileLowLevel.DD.Z` | `/Doc/FileLowLevel.DD.Z` | `CT_8_BIT` (DolDoc with bytes above 0x7f) |
+| `templeos-z/FileSysRedSea.HC.Z` | `/Kernel/BlkDev/FileSysRedSea.HC.Z` | `CT_7_BIT`, long enough that string slots are recycled at 12 bits |
+| `templeos-z/StadiumBG.GR.Z` | `/Demo/Games/Stadium/StadiumBG.GR.Z` | `CT_NONE` (stored: LZW did not shrink it) |
+
+## TempleOS V5.03 in QEMU: a RedSea ISO written by TempleOS
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `iso9660/templeos-redseaiso.iso.gz` | TempleOS V5.03 (the distribution ISO above, booted as a live CD in QEMU 10.0.13 `qemu-system-x86_64 -accel tcg`, Debian 13 aarch64, in Docker, `-rtc base=2026-01-01T00:00:00`) | `tests/data/redsea/qemu_redseaiso.py` (its docstring has the `docker run` line) types, over QMP, `DirMk`/`Copy` of `/Demo/DateTime.HC.Z` and `/Doc/FileLowLevel.DD.Z` from the CD into `B:/Src` on the RAM drive, then `RedSeaISO("B:/Out","B:/Src");`, saves the guest's memory and carves `B:/Out.ISO.C` (contiguous) out of the RAM drive. Not reproducible byte for byte (the volume's `unique_id` mixes in the TSC, and creation times vary by seconds; two runs differed in 20 bytes). Apart from the slack after each file's last block (TempleOS writes from an uninitialised buffer, so it holds stale heap bytes), it is byte for byte what `tests/data/redsea/make_image.py` builds for the same tree, times and ID. Stored with `gzip -9 -n`. Public domain (TempleOS) |

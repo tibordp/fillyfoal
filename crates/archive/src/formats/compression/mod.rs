@@ -1,5 +1,6 @@
 //! Compressed streams: gzip, bzip2, xz, Zstandard, LZ4 (and Snappy framing),
-//! LZMA-family containers, Brotli, Unix `compress` and `pack`, MS-DOS SZDD
+//! LZMA-family containers, Brotli, Unix `compress` and `pack`, TempleOS
+//! `.Z` (`templeos`), MS-DOS SZDD
 //! and KWAJ (`szdd`), less common compression containers (`containers`:
 //! Apple Archive, LZFSE, pbzx, lzop, LZF, lrzip, zstd dictionaries,
 //! PowerPacker, ZPAQ) and old Unix and CP/M compressors (`legacy`: freeze,
@@ -14,5 +15,6 @@ pub mod legacy;
 pub mod lz4;
 pub mod lzma;
 pub mod szdd;
+pub mod templeos;
 pub mod xz;
 pub mod zstd;

@@ -840,10 +840,10 @@ closely enough to credit:
   `cp950` and `big5hkscs` codecs (PSF License 2.0), whose mappings follow the Unicode
   Consortium's and Microsoft's published code page tables and the Hong Kong SAR
   government's HKSCS-2004.
-- TempleOS formats (`crates/exec/src/formats/executable/templeos.rs` and the other TempleOS
-  dissectors) and test fixtures from the TempleOS V5.03 distribution: Terry A. Davis's
-  TempleOS (public domain).
-- TempleOS formats (DolDoc, HolyC, sprites, GR, the AutoComplete dictionary in
-  `crates/docs/src/formats/documents/doldoc.rs`, `templeos_ac.rs` and
-  `crates/image/src/formats/image/templeos.rs`): ported from Terry A. Davis's TempleOS V5.03
-  source (public domain).
+- TempleOS formats, ported from Terry A. Davis's TempleOS V5.03 source (public domain): the
+  `.Z` codec (`crates/codec/src/codec/templeos.rs`), `.Z` and RedSea
+  (`crates/archive/src/formats/compression/templeos.rs`, `disk/redsea.rs`), binary modules
+  (`crates/exec/src/formats/executable/templeos.rs`), DolDoc, HolyC and the AutoComplete
+  dictionary (`crates/docs/src/formats/documents/doldoc.rs`, `templeos_ac.rs`), sprites and GR
+  (`crates/image/src/formats/image/templeos.rs`). Test fixtures come from its distribution ISO
+  (public domain).

@@ -45,6 +45,7 @@ pub mod quantum;
 pub mod rar;
 pub mod statdata;
 pub mod stuffit;
+pub mod templeos;
 pub mod unixz;
 pub mod wim;
 pub mod xpress;
@@ -120,6 +121,9 @@ pub enum Codec {
     WimResource(wim::Resource),
     /// Unix `compress` (`.Z`, LSB-first LZW with a header).
     UnixCompress,
+    /// TempleOS `.Z`: a whole `CArcCompress`, header included (stored
+    /// bytes or LZW; see [`templeos`]).
+    TempleOsZ,
     /// LZNT1 ([MS-XCA] 2.5); with a `size` (an NTFS compression unit) the
     /// output is cut or zero-filled to it.
     Lznt1 {
@@ -379,6 +383,7 @@ impl Codec {
             Codec::PalmDoc(_) => "palmdoc",
             Codec::BtrfsLzo => "btrfs-lzo",
             Codec::UnixCompress => "unix-compress",
+            Codec::TempleOsZ => "templeos-z",
             Codec::Lznt1 { .. } => "lznt1",
             Codec::Xpress { .. } => "xpress",
             Codec::XpressHuffman { .. } => "xpress-huffman",
@@ -478,6 +483,7 @@ impl Codec {
             Codec::PalmDoc(_) => "palmdoc (lazy)",
             Codec::BtrfsLzo => "btrfs-lzo (lazy)",
             Codec::UnixCompress => "unix-compress (lazy)",
+            Codec::TempleOsZ => "templeos-z (lazy)",
             Codec::Lznt1 { .. } => "lznt1 (lazy)",
             Codec::Xpress { .. } => "xpress (lazy)",
             Codec::XpressHuffman { .. } => "xpress-huffman (lazy)",
@@ -576,6 +582,7 @@ impl Codec {
             | Codec::PalmDoc(_)
             | Codec::BtrfsLzo
             | Codec::UnixCompress
+            | Codec::TempleOsZ
             | Codec::Lznt1 { .. }
             | Codec::Xpress { .. }
             | Codec::XpressHuffman { .. }
@@ -679,6 +686,8 @@ impl Codec {
             // RLE blocks can encode 128 KiB in four bytes.
             Codec::Zstd | Codec::ZstdFrame | Codec::ZstdDict(_) => 32_768,
             Codec::UnixCompress => 8_000,
+            // A 12-bit code stands for up to 4096 bytes.
+            Codec::TempleOsZ => 2_800,
             // A 32 KiB copy costs 35 bits.
             Codec::Bcfz { .. } => 8_000,
             // At most 2^lookahead bytes per back-reference of 1 + window +
@@ -784,6 +793,7 @@ impl Codec {
             Codec::WimResource(r) => Box::new(wim::WimDecoder::new(*r)),
             Codec::Brotli => Box::new(Streaming(brotli::Stream::default())),
             Codec::UnixCompress => Box::new(unixz::UnixCompress::default()),
+            Codec::TempleOsZ => Box::new(templeos::TempleOsZ::default()),
             Codec::Lznt1 { size } => Box::new(Streaming(lznt1::Lznt1::new(*size))),
             Codec::Xpress { size } => Box::new(Streaming(xpress::Xpress::new(*size))),
             Codec::XpressHuffman { size } => Box::new(Streaming(xpress::XpressHuffman::new(*size))),

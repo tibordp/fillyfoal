@@ -1,0 +1,26 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ StadiumBG.GR.Z — TempleOS compressed file (stored), 4.6 KiB → 4.6 KiB  [0x0+0x1273]
+  ▾ Header  [0x0+0x11]
+      compressed_size: 4723 — 4.6 KiB  [0x0+0x8]
+      expanded_size: 4706 — 4.6 KiB  [0x8+0x8]
+      compression_type: CT_NONE (0x1)  [0x10+0x1]
+  ▾ Expanded — TempleOS GR, 641×473, compressed  [0x0+0x1273]
+    ▾ Device context  [#1:0x0+0x20]
+        Time: 0x0  [#1:0x0+0x4]
+        Date: 0  [#1:0x4+0x4]
+        X origin: 0  [#1:0x8+0x4]
+        Y origin: 0  [#1:0xc+0x4]
+        Width: 641  [#1:0x10+0x4]
+        Padded width: 648  [#1:0x14+0x4]
+        Height: 473  [#1:0x18+0x4]
+        Flags: 0x1 [DCF_COMPRESSED]  [#1:0x1c+0x4]
+    ▾ Compressed pixels — TempleOS LZW, 4674 bytes expanding to 306504 bytes  [#1:0x20+0x1242]
+      ▾ Header  [#1:0x20+0x11]
+          Compressed size: 4674  [#1:0x20+0x8]
+          Expanded size: 306504  [#1:0x28+0x8]
+          Compression: CT_8_BIT (0x3)  [#1:0x30+0x1]
+        Codes  [#1:0x31+0x1231]
+    Stored data  [0x11+0x1262]
