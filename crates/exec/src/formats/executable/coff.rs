@@ -651,9 +651,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 /// The "Symbol Table" and "String Table" nodes (the string table follows
 /// the symbols).
 fn symbol_nodes(c: &Coff) -> [Node; 2] {
-    let strtab = c
-        .file
-        .sub(c.symbols.end().saturating_sub(c.file.offset), to_u64(c.strings.len()));
+    let strtab = c.file.sub(
+        c.symbols.end().saturating_sub(c.file.offset),
+        to_u64(c.strings.len()),
+    );
     [
         Node::new("Symbol Table")
             .span(c.symbols)

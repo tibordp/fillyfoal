@@ -5,21 +5,39 @@
 //! Each stream (and the directory itself) becomes a piecewise source, so
 //! streams read as contiguous bytes while spans still resolve to file
 //! offsets.
+//!
+//! Streams 1-4 have fixed roles (PDB info, TPI, DBI, IPI); the others are
+//! named by those: the info stream's named stream map (`/names`,
+//! `/LinkInfo`, ...), the DBI header (global and public symbol hashes,
+//! symbol records), its module info (one stream per module) and optional
+//! debug header (section headers, FPO, ...), and the TPI/IPI headers (their
+//! hash streams). Expanding "Streams" reads those small tables once; each
+//! stream is then decoded by its role (`dbi`, `codeview` for type and
+//! symbol records and module streams, `tables` for hash and string tables),
+//! following LLVM's PDB documentation and checked against `llvm-pdbutil`.
+//! Streams nobody names stay raw data.
 
 use std::sync::Arc;
 
-use crate::bytes::{to_u64, to_usize, u32_le};
+mod codeview;
+mod dbi;
+mod tables;
+
+use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Record, read_record};
 use crate::error::{Diagnostic, Result};
-use crate::fields::{Endian, Fields};
-use crate::formats::executable::pe::tables::{MACHINE, MACHINE_SHORT};
+use crate::fields::{Endian, Fields, parse};
+use crate::formats::executable::pe::tables::MACHINE_SHORT;
+use crate::formats::util::arcutil::push_nodes;
 use crate::formats::{Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, Value, lookup};
+use codeview::{ModuleLayout, NameTables, Records, TypeHeader};
+use dbi::DbiHeader;
 
 const LE: Endian = Endian::Little;
 
@@ -52,15 +70,6 @@ const PDB_VERSIONS: EnumTable = &[
     (20_030_901, "VC80"),
     (20_091_201, "VC110"),
     (20_140_508, "VC140"),
-];
-
-/// Fixed stream numbers.
-const STREAM_NAMES: [&str; 5] = [
-    "Old directory",
-    "PDB info",
-    "Type info (TPI)",
-    "Debug info (DBI)",
-    "ID info (IPI)",
 ];
 
 /// The blocks of a stream as file spans (input-sized: checkpointed).
@@ -203,31 +212,275 @@ async fn pdb(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
+/// What a stream holds, as the other streams say.
+#[derive(Clone, Debug)]
+enum Role {
+    OldDirectory,
+    Info,
+    Tpi,
+    Dbi,
+    Ipi,
+    Globals,
+    Publics,
+    Symbols,
+    /// The hash stream of the TPI (`false`) or IPI (`true`) stream.
+    TypeHash(bool),
+    Names,
+    /// Another named stream (`/LinkInfo`, `/src/headerblock`, ...).
+    Named(String),
+    /// A stream of the DBI optional debug header (index into
+    /// [`dbi::DEBUG_STREAMS`]).
+    Debug(usize),
+    /// A module's symbols and line information (index into the modules).
+    Module(usize),
+}
+
+/// The stream roles and what decoding the streams needs, gathered from the
+/// PDB info, DBI, TPI and IPI streams.
+struct Layout {
+    roles: Vec<Option<Role>>,
+    modules: Vec<dbi::Module>,
+    tpi: Option<TypeHeader>,
+    ipi: Option<TypeHeader>,
+    tables: NameTables,
+}
+
+impl Layout {
+    async fn load(cx: &Cx, streams: &[(u32, Span)]) -> Layout {
+        let span_of = |i: u16| {
+            streams
+                .get(usize::from(i))
+                .filter(|(size, _)| *size != u32::MAX)
+                .map(|&(_, span)| span)
+        };
+        let mut roles: Vec<Option<Role>> = vec![None; streams.len()];
+        let mut set = |i: u16, role: Role| {
+            if let Some(slot) = roles.get_mut(usize::from(i))
+                && slot.is_none()
+            {
+                *slot = Some(role);
+            }
+        };
+        set(0, Role::OldDirectory);
+        set(1, Role::Info);
+        set(2, Role::Tpi);
+        set(3, Role::Dbi);
+        set(4, Role::Ipi);
+        let mut names = None;
+        if let Some(info) = span_of(1)
+            && let Ok(map) = named_streams(cx, info).await
+        {
+            for (name, index, _) in map.entries {
+                let Ok(index) = u16::try_from(index) else {
+                    continue;
+                };
+                if name == "/names" {
+                    names = span_of(index);
+                    set(index, Role::Names);
+                } else {
+                    set(index, Role::Named(name));
+                }
+            }
+        }
+        let mut modules = Vec::new();
+        let mut symbols = None;
+        if let Some(stream) = span_of(3)
+            && stream.len >= DbiHeader::SIZE
+            && let Ok(h) = read_record::<DbiHeader>(cx, stream.sub(0, DbiHeader::SIZE), LE).await
+        {
+            set(h.globals, Role::Globals);
+            set(h.publics, Role::Publics);
+            set(h.symbols, Role::Symbols);
+            symbols = span_of(h.symbols);
+            let subs = dbi::Substreams::new(stream, &h);
+            modules = dbi::modules(cx, subs.modules).await.unwrap_or_default();
+            for (i, m) in modules.iter().enumerate() {
+                set(m.stream, Role::Module(i));
+            }
+            if let Ok(debug) = cx.read_avail(subs.debug).await {
+                for k in 0..debug.len() / 2 {
+                    if let Some(v) = u16_le(&debug, k.saturating_mul(2)) {
+                        set(v, Role::Debug(k));
+                    }
+                }
+            }
+        }
+        let mut headers = [None, None];
+        for (slot, index, ipi) in [(0usize, 2u16, false), (1, 4, true)] {
+            if let Some(stream) = span_of(index)
+                && stream.len >= 56
+                && let Ok(h) = parse(cx, stream.sub(0, 56), LE, &(), codeview::type_header).await
+            {
+                set(h.hash_stream, Role::TypeHash(ipi));
+                if let Some(s) = headers.get_mut(slot) {
+                    *s = Some(h);
+                }
+            }
+        }
+        // The string buffer of /names.
+        let mut name_buffer = None;
+        if let Some(n) = names
+            && let Ok(head) = cx.read_avail(n.sub(0, 12)).await
+            && let Some(size) = u32_le(&head, 8)
+        {
+            name_buffer = Some(n.sub(12, size.into()));
+        }
+        let [tpi, ipi] = headers;
+        Layout {
+            roles,
+            modules,
+            tpi,
+            ipi,
+            tables: NameTables {
+                names: name_buffer,
+                symbols,
+            },
+        }
+    }
+
+    fn label(&self, role: &Role) -> String {
+        match role {
+            Role::OldDirectory => "Old directory".to_owned(),
+            Role::Info => "PDB info".to_owned(),
+            Role::Tpi => "Type info (TPI)".to_owned(),
+            Role::Dbi => "Debug info (DBI)".to_owned(),
+            Role::Ipi => "ID info (IPI)".to_owned(),
+            Role::Globals => "Global symbol hash".to_owned(),
+            Role::Publics => "Public symbol hash".to_owned(),
+            Role::Symbols => "Symbol records".to_owned(),
+            Role::TypeHash(false) => "TPI hash".to_owned(),
+            Role::TypeHash(true) => "IPI hash".to_owned(),
+            Role::Names => "/names".to_owned(),
+            Role::Named(name) => name.clone(),
+            Role::Debug(k) => dbi::DEBUG_STREAMS
+                .get(*k)
+                .copied()
+                .unwrap_or("Debug data")
+                .to_owned(),
+            Role::Module(i) => match self.modules.get(*i) {
+                Some(m) => format!("Module {:?}", m.name),
+                None => "Module".to_owned(),
+            },
+        }
+    }
+}
+
+/// The named stream map of the PDB info stream, and the features after it.
+struct NamedStreams {
+    /// Name, stream number, and the span of the entry.
+    entries: Vec<(String, u32, Span)>,
+    /// The hash table (after the string buffer).
+    table: Span,
+    /// Where the feature signatures start.
+    features: u64,
+}
+
+/// Reads the named stream map: a string buffer, then a hash table of
+/// (string offset, stream) pairs with present and deleted bit vectors.
+async fn named_streams(cx: &Cx, info: Span) -> Result<NamedStreams> {
+    let data = cx.read_avail(info.sub(0, 1 << 20)).await?;
+    let word = |at: usize| u32_le(&data, at);
+    let strings_len = to_usize(word(28).unwrap_or(0).into());
+    let strings_at = 32usize;
+    let table_at = strings_at.saturating_add(strings_len);
+    let size = word(table_at).unwrap_or(0);
+    let mut at = table_at.saturating_add(8);
+    // Present and deleted bit vectors: a word count, then the words.
+    for _ in 0..2 {
+        let words = to_usize(word(at).unwrap_or(0).into());
+        at = at.saturating_add(4).saturating_add(words.saturating_mul(4));
+    }
+    let mut entries = Vec::new();
+    for i in 0..size {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
+        let (Some(key), Some(stream)) = (word(at), word(at.saturating_add(4))) else {
+            break;
+        };
+        let name_at = strings_at.saturating_add(to_usize(key.into()));
+        let s = data.get(name_at..).unwrap_or_default();
+        let end = s.iter().position(|&b| b == 0).unwrap_or(s.len());
+        let name = String::from_utf8_lossy(s.get(..end).unwrap_or_default()).into_owned();
+        entries.push((name, stream, info.sub(to_u64(at), 8)));
+        at = at.saturating_add(8);
+    }
+    // A trailing "niMac" word, then the feature signatures.
+    let features = to_u64(at.saturating_add(4));
+    Ok(NamedStreams {
+        entries,
+        table: info.sub(to_u64(table_at), to_u64(at.saturating_sub(table_at))),
+        features,
+    })
+}
+
 async fn pdb_streams(cx: Cx, (input, streams): (Input, Arc<Vec<(u32, Span)>>)) -> Result<()> {
+    let layout = Arc::new(Layout::load(&cx, &streams).await);
     cx.set_count(Count::Exact(to_u64(streams.len())));
     for (i, &(size, span)) in streams.iter().enumerate() {
-        let name = STREAM_NAMES
-            .get(i)
-            .map_or_else(|| format!("Stream {i}"), |n| format!("Stream {i}: {n}"));
+        let role = layout.roles.get(i).cloned().flatten();
+        let name = match &role {
+            Some(r) => format!("Stream {i}: {}", layout.label(r)),
+            None => format!("Stream {i}"),
+        };
         let node = if size == u32::MAX {
             Node::new(name).summary("deleted")
-        } else if i == 1 {
-            Node::new(name)
-                .span(span)
-                .summary(format!("{size} bytes"))
-                .lazy(pdb_info, span)
-        } else if i == 3 {
-            Node::new(name)
-                .span(span)
-                .summary(format!("{size} bytes"))
-                .lazy(dbi_header, span)
         } else {
-            embedded(name, input.nested(span)).summary(format!("{size} bytes"))
+            stream_node(Node::new(name).span(span), &input, span, role, &layout)
+                .summary(format!("{size} bytes"))
         };
         cx.push(node).await;
     }
     Ok(())
 }
+
+/// A stream's node, decoded according to its role. Streams nobody names
+/// are raw data: they are binary records whose few bytes match weak magic
+/// numbers of unrelated formats.
+fn stream_node(node: Node, input: &Input, span: Span, role: Option<Role>, layout: &Layout) -> Node {
+    let tables = layout.tables;
+    match role {
+        Some(Role::Info) => node.lazy(pdb_info, span),
+        Some(Role::Tpi | Role::Ipi) if span.len >= 56 => node.lazy(codeview::type_stream, span),
+        Some(Role::Dbi) if span.len >= DbiHeader::SIZE => node.lazy(dbi::dbi, span),
+        Some(Role::Globals) => node.lazy(tables::globals, (span, tables.symbols)),
+        Some(Role::Publics) => node.lazy(tables::publics, (span, tables.symbols)),
+        Some(Role::Symbols) => node.lazy(codeview::records, (span, Records::Symbols(0))),
+        Some(Role::TypeHash(ipi)) => match if ipi { layout.ipi } else { layout.tpi } {
+            Some(h) => node.lazy(tables::type_hash, (span, h)),
+            None => node,
+        },
+        Some(Role::Names) => node.lazy(tables::names, span),
+        Some(Role::Debug(5 | 10)) => node.lazy(dbi::section_headers, span),
+        Some(Role::Module(i)) => match layout.modules.get(i) {
+            Some(m) => node.lazy(
+                codeview::module_stream,
+                (
+                    span,
+                    ModuleLayout {
+                        symbols: m.symbols,
+                        c11: m.c11,
+                        c13: m.c13,
+                    },
+                    tables,
+                ),
+            ),
+            None => node,
+        },
+        // Embedded source files (clang /Zi /embed-source-ish named streams).
+        Some(Role::Named(n)) if n.starts_with("/src/files/") => {
+            embedded(node.name.clone(), input.nested(span))
+        }
+        _ => node.desc("Not decoded"),
+    }
+}
+
+const FEATURES: EnumTable = &[
+    (20_091_201, "VC110"),
+    (20_140_508, "VC140"),
+    (0x4d54_4f4e, "no type merge"),
+    (0x494e_494d, "minimal debug info"),
+];
 
 async fn pdb_info(cx: Cx, span: Span) -> Result<()> {
     let block = cx.block(span.sub(0, 32)).await?;
@@ -243,52 +496,42 @@ async fn pdb_info(cx: Cx, span: Span) -> Result<()> {
         .emit()?;
     let names_len = f.u32("Named stream map: string buffer size").emit()?;
     let strings = span.sub(32, names_len.into());
-    let text = cx.read_avail(strings).await?;
-    let names: Vec<String> = text
-        .split(|&b| b == 0)
-        .filter(|s| !s.is_empty())
-        .map(|s| String::from_utf8_lossy(s).into_owned())
+    cx.emit(
+        Node::new("Names")
+            .span(strings)
+            .lazy(crate::formats::util::binutil::cstrings, strings),
+    );
+    let map = named_streams(&cx, span).await?;
+    let nodes: Vec<Node> = map
+        .entries
+        .iter()
+        .map(|(name, stream, at)| {
+            Node::new(name.clone())
+                .span(*at)
+                .value(crate::formats::util::val::uint(*stream, 32))
+                .summary(format!("stream {stream}"))
+        })
         .collect();
     cx.emit(
-        Node::new("Named streams")
-            .span(strings)
-            .value(Value::Text(names.join(", "))),
+        Node::new("Named stream map")
+            .span(map.table)
+            .summary(format!("{} streams", nodes.len()))
+            .lazy(push_nodes, Arc::new(nodes)),
     );
-    Ok(())
-}
-
-record! {
-    pub struct DbiHeader {
-        signature: i32 "Version signature",
-        version: u32 "Version header",
-        age: u32 "Age",
-        globals: u16 "Global symbol stream index",
-        build: u16 "Build number" .hex(),
-        publics: u16 "Public symbol stream index",
-        dll_version: u16 "PDB DLL version",
-        symbols: u16 "Symbol record stream index",
-        dll_rbld: u16 "PDB DLL rebuild",
-        module_info_size: i32 "Module info size",
-        section_contribution_size: i32 "Section contribution size",
-        section_map_size: i32 "Section map size",
-        source_info_size: i32 "Source info size",
-        type_server_map_size: i32 "Type server map size",
-        mfc_index: u32 "MFC type server index",
-        debug_header_size: i32 "Optional debug header size",
-        ec_size: i32 "EC substream size",
-        flags: u16 "Flags" .hex(),
-        machine: u16 "Machine" .enumeration(MACHINE),
-        _padding: u32 "Padding",
+    let features = span.tail(map.features);
+    let data = cx.read_avail(features.sub(0, 4096)).await?;
+    for i in 0..data.len() / 4 {
+        let v = u32_le(&data, i.saturating_mul(4)).unwrap_or(0);
+        cx.emit(
+            Node::new("Feature")
+                .span(features.sub(to_u64(i.saturating_mul(4)), 4))
+                .value(Value::Enum {
+                    raw: v.into(),
+                    bits: 32,
+                    name: lookup(FEATURES, v.into()),
+                }),
+        );
     }
-}
-
-async fn dbi_header(cx: Cx, span: Span) -> Result<()> {
-    cx.emit(DbiHeader::node(
-        "DBI header",
-        span.sub(0, DbiHeader::SIZE),
-        LE,
-    ));
-    cx.emit(Node::new("Substreams").span(span.tail(DbiHeader::SIZE)));
     Ok(())
 }
 
