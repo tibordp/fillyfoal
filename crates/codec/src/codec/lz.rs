@@ -630,6 +630,27 @@ impl Default for Lz4Frame {
     }
 }
 
+/// Whether `rest` (1 to 3 bytes) begins an LZ4 frame, legacy frame or
+/// skippable frame magic number.
+fn lz4_magic_prefix(rest: &[u8]) -> bool {
+    const MAGICS: [[u8; 4]; 3] = [
+        [0x04, 0x22, 0x4d, 0x18],
+        [0x02, 0x21, 0x4c, 0x18],
+        // Skippable frames: 0x184D2A50 to 0x184D2A5F.
+        [0x50, 0x2a, 0x4d, 0x18],
+    ];
+    !rest.is_empty()
+        && MAGICS.iter().any(|magic| {
+            rest.iter().zip(magic).enumerate().all(|(i, (&b, &m))| {
+                if i == 0 && m == 0x50 {
+                    b & 0xf0 == 0x50
+                } else {
+                    b == m
+                }
+            })
+        })
+}
+
 impl Lz4Frame {
     /// Reads one header: a frame header, a block header (starting the
     /// block's body), or an end mark.
@@ -639,8 +660,9 @@ impl Lz4Frame {
             Lz4At::Done => {}
             Lz4At::Magic => {
                 let Some(magic) = crate::bytes::u32_le(input, pos) else {
-                    // The end, unless more input is coming.
-                    if !eof {
+                    // The end, unless more input is coming or the input
+                    // stops inside a frame's magic number.
+                    if !eof || lz4_magic_prefix(input.get(pos..).unwrap_or_default()) {
                         return Err(short("truncated LZ4 frame magic"));
                     }
                     self.pos = pos.min(input.len());
@@ -696,6 +718,9 @@ impl Lz4Frame {
                 let pos = pos.saturating_add(4);
                 if size == 0 {
                     self.pos = pos.saturating_add(if content_checksum { 4 } else { 0 });
+                    if self.pos > input.len() {
+                        return Err(short("truncated LZ4 content checksum"));
+                    }
                     self.at = Lz4At::Magic;
                     return Ok(());
                 }
@@ -1483,6 +1508,38 @@ mod tests {
         }
         assert!(linked && free);
         assert_eq!(out.len(), 368_192);
+    }
+
+    /// A stream cut inside the last frame's content checksum, or inside a
+    /// following frame's magic number, is truncated, not complete.
+    #[test]
+    fn lz4_cut_in_checksum_or_magic_is_truncated() {
+        use crate::codec::pipeline::decode_all;
+        use crate::error::DiagKind;
+        // FLG: version 1, independent blocks, content checksum; BD: 64 KiB;
+        // HC. One stored block, the end mark, the checksum (not verified).
+        let mut frame = vec![0x04, 0x22, 0x4d, 0x18, 0x64, 0x40, 0xa7];
+        frame.extend(0x8000_0005u32.to_le_bytes());
+        frame.extend(b"hello");
+        frame.extend([0, 0, 0, 0]);
+        frame.extend([0x11, 0x22, 0x33, 0x44]);
+        let decode = |data: &[u8]| decode_all(&mut Streaming(Lz4Frame::default()), data, 1 << 20);
+        assert_eq!(decode(&frame).unwrap(), b"hello");
+        for cut in 1..=4 {
+            let e = decode(&frame[..frame.len() - cut]).unwrap_err();
+            assert_eq!(e.kind, DiagKind::Truncated, "{cut}: {e}");
+        }
+        for magic in [&[0x04, 0x22, 0x4d][..], &[0x02, 0x21], &[0x5f]] {
+            let mut data = frame.clone();
+            data.extend_from_slice(magic);
+            let e = decode(&data).unwrap_err();
+            assert_eq!(e.kind, DiagKind::Truncated, "{magic:?}: {e}");
+        }
+        // Bytes that cannot start a frame end the stream, as a whole
+        // unknown magic number does.
+        let mut data = frame.clone();
+        data.extend([0, 0]);
+        assert_eq!(decode(&data).unwrap(), b"hello");
     }
 
     /// Feeds `input` to a streaming LZ4 frame decoder 4 KiB at a time until
