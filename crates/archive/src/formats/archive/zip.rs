@@ -1325,6 +1325,17 @@ async fn data_descriptor(
     sizes: Sizes,
 ) -> Option<Node> {
     let head = cx.read_avail(rest.sub(0, 4)).await.ok()?;
+    // Some writers (pyaff4) set bit 3 with the sizes in the local header
+    // and write no descriptor: the next record follows the data.
+    let next_record = [LOCAL, b"PK\x01\x02", EOCD, EOCD64]
+        .iter()
+        .any(|m| head == *m && u32_le(m, 0) != Some(header.crc));
+    if next_record {
+        cx.diag(Diagnostic::note(
+            "flag bit 3 is set, but no data descriptor follows the data",
+        ));
+        return None;
+    }
     // The signature is optional; a CRC that happens to equal it is the CRC.
     let signature = head == b"PK\x07\x08" && header.crc != 0x0807_4b50;
     let len = (if signature { 4u64 } else { 0 })
@@ -2127,4 +2138,126 @@ async fn local_entry(
     emit_local_name_extra(&cx, name, extra, &local, &extra_bytes).await?;
     cx.emit(content("Content", input, data, codec, Some(size)));
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Member index, for dissectors of formats built on ZIP (AFF4)
+
+/// One member, as the central directory lists it.
+#[derive(Clone, Debug)]
+pub struct Member {
+    pub name: String,
+    /// The central directory header, name, extra field and comment.
+    pub entry: Span,
+    pub method: u16,
+    pub flags: u16,
+    pub compressed: u64,
+    pub uncompressed: u64,
+    /// The local header's offset in the file (any prefix included).
+    pub local: u64,
+}
+
+impl Member {
+    /// The codec of the member's data (`None` for an encrypted member or a
+    /// method other than stored, deflate, bzip2, zstd or xz).
+    pub fn codec(&self) -> Option<Codec> {
+        if self.flags & 0x0001 != 0 {
+            return None;
+        }
+        match self.method {
+            0 => Some(Codec::Stored),
+            8 => Some(Codec::Deflate),
+            9 => Some(Codec::Deflate64),
+            12 => Some(Codec::Bzip2),
+            20 | 93 => Some(Codec::Zstd),
+            95 => Some(Codec::Xz),
+            _ => None,
+        }
+    }
+}
+
+/// The members of the archive in `file`, in central directory order, with
+/// the span of the central directory; `None` when there is no end record.
+/// Reads the directory in pages and checks in every 256 entries.
+pub async fn members(cx: &Cx, file: Span) -> Result<Option<(Span, Vec<Member>)>> {
+    let window_len = file.len.min(0xffff + 22);
+    let window_start = file.len.saturating_sub(window_len);
+    let window = cx.read(file.sub(window_start, window_len)).await?;
+    let Some(at) = (0..window.len().saturating_sub(21))
+        .rev()
+        .find(|&i| window.get(i..i.saturating_add(4)) == Some(EOCD))
+    else {
+        return Ok(None);
+    };
+    let eocd_offset = window_start.saturating_add(to_u64(at));
+    let eocd_span = file.sub(eocd_offset, EndOfCentralDirectory::SIZE);
+    let eocd = crate::fields::parse(cx, eocd_span, LE, &(), EndOfCentralDirectory::layout).await?;
+    let (mut offset, mut size, mut directory_end) = (
+        u64::from(eocd.cd_offset),
+        u64::from(eocd.cd_size),
+        eocd_offset,
+    );
+    if let Some(loc_offset) = eocd_offset.checked_sub(Zip64Locator::SIZE) {
+        let loc = cx
+            .read_avail(file.sub(loc_offset, Zip64Locator::SIZE))
+            .await?;
+        if loc.starts_with(EOCD64_LOCATOR) {
+            let recorded = u64_le(&loc, 8).unwrap_or(0);
+            let end_offset = if starts_with(cx, file.sub(recorded, 4), EOCD64).await {
+                recorded
+            } else {
+                loc_offset.saturating_sub(Zip64End::SIZE)
+            };
+            let end_span = file.sub(end_offset, Zip64End::SIZE);
+            if let Ok(end) = crate::fields::parse(cx, end_span, LE, &(), Zip64End::layout).await
+                && end.signature.starts_with(EOCD64)
+            {
+                (offset, size, directory_end) = (end.cd_offset, end.cd_size, end_offset);
+            }
+        }
+    }
+    let prefix = directory_end.saturating_sub(offset.saturating_add(size));
+    let directory = file.sub(offset.saturating_add(prefix), size);
+    let mut cur = Cursor::new(cx, directory, LE);
+    let mut out = Vec::new();
+    while cur.remaining() >= CentralHeader::SIZE {
+        if out.len().is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+        let start = cur.pos();
+        let (header, _) = cur.record::<CentralHeader>().await?;
+        if u32_le(&header.signature, 0) != Some(CENTRAL) {
+            break;
+        }
+        let name = cur.bytes(header.name_len.into()).await?;
+        let extra_span = cur.span(header.extra_len.into());
+        let extra = cx.read_avail(extra_span).await?;
+        cur.skip(u64::from(header.extra_len).saturating_add(header.comment_len.into()));
+        let sizes = zip64_sizes(cx, extra_span, &header).await;
+        out.push(Member {
+            name: decode_name(&name, header.flags, &extra),
+            entry: cur.since(start),
+            method: header.method,
+            flags: header.flags,
+            compressed: sizes.compressed,
+            uncompressed: sizes.uncompressed,
+            local: sizes.offset.saturating_add(prefix),
+        });
+    }
+    Ok(Some((directory, out)))
+}
+
+/// The span of a member's (compressed) data, after its local header.
+pub async fn member_data(cx: &Cx, file: Span, member: &Member) -> Result<Span> {
+    let header = file.sub_exact(member.local, LocalHeader::SIZE)?;
+    let local = crate::fields::parse(cx, header, LE, &(), LocalHeader::layout).await?;
+    if !local.signature.starts_with(LOCAL) {
+        return Err(Diagnostic::malformed("bad local header signature").at(header));
+    }
+    let start = member
+        .local
+        .saturating_add(LocalHeader::SIZE)
+        .saturating_add(local.name_len.into())
+        .saturating_add(local.extra_len.into());
+    Ok(file.sub(start, member.compressed))
 }
