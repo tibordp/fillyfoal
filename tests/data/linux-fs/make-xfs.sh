@@ -11,7 +11,8 @@
 # v5.xfs.raw.zst needs a loop mount (--privileged): extended attributes,
 # B-tree extent maps, unwritten and shared extents cannot be made by mkfs.
 # The kernel stamps inode change/creation times and the log with the time
-# of the run, so v5 is not reproducible byte for byte.
+# of the run, so v5 is not reproducible byte for byte. Its log is zeroed
+# afterwards (xfs_repair -L).
 set -eu
 # mkfs.xfs refuses filesystems under 300 MiB unless it runs under fstests.
 export TEST_DIR=1 TEST_DEV=1 QA_CHECK_FS=1
@@ -91,6 +92,10 @@ touch -d '2200-01-01 00:00:00' future
 touch -d '1960-06-01 00:00:00' past
 cd ..
 umount mnt
+# A fresh log holding only an unmount record: the log records the kernel
+# left behind would fill most of the snapshot (wrapped-log.xfs.raw.zst
+# covers them), and repair checks the rest is consistent.
+xfs_repair -L v5.img
 
 xfs_db -r -c 'sb 0' -c p v5.img > v5.sb.txt
 xfs_db -r -c 'sb 0' -c p v4.img > v4.sb.txt

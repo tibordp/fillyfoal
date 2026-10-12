@@ -168,16 +168,38 @@ async fn find_head(cx: &Cx, log: Span, total: u64) -> Result<Option<(u64, u32)>>
 }
 
 /// The tail the last record before `head` (of cycle `cycle`) names: where
-/// replay would start. Searched backwards over at most one record.
+/// replay would start. Searched backwards over at most one record, past
+/// the log's start if need be (`xlog_rseek_logrec_hdr`): a header found
+/// there, behind the head, was written in the previous cycle. That is
+/// the case when the last record was split over the log's end: only its
+/// continuation at the start carries the head's cycle (`xlog_sync`
+/// stamps the wrapped blocks with the next cycle).
 async fn find_tail(cx: &Cx, log: Span, total: u64, head: u64, cycle: u32) -> Result<Option<u64>> {
     let reach = (MAX_BODY / BB).saturating_add(16).min(total);
     let mut blk = head;
     for _ in 0..reach {
         blk = blk.checked_sub(1).unwrap_or(total.saturating_sub(1));
         let h = cx.read_avail(log.sub(blk.saturating_mul(BB), 32)).await?;
-        if u32_be(&h, 0) == Some(MAGIC) && u32_be(&h, 4) == Some(cycle) {
+        let expected = if blk < head {
+            cycle
+        } else {
+            cycle.wrapping_sub(1)
+        };
+        if u32_be(&h, 0) == Some(MAGIC) && u32_be(&h, 4) == Some(expected) {
             let tail = u64::from(u32_be(&h, 28).unwrap_or(0));
-            return Ok((tail < total).then_some(tail));
+            if tail >= total {
+                return Ok(None);
+            }
+            // A tail with no record header there (xfs_repair -L names
+            // one inside the records of the previous cycle it writes over
+            // the log, before its unmount record): start from this last
+            // record instead, so the record itself shows.
+            let at = cx.read_avail(log.sub(tail.saturating_mul(BB), 4)).await?;
+            return Ok(Some(if u32_be(&at, 0) == Some(MAGIC) {
+                tail
+            } else {
+                blk
+            }));
         }
     }
     Ok(None)
