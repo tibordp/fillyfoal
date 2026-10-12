@@ -251,7 +251,10 @@ RAR readers, `libarchive/archive_read_support_format_rar.c` and
 `libarchive/archive_read_support_format_rar5.c`
 (<https://github.com/libarchive/libarchive>), and follow their behaviour,
 constant tables and limits; the test encoder `tests/data/rar/rarenc.py` is
-written against the same readers. They replace an earlier version that had
+written against the same readers. The RAR 4.x Unicode file name decoding in
+`crates/archive/src/formats/archive/rar.rs` (`name4`, `decode_unicode_name`)
+follows the same file's `read_header` (the high byte, flag bits and run
+loop). They replace an earlier version that had
 been transliterated from unRAR (see the module documentation of
 `crates/codec/src/codec/rar/mod.rs`). libarchive's notice:
 
