@@ -42,17 +42,46 @@ fn shape_header(h: &Head<'_>) -> bool {
     h.at(0, b"\x00\x00\x27\x0a") && u32_le(h.data, 28) == Some(1000)
 }
 
+/// A shapefile or index with no records: just the 100-byte header, the
+/// same bytes in the `.shp` and the `.shx` (GDAL writes them identical).
+/// Only the name tells them apart, so neither first-phase probe takes it;
+/// the second phase does ([`SHX_DEEP`], then [`SHP_DEEP`]).
+fn header_only(h: &Head<'_>) -> bool {
+    h.len_known && h.len == 100
+}
+
 fn shx_probe(h: &Head<'_>) -> bool {
     shape_header(h)
-        && h.len >= 100
+        && h.len_known
+        && h.len > 100
         && h.len.saturating_sub(100).is_multiple_of(8)
-        && (h.len == 100 || u32_be(h.data, 100) == Some(50))
+        && u32_be(h.data, 100) == Some(50)
+}
+
+fn shp_probe(h: &Head<'_>) -> bool {
+    shape_header(h) && !header_only(h)
 }
 
 declare_format!(pub SHX = "shx", "ESRI shapefile index", ["shx"], "application/x-esri-shape-index",
     Probe::Custom(shx_probe), shx);
 declare_format!(pub SHP = "shp", "ESRI shapefile", ["shp"], "application/x-esri-shape",
-    Probe::Custom(shape_header), shp);
+    Probe::Custom(shp_probe), shp);
+
+/// The second phase: a header-only shapefile named `*.shx` is an index.
+pub static SHX_DEEP: crate::formats::DeepProbe = crate::formats::DeepProbe {
+    format: &SHX,
+    tail: false,
+    over: &[],
+    probe: |d| shape_header(d.head) && header_only(d.head) && d.extension_is("shx"),
+};
+
+/// The second phase: any other header-only shapefile.
+pub static SHP_DEEP: crate::formats::DeepProbe = crate::formats::DeepProbe {
+    format: &SHP,
+    tail: false,
+    over: &[],
+    probe: |d| shape_header(d.head) && header_only(d.head),
+};
 
 record! {
     pub struct ShapeHeader {
