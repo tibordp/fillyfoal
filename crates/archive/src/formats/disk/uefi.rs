@@ -3,8 +3,8 @@
 //! images, nested firmware volume sections as firmware volumes.
 
 use crate::bytes::{align_up, u16_le, u24_le, u32_le, u64_le};
-use crate::codec::Codec;
 use crate::codec::lzma::Post;
+use crate::codec::{Codec, lzh};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
@@ -312,15 +312,22 @@ async fn sections(cx: Cx, (input, area, depth): (Input, Span, u32)) -> Result<()
             }
             0x01 => {
                 let data = cx.read_avail(body.sub(0, 5)).await?;
+                let decoded = u32_le(&data, 0).unwrap_or(0);
                 match data.get(4) {
-                    Some(0) if depth < MAX_DEPTH => node.summary("not compressed").lazy(
+                    _ if depth >= MAX_DEPTH => node.diag(Diagnostic::limit(format!(
+                        "sections nested deeper than {MAX_DEPTH}"
+                    ))),
+                    Some(0) => node.summary("not compressed").lazy(
                         crate::expander!(self::sections: (Input, Span, u32)),
                         (input, body.tail(5), depth.saturating_add(1)),
                     ),
-                    Some(t) => node.diag(Diagnostic::unsupported(format!(
-                        "compression type {t} ({})",
-                        if *t == 1 { "EFI/Tiano" } else { "unknown" }
-                    ))),
+                    Some(1) => node
+                        .summary(format!("standard compression, {}", size(decoded.into())))
+                        .lazy(
+                            crate::expander!(self::encoded_sections: (Input, Span, u32, Encoding)),
+                            (input, body, depth.saturating_add(1), Encoding::Standard),
+                        ),
+                    Some(t) => node.diag(Diagnostic::unsupported(format!("compression type {t}"))),
                     None => node,
                 }
             }
@@ -335,9 +342,11 @@ async fn sections(cx: Cx, (input, area, depth): (Input, Span, u32)) -> Result<()
                     None => size(body.len),
                 });
                 let data = body.tail(offset);
-                let lzma = match known {
-                    Some(LZMA_NAME) => Some(false),
-                    Some(LZMA_F86_NAME) => Some(true),
+                let encoding = match known {
+                    Some(LZMA_NAME) => Some(Encoding::Lzma),
+                    Some(LZMA_F86_NAME) => Some(Encoding::LzmaF86),
+                    Some(TIANO_NAME) => Some(Encoding::Tiano),
+                    Some(BROTLI_NAME) => Some(Encoding::Brotli),
                     _ => None,
                 };
                 if depth >= MAX_DEPTH {
@@ -350,10 +359,10 @@ async fn sections(cx: Cx, (input, area, depth): (Input, Span, u32)) -> Result<()
                         crate::expander!(self::sections: (Input, Span, u32)),
                         (input, data, depth.saturating_add(1)),
                     )
-                } else if let Some(f86) = lzma {
+                } else if let Some(encoding) = encoding {
                     node.lazy(
-                        crate::expander!(self::lzma_sections: (Input, Span, u32, bool)),
-                        (input, data, depth.saturating_add(1), f86),
+                        crate::expander!(self::encoded_sections: (Input, Span, u32, Encoding)),
+                        (input, data, depth.saturating_add(1), encoding),
                     )
                 } else {
                     node.diag(Diagnostic::unsupported(format!(
@@ -373,13 +382,15 @@ async fn sections(cx: Cx, (input, area, depth): (Input, Span, u32)) -> Result<()
 
 const LZMA_NAME: &str = "LZMA";
 const LZMA_F86_NAME: &str = "LZMA with x86 branch conversion";
+const TIANO_NAME: &str = "Tiano compression";
+const BROTLI_NAME: &str = "Brotli";
 
 /// GUIDs of GUID-defined sections in EDK2 (`MdePkg`, `BaseTools`).
 const GUIDED: &[(&str, &str)] = &[
     ("ee4e5898-3914-4259-9d6e-dc7bd79403cf", LZMA_NAME),
     ("d42ae6bd-1352-4bfb-909a-ca72a6eae889", LZMA_F86_NAME),
-    ("a31280ad-481e-41b6-95e8-127f4c984779", "Tiano compression"),
-    ("3d532050-5cda-4fd0-879e-0f7f630d5afb", "Brotli"),
+    ("a31280ad-481e-41b6-95e8-127f4c984779", TIANO_NAME),
+    ("3d532050-5cda-4fd0-879e-0f7f630d5afb", BROTLI_NAME),
     ("fc1bcdb0-7d31-49aa-936a-a4600d9dd083", "CRC-32"),
 ];
 
@@ -398,27 +409,120 @@ record! {
     }
 }
 
-/// An LZMA GUID-defined section's data (EDK2's `LzmaCustomDecompress`, or
-/// `LzmaArchCustomDecompress` with the x86 BCJ filter from address 0): the
-/// LZMA header, then the sections it decodes to.
-async fn lzma_sections(cx: Cx, (input, data, depth, f86): (Input, Span, u32, bool)) -> Result<()> {
-    let header = data.sub(0, LzmaHeader::SIZE);
-    cx.emit(LzmaHeader::node("LZMA header", header, LE));
-    let h = parse(&cx, header, LE, &(), LzmaHeader::layout).await?;
-    let codec = if f86 {
-        Codec::chain(
-            "uefi lzma-f86",
-            "uefi lzma-f86 (lazy)",
-            [Codec::LzmaAlone, Codec::PostFilter(Post::X86)],
-        )
-    } else {
-        Codec::LzmaAlone
+record! {
+    /// The header of EFI and Tiano compressed data.
+    pub struct UefiHeader {
+        comp: u32 "Compressed size" .with(|&v, n| n.summary(size(v.into()))),
+        orig: u32 "Decoded size" .with(|&v, n| n.summary(size(v.into()))),
+    }
+}
+
+record! {
+    /// The header EDK2's `BrotliCompress` writes before the Brotli stream.
+    pub struct BrotliHeader {
+        size: u64 "Decoded size" .with(|&v, n| n.summary(size(v))),
+        scratch: u64 "Scratch size" .desc("Memory the decoder needs (the encoder's estimate)"),
+    }
+}
+
+/// How an encapsulation section's content is encoded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum Encoding {
+    /// A compression section of type 1 (`EFI_STANDARD_COMPRESSION`): the
+    /// EFI algorithm (4-bit position table), which some firmware writes
+    /// with Tiano's instead.
+    Standard,
+    /// EDK2's `LzmaCustomDecompress`.
+    Lzma,
+    /// `LzmaArchCustomDecompress` with the x86 BCJ filter from address 0.
+    LzmaF86,
+    /// EDK2's `TianoCustomDecompress` (5-bit position table).
+    Tiano,
+    /// EDK2's `BrotliCustomDecompress`: a 16-byte header, then the stream.
+    Brotli,
+}
+
+fn uefi_codec(name: &'static str, lazy_name: &'static str, pbit: u8, size: u64) -> Codec {
+    let params = lzh::Params::new(lzh::Method::Uefi { pbit }, Some(size), lzh::Check::None);
+    Codec::chain(name, lazy_name, [Codec::Lzh(params)])
+}
+
+/// An encapsulation section's encoded data: its header, then the sections
+/// it decodes to.
+async fn encoded_sections(
+    cx: Cx,
+    (input, data, depth, encoding): (Input, Span, u32, Encoding),
+) -> Result<()> {
+    // (the stream, its codec, the decoded size, a codec to try if it fails)
+    let (stream, codec, expected, fallback) = match encoding {
+        Encoding::Lzma | Encoding::LzmaF86 => {
+            let header = data.sub(0, LzmaHeader::SIZE);
+            cx.emit(LzmaHeader::node("LZMA header", header, LE));
+            let h = parse(&cx, header, LE, &(), LzmaHeader::layout).await?;
+            let codec = if encoding == Encoding::LzmaF86 {
+                Codec::chain(
+                    "uefi lzma-f86",
+                    "uefi lzma-f86 (lazy)",
+                    [Codec::LzmaAlone, Codec::PostFilter(Post::X86)],
+                )
+            } else {
+                Codec::LzmaAlone
+            };
+            (data, codec, (h.size != u64::MAX).then_some(h.size), None)
+        }
+        Encoding::Standard | Encoding::Tiano => {
+            // A compression section's body starts with the decoded length
+            // and the compression type.
+            let at = if encoding == Encoding::Standard {
+                cx.emit(CompressionFields::node("Compression", data.sub(0, 5), LE));
+                5
+            } else {
+                0
+            };
+            let header = data.sub(at, UefiHeader::SIZE);
+            cx.emit(UefiHeader::node("Compression header", header, LE));
+            let h = parse(&cx, header, LE, &(), UefiHeader::layout).await?;
+            let stream = data
+                .tail(at.saturating_add(UefiHeader::SIZE))
+                .sub(0, h.comp.into());
+            let orig = u64::from(h.orig);
+            let efi = uefi_codec("uefi efi", "uefi efi (lazy)", 4, orig);
+            let tiano = uefi_codec("uefi tiano", "uefi tiano (lazy)", 5, orig);
+            if encoding == Encoding::Standard {
+                (stream, efi, Some(orig), Some(tiano))
+            } else {
+                (stream, tiano, Some(orig), None)
+            }
+        }
+        Encoding::Brotli => {
+            let header = data.sub(0, BrotliHeader::SIZE);
+            cx.emit(BrotliHeader::node("Brotli header", header, LE));
+            let h = parse(&cx, header, LE, &(), BrotliHeader::layout).await?;
+            (
+                data.tail(BrotliHeader::SIZE),
+                Codec::Brotli,
+                Some(h.size),
+                None,
+            )
+        }
     };
-    let expected = (h.size != u64::MAX).then_some(h.size);
     let decoded = match expected {
-        Some(len) if decodes_lazily(data, &codec, len) => cx.decode_lazy(data, &codec, len)?,
+        Some(len) if decodes_lazily(stream, &codec, len) => cx.decode_lazy(stream, &codec, len)?,
         _ => {
-            let d = crate::codec::decode_span(&cx, data, &codec, expected).await?;
+            let mut d = crate::codec::decode_span(&cx, stream, &codec, expected).await;
+            // Some firmware compresses type-1 sections with Tiano's
+            // algorithm (UEFITool tries both, EFI first).
+            if let Some(alt) = &fallback
+                && d.as_ref().map_or(true, |d| d.error.is_some())
+                && let Ok(t) = crate::codec::decode_span(&cx, stream, alt, expected).await
+                && t.error.is_none()
+            {
+                cx.diag(Diagnostic::warning(
+                    "standard compression section decoded with the Tiano algorithm",
+                ));
+                d = Ok(t);
+            }
+            let d = d?;
             if let Some(e) = d.error {
                 cx.diag(e);
             }
@@ -436,3 +540,13 @@ async fn lzma_sections(cx: Cx, (input, data, depth, f86): (Input, Span, u32, boo
     );
     Ok(())
 }
+
+record! {
+    /// The fields of a compression section after its common header.
+    pub struct CompressionFields {
+        length: u32 "Uncompressed length" .with(|&v, n| n.summary(size(v.into()))),
+        kind: u8 "Compression type" .enumeration(COMPRESSION_TYPES),
+    }
+}
+
+const COMPRESSION_TYPES: EnumTable = &[(0, "not compressed"), (1, "standard compression")];

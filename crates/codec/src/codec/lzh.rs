@@ -12,7 +12,8 @@
 //! and `lhafile` decode to the same bytes and which are only checked
 //! against our own test encoders.
 //!
-//! - **Static Huffman** (`-lh4-` to `-lh7-`, ARJ 1 to 3, ZOO 2): LZSS with
+//! - **Static Huffman** (`-lh4-` to `-lh7-`, ARJ 1 to 3, ZOO 2, and the
+//!   UEFI standard and Tiano compressions): LZSS with
 //!   a window of 2^`dict_bits` bytes (ARJ: 26 KiB), in blocks. Each block
 //!   starts with a 16-bit token count and three code-length tables: a
 //!   19-symbol table that codes the literal/length table's lengths, the
@@ -20,6 +21,10 @@
 //!   n + 3 bytes), and the position table, whose symbol is the bit length
 //!   of the match distance minus one (followed by the bits below the top
 //!   one). Codes are canonical, bits are read most significant first.
+//!   UEFI's compression (UEFI specification, "Compression Algorithm
+//!   Specification"; EDK2 `BaseUefiDecompressLib`) is the same coding with
+//!   a 4-bit (EFI) or 5-bit (Tiano) count of position lengths, matches
+//!   reaching back as far as the output goes, and none before its start.
 //! - **`-lh1-`**: LHarc's LZHUF: 4 KiB window, matches of up to 60 bytes,
 //!   literals and lengths with an adaptive Huffman code (314 symbols,
 //!   rebuilt when the root reaches 0x8000), and distances as a fixed code
@@ -63,6 +68,9 @@ pub enum Method {
     Lh { dict_bits: u8 },
     /// ARJ methods 1 to 3 (static Huffman, 26 KiB window).
     Arj,
+    /// UEFI compression, the bit stream after its 8-byte header: `pbit` 4
+    /// for the standard (EFI 1.1, UEFI) algorithm, 5 for Tiano.
+    Uefi { pbit: u8 },
     /// ARJ method 4.
     ArjFastest,
     /// LArc `-lzs-` (2 KiB ring).
@@ -116,7 +124,7 @@ impl Params {
     pub fn max_ratio(&self) -> u64 {
         match self.method {
             // A 256-byte match in a few bits.
-            Method::Lh { .. } | Method::Arj | Method::Lh1 => 2_048,
+            Method::Lh { .. } | Method::Arj | Method::Lh1 | Method::Uefi { .. } => 2_048,
             Method::ArjFastest => 128,
             // 18 bytes per 2 bytes (and a flag bit).
             Method::Lz5 | Method::Szdd | Method::Visio | Method::Lzs => 16,
@@ -130,17 +138,20 @@ impl Params {
     fn window(&self) -> Option<usize> {
         match self.method {
             Method::Lh { .. } | Method::Arj => Some(1 << 16),
+            Method::Uefi { .. } => Some(1 << UEFI_MAX_PCODE),
             Method::Lh1 => Some(1 << 12),
             Method::ArjFastest => Some(1 << 15),
             _ => None,
         }
     }
 
-    /// What a reference before the start of the output reads.
-    fn fill(&self) -> u8 {
+    /// What a reference before the start of the output reads (`None`:
+    /// such a reference is an error).
+    fn fill(&self) -> Option<u8> {
         match self.method {
-            Method::Lh { .. } | Method::Lh1 => b' ',
-            _ => 0,
+            Method::Lh { .. } | Method::Lh1 => Some(b' '),
+            Method::Uefi { .. } => None,
+            _ => Some(0),
         }
     }
 }
@@ -268,6 +279,10 @@ impl Code {
         Err(bad("unused Huffman code"))
     }
 }
+
+/// The largest UEFI position code we accept: distances below 16 MiB (EDK2
+/// takes up to 30, but its encoders use at most 19, Tiano's 512 KiB window).
+const UEFI_MAX_PCODE: u32 = 24;
 
 /// Literal/length symbols of the static methods.
 const NC: usize = 510;
@@ -585,7 +600,7 @@ pub struct Lzh {
 impl Lzh {
     pub fn new(params: Params) -> Self {
         let state = match params.method {
-            Method::Lh { .. } | Method::Arj => State::Static {
+            Method::Lh { .. } | Method::Arj | Method::Uefi { .. } => State::Static {
                 block: 0,
                 c: Code::Single(0),
                 p: Code::Single(0),
@@ -659,13 +674,15 @@ impl Lzh {
         for k in 0..len {
             let back = dist;
             let byte = if back > produced.saturating_add(k) {
-                fill
+                fill.ok_or_else(|| bad("reference before the start of the output"))?
             } else {
                 let at = out
                     .len()
                     .checked_sub(back)
                     .ok_or_else(|| bad("reference beyond the window"))?;
-                out.get(at).copied().unwrap_or(fill)
+                out.get(at)
+                    .copied()
+                    .ok_or_else(|| bad("reference beyond the window"))?
             };
             out.push(byte);
         }
@@ -682,12 +699,14 @@ impl Lzh {
 
     /// One token of the static Huffman methods.
     fn static_token(&mut self, bits: &mut Bits<'_>, out: &mut Vec<u8>) -> Result<()> {
-        let (np, pbit) = match self.params.method {
+        let (np, pbit, max_pcode) = match self.params.method {
             Method::Lh { dict_bits } => {
                 let np = usize::from(dict_bits.clamp(13, 16)).saturating_add(1);
-                (np, if np <= 14 { 4 } else { 5 })
+                (np, if np <= 14 { 4 } else { 5 }, 16)
             }
-            _ => (17, 5),
+            // EDK2 reads up to 31 lengths whatever the count's width.
+            Method::Uefi { pbit } => (31, u32::from(pbit.clamp(4, 5)), UEFI_MAX_PCODE),
+            _ => (17, 5, 16),
         };
         let State::Static { block, c, p } = &mut self.state else {
             return Err(bad("wrong state"));
@@ -707,7 +726,7 @@ impl Lzh {
         }
         let len = usize::from(sym).saturating_sub(253);
         let pcode = u32::from(p.decode(bits)?);
-        if pcode > 16 {
+        if pcode > max_pcode {
             return Err(bad(format!("position code {pcode}")));
         }
         let dist = if pcode == 0 {
@@ -970,7 +989,11 @@ impl Lzh {
             }
             let method = self.params.method;
             let more = match method {
-                Method::Lh { .. } | Method::Arj | Method::Lh1 | Method::ArjFastest => {
+                Method::Lh { .. }
+                | Method::Arj
+                | Method::Uefi { .. }
+                | Method::Lh1
+                | Method::ArjFastest => {
                     let mut bits = Bits {
                         data: input,
                         pos: self.bit,
@@ -1186,6 +1209,40 @@ mod tests {
             checked_all += checked;
         }
         assert!(checked_all > 30, "{checked_all}");
+    }
+
+    /// The standard (EFI) and Tiano compressed streams of
+    /// `edk2-compress.fv` (EDK2 BaseTools `EfiCompress` via `GenSec -c
+    /// PI_STD`, and `TianoCompress -e`): both decode to the same raw and
+    /// user interface sections, and resume from checkpoints.
+    #[test]
+    fn uefi_streams_from_edk2() {
+        let fv = include_bytes!("../../../../tests/fixtures/external/uefi-fv/edk2-compress.fv");
+        let u32le = |o: usize| u32::from_le_bytes(fv[o..o + 4].try_into().unwrap());
+        // (offset of the 8-byte header, pbit)
+        let mut decoded = Vec::new();
+        for (at, pbit) in [(96 + 9, 4u8), (1120, 5)] {
+            let (comp, orig) = (u32le(at) as usize, u32le(at + 4));
+            let data = &fv[at + 8..at + 8 + comp];
+            let params = Params::new(Method::Uefi { pbit }, Some(u64::from(orig)), Check::None);
+            let make = || -> Box<dyn crate::codec::pipeline::Decoder> {
+                Box::new(crate::codec::pipeline::Streaming(Lzh::new(params)))
+            };
+            let mut d = make();
+            let out = crate::codec::pipeline::decode_all(d.as_mut(), data, 1 << 20).unwrap();
+            assert_eq!(out.len() as u32, orig);
+            assert!(d.warning(&out).is_none());
+            let (checked, _) =
+                crate::codec::pipeline::verify_checkpoints(make, data, 300, 1).unwrap();
+            assert!(checked > 5, "{pbit}: {checked}");
+            decoded.push(out);
+        }
+        // A raw section (type 0x19) of the same payload, then a UI section
+        // whose name differs ("Inside std", "Inside tiano").
+        let payload = |d: &[u8]| d[4..4332 + 4].to_vec();
+        assert_eq!(decoded[0][3], 0x19);
+        assert_eq!(payload(&decoded[0]), payload(&decoded[1]));
+        assert!(payload(&decoded[0]).starts_with(b"fillyfoal UEFI compressed section"));
     }
 
     /// Visio's LZSS: three literals, a match back to output 0 (ring 4078,
