@@ -1,0 +1,49 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ thin.pack — Git pack v2, 3 objects  [0x0+0x1eb]
+  ▾ Header  [0x0+0xc]
+      Signature: "PACK"  [0x0+0x4]
+      Version: 2  [0x4+0x4]
+      Number of objects: 3  [0x8+0x4]
+    Pack checksum: "6192689ca8652be195d4858436ad9419181ec13c" — valid SHA-1  [0x1d7+0x14]
+  ▾ commit at 0xc — object 0, 151 → 220 bytes  [0xc+0x99]
+      Type and size: 0x9c  [0xc+0x1]
+      Type: commit (0x1)
+      Size: 220
+      Compressed data — zlib, 151 bytes  [0xe+0x97]
+      tree: "d6f05bff362030c4365f9d10246c1f53164f7a43"  [#1:0x0+0x2d]
+      parent: "cc1c4271c488c8acdb3e48facd464de7ce64e11e"  [#1:0x2e+0x2f]
+      author: "fillyfoal <test@example.com>" — 2026-01-04 00:00:00 UTC +0000  [#1:0x5e+0x34]
+      committer: "fillyfoal <test@example.com>" — 2026-01-04 00:00:00 UTC +0000  [#1:0x93+0x37]
+      Message: "Rewrite block 3"  [#1:0xcc+0x10]
+  ▾ tree at 0xa5 — object 1, 77 → 71 bytes  [0xa5+0x4f]
+      Type and size: 0xa7  [0xa5+0x1]
+      Type: tree (0x2)
+      Size: 71
+      Compressed data — zlib, 77 bytes  [0xa7+0x4d]
+    ▾ Entries  [#2:0x0+0x47]
+        README: "98ca4f0b213483e8332692cd8b1159ba0f03ba1c" — 100644 blob  [#2:0x0+0x22]
+        notes.txt: "91a239bf6c06d81a7474be5faba644856b9a935e" — 100644 blob  [#2:0x22+0x25]
+  ▾ ref-delta at 0xf4 — object 2, 205 → 1022 bytes, base 945267efe68a88f80090c89187dfe05ebf3f61bd  [0xf4+0xe3]
+      Type and size: 0xfe  [0xf4+0x1]
+      Type: ref-delta (0x7)
+      Size: 1022
+      Compressed data — zlib, 205 bytes  [0x10a+0xcd]
+    ▾ Delta  [#3:0x0+0x3fe]
+        Source size: 3894  [#3:0x0+0x2]
+        Target size: 4545  [#3:0x2+0x2]
+        Copy — 2738 bytes from source offset 0x0  [#3:0x4+0x3]
+        Insert — 127 literal bytes  [#3:0x7+0x80]
+        Insert — 127 literal bytes  [#3:0x87+0x80]
+        Insert — 127 literal bytes  [#3:0x107+0x80]
+        Insert — 127 literal bytes  [#3:0x187+0x80]
+        Insert — 127 literal bytes  [#3:0x207+0x80]
+        Insert — 127 literal bytes  [#3:0x287+0x80]
+        Insert — 68 literal bytes  [#3:0x307+0x45]
+        Copy — 806 bytes from source offset 0xc10  [#3:0x34c+0x5]
+        Insert — 127 literal bytes  [#3:0x351+0x80]
+        Insert — 44 literal bytes  [#3:0x3d1+0x2d]
+    ▾ Resolved object — the delta applied to its base
+        ! unsupported: ref-delta base 945267efe68a88f80090c89187dfe05ebf3f61bd is not in this pack (a thin pack's bases are in the receiving repository) [0xf4+0x1]
