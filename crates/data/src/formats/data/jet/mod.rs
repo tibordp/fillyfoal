@@ -13,6 +13,11 @@
 //!
 //! Layouts follow mdbtools' HACKING notes and Jackcess, and were checked
 //! against Jackcess-written Jet 4 and ACE files read back with mdb-export.
+//!
+//! Microsoft Money files (MSISAM, Jet 4 pages) also encrypt pages 1 to 14
+//! with RC4, keyed by a digest of the (possibly empty) password and a salt
+//! in the header; see [`Msisam`]. The walkers then read a file view with
+//! those pages decrypted.
 
 mod row;
 mod tdef;
@@ -114,6 +119,156 @@ fn rc4(key: &[u8], data: &[u8]) -> Vec<u8> {
     crate::codec::crypto::rc4(key, data)
 }
 
+/// MSISAM (Microsoft Money) page encryption, as Jackcess-encrypt's
+/// `MSISAMCryptCodecHandler` reads it, checked against files written by
+/// Money Plus Sunset Deluxe 17.0 with and without a password. With the
+/// "new" scheme (flag bits 0x06 at 0x298 of page 0), the password is
+/// upper-cased, written as UTF-16LE into 40 zero bytes and hashed (SHA-1
+/// with flag 0x20, otherwise MD5); the first 16 bytes of the digest and the
+/// first 4 of the 8-byte salt (0x72 of the demasked header) are the key,
+/// with the page number XORed into the salt part, for pages 1 to 14. Four
+/// check bytes at 0x2e9 plus the salt's first byte, decrypted with the
+/// digest and the whole salt, give the salt's first four bytes back when
+/// the password is right (all zero: no password check).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Msisam {
+    flags: u8,
+    salt: [u8; 8],
+    check: [u8; 4],
+}
+
+/// The last page MSISAM encrypts.
+const MSISAM_LAST_ENCRYPTED: u64 = 14;
+
+impl Msisam {
+    /// The encryption parameters from page 0 (`plain` is the demasked
+    /// header, which starts at 0x18).
+    async fn read(cx: &Cx, file: Span, plain: &[u8]) -> Option<Msisam> {
+        let flags = cx.read(file.sub(0x298, 1)).await.ok()?.first().copied()?;
+        let salt: [u8; 8] = plain.get(0x72 - 0x18..0x7a - 0x18)?.try_into().ok()?;
+        let at = 0x2e9u64.saturating_add(u64::from(salt[0]));
+        let check: [u8; 4] = cx.read(file.sub(at, 4)).await.ok()?.try_into().ok()?;
+        let m = Msisam { flags, salt, check };
+        // The old scheme with a blank key means no encryption (Jackcess
+        // uses no codec then).
+        if !m.new_scheme() && salt.get(..4) == Some(&[0; 4]) {
+            return None;
+        }
+        Some(m)
+    }
+
+    fn new_scheme(&self) -> bool {
+        self.flags & 0x06 != 0
+    }
+
+    fn digest(&self, password: &[u8]) -> Vec<u8> {
+        use crate::codec::crypto::{Hash, Md5, Sha1};
+        let upper = String::from_utf8_lossy(password).to_uppercase();
+        let mut buf = [0u8; 40];
+        for (d, b) in buf
+            .iter_mut()
+            .zip(upper.encode_utf16().flat_map(u16::to_le_bytes))
+        {
+            *d = b;
+        }
+        let mut h = if self.flags & 0x20 != 0 {
+            Sha1::digest(&buf)
+        } else {
+            Md5::digest(&buf)
+        };
+        h.truncate(16);
+        h
+    }
+
+    fn verify(&self, password: &[u8]) -> bool {
+        if self.check == [0; 4] {
+            return true;
+        }
+        let mut key = self.digest(password);
+        key.extend_from_slice(&self.salt);
+        rc4(&key, &self.check).get(..4) == self.salt.get(..4)
+    }
+
+    /// The RC4 key of page `no`.
+    fn page_key(&self, digest: &[u8], no: u64) -> Vec<u8> {
+        let mut key = digest.to_vec();
+        let no = u32::try_from(no).unwrap_or(0).to_le_bytes();
+        key.extend(self.salt.iter().zip(no).take(4).map(|(s, n)| s ^ n));
+        key
+    }
+}
+
+/// The input with MSISAM's encrypted pages decrypted (the password is
+/// asked for here, when a walker first needs the pages, unless it is
+/// empty), or the input itself for other files.
+async fn plain_input(cx: &Cx, input: Input, fmt: Fmt, crypt: Option<Msisam>) -> Result<Input> {
+    let Some(m) = crypt else { return Ok(input) };
+    let file = input.span;
+    let origin = Origin {
+        parent: file,
+        transform: "msisam-pages",
+    };
+    if let Some(found) = cx.derived(origin) {
+        return Ok(Input {
+            span: found.span,
+            ..input
+        });
+    }
+    if !m.new_scheme() {
+        return Err(Diagnostic::unsupported(
+            "MSISAM pages encrypted with the old Jet-style key",
+        ));
+    }
+    let last = MSISAM_LAST_ENCRYPTED.min(fmt.pages(file).saturating_sub(1));
+    if last == 0 {
+        return Ok(input);
+    }
+    let password = if m.verify(b"") {
+        Vec::new()
+    } else {
+        match cx
+            .unlock(
+                file.sub(0, fmt.page),
+                "Password for the Microsoft Money file",
+                |s| m.verify(s.expose()),
+            )
+            .await
+        {
+            Some(s) => s.expose().to_vec(),
+            None => {
+                return Err(Diagnostic::unsupported(
+                    "pages 1-14 are encrypted (no password)",
+                ));
+            }
+        }
+    };
+    let digest = m.digest(&password);
+    let enc = file.sub(fmt.page, last.saturating_mul(fmt.page));
+    let raw = cx.read(enc).await?;
+    let mut out = Vec::with_capacity(raw.len());
+    for (i, chunk) in raw.chunks(to_usize(fmt.page)).enumerate() {
+        cx.checkpoint().await;
+        let no = to_u64(i).saturating_add(1);
+        out.extend(rc4(&m.page_key(&digest, no), chunk));
+    }
+    let decrypted = cx.add_derived(
+        Origin {
+            parent: enc,
+            transform: "msisam-rc4",
+        },
+        out,
+        enc.len,
+        None,
+    )?;
+    let mut pieces = vec![file.sub(0, fmt.page), decrypted.span];
+    let rest = file.tail(fmt.page.saturating_mul(last.saturating_add(1)));
+    if rest.len > 0 {
+        pieces.push(rest);
+    }
+    let span = cx.add_pieces(origin, pieces)?;
+    Ok(Input { span, ..input })
+}
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 0x18)).await?;
@@ -162,6 +317,37 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         header = header.diag(Diagnostic::truncated(enc, to_u64(raw.len())));
     }
     cx.emit(header);
+    let crypt = if head.get(4..20) == Some(b"MSISAM Database\0".as_slice()) && !jet3 {
+        Msisam::read(&cx, file, &plain).await
+    } else {
+        None
+    };
+    if let Some(m) = crypt {
+        let summary = if !m.new_scheme() {
+            "pages 1-14 encrypted with the old Jet-style key (not supported)".to_owned()
+        } else {
+            format!(
+                "pages 1-14 encrypted with RC4, {} password digest, {}",
+                if m.flags & 0x20 != 0 { "SHA-1" } else { "MD5" },
+                if m.verify(b"") {
+                    "no password"
+                } else {
+                    "password set"
+                }
+            )
+        };
+        cx.emit(
+            Node::new("Page encryption")
+                .span(file.sub(0x298, 1))
+                .value(Value::UInt {
+                    value: m.flags.into(),
+                    bits: 8,
+                    radix: Radix::Hex,
+                })
+                .summary(summary)
+                .desc("MSISAM (Microsoft Money) page encryption flags"),
+        );
+    }
     let pages = file.len.checked_div(page_size).unwrap_or(0);
     let codepage = if jet3 {
         u16_le(&plain, 0x3a - 0x18)
@@ -188,13 +374,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .desc(
                     "The objects listed in MSysObjects; tables expand to their definition and rows",
                 )
-                .lazy(catalog, (input, fmt)),
+                .lazy(catalog, (input, fmt, crypt)),
         );
     }
     cx.emit(
         Node::new("Pages")
             .summary(format!("{pages}"))
-            .lazy(page_list, (input, fmt)),
+            .lazy(page_list, (input, fmt, crypt)),
     );
     Ok(())
 }
@@ -338,7 +524,8 @@ async fn table_pages(
 }
 
 /// The catalog: every MSysObjects row, tables expanding to their contents.
-async fn catalog(cx: Cx, (input, fmt): (Input, Fmt)) -> Result<()> {
+async fn catalog(cx: Cx, (input, fmt, crypt): (Input, Fmt, Option<Msisam>)) -> Result<()> {
+    let input = plain_input(&cx, input, fmt, crypt).await?;
     let file = input.span;
     let def = tdef::load(&cx, file, fmt, CATALOG_PAGE).await?;
     let find = |name: &str| def.columns.iter().position(|c| c.name == name);
@@ -517,7 +704,15 @@ async fn rows(cx: Cx, (input, fmt, page): (Input, Fmt, u32)) -> Result<()> {
 /// The owner of long-value pages.
 const LVAL: u32 = u32::from_le_bytes(*b"LVAL");
 
-async fn page_list(cx: Cx, (input, fmt): (Input, Fmt)) -> Result<()> {
+async fn page_list(cx: Cx, (input, fmt, crypt): (Input, Fmt, Option<Msisam>)) -> Result<()> {
+    // Without the password the encrypted pages are listed as they are.
+    let input = match plain_input(&cx, input, fmt, crypt).await {
+        Ok(plain) => plain,
+        Err(e) => {
+            cx.diag(e);
+            input
+        }
+    };
     let file = input.span;
     let pages = fmt.pages(file);
     cx.set_count(Count::Exact(pages));
