@@ -14,7 +14,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::disk::{PieceList, crc32c_update, size, uuid_value};
 use crate::node::Node;
-use crate::span::Span;
+use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, flag};
 
 use super::{BE, HdrCtx, crc_field, lsn_summary, rest_unused, uint};
@@ -130,11 +130,91 @@ fn empty_header(sector: &[u8], cycle: u32) -> bool {
         && u32_be(sector, 40) == Some(0)
 }
 
+/// The cycle a log sector was written in: a record header's `h_cycle`, or
+/// the cycle number stamped over the first word of a body sector.
+async fn cycle_of(cx: &Cx, log: Span, blk: u64) -> Result<u32> {
+    let s = cx.read_avail(log.sub(blk.saturating_mul(BB), 8)).await?;
+    Ok(match u32_be(&s, 0) {
+        Some(MAGIC) => u32_be(&s, 4).unwrap_or(0),
+        w => w.unwrap_or(0),
+    })
+}
+
+/// Where the log's head is once it has wrapped (`xlog_find_head`): the
+/// first block still of the previous cycle, found by bisecting the cycle
+/// discontinuity between the log's first and last blocks. `None` when the
+/// whole log carries one cycle (fresh from mkfs, or written once).
+async fn find_head(cx: &Cx, log: Span, total: u64) -> Result<Option<(u64, u32)>> {
+    if total < 2 {
+        return Ok(None);
+    }
+    let first = cycle_of(cx, log, 0).await?;
+    let last = cycle_of(cx, log, total.saturating_sub(1)).await?;
+    // A last block of cycle 0 was never written: the log has not wrapped,
+    // and its records read in order from the start.
+    if last == 0 || first != last.wrapping_add(1) {
+        return Ok(None);
+    }
+    let (mut lo, mut hi) = (0u64, total.saturating_sub(1));
+    while hi.saturating_sub(lo) > 1 {
+        let mid = lo.saturating_add(hi.saturating_sub(lo) / 2);
+        if cycle_of(cx, log, mid).await? == first {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    Ok(Some((hi, first)))
+}
+
+/// The tail the last record before `head` (of cycle `cycle`) names: where
+/// replay would start. Searched backwards over at most one record.
+async fn find_tail(cx: &Cx, log: Span, total: u64, head: u64, cycle: u32) -> Result<Option<u64>> {
+    let reach = (MAX_BODY / BB).saturating_add(16).min(total);
+    let mut blk = head;
+    for _ in 0..reach {
+        blk = blk.checked_sub(1).unwrap_or(total.saturating_sub(1));
+        let h = cx.read_avail(log.sub(blk.saturating_mul(BB), 32)).await?;
+        if u32_be(&h, 0) == Some(MAGIC) && u32_be(&h, 4) == Some(cycle) {
+            let tail = u64::from(u32_be(&h, 28).unwrap_or(0));
+            return Ok((tail < total).then_some(tail));
+        }
+    }
+    Ok(None)
+}
+
 pub(super) async fn walk(cx: Cx, log: Span) -> Result<()> {
     let total = log.len / BB;
-    let (mut blk, mut index) = cx.resume::<(u64, u64)>().unwrap_or((0, 0));
-    while blk < total && index < MAX_RECORDS {
-        cx.progress_in(log, blk.saturating_mul(BB));
+    // Once the log has wrapped, the records worth reading run from the
+    // tail to the head, maybe across the log's end; elsewhere from the
+    // first record header on.
+    let wrapped = match find_head(&cx, log, total).await? {
+        Some((head, cycle)) => find_tail(&cx, log, total, head, cycle)
+            .await?
+            .map(|tail| (head, tail, cycle)),
+        None => None,
+    };
+    let start = match wrapped {
+        Some((_, tail, _)) => tail,
+        None => {
+            let mut b = 0;
+            while b < total.min(MAX_BODY / BB) {
+                let s = cx.read_avail(log.sub(b.saturating_mul(BB), 4)).await?;
+                if u32_be(&s, 0) == Some(MAGIC) {
+                    break;
+                }
+                b = b.saturating_add(1);
+            }
+            b
+        }
+    };
+    // (block, records so far, blocks walked)
+    let (mut blk, mut index, mut walked) = cx.resume::<(u64, u64, u64)>().unwrap_or((start, 0, 0));
+    while walked < total && index < MAX_RECORDS {
+        if wrapped.is_some_and(|(head, tail, _)| blk == head && (walked > 0 || head == tail)) {
+            break;
+        }
+        cx.progress(walked, total);
         let hspan = log.sub(blk.saturating_mul(BB), BB);
         let h = cx.read_avail(hspan).await?;
         if u32_be(&h, 0) != Some(MAGIC) {
@@ -144,11 +224,11 @@ pub(super) async fn walk(cx: Cx, log: Span) -> Result<()> {
         let version = u32_be(&h, 8).unwrap_or(0);
         let len = u64::from(u32_be(&h, 12).unwrap_or(0));
         let ops = u32_be(&h, 40).unwrap_or(0);
-        let at = (blk, index);
+        let at = (blk, index, walked);
         cx.mark(move || at);
-        if len == 0 && ops == 0 {
+        if len == 0 && ops == 0 && wrapped.is_none() {
             // A run of empty headers: scan it in windows.
-            let start = blk;
+            let first = blk;
             'scan: while blk < total {
                 let window = log.sub(blk.saturating_mul(BB), SCAN.saturating_mul(BB));
                 let data = cx.read_avail(window).await?;
@@ -162,16 +242,17 @@ pub(super) async fn walk(cx: Cx, log: Span) -> Result<()> {
                     blk = blk.saturating_add(1);
                 }
             }
-            let n = blk.saturating_sub(start);
+            let n = blk.saturating_sub(first);
+            walked = walked.saturating_add(n);
             cx.push(
                 uint(
                     "Empty records",
-                    log.sub(start.saturating_mul(BB), n.saturating_mul(BB)),
+                    log.sub(first.saturating_mul(BB), n.saturating_mul(BB)),
                     n,
                     64,
                 )
                 .summary(format!(
-                    "blocks {start}–{}: headers of cycle {cycle} with no operations, as mkfs writes them",
+                    "blocks {first}–{}: headers of cycle {cycle} with no operations, as mkfs writes them",
                     blk.saturating_sub(1)
                 )),
             )
@@ -187,26 +268,70 @@ pub(super) async fn walk(cx: Cx, log: Span) -> Result<()> {
         };
         let body = len.min(MAX_BODY);
         let dblks = body.div_ceil(BB);
-        let span = log.sub(
-            blk.saturating_mul(BB),
-            hblks.saturating_add(dblks).saturating_mul(BB),
-        );
+        let blocks = hblks.saturating_add(dblks).max(1);
+        let end = blk.saturating_add(blocks);
+        // A record written across the end of the log continues at its start.
+        let (span, split) = if end > total && wrapped.is_some() {
+            let first = log.tail(blk.saturating_mul(BB));
+            let rest = log.sub(0, end.saturating_sub(total).saturating_mul(BB));
+            let joined = cx.add_pieces(
+                Origin {
+                    parent: log,
+                    transform: "xfs-log-wrap",
+                },
+                vec![first, rest],
+            )?;
+            (joined, true)
+        } else {
+            (
+                log.sub(blk.saturating_mul(BB), blocks.saturating_mul(BB)),
+                false,
+            )
+        };
         let lsn_blk = u32_be(&h, 20).unwrap_or(0);
         cx.push(
             Node::new(format!("Record {index}"))
                 .span(span)
                 .summary(format!(
-                    "LSN {cycle}:{lsn_blk}, {ops} operation{}, {}",
+                    "LSN {cycle}:{lsn_blk}, {ops} operation{}, {}{}",
                     if ops == 1 { "" } else { "s" },
-                    size(len)
+                    size(len),
+                    if split {
+                        ", continued at the start of the log"
+                    } else {
+                        ""
+                    }
                 ))
                 .lazy(record, (span, hblks, body)),
         )
         .await;
-        blk = blk.saturating_add(hblks).saturating_add(dblks);
+        walked = walked.saturating_add(blocks);
+        blk = if wrapped.is_some() {
+            end.checked_rem(total).unwrap_or(0)
+        } else {
+            end
+        };
         index = index.saturating_add(1);
+        if wrapped.is_none() && blk >= total {
+            break;
+        }
     }
-    if blk < total {
+    match wrapped {
+        Some((head, tail, cycle)) => {
+            cx.emit(Node::new("Older records").span(log).summary(format!(
+                "the log has wrapped: the records above run from the tail at block {tail} \
+                     to the head at block {head} (cycle {cycle}); the rest of the log holds \
+                     records of older cycles"
+            )))
+        }
+        None if start > 0 => cx.emit(
+            Node::new("Before the first record")
+                .span(log.sub(0, start.saturating_mul(BB)))
+                .summary("no record header: the end of a record that began before the log's end"),
+        ),
+        None => {}
+    }
+    if wrapped.is_none() && blk < total {
         let rest = log.tail(blk.saturating_mul(BB));
         cx.emit(
             Node::new("Unused")
