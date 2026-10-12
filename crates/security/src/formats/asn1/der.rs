@@ -252,20 +252,23 @@ fn valid(data: &[u8], depth: u32) -> bool {
     true
 }
 
-/// Dotted notation of an OBJECT IDENTIFIER's content.
+/// Dotted notation of an OBJECT IDENTIFIER's content. Arcs are unbounded
+/// in X.690: UUID arcs (`2.25.<uuid>`, X.667) need 128 bits, so arcs are
+/// accumulated in a `u128` and longer ones (up to [`MAX_BIG_ARC`] encoded
+/// bytes) are converted to decimal separately.
 pub fn oid(content: &[u8]) -> Option<String> {
     if content.is_empty() || content.last().is_some_and(|&b| b & 0x80 != 0) {
         return None;
     }
     let mut out = String::new();
-    let mut value = 0u64;
     let mut first = true;
-    for &b in content {
-        value = value.checked_mul(128)?.checked_add(u64::from(b & 0x7f))?;
-        if b & 0x80 != 0 {
-            continue;
-        }
+    for arc in content.split_inclusive(|&b| b & 0x80 == 0) {
+        let small = arc.iter().try_fold(0u128, |v, &b| {
+            v.checked_mul(128)?.checked_add(u128::from(b & 0x7f))
+        });
         if first {
+            // The first subidentifier folds the first two arcs.
+            let value = small?;
             let (a, rest) = match value {
                 0..40 => (0, value),
                 40..80 => (1, value.saturating_sub(40)),
@@ -275,11 +278,45 @@ pub fn oid(content: &[u8]) -> Option<String> {
             first = false;
         } else {
             out.push('.');
-            out.push_str(&value.to_string());
+            match small {
+                Some(v) => out.push_str(&v.to_string()),
+                None => out.push_str(&big_arc(arc)?),
+            }
         }
-        value = 0;
     }
     Some(out)
+}
+
+/// The longest arc [`oid`] converts beyond 128 bits, in encoded bytes
+/// (448 bits); the conversion is quadratic in it.
+const MAX_BIG_ARC: usize = 64;
+
+/// Decimal text of a base-128 arc too long for a `u128`.
+fn big_arc(arc: &[u8]) -> Option<String> {
+    // Little-endian limbs in base 10^9.
+    const BASE: u64 = 1_000_000_000;
+    if arc.len() > MAX_BIG_ARC {
+        return None;
+    }
+    let mut limbs: Vec<u64> = vec![0];
+    for &b in arc {
+        let mut carry = u64::from(b & 0x7f);
+        for limb in &mut limbs {
+            let v = limb.checked_mul(128)?.checked_add(carry)?;
+            *limb = v.checked_rem(BASE)?;
+            carry = v.checked_div(BASE)?;
+        }
+        while carry > 0 {
+            limbs.push(carry.checked_rem(BASE)?);
+            carry = carry.checked_div(BASE)?;
+        }
+    }
+    let mut parts = limbs.iter().rev();
+    let mut text = parts.next()?.to_string();
+    for limb in parts {
+        text.push_str(&format!("{limb:09}"));
+    }
+    Some(text)
 }
 
 /// The value of a two's-complement INTEGER, if it fits in 64 bits.
@@ -401,6 +438,28 @@ mod tests {
             oid(&[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b]).unwrap(),
             "1.2.840.113549.1.1.11"
         );
+        // A UUID arc (128 bits), as `openssl asn1parse -genstr OID:...` encodes it.
+        let uuid = [
+            0x69, 0x83, 0xf0, 0x9d, 0xa7, 0xeb, 0xcf, 0xde, 0xe0, 0xc7, 0xa1, 0xa7, 0xb2, 0xc0,
+            0x94, 0x8c, 0xc8, 0xf9, 0xd7, 0x76,
+        ];
+        assert_eq!(
+            oid(&uuid).unwrap(),
+            "2.25.329800735698586629295641978511506172918"
+        );
+        // 2^200 + 12345, beyond a u128.
+        let mut big = vec![0x2a, 0x90];
+        big.extend([0x80; 26]);
+        big.extend([0xe0, 0x39]);
+        assert_eq!(
+            oid(&big).unwrap(),
+            "1.2.1606938044258990275541962092341162602522202993782792835313721"
+        );
+        assert!(oid(&[0x2a, 0x81]).is_none());
+        let mut huge = vec![0x2a];
+        huge.extend([0xff; 64]);
+        huge.push(0x7f);
+        assert!(oid(&huge).is_none());
         assert_eq!(integer(&[0xff, 0x7f]), Some(-129));
         assert_eq!(integer(&[0x00, 0x80]), Some(128));
         assert_eq!(time(UTC_TIME, b"700101000000Z"), Some(0));

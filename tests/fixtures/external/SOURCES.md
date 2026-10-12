@@ -386,6 +386,7 @@ and reproduce every file byte for byte.
 | `x509/ed25519.cer` | OpenSSL 3.6.3 (openssl CLI) | the same script: self-signed Ed25519 |
 | `x509/x25519.cer` | OpenSSL 3.6.3 (openssl CLI) | the same script: X25519 key certified by the CA (`-force_pubkey`) |
 | `x509/rsa-pss.cer` | OpenSSL 3.6.3 (openssl CLI) | the same script: RSA-PSS key and signature (SHA-384, MGF1 SHA-384, salt 48) |
+| `x509/uuid-oid.cer` | OpenSSL 3.6.3 (openssl CLI) | `sh tests/data/x509/make-uuid-oid.sh` (fresh key each run): self-signed Ed25519 whose certificate policy and one private extension are UUID OIDs (`2.25.<128-bit arc>`); checked against `openssl x509 -text` |
 | `crl/revoked.crl` | OpenSSL 3.6.3 (`openssl ca -gencrl`) | the same script: three revocations (keyCompromise, `-crl_compromise` invalidity date, `-crl_hold` hold instruction), issuing distribution point with reasons, AKI, CRL number; checked against `openssl crl -text` |
 | `ocsp-request/` | OpenSSL 3.6.3 (`openssl ocsp`) | the same script: a request for three certificates signed by the leaf key with a nonce, and a plain one |
 | `ocsp-response/` | OpenSSL 3.6.3 (`openssl ocsp -index`) | the same script: responses over the CA database (revoked with reason, unknown, good; responder by name with certificates, and `-resp_key_id -resp_no_certs`); checked against `openssl ocsp -resp_text` |
