@@ -897,35 +897,39 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
     let mut post = Vec::new();
     for &i in order.get(1..).unwrap_or_default() {
         let c = coder(i).ok_or_else(|| f.methods())?;
-        post.push(match c.id.as_slice() {
-            // Branch converters, with an optional 4-byte start offset
-            // (7-Zip writes one for ARM64 and RISC-V, `-mf=ARM64:4096`),
-            // which must be a multiple of the instruction alignment.
-            id if let Some(kind) = branch(id) => {
-                let start = match c.props.len() {
-                    0 => 0,
-                    4 => u32_le(&c.props, 0).unwrap_or(0),
-                    _ => {
-                        return Err(format!(
-                            "{} with {} property bytes",
-                            method_name(id),
-                            c.props.len()
-                        ));
-                    }
-                };
-                if start.checked_rem(kind.alignment()) != Some(0) {
+        let id = c.id.as_slice();
+        // Branch converters, with an optional 4-byte start offset (7-Zip
+        // writes one for ARM64 and RISC-V, `-mf=ARM64:4096`), which must be
+        // a multiple of the instruction alignment.
+        post.push(if let Some(kind) = branch(id) {
+            let start = match c.props.len() {
+                0 => 0,
+                4 => u32_le(&c.props, 0).unwrap_or(0),
+                _ => {
                     return Err(format!(
-                        "{} with a misaligned start offset",
-                        method_name(id)
+                        "{} with {} property bytes",
+                        method_name(id),
+                        c.props.len()
                     ));
                 }
-                (kind, start)
+            };
+            if start.checked_rem(kind.alignment()) != Some(0) {
+                return Err(format!(
+                    "{} with a misaligned start offset",
+                    method_name(id)
+                ));
             }
-            [0x03] => (
-                Post::Delta(usize::from(c.props.first().copied().unwrap_or(0)).saturating_add(1)),
-                0,
-            ),
-            id => return Err(method_name(id)),
+            (kind, start)
+        } else {
+            match id {
+                [0x03] => (
+                    Post::Delta(
+                        usize::from(c.props.first().copied().unwrap_or(0)).saturating_add(1),
+                    ),
+                    0,
+                ),
+                id => return Err(method_name(id)),
+            }
         });
     }
     Ok(Plan {

@@ -604,9 +604,9 @@ async fn object(cx: Cx, (volume, urn): (Arc<Volume>, String)) -> Result<()> {
             Obj::Literal(s, t)
                 if t.as_deref()
                     .is_none_or(|t| matches!(local(t), "long" | "int" | "integer"))
-                    && let Ok(n) = s.parse::<u64>() =>
+                    && s.parse::<u64>().is_ok() =>
             {
-                uint(n, 64)
+                uint(s.parse::<u64>().unwrap_or(0), 64)
             }
             Obj::Literal(s, Some(t)) if local(t) != "string" => {
                 text(clip(&format!("{s} ({})", local(t)), 200))
