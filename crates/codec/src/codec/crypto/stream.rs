@@ -384,6 +384,72 @@ impl crate::codec::filters::ByteFilter for AesCbcIvPrefixed {
     }
 }
 
+/// AES-CBC with the IV given apart from the data and no padding to remove:
+/// every whole block is decrypted (RAR 5 file data, whose packed size is
+/// rounded up to a block; the container knows the real size). The key is
+/// the AES key followed by the 16-byte IV. A partial last block is an
+/// error.
+#[derive(Clone)]
+pub struct AesCbcRaw {
+    aes: Option<Aes>,
+    /// The previous ciphertext block (the IV at first).
+    iv: [u8; 16],
+    buf: [u8; 16],
+    filled: usize,
+}
+
+impl AesCbcRaw {
+    pub fn new(key: &Key) -> Self {
+        let bytes = key.expose();
+        let split = bytes.len().saturating_sub(16);
+        let (k, iv) = bytes.split_at(split);
+        AesCbcRaw {
+            aes: if iv.len() == 16 { Aes::new(k) } else { None },
+            iv: iv.try_into().unwrap_or([0; 16]),
+            buf: [0; 16],
+            filled: 0,
+        }
+    }
+}
+
+impl crate::codec::filters::ByteFilter for AesCbcRaw {
+    fn byte(&mut self, b: u8, out: &mut Vec<u8>) -> Result<bool> {
+        let Some(aes) = &self.aes else {
+            return Err(Diagnostic::malformed("invalid AES key or IV length"));
+        };
+        if let Some(slot) = self.buf.get_mut(self.filled) {
+            *slot = b;
+        }
+        self.filled = self.filled.saturating_add(1);
+        if self.filled < 16 {
+            return Ok(true);
+        }
+        self.filled = 0;
+        let cipher = self.buf;
+        let mut block = cipher;
+        aes.decrypt_block(&mut block);
+        for (p, v) in block.iter_mut().zip(&self.iv) {
+            *p ^= v;
+        }
+        self.iv = cipher;
+        out.extend_from_slice(&block);
+        Ok(true)
+    }
+
+    fn finish(&mut self, _out: &mut Vec<u8>) -> Result<()> {
+        if self.filled != 0 {
+            return Err(Diagnostic::malformed(
+                "AES-CBC data is not a whole number of blocks",
+            ));
+        }
+        Ok(())
+    }
+
+    fn heap_size(&self) -> Option<usize> {
+        Some(self.aes.as_ref().map_or(0, |_| AES_ROUND_KEYS))
+    }
+}
+
 /// Decrypts `data` (IV, then AES-CBC ciphertext with PKCS#7 padding).
 pub fn aes_cbc_iv_prefixed(key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
     if data.is_empty() {
@@ -435,7 +501,13 @@ mod tests {
             (Codec::ZipCrypto(key.clone()), data.clone(), 0),
             (Codec::AesCtrLe(key.clone()), data.clone(), AES_ROUND_KEYS),
             (Codec::Rc4(key.clone()), data.clone(), 0),
-            (Codec::AesCbc(key.clone()), cbc, AES_ROUND_KEYS),
+            (Codec::AesCbc(key.clone()), cbc.clone(), AES_ROUND_KEYS),
+            // The IV apart, nothing unpadded: every block comes out.
+            (
+                Codec::AesCbcRaw(Key::new([key.expose(), &cbc[..16]].concat())),
+                cbc[16..].to_vec(),
+                AES_ROUND_KEYS,
+            ),
         ];
         for (codec, input, heap) in cases {
             let decoded = crate::codec::pipeline::decode_all(
@@ -446,6 +518,7 @@ mod tests {
             .unwrap();
             match codec {
                 Codec::AesCbc(_) => assert!(decoded == data),
+                Codec::AesCbcRaw(_) => assert!(decoded == padded),
                 Codec::ZipCrypto(_) => assert_eq!(decoded.len(), data.len() - 12),
                 _ => assert_eq!(decoded.len(), data.len()),
             }

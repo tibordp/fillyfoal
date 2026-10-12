@@ -249,6 +249,9 @@ pub enum Codec {
     /// AES-CBC with this key; the IV is the first 16 bytes and the data is
     /// PKCS#7-padded (PDF AESV2/AESV3).
     AesCbc(crypto::Key),
+    /// AES-CBC with the IV apart from the data and no padding (RAR 5): the
+    /// key is the AES key followed by the 16-byte IV.
+    AesCbcRaw(crypto::Key),
     /// ACE LZ77/blocked data (see [`ace`]); solid archives list the files
     /// before the wanted one.
     Ace(ace::Params),
@@ -355,6 +358,7 @@ impl Codec {
             Codec::Rc4(_) => "rc4",
             Codec::XlsRc4(_) => "xls-rc4",
             Codec::AesCbc(_) => "aes-cbc",
+            Codec::AesCbcRaw(_) => "aes-cbc-raw",
             Codec::AsciiHex => "asciihex",
             Codec::Ascii85 => "ascii85",
             Codec::RunLength => "runlength",
@@ -452,6 +456,7 @@ impl Codec {
             Codec::Rc4(_) => "rc4 (lazy)",
             Codec::XlsRc4(_) => "xls-rc4 (lazy)",
             Codec::AesCbc(_) => "aes-cbc (lazy)",
+            Codec::AesCbcRaw(_) => "aes-cbc-raw (lazy)",
             Codec::AsciiHex => "asciihex (lazy)",
             Codec::Ascii85 => "ascii85 (lazy)",
             Codec::RunLength => "runlength (lazy)",
@@ -546,6 +551,7 @@ impl Codec {
             | Codec::Rc4(_)
             | Codec::XlsRc4(_)
             | Codec::AesCbc(_)
+            | Codec::AesCbcRaw(_)
             | Codec::Eexec { .. } => "decrypted",
             Codec::Lzw { .. }
             | Codec::RunLength
@@ -627,6 +633,7 @@ impl Codec {
             | Codec::Rc4(_)
             | Codec::XlsRc4(_)
             | Codec::AesCbc(_)
+            | Codec::AesCbcRaw(_)
             | Codec::Eexec { .. }
             | Codec::AsciiHex
             | Codec::Ascii85
@@ -831,6 +838,9 @@ impl Codec {
             ))),
             Codec::AesCbc(key) => Box::new(Streaming(filters::Bytes::new(
                 crypto::stream::AesCbcIvPrefixed::new(key),
+            ))),
+            Codec::AesCbcRaw(key) => Box::new(Streaming(filters::Bytes::new(
+                crypto::stream::AesCbcRaw::new(key),
             ))),
             Codec::ZipCrypto(key) => Box::new(Streaming(crypto::stream::ZipCrypto::new(key))),
             Codec::AesCtrLe(key) => match crypto::stream::AesCtrLe::new(key) {

@@ -10,9 +10,21 @@
 //!
 //! In a solid archive the files of a run share one dictionary: the run is
 //! decoded as one stream over its files' packed data (a pieces source), and
-//! each file is a span of the output. Encryption and multi-volume members
-//! remain unsupported leaves; RAR 5 BLAKE2sp hashes are shown but not
-//! checked.
+//! each file is a span of the output. Multi-volume members and RAR 4
+//! encryption remain unsupported leaves; RAR 5 BLAKE2sp hashes are shown
+//! but not checked.
+//!
+//! RAR 5 encryption is decrypted with the archive's password: file data
+//! (AES-256-CBC with each file's IV) and encrypted headers (`-hp`: each
+//! header after the archive encryption header is an IV and the header
+//! encrypted, padded to whole blocks). The record layouts are those of
+//! RARLAB's RAR 5.0 technote; the key is PBKDF2-HMAC-SHA256 of the
+//! password (UTF-8) with the record's salt and 2^KDF-count iterations, and
+//! the same PBKDF2 chain run 16 and 32 iterations further gives the key of
+//! the tweaked checksums and the value folded into the 8-byte password
+//! check (the technote's "additional PBKDF2 rounds"). This was written
+//! without unRAR's source, checked against RAR 6.23's own archives (the
+//! password check, the decrypted data and the tweaked CRC32s all match).
 //!
 //! Members compressed by RAR 1.5–2.x (compression versions 15, 20 and 26)
 //! and RAR 7.0 streams (algorithm version 1, used only for dictionaries over
@@ -157,6 +169,91 @@ struct Part {
     solid: bool,
     dict: u64,
     rar5: bool,
+    /// RAR 5 file encryption: the data is AES-256-CBC ciphertext.
+    crypt: Option<Crypt5>,
+}
+
+/// A RAR 5 file encryption record (RARLAB's RAR 5.0 technote, "File
+/// encryption record"): AES-256 in CBC mode with this file's IV, the key
+/// derived from the password by PBKDF2-HMAC-SHA256 with this salt and
+/// 2^`kdf` iterations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Crypt5 {
+    kdf: u8,
+    salt: [u8; 16],
+    iv: [u8; 16],
+    /// The password check value (8 bytes, then a 4-byte SHA-256 checksum
+    /// of them), if recorded.
+    check: Option<[u8; 12]>,
+    /// The file's checksums are "tweaked" (MACs keyed by the password)
+    /// rather than plain.
+    tweaked: bool,
+}
+
+/// What a file header's extra area says about encryption.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Encryption {
+    None,
+    Aes(Crypt5),
+    /// An encryption record we cannot use (unknown version, damaged).
+    Unsupported,
+}
+
+/// The largest KDF count (binary logarithm of the PBKDF2 iterations) we
+/// accept; the technote lets readers refuse large ones, and RAR itself
+/// writes 15.
+const MAX_KDF5: u8 = 24;
+
+/// Parses a file encryption record's body (after its type).
+fn crypt5(body: &[u8]) -> Option<Crypt5> {
+    let (version, l1) = crate::bytes::uleb128(body)?;
+    let rest = body.get(l1..)?;
+    let (flags, l2) = crate::bytes::uleb128(rest)?;
+    let rest = rest.get(l2..)?;
+    if version != 0 {
+        return None;
+    }
+    let kdf = *rest.first()?;
+    let salt: [u8; 16] = rest.get(1..17)?.try_into().ok()?;
+    let iv: [u8; 16] = rest.get(17..33)?.try_into().ok()?;
+    let check = if flags & 0x01 != 0 {
+        Some(rest.get(33..45)?.try_into().ok()?)
+    } else {
+        None
+    };
+    Some(Crypt5 {
+        kdf,
+        salt,
+        iv,
+        check,
+        tweaked: flags & 0x02 != 0,
+    })
+}
+
+/// The encryption of a file header with extra area `data`.
+fn encryption5(data: &[u8]) -> Encryption {
+    let mut at = 0usize;
+    while at < data.len() {
+        let Some((size, l1)) = crate::bytes::uleb128(data.get(at..).unwrap_or_default()) else {
+            break;
+        };
+        let body_at = at.saturating_add(l1);
+        let end = body_at.saturating_add(to_usize(size));
+        let Some(body) = data.get(body_at..end) else {
+            break;
+        };
+        if let Some((1, l2)) = crate::bytes::uleb128(body) {
+            return match crypt5(body.get(l2..).unwrap_or_default()) {
+                Some(c) if c.kdf <= MAX_KDF5 => Encryption::Aes(c),
+                _ => Encryption::Unsupported,
+            };
+        }
+        if size == 0 {
+            break;
+        }
+        at = end;
+    }
+    Encryption::None
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -204,6 +301,7 @@ fn part4(header: &[u8], block: Span, flags: u16, packed: u64, unpacked: u64) -> 
         solid: flags & 0x10 != 0,
         dict: 0x1_0000u64 << ((flags >> 5) & 7),
         rar5: false,
+        crypt: None,
     })
 }
 
@@ -552,6 +650,115 @@ struct Block5 {
     crc_ok: bool,
     /// For file headers (type 2) only.
     part: Option<Part>,
+    /// The header's bytes (in the file, or decrypted).
+    header: Span,
+    /// Bytes of the file the header takes (with encrypted headers: the IV
+    /// and the padded ciphertext).
+    header_file_len: u64,
+    /// For the archive encryption header (type 4): its parameters.
+    crypt: Option<Crypt5>,
+}
+
+/// A RAR 5 header's bytes and where they are.
+struct Raw5 {
+    span: Span,
+    bytes: Vec<u8>,
+    /// Length of the header size field.
+    vlen: usize,
+    file_len: u64,
+}
+
+/// Reads the RAR 5 header at the cursor. With encrypted headers (`key`
+/// from the archive encryption header), each is a 16-byte IV and the
+/// header AES-256-CBC encrypted, zero-padded to whole blocks; it is
+/// decrypted into a derived source, so its fields have spans of their own.
+async fn raw_header5(cx: &Cx, cur: &Cursor<'_>, key: Option<&Keys5>) -> Result<Raw5> {
+    let Some(key) = key else {
+        let head = cur.peek(4 + 3).await?;
+        let (size, vlen) = crate::bytes::uleb128(head.get(4..).unwrap_or_default())
+            .ok_or_else(|| Diagnostic::malformed("bad header size").at(cur.span(7)))?;
+        if size > MAX_HEADER5 || size == 0 {
+            return Err(Diagnostic::malformed(format!("header size {size:#x}")).at(cur.span(7)));
+        }
+        let len = 4u64.saturating_add(to_u64(vlen)).saturating_add(size);
+        let span = cur.span(len);
+        let bytes = cx.read(span).await?;
+        return Ok(Raw5 {
+            span,
+            bytes,
+            vlen,
+            file_len: len,
+        });
+    };
+    let aes = crate::codec::crypto::Aes::new(&key.key)
+        .ok_or_else(|| Diagnostic::internal("RAR 5 header key length"))?;
+    let first = cx.read(cur.span(32)).await?;
+    let (iv, block) = first.split_at(first.len().min(16));
+    let head = crate::codec::crypto::cbc_decrypt(&aes, iv, block);
+    let (size, vlen) =
+        crate::bytes::uleb128(head.get(4..).unwrap_or_default()).ok_or_else(|| {
+            Diagnostic::malformed("bad header size (wrong password?)").at(cur.span(32))
+        })?;
+    if size > MAX_HEADER5 || size == 0 {
+        return Err(
+            Diagnostic::malformed(format!("header size {size:#x} (wrong password?)"))
+                .at(cur.span(32)),
+        );
+    }
+    let len = 4u64.saturating_add(to_u64(vlen)).saturating_add(size);
+    let file_len = (len.saturating_add(15) & !15).saturating_add(16);
+    let enc_span = cur.span(file_len);
+    let enc = cx.read(enc_span).await?;
+    let mut bytes = crate::codec::crypto::cbc_decrypt(&aes, iv, enc.get(16..).unwrap_or_default());
+    bytes.truncate(to_usize(len));
+    let span = cx
+        .add_derived(
+            Origin {
+                parent: enc_span,
+                transform: "rar5 header",
+            },
+            bytes.clone(),
+            file_len,
+            None,
+        )?
+        .span;
+    Ok(Raw5 {
+        span,
+        bytes,
+        vlen,
+        file_len,
+    })
+}
+
+/// The parameters of an archive encryption header (type 4) body.
+fn header_crypt5(r: &mut ByteReader<'_>) -> Option<Crypt5> {
+    let version = r.vint("Encryption version")?;
+    r.with(|n| n.summary(if version == 0 { "AES-256" } else { "unknown" }));
+    let flags = r.vint("Encryption flags")?;
+    r.with(|n| {
+        let (set, unknown) = crate::value::decode_flags(CRYPT_FLAGS5, flags);
+        n.value(Value::Flags {
+            raw: flags,
+            bits: 64,
+            set,
+            unknown,
+        })
+    });
+    let kdf = r.u8("KDF count")?;
+    r.with(|n| n.summary(format!("2^{kdf} PBKDF2 iterations")));
+    let salt: [u8; 16] = r.bytes("Salt", 16)?.try_into().ok()?;
+    let check = if flags & 0x01 != 0 {
+        Some(r.bytes("Password check value", 12)?.try_into().ok()?)
+    } else {
+        None
+    };
+    (version == 0 && kdf <= MAX_KDF5).then_some(Crypt5 {
+        kdf,
+        salt,
+        iv: [0; 16],
+        check,
+        tweaked: false,
+    })
 }
 
 /// The fields of a RAR 5 file or service header after the common part.
@@ -576,15 +783,21 @@ fn dict5(info: u64) -> u64 {
 }
 
 /// The part of a RAR 5 file header (`None` for directories and for data
-/// that cannot be shown: encrypted, split across volumes).
+/// that cannot be shown: encrypted in a way we cannot decrypt, split
+/// across volumes).
 fn part5(
     block: Span,
     header_len: u64,
     c: &Common,
     f: &FileFields,
-    encrypted: bool,
+    encryption: Encryption,
 ) -> Option<Part> {
-    if f.flags & 0x01 != 0 || encrypted || c.flags & 0x18 != 0 || c.flags & 0x02 == 0 {
+    let crypt = match encryption {
+        Encryption::None => None,
+        Encryption::Aes(c) => Some(c),
+        Encryption::Unsupported => return None,
+    };
+    if f.flags & 0x01 != 0 || c.flags & 0x18 != 0 || c.flags & 0x02 == 0 {
         return None;
     }
     let how = match (f.method, f.info & 0x3f) {
@@ -602,27 +815,8 @@ fn part5(
         solid: f.info & 0x40 != 0,
         dict: dict5(f.info),
         rar5: true,
+        crypt,
     })
-}
-
-/// The record types of an extra area.
-fn extra_types(data: &[u8]) -> Vec<u64> {
-    let mut out = Vec::new();
-    let mut at = 0usize;
-    while at < data.len() {
-        let Some((size, l1)) = crate::bytes::uleb128(data.get(at..).unwrap_or_default()) else {
-            break;
-        };
-        let body = at.saturating_add(l1);
-        if let Some((kind, _)) = crate::bytes::uleb128(data.get(body..).unwrap_or_default()) {
-            out.push(kind);
-        }
-        if size == 0 {
-            break;
-        }
-        at = body.saturating_add(to_usize(size));
-    }
-    out
 }
 
 fn file_fields(r: &mut ByteReader<'_>) -> Option<FileFields> {
@@ -731,17 +925,15 @@ fn common5(r: &mut ByteReader<'_>) -> Option<Common> {
     })
 }
 
-async fn next_block5(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Block5> {
+async fn next_block5(cx: &Cx, cur: &mut Cursor<'_>, key: Option<&Keys5>) -> Result<Block5> {
     let start = cur.pos();
-    let head = cur.peek(4 + 3).await?;
-    let (size, vlen) = crate::bytes::uleb128(head.get(4..).unwrap_or_default())
-        .ok_or_else(|| Diagnostic::malformed("bad header size").at(cur.span(7)))?;
-    if size > MAX_HEADER5 || size == 0 {
-        return Err(Diagnostic::malformed(format!("header size {size:#x}")).at(cur.span(7)));
-    }
-    let header_len = 4u64.saturating_add(to_u64(vlen)).saturating_add(size);
-    let header_span = cur.span(header_len);
-    let header = cx.read(header_span).await?;
+    let Raw5 {
+        span: header_span,
+        bytes: header,
+        vlen,
+        file_len,
+    } = raw_header5(cx, cur, key).await?;
+    let header_len = to_u64(header.len());
     let crc_ok = header
         .get(4..)
         .zip(u32_le(&header, 0))
@@ -753,20 +945,28 @@ async fn next_block5(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Block5> {
     let mut unpacked = 0;
     let mut directory = false;
     let mut part = None;
+    let mut crypt = None;
+    if c.kind == 4 {
+        crypt = header_crypt5(&mut r);
+    }
     if (c.kind == 2 || c.kind == 3)
         && let Some(f) = file_fields(&mut r)
     {
         let extra = header
             .get(to_usize(header_len.saturating_sub(c.extra))..)
             .unwrap_or_default();
-        let encrypted = c.extra > 0 && extra_types(extra).contains(&1);
-        let block = cur.span(header_len.saturating_add(c.data));
-        part = part5(block, header_len, &c, &f, encrypted);
+        let encryption = if c.extra > 0 {
+            encryption5(extra)
+        } else {
+            Encryption::None
+        };
+        let block = cur.span(file_len.saturating_add(c.data));
+        part = part5(block, file_len, &c, &f, encryption);
         name = Some(f.name);
         unpacked = f.unpacked;
         directory = f.flags & 1 != 0;
     }
-    cur.skip(header_len.saturating_add(c.data));
+    cur.skip(file_len.saturating_add(c.data));
     Ok(Block5 {
         span: cur.since(start),
         kind: c.kind,
@@ -775,6 +975,9 @@ async fn next_block5(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Block5> {
         directory,
         crc_ok,
         part,
+        header: header_span,
+        header_file_len: file_len,
+        crypt,
     })
 }
 
@@ -787,14 +990,20 @@ async fn dissect5(cx: &Cx, input: Input) -> Result<()> {
             .summary("RAR 5.0"),
     );
     cx.annotate("RAR archive (v5)");
+    list5(cx, input, 8, None).await
+}
+
+/// Lists the RAR 5 blocks from `pos`, their headers decrypted with `key`
+/// if the archive's headers are encrypted.
+async fn list5(cx: &Cx, input: Input, pos: u64, key: Option<Arc<Keys5>>) -> Result<()> {
+    let file = input.span;
     let mut cur = Cursor::new(cx, file, LE);
-    cur.seek(8);
+    cur.seek(pos);
     let mut files = 0u64;
     let mut total = 0u64;
-    let mut encrypted = false;
     let mut solid = false;
     while cur.remaining() >= 6 {
-        let b = next_block5(cx, &mut cur).await?;
+        let b = next_block5(cx, &mut cur, key.as_deref()).await?;
         solid |= b.part.is_some_and(|p| p.solid);
         let (name, summary) = match (b.kind, b.name) {
             (2, Some(n)) => {
@@ -813,7 +1022,9 @@ async fn dissect5(cx: &Cx, input: Input) -> Result<()> {
                 String::new(),
             ),
         };
-        let mut node = Node::new(name).span(b.span).lazy(block5, (input, b.span));
+        let mut node = Node::new(name)
+            .span(b.span)
+            .lazy(block5, (input, b.span, b.header, b.header_file_len));
         if !summary.is_empty() {
             node = node.summary(summary);
         }
@@ -822,42 +1033,56 @@ async fn dissect5(cx: &Cx, input: Input) -> Result<()> {
         }
         cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.push(node).await;
-        if b.kind == 4 {
-            encrypted = true;
-            break;
+        if b.kind == 4 && key.is_none() {
+            // Everything after is encrypted: listed when expanded, with
+            // the password.
+            let rest = file.tail(cur.pos());
+            let node = Node::new("Encrypted headers").span(rest);
+            cx.emit(match b.crypt {
+                Some(c) => node.lazy(
+                    crate::expander!(self::encrypted5: (Input, u64, Crypt5)),
+                    (input, cur.pos(), c),
+                ),
+                None => node.diag(Diagnostic::unsupported("encryption version")),
+            });
+            cx.annotate("RAR archive (v5), encrypted headers");
+            return Ok(());
         }
         if b.kind == 5 {
             break;
         }
     }
-    if encrypted {
-        cx.emit(
-            Node::new("Encrypted headers")
-                .span(file.tail(cur.pos()))
-                .diag(Diagnostic::unsupported("encrypted archive headers")),
-        );
-        cx.annotate("RAR archive (v5), encrypted headers");
-        return Ok(());
-    }
     if !cur.at_end() {
         cx.emit(Node::new("Trailing data").span(file.tail(cur.pos())));
     }
-    cx.annotate(format!(
-        "RAR archive (v5), {}{}, {} uncompressed",
-        if solid { "solid, " } else { "" },
-        count(files, "file", "files"),
-        fmt::size(total)
-    ));
+    if key.is_none() {
+        cx.annotate(format!(
+            "RAR archive (v5), {}{}, {} uncompressed",
+            if solid { "solid, " } else { "" },
+            count(files, "file", "files"),
+            fmt::size(total)
+        ));
+    }
     Ok(())
 }
 
-async fn block5(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
-    let head = cx.read_avail(span.sub(0, 7)).await?;
-    let (size, vlen) = crate::bytes::uleb128(head.get(4..).unwrap_or_default())
-        .ok_or_else(|| Diagnostic::malformed("bad header size").at(span))?;
-    let header_len = 4u64.saturating_add(to_u64(vlen)).saturating_add(size);
-    let header_span = span.sub(0, header_len);
+/// Expander: the blocks after an archive encryption header, once the
+/// password is known.
+async fn encrypted5(cx: Cx, (input, pos, c): (Input, u64, Crypt5)) -> Result<()> {
+    match rar5_keys(&cx, input.span, &c).await {
+        Some(keys) => list5(&cx, input, pos, Some(keys)).await,
+        None => Err(Diagnostic::unsupported(
+            "encrypted archive headers (no password, or a wrong one)",
+        )),
+    }
+}
+
+async fn block5(
+    cx: Cx,
+    (input, span, header_span, file_len): (Input, Span, Span, u64),
+) -> Result<()> {
     let header = cx.read(header_span).await?;
+    let header_len = to_u64(header.len());
     let mut r = ByteReader::new(&header, header_span);
     let bad = || Diagnostic::malformed("truncated header").at(header_span);
     let stored = r.u32("Header CRC32", LE).ok_or_else(bad)?;
@@ -893,10 +1118,7 @@ async fn block5(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         }
         2 | 3 => fields = Some(file_fields(&mut r).ok_or_else(bad)?),
         4 => {
-            r.vint("Encryption version").ok_or_else(bad)?;
-            r.vint("Encryption flags").ok_or_else(bad)?;
-            r.u8("KDF count").ok_or_else(bad)?;
-            r.bytes("Salt", 16).ok_or_else(bad)?;
+            header_crypt5(&mut r);
         }
         5 => {
             let f = r.vint("End of archive flags").ok_or_else(bad)?;
@@ -911,12 +1133,14 @@ async fn block5(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         _ => {}
     }
     let extra_at = to_usize(header_len.saturating_sub(c.extra));
-    let mut encrypted = false;
+    let mut encryption = Encryption::None;
     if c.extra > 0 && extra_at >= r.at {
         let extra = header.get(extra_at..).unwrap_or_default();
         let extra_span = header_span.sub(to_u64(extra_at), c.extra);
         let records = extra_records(extra, extra_span, c.kind == 1);
-        encrypted = records.iter().any(|(t, _)| *t == 1) && c.kind != 1;
+        if c.kind != 1 {
+            encryption = encryption5(extra);
+        }
         let nodes: Vec<Node> = records.into_iter().map(|(_, n)| n).collect();
         r.at = to_usize(header_len);
         r.push(
@@ -932,19 +1156,19 @@ async fn block5(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             .lazy(emit_nodes, r.into_nodes()),
     );
     if c.flags & 0x02 != 0 {
-        let data = span.sub(header_len, c.data);
+        let data = span.sub(file_len, c.data);
         let part = fields
             .as_ref()
-            .and_then(|f| part5(span, header_len, &c, f, encrypted))
+            .and_then(|f| part5(span, file_len, &c, f, encryption))
             .map(|p| Part {
                 // Service data (comments, ...) is never part of a solid run.
                 solid: p.solid && c.kind == 2,
                 ..p
             });
         let node = match &fields {
-            _ if encrypted => Node::new("Encrypted data")
+            _ if encryption == Encryption::Unsupported => Node::new("Encrypted data")
                 .span(data)
-                .diag(Diagnostic::unsupported("encrypted file")),
+                .diag(Diagnostic::unsupported("encryption version or record")),
             _ if c.flags & 0x18 != 0 => Node::new("Data (split across volumes)")
                 .span(data)
                 .diag(Diagnostic::unsupported("multi-volume member")),
@@ -997,6 +1221,8 @@ fn extra_records(data: &[u8], span: Span, main: bool) -> Vec<(u64, Node)> {
         } else if !main && kind == 2 {
             r.vint("Hash type");
             r.bytes("BLAKE2sp hash", 32);
+        } else if !main && kind == 1 {
+            crypt_record(&mut r);
         } else if r.remaining() > 0 {
             r.bytes("Data", to_u64(r.remaining()));
         }
@@ -1011,6 +1237,35 @@ fn extra_records(data: &[u8], span: Span, main: bool) -> Vec<(u64, Node)> {
         at = end;
     }
     out
+}
+
+const CRYPT_FLAGS5: FlagTable = &[
+    flag(0x01, "PASSWORD_CHECK"),
+    flag(0x02, "TWEAKED_CHECKSUMS"),
+];
+
+/// The fields of a file encryption record.
+fn crypt_record(r: &mut ByteReader<'_>) -> Option<()> {
+    let version = r.vint("Encryption version")?;
+    r.with(|n| n.summary(if version == 0 { "AES-256" } else { "unknown" }));
+    let flags = r.vint("Encryption flags")?;
+    r.with(|n| {
+        let (set, unknown) = crate::value::decode_flags(CRYPT_FLAGS5, flags);
+        n.value(Value::Flags {
+            raw: flags,
+            bits: 64,
+            set,
+            unknown,
+        })
+    });
+    let kdf = r.u8("KDF count")?;
+    r.with(|n| n.summary(format!("2^{kdf} PBKDF2 iterations")));
+    r.bytes("Salt", 16)?;
+    r.bytes("IV", 16)?;
+    if flags & 0x01 != 0 {
+        r.bytes("Password check value", 12)?;
+    }
+    Some(())
 }
 
 fn time_record(r: &mut ByteReader<'_>) -> Option<()> {
@@ -1076,14 +1331,24 @@ async fn walk_parts(cx: &Cx, input: Input, rar5: bool) -> Result<Vec<Part>> {
     let mut parts = Vec::new();
     if rar5 {
         cur.seek(8);
+        let mut key = None;
         while cur.remaining() >= 6 {
-            let b = next_block5(cx, &mut cur).await?;
+            let b = next_block5(cx, &mut cur, key.as_deref()).await?;
             if b.kind == 2
                 && let Some(p) = b.part
             {
                 parts.push(p);
             }
-            if b.kind == 4 || b.kind == 5 {
+            if b.kind == 4 && key.is_none() {
+                match b.crypt {
+                    Some(c) => key = rar5_keys(cx, input.span, &c).await,
+                    None => break,
+                }
+                if key.is_none() {
+                    break;
+                }
+            }
+            if b.kind == 5 {
                 break;
             }
             cx.checkpoint().await;
@@ -1145,7 +1410,7 @@ struct RunStream {
 }
 
 /// The decoded output of a run of files, and where file `index` starts in it.
-async fn group_stream(cx: &Cx, parts: &[Part], index: usize) -> Result<(Span, u64)> {
+async fn group_stream(cx: &Cx, parts: &[Part], index: usize, realm: Span) -> Result<(Span, u64)> {
     let (Some(first), Some(last)) = (parts.first(), parts.last()) else {
         return Err(Diagnostic::malformed("empty solid run"));
     };
@@ -1158,7 +1423,7 @@ async fn group_stream(cx: &Cx, parts: &[Part], index: usize) -> Result<(Span, u6
     let run = match cx.cached::<RunStream>(parent, "rar run stream") {
         Some(run) => run,
         None => {
-            let run = Arc::new(run_stream(cx, parts, parent).await?);
+            let run = Arc::new(run_stream(cx, parts, parent, realm).await?);
             cx.cache(parent, "rar run stream", run.clone());
             run
         }
@@ -1166,7 +1431,8 @@ async fn group_stream(cx: &Cx, parts: &[Part], index: usize) -> Result<(Span, u6
     Ok((run.stream, run.offsets.get(index).copied().unwrap_or(0)))
 }
 
-async fn run_stream(cx: &Cx, parts: &[Part], parent: Span) -> Result<RunStream> {
+/// `realm` is the archive, which encrypted files ask the password for.
+async fn run_stream(cx: &Cx, parts: &[Part], parent: Span, realm: Span) -> Result<RunStream> {
     let Some(first) = parts.first() else {
         return Err(Diagnostic::malformed("empty solid run"));
     };
@@ -1181,7 +1447,15 @@ async fn run_stream(cx: &Cx, parts: &[Part], parent: Span) -> Result<RunStream> 
             cx.checkpoint().await;
         }
         offsets.push(total);
-        pieces.push(p.data);
+        pieces.push(match p.crypt {
+            None => p.data,
+            Some(c) => {
+                let keys = rar5_keys(cx, realm, &c).await.ok_or_else(|| {
+                    Diagnostic::unsupported("encrypted file (no password, or a wrong one)")
+                })?;
+                decrypt5(cx, p.data, &c, &keys)?
+            }
+        });
         members.push(Member {
             packed: p.data.len,
             unpacked: p.unpacked,
@@ -1194,7 +1468,7 @@ async fn run_stream(cx: &Cx, parts: &[Part], parent: Span) -> Result<RunStream> 
         dict = dict.max(p.dict);
     }
     let data = if parts.len() == 1 {
-        first.data
+        pieces.first().copied().unwrap_or(first.data)
     } else {
         cx.add_pieces_stepped(
             Origin {
@@ -1219,7 +1493,32 @@ async fn run_stream(cx: &Cx, parts: &[Part], parent: Span) -> Result<RunStream> 
 /// Expander: a file's content (decoded with the files of its solid run),
 /// its CRC32 checked, dissected.
 async fn content(cx: Cx, (input, part): (Input, Part)) -> Result<()> {
+    // An encrypted file: decrypt its data first (and every file of its
+    // solid run, see `run_stream`).
+    let mut hash_key = None;
+    let encrypted = part.crypt.is_some();
+    let part =
+        match part.crypt {
+            None => part,
+            Some(c) => match rar5_keys(&cx, input.span, &c).await {
+                Some(keys) => {
+                    hash_key = c.tweaked.then(|| keys.hash_key.clone());
+                    Part {
+                        data: decrypt5(&cx, part.data, &c, &keys)?,
+                        crypt: None,
+                        ..part
+                    }
+                }
+                None => {
+                    cx.emit(Node::new("Encrypted data").span(part.data).diag(
+                        Diagnostic::unsupported("encrypted file (no password, or a wrong one)"),
+                    ));
+                    return Ok(());
+                }
+            },
+        };
     let span = match part.how {
+        How::Stored if encrypted => part.data.sub(0, part.unpacked),
         How::Stored => part.data,
         How::Lz(_) => {
             let g;
@@ -1232,7 +1531,7 @@ async fn content(cx: Cx, (input, part): (Input, Part)) -> Result<()> {
             } else {
                 (&single, 0)
             };
-            let (stream, offset) = group_stream(&cx, run, index).await?;
+            let (stream, offset) = group_stream(&cx, run, index, input.span).await?;
 
             if run.len() > 1 {
                 cx.emit(Node::new("Solid run").span(stream).summary(format!(
@@ -1251,6 +1550,11 @@ async fn content(cx: Cx, (input, part): (Input, Part)) -> Result<()> {
         && span.len <= CRC_LIMIT
     {
         let (got, len) = crc_of(&cx, span).await?;
+        // With tweaked checksums the header holds a MAC of the CRC32.
+        let got = match &hash_key {
+            Some(k) => tweak_crc5(k, got),
+            None => got,
+        };
         let node = Node::new("CRC32").value(hex(got, 64));
         cx.emit(if len < part.unpacked {
             node.diag(Diagnostic::malformed(format!(
@@ -1266,6 +1570,168 @@ async fn content(cx: Cx, (input, part): (Input, Part)) -> Result<()> {
         });
     }
     dissect_or_data(cx, input.nested(span)).await
+}
+
+/// The keys PBKDF2 derives for a RAR 5 password and salt.
+struct Keys5 {
+    key: Vec<u8>,
+    hash_key: Vec<u8>,
+}
+
+/// PBKDF2-HMAC-SHA256 as RAR 5 runs it: one output block, whose running
+/// value after 2^kdf iterations is the AES key, after 16 more the key of
+/// the tweaked checksums, and after 16 more the value folded into the
+/// password check. One unit of work is one HMAC.
+struct Kdf5 {
+    prf: crate::codec::crypto::Hmac<crate::codec::crypto::Sha256>,
+    salt: [u8; 16],
+    count: u32,
+    round: u32,
+    u: Vec<u8>,
+    t: Vec<u8>,
+    key: Vec<u8>,
+    hash_key: Vec<u8>,
+    check: Vec<u8>,
+}
+
+impl Kdf5 {
+    fn new(password: &[u8], c: &Crypt5) -> Self {
+        Kdf5 {
+            prf: crate::codec::crypto::Hmac::new(password),
+            salt: c.salt,
+            count: 1u32 << c.kdf.min(MAX_KDF5),
+            round: 0,
+            u: Vec::new(),
+            t: Vec::new(),
+            key: Vec::new(),
+            hash_key: Vec::new(),
+            check: Vec::new(),
+        }
+    }
+
+    /// The 8-byte password check value: the last value folded by XOR.
+    fn password_check(&self) -> [u8; 8] {
+        let mut out = [0u8; 8];
+        for (i, b) in self.check.iter().enumerate() {
+            if let Some(o) = out.get_mut(i % 8) {
+                *o ^= b;
+            }
+        }
+        out
+    }
+}
+
+impl crate::codec::crypto::Stepped for Kdf5 {
+    fn done(&self) -> bool {
+        !self.check.is_empty()
+    }
+
+    fn advance(&mut self, units: u32) -> u32 {
+        let mut used = 0u32;
+        while used < units.max(1) && !self.done() {
+            let mut mac = self.prf.clone();
+            if self.round == 0 {
+                mac.update(&self.salt);
+                mac.update(&1u32.to_be_bytes());
+                self.u = mac.finish();
+                self.t.clone_from(&self.u);
+            } else {
+                mac.update(&self.u);
+                self.u = mac.finish();
+                for (x, y) in self.t.iter_mut().zip(&self.u) {
+                    *x ^= y;
+                }
+            }
+            used = used.saturating_add(1);
+            self.round = self.round.saturating_add(1);
+            if self.round == self.count {
+                self.key.clone_from(&self.t);
+            } else if self.round == self.count.saturating_add(16) {
+                self.hash_key.clone_from(&self.t);
+            } else if self.round == self.count.saturating_add(32) {
+                self.check.clone_from(&self.t);
+            }
+        }
+        used
+    }
+}
+
+/// Derived keys already verified, by salt and KDF count (a RAR archive
+/// usually reuses one salt for all its files).
+type KeyCache = std::sync::Mutex<Vec<([u8; 16], u8, Arc<Keys5>)>>;
+
+/// The keys for an encrypted RAR 5 file: asks for the archive's password
+/// (realm: the archive) and derives in budgeted steps until the password
+/// check value matches. `None` if declined or every attempt failed.
+async fn rar5_keys(cx: &Cx, realm: Span, c: &Crypt5) -> Option<Arc<Keys5>> {
+    use crate::secret::{MAX_ATTEMPTS, SecretRequest};
+    const PROMPT: &str = "Password for the encrypted RAR files";
+    let cache = match cx.cached::<KeyCache>(realm, "rar5 keys") {
+        Some(cache) => cache,
+        None => {
+            let cache = Arc::new(KeyCache::default());
+            cx.cache(realm, "rar5 keys", cache.clone());
+            cache
+        }
+    };
+    if let Ok(found) = cache.lock()
+        && let Some((_, _, keys)) = found.iter().find(|(s, k, _)| *s == c.salt && *k == c.kdf)
+    {
+        return Some(keys.clone());
+    }
+    // A damaged check value (its checksum fails) cannot tell passwords
+    // apart; decrypt with the first answer then.
+    let check = c.check.filter(|v| {
+        let (value, sum) = v.split_at(8);
+        <crate::codec::crypto::Sha256 as crate::codec::crypto::Hash>::digest(value).get(..4)
+            == Some(sum)
+    });
+    for attempt in 0..MAX_ATTEMPTS {
+        let secret = cx
+            .secret(SecretRequest::password(realm, PROMPT, attempt))
+            .await?;
+        let mut kdf = Kdf5::new(secret.expose(), c);
+        crate::codec::crypto::run(cx, &mut kdf).await;
+        if let Some(v) = check
+            && v.get(..8) != Some(&kdf.password_check()[..])
+        {
+            continue;
+        }
+        let keys = Arc::new(Keys5 {
+            key: kdf.key,
+            hash_key: kdf.hash_key,
+        });
+        if let Ok(mut found) = cache.lock() {
+            found.push((c.salt, c.kdf, keys.clone()));
+        }
+        return Some(keys);
+    }
+    None
+}
+
+/// The plaintext of an encrypted file's data (all of its blocks; the
+/// packed size is rounded up to a block, and the file's sizes say how
+/// much of it counts).
+fn decrypt5(cx: &Cx, data: Span, c: &Crypt5, keys: &Keys5) -> Result<Span> {
+    let mut key = keys.key.clone();
+    key.extend_from_slice(&c.iv);
+    let codec = Codec::AesCbcRaw(crate::codec::crypto::Key::new(key));
+    cx.decode_lazy(data, &codec, data.len & !15)
+}
+
+/// A CRC32 as RAR 5 stores it with tweaked checksums: HMAC-SHA256 of its
+/// little-endian bytes keyed by the password-derived hash key, folded to
+/// 32 bits by XOR.
+fn tweak_crc5(hash_key: &[u8], crc: u32) -> u32 {
+    let mac =
+        crate::codec::crypto::hmac::<crate::codec::crypto::Sha256>(hash_key, &crc.to_le_bytes());
+    let mut out = [0u8; 4];
+    for (i, b) in mac.iter().enumerate() {
+        if let Some(o) = out.get_mut(i % 4) {
+            *o ^= b;
+        }
+    }
+    u32::from_le_bytes(out)
 }
 
 /// CRC32 and length of what `span` holds.
