@@ -12,6 +12,7 @@
 //! symbols, fixups and signatures are decoded only when expanded.
 
 pub mod codesign;
+mod debug;
 pub mod dyld_cache;
 pub mod fat;
 mod linkedit;
@@ -235,6 +236,10 @@ impl MachInfo {
 
     fn bits(&self) -> u8 {
         if self.wide { 64 } else { 32 }
+    }
+
+    fn arch(&self) -> crate::formats::executable::dwarf::Arch {
+        crate::formats::executable::dwarf::Arch::from_macho(self.header.cputype)
     }
 
     fn nlist_size(&self) -> u64 {

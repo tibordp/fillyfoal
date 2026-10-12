@@ -1164,7 +1164,23 @@ async fn section_node(cx: Cx, (pe, index): (Pe, usize)) -> Result<()> {
             wanted
         };
         let data = pe.file().sub(section.raw_pointer.into(), used);
-        let mut node = Node::new("Raw Data").span(data);
+        let debug = super::coff_debug::is_debug(&section.name).then(|| {
+            super::coff_debug::shared(&cx, pe.file(), true, || super::coff_debug::CoffDebug {
+                file: pe.file(),
+                machine: pe.machine,
+                wide: pe.wide,
+                sections: pe.sections.clone(),
+                image: true,
+                image_base: pe.image_base,
+                symbols: pe.file().sub(0, 0),
+                record: 18,
+            })
+        });
+        // A DWARF section (MinGW) is decoded in place of its raw bytes.
+        let mut node = match debug.and_then(|d| super::coff_debug::node(&d, index)) {
+            Some(node) => node,
+            None => Node::new("Raw Data").span(data),
+        };
         if !inside.is_empty() {
             node = node.summary(format!("holds {}", inside.join(", ")));
         }

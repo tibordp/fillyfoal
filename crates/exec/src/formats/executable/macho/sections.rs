@@ -35,6 +35,9 @@ enum Content {
     Relative(u8),
     UnwindInfo,
     EhFrame,
+    /// A `__DWARF` section the `dwarf` module decodes.
+    Dwarf,
+    DebugFrame,
     CompactUnwind,
     AddrSig,
     Plist,
@@ -61,6 +64,12 @@ fn content(s: &SectionInfo) -> Content {
         S_INIT_FUNC_OFFSETS => return Content::InitOffsets,
         S_THREAD_LOCAL_VARIABLES => return Content::ThreadVars,
         _ => {}
+    }
+    if super::debug::dwarf_sec(&s.segname, &s.sectname).is_some() {
+        return Content::Dwarf;
+    }
+    if s.segname == "__DWARF" && s.sectname == "__debug_frame" {
+        return Content::DebugFrame;
     }
     match s.sectname.as_str() {
         "__objc_classlist" | "__objc_nlclslist" | "__objc_catlist" | "__objc_nlcatlist"
@@ -121,6 +130,8 @@ pub(super) fn section_node(m: &Macho, index: usize) -> Node {
         Content::ObjcImageInfo => node.lazy(objc_image_info, state),
         Content::UnwindInfo => node.lazy(super::unwind::unwind_info, state),
         Content::EhFrame => node.lazy(super::unwind::eh_frame, state),
+        Content::Dwarf => node.lazy(super::debug::section, state),
+        Content::DebugFrame => node.lazy(super::debug::debug_frame, state),
         Content::CompactUnwind => node.lazy(super::unwind::compact_unwind, state),
         Content::AddrSig => node.lazy(addrsig, state),
         Content::Plist => {

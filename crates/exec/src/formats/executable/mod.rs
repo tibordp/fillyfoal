@@ -4,6 +4,7 @@
 
 pub mod aout;
 pub mod coff;
+mod coff_debug;
 pub mod dcu;
 pub(crate) mod dwarf;
 pub(crate) mod eh_frame;

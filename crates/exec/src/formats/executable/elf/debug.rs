@@ -12,7 +12,9 @@ use super::{Elf, Section};
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::formats::Codec;
-use crate::formats::executable::dwarf::{Dwarf, Reloc, Sec, Section as DwarfSection, uint_of};
+use crate::formats::executable::dwarf::{
+    Arch, Dwarf, Reloc, Sec, Section as DwarfSection, uint_of,
+};
 use crate::span::Span;
 
 /// Relocations read per window.
@@ -50,6 +52,7 @@ pub(super) async fn dwarf(cx: &Cx, elf: &Elf) -> Arc<Dwarf> {
         endian: elf.endian(),
         address_size: if elf.class.wide { 8 } else { 4 },
         unrelocated: elf.header.kind == ET_REL,
+        arch: Arch::from_elf(elf.header.machine),
         sections,
         file: elf.file(),
     });

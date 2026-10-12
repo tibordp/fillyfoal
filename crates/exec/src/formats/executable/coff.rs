@@ -724,29 +724,29 @@ const SCN_LNK_NRELOC_OVFL: u32 = 0x0100_0000;
 
 /// A section's relocation table.
 #[derive(Clone, Copy, Debug)]
-struct Relocs {
-    span: Span,
+pub(super) struct Relocs {
+    pub span: Span,
     /// Relocations, not counting the count record.
-    count: u64,
+    pub count: u64,
     /// The first record holds the count (`SCN_LNK_NRELOC_OVFL`).
-    overflow: bool,
+    pub overflow: bool,
 }
 
 /// Where a section's relocations are and how many there are, reading the
 /// extended count when NumberOfRelocations overflowed.
-async fn relocs(cx: &Cx, c: &CoffInfo, s: &Section) -> Result<Relocs> {
+pub(super) async fn relocs(cx: &Cx, file: Span, s: &Section) -> Result<Relocs> {
     let at = u64::from(s.reloc_pointer);
     if s.nreloc == 0xffff && s.characteristics & SCN_LNK_NRELOC_OVFL != 0 {
-        let first = cx.read(c.file.sub_exact(at, 10)?).await?;
+        let first = cx.read(file.sub_exact(at, 10)?).await?;
         let total = u64::from(u32_le(&first, 0).unwrap_or(0));
         return Ok(Relocs {
-            span: c.file.sub(at, total.saturating_mul(10)),
+            span: file.sub(at, total.saturating_mul(10)),
             count: total.saturating_sub(1),
             overflow: true,
         });
     }
     Ok(Relocs {
-        span: c.file.sub(at, u64::from(s.nreloc).saturating_mul(10)),
+        span: file.sub(at, u64::from(s.nreloc).saturating_mul(10)),
         count: s.nreloc.into(),
         overflow: false,
     })
@@ -755,7 +755,7 @@ async fn relocs(cx: &Cx, c: &CoffInfo, s: &Section) -> Result<Relocs> {
 async fn section_list(cx: Cx, c: Coff) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(c.sections.len())));
     for (i, s) in c.sections.iter().enumerate() {
-        let nreloc = match relocs(&cx, &c, s).await {
+        let nreloc = match relocs(&cx, c.file, s).await {
             Ok(r) => r.count,
             Err(_) => s.nreloc.into(),
         };
@@ -793,11 +793,29 @@ async fn section_node(cx: Cx, (c, index): (Coff, usize)) -> Result<()> {
         .ok_or_else(|| Diagnostic::internal("section index out of range"))?;
     let block = cx.block(s.header).await?;
     section_header(&mut Fields::emitting(&cx, &block, LE), &c.section_context())?;
-    if let Some(data) = s.data(c.file, 0) {
+    let debug = super::coff_debug::is_debug(&s.name).then(|| {
+        super::coff_debug::shared(&cx, c.file, false, || super::coff_debug::CoffDebug {
+            file: c.file,
+            machine: c.machine,
+            // An object's machine says how wide its addresses are.
+            wide: matches!(
+                c.machine,
+                0x8664 | 0xaa64 | 0xa641 | 0xa64e | 0x5064 | 0x200
+            ),
+            sections: c.sections.clone(),
+            image: false,
+            image_base: 0,
+            symbols: c.symbols,
+            record: c.record(),
+        })
+    });
+    if let Some(node) = debug.and_then(|d| super::coff_debug::node(&d, index)) {
+        cx.emit(node);
+    } else if let Some(data) = s.data(c.file, 0) {
         cx.emit(data_node("Raw Data", data, s.raw_size.into()));
     }
     if s.nreloc > 0 {
-        match relocs(&cx, &c, s).await {
+        match relocs(&cx, c.file, s).await {
             Ok(r) => cx.emit(
                 Node::new("Relocations")
                     .span(r.span)

@@ -219,7 +219,15 @@ expression: "common::explore(&display_name(&path), &data)"
         NumberOfRelocations: 0  [0x2c0+0x2]
         NumberOfLinenumbers: 0  [0x2c2+0x2]
         Characteristics: 0x42000040 [CNT_INITIALIZED_DATA | MEM_DISCARDABLE | MEM_READ]  [0x2c4+0x4]
-        Raw Data  [0x1400+0x30]
+      ▾ Address Ranges  [0x1400+0x30]
+        ▾ Set at 0x0 — CU at 0x0  [0x1400+0x30]
+            unit_length: 0x2c  [0x1400+0x4]
+            version: 2  [0x1404+0x2]
+            debug_info_offset: 0x0  [0x1406+0x4] → 0x1600+0x0
+            address_size: 8  [0x140a+0x1]
+            segment_selector_size: 0  [0x140b+0x1]
+            Range: 0x140001000 — 0x140001000..0x14000103b  [0x1410+0x10]
+            Terminator: 0x0  [0x1420+0x10]
         Alignment Padding — 464 bytes  [0x1430+0x1d0]
     ▾ .debug_info — r--  VA 0x9000+0x21a, file 0x1600+0x400, data  [0x2c8+0x28]
         Name: ".debug_info"  [0x2c8+0x8]
@@ -232,7 +240,165 @@ expression: "common::explore(&display_name(&path), &data)"
         NumberOfRelocations: 0  [0x2e8+0x2]
         NumberOfLinenumbers: 0  [0x2ea+0x2]
         Characteristics: 0x42000040 [CNT_INITIALIZED_DATA | MEM_DISCARDABLE | MEM_READ]  [0x2ec+0x4]
-        Raw Data  [0x1600+0x21a]
+      ▾ Debug Information  [0x1600+0x21a]
+        ▾ Compile unit at 0x0: "fillymingw.c" — DWARF 5, 0x21a bytes  [0x1600+0x21a]
+          ▾ Header — DWARF 5, 32-bit, address size 8  [0x1600+0xc]
+              unit_length: 0x216  [0x1600+0x4]
+              version: 5  [0x1604+0x2]
+              unit_type: DW_UT_compile (0x1)  [0x1606+0x1]
+              address_size: 8  [0x1607+0x1]
+              debug_abbrev_offset: 0x0  [0x1608+0x4]
+          ▾ DW_TAG_compile_unit: "fillymingw.c" — 0x0000000c  [0x160c+0x62]
+              DW_AT_producer: "GNU C17 14-win32 -mtune=generic -march=x86-64 -g -O1 -ffreestanding" — DW_FORM_string  [0x160d+0x44]
+              DW_AT_language: DW_LANG_C11 (0x1d) — DW_FORM_data1  [0x1651+0x1]
+              DW_AT_name: "fillymingw.c" — DW_FORM_line_strp at 0x2  [0x1652+0x4]
+              DW_AT_comp_dir: "." — DW_FORM_line_strp at 0x0  [0x1656+0x4]
+              DW_AT_low_pc: 0x140001000 — DW_FORM_addr  [0x165a+0x8]
+              DW_AT_high_pc: 0x3b — DW_FORM_data8, ends at 0x14000103b  [0x1662+0x8]
+              DW_AT_stmt_list: 0x0 — DW_FORM_sec_offset  [0x166a+0x4] → 0x1c00+0x0
+            ▾ DW_TAG_variable: "filly_counter" — 0x0000006e  [0x166e+0x20]
+                DW_AT_name: "filly_counter" — DW_FORM_string  [0x166f+0xe]
+                DW_AT_decl_file: 0x1 — DW_FORM_data1  [0x167d+0x1]
+                DW_AT_decl_line: 0x4 — DW_FORM_data1  [0x167e+0x1]
+                DW_AT_decl_column: 0x5 — DW_FORM_data1  [0x167f+0x1]
+                DW_AT_type: 0x8e — DW_FORM_ref4, DW_TAG_base_type "int"  [0x1680+0x4] → 0x168e+0x0
+                DW_AT_external: true — DW_FORM_flag_present  [0x1684+0x0]
+                DW_AT_location: "DW_OP_addr 0x140002000" — DW_FORM_exprloc, 9 bytes  [0x1684+0xa]
+            ▾ DW_TAG_base_type: "int" — 0x0000008e  [0x168e+0x7]
+                DW_AT_byte_size: 0x4 — DW_FORM_data1  [0x168f+0x1]
+                DW_AT_encoding: DW_ATE_signed (0x5) — DW_FORM_data1  [0x1690+0x1]
+                DW_AT_name: "int" — DW_FORM_string  [0x1691+0x4]
+            ▾ DW_TAG_array_type — 0x00000095  [0x1695+0x9]
+                DW_AT_type: 0xcc — DW_FORM_ref4, DW_TAG_const_type  [0x1696+0x4] → 0x16cc+0x0
+                DW_AT_sibling: 0xa5 — DW_FORM_ref4  [0x169a+0x4] → 0x16a5+0x0
+              ▾ DW_TAG_subrange_type — 0x0000009e  [0x169e+0x6]
+                  DW_AT_type: 0xaa — DW_FORM_ref4, DW_TAG_base_type "long long unsigned int"  [0x169f+0x4] → 0x16aa+0x0
+                  DW_AT_upper_bound: 0x9 — DW_FORM_data1  [0x16a3+0x1]
+                NULL — 0x000000a4  [0x16a4+0x1]
+            ▾ DW_TAG_const_type — 0x000000a5  [0x16a5+0x5]
+                DW_AT_type: 0x95 — DW_FORM_ref4, DW_TAG_array_type  [0x16a6+0x4] → 0x1695+0x0
+            ▾ DW_TAG_base_type: "long long unsigned int" — 0x000000aa  [0x16aa+0x1a]
+                DW_AT_byte_size: 0x8 — DW_FORM_data1  [0x16ab+0x1]
+                DW_AT_encoding: DW_ATE_unsigned (0x7) — DW_FORM_data1  [0x16ac+0x1]
+                DW_AT_name: "long long unsigned int" — DW_FORM_string  [0x16ad+0x17]
+            ▾ DW_TAG_base_type: "char" — 0x000000c4  [0x16c4+0x8]
+                DW_AT_byte_size: 0x1 — DW_FORM_data1  [0x16c5+0x1]
+                DW_AT_encoding: DW_ATE_signed_char (0x6) — DW_FORM_data1  [0x16c6+0x1]
+                DW_AT_name: "char" — DW_FORM_string  [0x16c7+0x5]
+            ▾ DW_TAG_const_type — 0x000000cc  [0x16cc+0x5]
+                DW_AT_type: 0xc4 — DW_FORM_ref4, DW_TAG_base_type "char"  [0x16cd+0x4] → 0x16c4+0x0
+            ▾ DW_TAG_variable: "filly_greeting" — 0x000000d1  [0x16d1+0x21]
+                DW_AT_name: "filly_greeting" — DW_FORM_string  [0x16d2+0xf]
+                DW_AT_decl_file: 0x1 — DW_FORM_data1  [0x16e1+0x1]
+                DW_AT_decl_line: 0x5 — DW_FORM_data1  [0x16e2+0x1]
+                DW_AT_decl_column: 0x13 — DW_FORM_data1  [0x16e3+0x1]
+                DW_AT_type: 0xa5 — DW_FORM_ref4, DW_TAG_const_type  [0x16e4+0x4] → 0x16a5+0x0
+                DW_AT_location: "DW_OP_addr 0x140003000" — DW_FORM_exprloc, 9 bytes  [0x16e8+0xa]
+            ▾ DW_TAG_subprogram: "filly_start" — 0x000000f2  [0x16f2+0x2a]
+                DW_AT_external: true — DW_FORM_flag_present  [0x16f3+0x0]
+                DW_AT_name: "filly_start" — DW_FORM_string  [0x16f3+0xc]
+                DW_AT_decl_file: 0x1 — DW_FORM_data1  [0x16ff+0x1]
+                DW_AT_decl_line: 0xb — DW_FORM_data1  [0x1700+0x1]
+                DW_AT_decl_column: 0x5 — DW_FORM_data1  [0x1701+0x1]
+                DW_AT_prototyped: true — DW_FORM_flag_present  [0x1702+0x0]
+                DW_AT_type: 0x8e — DW_FORM_ref4, DW_TAG_base_type "int"  [0x1702+0x4] → 0x168e+0x0
+                DW_AT_low_pc: 0x140001009 — DW_FORM_addr  [0x1706+0x8]
+                DW_AT_high_pc: 0x32 — DW_FORM_data8, ends at 0x14000103b  [0x170e+0x8]
+                DW_AT_frame_base: "DW_OP_call_frame_cfa" — DW_FORM_exprloc, 1 bytes  [0x1716+0x2]
+                DW_AT_call_all_calls: true — DW_FORM_flag_present  [0x1718+0x0]
+                DW_AT_sibling: 0x19a — DW_FORM_ref4  [0x1718+0x4] → 0x179a+0x0
+              ▾ DW_TAG_variable: "sum" — 0x0000011c  [0x171c+0x13]
+                  DW_AT_name: "sum" — DW_FORM_string  [0x171d+0x4]
+                  DW_AT_decl_file: 1 — DW_FORM_implicit_const  [0x1721+0x0]
+                  DW_AT_decl_line: 0xc — DW_FORM_data1  [0x1721+0x1]
+                  DW_AT_decl_column: 0x9 — DW_FORM_data1  [0x1722+0x1]
+                  DW_AT_type: 0x8e — DW_FORM_ref4, DW_TAG_base_type "int"  [0x1723+0x4] → 0x168e+0x0
+                  DW_AT_location: 0x10 — DW_FORM_sec_offset  [0x1727+0x4] → 0x2210+0x0
+                  DW_AT_GNU_locviews: 0xc — DW_FORM_sec_offset  [0x172b+0x4]
+              ▾ DW_TAG_lexical_block — 0x0000012f  [0x172f+0x9]
+                  DW_AT_ranges: 0xc — DW_FORM_sec_offset  [0x1730+0x4] → 0x240c+0x0
+                  DW_AT_sibling: 0x14a — DW_FORM_ref4  [0x1734+0x4] → 0x174a+0x0
+                ▾ DW_TAG_variable: "i" — 0x00000138  [0x1738+0x11]
+                    DW_AT_name: "i" — DW_FORM_string  [0x1739+0x2]
+                    DW_AT_decl_file: 1 — DW_FORM_implicit_const  [0x173b+0x0]
+                    DW_AT_decl_line: 0xd — DW_FORM_data1  [0x173b+0x1]
+                    DW_AT_decl_column: 0xe — DW_FORM_data1  [0x173c+0x1]
+                    DW_AT_type: 0x8e — DW_FORM_ref4, DW_TAG_base_type "int"  [0x173d+0x4] → 0x168e+0x0
+                    DW_AT_location: 0x24 — DW_FORM_sec_offset  [0x1741+0x4] → 0x2224+0x0
+                    DW_AT_GNU_locviews: 0x1c — DW_FORM_sec_offset  [0x1745+0x4]
+                  NULL — 0x00000149  [0x1749+0x1]
+              ▾ DW_TAG_inlined_subroutine — 0x0000014a  [0x174a+0x20]
+                  DW_AT_abstract_origin: 0x19a — DW_FORM_ref4, DW_TAG_subprogram "filly_value"  [0x174b+0x4] → 0x179a+0x0
+                  DW_AT_entry_pc: 0x140001031 — DW_FORM_addr  [0x174f+0x8]
+                  DW_AT_GNU_entry_view: 0x1 — DW_FORM_data1  [0x1757+0x1]
+                  DW_AT_low_pc: 0x140001031 — DW_FORM_addr  [0x1758+0x8]
+                  DW_AT_high_pc: 0x0 — DW_FORM_data8, ends at 0x140001031  [0x1760+0x8]
+                  DW_AT_call_file: 1 — DW_FORM_implicit_const  [0x1768+0x0]
+                  DW_AT_call_line: 0xf — DW_FORM_data1  [0x1768+0x1]
+                  DW_AT_call_column: 0x12 — DW_FORM_data1  [0x1769+0x1]
+                ▾ DW_TAG_inlined_subroutine — 0x0000016a  [0x176a+0x20]
+                    DW_AT_abstract_origin: 0x1af — DW_FORM_ref4, DW_TAG_subprogram "filly_twice"  [0x176b+0x4] → 0x17af+0x0
+                    DW_AT_entry_pc: 0x140001031 — DW_FORM_addr  [0x176f+0x8]
+                    DW_AT_GNU_entry_view: 0x3 — DW_FORM_data1  [0x1777+0x1]
+                    DW_AT_low_pc: 0x140001031 — DW_FORM_addr  [0x1778+0x8]
+                    DW_AT_high_pc: 0x0 — DW_FORM_data8, ends at 0x140001031  [0x1780+0x8]
+                    DW_AT_call_file: 1 — DW_FORM_implicit_const  [0x1788+0x0]
+                    DW_AT_call_line: 0x9 — DW_FORM_data1  [0x1788+0x1]
+                    DW_AT_call_column: 0x36 — DW_FORM_data1  [0x1789+0x1]
+                  ▾ DW_TAG_formal_parameter — 0x0000018a  [0x178a+0xd]
+                      DW_AT_abstract_origin: 0x1c8 — DW_FORM_ref4, DW_TAG_formal_parameter "x"  [0x178b+0x4] → 0x17c8+0x0
+                      DW_AT_location: 0x62 — DW_FORM_sec_offset  [0x178f+0x4] → 0x2262+0x0
+                      DW_AT_GNU_locviews: 0x60 — DW_FORM_sec_offset  [0x1793+0x4]
+                    NULL — 0x00000197  [0x1797+0x1]
+                  NULL — 0x00000198  [0x1798+0x1]
+                NULL — 0x00000199  [0x1799+0x1]
+            ▾ DW_TAG_subprogram: "filly_value" — 0x0000019a  [0x179a+0x15]
+                DW_AT_external: true — DW_FORM_flag_present  [0x179b+0x0]
+                DW_AT_name: "filly_value" — DW_FORM_string  [0x179b+0xc]
+                DW_AT_decl_file: 0x1 — DW_FORM_data1  [0x17a7+0x1]
+                DW_AT_decl_line: 0x9 — DW_FORM_data1  [0x17a8+0x1]
+                DW_AT_decl_column: 0x1b — DW_FORM_data1  [0x17a9+0x1]
+                DW_AT_prototyped: true — DW_FORM_flag_present  [0x17aa+0x0]
+                DW_AT_type: 0x8e — DW_FORM_ref4, DW_TAG_base_type "int"  [0x17aa+0x4] → 0x168e+0x0
+                DW_AT_inline: DW_INL_inlined (0x1) — DW_FORM_data1  [0x17ae+0x1]
+            ▾ DW_TAG_subprogram: "filly_twice" — 0x000001af  [0x17af+0x19]
+                DW_AT_name: "filly_twice" — DW_FORM_string  [0x17b0+0xc]
+                DW_AT_decl_file: 0x1 — DW_FORM_data1  [0x17bc+0x1]
+                DW_AT_decl_line: 0x7 — DW_FORM_data1  [0x17bd+0x1]
+                DW_AT_decl_column: 0xc — DW_FORM_data1  [0x17be+0x1]
+                DW_AT_prototyped: true — DW_FORM_flag_present  [0x17bf+0x0]
+                DW_AT_type: 0x8e — DW_FORM_ref4, DW_TAG_base_type "int"  [0x17bf+0x4] → 0x168e+0x0
+                DW_AT_inline: DW_INL_inlined (0x1) — DW_FORM_data1  [0x17c3+0x1]
+                DW_AT_sibling: 0x1d3 — DW_FORM_ref4  [0x17c4+0x4] → 0x17d3+0x0
+              ▾ DW_TAG_formal_parameter: "x" — 0x000001c8  [0x17c8+0xa]
+                  DW_AT_name: "x" — DW_FORM_string  [0x17c9+0x2]
+                  DW_AT_decl_file: 0x1 — DW_FORM_data1  [0x17cb+0x1]
+                  DW_AT_decl_line: 0x7 — DW_FORM_data1  [0x17cc+0x1]
+                  DW_AT_decl_column: 0x1c — DW_FORM_data1  [0x17cd+0x1]
+                  DW_AT_type: 0x8e — DW_FORM_ref4, DW_TAG_base_type "int"  [0x17ce+0x4] → 0x168e+0x0
+                NULL — 0x000001d2  [0x17d2+0x1]
+            ▾ DW_TAG_subprogram — 0x000001d3  [0x17d3+0x17]
+                DW_AT_abstract_origin: 0x19a — DW_FORM_ref4, DW_TAG_subprogram "filly_value"  [0x17d4+0x4] → 0x179a+0x0
+                DW_AT_low_pc: 0x140001000 — DW_FORM_addr  [0x17d8+0x8]
+                DW_AT_high_pc: 0x9 — DW_FORM_data8, ends at 0x140001009  [0x17e0+0x8]
+                DW_AT_frame_base: "DW_OP_call_frame_cfa" — DW_FORM_exprloc, 1 bytes  [0x17e8+0x2]
+                DW_AT_call_all_calls: true — DW_FORM_flag_present  [0x17ea+0x0]
+              ▾ DW_TAG_inlined_subroutine — 0x000001ea  [0x17ea+0x20]
+                  DW_AT_abstract_origin: 0x1af — DW_FORM_ref4, DW_TAG_subprogram "filly_twice"  [0x17eb+0x4] → 0x17af+0x0
+                  DW_AT_entry_pc: 0x140001000 — DW_FORM_addr  [0x17ef+0x8]
+                  DW_AT_GNU_entry_view: 0x2 — DW_FORM_data1  [0x17f7+0x1]
+                  DW_AT_low_pc: 0x140001000 — DW_FORM_addr  [0x17f8+0x8]
+                  DW_AT_high_pc: 0x8 — DW_FORM_data8, ends at 0x140001008  [0x1800+0x8]
+                  DW_AT_call_file: 1 — DW_FORM_implicit_const  [0x1808+0x0]
+                  DW_AT_call_line: 0x9 — DW_FORM_data1  [0x1808+0x1]
+                  DW_AT_call_column: 0x36 — DW_FORM_data1  [0x1809+0x1]
+                ▾ DW_TAG_formal_parameter — 0x0000020a  [0x180a+0xd]
+                    DW_AT_abstract_origin: 0x1c8 — DW_FORM_ref4, DW_TAG_formal_parameter "x"  [0x180b+0x4] → 0x17c8+0x0
+                    DW_AT_location: 0x72 — DW_FORM_sec_offset  [0x180f+0x4] → 0x2272+0x0
+                    DW_AT_GNU_locviews: 0x70 — DW_FORM_sec_offset  [0x1813+0x4]
+                  NULL — 0x00000217  [0x1817+0x1]
+                NULL — 0x00000218  [0x1818+0x1]
+              NULL — 0x00000219  [0x1819+0x1]
         Alignment Padding — 486 bytes  [0x181a+0x1e6]
     ▾ .debug_abbrev — r--  VA 0xa000+0x102, file 0x1a00+0x200, data  [0x2f0+0x28]
         Name: ".debug_abbrev"  [0x2f0+0x8]
@@ -245,7 +411,110 @@ expression: "common::explore(&display_name(&path), &data)"
         NumberOfRelocations: 0  [0x310+0x2]
         NumberOfLinenumbers: 0  [0x312+0x2]
         Characteristics: 0x42000040 [CNT_INITIALIZED_DATA | MEM_DISCARDABLE | MEM_READ]  [0x314+0x4]
-        Raw Data  [0x1a00+0x102]
+      ▾ Abbreviations  [0x1a00+0x102]
+        ▾ [1]: "DW_TAG_base_type" — DW_CHILDREN_no, 3 attributes  [0x1a00+0xb]
+            DW_AT_byte_size: "DW_FORM_data1"
+            DW_AT_encoding: "DW_FORM_data1"
+            DW_AT_name: "DW_FORM_string"
+        ▾ [2]: "DW_TAG_inlined_subroutine" — DW_CHILDREN_yes, 8 attributes  [0x1a0b+0x17]
+            DW_AT_abstract_origin: "DW_FORM_ref4"
+            DW_AT_entry_pc: "DW_FORM_addr"
+            DW_AT_GNU_entry_view: "DW_FORM_data1"
+            DW_AT_low_pc: "DW_FORM_addr"
+            DW_AT_high_pc: "DW_FORM_data8"
+            DW_AT_call_file: "DW_FORM_implicit_const" — 1
+            DW_AT_call_line: "DW_FORM_data1"
+            DW_AT_call_column: "DW_FORM_data1"
+        ▾ [3]: "DW_TAG_const_type" — DW_CHILDREN_no, 1 attribute  [0x1a22+0x7]
+            DW_AT_type: "DW_FORM_ref4"
+        ▾ [4]: "DW_TAG_variable" — DW_CHILDREN_no, 7 attributes  [0x1a29+0x15]
+            DW_AT_name: "DW_FORM_string"
+            DW_AT_decl_file: "DW_FORM_implicit_const" — 1
+            DW_AT_decl_line: "DW_FORM_data1"
+            DW_AT_decl_column: "DW_FORM_data1"
+            DW_AT_type: "DW_FORM_ref4"
+            DW_AT_location: "DW_FORM_sec_offset"
+            DW_AT_GNU_locviews: "DW_FORM_sec_offset"
+        ▾ [5]: "DW_TAG_formal_parameter" — DW_CHILDREN_no, 3 attributes  [0x1a3e+0xc]
+            DW_AT_abstract_origin: "DW_FORM_ref4"
+            DW_AT_location: "DW_FORM_sec_offset"
+            DW_AT_GNU_locviews: "DW_FORM_sec_offset"
+        ▾ [6]: "DW_TAG_compile_unit" — DW_CHILDREN_yes, 7 attributes  [0x1a4a+0x13]
+            DW_AT_producer: "DW_FORM_string"
+            DW_AT_language: "DW_FORM_data1"
+            DW_AT_name: "DW_FORM_line_strp"
+            DW_AT_comp_dir: "DW_FORM_line_strp"
+            DW_AT_low_pc: "DW_FORM_addr"
+            DW_AT_high_pc: "DW_FORM_data8"
+            DW_AT_stmt_list: "DW_FORM_sec_offset"
+        ▾ [7]: "DW_TAG_variable" — DW_CHILDREN_no, 7 attributes  [0x1a5d+0x13]
+            DW_AT_name: "DW_FORM_string"
+            DW_AT_decl_file: "DW_FORM_data1"
+            DW_AT_decl_line: "DW_FORM_data1"
+            DW_AT_decl_column: "DW_FORM_data1"
+            DW_AT_type: "DW_FORM_ref4"
+            DW_AT_external: "DW_FORM_flag_present"
+            DW_AT_location: "DW_FORM_exprloc"
+        ▾ [8]: "DW_TAG_array_type" — DW_CHILDREN_yes, 2 attributes  [0x1a70+0x9]
+            DW_AT_type: "DW_FORM_ref4"
+            DW_AT_sibling: "DW_FORM_ref4"
+        ▾ [9]: "DW_TAG_subrange_type" — DW_CHILDREN_no, 2 attributes  [0x1a79+0x9]
+            DW_AT_type: "DW_FORM_ref4"
+            DW_AT_upper_bound: "DW_FORM_data1"
+        ▾ [10]: "DW_TAG_variable" — DW_CHILDREN_no, 6 attributes  [0x1a82+0x11]
+            DW_AT_name: "DW_FORM_string"
+            DW_AT_decl_file: "DW_FORM_data1"
+            DW_AT_decl_line: "DW_FORM_data1"
+            DW_AT_decl_column: "DW_FORM_data1"
+            DW_AT_type: "DW_FORM_ref4"
+            DW_AT_location: "DW_FORM_exprloc"
+        ▾ [11]: "DW_TAG_subprogram" — DW_CHILDREN_yes, 12 attributes  [0x1a93+0x1d]
+            DW_AT_external: "DW_FORM_flag_present"
+            DW_AT_name: "DW_FORM_string"
+            DW_AT_decl_file: "DW_FORM_data1"
+            DW_AT_decl_line: "DW_FORM_data1"
+            DW_AT_decl_column: "DW_FORM_data1"
+            DW_AT_prototyped: "DW_FORM_flag_present"
+            DW_AT_type: "DW_FORM_ref4"
+            DW_AT_low_pc: "DW_FORM_addr"
+            DW_AT_high_pc: "DW_FORM_data8"
+            DW_AT_frame_base: "DW_FORM_exprloc"
+            DW_AT_call_all_calls: "DW_FORM_flag_present"
+            DW_AT_sibling: "DW_FORM_ref4"
+        ▾ [12]: "DW_TAG_lexical_block" — DW_CHILDREN_yes, 2 attributes  [0x1ab0+0x9]
+            DW_AT_ranges: "DW_FORM_sec_offset"
+            DW_AT_sibling: "DW_FORM_ref4"
+        ▾ [13]: "DW_TAG_subprogram" — DW_CHILDREN_no, 8 attributes  [0x1ab9+0x15]
+            DW_AT_external: "DW_FORM_flag_present"
+            DW_AT_name: "DW_FORM_string"
+            DW_AT_decl_file: "DW_FORM_data1"
+            DW_AT_decl_line: "DW_FORM_data1"
+            DW_AT_decl_column: "DW_FORM_data1"
+            DW_AT_prototyped: "DW_FORM_flag_present"
+            DW_AT_type: "DW_FORM_ref4"
+            DW_AT_inline: "DW_FORM_data1"
+        ▾ [14]: "DW_TAG_subprogram" — DW_CHILDREN_yes, 8 attributes  [0x1ace+0x15]
+            DW_AT_name: "DW_FORM_string"
+            DW_AT_decl_file: "DW_FORM_data1"
+            DW_AT_decl_line: "DW_FORM_data1"
+            DW_AT_decl_column: "DW_FORM_data1"
+            DW_AT_prototyped: "DW_FORM_flag_present"
+            DW_AT_type: "DW_FORM_ref4"
+            DW_AT_inline: "DW_FORM_data1"
+            DW_AT_sibling: "DW_FORM_ref4"
+        ▾ [15]: "DW_TAG_formal_parameter" — DW_CHILDREN_no, 5 attributes  [0x1ae3+0xf]
+            DW_AT_name: "DW_FORM_string"
+            DW_AT_decl_file: "DW_FORM_data1"
+            DW_AT_decl_line: "DW_FORM_data1"
+            DW_AT_decl_column: "DW_FORM_data1"
+            DW_AT_type: "DW_FORM_ref4"
+        ▾ [16]: "DW_TAG_subprogram" — DW_CHILDREN_yes, 5 attributes  [0x1af2+0xf]
+            DW_AT_abstract_origin: "DW_FORM_ref4"
+            DW_AT_low_pc: "DW_FORM_addr"
+            DW_AT_high_pc: "DW_FORM_data8"
+            DW_AT_frame_base: "DW_FORM_exprloc"
+            DW_AT_call_all_calls: "DW_FORM_flag_present"
+          Table end: 0  [0x1b01+0x1]
         Alignment Padding — 254 bytes  [0x1b02+0xfe]
     ▾ .debug_line — r--  VA 0xb000+0xc2, file 0x1c00+0x200, data  [0x318+0x28]
         Name: ".debug_line"  [0x318+0x8]
@@ -258,7 +527,119 @@ expression: "common::explore(&display_name(&path), &data)"
         NumberOfRelocations: 0  [0x338+0x2]
         NumberOfLinenumbers: 0  [0x33a+0x2]
         Characteristics: 0x42000040 [CNT_INITIALIZED_DATA | MEM_DISCARDABLE | MEM_READ]  [0x33c+0x4]
-        Raw Data  [0x1c00+0xc2]
+      ▾ Line Tables  [0x1c00+0xc2]
+        ▾ Line table at 0x0 — version 5, 0xc2 bytes  [0x1c00+0xc2]
+            unit_length: 0xbe — DWARF32  [0x1c00+0x4]
+            version: 5  [0x1c04+0x2]
+            address_size: 8  [0x1c06+0x1]
+            seg_select_size: 0  [0x1c07+0x1]
+            header_length: 0x2a  [0x1c08+0x4]
+            minimum_instruction_length: 1  [0x1c0c+0x1]
+            maximum_operations_per_instruction: 1  [0x1c0d+0x1]
+            default_is_stmt: true  [0x1c0e+0x1]
+            line_base: -5  [0x1c0f+0x1]
+            line_range: 14  [0x1c10+0x1]
+            opcode_base: 13  [0x1c11+0x1]
+          ▾ standard_opcode_lengths  [0x1c12+0xc]
+              DW_LNS_copy: 0  [0x1c12+0x1]
+              DW_LNS_advance_pc: 1  [0x1c13+0x1]
+              DW_LNS_advance_line: 1  [0x1c14+0x1]
+              DW_LNS_set_file: 1  [0x1c15+0x1]
+              DW_LNS_set_column: 1  [0x1c16+0x1]
+              DW_LNS_negate_stmt: 0  [0x1c17+0x1]
+              DW_LNS_set_basic_block: 0  [0x1c18+0x1]
+              DW_LNS_const_add_pc: 0  [0x1c19+0x1]
+              DW_LNS_fixed_advance_pc: 1  [0x1c1a+0x1]
+              DW_LNS_set_prologue_end: 0  [0x1c1b+0x1]
+              DW_LNS_set_epilogue_begin: 0  [0x1c1c+0x1]
+              DW_LNS_set_isa: 1  [0x1c1d+0x1]
+          ▾ include_directories  [0x1c1e+0x8]
+            ▾ [0]: "."  [0x1c22+0x4]
+                DW_LNCT_path: "." — DW_FORM_line_strp at 0xf  [0x1c22+0x4]
+          ▾ file_names  [0x1c26+0x10]
+            ▾ [0]: "fillymingw.c"  [0x1c2c+0x5]
+                DW_LNCT_path: "fillymingw.c" — DW_FORM_line_strp at 0x11  [0x1c2c+0x4]
+                DW_LNCT_directory_index: 0 — DW_FORM_udata  [0x1c30+0x1]
+            ▾ [1]: "fillymingw.c"  [0x1c31+0x5]
+                DW_LNCT_path: "fillymingw.c" — DW_FORM_line_strp at 0x1e  [0x1c31+0x4]
+                DW_LNCT_directory_index: 0 — DW_FORM_udata  [0x1c35+0x1]
+          ▾ Program — 0x8c bytes  [0x1c36+0x8c]
+              DW_LNS_set_column: "45" — 0x00000036  [0x1c36+0x2]
+              DW_LNE_set_address: "0x140001000" — 0x00000038  [0x1c38+0xb]
+              special opcode 0x1a: "address += 0, line += 8: row 0x140001000 line 9 column 45 file 1 is_stmt" — 0x00000043  [0x1c43+0x1]
+              DW_LNS_set_column: "47" — 0x00000044  [0x1c44+0x2]
+              DW_LNS_copy: "row 0x140001000 line 9 column 47 file 1 is_stmt" — 0x00000046  [0x1c46+0x1]
+              DW_LNS_set_column: "12" — 0x00000047  [0x1c47+0x2]
+              special opcode 0x10: "address += 0, line += -2: row 0x140001000 line 7 column 12 file 1 is_stmt" — 0x00000049  [0x1c49+0x1]
+              DW_LNS_set_column: "33" — 0x0000004a  [0x1c4a+0x2]
+              DW_LNS_copy: "row 0x140001000 line 7 column 33 file 1 is_stmt" — 0x0000004c  [0x1c4c+0x1]
+              DW_LNS_set_column: "42" — 0x0000004d  [0x1c4d+0x2]
+              DW_LNS_negate_stmt — 0x0000004f  [0x1c4f+0x1]
+              DW_LNS_copy: "row 0x140001000 line 7 column 42 file 1" — 0x00000050  [0x1c50+0x1]
+              DW_LNS_set_column: "82" — 0x00000051  [0x1c51+0x2]
+              special opcode 0x84: "address += 8, line += 2: row 0x140001008 line 9 column 82 file 1" — 0x00000053  [0x1c53+0x1]
+              DW_LNS_set_column: "23" — 0x00000054  [0x1c54+0x2]
+              DW_LNS_negate_stmt — 0x00000056  [0x1c56+0x1]
+              special opcode 0x22: "address += 1, line += 2: row 0x140001009 line 11 column 23 file 1 is_stmt" — 0x00000057  [0x1c57+0x1]
+              DW_LNS_set_column: "5" — 0x00000058  [0x1c58+0x2]
+              special opcode 0x13: "address += 0, line += 1: row 0x140001009 line 12 column 5 file 1 is_stmt" — 0x0000005a  [0x1c5a+0x1]
+              special opcode 0x13: "address += 0, line += 1: row 0x140001009 line 13 column 5 file 1 is_stmt" — 0x0000005b  [0x1c5b+0x1]
+              DW_LNS_set_column: "10" — 0x0000005c  [0x1c5c+0x2]
+              DW_LNS_copy: "row 0x140001009 line 13 column 10 file 1 is_stmt" — 0x0000005e  [0x1c5e+0x1]
+              DW_LNS_set_column: "21" — 0x0000005f  [0x1c5f+0x2]
+              DW_LNE_set_discriminator: "1" — 0x00000061  [0x1c61+0x4]
+              DW_LNS_copy: "row 0x140001009 line 13 column 21 file 1 is_stmt discriminator 1" — 0x00000065  [0x1c65+0x1]
+              DW_LNS_set_column: "9" — 0x00000066  [0x1c66+0x2]
+              DW_LNS_negate_stmt — 0x00000068  [0x1c68+0x1]
+              special opcode 0x73: "address += 7, line += -1: row 0x140001010 line 12 column 9 file 1" — 0x00000069  [0x1c69+0x1]
+              DW_LNS_set_column: "35" — 0x0000006a  [0x1c6a+0x2]
+              DW_LNE_set_discriminator: "1" — 0x0000006c  [0x1c6c+0x4]
+              special opcode 0x59: "address += 5, line += 1: row 0x140001015 line 13 column 35 file 1 discriminator 1" — 0x00000070  [0x1c70+0x1]
+              DW_LNE_set_discriminator: "1" — 0x00000071  [0x1c71+0x4]
+              special opcode 0x58: "address += 5, line += 0: row 0x14000101a line 13 column 35 file 1 discriminator 1" — 0x00000075  [0x1c75+0x1]
+              DW_LNS_set_column: "9" — 0x00000076  [0x1c76+0x2]
+              DW_LNS_negate_stmt — 0x00000078  [0x1c78+0x1]
+              special opcode 0x67: "address += 6, line += 1: row 0x140001020 line 14 column 9 file 1 is_stmt" — 0x00000079  [0x1c79+0x1]
+              DW_LNS_set_column: "30" — 0x0000007a  [0x1c7a+0x2]
+              DW_LNS_negate_stmt — 0x0000007c  [0x1c7c+0x1]
+              DW_LNS_copy: "row 0x140001020 line 14 column 30 file 1" — 0x0000007d  [0x1c7d+0x1]
+              DW_LNS_set_column: "13" — 0x0000007e  [0x1c7e+0x2]
+              special opcode 0x3c: "address += 3, line += 0: row 0x140001023 line 14 column 13 file 1" — 0x00000080  [0x1c80+0x1]
+              DW_LNS_set_column: "41" — 0x00000081  [0x1c81+0x2]
+              DW_LNE_set_discriminator: "3" — 0x00000083  [0x1c83+0x4]
+              DW_LNS_negate_stmt — 0x00000087  [0x1c87+0x1]
+              special opcode 0x2d: "address += 2, line += -1: row 0x140001025 line 13 column 41 file 1 is_stmt discriminator 3" — 0x00000088  [0x1c88+0x1]
+              DW_LNS_set_column: "21" — 0x00000089  [0x1c89+0x2]
+              DW_LNE_set_discriminator: "1" — 0x0000008b  [0x1c8b+0x4]
+              DW_LNS_copy: "row 0x140001025 line 13 column 21 file 1 is_stmt discriminator 1" — 0x0000008f  [0x1c8f+0x1]
+              DW_LNS_set_column: "35" — 0x00000090  [0x1c90+0x2]
+              DW_LNE_set_discriminator: "1" — 0x00000092  [0x1c92+0x4]
+              DW_LNS_negate_stmt — 0x00000096  [0x1c96+0x1]
+              special opcode 0x4a: "address += 4, line += 0: row 0x140001029 line 13 column 35 file 1 discriminator 1" — 0x00000097  [0x1c97+0x1]
+              DW_LNS_set_column: "21" — 0x00000098  [0x1c98+0x2]
+              DW_LNE_set_discriminator: "1" — 0x0000009a  [0x1c9a+0x4]
+              special opcode 0x4a: "address += 4, line += 0: row 0x14000102d line 13 column 21 file 1 discriminator 1" — 0x0000009e  [0x1c9e+0x1]
+              DW_LNS_set_column: "5" — 0x0000009f  [0x1c9f+0x2]
+              DW_LNS_negate_stmt — 0x000000a1  [0x1ca1+0x1]
+              special opcode 0x4c: "address += 4, line += 2: row 0x140001031 line 15 column 5 file 1 is_stmt" — 0x000000a2  [0x1ca2+0x1]
+              DW_LNS_set_column: "27" — 0x000000a3  [0x1ca3+0x2]
+              DW_LNS_advance_line: "line 9 (-6)" — 0x000000a5  [0x1ca5+0x2]
+              DW_LNS_copy: "row 0x140001031 line 9 column 27 file 1 is_stmt" — 0x000000a7  [0x1ca7+0x1]
+              DW_LNS_set_column: "47" — 0x000000a8  [0x1ca8+0x2]
+              DW_LNS_copy: "row 0x140001031 line 9 column 47 file 1 is_stmt" — 0x000000aa  [0x1caa+0x1]
+              DW_LNS_set_column: "12" — 0x000000ab  [0x1cab+0x2]
+              special opcode 0x10: "address += 0, line += -2: row 0x140001031 line 7 column 12 file 1 is_stmt" — 0x000000ad  [0x1cad+0x1]
+              DW_LNS_set_column: "33" — 0x000000ae  [0x1cae+0x2]
+              DW_LNS_copy: "row 0x140001031 line 7 column 33 file 1 is_stmt" — 0x000000b0  [0x1cb0+0x1]
+              DW_LNS_negate_stmt — 0x000000b1  [0x1cb1+0x1]
+              DW_LNS_copy: "row 0x140001031 line 7 column 33 file 1" — 0x000000b2  [0x1cb2+0x1]
+              DW_LNS_set_column: "16" — 0x000000b3  [0x1cb3+0x2]
+              DW_LNE_set_discriminator: "1" — 0x000000b5  [0x1cb5+0x4]
+              special opcode 0x1a: "address += 0, line += 8: row 0x140001031 line 15 column 16 file 1 discriminator 1" — 0x000000b9  [0x1cb9+0x1]
+              DW_LNS_set_column: "1" — 0x000000ba  [0x1cba+0x2]
+              special opcode 0x91: "address += 9, line += 1: row 0x14000103a line 16 column 1 file 1" — 0x000000bc  [0x1cbc+0x1]
+              DW_LNS_advance_pc: "address += 1" — 0x000000bd  [0x1cbd+0x2]
+              DW_LNE_end_sequence: "row 0x14000103b line 16 column 1 file 1 end_sequence" — 0x000000bf  [0x1cbf+0x3]
         Alignment Padding — 318 bytes  [0x1cc2+0x13e]
     ▾ .debug_frame — r--  VA 0xc000+0x48, file 0x1e00+0x200, data  [0x340+0x28]
         Name: ".debug_frame"  [0x340+0x8]
@@ -271,7 +652,34 @@ expression: "common::explore(&display_name(&path), &data)"
         NumberOfRelocations: 0  [0x360+0x2]
         NumberOfLinenumbers: 0  [0x362+0x2]
         Characteristics: 0x42000040 [CNT_INITIALIZED_DATA | MEM_DISCARDABLE | MEM_READ]  [0x364+0x4]
-        Raw Data  [0x1e00+0x48]
+      ▾ Call Frame Information  [0x1e00+0x48]
+        ▾ CIE — version 1, augmentation "", data alignment -8  [0x1e00+0x18]
+            length: 0x14  [0x1e00+0x4]
+            CIE_id: 0xffffffff  [0x1e04+0x4]
+            version: 1  [0x1e08+0x1]
+            augmentation: ""  [0x1e09+0x1]
+            code_alignment_factor: 1  [0x1e0a+0x1]
+            data_alignment_factor: -8  [0x1e0b+0x1]
+            return_address_register: 32  [0x1e0c+0x1]
+          ▾ Call Frame Instructions — 11 bytes  [0x1e0d+0xb]
+              DW_CFA_def_cfa: "reg7 +8"  [0x1e0d+0x3]
+              DW_CFA_offset: "reg32 -8"  [0x1e10+0x2]
+              DW_CFA_nop  [0x1e12+0x1]
+              DW_CFA_nop  [0x1e13+0x1]
+              DW_CFA_nop  [0x1e14+0x1]
+              DW_CFA_nop  [0x1e15+0x1]
+              DW_CFA_nop  [0x1e16+0x1]
+              DW_CFA_nop  [0x1e17+0x1]
+        ▾ FDE — .text + 0x0..0x140001009  [0x1e18+0x18]
+            length: 0x14  [0x1e18+0x4]
+            CIE_pointer: 0x0 — CIE at 0x0  [0x1e1c+0x4] → 0x1e00+0x0
+            initial_location: 0x140001000 — .text + 0x0  [0x1e20+0x8] → 0x600+0x0
+            address_range: 0x9  [0x1e28+0x8]
+        ▾ FDE — .text + 0x9..0x14000103b  [0x1e30+0x18]
+            length: 0x14  [0x1e30+0x4]
+            CIE_pointer: 0x0 — CIE at 0x0  [0x1e34+0x4] → 0x1e00+0x0
+            initial_location: 0x140001009 — .text + 0x9  [0x1e38+0x8] → 0x609+0x0
+            address_range: 0x32  [0x1e40+0x8]
         Alignment Padding — 440 bytes  [0x1e48+0x1b8]
     ▾ .debug_line_str — r--  VA 0xd000+0x2b, file 0x2000+0x200, data  [0x368+0x28]
         Name: ".debug_line_str"  [0x368+0x8]
@@ -284,7 +692,12 @@ expression: "common::explore(&display_name(&path), &data)"
         NumberOfRelocations: 0  [0x388+0x2]
         NumberOfLinenumbers: 0  [0x38a+0x2]
         Characteristics: 0x42000040 [CNT_INITIALIZED_DATA | MEM_DISCARDABLE | MEM_READ]  [0x38c+0x4]
-        Raw Data  [0x2000+0x2b]
+      ▾ Strings  [0x2000+0x2b]
+          0x0: "."  [0x2000+0x2]
+          0x2: "fillymingw.c"  [0x2002+0xd]
+          0xf: "."  [0x200f+0x2]
+          0x11: "fillymingw.c"  [0x2011+0xd]
+          0x1e: "fillymingw.c"  [0x201e+0xd]
         Alignment Padding — 469 bytes  [0x202b+0x1d5]
     ▾ .debug_loclists — r--  VA 0xe000+0x80, file 0x2200+0x200, data  [0x390+0x28]
         Name: ".debug_loclists"  [0x390+0x8]
@@ -297,7 +710,27 @@ expression: "common::explore(&display_name(&path), &data)"
         NumberOfRelocations: 0  [0x3b0+0x2]
         NumberOfLinenumbers: 0  [0x3b2+0x2]
         Characteristics: 0x42000040 [CNT_INITIALIZED_DATA | MEM_DISCARDABLE | MEM_READ]  [0x3b4+0x4]
-        Raw Data  [0x2200+0x80]
+      ▾ Location Lists  [0x2200+0x80]
+        ▾ Contribution at 0x0 — version 5, 0 offsets  [0x2200+0x80]
+            unit_length: 0x7c  [0x2200+0x4]
+            version: 5  [0x2204+0x2]
+            address_size: 8  [0x2206+0x1]
+            segment_selector_size: 0  [0x2207+0x1]
+            offset_entry_count: 0  [0x2208+0x4]
+            DW_LLE_startx_endx: "index 0, index 0: " — 0xc  [0x220c+0x4]
+            DW_LLE_offset_pair: "0x9, 0x1a: DW_OP_lit0, DW_OP_stack_value" — 0x10  [0x2210+0x6]
+            DW_LLE_offset_pair: "0x20, 0x3b: DW_OP_reg2" — 0x16  [0x2216+0x5]
+            DW_LLE_end_of_list — 0x1b  [0x221b+0x1]
+            DW_LLE_offset_pair: "0x0, 0x0: <truncated or unknown operation>" — 0x1c  [0x221c+0x5]
+            DW_LLE_end_of_list — 0x21  [0x2221+0x1]
+            DW_LLE_end_of_list — 0x22  [0x2222+0x1]
+            DW_LLE_end_of_list — 0x23  [0x2223+0x1]
+            DW_LLE_offset_pair: "0x9, 0x1a: DW_OP_lit0, DW_OP_stack_value" — 0x24  [0x2224+0x6]
+            DW_LLE_offset_pair: "0x20, 0x25: DW_OP_breg1 +0, DW_OP_addr 0x140003001, DW_OP_minus, DW_OP_stack_value" — 0x2a  [0x222a+0x11]
+            DW_LLE_offset_pair: "0x25, 0x29: DW_OP_breg1 +0, DW_OP_addr 0x140003001, DW_OP_minus, DW_OP_plus_uconst 0x1, DW_OP_stack_value" — 0x3b  [0x223b+0x13]
+            DW_LLE_offset_pair: "0x29, 0x3b: DW_OP_breg1 +0, DW_OP_addr 0x140003001, DW_OP_minus, DW_OP_stack_value" — 0x4e  [0x224e+0x11]
+            DW_LLE_end_of_list — 0x5f  [0x225f+0x1]
+            DW_LLE_startx_length: "index 5, length 0x4: DW_OP_lit1, DW_OP_const1s 3, <truncated or unknown operation>" — 0x60  [0x2260+0x20]
         Alignment Padding — 384 bytes  [0x2280+0x180]
     ▾ .debug_rnglists — r--  VA 0xf000+0x13, file 0x2400+0x200, data  [0x3b8+0x28]
         Name: ".debug_rnglists"  [0x3b8+0x8]
@@ -310,7 +743,16 @@ expression: "common::explore(&display_name(&path), &data)"
         NumberOfRelocations: 0  [0x3d8+0x2]
         NumberOfLinenumbers: 0  [0x3da+0x2]
         Characteristics: 0x42000040 [CNT_INITIALIZED_DATA | MEM_DISCARDABLE | MEM_READ]  [0x3dc+0x4]
-        Raw Data  [0x2400+0x13]
+      ▾ Range Lists  [0x2400+0x13]
+        ▾ Contribution at 0x0 — version 5, 0 offsets  [0x2400+0x13]
+            unit_length: 0xf  [0x2400+0x4]
+            version: 5  [0x2404+0x2]
+            address_size: 8  [0x2406+0x1]
+            segment_selector_size: 0  [0x2407+0x1]
+            offset_entry_count: 0  [0x2408+0x4]
+            DW_RLE_offset_pair: "0x9, 0x10" — 0xc  [0x240c+0x3]
+            DW_RLE_offset_pair: "0x15, 0x31" — 0xf  [0x240f+0x3]
+            DW_RLE_end_of_list — 0x12  [0x2412+0x1]
         Alignment Padding — 493 bytes  [0x2413+0x1ed]
     Header Padding  [0x3e0+0x220]
   ▾ Export Table — mingw-symbols.exe, 1 function  [0x1000+0x50]
@@ -937,71 +1379,4 @@ expression: "common::explore(&display_name(&path), &data)"
         Type: 0x0  [0x2bc0+0x2]
         StorageClass: EXTERNAL (0x2)  [0x2bc2+0x1]
         NumberOfAuxSymbols: 0  [0x2bc3+0x1]
-  ▾ String Table  [0x2bc4+0x4a2]
-      Size: 1186  [0x2bc4+0x4]
-      0x4: ".debug_aranges"  [0x2bc8+0xf]
-      0x13: ".debug_info"  [0x2bd7+0xc]
-      0x1f: ".debug_abbrev"  [0x2be3+0xe]
-      0x2d: ".debug_line"  [0x2bf1+0xc]
-      0x39: ".debug_frame"  [0x2bfd+0xd]
-      0x46: ".debug_line_str"  [0x2c0a+0x10]
-      0x56: ".debug_loclists"  [0x2c1a+0x10]
-      0x66: ".debug_rnglists"  [0x2c2a+0x10]
-      0x76: "filly_value"  [0x2c3a+0xc]
-      0x82: "filly_start"  [0x2c46+0xc]
-      0x8e: "filly_greeting"  [0x2c52+0xf]
-      0x9d: ".debug_info"  [0x2c61+0xc]
-      0xa9: ".debug_abbrev"  [0x2c6d+0xe]
-      0xb7: ".debug_loclists"  [0x2c7b+0x10]
-      0xc7: ".debug_aranges"  [0x2c8b+0xf]
-      0xd6: ".debug_rnglists"  [0x2c9a+0x10]
-      0xe6: ".debug_line"  [0x2caa+0xc]
-      0xf2: ".debug_line_str"  [0x2cb6+0x10]
-      0x102: ".rdata$zzz"  [0x2cc6+0xb]
-      0x10d: ".debug_frame"  [0x2cd1+0xd]
-      0x11a: "___RUNTIME_PSEUDO_RELOC_LIST__"  [0x2cde+0x1f]
-      0x139: "__data_start__"  [0x2cfd+0xf]
-      0x148: "___DTOR_LIST__"  [0x2d0c+0xf]
-      0x157: "___tls_start__"  [0x2d1b+0xf]
-      0x166: "__rt_psrelocs_start"  [0x2d2a+0x14]
-      0x17a: "__dll_characteristics__"  [0x2d3e+0x18]
-      0x192: "__size_of_stack_commit__"  [0x2d56+0x19]
-      0x1ab: "__size_of_stack_reserve__"  [0x2d6f+0x1a]
-      0x1c5: "__major_subsystem_version__"  [0x2d89+0x1c]
-      0x1e1: "___crt_xl_start__"  [0x2da5+0x12]
-      0x1f3: "___crt_xi_start__"  [0x2db7+0x12]
-      0x205: "___crt_xi_end__"  [0x2dc9+0x10]
-      0x215: "__bss_start__"  [0x2dd9+0xe]
-      0x223: "___RUNTIME_PSEUDO_RELOC_LIST_END__"  [0x2de7+0x23]
-      0x246: "__size_of_heap_commit__"  [0x2e0a+0x18]
-      0x25e: "___crt_xd_end__"  [0x2e22+0x10]
-      0x26e: "___crt_xp_start__"  [0x2e32+0x12]
-      0x280: "___crt_xp_end__"  [0x2e44+0x10]
-      0x290: "__minor_os_version__"  [0x2e54+0x15]
-      0x2a5: "__section_alignment__"  [0x2e69+0x16]
-      0x2bb: "___crt_xd_start__"  [0x2e7f+0x12]
-      0x2cd: "__IAT_end__"  [0x2e91+0xc]
-      0x2d9: "__RUNTIME_PSEUDO_RELOC_LIST__"  [0x2e9d+0x1e]
-      0x2f7: "__data_end__"  [0x2ebb+0xd]
-      0x304: "__CTOR_LIST__"  [0x2ec8+0xe]
-      0x312: "__bss_end__"  [0x2ed6+0xc]
-      0x31e: "___crt_xc_end__"  [0x2ee2+0x10]
-      0x32e: "___crt_xc_start__"  [0x2ef2+0x12]
-      0x340: "___CTOR_LIST__"  [0x2f04+0xf]
-      0x34f: "__file_alignment__"  [0x2f13+0x13]
-      0x362: "__major_os_version__"  [0x2f26+0x15]
-      0x377: "__IAT_start__"  [0x2f3b+0xe]
-      0x385: "__DTOR_LIST__"  [0x2f49+0xe]
-      0x393: "_pei386_runtime_relocator"  [0x2f57+0x1a]
-      0x3ad: "__size_of_heap_reserve__"  [0x2f71+0x19]
-      0x3c6: "___crt_xt_start__"  [0x2f8a+0x12]
-      0x3d8: "__subsystem__"  [0x2f9c+0xe]
-      0x3e6: "___tls_end__"  [0x2faa+0xd]
-      0x3f3: "__major_image_version__"  [0x2fb7+0x18]
-      0x40b: "__loader_flags__"  [0x2fcf+0x11]
-      0x41c: "__rt_psrelocs_end"  [0x2fe0+0x12]
-      0x42e: "__minor_subsystem_version__"  [0x2ff2+0x1c]
-      0x44a: "__minor_image_version__"  [0x300e+0x18]
-      0x462: "filly_counter"  [0x3026+0xe]
-      0x470: "__RUNTIME_PSEUDO_RELOC_LIST_END__"  [0x3034+0x22]
-      0x492: "___crt_xt_end__"  [0x3056+0x10]
+  ▾ String Table  [0x2bc4+0x4a2]  (+67 nodes elided)
