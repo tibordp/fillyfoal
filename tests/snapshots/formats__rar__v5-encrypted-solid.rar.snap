@@ -166,8 +166,6 @@ expression: "common::explore(&display_name(&path), &data)"
         Host OS: Unix (0x1)  [0x1fe+0x1]
         Name length: 4  [0x1ff+0x1]
         Name: "docs"  [0x200+0x4]
-      Compressed data — 0 bytes  [0x204+0x0]
-        ! unsupported: RAR 5 (version 0) compression
   ▾ End of archive  [0x204+0x8]
     ▾ Header  [0x204+0x8]
         Header CRC32: 0x5156771d — valid  [0x204+0x4]
