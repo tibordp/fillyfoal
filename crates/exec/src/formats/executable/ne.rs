@@ -409,7 +409,12 @@ async fn relocations(cx: Cx, (span, n, imports): (Span, u16, Arc<Imports>)) -> R
         let base = i.saturating_mul(8);
         let at = records.sub(to_u64(base), 8);
         if i >= have {
-            cx.diag(Diagnostic::truncated(records, to_u64(data.len())));
+            let wanted = Span::new(
+                records.source,
+                records.offset,
+                u64::from(n).saturating_mul(8),
+            );
+            cx.diag(Diagnostic::truncated(wanted, to_u64(data.len())));
             break;
         }
         let b = |o: usize| data.get(base.saturating_add(o)).copied().unwrap_or(0);
