@@ -4,8 +4,11 @@ reading of the layouts ExifTool and exiv2 document. Tag values are made up.
 
     python3 tests/data/tiff/makernotes.py tests/fixtures/synthetic/tiff
 
-Writes makernote-{canon,nikon,sony,fujifilm,olympus,panasonic,apple}.tif
-and makernote-{huawei,leica,casio,ricoh,sigma,dji}.tif.
+Writes makernote-{canon,nikon,sony,fujifilm,olympus,panasonic,apple}.tif,
+makernote-{huawei,leica,casio,ricoh,sigma,dji}.tif and
+makernote-leica-{m8,m8-dng}.tif, and, next to the directory given, in
+../jpeg, makernote-leica-m246.jpg: a JPEG whose Exif carries a Leica M
+Monochrom (Typ 246) note, which uses absolute file offsets.
 """
 
 import os
@@ -246,6 +249,51 @@ def leica(at):
     return head + ifd(e, at + len(head), entries)[0]
 
 
+LEICA_M8 = [
+    (0x0300, "H", [1]),
+    (0x0303, "A", b"3106001\0"),
+    (0x0311, "r", [(-35, 10)]),
+    (0x0313, "R", [(56, 10)]),
+    (0x0320, "l", [21]),
+]
+
+
+def leica_m8(at):
+    # Leica M8 in a JPEG: "LEICA\0\0\0" (Make "Leica Camera AG"), the IFD
+    # after it, offsets relative to the IFD (ExifTool MakerNoteLeica2).
+    e = "<"
+    head = b"LEICA\0\0\0"
+    return head + ifd(e, at + len(head), LEICA_M8, base=at + len(head))[0]
+
+
+def leica_m8_dng(at):
+    # The same note as an M8 DNG writes it: offsets relative to the note's
+    # start, which ExifTool's FixLeicaBase detects.
+    e = "<"
+    head = b"LEICA\0\0\0"
+    return head + ifd(e, at + len(head), LEICA_M8, base=at)[0]
+
+
+# Where the TIFF stream starts in makernote-leica-m246.jpg: after SOI, the
+# JFIF APP0 of tiny.jpg, and the APP1 marker, length and "Exif\0\0".
+APP0_END = 4 + struct.unpack(">H", JPEG[4:6])[0]
+TIFF_IN_JPEG = APP0_END + 4 + 6
+
+
+def leica_m246(at):
+    # Leica M Monochrom (Typ 246): "LEICA\0\x02\xff", the IFD after it,
+    # offsets from the start of the JPEG file (ExifTool MakerNoteLeica7).
+    e = "<"
+    head = b"LEICA\0\x02\xff"
+    entries = [
+        (0x0300, "U", list(JPEG)),
+        (0x0303, "A", b"Summicron-M 1:2/50\0"),
+        (0x0304, "L", [3000]),
+        (0x0320, "R", [(1, 125)]),
+    ]
+    return head + ifd(e, at + len(head), entries, base=-TIFF_IN_JPEG)[0]
+
+
 def casio(at):
     # Casio type 2: "QVC\0\0\0", the IFD at +6, offsets relative to the
     # Exif TIFF header.
@@ -317,7 +365,15 @@ FILES = {
     "dji": ("<", b"DJI", b"FC3170", dji),
 }
 
+FILES["leica-m8"] = ("<", b"Leica Camera AG", b"M8 Digital Camera", leica_m8)
+FILES["leica-m8-dng"] = ("<", b"Leica Camera AG", b"M8 Digital Camera", leica_m8_dng)
+
 out = sys.argv[1]
 for name, (e, make, model, note) in FILES.items():
     with open(os.path.join(out, f"makernote-{name}.tif"), "wb") as f:
         f.write(exif_stream(e, make, model, list(COMMON), note))
+
+tiff = exif_stream("<", b"Leica Camera AG", b"LEICA M MONOCHROM (Typ 246)", list(COMMON), leica_m246)
+app1 = b"\xff\xe1" + struct.pack(">H", 2 + 6 + len(tiff)) + b"Exif\0\0" + tiff
+with open(os.path.join(out, "../jpeg/makernote-leica-m246.jpg"), "wb") as f:
+    f.write(JPEG[:APP0_END] + app1 + JPEG[APP0_END:])

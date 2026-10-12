@@ -1430,13 +1430,31 @@ fn maker_stream(t: Tiff, data: Span, layout: &maker::Layout) -> (Tiff, u64) {
             },
             layout.ifd.saturating_sub(k),
         ),
+        // Offsets from the start of the file the Exif stream is embedded in
+        // (the stream itself when it is the file).
+        maker::Base::Absolute if t.input.outer.source == t.file().source => {
+            let file = t.input.outer;
+            let at = data.offset.saturating_sub(file.offset);
+            (
+                Tiff {
+                    base: file,
+                    endian,
+                    big: false,
+                    ..t
+                },
+                at.saturating_add(layout.ifd),
+            )
+        }
+        maker::Base::Absolute => (Tiff { endian, ..t }, at.saturating_add(layout.ifd)),
     }
 }
 
 /// Opens the maker note in `e`: its layout, stream and IFD offset.
 async fn open_maker(cx: &Cx, t: Tiff, e: &Entry) -> Option<(maker::Layout, Tiff, u64)> {
-    let head = cx.read_avail(e.data.sub(0, 32)).await.ok()?;
-    let layout = maker::layout(&head, t.make, t.endian)?;
+    // Enough for the entries some layouts look at to choose a base.
+    let head = cx.read_avail(e.data.sub(0, 512)).await.ok()?;
+    let at = e.data.offset.saturating_sub(t.file().offset);
+    let layout = maker::layout(&head, t.make, t.endian, at)?;
     let (mt, offset) = maker_stream(t, e.data, &layout);
     Some((layout, mt, offset))
 }
@@ -1465,6 +1483,7 @@ async fn maker_note(cx: &Cx, st: &EntryState) -> Result<()> {
     }
     if let maker::Base::Note(k) = layout.base
         && k > 0
+        && layout.ifd > k
     {
         // Nikon type 3: a TIFF header of its own.
         let span = e.data.sub(k, 8);
