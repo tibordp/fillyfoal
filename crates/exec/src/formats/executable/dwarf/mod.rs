@@ -1,5 +1,7 @@
 //! DWARF debugging information (versions 2 to 5), as found in the
-//! `.debug_*` sections of ELF files: units and their DIE trees with the
+//! `.debug_*` sections of ELF files, the `__DWARF` segment of Mach-O
+//! objects and dSYM companions, and the `.debug_*` sections (long names
+//! through the string table) of MinGW PE images and COFF objects: units and their DIE trees with the
 //! abbreviations they use (`.debug_info`, `.debug_types`, `.debug_abbrev`),
 //! line number programs (`.debug_line`), string tables (`.debug_str`,
 //! `.debug_line_str`, `.debug_str_offsets`), `.debug_addr`, address range
@@ -92,6 +94,58 @@ impl Sec {
     }
 }
 
+/// The target architecture, for the DWARF register numbers it defines.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Arch {
+    #[default]
+    Unknown,
+    X86,
+    /// i386 as Darwin numbers it in `__eh_frame` (esp and ebp swapped;
+    /// its `__debug_*` sections use the usual numbers).
+    X86DarwinEh,
+    X86_64,
+    Arm,
+    Aarch64,
+    RiscV,
+}
+
+impl Arch {
+    /// From an ELF `e_machine`.
+    pub(crate) fn from_elf(machine: u16) -> Arch {
+        match machine {
+            3 => Arch::X86,
+            62 => Arch::X86_64,
+            40 => Arch::Arm,
+            183 => Arch::Aarch64,
+            243 => Arch::RiscV,
+            _ => Arch::Unknown,
+        }
+    }
+
+    /// From a Mach-O `cputype`.
+    pub(crate) fn from_macho(cputype: u32) -> Arch {
+        match cputype {
+            7 => Arch::X86,
+            0x0100_0007 => Arch::X86_64,
+            12 => Arch::Arm,
+            0x0100_000c | 0x0200_000c => Arch::Aarch64,
+            _ => Arch::Unknown,
+        }
+    }
+
+    /// From a COFF/PE `Machine`.
+    pub(crate) fn from_coff(machine: u16) -> Arch {
+        match machine {
+            0x14c => Arch::X86,
+            0x8664 => Arch::X86_64,
+            0x1c0 | 0x1c2 | 0x1c4 => Arch::Arm,
+            0xaa64 | 0xa641 | 0xa64e => Arch::Aarch64,
+            0x5032 | 0x5064 | 0x5128 => Arch::RiscV,
+            _ => Arch::Unknown,
+        }
+    }
+}
+
 /// A relocation applied when a section is read: `width` bytes at `offset`
 /// (in the section) are replaced with `value`.
 #[derive(Clone, Copy, Debug)]
@@ -120,6 +174,8 @@ pub(crate) struct Dwarf {
     /// Whether addresses are before relocation (a relocatable object
     /// whose relocations against code were not applied).
     pub unrelocated: bool,
+    /// The architecture, for register names.
+    pub arch: Arch,
     pub sections: Vec<Section>,
     /// The container's span, whose empty start stands in for a missing
     /// section.

@@ -623,6 +623,14 @@ impl crate::formats::executable::eh_frame::Image for MachInfo {
     fn target(&self, addr: u64) -> Option<Span> {
         self.vm_span(addr, 0)
     }
+
+    fn arch(&self, eh: bool) -> crate::formats::executable::dwarf::Arch {
+        use crate::formats::executable::dwarf::Arch;
+        match self.arch() {
+            Arch::X86 if eh => Arch::X86DarwinEh,
+            arch => arch,
+        }
+    }
 }
 
 pub(super) async fn eh_frame(cx: Cx, (m, index): (Macho, usize)) -> Result<()> {

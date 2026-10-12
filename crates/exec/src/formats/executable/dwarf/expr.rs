@@ -4,8 +4,8 @@
 use crate::fields::Endian;
 use crate::formats::util::binutil::Reader;
 
-use super::tables::op_name;
-use super::uint_of;
+use super::tables::{op_name, register_name};
+use super::{Arch, uint_of};
 
 /// How many operations an expression shows before it is cut short.
 const MAX_OPS: usize = 64;
@@ -16,6 +16,8 @@ pub(crate) struct Sizes {
     pub address: u8,
     pub offset: u8,
     pub endian: Endian,
+    /// For register names.
+    pub arch: Arch,
 }
 
 fn fixed(r: &mut Reader<'_>, size: u8, endian: Endian) -> Option<u64> {
@@ -60,7 +62,21 @@ fn op(r: &mut Reader<'_>, sizes: Sizes, depth: u8) -> Option<String> {
     let e = sizes.endian;
     let code = r.u8()?;
     let name = op_name(code);
+    // "rbp " before an offset, if the register has a name here.
+    let named = |reg: u64| register_name(sizes.arch, reg).map(|n| format!("{n} "));
     let operands = match code {
+        0x50..=0x6f => {
+            register_name(sizes.arch, u64::from(code.saturating_sub(0x50))).unwrap_or_default()
+        }
+        0x70..=0x8f => format!(
+            "{}{:+}",
+            named(u64::from(code.saturating_sub(0x70))).unwrap_or_default(),
+            r.sleb()?
+        ),
+        0x90 => {
+            let reg = r.uleb()?;
+            register_name(sizes.arch, reg).unwrap_or_else(|| format!("{reg:#x}"))
+        }
         0x03 => format!("{:#x}", fixed(r, sizes.address, e)?),
         0x08 => format!("{:#x}", r.u8()?),
         0x09 => format!("{}", signed(fixed(r, 1, e)?, 1)),
@@ -70,13 +86,14 @@ fn op(r: &mut Reader<'_>, sizes: Sizes, depth: u8) -> Option<String> {
         0x0d => format!("{}", signed(fixed(r, 4, e)?, 4)),
         0x0e => format!("{:#x}", fixed(r, 8, e)?),
         0x0f => format!("{}", signed(fixed(r, 8, e)?, 8)),
-        0x10 | 0x23 | 0x90 | 0x93 | 0xa1 | 0xa2 | 0xa8 | 0xa9 | 0xf7 | 0xf9 | 0xfb | 0xfc => {
+        0x10 | 0x23 | 0x93 | 0xa1 | 0xa2 | 0xa8 | 0xa9 | 0xf7 | 0xf9 | 0xfb | 0xfc => {
             format!("{:#x}", r.uleb()?)
         }
-        0x11 | 0x91 | 0x70..=0x8f => format!("{:+}", r.sleb()?),
+        0x11 | 0x91 => format!("{:+}", r.sleb()?),
         0x92 => {
             let reg = r.uleb()?;
-            format!("{reg} {:+}", r.sleb()?)
+            let reg = named(reg).unwrap_or_else(|| format!("{reg} "));
+            format!("{reg}{:+}", r.sleb()?)
         }
         0x15 | 0x94 | 0x95 => format!("{:#x}", r.u8()?),
         0x28 | 0x2f => format!("{:+}", signed(fixed(r, 2, e)?, 2)),
@@ -113,13 +130,14 @@ fn op(r: &mut Reader<'_>, sizes: Sizes, depth: u8) -> Option<String> {
         }
         0xa5 | 0xf5 => {
             let reg = r.uleb()?;
+            let reg = register_name(sizes.arch, reg).unwrap_or_else(|| reg.to_string());
             format!("{reg} {:#x}", r.uleb()?)
         }
         0xa6 | 0xa7 | 0xf6 => {
             let size = r.u8()?;
             format!("{size:#x} {:#x}", r.uleb()?)
         }
-        0x06 | 0x12..=0x14 | 0x16..=0x22 | 0x24..=0x27 | 0x29..=0x2e | 0x30..=0x6f => String::new(),
+        0x06 | 0x12..=0x14 | 0x16..=0x22 | 0x24..=0x27 | 0x29..=0x2e | 0x30..=0x4f => String::new(),
         0x96..=0x97 | 0x9b | 0x9c | 0x9f | 0xe0 | 0xf0 => String::new(),
         _ => return None,
     };

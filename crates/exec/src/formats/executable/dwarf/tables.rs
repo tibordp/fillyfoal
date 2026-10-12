@@ -236,10 +236,13 @@ pub(super) const ATTRIBUTES: EnumTable = &[
     (0x2136, "DW_AT_GNU_discriminator"),
     (0x2137, "DW_AT_GNU_locviews"),
     (0x2138, "DW_AT_GNU_entry_view"),
-    (0x3e01, "DW_AT_LLVM_include_path"),
-    (0x3e02, "DW_AT_LLVM_config_macros"),
-    (0x3e03, "DW_AT_LLVM_sysroot"),
-    (0x3e04, "DW_AT_LLVM_tag_offset"),
+    (0x3e00, "DW_AT_LLVM_include_path"),
+    (0x3e01, "DW_AT_LLVM_config_macros"),
+    (0x3e02, "DW_AT_LLVM_sysroot"),
+    (0x3e03, "DW_AT_LLVM_tag_offset"),
+    (0x3e04, "DW_AT_LLVM_ptrauth_key"),
+    (0x3e05, "DW_AT_LLVM_ptrauth_address_discriminated"),
+    (0x3e06, "DW_AT_LLVM_ptrauth_extra_discriminator"),
     (0x3e07, "DW_AT_LLVM_apinotes"),
     (0x3fe1, "DW_AT_APPLE_optimized"),
     (0x3fe2, "DW_AT_APPLE_flags"),
@@ -611,5 +614,179 @@ pub(crate) fn cfa_name(op: u8) -> String {
         2 => "DW_CFA_offset".to_owned(),
         3 => "DW_CFA_restore".to_owned(),
         _ => crate::formats::util::val::name_or(CFA, op.into(), "DW_CFA"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Registers
+
+const X86_64_REGS: &[&str] = &[
+    "rax", "rdx", "rcx", "rbx", "rsi", "rdi", "rbp", "rsp", "r8", "r9", "r10", "r11", "r12", "r13",
+    "r14", "r15", "rip",
+];
+const X86_64_MISC: &[(u64, &str)] = &[
+    (49, "rflags"),
+    (50, "es"),
+    (51, "cs"),
+    (52, "ss"),
+    (53, "ds"),
+    (54, "fs"),
+    (55, "gs"),
+    (58, "fs.base"),
+    (59, "gs.base"),
+    (62, "tr"),
+    (63, "ldtr"),
+    (64, "mxcsr"),
+    (65, "fcw"),
+    (66, "fsw"),
+];
+const X86_REGS: &[&str] = &[
+    "eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi", "eip", "eflags",
+];
+const X86_MISC: &[(u64, &str)] = &[
+    (39, "mxcsr"),
+    (40, "es"),
+    (41, "cs"),
+    (42, "ss"),
+    (43, "ds"),
+    (44, "fs"),
+    (45, "gs"),
+    (48, "tr"),
+    (49, "ldtr"),
+];
+const AARCH64_MISC: &[(u64, &str)] = &[
+    (31, "sp"),
+    (32, "pc"),
+    (33, "elr_mode"),
+    (34, "ra_sign_state"),
+    (35, "tpidrro_el0"),
+    (36, "tpidr_el0"),
+    (37, "tpidr2_el0"),
+    (46, "vg"),
+    (47, "ffr"),
+];
+const ARM_MISC: &[(u64, &str)] = &[
+    (13, "sp"),
+    (14, "lr"),
+    (15, "pc"),
+    (128, "spsr"),
+    (143, "ra_auth_code"),
+];
+const RISCV_REGS: &[&str] = &[
+    "zero", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4",
+    "a5", "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4",
+    "t5", "t6",
+];
+const RISCV_FREGS: &[&str] = &[
+    "ft0", "ft1", "ft2", "ft3", "ft4", "ft5", "ft6", "ft7", "fs0", "fs1", "fa0", "fa1", "fa2",
+    "fa3", "fa4", "fa5", "fa6", "fa7", "fs2", "fs3", "fs4", "fs5", "fs6", "fs7", "fs8", "fs9",
+    "fs10", "fs11", "ft8", "ft9", "ft10", "ft11",
+];
+
+/// `{prefix}{n - first + base}` if `n` is in `first..=last`.
+fn numbered(n: u64, first: u64, last: u64, prefix: &str, base: u64) -> Option<String> {
+    (first..=last)
+        .contains(&n)
+        .then(|| format!("{prefix}{}", n.saturating_sub(first).saturating_add(base)))
+}
+
+fn listed(names: &[&str], n: u64) -> Option<String> {
+    names.get(usize::try_from(n).ok()?).map(|s| (*s).to_owned())
+}
+
+fn misc(table: &[(u64, &str)], n: u64) -> Option<String> {
+    table
+        .iter()
+        .find(|&&(k, _)| k == n)
+        .map(|&(_, s)| s.to_owned())
+}
+
+/// The name of DWARF register `n` on `arch`, as its psABI's DWARF register
+/// mapping defines it (the System V x86-64 and i386 psABIs, Arm's AADWARF32
+/// and AADWARF64, the RISC-V ELF psABI).
+pub(crate) fn register_name(arch: super::Arch, n: u64) -> Option<String> {
+    use super::Arch;
+    match arch {
+        Arch::X86_64 => listed(X86_64_REGS, n)
+            .or_else(|| numbered(n, 17, 32, "xmm", 0))
+            .or_else(|| numbered(n, 33, 40, "st", 0))
+            .or_else(|| numbered(n, 41, 48, "mm", 0))
+            .or_else(|| misc(X86_64_MISC, n))
+            .or_else(|| numbered(n, 67, 82, "xmm", 16))
+            .or_else(|| numbered(n, 118, 125, "k", 0)),
+        Arch::X86 | Arch::X86DarwinEh => {
+            // Darwin's i386 `__eh_frame` swaps esp and ebp.
+            let n = match (arch, n) {
+                (Arch::X86DarwinEh, 4) => 5,
+                (Arch::X86DarwinEh, 5) => 4,
+                _ => n,
+            };
+            listed(X86_REGS, n)
+                .or_else(|| numbered(n, 11, 18, "st", 0))
+                .or_else(|| numbered(n, 21, 28, "xmm", 0))
+                .or_else(|| numbered(n, 29, 36, "mm", 0))
+                .or_else(|| misc(X86_MISC, n))
+                .or_else(|| numbered(n, 93, 100, "k", 0))
+        }
+        Arch::Arm => misc(ARM_MISC, n)
+            .or_else(|| numbered(n, 0, 12, "r", 0))
+            .or_else(|| numbered(n, 64, 95, "s", 0))
+            .or_else(|| numbered(n, 104, 111, "wcgr", 0))
+            .or_else(|| numbered(n, 112, 127, "wr", 0))
+            .or_else(|| numbered(n, 256, 287, "d", 0)),
+        Arch::Aarch64 => numbered(n, 0, 30, "x", 0)
+            .or_else(|| misc(AARCH64_MISC, n))
+            .or_else(|| numbered(n, 48, 63, "p", 0))
+            .or_else(|| numbered(n, 64, 95, "v", 0))
+            .or_else(|| numbered(n, 96, 127, "z", 0)),
+        Arch::RiscV => listed(RISCV_REGS, n)
+            .or_else(|| listed(RISCV_FREGS, n.checked_sub(32)?))
+            .or_else(|| numbered(n, 96, 127, "v", 0)),
+        Arch::Unknown => None,
+    }
+}
+
+/// A register for display: its name, or `reg{n}` if it has none here.
+pub(crate) fn register(arch: super::Arch, n: u64) -> String {
+    register_name(arch, n).unwrap_or_else(|| format!("reg{n}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::Arch;
+    use super::register;
+
+    #[test]
+    fn registers_follow_each_psabi() {
+        let cases: &[(Arch, u64, &str)] = &[
+            (Arch::X86_64, 0, "rax"),
+            (Arch::X86_64, 5, "rdi"),
+            (Arch::X86_64, 7, "rsp"),
+            (Arch::X86_64, 16, "rip"),
+            (Arch::X86_64, 17, "xmm0"),
+            (Arch::X86_64, 32, "xmm15"),
+            (Arch::X86_64, 67, "xmm16"),
+            (Arch::X86_64, 82, "xmm31"),
+            (Arch::X86_64, 49, "rflags"),
+            (Arch::X86, 4, "esp"),
+            (Arch::X86, 5, "ebp"),
+            (Arch::X86, 8, "eip"),
+            (Arch::X86DarwinEh, 4, "ebp"),
+            (Arch::X86DarwinEh, 5, "esp"),
+            (Arch::Aarch64, 29, "x29"),
+            (Arch::Aarch64, 31, "sp"),
+            (Arch::Aarch64, 64, "v0"),
+            (Arch::Arm, 13, "sp"),
+            (Arch::Arm, 14, "lr"),
+            (Arch::Arm, 256, "d0"),
+            (Arch::RiscV, 2, "sp"),
+            (Arch::RiscV, 10, "a0"),
+            (Arch::RiscV, 40, "fs0"),
+            (Arch::Unknown, 7, "reg7"),
+            (Arch::X86_64, 200, "reg200"),
+        ];
+        for &(arch, n, name) in cases {
+            assert_eq!(register(arch, n), name, "{arch:?} {n}");
+        }
     }
 }

@@ -176,6 +176,186 @@ fn form_value(
     })
 }
 
+/// A line table's directories and files, for naming the files that
+/// `DW_AT_decl_file` and `DW_AT_call_file` index.
+#[derive(Debug, Default)]
+pub(super) struct FileNames {
+    version: u16,
+    dirs: Vec<String>,
+    /// (directory index, name).
+    files: Vec<(u64, String)>,
+}
+
+/// Entries listed in one go before a checkpoint.
+const ENTRY_STEP: u64 = 256;
+
+/// The directories and files of the line table at `offset` (cached).
+pub(super) async fn file_names(cx: &Cx, dw: &Dwarf, offset: u64) -> Option<Arc<FileNames>> {
+    let key = dw.span(Sec::Line)?.sub(offset, 0);
+    if let Some(found) = cx.cached::<FileNames>(key, "dwarf-line-files") {
+        return Some(found);
+    }
+    let (h, data) = header(cx, dw, offset).await.ok()?;
+    let e = dw.endian;
+    let mut out = FileNames {
+        version: h.version,
+        ..FileNames::default()
+    };
+    let mut r = Reader::at(&data, to_usize(h.dirs.saturating_sub(h.offset)));
+    if h.version >= 5 {
+        for files in [false, true] {
+            let formats = formats(&mut r)?;
+            let count = r.uleb()?;
+            for i in 0..count {
+                // An entry with no fields reads nothing: stop rather than
+                // count to a huge `count`.
+                if r.at_end() || formats.is_empty() {
+                    break;
+                }
+                if i.is_multiple_of(ENTRY_STEP) {
+                    cx.checkpoint().await;
+                }
+                let (mut dir, mut name) = (0u64, String::new());
+                for &(content, form) in &formats {
+                    let v = form_value(&mut r, form, h.offset_size, e)?;
+                    match (content, v) {
+                        (1, EntryVal::Str(s)) => name = s,
+                        (1, EntryVal::U(v)) => {
+                            let sec = if form == 0x1f { Sec::LineStr } else { Sec::Str };
+                            if matches!(form, 0x0e | 0x1f) {
+                                name = dw.string(cx, sec, v).await.unwrap_or_default();
+                            }
+                        }
+                        (2, EntryVal::U(v)) => dir = v,
+                        _ => {}
+                    }
+                }
+                if files {
+                    out.files.push((dir, name));
+                } else {
+                    out.dirs.push(name);
+                }
+            }
+        }
+    } else {
+        let mut i = 0u64;
+        while let Some(s) = r.cstr() {
+            if s.is_empty() {
+                break;
+            }
+            out.dirs.push(String::from_utf8_lossy(s).into_owned());
+            i = i.wrapping_add(1);
+            if i.is_multiple_of(ENTRY_STEP) {
+                cx.checkpoint().await;
+            }
+        }
+        while let Some(s) = r.cstr() {
+            if s.is_empty() {
+                break;
+            }
+            let name = String::from_utf8_lossy(s).into_owned();
+            let dir = r.uleb()?;
+            r.uleb()?;
+            r.uleb()?;
+            out.files.push((dir, name));
+            i = i.wrapping_add(1);
+            if i.is_multiple_of(ENTRY_STEP) {
+                cx.checkpoint().await;
+            }
+        }
+    }
+    let out = Arc::new(out);
+    cx.cache(key, "dwarf-line-files", out.clone());
+    Some(out)
+}
+
+fn is_absolute(path: &str) -> bool {
+    let b = path.as_bytes();
+    path.starts_with('/')
+        || path.starts_with('\\')
+        || (b.get(1) == Some(&b':') && b.first().is_some_and(u8::is_ascii_alphabetic))
+}
+
+fn append(path: &mut String, part: &str) {
+    if part.is_empty() {
+        return;
+    }
+    if is_absolute(part) {
+        part.clone_into(path);
+        return;
+    }
+    if !path.is_empty() && !path.ends_with('/') && !path.ends_with('\\') {
+        path.push('/');
+    }
+    path.push_str(part);
+}
+
+impl FileNames {
+    /// The path of file `index`, as `llvm-dwarfdump` shows it: the
+    /// compilation directory (unless the directory is absolute, or, in
+    /// version 5, is directory 0, which already is the compilation
+    /// directory), the directory, then the name.
+    pub(super) fn path(&self, index: u64, comp_dir: Option<&str>) -> Option<String> {
+        let v5 = self.version >= 5;
+        let i = if v5 { index } else { index.checked_sub(1)? };
+        let (dir, name) = self.files.get(usize::try_from(i).ok()?)?;
+        if is_absolute(name) {
+            return Some(name.clone());
+        }
+        let include = if v5 {
+            self.dirs.get(usize::try_from(*dir).ok()?)
+        } else {
+            dir.checked_sub(1)
+                .and_then(|d| usize::try_from(d).ok())
+                .and_then(|d| self.dirs.get(d))
+        };
+        let include = include.map_or("", String::as_str);
+        let mut path = String::new();
+        if !is_absolute(include) && (!v5 || *dir != 0) {
+            append(&mut path, comp_dir.unwrap_or_default());
+        }
+        append(&mut path, include);
+        append(&mut path, name);
+        Some(path)
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::FileNames;
+
+    fn table(version: u16, dirs: &[&str], files: &[(u64, &str)]) -> FileNames {
+        FileNames {
+            version,
+            dirs: dirs.iter().map(|s| (*s).to_owned()).collect(),
+            files: files.iter().map(|&(d, n)| (d, n.to_owned())).collect(),
+        }
+    }
+
+    #[test]
+    fn paths_join_like_llvm_dwarfdump() {
+        // Version 4: files count from 1, directory 0 is the compilation
+        // directory.
+        let v4 = table(
+            4,
+            &["/usr/include", "sub"],
+            &[(0, "a.c"), (1, "stdio.h"), (2, "b.h"), (0, "/abs/c.c")],
+        );
+        let cd = Some("/src");
+        assert_eq!(v4.path(1, cd).as_deref(), Some("/src/a.c"));
+        assert_eq!(v4.path(2, cd).as_deref(), Some("/usr/include/stdio.h"));
+        assert_eq!(v4.path(3, cd).as_deref(), Some("/src/sub/b.h"));
+        assert_eq!(v4.path(4, cd).as_deref(), Some("/abs/c.c"));
+        assert_eq!(v4.path(0, cd), None);
+        assert_eq!(v4.path(5, cd), None);
+        // Version 5: files and directories count from 0, and directory 0
+        // already is the compilation directory.
+        let v5 = table(5, &[".", "inc"], &[(0, "a.c"), (1, "b.h")]);
+        assert_eq!(v5.path(0, Some(".")).as_deref(), Some("./a.c"));
+        assert_eq!(v5.path(1, Some("/w")).as_deref(), Some("/w/inc/b.h"));
+    }
+}
+
 /// Expander for `.debug_line`: one node per line table.
 pub(super) async fn tables(cx: &Cx, dw: &Arc<Dwarf>) -> Result<()> {
     let Some(section) = dw.span(Sec::Line) else {

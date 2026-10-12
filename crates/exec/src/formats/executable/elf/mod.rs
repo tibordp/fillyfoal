@@ -1146,6 +1146,10 @@ impl crate::formats::executable::eh_frame::Image for ElfInfo {
         }
         self.vaddr_span(addr, 0)
     }
+
+    fn arch(&self, _eh: bool) -> crate::formats::executable::dwarf::Arch {
+        crate::formats::executable::dwarf::Arch::from_elf(self.header.machine)
+    }
 }
 
 /// `.eh_frame`: CIEs and FDEs, walked as in Mach-O `__eh_frame`.
