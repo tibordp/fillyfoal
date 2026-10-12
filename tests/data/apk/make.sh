@@ -3,7 +3,8 @@
 # Scheme v4 file apk-idsig/signed.apk.idsig with the Android SDK tools:
 # aapt2 (resources, binary manifest), javac + d8 (classes.dex), zipalign and
 # apksigner (v1 + v2 + v3 + v3.1 with a key rotation lineage, v4), from the
-# sources in tests/data/apk/src, in a neutral directory with two fresh
+# sources in tests/data/apk/src (signed.apk without classes.dex and the
+# drawable), in a neutral directory with two fresh
 # throwaway EC P-256 keys ("CN=fillyfoal test"). The real resources.arsc and
 # AndroidManifest.xml are copied out of the package too.
 #
@@ -36,6 +37,12 @@ javac --release 8 -encoding UTF-8 -cp "$JAR" -d classes \
 touch -t 201001010000 dex/classes.dex
 (cd dex && zip -X -q ../base.apk classes.dex)
 "$BT/zipalign" -p -f 4 base.apk aligned.apk
+# signed.apk leaves out the code and the drawable, so its snapshot stays
+# under the size cap with the signing blocks, the manifest and the
+# resources whole (stamped.apk keeps the full package).
+cp base.apk lean.apk
+zip -q -d lean.apk classes.dex res/drawable/badge.xml
+"$BT/zipalign" -p -f 4 lean.apk lean-aligned.apk
 for k in old new; do
     keytool -genkeypair -keystore $k.p12 -storetype PKCS12 -alias $k \
         -keyalg EC -groupname secp256r1 -validity 10000 \
@@ -50,7 +57,7 @@ done
     --lineage lineage --rotation-min-sdk-version 33 \
     --v1-signing-enabled true --v2-signing-enabled true \
     --v3-signing-enabled true --v4-signing-enabled true \
-    --out signed.apk aligned.apk
+    --out signed.apk lean-aligned.apk
 "$BT/apksigner" verify -v --print-certs --v4-signature-file signed.apk.idsig signed.apk
 # A second signing: an RSA key, v1 + v2 + v3 and
 # a source stamp (apksig signs the stamp with the

@@ -1,5 +1,8 @@
 #!/bin/sh
-# Compiles tests/fixtures/external/apk/signed.apk ahead of time with the ART
+# Compiles the code of tests/fixtures/external/apk/stamped.apk (the same
+# classes.dex that signed.apk carried when app.odex, app.vdex and app.art
+# were made from it; signed.apk no longer carries code) ahead of time with
+# the ART
 # dex2oat of an Android emulator (SDK system image android-37.1
 # google_apis_playstore_ps16k arm64-v8a, ART with OAT version 279, VDEX 027,
 # image version 119) and pulls what it wrote: the OAT file (app.odex, an
@@ -43,7 +46,7 @@ $ADB wait-for-device
 until [ "$($ADB shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; do
     sleep 3
 done
-$ADB push "$FIX/apk/signed.apk" /data/local/tmp/app.apk
+$ADB push "$FIX/apk/stamped.apk" /data/local/tmp/app.apk
 $ADB shell 'cd /data/local/tmp &&
     /apex/com.android.art/bin/dex2oat64 --dex-file=app.apk \
         --dex-location=/data/app/app.apk --oat-file=app.odex \
