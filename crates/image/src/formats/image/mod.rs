@@ -7,8 +7,8 @@
 //! (`texture`: ASTC, PowerVR, VTF; `dds`, `ktx`), BPG and FLIF (`modern`),
 //! FITS (`fits`), other graphics (`graphics`: PKM, swatches, GIMP brushes,
 //! Paint.NET), camera and toolkit formats (`camera`, `toolkits`),
-//! paint-program documents (`paint`) and less common raster formats
-//! (`minor`).
+//! paint-program documents (`paint`), TempleOS sprites and GR files
+//! (`templeos`) and less common raster formats (`minor`).
 
 pub mod bmp;
 pub mod camera;
@@ -42,6 +42,7 @@ pub mod qoi;
 pub mod raw;
 pub mod sgi;
 pub mod sunras;
+pub mod templeos;
 pub mod texture;
 pub mod tga;
 pub mod tiff;

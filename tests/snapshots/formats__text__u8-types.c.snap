@@ -1,0 +1,34 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ u8-types.c — UTF-8 text, LF line endings, 26 lines  [0x0+0x1ca]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 26 LF, 0 CRLF, 0 CR
+  ▾ Lines — 26 lines  [0x0+0x1ca]
+      Line 1: "/* Embedded C with HolyC-looking type names: not HolyC. */"  [0x0+0x3a]
+      Line 2: "#include <stdint.h>"  [0x3b+0x13]
+      Line 3: ""  [0x4f+0x0]
+      Line 4: "typedef uint8_t U8;"  [0x50+0x13]
+      Line 5: "typedef int32_t I32;"  [0x64+0x14]
+      Line 6: "typedef int64_t I64;"  [0x79+0x14]
+      Line 7: "typedef double F64;"  [0x8e+0x13]
+      Line 8: ""  [0xa2+0x0]
+      Line 9: "static U8 buffer[64];"  [0xa3+0x15]
+      Line 10: ""  [0xb9+0x0]
+      Line 11: "I64 checksum(const U8 *data, I32 len)"  [0xba+0x25]
+      Line 12: "{"  [0xe0+0x1]
+      Line 13: "    I64 sum = 0;"  [0xe2+0x10]
+      Line 14: "    for (I32 i = 0; i < len; i++) {"  [0xf3+0x23]
+      Line 15: "        sum += data[i];"  [0x117+0x17]
+      Line 16: "    }"  [0x12f+0x5]
+      Line 17: "    return sum;"  [0x135+0xf]
+      Line 18: "}"  [0x145+0x1]
+      Line 19: ""  [0x147+0x0]
+      Line 20: "F64 average(const U8 *data, I32 len)"  [0x148+0x24]
+      Line 21: "{"  [0x16d+0x1]
+      Line 22: "    if (len == 0) {"  [0x16f+0x13]
+      Line 23: "        return 0.0;"  [0x183+0x13]
+      Line 24: "    }"  [0x197+0x5]
+      Line 25: "    return (F64)checksum(data, len) / len;"  [0x19d+0x2a]
+      Line 26: "}"  [0x1c8+0x1]

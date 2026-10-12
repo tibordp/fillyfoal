@@ -1296,3 +1296,27 @@ storage (`.raw.zst`).
 | `mdraid/r5-a.img.raw.zst` | as above | same script: first member of a three-disk RAID5, metadata 1.2, left-symmetric, 512 KiB chunks |
 | `android-super/super-avb.img.raw.zst` | AOSP lpmake (system/extras `partition_tools` fc2494a2abd7ab21774d03deb09c1362bbb0bba8, system/core `fs_mgr/liblp` a3b721a32242006b59cb12bd62c9133632af3a2d, built by `build-lptools.sh` against Ubuntu's android-libbase 34.0.5), AOSP avbtool 1.4.0 (platform/external/avb c5066a96caa7bf4150c0a8cc8cc14ab81733fdc7, MIT; fetched into /tmp, not committed), OpenSSL 3.5.5 | `make-super.sh`: a 4 MiB super device with two 8 KiB metadata slots, group `main` with `system` (48 KiB of filler with an AVB hashtree footer, no FEC, in 128 KiB) and `vendor` (48 KiB of filler with an AVB hash footer in 128 KiB), then `avbtool add_hash_footer` over the whole image in a 5 MiB partition `super`, signed SHA256_RSA2048 with a throwaway key; checked against `lpdump` and `avbtool info_image`. The key is new per run, so key and signature bytes differ between runs |
 | `android-super/super-ab.img.raw.zst` | AOSP lpmake (as above) | same script: three metadata slots, groups `main_a`/`main_b`, `system_a`/`vendor_a` with the images above and empty `system_b`/`vendor_b`; no footer; reproduced byte-for-byte; checked against `lpdump` |
+
+## TempleOS V5.03: DolDoc, HolyC, GR and AutoComplete files
+
+Real files from the official TempleOS V5.03 distribution ISO
+(`https://web.archive.org/web/2017id_/http://www.templeos.org/Downloads/TempleOS.ISO`,
+17,350,656 bytes, SHA-256
+`5d0fc944e5d89c155c0fc17c148646715bc1db6fa5750c0b913772cfec19ba26`), written by
+TempleOS itself. `tests/data/doldoc/extract.py` reads them from the ISO's RedSea file
+system and expands their `.Z` layer with Terry Davis's own `Linux/TOSZ.CPP` from the
+same release (the uncompressed copies in the TempleOS git repository have lost bytes
+0x0d and turned 0x1f into spaces, so they were not used). Public domain (TempleOS).
+
+| Fixture | Path in the ISO | Evidence and edits |
+| --- | --- | --- |
+| `doldoc/FileLowLevel.DD` | `/Doc/FileLowLevel.DD.Z` | unchanged: DolDoc text with links and one sprite bin (lines, text) |
+| `doldoc/Once.DD` | `/Doc/Once.DD.Z` | unchanged: links of several types, colors, no bins |
+| `doldoc/Compiler.MAP` | `/Compiler/Compiler.MAP.Z` | cut to its first 12 lines (`$LK...,BI=n$` per function) and the 11 `CDbgInfo` bins they refer to, kept byte for byte; the rest dropped |
+| `holyc/SpriteText.HC` | `/Demo/Graphics/SpriteText.HC.Z` | unchanged: HolyC with `$$` escapes, a sprite with dither colors, lines, circles and a PolyPoint |
+| `holyc/SpritePlot3D.HC` | `/Demo/Graphics/SpritePlot3D.HC.Z` | unchanged: a mesh sprite (6 vertices, 8 triangles), CP437 θ and φ in the code |
+| `holyc/AMouse.HC` | `/Adam/AMouse.HC.Z` | unchanged: two bitmap sprites (mouse pointers) and a vector one |
+| `holyc/Load.HC` | `/Apps/GrModels/Load.HC.Z` | unchanged: HolyC without DolDoc commands (`#help_index`) |
+| `templeos-gr/StadiumBG.GR` | `/Demo/Games/Stadium/StadiumBG.GR.Z` | unchanged: 641×473 device context, LZW-compressed body (`CT_8_BIT`), standard palette |
+| `templeos-ac-words/ACWords.DATA` | `/Adam/AutoComplete/ACWords.DATA.Z` | cut to its first 40 words, then the end marker (0) appended |
+| `templeos-ac-defs/ACDefs.DATA` | `/Adam/AutoComplete/ACDefs.DATA.Z` | cut to its first 11 entries ("A" to "Abaca", Webster's 1913), then the end marker (0) appended |

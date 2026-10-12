@@ -1,0 +1,10 @@
+Price list, autumn
+
+The small kit costs $5 and the large one $10; shipping is $3.50
+for orders under $40. Bundles are $FG$-free (a typo the printer kept).
+
+In the notes, the area is $A = \pi r^2$ and the mean is $\bar{x}$,
+and $ID$ is the shell variable the build script reads, next to
+$HOME/bin and ${PATH}.
+
+Totals: $15 + $20 = $35.
