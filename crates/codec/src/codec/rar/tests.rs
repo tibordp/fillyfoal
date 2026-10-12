@@ -122,6 +122,38 @@ fn ppmd_matches_7zip() {
     }
 }
 
+/// 7z PPMd decoded in small steps over input that arrives piecemeal never
+/// copies the model (a step that ran short used to be rolled back from a
+/// copy of the model taken before every step: here about 3,600 copies of
+/// a 1 MiB model), and still resumes exactly from checkpoints.
+#[test]
+fn ppmd7_steps_do_not_copy_the_model() {
+    use crate::codec::pipeline::{Decoder, Status, verify_checkpoints};
+    let want = include_bytes!("../testdata/words.txt");
+    let data = include_bytes!("../testdata/ppmd7-64-1048576.bin");
+    let make = || -> Box<dyn Decoder> { Box::new(Ppmd7::new(64, 1 << 20, want.len() as u64)) };
+    ppmd::CLONED.with(|c| c.set(0));
+    let mut d = make();
+    let mut out = Vec::new();
+    let (mut have, mut steps) = (0usize, 0usize);
+    loop {
+        let eof = have >= data.len();
+        match d.decode(&data[..have], eof, &mut out, 32, 1 << 20).unwrap() {
+            Status::Done => break,
+            Status::More => steps += 1,
+            Status::NeedInput => have = (have + 7).min(data.len()),
+        }
+    }
+    assert_eq!(out.as_slice(), want.as_slice());
+    assert!(steps > 3000, "{steps}");
+    assert_eq!(ppmd::CLONED.with(|c| c.get()), 0);
+    let (checked, largest) = verify_checkpoints(make, data, 4096, 4).unwrap();
+    assert!(checked >= 5, "{checked}");
+    assert!(largest > 1 << 20, "{largest}");
+    // Cut short: an error, never wrong bytes.
+    assert!(decode_all(make().as_mut(), &data[..data.len() / 2], 1 << 20).is_err());
+}
+
 /// RAR's carry-less range encoder (Subbotin), for re-encoding a traced 7z
 /// PPMd stream as a RAR one.
 fn rar_range_encode(trace: &[(u32, u32, u32)]) -> Vec<u8> {

@@ -806,7 +806,7 @@ impl Codec {
             Codec::Rar(params) => Box::new(rar::Stream::new(params.clone())),
             Codec::Bcj2(params) => Box::new(bcj2::Bcj2::new(params)),
             Codec::Ppmd7 { order, mem, size } => {
-                Box::new(Streaming(rar::Ppmd7::new(u32::from(*order), *mem, *size)))
+                Box::new(rar::Ppmd7::new(u32::from(*order), *mem, *size))
             }
             Codec::Ppmd8 { size } => Box::new(ppmd8::Ppmd8::new(*size)),
             Codec::Zstd => Box::new(Streaming(zstd::Zstd::new())),

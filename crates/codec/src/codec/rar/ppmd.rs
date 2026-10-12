@@ -36,9 +36,26 @@ const PAGE: usize = 1 << PAGE_BITS;
 pub type Trace = Vec<(u32, u32, u32)>;
 
 /// The heap, allocated in pages on first write.
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub(crate) struct Mem {
     pages: Vec<Option<Box<[u8]>>>,
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Heap bytes copied by [`Mem`] clones on this thread, for tests that
+    /// bound how much of the model a decoder copies.
+    pub(crate) static CLONED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+impl Clone for Mem {
+    fn clone(&self) -> Self {
+        #[cfg(test)]
+        CLONED.with(|c| c.set(c.get().saturating_add(self.heap_size())));
+        Mem {
+            pages: self.pages.clone(),
+        }
+    }
 }
 
 impl Mem {
@@ -1019,7 +1036,9 @@ impl Ppm {
         const TOP: u32 = 1 << 24;
         const BOT: u32 = 1 << 15;
         if self.seven {
-            while self.range < TOP {
+            // A zero range (corrupt data) would never grow; the next
+            // threshold then fails.
+            while self.range < TOP && self.range != 0 {
                 self.code = self.code << 8 | u32::from(bits.get_byte());
                 self.range <<= 8;
             }
@@ -1369,6 +1388,12 @@ pub struct Ppmd7 {
 /// `PPMD7_MIN_MEM_SIZE`, `PPMD7_MAX_MEM_SIZE`).
 const SEVEN_MIN_MEM: u32 = 1 << 11;
 const SEVEN_MAX_MEM: u32 = u32::MAX - 12 * 3;
+/// Input [`Ppmd7`] keeps unread before decoding a symbol, unless the input
+/// has ended: a symbol escapes through at most 65 contexts (orders 64 down
+/// to -1), each one coder operation that reads at most 3 bytes.
+const MARGIN: usize = 512;
+/// Symbols decoded per call at most.
+const BATCH: usize = 4096;
 
 impl Ppmd7 {
     pub fn new(order: u32, mem: u32, size: u64) -> Self {
@@ -1414,52 +1439,70 @@ impl Ppmd7 {
     }
 }
 
-impl crate::codec::pipeline::Decode for Ppmd7 {
-    fn step(
+impl crate::codec::pipeline::Decoder for Ppmd7 {
+    /// Decodes a symbol only while at least [`MARGIN`] bytes of input lie
+    /// ahead (or the input has ended), so a step never runs short and
+    /// never has to be rolled back: rolling back means copying the model,
+    /// up to its whole memory, before every step.
+    fn decode(
         &mut self,
         input: &[u8],
-        _eof: bool,
+        eof: bool,
         out: &mut Vec<u8>,
         step: usize,
         limit: usize,
-    ) -> Result<crate::codec::pipeline::Step> {
-        use crate::codec::pipeline::Step;
+    ) -> Result<crate::codec::pipeline::Status> {
+        use crate::codec::pipeline::Status;
+        if self.produced >= self.size {
+            return Ok(Status::Done);
+        }
         if !self.started {
+            if input.len() < 5 && !eof {
+                return Ok(Status::NeedInput);
+            }
             self.begin(input)?;
         }
-        let left = self.size.saturating_sub(self.produced);
-        let n = u64::try_from(step.max(1)).unwrap_or(u64::MAX).min(left);
+        let target = out.len().saturating_add(step.clamp(1, BATCH));
+        let start = out.len();
         let mut bits = Bits {
             data: input,
             base: 0,
             pos: self.pos,
         };
-        for _ in 0..n {
+        let ahead = u64::try_from(MARGIN).unwrap_or(u64::MAX).saturating_mul(8);
+        while self.produced < self.size && out.len() < target {
+            if !eof && bits.pos.saturating_add(ahead) > bits.end() {
+                break;
+            }
             if out.len() >= limit {
                 return Err(Diagnostic::output_limit(limit));
             }
-            let c = self
-                .ppm
-                .decode_char(&mut bits)
-                .ok_or_else(|| Diagnostic::malformed("PPMd: corrupt data"))?;
+            let c = self.ppm.decode_char(&mut bits);
+            // The range coder reads whole bytes ahead of the symbols;
+            // reading past the input means the stream is truncated.
+            if bits.pos > bits.end() {
+                return Err(Diagnostic::malformed("PPMd: input ends unexpectedly"));
+            }
+            let c = c.ok_or_else(|| Diagnostic::malformed("PPMd: corrupt data"))?;
             out.push(c);
+            self.produced = self.produced.saturating_add(1);
+            self.pos = bits.pos;
         }
-        // The range coder reads whole bytes ahead of the symbols; reading
-        // past the input means it ran out (or the stream is truncated).
-        if bits.pos > bits.end() {
-            return Err(Diagnostic::malformed("PPMd: input ends unexpectedly"));
-        }
-        self.pos = bits.pos;
-        self.produced = self.produced.saturating_add(n);
         Ok(if self.produced >= self.size {
-            Step::Done
+            Status::Done
+        } else if out.len() > start {
+            Status::More
         } else {
-            Step::More
+            Status::NeedInput
         })
     }
 
     fn consumed(&self) -> usize {
         usize::try_from(self.pos / 8).unwrap_or(usize::MAX)
+    }
+
+    fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
+        None
     }
 
     fn releasable_input(&self) -> usize {
@@ -1477,7 +1520,15 @@ impl crate::codec::pipeline::Decode for Ppmd7 {
         out_len
     }
 
-    fn heap_size(&self) -> Option<usize> {
-        Some(std::mem::size_of::<Ppm>().saturating_add(self.ppm.heap_size()))
+    /// Taken only when the session asks for one (and charged for its
+    /// size), never per step.
+    fn checkpoint(&self) -> Option<Box<dyn crate::codec::pipeline::Decoder>> {
+        Some(Box::new(self.clone()))
+    }
+
+    fn state_size(&self) -> usize {
+        std::mem::size_of::<Self>()
+            .saturating_add(std::mem::size_of::<Ppm>())
+            .saturating_add(self.ppm.heap_size())
     }
 }
