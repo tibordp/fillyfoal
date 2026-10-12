@@ -352,6 +352,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         let compressed = r.flags & FLAG_COMPRESSED != 0;
         let payload = match (name, compressed) {
+            // The bootable image's metadata resource (usually a copy of
+            // that image's lookup table entry): the same view.
+            ("Boot metadata", _) if r.flags & 0x02 != 0 => Node::new("Image metadata")
+                .span(data)
+                .summary("security data and directory tree")
+                .lazy(
+                    boot_metadata,
+                    (input, data, r, scheme, codec, resource(&raw, 48)),
+                ),
             ("Lookup table", true) => match scheme.codec(&r) {
                 Some(c) => Node::new("Entries")
                     .span(data)
@@ -767,6 +776,35 @@ async fn metadata(
         .ok_or_else(|| Diagnostic::malformed("no root directory entry").at(data.sub(root, 8)))?;
     cx.emit(dentry_node(&meta, &d, "Root directory", Path::new()));
     Ok(())
+}
+
+/// Expander: the boot metadata resource, read like an image's metadata
+/// resource (its streams are found in the lookup table, decoded first if
+/// it is compressed).
+async fn boot_metadata(
+    cx: Cx,
+    (input, stream, r, scheme, codec, lookup): (
+        Input,
+        Span,
+        Resource,
+        Scheme,
+        &'static str,
+        Option<Resource>,
+    ),
+) -> Result<()> {
+    let Some(l) = lookup else {
+        return Err(Diagnostic::malformed("no lookup table").at(stream));
+    };
+    let raw = input.span.sub(l.offset, l.size);
+    let table = if l.flags & FLAG_COMPRESSED == 0 {
+        raw
+    } else {
+        let Some(c) = scheme.codec(&l) else {
+            return Err(Diagnostic::unsupported(format!("{codec} compression")).at(raw));
+        };
+        crate::codec::decode_span(&cx, raw, &c, None).await?.span
+    };
+    metadata(cx, (input, stream, r, scheme, codec, table)).await
 }
 
 /// Expander: the security data at the start of a metadata resource.
