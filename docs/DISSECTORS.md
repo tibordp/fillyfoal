@@ -50,14 +50,23 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> { ... }
 
 Probes see the first `HEAD_LEN` (0x10800 bytes, 66 KiB: enough for the
 btrfs and UFS2 superblocks at 64 KiB) and last `TAIL_LEN` (1 KiB) bytes
-and the total length. Make them cheap and specific: check more than two magic
-bytes when you can (versions, sizes that must be sane), because a false
-positive hides the right format. Weak magics (one or two bytes) need a
-`Probe::Custom` with extra checks. A format with no reliable signature at
-all (schemaless protobuf, Thrift) gets `Probe::Never`: it is offered by
-`formats::by_extension` and dissected through `Session::open_as`, and the
-test harness dissects its fixtures as the format their directory names
-(and checks that no probe claims them).
+and the total length. Probes run on every file the host opens, so be
+conservative: a false positive hides the right format, and probe bugs are
+the ones users see first. Make them cheap and specific: check more than two
+magic bytes when you can (versions, sizes that must be sane). Weak magics
+(one or two bytes) need a `Probe::Custom` with extra checks. Never rely on
+the whole structure being inside the head: on a large file a header table,
+a record list or a text document runs past `HEAD_LEN`, so check what the
+head holds and accept a structure the head cuts off. A format with no
+reliable signature at all (schemaless protobuf, Thrift) gets
+`Probe::Never`: it is offered by `formats::by_extension` and dissected
+through `Session::open_as`, and the test harness dissects its fixtures as
+the format their directory names (and checks that no probe claims them).
+
+When you fix a probe that claimed the wrong file, add that file as a
+negative fixture, under the directory of the format it really is (see
+section 9): `fixtures_are_identified_correctly` then keeps both probes
+honest.
 
 **Second phase.** Identification runs on every file the host opens, maybe
 over remote storage where each range read costs, so the first phase reads
@@ -88,6 +97,10 @@ own detection step only; names lie, so use it as a tie-breaker for a
 signature too weak to stand alone (`Deep::extension_is`), never instead
 of one, and never in `over` probes. `fixtures_are_identified_correctly`
 runs both phases with each fixture's name.
+
+A probe cannot always tell; when the dissector finds out later that the
+content is really another format, it hands it over with `Cx::hand_off`
+(see section 6) rather than dissecting it as itself.
 
 A family of related formats (RIFF → WAV/AVI/WebP, ISO BMFF → MP4/HEIC/AVIF,
 ZIP → DOCX/EPUB/APK) shares one dissector and registers one `Format` per
@@ -248,7 +261,11 @@ the only signal, so work that is not charged is invisible.
   their size, and reads of lazily decoded sources charge as they decode.
   Identification charges for the custom probes it ran over the head
   (about 1,500 units when nothing matches a full head), so content
-  identified many times over (one node per BGZF block) is not free.
+  identified many times over (one node per BGZF block) is not free. A
+  dissector that runs identification itself (to label a ZIP by its
+  content, or to look past a long ID3 tag) calls
+  `cx.registry().identify_costed(&head)` and charges the units it returns
+  with `cx.charge`.
   Probes run on every identification: keep them cheap, and remember that
   dozens of them see the same head (text probes share one memoized
   encoding check, `text::encoding::classify`).
@@ -289,6 +306,18 @@ units, and the robustness tests fail if that ever happens on a fixture. The
 net only catches work that is charged; uncharged work is caught by review.
 Small fixtures hide all of this, so when writing a loop, ask what it does on
 an input a thousand times larger than the fixture.
+
+Measure rather than assume. The robustness sweep with `SWEEP_TIMES` set
+(see section 9) prints each fixture's time next to its work units; a
+fixture whose time per unit is far above a microsecond does
+uncharged work somewhere. Tests that bound work assert units
+(`Session::work_done`) or yield counts, never wall-clock time: timings
+flake on a loaded machine. `common::POLL_CEILING` exists only as a
+generous backstop for a whole input parsed in one step. Where counts in
+the input are not bounded by the structure that holds them (a count field
+claiming millions of elements from a few bytes, an entry referenced many
+times, nesting by reference), add a test with a crafted input that checks
+work and output stay bounded (see `tests/data_bounds.rs`).
 
 ## 5. Spans: `sub` versus `sub_exact`
 
@@ -382,6 +411,16 @@ an input a thousand times larger than the fixture.
   files, unallocated virtual-disk blocks) are `Span::zeros(len)` pieces:
   they read as zeros and resolve to nothing. `formats::disk::PieceList`
   collects and merges pieces for you.
+- **Images of compressed or sparse blocks** (QCOW2 clusters, VMDK grains,
+  DMG and Android sparse chunks, zisofs blocks) are assembled the same way:
+  one piece per unit, with each compressed unit a piece of its own
+  `cx.decode_lazy(span, &codec, size)` source, so only the units a read
+  reaches are decoded (see `qcow.rs`, `dmg.rs`). Never decode a whole image
+  when the node is expanded: that worked on fixtures and froze on real
+  disks. Where a container records restart points of one long stream (an
+  xz index, a BGZF block list, a WIM chunk table), pass them as seeds
+  (`cx.decode_lazy_seeded`, or `formats::expand_content_seeded`), so a far
+  read starts at the nearest one.
 - **Decoded data** you computed yourself (base64, quoted-printable, a custom
   decompressor): `cx.add_derived(Origin { parent, transform: "base64" },
   bytes, consumed, error)`. Counts against `Limits::max_derived`.
@@ -453,6 +492,20 @@ label).
 - Parsing the same structure for many nodes (an object stream, a string
   table)? Parse once and share it: `cx.cached::<T>(span, "kind")` /
   `cx.cache(span, "kind", Arc::new(value))`.
+- Rust 1.88 (the MSRV): no `if let` guards in `match` arms or other syntax
+  stabilised later.
+
+A change must pass the whole gate before it is merged (CI runs the same):
+
+```sh
+cargo fmt --all --check
+cargo clippy --workspace --all-targets
+cargo test --workspace
+for f in text archive data image av security exec docs system science games; do
+  cargo check -p fillyfoal --lib --no-default-features --features "$f"
+done
+cargo +1.88 check --lib --workspace
+```
 
 ## 9. Testing
 
@@ -474,21 +527,50 @@ layout:
   (see `tests/fixtures/synthetic/README.md`).
 
 Prefer external fixtures: a real writer is the only check that the
-dissector agrees with the format as others implement it. Every fixture is
-automatically fully explored and snapshotted (`tests/snapshots/`, named
-`formats__<format>__<file>.snap` whichever tree it is in), then truncated at
-many lengths and mutated hundreds of times; every variant must settle
-without panics, hangs or internal errors. Keep fixtures small (ideally
-< 16 KiB, never > 64 KiB), never commit files you did not create or that
-are not freely redistributable, and never put the same `<format>/<file>` in
+dissector agrees with the format as others implement it. A synthetic
+fixture written from the same reading of the spec as the dissector agrees
+with it whether or not that reading is right; such fixtures have hidden
+wrong paddings, header sizes, flag bits and opcode tables that the first
+real file exposed. So:
+
+- Make a fixture with the real tool when one exists, and list it in
+  `SOURCES.md` with the producer, its version and the exact commands.
+- A synthetic binary fixture comes from a generator committed under
+  `tests/data/<format>/` (hand-written text fixtures need none). If no real
+  tool is at hand, cross-check the layout against a real file or a second
+  independent description before trusting the snapshot, and say in the
+  module docs which parts are unverified.
+- Privacy: the repository is public. Build fixtures in a neutral
+  directory under `/tmp`, with neutral authors, owners and host names
+  (`fillyfoal`), and map build paths away (`-ffile-prefix-map`). Before
+  committing, scan each new fixture for your user, full and host names and
+  home path, in ASCII and UTF-16 and inside compressed streams and archive
+  members. Never use someone's personal files as fixtures.
+- Provenance of code: read only sources whose licence is compatible with
+  GPLv3 (never unRAR's). If you followed an upstream implementation
+  closely, say so in the module docs and add its notice and licence text
+  to `THIRD-PARTY.md`. If you wrote a layout from memory, say that plainly.
+- File names must be valid on Windows: no reserved device names (`nul`,
+  `con`, `aux`, `prn`, `com1`, `lpt1`, whatever the extension) and none of
+  `<>:"|?*\`, no trailing dot or space. `fixtures_are_classified`
+  enforces it.
+
+Every fixture is automatically fully explored and snapshotted
+(`tests/snapshots/`, named `formats__<format>__<file>.snap` whichever tree
+it is in), then truncated at many lengths and mutated hundreds of times;
+every variant must settle without panics, hangs or internal errors. Keep
+fixtures small (ideally < 16 KiB; larger only when the real tool cannot
+write anything smaller), never commit files you did not create or that are
+not freely redistributable, and never put the same `<format>/<file>` in
 both trees. `fixtures_are_classified` checks the layout and that
 `SOURCES.md` covers every external fixture.
 
 ```sh
 FIXTURE=bmp INSTA_UPDATE=always cargo test --test formats   # write snapshots
-cargo test && cargo clippy --all-targets                     # must be clean
 cargo run --example inspect -- file --depth 3                # look at it
 ```
+
+then the full gate from section 8.
 
 Formats identified by an exact image size (e.g. D64, ADF) need full-size
 fixtures; store those as `name.ext.gz` (`gzip -9 -n`) and the harness
@@ -530,4 +612,5 @@ repository with repetition:
 Elision lines count nodes and diagnostics, so a change in an elided part
 still changes the snapshot. To review a part that is elided, run the
 inspector on the fixture. If a fixture's snapshot hits the 256 KiB cut,
-its interesting part may well be cut too: shrink the fixture.
+its interesting part may well be cut too: shrink the fixture rather than
+raise the cap.

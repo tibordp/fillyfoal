@@ -15,7 +15,8 @@ read or decoded until you do.
 
 ## What's in the box
 
-About 400 kLOC of Rust. It takes a while to compile. You've been warned.
+About 500 kLOC of Rust. It takes a while to compile. You've been warned.
+
 The workspace splits it into a core (`crates/core`, with the codecs in
 `crates/codec`) and one crate per category of formats (`crates/av`,
 `crates/exec`, ...). The `fillyfoal` crate at the root pulls them together;

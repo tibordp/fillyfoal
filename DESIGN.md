@@ -12,8 +12,8 @@ exploration pays for additional work only as needed.
 
 - **Library first, UI-independent.** Hosts render the tree however they like.
 - **Sans-I/O core.** The host supplies bytes and performs all I/O. The core
-  never touches files, sockets or an executor. Adapters (sync, later Tokio)
-  live outside the core.
+  never touches files, sockets or an executor. Adapters sit on top of it
+  (`sync`, a blocking one; the WebAssembly viewer in `web/`).
 - **Structural and data laziness.** Unexpanded subtrees are not constructed;
   content is not read or decompressed merely because it exists. Prerequisite
   work is allowed, but its cost should be explicit.
@@ -50,7 +50,7 @@ exploration pays for additional work only as needed.
   a leaf with its span and an `Unsupported` diagnostic, distinct from
   `Malformed`, `Truncated` and `Limit`.
 - **Writing or editing files.**
-- **API stability** before the core survives SQLite and PDF.
+- **API stability**, for now.
 
 ## Codec policy
 
@@ -99,9 +99,30 @@ exploration pays for additional work only as needed.
   be budgeted and interrupted like everything else. No codec uses
   `filters::Whole` (decode once all input is in) any more; it is reserved
   for inputs bounded by a small constant.
-- CI tests both the hermetic and the feature-enabled build.
+- No optional codec features exist today, so the hermetic build is the only
+  one.
 
 ## Architecture (current)
+
+The workspace (MSRV 1.88, edition 2024) has three layers:
+
+- `crates/codec` (`fillyfoal-codec`): byte primitives, spans, diagnostics,
+  text helpers and every codec. No dependencies.
+- `crates/core` (`fillyfoal-core`): `Session`, `Cx`, nodes and values, the
+  DSL (`record!`, `Fields`, `Cursor`), the format plumbing (`Format`,
+  `Probe`, `DeepProbe`, `Registry`) and shared helpers
+  (`formats::util`).
+- Eleven category crates of dissectors: `text`, `archive`, `data`,
+  `image`, `av`, `security`, `exec`, `docs`, `system`, `science`, `games`.
+  Each depends on the core and on the categories it embeds; the graph has
+  no cycles, and a format in a crate that depends on yours is embedded by
+  name (`embedded_named`).
+
+The `fillyfoal` facade at the root has one feature per category (all on by
+default, each enabling the categories it needs) and assembles the
+registry in `src/formats.rs`: `FORMATS` (first-phase probes, in order),
+`STREAMING` and `DEEP`. `fillyfoal::Session` is the core's session over
+that registry.
 
 ```
 host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress::{Idle, Yielded, NeedBytes, NeedSecret}
@@ -121,8 +142,9 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
   by not polling; `collapse` discards the work. `progress(id)` reports how
   far a running expansion has got (from `Cx::progress`, or children out of
   an exact count). `address(id)` names a node by its path of child indices,
-  stable across collapses and sessions over the same bytes;
-  `reinterpret_at` applies an "inspect as" choice by address.
+  stable across collapses and sessions over the same bytes.
+  `work_done()` totals the units every expansion charged, however polls
+  split them; tests bound work with it instead of a clock.
 - **Dissectors are ordinary `async fn`s.** The session polls their futures
   with a no-op waker. A future suspends only through the context (`Cx`):
   - `cx.read(span).await` suspends while bytes are missing (**waiting for
@@ -131,7 +153,8 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
     suspend when it is exhausted (**yielded**). The core has no clock and no
     preemption, so the work between two suspension points must be bounded
     independently of the input (see "Accounting for work" in
-    `docs/DISSECTORS.md`). Decoding a lazy source
+    `docs/DISSECTORS.md`). Synchronous work already done is charged with
+    `cx.charge(n).await`. Decoding a lazy source
     charges as it goes, so a read far into a large stream yields partway
     and continues on the next poll; `Session::read_step` gives hosts the
     same bounded reads (`Session::read` decodes in one call);
@@ -148,7 +171,29 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
 - **Spans** are `(source, offset, len)`. Sources are host-provided or
   derived: decoded streams (`Cx::add_derived`, `codec::decode_span`, lazily
   `Cx::decode_lazy`) and piece lists over other sources (`Cx::add_pieces`),
-  memoized by `Origin { parent, transform }`.
+  memoized by `Origin { parent, transform }`. A stream whose decoded size
+  nothing records is decoded lazily with `Cx::decode_lazy_unsized`: its
+  length is an upper bound (`Cx::len_known` is false) until it has been
+  decoded to its end, and only `formats::STREAMING` formats see it before
+  then.
+- **Holes.** A host may declare the holes of a sparse source
+  (`Session::set_holes`, from `SEEK_HOLE`/`SEEK_DATA` or `FIEMAP`). Reads
+  wholly inside them are answered as zeros without asking the host, and
+  `Cx::next_data` lets a walker skip them and the zero pieces of piecewise
+  sources.
+- **Identification** has two phases. The first runs every `Probe` in
+  `FORMATS` order over the head (`HEAD_LEN`, 66 KiB) and tail (`TAIL_LEN`,
+  1 KiB); it is charged as work (`Registry::identify_costed`), since custom
+  probes scan the head. The second phase (`DeepProbe`, listed in
+  `formats::DEEP`) runs only when the first matched nothing or matched a
+  format a candidate lists in `over`; it may read the last
+  `DEEP_TAIL_LEN` (128 KiB) and the node's name (`Deep::name`), which only
+  breaks ties for a signature too weak to stand alone. A dissector that
+  finds its content is really another format hands it over
+  (`Cx::hand_off`), and the node takes that format. The host can force a
+  format: `Session::open_as` for a file, `Session::reinterpret` (or
+  `reinterpret_at` by address) for content inside one; a forced node is
+  never handed off.
 - **Secrets.** `cx.unlock(realm, prompt, verify)` suspends an expansion until
   the host answers a `SecretRequest` (`Progress::NeedSecret`, reported only
   when nothing else can run). Answers are cached per realm and attempt, so
@@ -173,19 +218,36 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
     parent. Bytes a dissector computed itself (`add_derived`) stay.
   - *Long streams*: a lazily decoded source keeps a sliding window. Codecs
     report what they no longer need (consumed input; output before their
-    LZ window — see "Releasing" in `codec::pipeline`), the source drops it
-    once its output exceeds twice the keep size (16 MiB, or a quarter of
-    `max_derived`), and a read behind the window decodes again from the
-    start (restart, no checkpoints).
+    LZ window; see "Releasing" in `codec::pipeline`), and the source drops
+    it once its output exceeds twice the keep size (16 MiB, or a quarter of
+    `max_derived`). A read behind the window resumes from the nearest
+    **checkpoint**: a clone of the decoder plus the window its history
+    reaches, taken while decoding from codecs that report their state
+    size (`Decode::heap_size`, giving `Decoder::checkpoint`), spaced at
+    least eight times their cost apart and thinned when they outgrow
+    their share of memory. Containers that record restart points (xz
+    index records, zstd frames, BGZF blocks, WIM and CHM chunk
+    tables) pass them as **seeds** (`Cx::decode_lazy_seeded`, `Seed`), so
+    a far read decodes from the nearest one, the first time too. Seeds are
+    trusted only until decoding disagrees with one at a boundary the
+    codec reports (`Decode::boundary`); then they are dropped. Codec tests
+    check checkpoints with `pipeline::verify_checkpoints`.
+  - *Damage*: `Streaming` treats a malformed-data error as a possible
+    shortage of input until the input ends. A codec that reports every
+    shortage as `Truncated` opts out (`Decode::truncation_is_exact`), so
+    damage early in a large stream is reported at once. A lazily decoded
+    source that stopped on an error reports it on the short read
+    ("decoding stopped: ...").
   - *Bytes* are an LRU cache of host chunks (`Limits::cache_bytes`);
     parsed values shared through `cx.cache` are bounded too.
 - **Partial results.** Children are pushed as they are produced; if the
   expansion fails, what was emitted stays and the error is attached to the
   expanded node.
 - **Composition.** A format entry point is `async fn(Cx, Input)` over a
-  region (`Input { span, nesting }`), so the same dissector serves a whole
-  file, a PE resource or (later) a decompressed ZIP member. `formats::embedded`
-  produces a lazy node that detects and dissects a region on expansion.
+  region (`Input { span, nesting, outer }`), so the same dissector serves a
+  whole file, a PE resource or a decompressed ZIP member.
+  `formats::embedded` produces a lazy node that detects and dissects a
+  region on expansion.
 
 ### DSL, version 0
 
@@ -202,8 +264,8 @@ fn file_header(f: &mut Fields<'_>, _: &()) -> Result<FileHeader> {
 }
 ```
 
-Macros or derives will be extracted from repetition once PE, ZIP and tar
-exist.
+Fixed layouts have since moved to `record!` (struct, decoder, size and
+rendering from one declaration); derives have not been needed.
 
 ## Decisions that are expensive to reverse
 
@@ -225,24 +287,12 @@ layout.
 
 ## Roadmap
 
-1. Core + PE (headers, sections, data directories, imports, exports,
-   resources with embedded-object detection, debug/CodeView, certificates,
-   overlay). Done, plus version resources.
-2. ZIP (stored members first) + PNG member: derived sources and composition.
-   Done.
-3. In-house inflate behind the codec interface; ZIP deflate members. Done
-   (whole-member decoding into memory, budgeted; streaming is still open).
-4. tar.gz: streaming-only derived source, checkpoints, budgets under load.
-   Partly done: large members are decoded lazily (`Cx::inflate_lazy`), so
-   the first page of a huge tarball costs only what it reads. Decoded bytes
-   are kept (bounded by `max_derived`); checkpoints that allow discarding
-   and re-decoding are still open.
-5. SQLite: page graph, resume keys with traversal stacks, overflow chains as
-   fragmented sources.
-6. MP4: generic recursive boxes, huge fixed-stride tables, random index access.
-7. PDF: tokenized parsing, xref, incremental updates, object streams.
-
-The core is not considered stable until SQLite and PDF fit without contortion.
+The slices that were meant to test the core are done: PE, ZIP (stored, then
+deflate through the in-house inflate), tar.gz with lazily decoded members
+and decoder checkpoints, SQLite (page graph, overflow chains as piecewise
+sources), MP4 (recursive boxes, large sample tables) and PDF (xref,
+incremental updates, object streams), and the core carries all of them.
+What remains open is listed under "Open questions".
 
 ## Findings from the PE slice
 
@@ -266,6 +316,8 @@ The core is not considered stable until SQLite and PDF fit without contortion.
 - **Not yet done in PE:** Rich header, delay imports, base relocations,
   exception/TLS/load-config tables, .NET metadata. These appear as leaves with
   spans. (Version resources and Authenticode via the ASN.1 dissector are done.)
+  *Since done:* all of these (`pe/extra.rs`, `loadcfg.rs`, `unwind.rs`,
+  `clr.rs`, `metadata.rs`).
 
 ## Findings from scaling out (hundreds of formats)
 
@@ -291,8 +343,9 @@ The core is not considered stable until SQLite and PDF fit without contortion.
   `Session::resolve` maps them back to file offsets. Holes are spans of a
   virtual `SourceId::ZEROS`, so a sparse 2 TiB disk costs nothing.
 - **Probe window.** `HEAD_LEN` grew from 36 KiB to 66 KiB so superblocks at
-  64 KiB (btrfs, UFS2) are detectable; signatures at the end of a device (md
-  v0.90/1.0) still are not, since probes see only the last 1 KiB.
+  64 KiB (btrfs, UFS2) are detectable. Signatures near the end of a device
+  (md v0.90/1.0) are not visible in the 1 KiB tail; *resolved* by the
+  second phase (`DeepProbe`).
 - **Composition compounds.** Each new format improves others: text inside
   archives, JPEG frames inside AVI, PNG inside game packs, TAR inside Android
   backups. Snapshot diffs after merges are mostly such improvements.
@@ -323,7 +376,8 @@ unioning `mod.rs` sections. What they reported, consolidated:
   times and FlatBuffers readers twice (`ml::proto`, `ml::flatbuf`, `geo`,
   `archive::crx`, `geo::osm`). They should move to a public
   `formats::wire` (protobuf with static schemas, FlatBuffers tables,
-  MSB-first bit reader).
+  MSB-first bit reader). *Resolved:* `formats::util::wire` (protobuf,
+  FlatBuffers, Thrift, Cap'n Proto).
 - **Hand-off to text dissectors** (an XML vocabulary, a JSON schema) works
   by calling `xml::dissect`/`json::dissect` and annotating afterwards; a
   public "dissect as XML/JSON with this summary" entry point would be cleaner.
@@ -362,13 +416,14 @@ containers. Consolidated:
 - **Expected-size and single-frame modes are missing** for some codecs:
   `Lz4Block` fails on trailing padding (ZSO with alignment), Zstd decodes
   every frame it finds (qcow2 has to walk the frame header itself). A
-  per-codec "stop at the expected size" would cover both.
+  per-codec "stop at the expected size" would cover both. *Partly
+  resolved:* `Codec::ZstdFrame` decodes exactly one frame.
 - **Lazy decode errors are dropped:** if a lazily decoded source fails
-  partway, reads come back short with no diagnostic. The error should be
-  attached to the content node.
+  partway, reads come back short with no diagnostic. *Resolved:* the short
+  read fails with the stream's error ("decoding stopped: ...").
 - **Post-filters inside `Codec`.** 7z BCJ/Delta chains decode in memory
   because the filters are not `Codec` stages; making them stages would let
-  them decode lazily.
+  them decode lazily. *Resolved:* they are (`Codec::PostFilter`).
 - **Bit-at-a-time Huffman** (inflate, LZX, implode) is fine for viewing but
   slow on very large members; table-driven decoding is the obvious next
   step if it ever matters.
@@ -376,20 +431,58 @@ containers. Consolidated:
   of small, complete files only; measured at about 1 in 10⁶ false positives
   on random 4–63 byte inputs and none on short text.
 
+## Findings from the review audit (2026-10)
+
+A review of every category, then independent verification of each finding,
+then fixes. What it showed:
+
+- **Synthetic fixtures check consistency, not correctness.** A generator
+  written from the same misreading as the dissector agrees with it. MAT
+  padding, the GDBM 64-bit header, AY, Arm FIP UUIDs, the ZFS uberblock
+  slot size, TraceLogging array flags, PCL XL opcodes and MSI transform
+  masks were all wrong with green snapshots. Fixtures from the real tool
+  found bugs almost every time they were added.
+- **Probes held the most visible defects:** false positives from
+  Markdown, JSON, LRC and legacy-text probes; LibreOffice OOXML identified
+  as plain ZIP; probes that needed the whole structure inside the head and
+  failed on large files. The fixes were tighter probes with a negative
+  fixture for each, and the deep phase for evidence past the head.
+- **Bounded work has to be measured, not assumed.** Identification was not
+  charged at all; EVTX undercharged Binary XML; probes rescanned the head
+  per probe; 7z PPMd cloned its model on every step; wall-clock assertions
+  in tests flaked under load. Time per unit across the robustness sweep
+  (`SWEEP_TIMES`) finds such outliers mechanically; tests now assert work
+  units and yield counts, with `common::POLL_CEILING` only as a backstop.
+- **Laziness regresses silently.** QCOW2 and VMDK images and zisofs files
+  were decoded whole on expand; DMG and Android sparse images were never
+  assembled.
+  One pattern fixed all of them: the image as a pieces source, each
+  compressed cluster, grain or chunk a `decode_lazy` piece decoded when a
+  read reaches it.
+- **Process.** Review, independent verification (which refuted several
+  confident findings), then fixes. Provenance was checked at every merge:
+  what was read, and whether it is credited in `THIRD-PARTY.md`. A gate
+  was added the first time a class of breakage escaped: the MSRV build
+  (an `if let` guard), Windows-invalid fixture names (`nul.log`).
+
 ## Open questions
 
-- Decoder checkpoints, so a read far behind a lazily decoded source's
-  window resumes from a snapshot instead of the start (deliberately left
-  out: restart is good enough so far).
-- Lazily decoded sources need their decoded length up front; a stream that
-  records none (standalone `.bz2`, `.br`, LZ4 frames without a content
-  size) is decoded eagerly. Provisional lengths would fix this but make
-  tail reads (identification looks at the end) decode everything.
-- Node links (to other nodes, not just spans) for graph-shaped formats.
-- CJK multi-byte encodings (Shift_JIS, EUC-JP, GBK/GB18030, Big5, EUC-KR):
-  labels are recognised and reported as unsupported; decoders with
-  generated tables (~200 KB) would belong behind a feature. Single-byte code
-  pages are in `codec::charset`.
-- Format detection beyond magic bytes, with confidence. ("Inspect as…" is
-  there: `Session::open_as` for a file, `Session::reinterpret` for content
-  inside one.)
+- **Multi-file inputs.** Some formats span several files: EWF segment sets
+  (`.E01`, `.E02`, ...), MyISAM tables (`.MYI` holds the row length and
+  index, `.MYD` the rows), split archives. Each file is dissected alone
+  today (EWF says the rest of the media is in other segment files;
+  fixed-length MyISAM rows show as one region). A host "sibling file"
+  facility, a request for a named file next to the current one that the
+  host may decline, would let a dissector join them.
+- **Node links** (to other nodes, not just spans, as `target` is) for
+  graph-shaped formats.
+- **Refinement probes.** A variant of a generic container (ZIP, CFB,
+  RIFF, TIFF) must still be registered before its parent; a `Format` with
+  a parent whose probe runs after the parent matched would remove that
+  ordering constraint.
+- **Detection confidence.** The first matching probe wins; there is no
+  score, so a weak probe early in `FORMATS` can still shadow a stronger
+  one later.
+- **Table-driven Huffman** for inflate, LZX and implode, if decoding speed
+  on very large members ever matters.
+- **Fuzzing** beyond the truncation and mutation sweeps.
