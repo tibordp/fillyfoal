@@ -11,6 +11,7 @@
 pub mod adobe;
 pub mod bitmap;
 pub mod eot;
+pub mod glyphs;
 mod opentype;
 pub mod pfb;
 pub mod raster;
@@ -88,6 +89,8 @@ pub struct TableEntry {
     pub span: Span,
     /// The font the table belongs to, for content dissected as another format.
     pub input: Input,
+    /// The font's tables, for decoders that need values from other tables.
+    pub ctx: glyphs::FontCtx,
 }
 
 /// Emits the offset table and the table directory of the font whose offset
@@ -120,18 +123,31 @@ async fn font_at(cx: &Cx, input: Input, file: Span, base: u64) -> Result<String>
     let dir = file.sub_exact(base.saturating_add(12), u64::from(count).saturating_mul(16))?;
     let data = cx.read(dir).await?;
     let mut entries = Vec::new();
+    let mut tables = Vec::new();
     for rec in data.as_chunks::<16>().0 {
         let tag = fourcc(rec.get(..4).unwrap_or_default());
         let checksum = u32_be(rec, 4).unwrap_or(0);
         let offset = u64::from(u32_be(rec, 8).unwrap_or(0));
         let length = u64::from(u32_be(rec, 12).unwrap_or(0));
-        entries.push(TableEntry {
+        let span = file.sub(offset, length);
+        tables.push(glyphs::FontTable {
+            tag: tag.clone(),
+            span,
+            zlib: None,
+        });
+        entries.push((tag, checksum, span));
+    }
+    let ctx = glyphs::FontCtx::new(tables);
+    let entries: Vec<TableEntry> = entries
+        .into_iter()
+        .map(|(tag, checksum, span)| TableEntry {
             tag,
             checksum,
-            span: file.sub(offset, length),
+            span,
             input,
-        });
-    }
+            ctx: ctx.clone(),
+        })
+        .collect();
     let mut summary = flavor(version).to_owned();
     let names = entries.iter().find(|e| e.tag == "name").map(|e| e.span);
     if let Some(name) = names {
@@ -216,7 +232,7 @@ async fn table(cx: Cx, entry: TableEntry) -> Result<()> {
             )))
         });
     }
-    tables::decode(&cx, entry.input, &entry.tag, entry.span).await
+    tables::decode(&cx, entry.input, &entry.tag, entry.span, &entry.ctx).await
 }
 
 /// TrueType collections: a header listing the offset tables of the fonts.

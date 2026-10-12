@@ -4,7 +4,8 @@
 //! decompressed when expanded and then decoded like an sfnt table. WOFF2
 //! compresses all tables together into one Brotli stream; its table
 //! directory, with variable-length sizes and transforms, is shown in full,
-//! and the decompressed tables are decoded unless WOFF2 transformed them.
+//! and the decompressed tables are decoded; the transformed `glyf` and
+//! `hmtx` are shown in their transformed layout (streams, flags).
 
 use crate::bytes::u32_be;
 use crate::codec::inflate_span;
@@ -12,7 +13,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::font::tables;
+use crate::formats::font::{glyphs, tables};
 use crate::formats::util::datakit::size;
 use crate::formats::util::fmt::fourcc;
 use crate::formats::{Codec, Format, Input, Probe, content};
@@ -123,6 +124,22 @@ pub async fn woff(cx: Cx, input: Input) -> Result<()> {
         false,
     );
     let data = cx.read(dir).await?;
+    let ctx = glyphs::FontCtx::new(
+        data.as_chunks::<20>()
+            .0
+            .iter()
+            .map(|rec| {
+                let offset = u32_be(rec, 4).unwrap_or(0);
+                let comp = u32_be(rec, 8).unwrap_or(0);
+                let orig = u32_be(rec, 12).unwrap_or(0);
+                glyphs::FontTable {
+                    tag: fourcc(rec.get(..4).unwrap_or_default()),
+                    span: file.sub(offset.into(), comp.into()),
+                    zlib: (comp < orig).then_some(orig),
+                }
+            })
+            .collect(),
+    );
     for (i, rec) in data.as_chunks::<20>().0.iter().enumerate() {
         let tag = fourcc(rec.get(..4).unwrap_or_default());
         let offset = u32_be(rec, 4).unwrap_or(0);
@@ -145,7 +162,16 @@ pub async fn woff(cx: Cx, input: Input) -> Result<()> {
                 .summary(summary)
                 .lazy(
                     woff_table,
-                    (input, entry, span, tag, comp < orig, orig, checksum),
+                    (
+                        input,
+                        entry,
+                        span,
+                        tag,
+                        comp < orig,
+                        orig,
+                        checksum,
+                        ctx.clone(),
+                    ),
                 ),
         )
         .await;
@@ -155,7 +181,7 @@ pub async fn woff(cx: Cx, input: Input) -> Result<()> {
 
 async fn woff_table(
     cx: Cx,
-    (input, entry, span, tag, compressed, orig, checksum): (
+    (input, entry, span, tag, compressed, orig, checksum, ctx): (
         Input,
         Span,
         Span,
@@ -163,6 +189,7 @@ async fn woff_table(
         bool,
         u32,
         u32,
+        glyphs::FontCtx,
     ),
 ) -> Result<()> {
     cx.emit(crate::fields::struct_node(
@@ -200,7 +227,7 @@ async fn woff_table(
             )))
         });
     }
-    tables::decode(&cx, input, &tag, table).await
+    tables::decode(&cx, input, &tag, table, &ctx).await
 }
 
 /// Known tags, indexed by the low 6 bits of a WOFF2 table entry's flags.
@@ -332,30 +359,56 @@ async fn woff2_tables(
         cx.diag(e);
     }
     cx.set_count(Count::Exact(crate::bytes::to_u64(entries.len())));
+    // Where each table lies in the decompressed stream (a transformed table
+    // in its transformed form), for decoders that need other tables.
     let mut offset = 0u64;
-    for (_, tag, flags, orig, transform) in entries {
-        let len = u64::from(transform.unwrap_or(orig));
-        let span = decoded.span.sub(offset, len);
+    let mut spans = Vec::new();
+    for (_, tag, _, orig, transform) in &entries {
+        let len = u64::from(transform.unwrap_or(*orig));
+        spans.push(glyphs::FontTable {
+            tag: tag.clone(),
+            span: decoded.span.sub(offset, len),
+            zlib: None,
+        });
         offset = offset.saturating_add(len);
-        let mut summary = format!("{len} bytes");
+    }
+    let ctx = glyphs::FontCtx::new(spans.clone());
+    for ((_, tag, flags, _, transform), table) in entries.into_iter().zip(spans) {
+        let span = table.span;
+        let mut summary = format!("{} bytes", span.len);
         if let Some(name) = tables::table_name(&tag) {
             summary = format!("{name}, {summary}");
         }
         let node = Node::new(format!("'{tag}'")).span(span);
-        cx.push(match transform {
-            Some(_) => node.summary(format!(
-                "{summary}, transformed (version {}; not decoded)",
-                flags >> 6
+        let version = flags >> 6;
+        cx.push(match (transform, tag.as_str()) {
+            (None, _) => node
+                .summary(summary)
+                .lazy(woff2_table, (input, span, tag, ctx.clone(), false)),
+            (Some(_), "loca") => node.summary(format!(
+                "{summary}, transformed (version {version}): rebuilt from the transformed 'glyf'"
             )),
-            None => node.summary(summary).lazy(woff2_table, (input, span, tag)),
+            (Some(_), "glyf" | "hmtx") => node
+                .summary(format!("{summary}, transformed (version {version})"))
+                .lazy(woff2_table, (input, span, tag, ctx.clone(), true)),
+            (Some(_), _) => node.summary(format!(
+                "{summary}, transformed (version {version}; unknown transform)"
+            )),
         })
         .await;
     }
     Ok(())
 }
 
-async fn woff2_table(cx: Cx, (input, span, tag): (Input, Span, String)) -> Result<()> {
-    tables::decode(&cx, input, &tag, span).await
+async fn woff2_table(
+    cx: Cx,
+    (input, span, tag, ctx, transformed): (Input, Span, String, glyphs::FontCtx, bool),
+) -> Result<()> {
+    match (transformed, tag.as_str()) {
+        (true, "glyf") => glyphs::woff2_glyf(&cx, span).await,
+        (true, _) => glyphs::woff2_hmtx(&cx, span, &ctx).await,
+        (false, _) => tables::decode(&cx, input, &tag, span, &ctx).await,
+    }
 }
 
 async fn woff2_directory(cx: Cx, (entries,): (Vec<Woff2Entry>,)) -> Result<()> {

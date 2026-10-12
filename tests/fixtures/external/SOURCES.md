@@ -935,3 +935,5 @@ Stored whole as `.raw.zst` (zstd -19).
 ## Robotics recordings
 | `mcap/zstd.mcap` | Python `mcap` 1.2.2 `Writer` (zstandard 0.25.0) | `uv run --with mcap==1.2.2 --with zstandard==0.25.0 --with lz4==4.4.5 python3 -I tests/data/mcap/make.py OUTDIR`; reproduced byte-for-byte; one zstd chunk with a schema, two channels and nine JSON messages, then the summary section |
 | `mcap/lz4.mcap` | Python `mcap` 1.2.2 `Writer` (lz4 4.4.5) | same script; the same records in one LZ4-frame chunk |
+## Bitmap fonts (fontTools)
+| `sfnt/fonttools-glyf-bitmaps.ttf` | fontTools 4.66.1 `FontBuilder` and TTX import, Pillow 11.3.0 | reproduced byte-for-byte with `SOURCE_DATE_EPOCH=1767225600 uv run --with fonttools==4.66.1 --with pillow==11.3.0 python3 -I tests/data/sfnt/make_bitmap_glyphs.py OUT`: five TrueType glyphs (empty, simple, composite with a scale), hmtx/vmtx, an `sbix` strike (PNG and `dupe`), a `CBDT`/`CBLC` strike (format 17 PNGs, index format 1) and an `EBDT`/`EBLC` strike (format 5, index format 2) |

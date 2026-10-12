@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ fillyfoal-family.ttc — font collection, 2 fonts  [0x0+0x6ec]
     Tag: "ttcf"  [0x0+0x4]
@@ -175,7 +175,23 @@ expression: "common::explore(&name, &data)"
           Instance 0 — name ID 258, coordinates (700, 100)  [0x278+0xc]
     ▾ 'glyf' — Glyph data, 36 bytes  [0x284+0x24]
         Checksum: 0x3be03c0 — valid
-        Data — 36 bytes  [0x284+0x24]
+        Glyph 0 — empty  [0x284+0x0]
+      ▾ Glyph 1 — 1 contours, (100, 0)–(500, 700)  [0x284+0x24]
+          Number of contours: 1  [0x284+0x2]
+          xMin: 100  [0x286+0x2]
+          yMin: 0  [0x288+0x2]
+          xMax: 500  [0x28a+0x2]
+          yMax: 700  [0x28c+0x2]
+          End points of contours — 1 contours, 4 points  [0x28e+0x2]
+          Instruction length: 0  [0x290+0x2]
+          Instructions:   ||  [0x292+0x0]
+          Flags — 4 bytes  [0x292+0x4]
+          X coordinates — 8 bytes  [0x296+0x8]
+          Y coordinates — 8 bytes  [0x29e+0x8]
+          Padding  [0x2a6+0x2]
+        Glyph 2 — empty  [0x2a8+0x0]
+        Glyph 3 — empty  [0x2a8+0x0]
+        Glyph 4 — empty  [0x2a8+0x0]
     ▾ 'head' — Font header, 54 bytes, 1000 units/em  [0x2a8+0x36]
         Checksum: 0x2feeed21 — valid
         Major version: 1  [0x2a8+0x2]
@@ -215,10 +231,20 @@ expression: "common::explore(&name, &data)"
         Number of h metrics: 5  [0x302+0x2]
     ▾ 'hmtx' — Horizontal metrics, 20 bytes  [0x304+0x14]
         Checksum: 0xbb80000 — valid
-        Data — 20 bytes  [0x304+0x14]
+      ▾ Long metrics — 5 × (advance width, left side bearing)  [0x304+0x14]
+          Glyph 0 — advance 600, lsb 0  [0x304+0x4]
+          Glyph 1 — advance 600, lsb 0  [0x308+0x4]
+          Glyph 2 — advance 600, lsb 0  [0x30c+0x4]
+          Glyph 3 — advance 600, lsb 0  [0x310+0x4]
+          Glyph 4 — advance 600, lsb 0  [0x314+0x4]
     ▾ 'loca' — Index to location, 12 bytes  [0x318+0xc]
         Checksum: 0x240024 — valid
-        Data — 12 bytes  [0x318+0xc]
+        Glyph 0 — 0x0, empty  [0x318+0x2]
+        Glyph 1 — 0x0, 36 bytes  [0x31a+0x2]
+        Glyph 2 — 0x24, empty  [0x31c+0x2]
+        Glyph 3 — 0x24, empty  [0x31e+0x2]
+        Glyph 4 — 0x24, empty  [0x320+0x2]
+        End — 0x24, end  [0x322+0x2]
     ▾ 'maxp' — Maximum profile, 32 bytes, 5 glyphs  [0x324+0x20]
         Checksum: 0x47000a — valid
         Version: 0x10000 — 1.0 (TrueType)  [0x324+0x4]
@@ -452,7 +478,23 @@ expression: "common::explore(&name, &data)"
             U+1F600–U+1F600 — → glyphs 4–4  [0x234+0xc]
     ▾ 'glyf' — Glyph data, 36 bytes  [0x284+0x24]
         Checksum: 0x3be03c0 — valid
-        Data — 36 bytes  [0x284+0x24]
+        Glyph 0 — empty  [0x284+0x0]
+      ▾ Glyph 1 — 1 contours, (100, 0)–(500, 700)  [0x284+0x24]
+          Number of contours: 1  [0x284+0x2]
+          xMin: 100  [0x286+0x2]
+          yMin: 0  [0x288+0x2]
+          xMax: 500  [0x28a+0x2]
+          yMax: 700  [0x28c+0x2]
+          End points of contours — 1 contours, 4 points  [0x28e+0x2]
+          Instruction length: 0  [0x290+0x2]
+          Instructions:   ||  [0x292+0x0]
+          Flags — 4 bytes  [0x292+0x4]
+          X coordinates — 8 bytes  [0x296+0x8]
+          Y coordinates — 8 bytes  [0x29e+0x8]
+          Padding  [0x2a6+0x2]
+        Glyph 2 — empty  [0x2a8+0x0]
+        Glyph 3 — empty  [0x2a8+0x0]
+        Glyph 4 — empty  [0x2a8+0x0]
     ▾ 'head' — Font header, 54 bytes, 1000 units/em  [0x538+0x36]
         Checksum: 0x2feeed21 — valid
         Major version: 1  [0x538+0x2]
@@ -492,10 +534,20 @@ expression: "common::explore(&name, &data)"
         Number of h metrics: 5  [0x592+0x2]
     ▾ 'hmtx' — Horizontal metrics, 20 bytes  [0x304+0x14]
         Checksum: 0xbb80000 — valid
-        Data — 20 bytes  [0x304+0x14]
+      ▾ Long metrics — 5 × (advance width, left side bearing)  [0x304+0x14]
+          Glyph 0 — advance 600, lsb 0  [0x304+0x4]
+          Glyph 1 — advance 600, lsb 0  [0x308+0x4]
+          Glyph 2 — advance 600, lsb 0  [0x30c+0x4]
+          Glyph 3 — advance 600, lsb 0  [0x310+0x4]
+          Glyph 4 — advance 600, lsb 0  [0x314+0x4]
     ▾ 'loca' — Index to location, 12 bytes  [0x318+0xc]
         Checksum: 0x240024 — valid
-        Data — 12 bytes  [0x318+0xc]
+        Glyph 0 — 0x0, empty  [0x318+0x2]
+        Glyph 1 — 0x0, 36 bytes  [0x31a+0x2]
+        Glyph 2 — 0x24, empty  [0x31c+0x2]
+        Glyph 3 — 0x24, empty  [0x31e+0x2]
+        Glyph 4 — 0x24, empty  [0x320+0x2]
+        End — 0x24, end  [0x322+0x2]
     ▾ 'maxp' — Maximum profile, 32 bytes, 5 glyphs  [0x324+0x20]
         Checksum: 0x47000a — valid
         Version: 0x10000 — 1.0 (TrueType)  [0x324+0x4]

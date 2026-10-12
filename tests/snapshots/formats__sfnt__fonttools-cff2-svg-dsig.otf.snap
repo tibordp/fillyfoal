@@ -392,7 +392,9 @@ expression: "common::explore(&display_name(&path), &data)"
       Number of h metrics: 2  [0x116+0x2]
   ▾ 'hmtx' — Horizontal metrics, 8 bytes  [0x180+0x8]
       Checksum: 0x44c0064 — valid
-      Data — 8 bytes  [0x180+0x8]
+    ▾ Long metrics — 2 × (advance width, left side bearing)  [0x180+0x8]
+        Glyph 0 — advance 500, lsb 50  [0x180+0x4]
+        Glyph 1 — advance 600, lsb 50  [0x184+0x4]
   ▾ 'maxp' — Maximum profile, 6 bytes, 2 glyphs  [0x118+0x6]
       Checksum: 0x25000 — valid
       Version: 0x5000 — 0.5 (CFF)  [0x118+0x4]
