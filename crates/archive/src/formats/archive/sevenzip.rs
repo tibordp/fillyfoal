@@ -850,8 +850,9 @@ struct Plan {
     codec: Codec,
     /// The decompressor's output size.
     size: u64,
-    /// Post-filters, in the order they are applied.
-    post: Vec<Post>,
+    /// Post-filters, in the order they are applied, with the start offset
+    /// of a branch converter.
+    post: Vec<(Post, u32)>,
     /// For a folder of several packed streams (BCJ2): the (offset, length)
     /// of each, relative to the folder's packed data, in the order the
     /// codec's input has them.
@@ -897,14 +898,24 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
     for &i in order.get(1..).unwrap_or_default() {
         let c = coder(i).ok_or_else(|| f.methods())?;
         post.push(match c.id.as_slice() {
-            // Branch converters; a start offset (4-byte props) other than
-            // zero is not supported.
-            id if branch(id).is_some() && c.props.iter().all(|&b| b == 0) => {
-                branch(id).unwrap_or(Post::X86)
+            // Branch converters, with an optional 4-byte start offset
+            // (7-Zip writes one for ARM64 and RISC-V, `-mf=ARM64:4096`),
+            // which must be a multiple of the instruction alignment.
+            id if let Some(kind) = branch(id) => {
+                let start = match c.props.len() {
+                    0 => 0,
+                    4 => u32_le(&c.props, 0).unwrap_or(0),
+                    _ => return Err(format!("{} with {} property bytes", method_name(id), c.props.len())),
+                };
+                if start.checked_rem(kind.alignment()) != Some(0) {
+                    return Err(format!("{} with a misaligned start offset", method_name(id)));
+                }
+                (kind, start)
             }
-            [0x03] => {
-                Post::Delta(usize::from(c.props.first().copied().unwrap_or(0)).saturating_add(1))
-            }
+            [0x03] => (
+                Post::Delta(usize::from(c.props.first().copied().unwrap_or(0)).saturating_add(1)),
+                0,
+            ),
             id => return Err(method_name(id)),
         });
     }
@@ -1073,7 +1084,10 @@ impl Plan {
             return self.codec.clone();
         }
         let mut stages = vec![self.codec.clone()];
-        stages.extend(self.post.iter().map(|&p| Codec::PostFilter(p)));
+        stages.extend(self.post.iter().map(|&(post, start)| match start {
+            0 => Codec::PostFilter(post),
+            start => Codec::PostFilterAt { post, start },
+        }));
         Codec::chain("7z coders", "7z coders (lazy)", stages)
     }
 }
