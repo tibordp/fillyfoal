@@ -322,7 +322,7 @@ impl<'a> Rd<'a> {
         }
         let start = self.pos;
         for i in 0..len {
-            if i % 4096 == 4095 {
+            if i % 256 == 255 {
                 self.cx.checkpoint().await;
             }
             let c = self.next_byte().await?;
@@ -391,7 +391,7 @@ impl<'a> Rd<'a> {
         }
         let total = n.saturating_mul(words);
         for i in 0..total {
-            if i % 1024 == 1023 {
+            if i % 64 == 63 {
                 self.cx.checkpoint().await;
             }
             self.word().await?;
@@ -476,10 +476,11 @@ async fn skip_item(rd: &mut Rd<'_>, ctx: &RCtx, refs: &mut u64) -> Result<()> {
 
 async fn skip_tasks(rd: &mut Rd<'_>, ctx: &RCtx, refs: &mut u64, first: Task) -> Result<()> {
     let mut stack = vec![first];
-    let mut steps = 0u32;
+    // The first step checkpoints too, so many small skips are charged.
+    let mut steps = 15u32;
     while let Some(task) = stack.pop() {
         steps = steps.wrapping_add(1);
-        if steps.is_multiple_of(256) {
+        if steps.is_multiple_of(16) {
             rd.cx.checkpoint().await;
         }
         if stack.len() > R_MAX_STACK {
@@ -823,15 +824,23 @@ async fn item_node(
             let n = rd.length().await?;
             let mut shown = Vec::new();
             let mut r = refs;
+            // A preview only: a vector cut short still gets its node (its
+            // elements show where it ends).
             for _ in 0..n.min(6) {
-                shown.push(if ty == 16 {
-                    string_item(&mut rd, ctx, &mut r).await?.map_or_else(
-                        || "NA".to_owned(),
-                        |s| format!("{:?}", crate::formats::util::fmt::clip(&s, 40)),
-                    )
+                let one = if ty == 16 {
+                    string_item(&mut rd, ctx, &mut r).await.map(|s| {
+                        s.map_or_else(
+                            || "NA".to_owned(),
+                            |s| format!("{:?}", crate::formats::util::fmt::clip(&s, 40)),
+                        )
+                    })
                 } else {
-                    short(&atomic(&mut rd, ty).await?)
-                });
+                    atomic(&mut rd, ty).await.map(|v| short(&v))
+                };
+                match one {
+                    Ok(s) => shown.push(s),
+                    Err(_) => break,
+                }
             }
             summary = format!(
                 "{summary}, {}{}{}{}",
@@ -926,11 +935,26 @@ struct VecInfo {
     names: Vec<String>,
 }
 
-async fn vec_info(cx: &Cx, ctx: &Arc<RCtx>, pos: u64, refs: u64) -> Result<Arc<VecInfo>> {
+/// The vector at `pos`'s attributes and element names, as far as they can
+/// be read: a vector cut short (or claiming more elements than the stream
+/// holds) has none, and its elements show where it ends.
+async fn vec_info(cx: &Cx, ctx: &Arc<RCtx>, pos: u64, refs: u64) -> Arc<VecInfo> {
     let key = ctx.span.sub(pos, 1);
     if let Some(info) = cx.cached::<VecInfo>(key, "r-vector") {
-        return Ok(info);
+        return info;
     }
+    let mut info = VecInfo {
+        attr: None,
+        names: Vec::new(),
+    };
+    // Errors are reported where the elements or attributes are read.
+    let _ = vec_walk(cx, ctx, pos, refs, &mut info).await;
+    let info = Arc::new(info);
+    cx.cache(key, "r-vector", info.clone());
+    info
+}
+
+async fn vec_walk(cx: &Cx, ctx: &Arc<RCtx>, pos: u64, refs: u64, info: &mut VecInfo) -> Result<()> {
     let mut rd = Rd::new(cx, ctx, pos);
     let f = read_flags(&mut rd).await?;
     let n = rd.length().await?;
@@ -942,14 +966,11 @@ async fn vec_info(cx: &Cx, ctx: &Arc<RCtx>, pos: u64, refs: u64) -> Result<Arc<V
         24 => rd.skip_values(n, 1, 1).await?,
         _ => skip_tasks(&mut rd, ctx, &mut r, Task::Items(n)).await?,
     }
-    let mut info = VecInfo {
-        attr: None,
-        names: Vec::new(),
-    };
     if f.attr() {
         info.attr = Some((rd.pos, r));
         // Walk the attribute pairlist for `names`.
         loop {
+            cx.checkpoint().await;
             let cell = rd.pos;
             let c = read_flags(&mut rd).await?;
             if c.ty() != 2 {
@@ -968,13 +989,12 @@ async fn vec_info(cx: &Cx, ctx: &Arc<RCtx>, pos: u64, refs: u64) -> Result<Arc<V
             let vf = read_flags(&mut rd).await?;
             if tag.as_deref() == Some("names") && vf.ty() == 16 {
                 let k = rd.length().await?;
-                for i in 0..k {
-                    if i < R_MAX_NAMES {
-                        let s = string_item(&mut rd, ctx, &mut r).await?;
-                        info.names.push(s.unwrap_or_else(|| "NA".to_owned()));
-                    } else {
-                        skip_item(&mut rd, ctx, &mut r).await?;
+                for i in 0..k.min(R_MAX_NAMES) {
+                    if i % 16 == 15 {
+                        cx.checkpoint().await;
                     }
+                    let s = string_item(&mut rd, ctx, &mut r).await?;
+                    info.names.push(s.unwrap_or_else(|| "NA".to_owned()));
                 }
                 break;
             }
@@ -982,9 +1002,7 @@ async fn vec_info(cx: &Cx, ctx: &Arc<RCtx>, pos: u64, refs: u64) -> Result<Arc<V
             skip_item(&mut rd, ctx, &mut r).await?;
         }
     }
-    let info = Arc::new(info);
-    cx.cache(key, "r-vector", info.clone());
-    Ok(info)
+    Ok(())
 }
 
 fn element_label(names: &[String], i: u64) -> String {
@@ -1147,7 +1165,7 @@ async fn cells(cx: Cx, ctx: Arc<RCtx>, first: u64, refs: u64) -> Result<()> {
 
 /// The elements of a vector, then its attributes.
 async fn elements(cx: Cx, ctx: Arc<RCtx>, pos: u64, refs: u64, f: Flags) -> Result<()> {
-    let info = vec_info(&cx, &ctx, pos, refs).await?;
+    let info = vec_info(&cx, &ctx, pos, refs).await;
     let ty = f.ty();
     let mut rd = Rd::new(&cx, &ctx, pos);
     read_flags(&mut rd).await?;
