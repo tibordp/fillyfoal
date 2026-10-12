@@ -1133,9 +1133,19 @@ const HPROF_TAGS: EnumTable = &[
     (0x2c, "HEAP DUMP END"),
 ];
 
-async fn hprof(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let mut cur = Cursor::new(&cx, file, BE);
+/// The HPROF record walker's state, kept in resume marks.
+#[derive(Clone, Debug)]
+struct Hprof {
+    pos: u64,
+    id_size: u32,
+    n: u64,
+    counts: BTreeMap<u8, u64>,
+    version: String,
+}
+
+/// Emits the header fields (format, identifier size, timestamp) and
+/// returns the walker's starting state.
+async fn hprof_header(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Hprof> {
     let (version, vspan) = cur.cstr(32).await?;
     cx.emit(Node::new("Format").span(vspan).value(text(version.clone())));
     let at = cur.pos();
@@ -1157,10 +1167,41 @@ async fn hprof(cx: Cx, input: Input) -> Result<()> {
                 unix_seconds: i64::try_from(millis / 1000).unwrap_or(0),
             }),
     );
-    let mut counts = BTreeMap::<u8, u64>::new();
-    let mut n = 0u64;
+    Ok(Hprof {
+        pos: cur.pos(),
+        id_size,
+        n: 0,
+        counts: BTreeMap::new(),
+        version,
+    })
+}
+
+async fn hprof(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let mut cur = Cursor::new(&cx, file, BE);
+    // Resume marks: the record walk's state. A resumed run starts in the
+    // records, past the header fields emitted before them.
+    let resumed = cx.resume::<Hprof>();
+    let Hprof {
+        pos,
+        id_size,
+        mut n,
+        mut counts,
+        version,
+    } = match resumed {
+        Some(state) => state,
+        None => hprof_header(&cx, &mut cur).await?,
+    };
+    cur.seek(pos);
     while !cur.at_end() {
         let start = cur.pos();
+        cx.mark(|| Hprof {
+            pos: start,
+            id_size,
+            n,
+            counts: counts.clone(),
+            version: version.clone(),
+        });
         let tag = cur.u8().await?;
         let _time = cur.u32().await?;
         let len = cur.u32().await?;

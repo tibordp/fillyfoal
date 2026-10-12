@@ -161,6 +161,19 @@ pub async fn dissect_srec(cx: Cx, input: Input) -> Result<()> {
     dissect(&cx, input, Flavor::Motorola).await
 }
 
+/// The record walker's state, kept in resume marks.
+#[derive(Clone, Copy, Debug)]
+struct Walk {
+    pos: u64,
+    records: u64,
+    data_bytes: u64,
+    /// Intel extended address.
+    base: u64,
+    low: u64,
+    high: u64,
+    bad: u64,
+}
+
 async fn dissect(cx: &Cx, input: Input, flavor: Flavor) -> Result<()> {
     let file = input.span;
     let name = match flavor {
@@ -168,14 +181,35 @@ async fn dissect(cx: &Cx, input: Input, flavor: Flavor) -> Result<()> {
         Flavor::Motorola => "Motorola S-record",
     };
     cx.annotate(name);
-    let mut pos = 0u64;
-    let mut records = 0u64;
-    let mut data_bytes = 0u64;
-    let mut base = 0u64; // Intel extended address
-    let mut low = u64::MAX;
-    let mut high = 0u64;
-    let mut bad = 0u64;
+    // Resume marks: the whole walker state (`Walk`).
+    let Walk {
+        mut pos,
+        mut records,
+        mut data_bytes,
+        mut base,
+        mut low,
+        mut high,
+        mut bad,
+    } = cx.resume::<Walk>().unwrap_or(Walk {
+        pos: 0,
+        records: 0,
+        data_bytes: 0,
+        base: 0,
+        low: u64::MAX,
+        high: 0,
+        bad: 0,
+    });
     while pos < file.len {
+        let mark = Walk {
+            pos,
+            records,
+            data_bytes,
+            base,
+            low,
+            high,
+            bad,
+        };
+        cx.mark(move || mark);
         let window = cx.read_avail(file.sub(pos, MAX_LINE)).await?;
         let nl = window.iter().position(|&b| b == b'\n');
         let line_len = nl.map_or(window.len(), |n| n.saturating_add(1));

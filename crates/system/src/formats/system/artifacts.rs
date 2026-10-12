@@ -543,8 +543,11 @@ async fn journal_preview(cx: &Cx, payload: Span, codec: &crate::codec::Codec) ->
 async fn journal_objects(cx: Cx, (input, arena, compact): (Input, Span, bool)) -> Result<()> {
     let payload_at = if compact { 72 } else { 64 };
     let mut cur = Cursor::new(&cx, arena, LE);
+    // Resume marks: the position of the next object.
+    cur.seek(cx.resume::<u64>().unwrap_or(0));
     while cur.remaining() >= 16 {
         let start = cur.pos();
+        cx.mark(move || start);
         let header = cur.bytes(16).await?;
         let kind = header.first().copied().unwrap_or(0);
         let flags = header.get(1).copied().unwrap_or(0);

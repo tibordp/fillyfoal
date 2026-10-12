@@ -1135,11 +1135,16 @@ const CRC_MAX: u64 = 1 << 20;
 async fn tfrecord(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut cur = Cursor::new(&cx, file, Endian::Little);
-    let mut n = 0u64;
-    let mut kinds = (0u64, 0u64);
+    // Resume marks: (position, records so far, (examples, events)).
+    let (pos, mut n, mut kinds) = cx
+        .resume::<(u64, u64, (u64, u64))>()
+        .unwrap_or((0, 0, (0, 0)));
+    cur.seek(pos);
     while !cur.at_end() {
         cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let start = cur.pos();
+        let mark = (start, n, kinds);
+        cx.mark(move || mark);
         let head = cur.bytes(12).await?;
         let len = u64_le(&head, 0).unwrap_or(0);
         let len_crc = u32_le(&head, 8).unwrap_or(0);
