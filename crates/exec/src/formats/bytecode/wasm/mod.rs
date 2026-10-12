@@ -76,6 +76,59 @@ const SECTION: EnumTable = &[
     (13, "Tag"),
 ];
 
+/// Component sections (component-model `Binary.md`, layer 1).
+const COMPONENT_SECTION: EnumTable = &[
+    (0, "Custom"),
+    (1, "Core module"),
+    (2, "Core instance"),
+    (3, "Core type"),
+    (4, "Component"),
+    (5, "Instance"),
+    (6, "Alias"),
+    (7, "Type"),
+    (8, "Canon"),
+    (9, "Start"),
+    (10, "Import"),
+    (11, "Export"),
+    (12, "Value"),
+];
+
+const CORE_SORT: EnumTable = &[
+    (0x00, "core func"),
+    (0x01, "core table"),
+    (0x02, "core memory"),
+    (0x03, "core global"),
+    (0x04, "core tag"),
+    (0x10, "core type"),
+    (0x11, "core module"),
+    (0x12, "core instance"),
+];
+
+const SORT: EnumTable = &[
+    (0x01, "func"),
+    (0x02, "value"),
+    (0x03, "type"),
+    (0x04, "component"),
+    (0x05, "instance"),
+];
+
+const PRIMITIVE: EnumTable = &[
+    (0x7f, "bool"),
+    (0x7e, "s8"),
+    (0x7d, "u8"),
+    (0x7c, "s16"),
+    (0x7b, "u16"),
+    (0x7a, "s32"),
+    (0x79, "u32"),
+    (0x78, "s64"),
+    (0x77, "u64"),
+    (0x76, "f32"),
+    (0x75, "f64"),
+    (0x74, "char"),
+    (0x73, "string"),
+    (0x64, "error-context"),
+];
+
 const EXTERNAL_KIND: EnumTable = &[
     (0, "func"),
     (1, "table"),
@@ -111,6 +164,9 @@ struct Section {
 type Module = Arc<ModuleInfo>;
 
 struct ModuleInfo {
+    input: Input,
+    /// Layer 1: a component, whose sections are not core sections.
+    component: bool,
     sections: Vec<Section>,
     /// Name of each custom section, by section index.
     custom_names: Vec<(usize, String)>,
@@ -495,12 +551,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         sections.push(Section { id, span, body });
     }
     let m: Module = Arc::new(ModuleInfo {
+        input,
+        component: layer == 1,
         sections,
         custom_names,
     });
 
     let summary = if layer == 1 {
-        format!("WebAssembly component (version {version:#x})")
+        component_summary(&cx, &m, version).await
     } else {
         module_summary(&cx, &m).await
     };
@@ -519,9 +577,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .and_then(|k| m.custom_names.get(k));
         let label = match custom {
             Some((_, n)) => format!("Custom \"{n}\""),
+            None if m.component => name_or(COMPONENT_SECTION, s.id.into(), "Section"),
             None => name_or(SECTION, s.id.into(), "Section"),
         };
-        let count = if matches!(s.id, 0 | 8 | 12) {
+        let single = if m.component {
+            matches!(s.id, 0 | 1 | 4 | 9)
+        } else {
+            matches!(s.id, 0 | 8 | 12)
+        };
+        let count = if single {
             None
         } else {
             leading_count(&cx, s.body).await
@@ -662,13 +726,22 @@ async fn section(cx: Cx, (m, index): (Module, usize)) -> Result<()> {
             .block(s.span.sub(0, s.span.len.saturating_sub(s.body.len)))
             .await?;
         let mut f = Fields::emitting(&cx, &header, LE);
-        f.u8("id").enumeration(SECTION).emit()?;
+        f.u8("id")
+            .enumeration(if m.component {
+                COMPONENT_SECTION
+            } else {
+                SECTION
+            })
+            .emit()?;
         let size_len = header.span.len.saturating_sub(1);
         f.bytes("size", size_len)
             .with(|_, n| n.value(uint(s.body.len, 32)).desc("LEB128"))
             .emit()?;
     }
     let body = s.body;
+    if m.component {
+        return component_section(&cx, &m, s, resumed).await;
+    }
     match s.id {
         0 => custom(&cx, body, resumed).await,
         1 => {
@@ -794,6 +867,180 @@ async fn section(cx: Cx, (m, index): (Module, usize)) -> Result<()> {
             Ok(())
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Components
+
+async fn component_summary(cx: &Cx, m: &ModuleInfo, version: u16) -> String {
+    let mut parts = vec![format!("WebAssembly component (version {version:#x})")];
+    let nested = |id: u8| to_u64(m.sections.iter().filter(|s| s.id == id).count());
+    let modules = nested(1);
+    if modules > 0 {
+        parts.push(plural(modules, "core module"));
+    }
+    let components = nested(4);
+    if components > 0 {
+        parts.push(plural(components, "nested component"));
+    }
+    for (id, what) in [(10u8, "import"), (11, "export")] {
+        let mut total = 0u64;
+        for s in m.sections.iter().filter(|s| s.id == id).take(64) {
+            total = total.saturating_add(leading_count(cx, s.body).await.unwrap_or(0));
+        }
+        if total > 0 {
+            parts.push(plural(total, what));
+        }
+    }
+    parts.join(", ")
+}
+
+/// A component section: nested core modules and components are dissected
+/// as WebAssembly; imports and exports are listed; the other sections'
+/// entries are not decoded.
+async fn component_section(
+    cx: &Cx,
+    m: &ModuleInfo,
+    s: Section,
+    resumed: Option<Walk>,
+) -> Result<()> {
+    let body = s.body;
+    match s.id {
+        0 => custom(cx, body, resumed).await,
+        1 | 4 => {
+            let label = if s.id == 1 { "Module" } else { "Component" };
+            cx.emit(crate::formats::embedded(label, m.input.nested(body)));
+            Ok(())
+        }
+        10 => {
+            vector(cx, body, resumed, 2, "import", |r, _, _| {
+                let n = extern_name(r)?;
+                let desc = extern_desc(r)?;
+                Some(Entry::new(Node::new(n).value(text(desc))))
+            })
+            .await
+        }
+        6 => {
+            vector(cx, body, resumed, 2, "alias", |r, i, _| {
+                let what = sort(r)?;
+                let target = match r.u8()? {
+                    0x00 => {
+                        let i = r.uleb()?;
+                        format!("export {:?} of instance {i}", name(r)?)
+                    }
+                    0x01 => {
+                        let i = r.uleb()?;
+                        format!("export {:?} of core instance {i}", name(r)?)
+                    }
+                    0x02 => {
+                        let up = r.uleb()?;
+                        format!("outer {up} index {}", r.uleb()?)
+                    }
+                    _ => return None,
+                };
+                Some(Entry::new(
+                    Node::new(format!("alias {i}"))
+                        .value(text(what))
+                        .summary(target),
+                ))
+            })
+            .await
+        }
+        11 => {
+            vector(cx, body, resumed, 2, "export", |r, _, _| {
+                let n = extern_name(r)?;
+                let item = sort_index(r)?;
+                let node = Node::new(n).value(text(item));
+                let node = match r.u8()? {
+                    0 => node,
+                    1 => node.summary(format!("as {}", extern_desc(r)?)),
+                    _ => return None,
+                };
+                Some(Entry::new(node))
+            })
+            .await
+        }
+        _ => {
+            let n = leading_count(cx, body).await.unwrap_or(0);
+            cx.emit(
+                Node::new("Contents")
+                    .span(body)
+                    .summary(count(n, "entry", "entries"))
+                    .diag(Diagnostic::unsupported(format!(
+                        "decoding component {} section entries",
+                        name_or(COMPONENT_SECTION, s.id.into(), "unknown").to_lowercase()
+                    ))),
+            );
+            Ok(())
+        }
+    }
+}
+
+/// An `importname'` or `exportname'`: a kind byte, the name and, for kind
+/// 1, a version suffix.
+fn extern_name(r: &mut Reader<'_>) -> Option<String> {
+    match r.u8()? {
+        0 => name(r),
+        1 => {
+            let n = name(r)?;
+            match r.u8()? {
+                0 => Some(n),
+                1 => Some(format!("{n}@{}", name(r)?)),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// A component `externdesc`.
+fn extern_desc(r: &mut Reader<'_>) -> Option<String> {
+    Some(match r.u8()? {
+        0x00 => {
+            if r.u8()? != 0x11 {
+                return None;
+            }
+            format!("core module (type {})", r.uleb()?)
+        }
+        0x01 => format!("func (type {})", r.uleb()?),
+        0x02 => match r.u8()? {
+            0x00 => format!("value (eq {})", r.uleb()?),
+            0x01 => format!("value ({})", value_type(r)?),
+            _ => return None,
+        },
+        0x03 => match r.u8()? {
+            0x00 => format!("type (eq {})", r.uleb()?),
+            0x01 => "type (sub resource)".to_owned(),
+            _ => return None,
+        },
+        0x04 => format!("component (type {})", r.uleb()?),
+        0x05 => format!("instance (type {})", r.uleb()?),
+        _ => return None,
+    })
+}
+
+/// A component `valtype`: a primitive (one byte) or a type index.
+fn value_type(r: &mut Reader<'_>) -> Option<String> {
+    let b = r.peek()?;
+    if (0x64..=0x7f).contains(&b) {
+        r.u8()?;
+        return Some(name_or(PRIMITIVE, b.into(), "primitive"));
+    }
+    Some(format!("type {}", r.uleb()?))
+}
+
+/// A `sort`: a core sort after 0x00, or a component sort.
+fn sort(r: &mut Reader<'_>) -> Option<String> {
+    Some(match r.u8()? {
+        0x00 => name_or(CORE_SORT, r.u8()?.into(), "core sort"),
+        s => name_or(SORT, s.into(), "sort"),
+    })
+}
+
+/// A `sortidx`: a sort and an index.
+fn sort_index(r: &mut Reader<'_>) -> Option<String> {
+    let sort = sort(r)?;
+    Some(format!("{sort} {}", r.uleb()?))
 }
 
 /// A section holding one LEB128 number (start, data count).
