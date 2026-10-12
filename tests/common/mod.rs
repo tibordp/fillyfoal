@@ -665,11 +665,17 @@ fn explored(name: &str, data: &[u8], format: Option<&'static formats::Format>) -
 
 /// Units of work one exploration of a fixture may cost before its
 /// robustness sweep is scaled down (see [`sweep_plan`]): about 0.2 s at
-/// the intended microsecond per unit. Measured over the corpus (2026-10),
-/// only two fixtures exceed it, both by key derivations the format or tool
-/// fixes: `pkcs12/nss-pk12util.p12` (3.0M units, NSS's 600,000 PBKDF2
-/// iterations) and `jks/keytool.jceks` (1.6M, JCEKS's 200,000 MD5
-/// iterations per key); the next is `fat/mkfs-fat32.img` at 158k.
+/// the intended microsecond per unit. Measured over the corpus (2026-10,
+/// with identification charged), three fixtures exceed it: two by key
+/// derivations the format or tool fixes, `pkcs12/nss-pk12util.p12` (3.0M
+/// units, NSS's 600,000 PBKDF2 iterations) and `jks/keytool.jceks` (1.6M,
+/// JCEKS's 200,000 MD5 iterations per key), and `bdb/recno47.db` (276k);
+/// the next is `fat/mkfs-fat32.img` at 175k. Sweep time per unit varies
+/// about tenfold between fixtures (most below 1 µs a unit in the sweep's
+/// parallel run; `evtx/fillyfoal.evtx`, `kdb/vault.kdb`,
+/// `text/lines-utf16le.txt` and the ext images at 5-15 µs), but none is
+/// slow enough to list in [`SLOW_SWEEPS`]: the slowest whole sweep (evtx)
+/// takes under a minute of one thread.
 pub const HEAVY_WORK: u64 = 200_000;
 /// The fewest truncations and the fewest mutated copies a scaled-down sweep
 /// still runs.

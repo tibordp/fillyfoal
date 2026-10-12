@@ -52,6 +52,9 @@ fn instruction(line: &[u8]) -> Option<&'static str> {
 }
 
 fn probe_dockerfile(h: &Head<'_>) -> bool {
+    if !probe::is_text(h) {
+        return false;
+    }
     let head = probe::head(h);
     let mut continued = false;
     let mut seen = 0usize;

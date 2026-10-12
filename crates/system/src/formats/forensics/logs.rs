@@ -464,7 +464,9 @@ fn transcript_command(cmd: String, file: Span, list: Lines) -> Node {
 // Linux audit logs (auditd)
 
 fn audit_probe(h: &Head<'_>) -> bool {
-    let first = h.data.split(|&b| b == b'\n').next().unwrap_or_default();
+    let first = crate::formats::util::lines::split_lines(h.data)
+        .next()
+        .unwrap_or_default();
     h.starts_with(b"type=") && first.windows(11).any(|w| w == b" msg=audit(")
 }
 

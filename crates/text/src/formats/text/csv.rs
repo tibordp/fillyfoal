@@ -102,6 +102,10 @@ fn sniff(data: &[u8], candidates: &[u8]) -> Option<(u8, usize)> {
 }
 
 fn sniff_head(h: &Head<'_>, candidates: &[u8]) -> Option<(u8, usize)> {
+    // Cheap once classified (other probes ask too); binary heads stop here.
+    if !probe::is_text(h) {
+        return None;
+    }
     let head = probe::head(h);
     // Records of prose or code rarely have a constant number of separators;
     // still, require text that is not obviously something else.
@@ -113,8 +117,7 @@ fn sniff_head(h: &Head<'_>, candidates: &[u8]) -> Option<(u8, usize)> {
     if probe::contains(&head, b"\x1b[") {
         return None;
     }
-    let found = sniff(&head, candidates)?;
-    probe::is_text(h).then_some(found)
+    sniff(&head, candidates)
 }
 
 /// Field boundaries of one record.

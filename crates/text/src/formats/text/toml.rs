@@ -60,6 +60,9 @@ fn valid_value(value: &[u8]) -> bool {
 }
 
 fn probe_toml(h: &Head<'_>) -> bool {
+    if !probe::is_text(h) {
+        return false;
+    }
     let head = probe::head(h);
     let mut entries = 0usize;
     let mut headers = 0usize;
@@ -80,6 +83,18 @@ fn probe_toml(h: &Head<'_>) -> bool {
             if body.is_some_and(valid_key) {
                 headers = headers.saturating_add(1);
                 continue;
+            }
+            // `[Host Extender Info]` (a VBA PROJECT stream, INI files):
+            // words separated by spaces are no TOML key, and no array
+            // element continuing a multi-line value either.
+            if t.ends_with(b"]")
+                && body.map(probe::trim).is_some_and(|b| {
+                    !b.is_empty()
+                        && !b.iter().any(|c| matches!(c, b',' | b'"' | b'\''))
+                        && b.iter().any(u8::is_ascii_whitespace)
+                })
+            {
+                return false;
             }
         }
         match t.iter().position(|&b| b == b'=') {

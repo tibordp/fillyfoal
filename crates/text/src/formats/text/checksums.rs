@@ -94,6 +94,9 @@ fn parse(line: Piece<'_>) -> Option<Entry<'_>> {
 }
 
 fn probe_sums(h: &Head<'_>) -> bool {
+    if !probe::is_text(h) {
+        return false;
+    }
     let head = probe::head(h);
     let span = Span::new(crate::span::SourceId(0), 0, 0);
     let (mut good, mut bad) = (0usize, 0usize);

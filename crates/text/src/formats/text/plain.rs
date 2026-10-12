@@ -365,7 +365,9 @@ fn probe_script(h: &Head<'_>) -> bool {
     let Some(rest) = data.strip_prefix(b"#!") else {
         return false;
     };
-    let line = rest.split(|&b| b == b'\n').next().unwrap_or_default();
+    let line = crate::formats::util::lines::split_lines(rest)
+        .next()
+        .unwrap_or_default();
     line.len() < 512
         && line.iter().all(|&b| b >= 0x20 || b == b'\t' || b == b'\r')
         && super::probe::trim_start(line).first() == Some(&b'/')

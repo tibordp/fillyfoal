@@ -61,8 +61,10 @@ fn quoted_or_word(s: &str) -> Option<(String, &str)> {
 fn strings_probe(h: &Head<'_>) -> bool {
     let data = probe::head(h);
     let mut entries = significant(&data, &[b"/*", b"//", b"*"]).map(|l| {
-        let s = String::from_utf8_lossy(trim_start(l)).into_owned();
-        s.starts_with('"') && strings_entry(&s).is_some()
+        // The quote is checked before decoding: a binary head's first
+        // "line" may be all of it.
+        let t = trim_start(l);
+        t.first() == Some(&b'"') && strings_entry(&String::from_utf8_lossy(t)).is_some()
     });
     entries.next() == Some(true) && (entries.next() == Some(true) || probe::complete(h))
 }

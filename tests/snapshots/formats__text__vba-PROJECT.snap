@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ vba-PROJECT — UTF-8 text, CRLF line endings, 12 lines  [0x0+0x12b]
+    Encoding: "UTF-8"
+    Line endings: "CRLF" — 0 LF, 12 CRLF, 0 CR
+  ▾ Lines — 12 lines  [0x0+0x12b]
+      Line 1: "ID=\"{4C1E1D2A-6F5B-4E3C-9A8D-1B2C3D4E5F60}\""  [0x0+0x2b]
+      Line 2: "Name=\"Database1\""  [0x2d+0x10]
+      Line 3: "HelpContextID=\"0\""  [0x3f+0x11]
+      Line 4: "VersionCompatible32=\"393222000\""  [0x52+0x1f]
+      Line 5: "CMG=\"0A08B8E2BCE2BCE2BCE2BC\""  [0x73+0x1c]
+      Line 6: "DPB=\"1E1CAEF6AFF6AFF6\""  [0x91+0x16]
+      Line 7: "GC=\"2C2E9CC49DC59DC562\""  [0xa9+0x17]
+      Line 8: ""  [0xc2+0x0]
+      Line 9: "[Host Extender Info]"  [0xc4+0x14]
+      Line 10: "&H00000001={3832D640-CF90-11CF-8E43-00A0C911005A};VBE;&H00000000"  [0xda+0x40]
+      Line 11: ""  [0x11c+0x0]
+      Line 12: "[Workspace]"  [0x11e+0xb]

@@ -34,10 +34,12 @@ pub static XPM: Format = Format {
 };
 
 fn probe_xbm(h: &Head<'_>) -> bool {
-    let first = h.data.split(|&b| b == b'\n').next().unwrap_or_default();
+    let first = crate::formats::util::lines::split_lines(h.data)
+        .next()
+        .unwrap_or_default();
     h.starts_with(b"#define ")
         && first.windows(7).any(|w| w == b"_width ")
-        && h.data.windows(8).any(|w| w == b"_height ")
+        && crate::bytes::contains(h.data, b"_height ")
 }
 
 /// Text files are read whole, up to this size.

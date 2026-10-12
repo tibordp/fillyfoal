@@ -34,8 +34,7 @@ pub fn trim(data: &[u8]) -> &[u8] {
 
 /// Lines of `data` (split at `\n`, without a trailing `\r`).
 pub fn lines(data: &[u8]) -> impl Iterator<Item = &[u8]> {
-    data.split(|&b| b == b'\n')
-        .map(|l| l.strip_suffix(b"\r").unwrap_or(l))
+    crate::formats::util::lines::split_lines(data).map(|l| l.strip_suffix(b"\r").unwrap_or(l))
 }
 
 /// Non-blank lines that do not start (after indentation) with any of

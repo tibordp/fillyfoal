@@ -62,7 +62,9 @@ enum Kind {
 
 /// The name of a `Name: value` line (no leading space; `A-Za-z0-9-_.`).
 fn field_name(line: &[u8]) -> Option<&[u8]> {
-    let colon = line.iter().position(|&b| b == b':')?;
+    // Names are at most 64 bytes: a colon farther in (or none in a binary
+    // head's 66 KiB first "line") is no field.
+    let colon = line.iter().take(65).position(|&b| b == b':')?;
     let name = line.get(..colon)?;
     (!name.is_empty()
         && name.len() <= 64
@@ -74,6 +76,10 @@ fn field_name(line: &[u8]) -> Option<&[u8]> {
 }
 
 fn starts_with_field(h: &Head<'_>, names: &[&[u8]]) -> bool {
+    // Cheap once classified (other probes ask too); binary heads stop here.
+    if !probe::is_text(h) {
+        return false;
+    }
     let head = probe::head(h);
     let first = probe::lines(&head).next().unwrap_or_default();
     field_name(first).is_some_and(|n| names.iter().any(|k| n.eq_ignore_ascii_case(k)))
@@ -84,7 +90,6 @@ fn starts_with_field(h: &Head<'_>, names: &[&[u8]]) -> bool {
                 .unwrap_or(0)
                 .saturating_add(1),
         ) == Some(&b' ')
-        && probe::is_text(h)
 }
 
 fn probe_manifest(h: &Head<'_>) -> bool {
@@ -153,6 +158,9 @@ const DEB_KNOWN: &[&[u8]] = &[
 ];
 
 fn probe_deb822(h: &Head<'_>) -> bool {
+    if !probe::is_text(h) {
+        return false;
+    }
     let head = probe::head(h);
     let complete = probe::complete(h);
     let mut lines: Vec<&[u8]> = probe::lines(&head).take(200).collect();

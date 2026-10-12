@@ -101,12 +101,48 @@ pub enum Endian {
 /// `haystack`. An empty needle matches at `from` (if it is in range).
 pub fn find(haystack: &[u8], needle: &[u8], from: usize) -> Option<usize> {
     let rest = haystack.get(from..)?;
-    if needle.is_empty() {
+    let Some((&first, tail)) = needle.split_first() else {
         return Some(from);
+    };
+    // Candidates are found a word at a time: probes search whole heads
+    // (66 KiB) for strings that are usually absent.
+    let mut at = 0usize;
+    loop {
+        let p = at.checked_add(find_byte(rest.get(at..)?, first)?)?;
+        let next = p.checked_add(1)?;
+        if rest
+            .get(next..next.checked_add(tail.len())?)
+            .is_some_and(|w| w == tail)
+        {
+            return p.checked_add(from);
+        }
+        at = next;
     }
-    rest.windows(needle.len())
-        .position(|w| w == needle)
-        .map(|p| p.saturating_add(from))
+}
+
+/// The first position of `byte` in `haystack`, examining eight bytes at a
+/// time.
+pub fn find_byte(haystack: &[u8], byte: u8) -> Option<usize> {
+    const LO: u64 = 0x0101_0101_0101_0101;
+    const HI: u64 = 0x8080_8080_8080_8080;
+    let pattern = LO.wrapping_mul(u64::from(byte));
+    let (chunks, remainder) = haystack.as_chunks::<8>();
+    let mut base = 0usize;
+    for &chunk in chunks {
+        let word = u64::from_le_bytes(chunk) ^ pattern;
+        // A zero byte of `word` is a match; the lowest flagged byte is
+        // exact (false positives only appear above a true one).
+        let zero = word.wrapping_sub(LO) & !word & HI;
+        if zero != 0 {
+            let lane = usize::try_from(zero.trailing_zeros().wrapping_div(8)).ok()?;
+            return base.checked_add(lane);
+        }
+        base = base.checked_add(8)?;
+    }
+    remainder
+        .iter()
+        .position(|&b| b == byte)
+        .and_then(|p| base.checked_add(p))
 }
 
 /// The last position where `needle` occurs in `haystack`.
@@ -184,6 +220,7 @@ pub fn padding(v: u64, a: u64) -> u64 {
 }
 
 #[cfg(test)]
+#[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
 mod tests {
     use super::*;
 
@@ -195,6 +232,48 @@ mod tests {
         assert_eq!(find(b"abc", b"x", 5), None);
         assert_eq!(rfind(b"abcabc", b"bc"), Some(4));
         assert!(contains(b"abc", b"c"));
+        assert_eq!(find(b"abc", b"", 3), Some(3));
+        assert_eq!(find(b"abc", b"", 4), None);
+        assert_eq!(find(b"abc", b"abcd", 0), None);
+    }
+
+    /// The word-at-a-time search agrees with a naive one at every length,
+    /// alignment and byte value (including 0x80 and 0x01 neighbours, which
+    /// the zero-byte trick is sensitive to).
+    #[test]
+    fn word_search_matches_naive_search() {
+        let naive = |h: &[u8], n: &[u8], from: usize| -> Option<usize> {
+            let rest = h.get(from..)?;
+            if n.is_empty() {
+                return Some(from);
+            }
+            rest.windows(n.len()).position(|w| w == n).map(|p| p + from)
+        };
+        let mut x = 0x2545_f491_4f6c_dd1du64;
+        let mut data = Vec::new();
+        for _ in 0..600 {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            data.push([0u8, 1, 0x80, 0x81, 0xff, b'\n', b'a', b'b'][(x % 8) as usize]);
+        }
+        for len in 0..data.len() {
+            let h = &data[..len];
+            for byte in [0u8, 1, 0x80, 0x81, 0xff, b'\n', b'a', b'b', b'z'] {
+                assert_eq!(
+                    find_byte(h, byte),
+                    h.iter().position(|&b| b == byte),
+                    "{len} {byte}"
+                );
+            }
+            if len % 7 == 0 {
+                for needle in [&b"ab"[..], b"\n\x80", b"\x01\x00\x01", b"bb a"] {
+                    for from in [0, 1, 5, len] {
+                        assert_eq!(find(h, needle, from), naive(h, needle, from));
+                    }
+                }
+            }
+        }
     }
 
     #[test]

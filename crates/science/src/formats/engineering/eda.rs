@@ -1904,6 +1904,18 @@ async fn vcd_changes(cx: Cx, span: Span) -> Result<()> {
 // Touchstone and CITIfile network parameters
 
 fn touchstone_option(l: &[u8]) -> bool {
+    // Only whitespace may come before the `#` (an ASCII byte, so it splits
+    // the decoded text at the same place): checked before decoding, as a
+    // binary head's first "line" may be all of it.
+    let Some(hash) = crate::bytes::find_byte(l, b'#') else {
+        return false;
+    };
+    if !String::from_utf8_lossy(l.get(..hash).unwrap_or_default())
+        .trim()
+        .is_empty()
+    {
+        return false;
+    }
     let t = String::from_utf8_lossy(l).to_ascii_lowercase();
     let Some(rest) = t.trim().strip_prefix('#') else {
         return false;

@@ -9,6 +9,18 @@ fn bad(what: &str) -> Diagnostic {
     Diagnostic::malformed(what.to_owned())
 }
 
+/// The input ran out: more of it may follow (see
+/// [`Decode::truncation_is_exact`]).
+fn short(what: &str) -> Diagnostic {
+    Diagnostic::new(crate::error::DiagKind::Truncated, what.to_owned())
+}
+
+/// Input that ends early: a shortage before `eof`, damage at it (a block
+/// whose size its container recorded is all there, yet ends early).
+fn cut(eof: bool, what: &str) -> Diagnostic {
+    if eof { bad(what) } else { short(what) }
+}
+
 fn limit_check(out: &[u8], limit: usize) -> Result<()> {
     if out.len() > limit {
         Err(Diagnostic::output_limit(limit))
@@ -296,14 +308,20 @@ impl Lz4Block {
 
     /// A length: `nibble`, continued by bytes at `at` when it is 15.
     /// `None` when the read was suspended.
-    fn length(&mut self, input: &[u8], at: usize, nibble: u8) -> Result<Option<(usize, usize)>> {
+    fn length(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        at: usize,
+        nibble: u8,
+    ) -> Result<Option<(usize, usize)>> {
         if nibble != 15 {
             return Ok(Some((usize::from(nibble), at)));
         }
         match read_run(input, at, 255, &mut self.memo) {
             Run::Done(extra, next) => Ok(Some((extra.saturating_add(15), next))),
             Run::Suspended => Ok(None),
-            Run::Short => Err(bad("truncated LZ4 block")),
+            Run::Short => Err(cut(eof, "truncated LZ4 block")),
         }
     }
 }
@@ -322,11 +340,12 @@ impl Units for Lz4Block {
             Lz4Seq::Token => {
                 let Some(&token) = input.get(pos) else {
                     if !eof {
-                        return Err(bad("truncated LZ4 block"));
+                        return Err(short("truncated LZ4 block"));
                     }
                     return Ok(self.finish(input));
                 };
-                let Some((left, next)) = self.length(input, pos.saturating_add(1), token >> 4)?
+                let Some((left, next)) =
+                    self.length(input, eof, pos.saturating_add(1), token >> 4)?
                 else {
                     return Ok(SCAN);
                 };
@@ -348,7 +367,7 @@ impl Units for Lz4Block {
                     room,
                     limit.saturating_sub(out.len()),
                     limit,
-                    &|| bad("truncated LZ4 literals"),
+                    &|| cut(eof, "truncated LZ4 literals"),
                 )?;
                 self.seq = Lz4Seq::Literals { left, nibble };
                 Ok(n)
@@ -357,7 +376,7 @@ impl Units for Lz4Block {
                 if pos >= input.len() {
                     // The last sequence has literals only.
                     if !eof {
-                        return Err(bad("truncated LZ4 block"));
+                        return Err(short("truncated LZ4 block"));
                     }
                     return Ok(self.finish(input));
                 }
@@ -367,7 +386,7 @@ impl Units for Lz4Block {
                 if self.zero_padding && nibble == 0 && head.iter().all(|&b| b == 0) {
                     // Padding if only zeros follow, else an invalid offset.
                     if !eof {
-                        return Err(bad("truncated LZ4 block"));
+                        return Err(short("truncated LZ4 block"));
                     }
                     let from = self.zeros.max(pos);
                     let to = from.saturating_add(SCAN).min(input.len());
@@ -383,10 +402,11 @@ impl Units for Lz4Block {
                 }
                 let (Some(&lo), Some(&hi)) = (input.get(pos), input.get(pos.saturating_add(1)))
                 else {
-                    return Err(bad("truncated LZ4 block"));
+                    return Err(cut(eof, "truncated LZ4 block"));
                 };
                 let dist = usize::from(u16::from_le_bytes([lo, hi]));
-                let Some((len, next)) = self.length(input, pos.saturating_add(2), nibble)? else {
+                let Some((len, next)) = self.length(input, eof, pos.saturating_add(2), nibble)?
+                else {
                     return Ok(SCAN);
                 };
                 if dist == 0 || dist > out.len().saturating_sub(self.base) {
@@ -568,7 +588,7 @@ impl Lz4Body {
     ) -> Result<bool> {
         let (slice, whole) = self.sub.slice(input);
         if !whole && eof {
-            return Err(bad(if self.legacy {
+            return Err(short(if self.legacy {
                 "truncated legacy LZ4 block"
             } else {
                 "truncated LZ4 block"
@@ -580,7 +600,7 @@ impl Lz4Body {
                 let n = self.sub.copy(input, out, step);
                 limit_check(out, limit)?;
                 if n == 0 && !self.sub.copied() {
-                    return Err(bad("truncated LZ4 block"));
+                    return Err(short("truncated LZ4 block"));
                 }
                 Ok(self.sub.copied())
             }
@@ -621,7 +641,7 @@ impl Lz4Frame {
                 let Some(magic) = crate::bytes::u32_le(input, pos) else {
                     // The end, unless more input is coming.
                     if !eof {
-                        return Err(bad("truncated LZ4 frame magic"));
+                        return Err(short("truncated LZ4 frame magic"));
                     }
                     self.pos = pos.min(input.len());
                     self.at = Lz4At::Done;
@@ -632,7 +652,7 @@ impl Lz4Frame {
                     0x184d_2204 => {
                         let flg = *input
                             .get(pos)
-                            .ok_or_else(|| bad("truncated frame descriptor"))?;
+                            .ok_or_else(|| short("truncated frame descriptor"))?;
                         let content_size = flg & 0x08 != 0;
                         if flg & 0x01 != 0 {
                             return Err(Diagnostic::unsupported(
@@ -657,7 +677,7 @@ impl Lz4Frame {
                     }
                     m if m & 0xffff_fff0 == 0x184d_2a50 => {
                         let len = crate::bytes::u32_le(input, pos)
-                            .ok_or_else(|| bad("truncated skippable frame"))?;
+                            .ok_or_else(|| short("truncated skippable frame"))?;
                         self.pos = pos
                             .saturating_add(4)
                             .saturating_add(crate::bytes::to_usize(len.into()));
@@ -672,7 +692,7 @@ impl Lz4Frame {
                 content_checksum,
             } => {
                 let size = crate::bytes::u32_le(input, pos)
-                    .ok_or_else(|| bad("truncated LZ4 block size"))?;
+                    .ok_or_else(|| short("truncated LZ4 block size"))?;
                 let pos = pos.saturating_add(4);
                 if size == 0 {
                     self.pos = pos.saturating_add(if content_checksum { 4 } else { 0 });
@@ -699,7 +719,7 @@ impl Lz4Frame {
                 // number or the end.
                 let Some(len) = crate::bytes::u32_le(input, pos) else {
                     if !eof {
-                        return Err(bad("truncated legacy LZ4 block size"));
+                        return Err(short("truncated legacy LZ4 block size"));
                     }
                     self.at = Lz4At::Magic;
                     return Ok(());
@@ -749,7 +769,7 @@ impl Decode for Lz4Frame {
                 self.pos = body.sub.end.saturating_add(body.trailer);
                 self.body = None;
                 if self.pos > input.len() && !eof {
-                    return Err(bad("truncated LZ4 block checksum"));
+                    return Err(short("truncated LZ4 block checksum"));
                 }
                 continue;
             }
@@ -819,6 +839,14 @@ impl Decode for Lz4Frame {
     /// between independent blocks, there is no window at all.
     fn heap_size(&self) -> Option<usize> {
         Some(0)
+    }
+
+    /// Headers are read whole, and a block decoded from part of its bytes
+    /// reports running out of them as truncated; whatever else goes wrong
+    /// is damage (a whole block that ends early, an offset outside the
+    /// window).
+    fn truncation_is_exact(&self) -> bool {
+        true
     }
 }
 
@@ -1367,7 +1395,12 @@ impl Decode for SnappyFramed {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::arithmetic_side_effects)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic
+)]
 mod tests {
     use super::*;
     use crate::codec::pipeline::{Decoder, Streaming, verify_checkpoints};
@@ -1450,6 +1483,123 @@ mod tests {
         }
         assert!(linked && free);
         assert_eq!(out.len(), 368_192);
+    }
+
+    /// Feeds `input` to a streaming LZ4 frame decoder 4 KiB at a time until
+    /// it fails; returns the error and how much had been fed.
+    fn lz4_until_error(input: &[u8]) -> Option<(Diagnostic, usize)> {
+        use crate::codec::pipeline::Status;
+        let mut d = Streaming(Lz4Frame::default());
+        let mut out = Vec::new();
+        let mut fed = 0;
+        loop {
+            fed = (fed + 4096).min(input.len());
+            loop {
+                match d.decode(
+                    &input[..fed],
+                    fed == input.len(),
+                    &mut out,
+                    1 << 16,
+                    1 << 30,
+                ) {
+                    Ok(Status::More) => {}
+                    Ok(Status::NeedInput) => break,
+                    Ok(Status::Done) => return None,
+                    Err(e) => return Some((e, fed)),
+                }
+            }
+            // Released output keeps memory flat over the long stream.
+            let keep = d.releasable_output(out.len());
+            out.drain(..keep);
+            d.release_output(keep);
+        }
+    }
+
+    /// Every shortage is reported as truncated, so damage in a large
+    /// stream is reported once the damaged block is in, not after the
+    /// whole stream has been fed (retrying every step on the way).
+    #[test]
+    fn lz4_damage_is_reported_once_its_block_is_in() {
+        use crate::error::DiagKind;
+        let one = include_bytes!("testdata/words8.lz4");
+        // 40 copies: about 1 MB of input, 14 MB of output.
+        let whole: Vec<u8> = one.repeat(40);
+        let flg = whole[4];
+        let block = 4 + 2 + if flg & 0x08 != 0 { 8 } else { 0 } + 1;
+        let size = u32::from_le_bytes(whole[block..block + 4].try_into().unwrap());
+        assert_eq!(size & 0x8000_0000, 0, "a compressed block");
+        let body = block + 4;
+        let size = size as usize;
+
+        // The first sequence's match offset: after the token, any literal
+        // length bytes and the literals.
+        let token = whole[body];
+        let mut at = body + 1;
+        let mut literals = usize::from(token >> 4);
+        if literals == 15 {
+            while whole[at] == 255 {
+                literals += 255;
+                at += 1;
+            }
+            literals += usize::from(whole[at]);
+            at += 1;
+        }
+        let offset = at + literals;
+        assert!(offset + 2 <= body + size);
+
+        // An offset reaching before the frame's output, in the first frame
+        // and in the 21st (half a megabyte in): reported once its block is
+        // in, not at the end of the stream.
+        for copy in [0, 20] {
+            let mut data = whole.clone();
+            let base = copy * one.len();
+            data[base + offset..base + offset + 2].copy_from_slice(&[0xff, 0xff]);
+            let (e, fed) = lz4_until_error(&data).unwrap();
+            assert_eq!(e.kind, DiagKind::Malformed, "{e}");
+            assert!(e.message.contains("match offset"), "{e}");
+            assert!(fed <= base + body + size + 4096, "{copy}: {fed}");
+        }
+
+        // A stream that is merely cut short still waits for input, and
+        // is reported as truncated at its end.
+        let cut = &whole[..whole.len() - 100];
+        let (e, fed) = lz4_until_error(cut).unwrap();
+        assert_eq!(e.kind, DiagKind::Truncated, "{e}");
+        assert_eq!(fed, cut.len());
+
+        // Cut all over the two frames: truncated (never malformed), and
+        // only at the end. (A cut between frames, or inside a final
+        // checksum or magic number, ends the stream without an error.)
+        let mut cuts = 0;
+        for len in (1..one.len()).step_by(97) {
+            if let Some((e, fed)) = lz4_until_error(&whole[..len]) {
+                assert_eq!(e.kind, DiagKind::Truncated, "{len}: {e}");
+                assert_eq!(fed, len);
+                cuts += 1;
+            }
+        }
+        assert!(cuts >= one.len() / 97 - 2, "{cuts}");
+    }
+
+    /// A stored block of 4 MiB (the largest frame block) streams through as
+    /// its bytes arrive, without waiting for the whole block.
+    #[test]
+    fn lz4_large_stored_block_streams() {
+        use crate::codec::pipeline::Status;
+        let len = 4 << 20;
+        let mut frame = vec![0x04, 0x22, 0x4d, 0x18, 0x60, 0x70, 0x73];
+        frame.extend_from_slice(&(0x8000_0000u32 | len as u32).to_le_bytes());
+        frame.extend((0..len).map(|i| (i % 251) as u8));
+        frame.extend_from_slice(&0u32.to_le_bytes());
+        let mut d = Streaming(Lz4Frame::default());
+        let mut out = Vec::new();
+        // Half the block is in: half of it comes out.
+        let half = 11 + len / 2;
+        while let Ok(Status::More) = d.decode(&frame[..half], false, &mut out, 1 << 16, 1 << 30) {}
+        assert_eq!(out.len(), len / 2);
+        while d.decode(&frame, true, &mut out, 1 << 16, 1 << 30).unwrap() != Status::Done {}
+        assert_eq!(out.len(), len);
+        assert!(out.iter().enumerate().all(|(i, &b)| b == (i % 251) as u8));
     }
 
     #[test]

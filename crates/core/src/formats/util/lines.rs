@@ -191,10 +191,27 @@ impl<'a> Lines<'a> {
     }
 }
 
+/// `data` split at each `\n` (the pieces exactly as
+/// `data.split(|&b| b == b'\n')` yields them, terminators excluded, `\r`
+/// kept), found a word at a time: probes split whole heads, and a binary
+/// head may be one 66 KiB "line".
+pub fn split_lines(data: &[u8]) -> impl Iterator<Item = &[u8]> {
+    let mut rest = Some(data);
+    std::iter::from_fn(move || {
+        let r = rest?;
+        let (line, next) = match crate::bytes::find_byte(r, b'\n') {
+            Some(i) => (r.get(..i), r.get(i.saturating_add(1)..)),
+            None => (Some(r), None),
+        };
+        rest = next;
+        line
+    })
+}
+
 /// The first `n` lines of the probe window, without terminators.
 pub fn head_lines<'h>(h: &'h Head<'_>, n: usize) -> Vec<&'h [u8]> {
     let data = h.data.strip_prefix(b"\xef\xbb\xbf").unwrap_or(h.data);
-    data.split(|&b| b == b'\n')
+    split_lines(data)
         .take(n)
         .map(|l| l.strip_suffix(b"\r").unwrap_or(l))
         .collect()
@@ -300,4 +317,26 @@ pub fn summarize(node: crate::node::Node, s: impl Into<String>) -> crate::node::
 /// 0.05000000074505806).
 pub fn float32(v: f32) -> crate::value::Value {
     crate::value::Value::Float(v.to_string().parse().unwrap_or(f64::from(v)))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn split_lines_matches_slice_split() {
+        let zeros = [0u8; 1000];
+        let cases: [&[u8]; 7] = [
+            b"",
+            b"\n",
+            b"a",
+            b"a\n",
+            b"a\r\nbb\n\nccc",
+            b"\n\nx\n\n",
+            &zeros,
+        ];
+        for data in cases {
+            let ours: Vec<&[u8]> = super::split_lines(data).collect();
+            let std: Vec<&[u8]> = data.split(|&b| b == b'\n').collect();
+            assert_eq!(ours, std, "{data:?}");
+        }
+    }
 }

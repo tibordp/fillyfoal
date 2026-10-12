@@ -198,6 +198,40 @@ fn identification_is_charged() {
     assert!((1_000..3_000).contains(&work), "{work} units");
 }
 
+/// Work units for expanding the root of `data` (identified, not forced).
+fn root_work(data: Vec<u8>) -> u64 {
+    let mut host = Host::new(data, Limits::default());
+    host.session.expand(host.root, 10);
+    host.run();
+    host.session.work_done()
+}
+
+/// An MP3 whose ID3v2 tag is longer than the probes' head has what follows
+/// the tag identified again (`behind_long_tag`); a miss over zeros runs
+/// every custom probe, which is charged like the root's identification.
+/// Uncharged, this cost 330 units.
+#[test]
+fn identification_behind_a_long_id3_tag_is_charged() {
+    let mut data = b"ID3\x03\x00\x00\x00\x08\x00\x00".to_vec();
+    data.resize(10 + 0x20000 + 0x10800, 0);
+    let work = root_work(data);
+    assert!(work >= 2_000, "{work} units");
+}
+
+/// A ZIP labels itself by identifying its own head again (an APK, a JAR, an
+/// OOXML file); that identification is charged. Uncharged, this cost 331
+/// units, about the root identification alone.
+#[test]
+fn zip_label_identification_is_charged() {
+    let data = std::fs::read(format!(
+        "{}/tests/fixtures/external/zip/mixed.zip",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    let work = root_work(data);
+    assert!(work >= 500, "{work} units");
+}
+
 /// A tarball whose middle member is 2 MiB of zeros: listing the first entry
 /// must not decompress the whole stream.
 #[test]

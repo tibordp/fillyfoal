@@ -84,7 +84,9 @@ const KNOWN: &[&[u8]] = &[
 
 /// The name of a header field line, if it is one.
 fn field_name(line: &[u8]) -> Option<&[u8]> {
-    let colon = line.iter().position(|&b| b == b':')?;
+    // Names are shorter than 80 bytes: a colon farther in (or none in a
+    // binary head's 66 KiB first "line") is no field.
+    let colon = line.iter().take(80).position(|&b| b == b':')?;
     let name = line.get(..colon)?;
     (!name.is_empty() && name.len() < 80 && name.iter().all(|&b| b > 0x20 && b < 0x7f))
         .then_some(name)

@@ -515,6 +515,11 @@ async fn tab(cx: Cx, input: Input) -> Result<()> {
 
 fn grass_probe(h: &Head<'_>) -> bool {
     let lines = super::head_lines(h, 6);
+    // Six `key: value` lines, checked before decoding: a binary head's
+    // first "line" may be all of it.
+    if lines.len() < 6 || lines.iter().any(|l| !l.contains(&b':')) {
+        return false;
+    }
     let keys: Vec<String> = lines
         .iter()
         .filter_map(|l| {
@@ -649,9 +654,18 @@ async fn grass_vector(cx: Cx, input: Input) -> Result<()> {
 
 fn idrisi_probe(h: &Head<'_>) -> bool {
     super::head_lines(h, 1).first().is_some_and(|l| {
-        let t = String::from_utf8_lossy(l);
-        t.split_once(':')
-            .is_some_and(|(k, v)| k.trim() == "file format" && v.trim().starts_with("IDRISI"))
+        // Split before decoding (`:` is ASCII, so it splits the decoded
+        // text at the same place): a binary head's first "line" may be all
+        // of it.
+        let Some(colon) = crate::bytes::find_byte(l, b':') else {
+            return false;
+        };
+        let (k, v) = (
+            l.get(..colon).unwrap_or_default(),
+            l.get(colon.saturating_add(1)..).unwrap_or_default(),
+        );
+        String::from_utf8_lossy(k).trim() == "file format"
+            && String::from_utf8_lossy(v).trim().starts_with("IDRISI")
     })
 }
 
@@ -888,6 +902,16 @@ async fn wkt(cx: Cx, input: Input) -> Result<()> {
 fn bil_probe(h: &Head<'_>) -> bool {
     let data = probe::head(h);
     let lines: Vec<&[u8]> = probe::significant(&data, &[]).take(24).collect();
+    let all_keys = lines.iter().all(|l| {
+        let t = probe::trim(l);
+        t.iter()
+            .take_while(|b| !b.is_ascii_whitespace())
+            .all(|b| b.is_ascii_alphanumeric() || *b == b'_')
+            && t.iter().any(u8::is_ascii_whitespace)
+    });
+    if !all_keys {
+        return false;
+    }
     let keys: Vec<String> = lines
         .iter()
         .map(|l| {
@@ -898,15 +922,7 @@ fn bil_probe(h: &Head<'_>) -> bool {
                 .to_ascii_uppercase()
         })
         .collect();
-    let all_keys = lines.iter().all(|l| {
-        let t = probe::trim(l);
-        t.iter()
-            .take_while(|b| !b.is_ascii_whitespace())
-            .all(|b| b.is_ascii_alphanumeric() || *b == b'_')
-            && t.iter().any(u8::is_ascii_whitespace)
-    });
-    all_keys
-        && keys.iter().any(|k| k == "NROWS")
+    keys.iter().any(|k| k == "NROWS")
         && keys.iter().any(|k| k == "NCOLS")
         && keys
             .iter()
