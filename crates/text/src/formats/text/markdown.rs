@@ -112,6 +112,16 @@ fn probe_markdown(h: &Head<'_>) -> bool {
     if head.starts_with(b"%YAML") {
         return false;
     }
+    // Only a heading can start the document (`first_heading` below), and
+    // only text is Markdown: most heads stop here.
+    if probe::lines(&head)
+        .map(probe::trim)
+        .find(|t| !t.is_empty())
+        .is_none_or(|t| t.first() != Some(&b'#'))
+        || !probe::is_text(h)
+    {
+        return false;
+    }
     // `#` starts a comment in shell, Python, R, Makefiles, `.gitignore`,
     // `hosts` and `requirements.txt`: a heading counts only where Markdown
     // puts one, and only a construct those files lack makes it Markdown.
@@ -176,7 +186,6 @@ fn probe_markdown(h: &Head<'_>) -> bool {
         && signals >= 1
         && mappings.saturating_mul(3) <= total
         && code_like.saturating_mul(10) <= total
-        && probe::is_text(h)
 }
 
 // ---------------------------------------------------------------------------

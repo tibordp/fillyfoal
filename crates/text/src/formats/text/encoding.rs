@@ -261,8 +261,13 @@ fn classify_once(data: &[u8]) -> Option<Encoding> {
     if high.saturating_mul(4) <= data.len() {
         return Some(guess_single(data));
     }
+    // Words first: they are cheap, and scoring code pages over a binary
+    // head (all 0xff) is not.
+    if !words(data) {
+        return None;
+    }
     let script = guess_single(data);
-    (matches!(script, Encoding::Single(_)) && words(data)).then_some(script)
+    matches!(script, Encoding::Single(_)).then_some(script)
 }
 
 /// Whether mostly-high-byte data reads as words: separated by spaces or
@@ -740,22 +745,24 @@ pub fn meta_charset(head: &[u8]) -> Option<String> {
 /// (`-*- coding: latin-1 -*-`), Python (PEP 263) or Vim
 /// (`vim: set fileencoding=koi8-r :`).
 pub fn coding_cookie(head: &[u8]) -> Option<String> {
-    head.split(|&b| b == b'\n').take(2).find_map(|line| {
-        let line = line.get(..line.len().min(256))?;
-        let lower = line.to_ascii_lowercase();
-        let at = lower.windows(6).position(|w| w == b"coding")?;
-        let rest = line.get(at.saturating_add(6)..)?;
-        let rest = rest
-            .strip_prefix(b":")
-            .or_else(|| rest.strip_prefix(b"="))?;
-        let rest = super::probe::trim_start(rest);
-        let end = rest
-            .iter()
-            .position(|&b| !(b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.')))
-            .unwrap_or(rest.len());
-        let label = rest.get(..end)?;
-        (!label.is_empty()).then(|| String::from_utf8_lossy(label).into_owned())
-    })
+    crate::formats::util::lines::split_lines(head)
+        .take(2)
+        .find_map(|line| {
+            let line = line.get(..line.len().min(256))?;
+            let lower = line.to_ascii_lowercase();
+            let at = lower.windows(6).position(|w| w == b"coding")?;
+            let rest = line.get(at.saturating_add(6)..)?;
+            let rest = rest
+                .strip_prefix(b":")
+                .or_else(|| rest.strip_prefix(b"="))?;
+            let rest = super::probe::trim_start(rest);
+            let end = rest
+                .iter()
+                .position(|&b| !(b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.')))
+                .unwrap_or(rest.len());
+            let label = rest.get(..end)?;
+            (!label.is_empty()).then(|| String::from_utf8_lossy(label).into_owned())
+        })
 }
 
 /// The legacy encoding that `declared` names for text starting with

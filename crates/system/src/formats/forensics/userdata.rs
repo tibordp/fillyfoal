@@ -18,7 +18,9 @@ use crate::value::Value;
 
 fn first_line<'a>(h: &'a Head<'_>) -> &'a [u8] {
     let d = strip_bom(h.data);
-    let line = d.split(|&b| b == b'\n').next().unwrap_or_default();
+    let line = crate::formats::util::lines::split_lines(d)
+        .next()
+        .unwrap_or_default();
     line.strip_suffix(b"\r").unwrap_or(line)
 }
 
@@ -139,7 +141,7 @@ fn bash_stamp(line: &str) -> Option<i64> {
 
 fn bash_probe(h: &Head<'_>) -> bool {
     let d = strip_bom(h.data);
-    let mut it = d.split(|&b| b == b'\n');
+    let mut it = crate::formats::util::lines::split_lines(d);
     let first = std::str::from_utf8(it.next().unwrap_or_default())
         .unwrap_or_default()
         .trim_end();

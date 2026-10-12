@@ -1414,7 +1414,7 @@ async fn rdp_cache(cx: Cx, input: Input) -> Result<()> {
 /// The first meaningful line (after a BOM, blank lines and `;` comments).
 fn ini_first_line<'a>(h: &'a Head<'_>) -> &'a [u8] {
     let data = h.data.strip_prefix(b"\xef\xbb\xbf").unwrap_or(h.data);
-    data.split(|&b| b == b'\n')
+    crate::formats::util::lines::split_lines(data)
         .map(|l| l.strip_suffix(b"\r").unwrap_or(l))
         .find(|l| !l.is_empty() && !l.starts_with(b";"))
         .unwrap_or_default()

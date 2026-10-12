@@ -164,12 +164,12 @@ async fn ncnn(cx: Cx, input: Input) -> Result<()> {
 // Caffe network definition (.prototxt)
 
 fn caffe_probe(h: &Head<'_>) -> bool {
+    if !probe::is_text(h) {
+        return false;
+    }
     let data = probe::head(h);
     let first = first_line(&data, &[b"#"]);
-    probe::is_text(h)
-        && (first.starts_with(b"name:")
-            || first.starts_with(b"layer")
-            || first.starts_with(b"input"))
+    (first.starts_with(b"name:") || first.starts_with(b"layer") || first.starts_with(b"input"))
         && (contains(&data, b"layer {") || contains(&data, b"layers {"))
         && contains(&data, b"type:")
         && (contains(&data, b"bottom:") || contains(&data, b"top:"))

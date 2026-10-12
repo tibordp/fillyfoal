@@ -75,6 +75,10 @@ const MTL_KEYWORDS: &[&[u8]] = &[
 /// Every significant line starts with a known keyword, and `required`
 /// occurs among them.
 fn probe_keywords(h: &Head<'_>, keywords: &[&[u8]], required: &[u8]) -> bool {
+    // Cheap once classified (other probes ask too); binary heads stop here.
+    if !probe::is_text(h) {
+        return false;
+    }
     let head = probe::head(h);
     let mut seen = false;
     let mut n = 0usize;
@@ -90,7 +94,7 @@ fn probe_keywords(h: &Head<'_>, keywords: &[&[u8]], required: &[u8]) -> bool {
         seen |= word == required;
         n = n.saturating_add(1);
     }
-    seen && n >= 2 && probe::is_text(h)
+    seen && n >= 2
 }
 
 /// Statement counts, used for vertex numbering and summaries.

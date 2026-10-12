@@ -421,6 +421,9 @@ const CUE_COMMANDS: &[&[u8]] = &[
 ];
 
 fn probe_cue(h: &Head<'_>) -> bool {
+    if !probe::is_text(h) {
+        return false;
+    }
     let head = probe::head(h);
     let mut tracks = false;
     let mut file = false;

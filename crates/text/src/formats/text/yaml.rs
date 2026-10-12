@@ -51,13 +51,17 @@ fn probe_yaml(h: &Head<'_>) -> bool {
     if start.starts_with(b"%YAML") || start.starts_with(b"%TAG") {
         return true;
     }
+    // Cheap once classified (other probes ask too); binary heads stop here.
+    if !probe::is_text(h) {
+        return false;
+    }
     let mut lines = probe::significant(&head, &[b"#"]);
     let Some(first) = lines.next() else {
         return false;
     };
     let mut rest = lines.take(30).peekable();
     if probe::trim(first) == b"---" {
-        return rest.peek().is_some() && probe::is_text(h);
+        return rest.peek().is_some();
     }
     // Without a marker: a mapping at column 0, and every following line a
     // mapping, a sequence item, or an indented continuation.
@@ -72,7 +76,7 @@ fn probe_yaml(h: &Head<'_>) -> bool {
             return false;
         }
     }
-    top && probe_mapping(first) && entries >= 2 && probe::is_text(h)
+    top && probe_mapping(first) && entries >= 2
 }
 
 // ---------------------------------------------------------------------------

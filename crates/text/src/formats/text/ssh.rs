@@ -122,6 +122,9 @@ fn key_line(line: Piece<'_>) -> Option<KeyLine<'_>> {
 }
 
 fn probe_keys(h: &Head<'_>) -> bool {
+    if !probe::is_text(h) {
+        return false;
+    }
     let head = probe::head(h);
     let Some(first) = probe::significant(&head, &[b"#"]).next() else {
         return false;
