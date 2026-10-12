@@ -1270,3 +1270,26 @@ reproducible (link times, GUIDs, signing and timestamp times).
 | `it/fillyfoal-uncompressed.it` | OpenMPT 1.32.11.00 (as above) | same song saved with `ITCompressionMono=0`: plain signed PCM |
 | `it/fillyfoal-compat-uncompressed.it` | OpenMPT 1.32.11.00 (as above) | Compatibility Export of the uncompressed song |
 | `it/fillyfoal.mptm` | OpenMPT 1.32.11.00 (as above) | the compressed song converted to MPTM (Song Properties) and saved as `.mptm`: "Created with" 0x891, "Compatible with" 0x888, IT 2.15 compressed samples (Cvt 0x05; they also decompress to the uncompressed file's PCM), STPM extensions, then the MPTM data in OpenMPT's serialization (sequences) |
+
+## Linux VM fixtures: ZFS pools, md RAID members, dynamic partitions
+
+Written on a disposable Ubuntu 26.04.1 LTS aarch64 VM (kernel
+7.0.0-38-generic; host name `fillyfoal`, TZ=UTC) by the scripts in
+`tests/data/zfs/`, `tests/data/mdraid/` and `tests/data/android-super/`,
+kept as they ran; the reference tools' output for every committed file is
+in `reference.txt` next to each script. Members of each pool or array not
+committed are near-duplicates of the committed one. Unchanged apart from
+storage (`.raw.zst`).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `zfs/tank.img.raw.zst` | OpenZFS 2.4.1 (zfsutils-linux 2.4.1-1ubuntu5.1, kernel module 2.4.1) | `make-zfs.sh`: `zpool create -o ashift=9` on a 64 MiB file, `compression=lz4` and `compression=zstd` datasets with small files, a snapshot, a 4 MiB zvol, `zpool export`; label configuration, the four labels and the uberblock ring checked against `zdb -l` and `zdb -uuu` (root block pointer identical to zdb's). Not reproducible (GUIDs, times) |
+| `zfs/mirror-a.img.raw.zst` | OpenZFS 2.4.1 (as above) | same script: first member of a two-way mirror pool `mpool` (ashift 9), exported; `zdb -l` |
+| `zfs/raidz-a.img.raw.zst` | OpenZFS 2.4.1 (as above) | same script: first member of a three-file raidz1 pool `rz` with `ashift=12` (4 KiB uberblock slots), exported; `zdb -l`, `zdb -uuu` |
+| `mdraid/r1-v090-a.img.raw.zst` | mdadm 4.5 (Ubuntu 4.5-5ubuntu1.1), Linux md, e2fsprogs 1.47.2 | `make-mdraid.sh`: `mdadm --create --metadata=0.90 --level=1` over two 8 MiB loop devices, `mke2fs -t ext4 -d` on the array, `mdadm --stop`; first member; `mdadm --examine` (checksum, events, disk table). Not reproducible (times, device UUIDs) |
+| `mdraid/r1-v10-a.img.raw.zst` | as above | same script, `--metadata=1.0` (superblock 8 KiB before the end, component size smaller than the data area) |
+| `mdraid/r1-v11-a.img.raw.zst` | as above | same script, `--metadata=1.1` (superblock at 0) |
+| `mdraid/r1-v12-a.img.raw.zst` | as above | same script, `--metadata=1.2` (superblock at 4 KiB) |
+| `mdraid/r5-a.img.raw.zst` | as above | same script: first member of a three-disk RAID5, metadata 1.2, left-symmetric, 512 KiB chunks |
+| `android-super/super-avb.img.raw.zst` | AOSP lpmake (system/extras `partition_tools` fc2494a2abd7ab21774d03deb09c1362bbb0bba8, system/core `fs_mgr/liblp` a3b721a32242006b59cb12bd62c9133632af3a2d, built by `build-lptools.sh` against Ubuntu's android-libbase 34.0.5), AOSP avbtool 1.4.0 (platform/external/avb c5066a96caa7bf4150c0a8cc8cc14ab81733fdc7, MIT; fetched into /tmp, not committed), e2fsprogs 1.47.2, OpenSSL 3.5.5 | `make-super.sh`: a 4 MiB super device with two 8 KiB metadata slots, group `main` with `system` (a 256 KiB ext4 image with an AVB hashtree footer in 384 KiB) and `vendor` (48 KiB of text with an AVB hash footer in 128 KiB), then `avbtool add_hash_footer` over the whole image in a 5 MiB partition `super`, signed SHA256_RSA2048 with a throwaway key; checked against `lpdump` and `avbtool info_image`. The key is new per run, so key and signature bytes differ between runs |
+| `android-super/super-ab.img.raw.zst` | AOSP lpmake (as above) | same script: three metadata slots, groups `main_a`/`main_b`, `system_a`/`vendor_a` with the images above and empty `system_b`/`vendor_b`; no footer; reproduced byte-for-byte; checked against `lpdump` |
