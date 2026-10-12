@@ -647,10 +647,12 @@ async fn svn_headers(cx: &Cx, file: Span, pos: u64) -> Result<(Vec<(String, Stri
 
 async fn svn_dump(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let mut pos = 0u64;
-    let mut revisions = 0u32;
-    let mut version = String::new();
+    // Resume marks: (position, revisions so far, format version).
+    let (mut pos, mut revisions, mut version) =
+        cx.resume::<(u64, u32, String)>()
+            .unwrap_or((0, 0, String::new()));
     while pos < file.len {
+        cx.mark(|| (pos, revisions, version.clone()));
         // Skip blank lines between records.
         let peek = cx.read_avail(file.sub(pos, 1)).await?;
         if peek == b"\n" {

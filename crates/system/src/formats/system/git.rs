@@ -5,10 +5,15 @@
 //! length, so listing objects means inflating each one (a page at a time);
 //! the decoded data is cached and reused when an object is expanded.
 //! Commits and tags are shown as headers and message, trees as entries,
-//! deltas as copy/insert instructions, and blobs are dissected as content.
+//! deltas as copy/insert instructions (and, for ofs-deltas, the object the
+//! delta rebuilds from its base), and blobs are dissected as content.
+//!
+//! Repositories use SHA-1 or SHA-256 object names (`--object-format`);
+//! nothing in these files says which, so each file's trailing checksum
+//! decides (and, for pack indexes, the table sizes).
 
 use crate::bytes::{to_u64, to_usize, u16_be, u32_be, u64_be};
-use crate::codec::crypto::{Hash, Sha1};
+use crate::codec::crypto::{Hash, Sha1, Sha256};
 use crate::codec::inflate_span;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
@@ -16,11 +21,13 @@ use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::datakit::{clip, hex_string, size};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
-use crate::span::Span;
+use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Value, field, flag, lookup};
 
 const BE: Endian = Endian::Big;
-const HASH: u64 = 20;
+/// Object name sizes: SHA-1 and SHA-256.
+const SHA1_LEN: u64 = 20;
+const SHA256_LEN: u64 = 32;
 
 pub static PACK: Format = Format {
     name: "git-pack",
@@ -62,31 +69,83 @@ const OBJECT_TYPES: EnumTable = &[
     (7, "ref-delta"),
 ];
 
-/// A trailing SHA-1 over everything before it.
-async fn checksum_node(cx: &Cx, file: Span, name: &'static str) -> Result<Node> {
-    let at = file.len.saturating_sub(HASH);
-    let span = file.sub(at, HASH);
+fn hash_name(len: u64) -> &'static str {
+    if len == SHA256_LEN {
+        "SHA-256"
+    } else {
+        "SHA-1"
+    }
+}
+
+/// A file's trailing checksum: its length (the object format's hash
+/// size) and whether it matched (`None`: too large to check).
+#[derive(Clone, Copy, Debug)]
+struct Trailer {
+    len: u64,
+    valid: Option<bool>,
+}
+
+/// Checks the trailing checksum of `file` both as a SHA-1 over all but the
+/// last 20 bytes and as a SHA-256 over all but the last 32, in one pass,
+/// and settles the hash size by the one that matches; if neither does (or
+/// the file is too large to hash), `guess` is taken.
+async fn trailer(cx: &Cx, file: Span, guess: u64) -> Result<Trailer> {
+    let short = file.len.saturating_sub(SHA1_LEN);
+    let long = file.len.saturating_sub(SHA256_LEN);
+    if short > cx.limits().max_read || file.len < SHA256_LEN {
+        return Ok(Trailer {
+            len: guess,
+            valid: None,
+        });
+    }
+    // Hashed a chunk per read, so each step stays bounded.
+    const CHUNK: u64 = 1 << 20;
+    let mut sha1 = Sha1::new();
+    let mut sha256 = Sha256::new();
+    let mut done = 0u64;
+    while done < short {
+        let n = short.saturating_sub(done).min(CHUNK);
+        let data = cx.read(file.sub(done, n)).await?;
+        sha1.update(&data);
+        let for256 = long.saturating_sub(done).min(n);
+        sha256.update(data.get(..to_usize(for256)).unwrap_or_default());
+        done = done.saturating_add(n);
+    }
+    let stored1 = cx.read(file.sub(short, SHA1_LEN)).await?;
+    let stored256 = cx.read(file.sub(long, SHA256_LEN)).await?;
+    Ok(if sha1.finish() == stored1 {
+        Trailer {
+            len: SHA1_LEN,
+            valid: Some(true),
+        }
+    } else if sha256.finish() == stored256 {
+        Trailer {
+            len: SHA256_LEN,
+            valid: Some(true),
+        }
+    } else {
+        Trailer {
+            len: guess,
+            valid: Some(false),
+        }
+    })
+}
+
+/// The node for a file's trailing checksum.
+async fn checksum_node(cx: &Cx, file: Span, name: &'static str, t: Trailer) -> Result<Node> {
+    let span = file.sub(file.len.saturating_sub(t.len), t.len);
     let stored = cx.read(span).await?;
-    let mut node = Node::new(name)
+    let node = Node::new(name)
         .span(span)
         .value(Value::Text(hex_string(&stored)));
-    if at <= cx.limits().max_read {
-        // Hashed a chunk per read, so each step stays bounded.
-        const CHUNK: u64 = 1 << 20;
-        let mut hash = Sha1::new();
-        let mut done = 0u64;
-        while done < at {
-            let n = at.saturating_sub(done).min(CHUNK);
-            hash.update(&cx.read(file.sub(done, n)).await?);
-            done = done.saturating_add(n);
-        }
-        node = if hash.finish().as_slice() == stored.as_slice() {
-            node.summary("valid")
-        } else {
-            node.diag(Diagnostic::warning("SHA-1 mismatch"))
-        };
-    }
-    Ok(node)
+    Ok(match t.valid {
+        Some(true) => node.summary(format!("valid {}", hash_name(t.len))),
+        Some(false) => node.diag(Diagnostic::warning(format!(
+            "{} mismatch",
+            hash_name(t.len)
+        ))),
+        None => node.summary(hash_name(t.len)),
+    })
 }
 
 /// The variable-length object header: type, size and header length.
@@ -123,17 +182,101 @@ fn delta_offset(data: &[u8]) -> Option<(u64, u64)> {
     Some((value, to_u64(i).saturating_add(1)))
 }
 
-#[derive(Clone, Copy, Debug)]
-struct Object {
-    input: Input,
-    /// The object, from its header to the end of the compressed data.
-    span: Span,
+/// Where a delta's base is.
+#[derive(Clone, Debug)]
+enum Base {
+    None,
+    /// An ofs-delta's base: its offset in the pack.
+    At(u64),
+    /// A ref-delta's base: its object name.
+    Named(Vec<u8>),
+}
+
+/// An object's header, read from the pack.
+#[derive(Clone, Debug)]
+struct Header {
     kind: u8,
     size: u64,
     /// Header (and delta base) length.
-    header: u64,
-    /// The span handed to the inflater (shared with the listing, so the
-    /// decoded data is cached).
+    len: u64,
+    base: Base,
+}
+
+/// Reads the header of the object at `pos` of the pack `file`.
+async fn read_header(cx: &Cx, file: Span, pos: u64, hash_len: u64) -> Result<Header> {
+    let head = cx.read_avail(file.sub(pos, 32)).await?;
+    let (kind, size, mut len) = object_header(&head)
+        .ok_or_else(|| Diagnostic::malformed("bad object header").at(file.sub(pos, 1)))?;
+    let base = match kind {
+        6 => {
+            let rest = head.get(to_usize(len)..).unwrap_or_default();
+            let (offset, n) = delta_offset(rest)
+                .ok_or_else(|| Diagnostic::malformed("bad delta offset").at(file.sub(pos, 1)))?;
+            len = len.saturating_add(n);
+            if offset == 0 || offset > pos {
+                return Err(Diagnostic::malformed(format!(
+                    "delta base {offset:#x} bytes back from {pos:#x}"
+                ))
+                .at(file.sub(pos, len)));
+            }
+            Base::At(pos.saturating_sub(offset))
+        }
+        7 => {
+            let name = cx
+                .read(file.sub_exact(pos.saturating_add(len), hash_len)?)
+                .await?;
+            len = len.saturating_add(hash_len);
+            Base::Named(name)
+        }
+        1..=4 => Base::None,
+        _ => {
+            return Err(Diagnostic::malformed(format!("object type {kind}")).at(file.sub(pos, 1)));
+        }
+    };
+    Ok(Header {
+        kind,
+        size,
+        len,
+        base,
+    })
+}
+
+/// The pack `file` and the size of its object names.
+#[derive(Clone, Copy, Debug)]
+struct Pack {
+    input: Input,
+    hash_len: u64,
+}
+
+impl Pack {
+    fn file(&self) -> Span {
+        self.input.span
+    }
+
+    /// Where the objects end (the checksum follows).
+    fn body_end(&self) -> u64 {
+        self.file().len.saturating_sub(self.hash_len)
+    }
+
+    /// The span handed to the inflater for the object whose data starts at
+    /// `start` (the same for the listing and the object, so the decoded
+    /// data is cached).
+    fn stream(&self, start: u64, size: u64) -> Span {
+        let end = self.body_end();
+        self.file()
+            .sub(start, bound(size).min(end.saturating_sub(start)))
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Object {
+    pack: Pack,
+    /// The object's offset in the pack.
+    pos: u64,
+    /// The object, from its header to the end of the compressed data.
+    span: Span,
+    header: Header,
+    /// The span handed to the inflater.
     stream: Span,
 }
 
@@ -146,70 +289,64 @@ pub async fn pack(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub_exact(0, 12)?).await?;
     let count = u32_be(&head, 8).unwrap_or(0);
-    cx.emit(struct_node("Header", file.sub(0, 12), BE, (), |f, _| {
-        f.ascii("Signature", 4).emit()?;
-        f.u32("Version").emit()?;
-        f.u32("Number of objects").emit()?;
-        Ok(())
-    }));
+    // Resume marks: (position, object index, hash size). A resumed run
+    // starts in the objects, past the header and checksum emitted first.
+    let (mut pos, first, hash_len) = match cx.resume::<(u64, u32, u64)>() {
+        Some(state) => state,
+        None => {
+            cx.emit(struct_node("Header", file.sub(0, 12), BE, (), |f, _| {
+                f.ascii("Signature", 4).emit()?;
+                f.u32("Version").emit()?;
+                f.u32("Number of objects").emit()?;
+                Ok(())
+            }));
+            let t = trailer(&cx, file, SHA1_LEN).await?;
+            cx.emit(checksum_node(&cx, file, "Pack checksum", t).await?);
+            (12, 0, t.len)
+        }
+    };
+    let p = Pack { input, hash_len };
+    let format = if hash_len == SHA256_LEN {
+        ", SHA-256"
+    } else {
+        ""
+    };
     cx.annotate(format!(
-        "Git pack v{}, {count} objects",
+        "Git pack v{}, {count} objects{format}",
         u32_be(&head, 4).unwrap_or(0)
     ));
-    let body_end = file.len.saturating_sub(HASH);
-    cx.emit(checksum_node(&cx, file, "Pack checksum").await?);
+    let body_end = p.body_end();
     cx.set_count(Count::Exact(u64::from(count).saturating_add(2)));
-    let mut pos = 12u64;
-    for index in 0..count {
+    for index in first..count {
         if pos >= body_end {
             cx.diag(Diagnostic::truncated(file.sub(pos, 0), 0));
             break;
         }
-        let head = cx.read_avail(file.sub(pos, 32)).await?;
-        let (kind, size, mut header) = object_header(&head)
-            .ok_or_else(|| Diagnostic::malformed("bad object header").at(file.sub(pos, 1)))?;
-        let mut base = String::new();
-        match kind {
-            6 => {
-                let rest = head.get(to_usize(header)..).unwrap_or_default();
-                let (offset, len) = delta_offset(rest).ok_or_else(|| {
-                    Diagnostic::malformed("bad delta offset").at(file.sub(pos, 1))
-                })?;
-                base = format!(", base at {:#x}", pos.saturating_sub(offset));
-                header = header.saturating_add(len);
-            }
-            7 => {
-                let sha = cx
-                    .read(file.sub_exact(pos.saturating_add(header), HASH)?)
-                    .await?;
-                base = format!(", base {}", hex_string(&sha));
-                header = header.saturating_add(HASH);
-            }
-            1..=4 => {}
-            _ => {
-                return Err(
-                    Diagnostic::malformed(format!("object type {kind}")).at(file.sub(pos, 1))
-                );
-            }
-        }
-        let start = pos.saturating_add(header);
-        let stream = file.sub(start, bound(size).min(body_end.saturating_sub(start)));
-        let decoded = inflate_span(&cx, stream, true, Some(size)).await?;
-        let span = file.sub(pos, header.saturating_add(decoded.consumed));
-        let name = lookup(OBJECT_TYPES, kind.into()).unwrap_or("?");
+        let mark = (pos, index, hash_len);
+        cx.mark(move || mark);
+        let header = read_header(&cx, file, pos, hash_len).await?;
+        let base = match &header.base {
+            Base::None => String::new(),
+            Base::At(at) => format!(", base at {at:#x}"),
+            Base::Named(name) => format!(", base {}", hex_string(name)),
+        };
+        let start = pos.saturating_add(header.len);
+        let stream = p.stream(start, header.size);
+        let decoded = inflate_span(&cx, stream, true, Some(header.size)).await?;
+        let span = file.sub(pos, header.len.saturating_add(decoded.consumed));
+        let name = lookup(OBJECT_TYPES, header.kind.into()).unwrap_or("?");
         let mut node = Node::new(format!("{name} at {pos:#x}"))
             .span(span)
             .summary(format!(
-                "object {index}, {} → {size} bytes{base}",
-                decoded.consumed
+                "object {index}, {} → {} bytes{base}",
+                decoded.consumed, header.size
             ))
             .lazy(
                 object,
                 Object {
-                    input,
+                    pack: p,
+                    pos,
                     span,
-                    kind,
-                    size,
                     header,
                     stream,
                 },
@@ -227,7 +364,7 @@ pub async fn pack(cx: Cx, input: Input) -> Result<()> {
 }
 
 async fn object(cx: Cx, o: Object) -> Result<()> {
-    let head = cx.block(o.span.sub(0, o.header)).await?;
+    let head = cx.block(o.span.sub(0, o.header.len)).await?;
     {
         let mut f = Fields::emitting(&cx, &head, BE);
         let first = f.u8("Type and size").hex().emit()?;
@@ -237,30 +374,210 @@ async fn object(cx: Cx, o: Object) -> Result<()> {
             name: lookup(OBJECT_TYPES, ((first >> 4) & 7).into()),
         }));
         f.node(Node::new("Size").value(Value::UInt {
-            value: o.size,
+            value: o.header.size,
             bits: 64,
             radix: crate::value::Radix::Dec,
         }));
     }
-    let decoded = inflate_span(&cx, o.stream, true, Some(o.size)).await?;
+    let decoded = inflate_span(&cx, o.stream, true, Some(o.header.size)).await?;
     cx.emit(
         Node::new("Compressed data")
             .span(o.stream.sub(0, decoded.consumed))
             .summary(format!("zlib, {} bytes", decoded.consumed)),
     );
     let data = decoded.span;
-    match o.kind {
-        1 | 4 => commit_like(&cx, data).await?,
-        2 => cx.emit(Node::new("Entries").span(data).lazy(tree_entries, data)),
-        3 => cx.emit(
-            Node::new("Content")
-                .span(data)
-                .summary(size(data.len))
-                .lazy(blob, (o.input, data)),
-        ),
-        _ => cx.emit(Node::new("Delta").span(data).lazy(delta, data)),
+    match o.header.kind {
+        6 | 7 => {
+            cx.emit(Node::new("Delta").span(data).lazy(delta, data));
+            cx.emit(match o.header.base {
+                Base::Named(_) => Node::new("Resolved object").diag(Diagnostic::unsupported(
+                    "ref-delta: the base is named by object ID, not located in the pack",
+                )),
+                _ => Node::new("Resolved object")
+                    .summary("the delta applied to its base")
+                    .lazy(resolved, (o.pack, o.pos)),
+            });
+            Ok(())
+        }
+        kind => show(&cx, o.pack, kind, data).await,
     }
-    Ok(())
+}
+
+/// The content of an object of type `kind` (commit, tree, blob, tag)
+/// whose data is `data`.
+async fn show(cx: &Cx, pack: Pack, kind: u8, data: Span) -> Result<()> {
+    match kind {
+        1 | 4 => commit_like(cx, data).await,
+        2 => {
+            cx.emit(
+                Node::new("Entries")
+                    .span(data)
+                    .lazy(tree_entries, (data, pack.hash_len)),
+            );
+            Ok(())
+        }
+        _ => {
+            cx.emit(
+                Node::new("Content")
+                    .span(data)
+                    .summary(size(data.len))
+                    .lazy(blob, (pack.input, data)),
+            );
+            Ok(())
+        }
+    }
+}
+
+/// Deltas applied on top of one another at most (git's default for
+/// `--depth` is 50).
+const MAX_DELTA_DEPTH: usize = 64;
+
+/// The object an ofs-delta chain rebuilds.
+async fn resolved(cx: Cx, (pack, pos): (Pack, u64)) -> Result<()> {
+    let (kind, data) = resolve(&cx, pack, pos).await?;
+    let name = lookup(OBJECT_TYPES, kind.into()).unwrap_or("?");
+    cx.annotate(format!("{name}, {}", size(data.len)));
+    cx.emit(
+        Node::new("Object")
+            .span(data)
+            .value(Value::Enum {
+                raw: kind.into(),
+                bits: 3,
+                name: lookup(OBJECT_TYPES, kind.into()),
+            })
+            .summary(size(data.len)),
+    );
+    show(&cx, pack, kind, data).await
+}
+
+/// The delta's transform name in derived-source origins.
+const DELTA: &str = "git-delta";
+
+/// Rebuilds the object at `pos`: follows ofs-delta bases back to a whole
+/// object, then applies the deltas in turn. Each rebuilt object is kept
+/// (keyed by its delta's header), so chains sharing bases rebuild them
+/// once. Returns the base object's type and the rebuilt bytes.
+async fn resolve(cx: &Cx, pack: Pack, pos: u64) -> Result<(u8, Span)> {
+    let file = pack.file();
+    // The deltas from `pos` back to the base, newest first.
+    let mut chain: Vec<(u64, Header)> = Vec::new();
+    let mut at = pos;
+    let (kind, base) = loop {
+        let h = read_header(cx, file, at, pack.hash_len).await?;
+        match h.base {
+            Base::None => break (h.kind, (at, h)),
+            Base::At(base) => {
+                if chain.len() >= MAX_DELTA_DEPTH {
+                    return Err(Diagnostic::limit(format!(
+                        "delta chain deeper than {MAX_DELTA_DEPTH}"
+                    ))
+                    .at(file.sub(pos, 1)));
+                }
+                chain.push((at, h));
+                at = base;
+            }
+            Base::Named(_) => {
+                return Err(Diagnostic::unsupported(
+                    "a ref-delta base (named by object ID) in the chain",
+                )
+                .at(file.sub(at, 1)));
+            }
+        }
+    };
+    let origin = |at: u64, h: &Header| Origin {
+        parent: file.sub(at, h.len),
+        transform: DELTA,
+    };
+    // Start from the newest object already rebuilt, if any.
+    let done = chain
+        .iter()
+        .enumerate()
+        .find_map(|(i, (at, h))| Some((i, cx.derived(origin(*at, h))?.span)));
+    let (todo, mut data) = match done {
+        Some(found) => found,
+        None => {
+            let (at, h) = base;
+            let stream = pack.stream(at.saturating_add(h.len), h.size);
+            let span = inflate_span(cx, stream, true, Some(h.size)).await?.span;
+            (chain.len(), span)
+        }
+    };
+    for (at, h) in chain.get(..todo).unwrap_or_default().iter().rev() {
+        let stream = pack.stream(at.saturating_add(h.len), h.size);
+        let delta = inflate_span(cx, stream, true, Some(h.size)).await?;
+        let instructions = cx.read(delta.span).await?;
+        let source = cx.read(data).await?;
+        let out = apply_delta(cx, &instructions, &source, delta.span).await?;
+        data = cx
+            .add_derived(origin(*at, h), out, delta.span.len, None)?
+            .span;
+    }
+    Ok((kind, data))
+}
+
+/// Applies git delta `instructions` (`patch-delta.c`) to `source`.
+async fn apply_delta(cx: &Cx, instructions: &[u8], source: &[u8], at: Span) -> Result<Vec<u8>> {
+    let bad = |what: &str| Diagnostic::malformed(format!("delta: {what}")).at(at);
+    let (src_size, n) = crate::bytes::uleb128(instructions).ok_or_else(|| bad("bad size"))?;
+    let rest = instructions.get(n..).unwrap_or_default();
+    let (dst_size, m) = crate::bytes::uleb128(rest).ok_or_else(|| bad("bad size"))?;
+    if src_size != to_u64(source.len()) {
+        return Err(bad(&format!(
+            "source size {src_size}, base has {}",
+            source.len()
+        )));
+    }
+    if dst_size > cx.limits().max_derived {
+        return Err(Diagnostic::limit(format!("delta target of {dst_size} bytes")).at(at));
+    }
+    let mut ops = rest.get(m..).unwrap_or_default().iter();
+    let mut out = Vec::new();
+    // Bytes copied since the last checkpoint.
+    let mut paced = 0usize;
+    while let Some(&op) = ops.next() {
+        if op & 0x80 != 0 {
+            let mut offset = 0u64;
+            let mut len = 0u64;
+            for bit in 0..7u32 {
+                if op & (1 << bit) != 0 {
+                    let b = u64::from(*ops.next().ok_or_else(|| bad("truncated copy"))?);
+                    if bit < 4 {
+                        offset |= b.checked_shl(bit.saturating_mul(8)).unwrap_or(0);
+                    } else {
+                        len |= b
+                            .checked_shl(bit.saturating_sub(4).saturating_mul(8))
+                            .unwrap_or(0);
+                    }
+                }
+            }
+            if len == 0 {
+                len = 0x10000;
+            }
+            let piece = source
+                .get(to_usize(offset)..to_usize(offset.saturating_add(len)))
+                .ok_or_else(|| bad("copy past the end of the base"))?;
+            out.extend_from_slice(piece);
+            paced = paced.saturating_add(piece.len());
+        } else if op == 0 {
+            return Err(bad("opcode 0"));
+        } else {
+            for _ in 0..op {
+                out.push(*ops.next().ok_or_else(|| bad("truncated insert"))?);
+            }
+            paced = paced.saturating_add(usize::from(op));
+        }
+        if to_u64(out.len()) > dst_size {
+            return Err(bad("writes past the target size"));
+        }
+        if paced >= 1 << 16 {
+            paced = 0;
+            cx.checkpoint().await;
+        }
+    }
+    if to_u64(out.len()) != dst_size {
+        return Err(bad(&format!("target size {dst_size}, wrote {}", out.len())));
+    }
+    Ok(out)
 }
 
 async fn blob(cx: Cx, (input, data): (Input, Span)) -> Result<()> {
@@ -344,8 +661,10 @@ fn commit_header(data: Span, key: String, value: &str, start: usize, end: usize)
     node
 }
 
-async fn tree_entries(cx: Cx, data: Span) -> Result<()> {
+/// Tree entries: `mode SP name NUL` and the entry's object name.
+async fn tree_entries(cx: Cx, (data, hash_len): (Span, u64)) -> Result<()> {
     let bytes = cx.read(data).await?;
+    let hash = to_usize(hash_len);
     let mut at = 0usize;
     while at < bytes.len() {
         let rest = bytes.get(at..).unwrap_or_default();
@@ -354,10 +673,8 @@ async fn tree_entries(cx: Cx, data: Span) -> Result<()> {
         };
         let head = String::from_utf8_lossy(rest.get(..nul).unwrap_or_default()).into_owned();
         let (mode, name) = head.split_once(' ').unwrap_or(("?", head.as_str()));
-        let sha = rest
-            .get(nul.saturating_add(1)..nul.saturating_add(21))
-            .unwrap_or_default();
-        let len = nul.saturating_add(21);
+        let len = nul.saturating_add(1).saturating_add(hash);
+        let sha = rest.get(nul.saturating_add(1)..len).unwrap_or_default();
         let kind = match mode {
             "40000" => "tree",
             "160000" => "submodule",
@@ -430,24 +747,53 @@ async fn delta(cx: Cx, data: Span) -> Result<()> {
     Ok(())
 }
 
+/// The object name size of a version 2 pack index of `len` bytes holding
+/// `count` objects: `8 + 1024 + count * (H + 8) + 8 * large + 2 * H`
+/// bytes, with at most `count` large offsets. `None` when both sizes fit
+/// (or neither does).
+fn index_hash_len(len: u64, count: u64) -> Option<u64> {
+    let fits = |h: u64| {
+        let fixed = count
+            .checked_mul(h.checked_add(8)?)?
+            .checked_add(1032)?
+            .checked_add(h.checked_mul(2)?)?;
+        let large = len.checked_sub(fixed)?;
+        (large.is_multiple_of(8) && large / 8 <= count).then_some(h)
+    };
+    match (fits(SHA1_LEN), fits(SHA256_LEN)) {
+        (Some(h), None) | (None, Some(h)) => Some(h),
+        _ => None,
+    }
+}
+
 pub async fn pack_index(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let fanout = file.sub_exact(8, 1024)?;
     let table = cx.read(fanout).await?;
     let count = u64::from(u32_be(&table, 1020).unwrap_or(0));
+    let t = trailer(
+        &cx,
+        file,
+        index_hash_len(file.len, count).unwrap_or(SHA1_LEN),
+    )
+    .await?;
+    let hash = t.len;
     cx.emit(struct_node("Header", file.sub(0, 8), BE, (), |f, _| {
         f.bytes("Magic", 4).emit()?;
         f.u32("Version").emit()?;
         Ok(())
     }));
-    cx.annotate(format!("Git pack index v2, {count} objects"));
+    cx.annotate(format!(
+        "Git pack index v2, {count} objects{}",
+        if hash == SHA256_LEN { ", SHA-256" } else { "" }
+    ));
     cx.emit(
         Node::new("Fan-out table")
             .span(fanout)
             .summary("cumulative object counts by first byte")
             .lazy(fanout_table, fanout),
     );
-    let names = file.sub_exact(1032, count.saturating_mul(HASH))?;
+    let names = file.sub_exact(1032, count.saturating_mul(hash))?;
     let crcs = file.sub_exact(
         names.end().saturating_sub(file.offset),
         count.saturating_mul(4),
@@ -460,11 +806,11 @@ pub async fn pack_index(cx: Cx, input: Input) -> Result<()> {
         Node::new("Objects")
             .span(names)
             .summary(format!("{count}"))
-            .lazy(index_objects, (file, names, crcs, offsets, count)),
+            .lazy(index_objects, (file, names, crcs, offsets, count, hash)),
     );
     cx.emit(Node::new("CRC-32 table").span(crcs));
     cx.emit(Node::new("Offset table").span(offsets));
-    let trailer_at = file.len.saturating_sub(2 * HASH);
+    let trailer_at = file.len.saturating_sub(hash.saturating_mul(2));
     let large_at = offsets.end().saturating_sub(file.offset);
     if trailer_at > large_at {
         cx.emit(
@@ -472,13 +818,13 @@ pub async fn pack_index(cx: Cx, input: Input) -> Result<()> {
                 .span(file.sub(large_at, trailer_at.saturating_sub(large_at))),
         );
     }
-    let pack_sum = file.sub(trailer_at, HASH);
+    let pack_sum = file.sub(trailer_at, hash);
     cx.emit(
         Node::new("Pack checksum")
             .span(pack_sum)
             .value(Value::Text(hex_string(&cx.read(pack_sum).await?))),
     );
-    cx.emit(checksum_node(&cx, file, "Index checksum").await?);
+    cx.emit(checksum_node(&cx, file, "Index checksum", t).await?);
     Ok(())
 }
 
@@ -502,12 +848,15 @@ async fn fanout_table(cx: Cx, span: Span) -> Result<()> {
 
 async fn index_objects(
     cx: Cx,
-    (file, names, crcs, offsets, count): (Span, Span, Span, Span, u64),
+    (file, names, crcs, offsets, count, hash): (Span, Span, Span, Span, u64, u64),
 ) -> Result<()> {
     cx.set_count(Count::Exact(count));
     let large = offsets.end().saturating_sub(file.offset);
-    for i in 0..count {
-        let name = names.sub(i.saturating_mul(HASH), HASH);
+    // Resume marks: the next index (each entry is at a fixed place).
+    let first = cx.resume::<u64>().unwrap_or(0);
+    for i in first..count {
+        cx.mark(move || i);
+        let name = names.sub(i.saturating_mul(hash), hash);
         let sha = cx.read(name).await?;
         let crc = u32_be(&cx.read(crcs.sub(i.saturating_mul(4), 4)).await?, 0).unwrap_or(0);
         let raw = u32_be(&cx.read(offsets.sub(i.saturating_mul(4), 4)).await?, 0).unwrap_or(0);
@@ -552,6 +901,15 @@ fn mode_text(mode: u32) -> String {
     format!("{mode:o}")
 }
 
+/// The index `file`: its version, entry count and object name size.
+#[derive(Clone, Copy, Debug)]
+struct Dirc {
+    file: Span,
+    version: u32,
+    count: u32,
+    hash_len: u64,
+}
+
 /// One index entry: its span, path and fixed fields.
 struct Entry {
     span: Span,
@@ -562,14 +920,18 @@ struct Entry {
 }
 
 /// Decodes the entry at `pos`; `prev` is the previous path (version 4).
-async fn index_entry(cx: &Cx, file: Span, version: u32, pos: u64, prev: &str) -> Result<Entry> {
-    let head = cx.read(file.sub_exact(pos, 62)?).await?;
-    let flags = u16_be(&head, 60).unwrap_or(0);
-    let mut at = pos.saturating_add(62);
-    if version >= 3 && flags & 0x4000 != 0 {
+/// The fixed part is 40 bytes of stat data, the object name and 2 bytes
+/// of flags.
+async fn index_entry(cx: &Cx, d: &Dirc, pos: u64, prev: &str) -> Result<Entry> {
+    let file = d.file;
+    let fixed = d.hash_len.saturating_add(42);
+    let head = cx.read(file.sub_exact(pos, fixed)?).await?;
+    let flags = u16_be(&head, to_usize(fixed.saturating_sub(2))).unwrap_or(0);
+    let mut at = pos.saturating_add(fixed);
+    if d.version >= 3 && flags & 0x4000 != 0 {
         at = at.saturating_add(2);
     }
-    let (path, end) = if version >= 4 {
+    let (path, end) = if d.version >= 4 {
         let window = cx.read_avail(file.sub(at, 10)).await?;
         let (strip, n) = crate::bytes::uleb128(&window)
             .ok_or_else(|| Diagnostic::malformed("bad path prefix").at(file.sub(at, 1)))?;
@@ -592,7 +954,10 @@ async fn index_entry(cx: &Cx, file: Span, version: u32, pos: u64, prev: &str) ->
         path,
         mode: u32_be(&head, 24).unwrap_or(0),
         size: u32_be(&head, 36).unwrap_or(0),
-        sha: head.get(40..60).unwrap_or_default().to_vec(),
+        sha: head
+            .get(40..to_usize(fixed.saturating_sub(2)))
+            .unwrap_or_default()
+            .to_vec(),
     })
 }
 
@@ -601,44 +966,58 @@ pub async fn index(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read(file.sub_exact(0, 12)?).await?;
     let version = u32_be(&head, 4).unwrap_or(0);
     let count = u32_be(&head, 8).unwrap_or(0);
+    let t = trailer(&cx, file, SHA1_LEN).await?;
+    let d = Dirc {
+        file,
+        version,
+        count,
+        hash_len: t.len,
+    };
     cx.emit(struct_node("Header", file.sub(0, 12), BE, (), |f, _| {
         f.ascii("Signature", 4).emit()?;
         f.u32("Version").emit()?;
         f.u32("Number of entries").emit()?;
         Ok(())
     }));
-    cx.annotate(format!("Git index v{version}, {count} entries"));
+    cx.annotate(format!(
+        "Git index v{version}, {count} entries{}",
+        if t.len == SHA256_LEN { ", SHA-256" } else { "" }
+    ));
     cx.emit(
         Node::new("Entries")
             .summary(format!("{count}"))
-            .lazy(index_entries, (file, version, count)),
+            .lazy(index_entries, d),
     );
-    cx.emit(Node::new("Extensions").lazy(index_extensions, (file, version, count)));
-    cx.emit(checksum_node(&cx, file, "Checksum").await?);
+    cx.emit(Node::new("Extensions").lazy(index_extensions, d));
+    cx.emit(checksum_node(&cx, file, "Checksum", t).await?);
     Ok(())
 }
 
-async fn index_entries(cx: Cx, (file, version, count): (Span, u32, u32)) -> Result<()> {
-    cx.set_count(Count::Exact(count.into()));
-    let mut pos = 12u64;
-    let mut prev = String::new();
-    for _ in 0..count {
-        let e = index_entry(&cx, file, version, pos, &prev).await?;
+async fn index_entries(cx: Cx, d: Dirc) -> Result<()> {
+    cx.set_count(Count::Exact(d.count.into()));
+    // Resume marks: (position, entry index, previous path); version 4
+    // paths are compressed against the previous one.
+    let (mut pos, first, mut prev) =
+        cx.resume::<(u64, u32, String)>()
+            .unwrap_or((12, 0, String::new()));
+    for i in first..d.count {
+        cx.mark(|| (pos, i, prev.clone()));
+        let e = index_entry(&cx, &d, pos, &prev).await?;
         cx.push(
             Node::new(clip(&e.path, 200))
                 .span(e.span)
                 .value(Value::Text(hex_string(&e.sha)))
                 .summary(format!("{}, {} bytes", mode_text(e.mode), e.size))
-                .lazy(entry_fields, (e.span, version)),
+                .lazy(entry_fields, (e.span, d.version, d.hash_len)),
         )
         .await;
-        pos = e.span.end().saturating_sub(file.offset);
+        pos = e.span.end().saturating_sub(d.file.offset);
         prev = e.path;
     }
     Ok(())
 }
 
-async fn entry_fields(cx: Cx, (span, version): (Span, u32)) -> Result<()> {
+async fn entry_fields(cx: Cx, (span, version, hash_len): (Span, u32, u64)) -> Result<()> {
     let block = cx.block(span).await?;
     let mut f = Fields::emitting(&cx, &block, BE);
     f.u32("ctime (seconds)").timestamp().emit()?;
@@ -651,7 +1030,7 @@ async fn entry_fields(cx: Cx, (span, version): (Span, u32)) -> Result<()> {
     f.u32("UID").emit()?;
     f.u32("GID").emit()?;
     f.u32("File size").emit()?;
-    f.bytes("Object name", HASH)
+    f.bytes("Object name", hash_len)
         .with(|b, n| n.value(Value::Text(hex_string(b))))
         .emit()?;
     let flags = f
@@ -690,16 +1069,17 @@ async fn entry_fields(cx: Cx, (span, version): (Span, u32)) -> Result<()> {
     Ok(())
 }
 
-async fn index_extensions(cx: Cx, (file, version, count): (Span, u32, u32)) -> Result<()> {
+async fn index_extensions(cx: Cx, d: Dirc) -> Result<()> {
+    let file = d.file;
     let mut pos = 12u64;
     let mut prev = String::new();
-    for _ in 0..count {
-        let e = index_entry(&cx, file, version, pos, &prev).await?;
+    for _ in 0..d.count {
+        let e = index_entry(&cx, &d, pos, &prev).await?;
         pos = e.span.end().saturating_sub(file.offset);
         prev = e.path;
         cx.checkpoint().await;
     }
-    let end = file.len.saturating_sub(HASH);
+    let end = file.len.saturating_sub(d.hash_len);
     while pos.saturating_add(8) <= end {
         let head = cx.read(file.sub(pos, 8)).await?;
         let sig: [u8; 4] = crate::bytes::array(&head, 0).unwrap_or_default();
@@ -716,7 +1096,7 @@ async fn index_extensions(cx: Cx, (file, version, count): (Span, u32, u32)) -> R
         .span(span)
         .summary(format!("{len} bytes"));
         if &sig == b"TREE" {
-            node = node.lazy(cache_tree, span.tail(8));
+            node = node.lazy(cache_tree, (span.tail(8), d.hash_len));
         }
         cx.push(node).await;
         pos = pos.saturating_add(8).saturating_add(len);
@@ -724,9 +1104,11 @@ async fn index_extensions(cx: Cx, (file, version, count): (Span, u32, u32)) -> R
     Ok(())
 }
 
-/// `TREE`: `path NUL entries SP subtrees LF [sha]` records, depth-first.
-async fn cache_tree(cx: Cx, span: Span) -> Result<()> {
+/// `TREE`: `path NUL entries SP subtrees LF [object name]` records,
+/// depth-first.
+async fn cache_tree(cx: Cx, (span, hash_len): (Span, u64)) -> Result<()> {
     let data = cx.read(span).await?;
+    let hash = to_usize(hash_len);
     let mut at = 0usize;
     while at < data.len() {
         let rest = data.get(at..).unwrap_or_default();
@@ -749,9 +1131,9 @@ async fn cache_tree(cx: Cx, span: Span) -> Result<()> {
         })
         .summary(format!("{entries} entries, {subtrees} subtrees"));
         if valid {
-            let sha = rest.get(len..len.saturating_add(20)).unwrap_or_default();
+            let sha = rest.get(len..len.saturating_add(hash)).unwrap_or_default();
             node = node.value(Value::Text(hex_string(sha)));
-            len = len.saturating_add(20);
+            len = len.saturating_add(hash);
         } else {
             node = node.desc("invalidated");
         }

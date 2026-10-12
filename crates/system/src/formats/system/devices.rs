@@ -10,6 +10,7 @@ use crate::fields::{Endian, Fields};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
+use crate::span::Span;
 use crate::value::{EnumTable, Value, lookup};
 
 const LE: Endian = Endian::Little;
@@ -675,19 +676,63 @@ async fn cia(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub KERNEL_DUMP = "windows-kernel-dump", "Windows kernel crash dump", ["dmp"], "application/x-windows-kernel-dump",
     Probe::Magic(&[(0, b"PAGEDU64"), (0, b"PAGEDUMP")]), kernel_dump);
 
+/// `_DUMP_TYPES` (the header's DumpType), with the live-dump types newer
+/// debuggers write (kdmp-parser's `DumpType_t`).
 const DUMP_TYPES: EnumTable = &[
     (1, "full"),
-    (2, "kernel"),
-    (4, "small (minidump)"),
-    (5, "triage"),
-    (6, "bitmap"),
-    (8, "automatic"),
+    (2, "kernel (summary)"),
+    (3, "header only"),
+    (4, "triage (minidump)"),
+    (5, "bitmap full"),
+    (6, "bitmap kernel"),
+    (7, "automatic"),
+    (8, "live kernel memory"),
+    (9, "live kernel and user memory"),
+    (10, "live complete memory"),
 ];
+
+const PRODUCT_TYPES: EnumTable = &[(1, "workstation"), (2, "domain controller"), (3, "server")];
+
+/// Offsets of the `DUMP_HEADER32` / `DUMP_HEADER64` fields past the
+/// bug check code.
+struct DumpLayout {
+    header: u64,
+    physical_memory: u64,
+    physical_memory_len: u64,
+    context: u64,
+    context_len: u64,
+    exception: u64,
+    exception_len: u64,
+    dump_type: u64,
+}
+
+const DUMP32: DumpLayout = DumpLayout {
+    header: 0x1000,
+    physical_memory: 0x64,
+    physical_memory_len: 700,
+    context: 0x320,
+    context_len: 1200,
+    exception: 0x7d0,
+    exception_len: 0x50,
+    dump_type: 0xf88,
+};
+
+const DUMP64: DumpLayout = DumpLayout {
+    header: 0x2000,
+    physical_memory: 0x88,
+    physical_memory_len: 704,
+    context: 0x348,
+    context_len: 3000,
+    exception: 0xf00,
+    exception_len: 0x98,
+    dump_type: 0xf98,
+};
 
 async fn kernel_dump(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let wide = cx.read(file.sub(0, 8)).await? == b"PAGEDU64";
-    let head = cx.block(file.sub(0, 0x40)).await?;
+    let l = if wide { &DUMP64 } else { &DUMP32 };
+    let head = cx.block(file.sub(0, l.header)).await?;
     let mut f = Fields::emitting(&cx, &head, LE);
     f.ascii("Signature", 4).emit()?;
     f.ascii("Valid dump", 4).emit()?;
@@ -703,22 +748,162 @@ async fn kernel_dump(cx: Cx, input: Input) -> Result<()> {
         .emit()?;
     let processors = f.u32("Processors").emit()?;
     let code = f.u32("Bug check code").hex().emit()?;
-    let kind_at = if wide { 0xf98u64 } else { 0xf88 };
-    let kind = u32_le(&cx.read_avail(file.sub(kind_at, 4)).await?, 0).unwrap_or(0);
-    cx.emit(
-        Node::new("Dump type")
-            .span(file.sub(kind_at, 4))
-            .value(Value::Enum {
-                raw: kind.into(),
-                bits: 32,
-                name: lookup(DUMP_TYPES, kind.into()),
-            }),
+    if wide {
+        f.skip(4);
+    }
+    for name in [
+        "Bug check parameter 1",
+        "Bug check parameter 2",
+        "Bug check parameter 3",
+        "Bug check parameter 4",
+    ] {
+        f.uword(name, wide).hex().emit()?;
+    }
+    f.bytes("Version user", 32).emit()?;
+    if !wide {
+        f.u8("PAE enabled").emit()?;
+        f.u8("KD secondary version").emit()?;
+        f.skip(2);
+    }
+    f.uword("KdDebuggerDataBlock", wide).hex().emit()?;
+    let mem = file.sub(l.physical_memory, l.physical_memory_len);
+    let runs = u32_le(&head.data, crate::bytes::to_usize(l.physical_memory)).unwrap_or(0);
+    f.node(
+        Node::new("Physical memory descriptor")
+            .span(mem)
+            .summary(format!("{runs} runs"))
+            .lazy(memory_runs, (mem, wide)),
     );
-    cx.emit(Node::new("Memory pages").span(file.tail(if wide { 0x2000 } else { 0x1000 })));
+    f.node(Node::new("Context record").span(file.sub(l.context, l.context_len)));
+    let exception = file.sub(l.exception, l.exception_len);
+    f.node(
+        Node::new("Exception record")
+            .span(exception)
+            .summary(format!(
+                "code {:#x}",
+                u32_le(&head.data, crate::bytes::to_usize(l.exception)).unwrap_or(0)
+            )),
+    );
+    f.seek(l.dump_type);
+    let kind = f.u32("Dump type").enumeration(DUMP_TYPES).emit()?;
+    if wide {
+        f.skip(4);
+        f.u64("Required dump space").emit()?;
+        f.u64("System time").filetime().emit()?;
+        f.ascii("Comment", 128).emit()?;
+        f.u64("System up time").emit()?;
+        f.u32("Minidump fields").hex().emit()?;
+        f.u32("Secondary data state").emit()?;
+        f.u32("Product type").enumeration(PRODUCT_TYPES).emit()?;
+        f.u32("Suite mask").hex().emit()?;
+        f.u32("Writer status").emit()?;
+        f.u8("Unused").emit()?;
+        f.u8("KD secondary version").emit()?;
+        f.skip(2);
+        f.u32("Attributes").hex().emit()?;
+        f.u32("Boot ID").emit()?;
+    } else {
+        f.u32("Minidump fields").hex().emit()?;
+        f.u32("Secondary data state").emit()?;
+        f.u32("Product type").enumeration(PRODUCT_TYPES).emit()?;
+        f.u32("Suite mask").hex().emit()?;
+        f.u32("Writer status").emit()?;
+        f.u64("Required dump space").emit()?;
+        f.skip(16);
+        f.u64("System up time").emit()?;
+        f.u64("System time").filetime().emit()?;
+    }
+    let mut pages_at = l.header;
+    if wide && matches!(kind, 5 | 6) {
+        let bmp = file.sub(l.header, 0x38);
+        let b = cx.read_avail(bmp).await?;
+        let first = u64_le(&b, 0x20).unwrap_or(0);
+        let present = u64_le(&b, 0x28).unwrap_or(0);
+        let pages = u64_le(&b, 0x30).unwrap_or(0);
+        let bitmap = file.sub(l.header.saturating_add(0x38), pages.div_ceil(8));
+        cx.emit(
+            Node::new("Bitmap header")
+                .span(bmp)
+                .summary(format!("{present} of {pages} pages present"))
+                .lazy(bitmap_header, bmp),
+        );
+        cx.emit(
+            Node::new("Page bitmap")
+                .span(bitmap)
+                .summary(format!("{pages} bits")),
+        );
+        let bitmap_end = l
+            .header
+            .saturating_add(0x38)
+            .saturating_add(pages.div_ceil(8));
+        if b.get(..4).is_some_and(|s| s == b"SDMP" || s == b"FDMP")
+            && first >= bitmap_end
+            && first <= file.len
+        {
+            pages_at = first;
+        }
+    }
+    cx.emit(Node::new("Memory pages").span(file.tail(pages_at)));
     cx.annotate(format!(
         "Windows {major}.{minor} {} dump, bug check {code:#x}, {processors} CPU(s), machine {machine:#x}",
         lookup(DUMP_TYPES, kind.into()).unwrap_or("crash")
     ));
+    Ok(())
+}
+
+/// `PHYSICAL_MEMORY_DESCRIPTOR32/64`: the runs of physical pages a full
+/// dump stores after its header, in order.
+async fn memory_runs(cx: Cx, (span, wide): (Span, bool)) -> Result<()> {
+    let block = cx.block(span).await?;
+    let mut f = Fields::emitting(&cx, &block, LE);
+    let runs = f.u32("Number of runs").emit()?;
+    if wide {
+        f.skip(4);
+    }
+    f.uword("Number of pages", wide).emit()?;
+    let size = if wide { 16 } else { 8 };
+    let fits = f.remaining().checked_div(size).unwrap_or(0);
+    for i in 0..u64::from(runs).min(fits) {
+        let at = f.pos();
+        let base = if wide {
+            u64_le(&block.data, crate::bytes::to_usize(at))
+        } else {
+            u32_le(&block.data, crate::bytes::to_usize(at)).map(u64::from)
+        }
+        .unwrap_or(0);
+        let count = if wide {
+            u64_le(&block.data, crate::bytes::to_usize(at.saturating_add(8)))
+        } else {
+            u32_le(&block.data, crate::bytes::to_usize(at.saturating_add(4))).map(u64::from)
+        }
+        .unwrap_or(0);
+        f.node(
+            Node::new(format!("Run {i}"))
+                .span(f.peek_span(size))
+                .summary(format!(
+                    "page {base:#x}, {count} pages (physical {:#x})",
+                    base.saturating_mul(0x1000)
+                )),
+        );
+        f.skip(size);
+    }
+    if u64::from(runs) > fits {
+        cx.diag(Diagnostic::malformed(format!("{runs} runs do not fit the descriptor")).at(span));
+    }
+    Ok(())
+}
+
+/// The bitmap dump header (`SDMP`/`FDMP`) at 0x2000 of 64-bit bitmap
+/// dumps.
+async fn bitmap_header(cx: Cx, span: Span) -> Result<()> {
+    let block = cx.block(span).await?;
+    let mut f = Fields::emitting(&cx, &block, LE);
+    f.ascii("Signature", 4).emit()?;
+    f.ascii("Valid dump", 4).emit()?;
+    f.bytes("Padding", 0x18).emit()?;
+    f.u64("First page").hex().emit()?;
+    f.u64("Present pages").emit()?;
+    f.u64("Pages").emit()?;
     Ok(())
 }
 
