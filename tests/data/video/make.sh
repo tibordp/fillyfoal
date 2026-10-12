@@ -50,3 +50,7 @@ ffmpeg $F $T sine=frequency=440:sample_rate=8000:duration=0.05 -c:a pcm_s16le -b
 mkdir -p "$OUT/mkv"
 # AV1 in Matroska: OBUs per block, the sequence header OBU in CodecPrivate (av1C).
 ffmpeg $F $T testsrc=size=32x32:rate=25 -frames:v 2 -c:v libsvtav1 -bitexact -f matroska "$OUT/mkv/av1.mkv" 2>/dev/null
+# AC-3 in WAV (format tag 0x2000) and stereo IMA ADPCM in 256-byte blocks.
+B="-fflags +bitexact -flags:a +bitexact"
+ffmpeg $F $B $T sine=frequency=440:sample_rate=32000:duration=0.1 -ac 1 -c:a ac3 -b:a 32k "$OUT/wav/ac3.wav"
+ffmpeg $F $B $T sine=frequency=440:sample_rate=8000:duration=0.1 -ac 2 -c:a adpcm_ima_wav -block_size 256 "$OUT/wav/adpcm-ima-stereo.wav"
