@@ -243,6 +243,14 @@ The PPMd model in `crates/codec/src/codec/rar/ppmd.rs` implements Dmitry Shkarin
 variant H (public domain), organised after Igor Pavlov's `Ppmd7` in 7-Zip /
 the LZMA SDK (public domain).
 
+## PPMd variant I
+
+The PPMd model in `crates/codec/src/codec/ppmd8.rs` (ZIP method 98) implements
+Dmitry Shkarin's PPMd variant I revision 1 (public domain), organised after
+`Ppmd8.c` and `Ppmd8Dec.c` of Igor Pavlov's LZMA SDK (public domain). Its
+test vectors (`crates/codec/src/codec/testdata/ppmd8-*.bin`) are written by
+that code through pyppmd (`tests/data/zip/ppmd8.py`).
+
 ## RAR decompression — libarchive
 
 The RAR 2.9/3.x and RAR 5.0 decoders in `crates/codec/src/codec/rar/` (`bits.rs`,

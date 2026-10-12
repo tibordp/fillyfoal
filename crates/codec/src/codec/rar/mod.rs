@@ -59,6 +59,7 @@ mod ppmd;
 mod v3;
 mod v5;
 
+pub(crate) use ppmd::Mem as PpmdMem;
 pub use ppmd::Ppmd7;
 
 use std::sync::Arc;

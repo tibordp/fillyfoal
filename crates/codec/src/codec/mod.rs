@@ -39,6 +39,7 @@ pub mod meatpack;
 pub mod palmdoc;
 pub mod pbz;
 pub mod pipeline;
+pub mod ppmd8;
 pub mod psarc;
 pub mod quantum;
 pub mod rar;
@@ -265,6 +266,11 @@ pub enum Codec {
         mem: u32,
         size: u64,
     },
+    /// ZIP PPMd (method 98: variant I rev. 1, its parameters in the
+    /// stream's first two bytes), `size` bytes of output (see [`ppmd8`]).
+    Ppmd8 {
+        size: u64,
+    },
     /// A RAR 2.9/5.0 group of files (one, or a solid run) decoded as one
     /// stream (see [`rar`]).
     Rar(rar::Params),
@@ -407,6 +413,7 @@ impl Codec {
             Codec::Psarc(_) => "psarc",
             Codec::Rar(_) => "rar",
             Codec::Ppmd7 { .. } => "ppmd7",
+            Codec::Ppmd8 { .. } => "ppmd8",
             Codec::Bcj2(_) => "bcj2",
             Codec::PostFilter(lzma::Post::X86) => "bcj-x86",
             Codec::PostFilter(lzma::Post::Arm) => "bcj-arm",
@@ -503,6 +510,7 @@ impl Codec {
             Codec::Psarc(_) => "psarc (lazy)",
             Codec::Rar(_) => "rar (lazy)",
             Codec::Ppmd7 { .. } => "ppmd7 (lazy)",
+            Codec::Ppmd8 { .. } => "ppmd8 (lazy)",
             Codec::Bcj2(_) => "bcj2 (lazy)",
             Codec::PostFilter(lzma::Post::X86) => "bcj-x86 (lazy)",
             Codec::PostFilter(lzma::Post::Arm) => "bcj-arm (lazy)",
@@ -585,9 +593,11 @@ impl Codec {
             Codec::SpssBytecode { .. } | Codec::SasRle | Codec::SasRdc => "decompressed",
             Codec::DwgLz77 { .. } => "decompressed",
             Codec::Lzh(_) | Codec::Psarc(_) => "decompressed",
-            Codec::Rar(_) | Codec::Ppmd7 { .. } | Codec::Bcj2(_) | Codec::Yaz0 { .. } => {
-                "decompressed"
-            }
+            Codec::Rar(_)
+            | Codec::Ppmd7 { .. }
+            | Codec::Ppmd8 { .. }
+            | Codec::Bcj2(_)
+            | Codec::Yaz0 { .. } => "decompressed",
             Codec::PostFilter(_) | Codec::PostFilterAt { .. } | Codec::BinHex => "decoded",
             Codec::AsciiHex
             | Codec::Ascii85
@@ -684,7 +694,7 @@ impl Codec {
             // A 4 KiB RAR 5 match costs a few bits; PPMd runs cost less.
             Codec::Rar(_) => 1 << 16,
             // A highly probable symbol costs a small fraction of a bit.
-            Codec::Ppmd7 { .. } => 1 << 16,
+            Codec::Ppmd7 { .. } | Codec::Ppmd8 { .. } => 1 << 16,
             // As its main stream's codec (the other streams are smaller).
             Codec::Bcj2(p) => p.streams.first().map_or(1, |s| s.codec.max_ratio()),
             Codec::CabFolder(f) if f.method() == 0 => 1,
@@ -784,6 +794,7 @@ impl Codec {
             Codec::Ppmd7 { order, mem, size } => {
                 Box::new(Streaming(rar::Ppmd7::new(u32::from(*order), *mem, *size)))
             }
+            Codec::Ppmd8 { size } => Box::new(ppmd8::Ppmd8::new(*size)),
             Codec::Zstd => Box::new(Streaming(zstd::Zstd::new())),
             Codec::ZstdFrame => Box::new(Streaming(zstd::Zstd::single_frame())),
             Codec::ZstdDict(d) => Box::new(Streaming(zstd::Zstd::with_dictionary(d.clone()))),
