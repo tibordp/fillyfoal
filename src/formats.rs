@@ -956,6 +956,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "archive")]
     &archive::ace::ACE,
     // ZIP-based formats before plain ZIP (more specific ones first).
+    #[cfg(feature = "system")]
+    &forensics::aff4::FORMAT,
     // (ml models & mobile platforms)
     #[cfg(feature = "archive")]
     &archive::zip::TORCHSCRIPT,
@@ -2448,7 +2450,9 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "system")]
     &forensics::logs::VIMINFO,
     #[cfg(feature = "system")]
-    &forensics::evidence::EWF,
+    &forensics::ewf::EWF,
+    #[cfg(feature = "system")]
+    &forensics::ewf::EWF2,
     #[cfg(feature = "system")]
     &forensics::evidence::AFF,
     #[cfg(feature = "system")]
