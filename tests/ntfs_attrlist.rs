@@ -1,7 +1,8 @@
 //! NTFS files whose attributes continue in extension records (through an
 //! $ATTRIBUTE_LIST), on the ntfs-3g/ntfs3 fixture: every named stream is
 //! listed, a $DATA runlist split over three records reads back as the
-//! file written, and freed index records are not listed.
+//! file written, freed index records are not listed, and a directory
+//! whose $INDEX_ROOT is in an extension record lists its entries.
 
 #![allow(
     clippy::unwrap_used,
@@ -69,7 +70,7 @@ fn all_named_streams_are_listed() {
         .into_iter()
         .filter(|n| n.starts_with("$DATA:stream_number_"))
         .count();
-    assert_eq!(streams, 30);
+    assert_eq!(streams, 20);
 }
 
 #[test]
@@ -98,7 +99,21 @@ fn freed_index_records_are_skipped() {
     let id = open(&mut host, &["Root directory", "big"]);
     let files = names(&host, id)
         .into_iter()
-        .filter(|n| n.starts_with("file_with"))
+        .filter(|n| n.starts_with("file_"))
         .count();
-    assert_eq!(files, 30);
+    // 32 files, all but every eighth deleted.
+    assert_eq!(files, 4);
+}
+
+#[test]
+fn a_root_in_an_extension_record_is_listed() {
+    // ntfs-3g moved xdir's $INDEX_ROOT, entries and all, to an extension
+    // record when the base record was full of named streams.
+    let mut host = host();
+    let id = open(&mut host, &["Root directory", "xdir"]);
+    let files = names(&host, id)
+        .into_iter()
+        .filter(|n| n.ends_with("00000000000000000000"))
+        .count();
+    assert_eq!(files, 4);
 }

@@ -108,7 +108,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 32768  [#1:0x110+0x8]
             Data size: 32768 — 32 KiB  [#1:0x118+0x8]
             Initialized size: 32768  [#1:0x120+0x8]
-          Run 0 — VCN 0: 64 clusters at LCN 16 → 0x2000+0x8000
+          Run 0 — VCN 0: 64 clusters at LCN 16  [#1:0x128+0x3] → 0x2000+0x8000
       ▾ $BITMAP — resident, 8 bytes  [#1:0x130+0x20]
         ▾ Header  [#1:0x130+0x18]
             Type: $BITMAP (0xb0)  [#1:0x130+0x4]
@@ -210,7 +210,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 4096  [#3:0x118+0x8]
             Data size: 4096 — 4 KiB  [#3:0x120+0x8]
             Initialized size: 4096  [#3:0x128+0x8]
-          Run 0 — VCN 0: 8 clusters at LCN 80 → 0xa000+0x1000
+          Run 0 — VCN 0: 8 clusters at LCN 80  [#3:0x130+0x3] → 0xa000+0x1000
       ▾ Clusters — contiguous, 4 KiB
           Fragment 0 — file offset 0x0, 4 KiB  [0xa000+0x1000]
       ▾ Content — NTFS MFT, 4 records of 1024 bytes, 4 in use (0 directories)  [0xa000+0x1000]
@@ -297,7 +297,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Allocated size: 32768  [#19:0x110+0x8]
                 Data size: 32768 — 32 KiB  [#19:0x118+0x8]
                 Initialized size: 32768  [#19:0x120+0x8]
-              Run 0 — VCN 0: 64 clusters at LCN 16
+              Run 0 — VCN 0: 64 clusters at LCN 16  [#19:0x128+0x3]
           ▾ $BITMAP — resident, 8 bytes  [#19:0x130+0x20]
             ▾ Header  [#19:0x130+0x18]
                 Type: $BITMAP (0xb0)  [#19:0x130+0x4]
@@ -396,7 +396,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Allocated size: 4096  [#20:0x118+0x8]
                 Data size: 4096 — 4 KiB  [#20:0x120+0x8]
                 Initialized size: 4096  [#20:0x128+0x8]
-              Run 0 — VCN 0: 8 clusters at LCN 80
+              Run 0 — VCN 0: 8 clusters at LCN 80  [#20:0x130+0x3]
         ▾ Record 2: 2024-05-15 05:17:43 UTC — $LogFile — file  [0xa800+0x400]
           ▾ Header  [#21:0x0+0x38]
               Magic: "FILE"  [#21:0x0+0x4]
@@ -951,9 +951,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 2048  [#6:0x160+0x8]
             Data size: 2048 — 2 KiB  [#6:0x168+0x8]
             Initialized size: 2048  [#6:0x170+0x8]
-            Compressed size: 13511017930227748  [#6:0x178+0x8]
             Name: "$I30"  [#6:0x178+0x8]
-          Run 0 — VCN 0: 4 clusters at LCN 88 → 0xb000+0x800
+          Run 0 — VCN 0: 4 clusters at LCN 88  [#6:0x180+0x3] → 0xb000+0x800
         ▾ Content — 2 KiB  [0xb000+0x800]
             Data  [0xb000+0x800]
       ▾ $BITMAP:$I30 — resident, 8 bytes  [#6:0x188+0x28]
@@ -1137,7 +1136,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 512  [#8:0x110+0x8]
             Data size: 512 — 512 bytes  [#8:0x118+0x8]
             Initialized size: 512  [#8:0x120+0x8]
-          Run 0 — VCN 0: 1 clusters at LCN 0 → 0x0+0x200
+          Run 0 — VCN 0: 1 clusters at LCN 0  [#8:0x128+0x3] → 0x0+0x200
       ▾ Clusters — contiguous, 512 bytes
           Fragment 0 — file offset 0x0, 512 bytes  [0x0+0x200]
         Content — the volume's boot sector and loader (shown at the top level)  [0x0+0x200]
@@ -1697,8 +1696,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 1536  [#14:0x198+0x8]
             Data size: 1200 — 1.2 KiB  [#14:0x1a0+0x8]
             Initialized size: 1200  [#14:0x1a8+0x8]
-          Run 0 — VCN 0: 2 clusters at LCN 96 → 0xc000+0x400
-          Run 1 — VCN 2: 1 clusters at LCN 92 → 0xb800+0x200
+          Run 0 — VCN 0: 2 clusters at LCN 96  [#14:0x1b0+0x3] → 0xc000+0x400
+          Run 1 — VCN 2: 1 clusters at LCN 92  [#14:0x1b3+0x3] → 0xb800+0x200
           Slack — allocated past the end of the data  [0xb8b0+0x150]
       ▾ Clusters — 2 fragments, 1.2 KiB
           Fragment 0 — file offset 0x0, 1 KiB  [0xc000+0x400]
@@ -1988,9 +1987,9 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 1536  [#17:0x118+0x8]
             Data size: 1536 — 1.5 KiB  [#17:0x120+0x8]
             Initialized size: 1536  [#17:0x128+0x8]
-          Run 0 — VCN 0: 1 clusters at LCN 100 → 0xc800+0x200
-          Run 1 — VCN 1: 1 sparse clusters
-          Run 2 — VCN 2: 1 clusters at LCN 101 → 0xca00+0x200
+          Run 0 — VCN 0: 1 clusters at LCN 100  [#17:0x130+0x3] → 0xc800+0x200
+          Run 1 — VCN 1: 1 sparse clusters  [#17:0x133+0x2]
+          Run 2 — VCN 2: 1 clusters at LCN 101  [#17:0x135+0x3] → 0xca00+0x200
       ▾ Clusters — 3 fragments, 1.5 KiB
           Fragment 0 — file offset 0x0, 512 bytes  [0xc800+0x200]
           Fragment 1 — file offset 0x200, 512 bytes  [#4294967295:0x0+0x200]
@@ -2081,13 +2080,13 @@ expression: "common::explore(&display_name(&path), &data)"
             Data size: 28176 — 27.5 KiB  [#18:0x120+0x8]
             Initialized size: 28176  [#18:0x128+0x8]
             Compressed size: 11776  [#18:0x130+0x8]
-          Run 0 — VCN 0: 4 clusters at LCN 102 → 0xcc00+0x800
-          Run 1 — VCN 4: 12 sparse clusters
-          Run 2 — VCN 16: 16 clusters at LCN 106 → 0xd400+0x2000
-          Run 3 — VCN 32: 16 sparse clusters
-          Run 4 — VCN 48: 1 clusters at LCN 93 → 0xba00+0x200
-          Run 5 — VCN 49: 2 clusters at LCN 122 → 0xf400+0x400
-          Run 6 — VCN 51: 13 sparse clusters
+          Run 0 — VCN 0: 4 clusters at LCN 102  [#18:0x138+0x3] → 0xcc00+0x800
+          Run 1 — VCN 4: 12 sparse clusters  [#18:0x13b+0x2]
+          Run 2 — VCN 16: 16 clusters at LCN 106  [#18:0x13d+0x3] → 0xd400+0x2000
+          Run 3 — VCN 32: 16 sparse clusters  [#18:0x140+0x2]
+          Run 4 — VCN 48: 1 clusters at LCN 93  [#18:0x142+0x3] → 0xba00+0x200
+          Run 5 — VCN 49: 2 clusters at LCN 122  [#18:0x145+0x3] → 0xf400+0x400
+          Run 6 — VCN 51: 13 sparse clusters  [#18:0x148+0x2]
       ▾ Compression units — 4 of 8 KiB
           Unit 0 — LZNT1, 2 KiB in 1 fragment(s)  [0xcc00+0x800]
           Unit 1 — stored, 8 KiB in 1 fragment(s)  [0xd400+0x2000]
@@ -2238,9 +2237,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 2048  [#6:0x160+0x8]
             Data size: 2048 — 2 KiB  [#6:0x168+0x8]
             Initialized size: 2048  [#6:0x170+0x8]
-            Compressed size: 13511017930227748  [#6:0x178+0x8]
             Name: "$I30"  [#6:0x178+0x8]
-          Run 0 — VCN 0: 4 clusters at LCN 88 → 0xb000+0x800
+          Run 0 — VCN 0: 4 clusters at LCN 88  [#6:0x180+0x3] → 0xb000+0x800
         ▾ Content — 2 KiB  [0xb000+0x800]
             Data  [0xb000+0x800]
       ▾ $BITMAP:$I30 — resident, 8 bytes  [#6:0x188+0x28]
@@ -2505,7 +2503,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 512  [#8:0x110+0x8]
             Data size: 512 — 512 bytes  [#8:0x118+0x8]
             Initialized size: 512  [#8:0x120+0x8]
-          Run 0 — VCN 0: 1 clusters at LCN 0 → 0x0+0x200
+          Run 0 — VCN 0: 1 clusters at LCN 0  [#8:0x128+0x3] → 0x0+0x200
       ▾ Clusters — contiguous, 512 bytes
           Fragment 0 — file offset 0x0, 512 bytes  [0x0+0x200]
         Content — the volume's boot sector and loader (shown at the top level)  [0x0+0x200]
@@ -2673,7 +2671,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 32768  [#1:0x110+0x8]
             Data size: 32768 — 32 KiB  [#1:0x118+0x8]
             Initialized size: 32768  [#1:0x120+0x8]
-          Run 0 — VCN 0: 64 clusters at LCN 16 → 0x2000+0x8000
+          Run 0 — VCN 0: 64 clusters at LCN 16  [#1:0x128+0x3] → 0x2000+0x8000
       ▾ $BITMAP — resident, 8 bytes  [#1:0x130+0x20]
         ▾ Header  [#1:0x130+0x18]
             Type: $BITMAP (0xb0)  [#1:0x130+0x4]
@@ -2775,7 +2773,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 4096  [#3:0x118+0x8]
             Data size: 4096 — 4 KiB  [#3:0x120+0x8]
             Initialized size: 4096  [#3:0x128+0x8]
-          Run 0 — VCN 0: 8 clusters at LCN 80 → 0xa000+0x1000
+          Run 0 — VCN 0: 8 clusters at LCN 80  [#3:0x130+0x3] → 0xa000+0x1000
       ▾ Clusters — contiguous, 4 KiB
           Fragment 0 — file offset 0x0, 4 KiB  [0xa000+0x1000]
       ▾ Content — NTFS MFT, 4 records of 1024 bytes, 4 in use (0 directories)  [0xa000+0x1000]
@@ -2862,7 +2860,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Allocated size: 32768  [#19:0x110+0x8]
                 Data size: 32768 — 32 KiB  [#19:0x118+0x8]
                 Initialized size: 32768  [#19:0x120+0x8]
-              Run 0 — VCN 0: 64 clusters at LCN 16
+              Run 0 — VCN 0: 64 clusters at LCN 16  [#19:0x128+0x3]
           ▾ $BITMAP — resident, 8 bytes  [#19:0x130+0x20]
             ▾ Header  [#19:0x130+0x18]
                 Type: $BITMAP (0xb0)  [#19:0x130+0x4]
@@ -2961,7 +2959,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Allocated size: 4096  [#20:0x118+0x8]
                 Data size: 4096 — 4 KiB  [#20:0x120+0x8]
                 Initialized size: 4096  [#20:0x128+0x8]
-              Run 0 — VCN 0: 8 clusters at LCN 80
+              Run 0 — VCN 0: 8 clusters at LCN 80  [#20:0x130+0x3]
         ▾ Record 2: 2024-05-15 05:17:43 UTC — $LogFile — file  [0xa800+0x400]
           ▾ Header  [#21:0x0+0x38]
               Magic: "FILE"  [#21:0x0+0x4]
@@ -3709,8 +3707,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 1536  [#14:0x198+0x8]
             Data size: 1200 — 1.2 KiB  [#14:0x1a0+0x8]
             Initialized size: 1200  [#14:0x1a8+0x8]
-          Run 0 — VCN 0: 2 clusters at LCN 96 → 0xc000+0x400
-          Run 1 — VCN 2: 1 clusters at LCN 92 → 0xb800+0x200
+          Run 0 — VCN 0: 2 clusters at LCN 96  [#14:0x1b0+0x3] → 0xc000+0x400
+          Run 1 — VCN 2: 1 clusters at LCN 92  [#14:0x1b3+0x3] → 0xb800+0x200
           Slack — allocated past the end of the data  [0xb8b0+0x150]
       ▾ Clusters — 2 fragments, 1.2 KiB
           Fragment 0 — file offset 0x0, 1 KiB  [0xc000+0x400]
@@ -3885,9 +3883,9 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 1536  [#17:0x118+0x8]
             Data size: 1536 — 1.5 KiB  [#17:0x120+0x8]
             Initialized size: 1536  [#17:0x128+0x8]
-          Run 0 — VCN 0: 1 clusters at LCN 100 → 0xc800+0x200
-          Run 1 — VCN 1: 1 sparse clusters
-          Run 2 — VCN 2: 1 clusters at LCN 101 → 0xca00+0x200
+          Run 0 — VCN 0: 1 clusters at LCN 100  [#17:0x130+0x3] → 0xc800+0x200
+          Run 1 — VCN 1: 1 sparse clusters  [#17:0x133+0x2]
+          Run 2 — VCN 2: 1 clusters at LCN 101  [#17:0x135+0x3] → 0xca00+0x200
       ▾ Clusters — 3 fragments, 1.5 KiB
           Fragment 0 — file offset 0x0, 512 bytes  [0xc800+0x200]
           Fragment 1 — file offset 0x200, 512 bytes  [#4294967295:0x0+0x200]

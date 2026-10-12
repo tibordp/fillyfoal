@@ -90,7 +90,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Allocated size: 77824  [#1:0x128+0x8]
           Data size: 68608 — 67 KiB  [#1:0x130+0x8]
           Initialized size: 68608  [#1:0x138+0x8]
-        Run 0 — VCN 0: 19 clusters at LCN 4
+        Run 0 — VCN 0: 19 clusters at LCN 4  [#1:0x140+0x3]
     ▾ $BITMAP — non-resident, 16 bytes  [#1:0x148+0x48]
       ▾ Header  [#1:0x148+0x40]
           Type: $BITMAP (0xb0)  [#1:0x148+0x4]
@@ -108,7 +108,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Allocated size: 4096  [#1:0x170+0x8]
           Data size: 16 — 16 bytes  [#1:0x178+0x8]
           Initialized size: 16  [#1:0x180+0x8]
-        Run 0 — VCN 0: 1 clusters at LCN 2
+        Run 0 — VCN 0: 1 clusters at LCN 2  [#1:0x188+0x3]
   ▾ Record 1: 2026-10-11 20:54:42 UTC — $MFTMirr — file  [0x400+0x400]
     ▾ Header  [#2:0x0+0x38]
         Magic: "FILE"  [#2:0x0+0x4]
@@ -196,7 +196,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Allocated size: 4096  [#2:0x130+0x8]
           Data size: 4096 — 4 KiB  [#2:0x138+0x8]
           Initialized size: 4096  [#2:0x140+0x8]
-        Run 0 — VCN 0: 1 clusters at LCN 255
+        Run 0 — VCN 0: 1 clusters at LCN 255  [#2:0x148+0x4]
   ▾ Record 2: 2026-10-11 20:54:42 UTC — $LogFile — file  [0x800+0x400]
     ▾ Header  [#3:0x0+0x38]
         Magic: "FILE"  [#3:0x0+0x4]
@@ -284,7 +284,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Allocated size: 262144  [#3:0x130+0x8]
           Data size: 262144 — 256 KiB  [#3:0x138+0x8]
           Initialized size: 262144  [#3:0x140+0x8]
-        Run 0 — VCN 0: 64 clusters at LCN 256
+        Run 0 — VCN 0: 64 clusters at LCN 256  [#3:0x148+0x4]
   ▾ Record 3: 2026-10-11 20:54:42 UTC — $Volume — file  [0xc00+0x400]
     ▾ Header  [#4:0x0+0x38]
         Magic: "FILE"  [#4:0x0+0x4]
@@ -563,7 +563,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Allocated size: 4096  [#5:0x198+0x8]
           Data size: 2560 — 2.5 KiB  [#5:0x1a0+0x8]
           Initialized size: 2560  [#5:0x1a8+0x8]
-        Run 0 — VCN 0: 1 clusters at LCN 70
+        Run 0 — VCN 0: 1 clusters at LCN 70  [#5:0x1b0+0x3]
   ▾ Record 5: 2026-10-11 20:54:42 UTC — . — directory  [0x1400+0x400]
     ▾ Header  [#6:0x0+0x38]
         Magic: "FILE"  [#6:0x0+0x4]
@@ -647,7 +647,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Allocated size: 8192  [#6:0x108+0x8]
           Data size: 4140 — 4.0 KiB  [#6:0x110+0x8]
           Initialized size: 4140  [#6:0x118+0x8]
-        Run 0 — VCN 0: 2 clusters at LCN 67
+        Run 0 — VCN 0: 2 clusters at LCN 67  [#6:0x120+0x3]
     ▾ $INDEX_ROOT:$I30 — resident, 56 bytes  [#6:0x128+0x58]
       ▾ Header  [#6:0x128+0x20]
           Type: $INDEX_ROOT (0x90)  [#6:0x128+0x4]
@@ -697,9 +697,8 @@ expression: "common::explore(&display_name(&path), &data)"
           Allocated size: 4096  [#6:0x1a8+0x8]
           Data size: 4096 — 4 KiB  [#6:0x1b0+0x8]
           Initialized size: 4096  [#6:0x1b8+0x8]
-          Compressed size: 13511017930227748  [#6:0x1c0+0x8]
           Name: "$I30"  [#6:0x1c0+0x8]
-        Run 0 — VCN 0: 1 clusters at LCN 69
+        Run 0 — VCN 0: 1 clusters at LCN 69  [#6:0x1c8+0x3]
     ▾ $BITMAP:$I30 — resident, 8 bytes  [#6:0x1d0+0x28]
       ▾ Header  [#6:0x1d0+0x20]
           Type: $BITMAP (0xb0)  [#6:0x1d0+0x4]
@@ -803,7 +802,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Allocated size: 4096  [#7:0x128+0x8]
           Data size: 64 — 64 bytes  [#7:0x130+0x8]
           Initialized size: 64  [#7:0x138+0x8]
-        Run 0 — VCN 0: 1 clusters at LCN 71
+        Run 0 — VCN 0: 1 clusters at LCN 71  [#7:0x140+0x3]
   ▾ Record 7: 2026-10-11 20:54:42 UTC — $Boot — file  [0x1c00+0x400]
     ▾ Header  [#8:0x0+0x38]
         Magic: "FILE"  [#8:0x0+0x4]
@@ -928,7 +927,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Allocated size: 8192  [#8:0x190+0x8]
           Data size: 8192 — 8 KiB  [#8:0x198+0x8]
           Initialized size: 8192  [#8:0x1a0+0x8]
-        Run 0 — VCN 0: 2 clusters at LCN 0
+        Run 0 — VCN 0: 2 clusters at LCN 0  [#8:0x1a8+0x3]
   ▾ Record 8: 2026-10-11 20:54:42 UTC — $BadClus — file  [0x2000+0x400]
     ▾ Header  [#9:0x0+0x38]
         Magic: "FILE"  [#9:0x0+0x4]
@@ -1031,9 +1030,8 @@ expression: "common::explore(&display_name(&path), &data)"
           Allocated size: 2093056  [#9:0x148+0x8]
           Data size: 2093056 — 2.0 MiB  [#9:0x150+0x8]
           Initialized size: 0  [#9:0x158+0x8]
-          Compressed size: 28147914287218724  [#9:0x160+0x8]
           Name: "$Bad"  [#9:0x160+0x8]
-        Run 0 — VCN 0: 511 sparse clusters
+        Run 0 — VCN 0: 511 sparse clusters  [#9:0x168+0x3]
   ▾ Record 9: 2026-10-11 20:54:42 UTC — $Secure — file  [0x2400+0x400]
     ▾ Header  [#10:0x0+0x38]
         Magic: "FILE"  [#10:0x0+0x4]
@@ -1121,9 +1119,8 @@ expression: "common::explore(&display_name(&path), &data)"
           Allocated size: 266240  [#10:0x128+0x8]
           Data size: 262512 — 256.4 KiB  [#10:0x130+0x8]
           Initialized size: 262512  [#10:0x138+0x8]
-          Compressed size: 23362715130200100  [#10:0x140+0x8]
           Name: "$SDS"  [#10:0x140+0x8]
-        Run 0 — VCN 0: 65 clusters at LCN 72
+        Run 0 — VCN 0: 65 clusters at LCN 72  [#10:0x148+0x3]
     ▾ $INDEX_ROOT:$SDH — resident, 192 bytes  [#10:0x150+0xe0]
       ▾ Header  [#10:0x150+0x20]
           Type: $INDEX_ROOT (0x90)  [#10:0x150+0x4]
@@ -1337,7 +1334,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Allocated size: 131072  [#11:0x128+0x8]
           Data size: 131072 — 128 KiB  [#11:0x130+0x8]
           Initialized size: 131072  [#11:0x138+0x8]
-        Run 0 — VCN 0: 32 clusters at LCN 137
+        Run 0 — VCN 0: 32 clusters at LCN 137  [#11:0x140+0x4]
     ▾ $DATA:$Info — resident, 32 bytes  [#11:0x148+0x48]
       ▾ Header  [#11:0x148+0x28]
           Type: $DATA (0x80)  [#11:0x148+0x4]
@@ -2679,7 +2676,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Allocated size: 4096  [#28:0xb8+0x8]
           Data size: 544 — 544 bytes  [#28:0xc0+0x8]
           Initialized size: 544  [#28:0xc8+0x8]
-        Run 0 — VCN 0: 1 clusters at LCN 383
+        Run 0 — VCN 0: 1 clusters at LCN 383  [#28:0xd0+0x4]
     ▾ $FILE_NAME — resident, 156 bytes  [#28:0xd8+0xb8]
       ▾ Header  [#28:0xd8+0x18]
           Type: $FILE_NAME (0x30)  [#28:0xd8+0x4]

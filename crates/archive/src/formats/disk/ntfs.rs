@@ -15,7 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use crate::bytes::{u16_le, u32_le, u64_le};
-use crate::codec::Codec;
+use crate::codec::{Codec, wim};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
@@ -318,6 +318,24 @@ fn le_int(b: &[u8], signed: bool) -> i64 {
 
 /// A run: cluster count and starting cluster (`None` for sparse runs).
 fn parse_runs(data: &[u8]) -> (Vec<(u64, Option<u64>)>, Option<Diagnostic>) {
+    let (runs, problem) = located_runs(data);
+    (
+        runs.into_iter().map(|r| (r.count, r.lcn)).collect(),
+        problem,
+    )
+}
+
+/// A decoded run and where its bytes are in the runlist.
+#[derive(Clone, Copy, Debug)]
+struct Run {
+    at: u64,
+    len: u64,
+    count: u64,
+    lcn: Option<u64>,
+}
+
+/// Decodes a runlist, keeping each run's position in it.
+fn located_runs(data: &[u8]) -> (Vec<Run>, Option<Diagnostic>) {
     let mut out = Vec::new();
     let mut at = 0usize;
     let mut lcn = 0i64;
@@ -353,11 +371,17 @@ fn parse_runs(data: &[u8]) -> (Vec<(u64, Option<u64>)>, Option<Diagnostic>) {
             lcn = lcn.saturating_add(le_int(off, true));
             u64::try_from(lcn).ok()
         };
-        out.push((count, start));
+        let end = off_at.saturating_add(off_bytes);
+        out.push(Run {
+            at: crate::bytes::to_u64(at),
+            len: crate::bytes::to_u64(end.saturating_sub(at)),
+            count,
+            lcn: start,
+        });
         if out.len() >= MAX_RUNS {
             return (out, Some(Diagnostic::limit("too many runs")));
         }
-        at = off_at.saturating_add(off_bytes);
+        at = end;
     }
     (
         out,
@@ -963,6 +987,10 @@ async fn record_node(cx: Cx, (fs, n): (Vol, u64)) -> Result<()> {
         cx.emit(attribute_node(&store, a, n));
     }
     if let Some(data) = find_attr(&attrs, 0x80, "") {
+        if let Some(node) = wof_content(&cx, &fs, &attrs, data).await? {
+            cx.emit(node);
+            return Ok(());
+        }
         let node = stream_content(&cx, &fs, data).await?;
         // The MFT and $Boot are the volume's own structures, already shown
         // at the top level: dissecting them again would recurse into the
@@ -1010,6 +1038,52 @@ async fn system_content(cx: &Cx, fs: &Vol, n: u64, span: Span, node: Node) -> Re
         10 => content.summary("upper-case table").lazy(upcase, span),
         _ => node,
     })
+}
+
+/// The content of a file compressed by Windows' WOF driver ("compact
+/// /exe", Compact OS): its reparse point names the file provider and the
+/// algorithm, the unnamed $DATA is sparse and only gives the size, and
+/// the content is in the named stream `WofCompressedData`, in the WIM
+/// resource framing (a chunk table, then XPRESS or LZX chunks, each stored
+/// as is when it did not shrink); see ntfs-3g's system compression plugin
+/// and wimlib's `wof.h`. `None` for any other file.
+async fn wof_content(cx: &Cx, fs: &Vol, attrs: &[Attr], data: &Attr) -> Result<Option<Node>> {
+    let Some(reparse) = find_attr(attrs, 0xc0, "").and_then(|a| a.resident) else {
+        return Ok(None);
+    };
+    let raw = cx.read_avail(reparse.sub(0, 24)).await?;
+    if u32_le(&raw, 0) != Some(IO_REPARSE_TAG_WOF) || u32_le(&raw, 12) != Some(WOF_PROVIDER_FILE) {
+        return Ok(None);
+    }
+    let Some(stream) = find_attr(attrs, 0x80, "WofCompressedData") else {
+        return Ok(None);
+    };
+    let algorithm = u32_le(&raw, 20).unwrap_or(u32::MAX);
+    let name = name_or(WOF_ALGORITHMS, algorithm.into(), "algorithm");
+    let Some((kind, chunk)) = wof_chunks(algorithm) else {
+        return Ok(Some(
+            Node::new("Content").diag(Diagnostic::unsupported(format!("WOF compression {name}"))),
+        ));
+    };
+    let span = match stream.resident {
+        Some(value) => value,
+        None => {
+            let runs = attr_runs(cx, stream).await?;
+            fs.runs_list(cx, stream.span, &runs, stream.data_size)?
+                .finish(cx, "ntfs-runs")
+                .await?
+        }
+    };
+    let codec = Codec::WimResource(wim::Resource {
+        kind,
+        chunk,
+        original: data.data_size,
+        solid: false,
+    });
+    Ok(Some(
+        crate::formats::content("Content", fs.input, span, codec, Some(data.data_size))
+            .summary(format!("WOF-compressed ({name}), {}", size(data.data_size))),
+    ))
 }
 
 /// Where a record's attributes are read from.
@@ -1079,13 +1153,15 @@ async fn attribute_fields(cx: Cx, (store, a, record): (Store, Arc<Attr>, u64)) -
     }
     let Some(runs) = a.runs else { return Ok(()) };
     let raw = cx.read_avail(runs).await?;
-    let (list, problem) = parse_runs(&raw);
+    let (located, problem) = located_runs(&raw);
     if let Some(d) = problem {
         cx.diag(d);
     }
+    let list: Vec<(u64, Option<u64>)> = located.iter().map(|r| (r.count, r.lcn)).collect();
     let mut vcn = a.lowest_vcn;
-    for (i, &(count, lcn)) in list.iter().enumerate() {
-        let node = Node::new(format!("Run {i}"));
+    for (i, run) in located.iter().enumerate() {
+        let (count, lcn) = (run.count, run.lcn);
+        let node = Node::new(format!("Run {i}")).span(runs.sub(run.at, run.len));
         let node = match lcn {
             Some(l) => {
                 let node = node.summary(format!("VCN {vcn}: {count} clusters at LCN {l}"));
@@ -2027,7 +2103,7 @@ pub fn attribute_header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     let non_resident = f.u8("Non-resident").emit()?;
     let name_len = f.u8("Name length").emit()?;
     let name_off = f.u16("Name offset").hex().emit()?;
-    f.u16("Flags").hex().flags(ATTRIBUTE_FLAGS).emit()?;
+    let flags = f.u16("Flags").hex().flags(ATTRIBUTE_FLAGS).emit()?;
     f.u16("Attribute id").emit()?;
     if non_resident == 0 {
         f.u32("Value length").emit()?;
@@ -2045,7 +2121,9 @@ pub fn attribute_header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
         f.u64("Allocated size").emit()?;
         f.u64("Data size").with(|&v, n| n.summary(size(v))).emit()?;
         f.u64("Initialized size").emit()?;
-        if runs >= 72 {
+        // Only compressed and sparse attributes have the field (a named
+        // attribute's name may start right after the initialized size).
+        if runs >= 72 && flags & 0x80ff != 0 {
             f.u64("Compressed size")
                 .desc("Bytes of clusters allocated (compressed and sparse attributes)")
                 .emit()?;
@@ -2200,6 +2278,31 @@ async fn attribute_list(cx: Cx, value: Span) -> Result<()> {
 const IO_REPARSE_TAG_MOUNT_POINT: u32 = 0xa000_0003;
 const IO_REPARSE_TAG_SYMLINK: u32 = 0xa000_000c;
 const IO_REPARSE_TAG_LX_SYMLINK: u32 = 0xa000_001d;
+const IO_REPARSE_TAG_WOF: u32 = 0x8000_0017;
+
+/// WOF providers (`WOF_PROVIDER_*` in `wofapi.h`).
+const WOF_PROVIDER_WIM: u32 = 1;
+const WOF_PROVIDER_FILE: u32 = 2;
+const WOF_PROVIDERS: EnumTable = &[(1, "WIM"), (2, "file")];
+
+/// The file provider's algorithms (`FILE_PROVIDER_COMPRESSION_*`).
+const WOF_ALGORITHMS: EnumTable = &[
+    (0, "XPRESS4K"),
+    (1, "LZX"),
+    (2, "XPRESS8K"),
+    (3, "XPRESS16K"),
+];
+
+/// The chunk codec and chunk size of a WOF file provider algorithm.
+fn wof_chunks(algorithm: u32) -> Option<(wim::Kind, u32)> {
+    match algorithm {
+        0 => Some((wim::Kind::Xpress, 4096)),
+        1 => Some((wim::Kind::Lzx, 32768)),
+        2 => Some((wim::Kind::Xpress, 8192)),
+        3 => Some((wim::Kind::Xpress, 16384)),
+        _ => None,
+    }
+}
 
 /// Reparse tags (`ntifs.h`, MS-FSCC 2.1.2.1).
 const REPARSE_TAGS: EnumTable = &[
@@ -2269,6 +2372,30 @@ fn reparse_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
             f.u32("Version").emit()?;
             f.ascii("Target", u64::from(len).saturating_sub(4)).emit()?;
         }
+        IO_REPARSE_TAG_WOF => {
+            // WOF_EXTERNAL_INFO, then the provider's own structure
+            // (wofapi.h; wimlib's wof.h).
+            f.u32("WOF version").emit()?;
+            let provider = f.u32("Provider").enumeration(WOF_PROVIDERS).emit()?;
+            match provider {
+                WOF_PROVIDER_FILE => {
+                    f.u32("Provider version").emit()?;
+                    f.u32("Algorithm").enumeration(WOF_ALGORITHMS).emit()?;
+                }
+                WOF_PROVIDER_WIM => {
+                    f.u32("Provider version").emit()?;
+                    f.u32("Flags").hex().emit()?;
+                    f.u64("Data source id").emit()?;
+                    f.bytes("Stream hash", 20)
+                        .desc("SHA-1 of the unnamed stream, looked up in the WIM")
+                        .emit()?;
+                }
+                _ if len > 8 => {
+                    f.bytes("Data", u64::from(len).saturating_sub(8)).emit()?;
+                }
+                _ => {}
+            }
+        }
         _ if len > 0 => {
             f.bytes("Data", len.into()).emit()?;
         }
@@ -2300,6 +2427,18 @@ fn reparse_summary(raw: &[u8]) -> String {
             String::from_utf8_lossy(raw.get(12..len.saturating_add(8)).unwrap_or_default())
                 .into_owned()
         }
+        IO_REPARSE_TAG_WOF => match u32_le(raw, 12) {
+            Some(WOF_PROVIDER_FILE) => format!(
+                "compressed, {}",
+                name_or(
+                    WOF_ALGORITHMS,
+                    u32_le(raw, 20).unwrap_or(0).into(),
+                    "algorithm"
+                )
+            ),
+            Some(WOF_PROVIDER_WIM) => "backed by a WIM image".to_string(),
+            _ => String::new(),
+        },
         _ => String::new(),
     };
     if target.is_empty() {

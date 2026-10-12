@@ -8,7 +8,10 @@
 # Runs a privileged Debian container (FUSE and loop devices), host name
 # "fillyfoal", in a scratch directory outside the home directory:
 #
-#   sh tests/data/disk/make-volumes.sh [scratch dir]
+#   sh tests/data/disk/make-volumes.sh [scratch dir [part...]]
+#
+# Parts: ntfs, lvm, iso (default: all); only the images built are
+# replaced.
 #
 # Images are stored as `<name>.raw.zst` (zstd -19). Timestamps in the NTFS
 # and LVM images are those of the run, and LVM and NTFS write random
@@ -17,11 +20,13 @@ set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../.." && pwd)
 work=${1:-/tmp/fixtures/disk-volumes}
+[ $# -gt 0 ] && shift
 mkdir -p "$work"
 docker run --rm --privileged --hostname fillyfoal -v "$work:/w" -v "$here:/data:ro" -w /w \
-  debian:trixie-slim sh /data/volumes-inner.sh
+  debian:trixie-slim sh /data/volumes-inner.sh "$@"
 
 put() {
+  [ -f "$3" ] || return 0
   dest="$repo/tests/fixtures/$1/$2"
   mkdir -p "$dest"
   zstd -19 -q -f "$3" -o "$dest/$(basename "$3").raw.zst"

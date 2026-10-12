@@ -3,7 +3,9 @@
 //!
 //! - A non-solid resource is a chunk table (one 4-byte, or for resources
 //!   over 4 GiB 8-byte, offset per chunk after the first, relative to the
-//!   end of the table), then the chunks.
+//!   end of the table), then the chunks. NTFS stores WOF-compressed files
+//!   ("compact /exe") in this framing too, in their `WofCompressedData`
+//!   stream.
 //! - A solid resource (several streams compressed together, as in ESD
 //!   files) starts with a 16-byte header (decoded size, chunk size and
 //!   compression format, which override the image's), then a table of
@@ -192,7 +194,13 @@ impl Decoder for WimDecoder {
             Kind::Xpress | Kind::Lzx => 1 << 21,
             Kind::Lzms => lzms::MAX_BLOCK as u64,
         };
-        if !chunk.is_power_of_two() || !(1 << 15..=max_chunk).contains(&chunk) {
+        // wimlib writes XPRESS chunks from 4 KiB, and NTFS's WOF
+        // compression (the same framing) uses 4, 8 and 16 KiB XPRESS chunks.
+        let min_chunk = match r.kind {
+            Kind::Xpress => 1 << 12,
+            Kind::Lzx | Kind::Lzms => 1 << 15,
+        };
+        if !chunk.is_power_of_two() || !(min_chunk..=max_chunk).contains(&chunk) {
             return Err(Diagnostic::unsupported(format!(
                 "WIM chunk size {chunk:#x}"
             )));
