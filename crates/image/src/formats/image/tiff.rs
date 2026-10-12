@@ -358,10 +358,16 @@ struct Entry {
     inline: bool,
 }
 
+/// Whether a field type holds text: ASCII, or UTF-8 (Exif 3.0).
+pub(super) fn is_text(kind: u16) -> bool {
+    matches!(kind, 2 | 129)
+}
+
 /// Bytes per value of a field type (0 for unknown types).
 pub(super) fn type_size(kind: u16) -> u64 {
     match kind {
-        1 | 2 | 6 | 7 => 1,
+        // 129: UTF-8 (Exif 3.0, CIPA DC-008-2023).
+        1 | 2 | 6 | 7 | 129 => 1,
         3 | 8 => 2,
         4 | 9 | 11 | 13 => 4,
         5 | 10 | 12 | 16 | 17 | 18 => 8,
@@ -569,7 +575,7 @@ async fn first_value(cx: &Cx, t: Tiff, ifd: &Ifd, tag: u16) -> Option<Num> {
 
 /// The text of an ASCII entry (up to `cap` bytes), trimmed.
 async fn ascii_of(cx: &Cx, e: &Entry, cap: u64) -> Option<String> {
-    if e.kind != 2 {
+    if !is_text(e.kind) {
         return None;
     }
     let bytes = cx.read_avail(e.data.sub(0, cap)).await.ok()?;
@@ -1064,14 +1070,16 @@ async fn entry_node(cx: &Cx, t: Tiff, dir: Dir, e: &Entry, refs: &render::Refs) 
     if let Some(table) = dir.spec_table(e.tag)
         && let Some((types, count)) = spec(table, e.tag)
     {
-        let bit = 1u32.checked_shl(u32::from(e.kind)).unwrap_or(0);
+        // Exif 3.0 allows UTF-8 wherever the specifications give ASCII.
+        let as_kind = if e.kind == 129 { 2 } else { e.kind };
+        let bit = 1u32.checked_shl(u32::from(as_kind)).unwrap_or(0);
         let kind = lookup(TYPES, e.kind.into()).unwrap_or("?");
         if types & bit == 0 {
             node = node.diag(Diagnostic::warning(format!(
                 "type {kind}; the specification gives {}",
                 type_names(types)
             )));
-        } else if count != 0 && e.kind != 2 && e.count != u64::from(count) {
+        } else if count != 0 && !is_text(e.kind) && e.count != u64::from(count) {
             node = node.diag(Diagnostic::warning(format!(
                 "{} values; the specification gives {count}",
                 e.count
@@ -1334,7 +1342,7 @@ async fn entry(cx: Cx, st: EntryState) -> Result<()> {
             return Ok(());
         }
     }
-    if e.count > 1 && e.kind != 2 && e.kind != 7 && type_size(e.kind) > 0 {
+    if e.count > 1 && !is_text(e.kind) && e.kind != 7 && type_size(e.kind) > 0 {
         cx.emit(
             Node::new("Values")
                 .span(e.data)
