@@ -1,0 +1,7 @@
+FILLY_1.0 {
+    global: filly_count; filly_value;
+    local: *;
+};
+
+FILLY_2.0 {
+} FILLY_1.0;
