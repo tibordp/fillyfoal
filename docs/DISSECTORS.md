@@ -318,7 +318,13 @@ an input a thousand times larger than the fixture.
   out of input is just an error) and add a `Codec` variant. `Streaming`
   makes it resumable by rolling back steps that ran short, so it works
   lazily and inside chains with no extra effort. Report checksum problems
-  through `Decode::warning`.
+  through `Decode::warning`. By default a malformed-data error counts as a
+  possible shortage until the input ends, so damage early in a large
+  stream surfaces only once the whole stream has been fed; a codec that
+  reports every shortage as `DiagKind::Truncated` (and nothing else as
+  truncated) returns `true` from `Decode::truncation_is_exact`, and its
+  other errors are reported at once. Block codecs get there by checking a
+  block is whole before decoding it (see `zstd.rs`).
 - Look at the `Codec` enum before writing a decoder: most compression
   schemes in the wild already have a variant (see the list in `DESIGN.md`).
   Container framings that wrap a codec (WIM chunk tables, CAB folders,
