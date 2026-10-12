@@ -123,6 +123,8 @@ pub struct Inflate {
     last: bool,
     /// Deflate64 rather than DEFLATE.
     deflate64: bool,
+    /// Return after every block (see [`Inflate::stop_at_blocks`]).
+    stop_at_blocks: bool,
 }
 
 impl Default for Inflate {
@@ -138,7 +140,22 @@ impl Inflate {
             state: State::Header,
             last: false,
             deflate64: false,
+            stop_at_blocks: false,
         }
+    }
+
+    /// Makes [`Inflate::step`] also return (with [`Step::More`]) at the end
+    /// of every block, so a caller can see where block boundaries fall in
+    /// the output, as zlib's `Z_BLOCK` does (InnoDB's compressed pages
+    /// flush the index description into a block of its own).
+    pub fn stop_at_blocks(mut self) -> Self {
+        self.stop_at_blocks = true;
+        self
+    }
+
+    /// The decoder is between blocks (or done).
+    pub fn at_block_boundary(&self) -> bool {
+        matches!(self.state, State::Header | State::Done)
     }
 
     /// A Deflate64 inflater (see the module docs).
@@ -235,19 +252,25 @@ impl Inflate {
                     out.extend_from_slice(bytes);
                     self.bit = self.bit.saturating_add(n.saturating_mul(8));
                     let remaining = remaining.saturating_sub(n);
-                    self.state = if remaining == 0 {
-                        State::Header
+                    if remaining == 0 {
+                        self.state = State::Header;
+                        if self.stop_at_blocks {
+                            return Ok(Step::More);
+                        }
                     } else {
-                        State::Stored { remaining }
-                    };
+                        self.state = State::Stored { remaining };
+                    }
                 }
                 State::Codes { lit, dist } => {
                     let done = self.codes(input, out, &lit, &dist, target, limit)?;
-                    self.state = if done {
-                        State::Header
+                    if done {
+                        self.state = State::Header;
+                        if self.stop_at_blocks {
+                            return Ok(Step::More);
+                        }
                     } else {
-                        State::Codes { lit, dist }
-                    };
+                        self.state = State::Codes { lit, dist };
+                    }
                 }
             }
         }
@@ -449,4 +472,37 @@ pub fn inflate_with_dictionary(
     while inflater.step(input, &mut out, usize::MAX, total)? == Step::More {}
     out.drain(..dictionary.len());
     Ok((out, inflater.consumed()))
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    /// zlib's raw deflate of "abc", a full flush, then "defgdefg".
+    const FLUSHED: [u8; 17] = [
+        0x4a, 0x4c, 0x4a, 0x06, 0x00, 0x00, 0x00, 0xff, 0xff, 0x4b, 0x49, 0x4d, 0x4b, 0x4f, 0x01,
+        0x62, 0x00,
+    ];
+
+    #[test]
+    fn stops_at_block_ends() {
+        let mut inflater = Inflate::new().stop_at_blocks();
+        let mut out = Vec::new();
+        let mut ends = Vec::new();
+        loop {
+            let step = inflater.step(&FLUSHED, &mut out, usize::MAX, 64).unwrap();
+            if inflater.at_block_boundary() {
+                ends.push(out.len());
+            }
+            if step == Step::Done {
+                break;
+            }
+        }
+        assert_eq!(out, b"abcdefgdefg");
+        // The first block, the flush's empty stored block, the last block.
+        assert_eq!(ends.first(), Some(&3));
+        assert_eq!(ends.last(), Some(&11));
+        assert_eq!(inflate(&FLUSHED, 64).unwrap(), b"abcdefgdefg");
+    }
 }

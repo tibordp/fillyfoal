@@ -103,6 +103,26 @@ pub struct PageState {
     pub space: SpaceRef,
     pub no: u32,
     pub path: Arc<Vec<u32>>,
+    /// A compressed page's rebuilt uncompressed page, when the expansion
+    /// is about that rather than the page in the file.
+    pub view: Option<Span>,
+}
+
+impl PageState {
+    /// The bytes the expansion is about: the rebuilt page, or the page.
+    pub fn span(&self) -> Option<Span> {
+        self.view.or_else(|| self.space.page(self.no))
+    }
+
+    /// The trailer after the page directory (a rebuilt page has the
+    /// uncompressed page's).
+    pub fn trailer(&self) -> u64 {
+        if self.view.is_some() {
+            super::FIL_TRAILER
+        } else {
+            self.space.geo.trailer()
+        }
+    }
 }
 
 /// A node for page `no`, expanded lazily; `path` holds the pages whose
@@ -123,6 +143,7 @@ pub fn node(space: &SpaceRef, name: String, no: u32, path: Arc<Vec<u32>>) -> Nod
             space: space.clone(),
             no,
             path,
+            view: None,
         },
     )
 }

@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use super::dict::{self, Field, IndexDef};
 use super::page::{self, PageState, SDI};
-use super::{BE, FIL_HEADER, SpaceRef, Sum, fseg_header};
+use super::{BE, FIL_HEADER, SpaceRef, Sum, fseg_header, zip};
 use crate::bytes::{to_u64, to_usize, u16_be, u32_be};
 use crate::codec::Codec;
 use crate::cx::Cx;
@@ -164,6 +164,8 @@ pub struct Parsed {
     pub lens: Option<(u64, u64)>,
     /// Redundant: the field end offsets, and whether they take one byte.
     pub offsets: Option<(u64, u64, bool)>,
+    /// MySQL 8.0.29+: the row version byte's offset and value.
+    pub version: Option<(u64, u8)>,
     pub problem: Option<String>,
 }
 
@@ -214,25 +216,55 @@ fn parse_compact(page: &[u8], origin: u64, def: Option<&IndexDef>) -> Parsed {
         return p;
     };
     if def.instant {
-        p.problem = Some("the table was altered with instant ADD or DROP COLUMN; its records are not split into columns".to_owned());
+        p.problem = Some("the table was altered with instant ADD COLUMN before MySQL 8.0.29; its records are not split into columns".to_owned());
         return p;
     }
-    if p.flags & 0xc0 != 0 || p.status > 3 {
+    if p.flags & 0x80 != 0 || p.status > 3 {
         p.problem = Some(
-            "the record carries a row version (instant ADD/DROP COLUMN), which is not decoded"
+            "the record carries a field count (instant ADD COLUMN before MySQL 8.0.29), which is not decoded"
                 .to_owned(),
         );
         return p;
     }
     let node_ptr = p.status == 1;
+    // MySQL 8.0.29+ row versions: a versioned record has its version in
+    // the byte before the header and holds the fields of that version;
+    // other records those of version 0.
+    let mut nulls_end = origin.saturating_sub(5);
+    let mut version = 0u32;
+    if p.flags & 0x40 != 0 && !node_ptr {
+        if def.versions.is_empty() {
+            p.problem =
+                Some("the record carries a row version, but the definition has none".to_owned());
+            return p;
+        }
+        let at = origin.saturating_sub(6);
+        let Some(v) = byte(page, at) else {
+            p.problem = Some("row version outside the page".to_owned());
+            return p;
+        };
+        p.version = Some((at, v));
+        version = v.into();
+        nulls_end = at;
+    }
+    let present = |i: usize| {
+        node_ptr
+            || def.versions.get(i).is_none_or(|&(added, dropped)| {
+                added <= version && (dropped == 0 || dropped > version)
+            })
+    };
     let n = if node_ptr {
         def.n_uniq.min(def.fields.len())
     } else {
         def.fields.len()
     };
-    let n_nullable = def.fields.iter().filter(|f| f.nullable).count();
+    let n_nullable = def
+        .fields
+        .iter()
+        .enumerate()
+        .filter(|&(i, f)| f.nullable && present(i))
+        .count();
     let null_bytes = to_u64(n_nullable.div_ceil(8));
-    let nulls_end = origin.saturating_sub(5);
     let Some(mut lens) = nulls_end.checked_sub(null_bytes) else {
         p.problem = Some("null flags outside the page".to_owned());
         return p;
@@ -242,6 +274,9 @@ fn parse_compact(page: &[u8], origin: u64, def: Option<&IndexDef>) -> Parsed {
     let mut null_i = 0u64;
     let mut off = origin;
     for (i, f) in def.fields.iter().take(n).enumerate() {
+        if !present(i) {
+            continue;
+        }
         if f.nullable {
             let at = nulls_end.saturating_sub(1).saturating_sub(null_i / 8);
             let bit = 1u8 << (null_i % 8);
@@ -398,6 +433,19 @@ async fn definition(cx: &Cx, space: &SpaceRef, page: &[u8]) -> Option<Arc<IndexD
     dict::load(cx, space).await.index(id).cloned()
 }
 
+/// Index page `no` as its records are read: the page itself, or for a
+/// compressed tablespace the page rebuilt from it.
+pub async fn record_page(cx: &Cx, space: &SpaceRef, no: u32) -> Result<(Span, Vec<u8>)> {
+    let span = space
+        .page(no)
+        .ok_or_else(|| Diagnostic::malformed(format!("page {no} is past the end")))?;
+    if space.geo.sum == Sum::Zip {
+        let v = zip::view(cx, span, space.geo.logical).await?;
+        return Ok((v.span, cx.read(v.span).await?));
+    }
+    Ok((span, cx.read(span).await?))
+}
+
 /// The body of an index page.
 pub async fn body(cx: &Cx, state: &PageState, span: Span, page: &[u8]) -> Result<()> {
     let space = &state.space;
@@ -407,23 +455,17 @@ pub async fn body(cx: &Cx, state: &PageState, span: Span, page: &[u8]) -> Result
         BE,
     ));
     if space.geo.sum == Sum::Zip {
-        let end = span.len;
-        cx.emit(
-            content(
-                "Compressed records",
-                space
-                    .input
-                    .nested(span.sub(PAGE_DATA, end.saturating_sub(PAGE_DATA))),
-                span.sub(PAGE_DATA, end.saturating_sub(PAGE_DATA)),
-                Codec::Zlib,
-                None,
-            )
-            .summary("zlib stream, then the modification log and the dense page directory"),
-        );
-        return Ok(());
+        return zip_body(cx, state, span).await;
     }
-    let compact = compact(page);
     let def = definition(cx, space, page).await;
+    records_body(cx, state, span, page, def);
+    Ok(())
+}
+
+/// The system records, the user and deleted records, free space and the
+/// page directory of an uncompressed (or rebuilt) index page.
+fn records_body(cx: &Cx, state: &PageState, span: Span, page: &[u8], def: Option<Arc<IndexDef>>) {
+    let compact = compact(page);
     let (inf, sup, end) = if compact {
         (COMPACT_INFIMUM, COMPACT_SUPREMUM, COMPACT_END)
     } else {
@@ -462,7 +504,11 @@ pub async fn body(cx: &Cx, state: &PageState, span: Span, page: &[u8]) -> Result
     let level = level(page);
     let mut summary = grouped_count(to_u64(records.len()), "record", "records");
     if let Some(d) = &def {
-        summary.push_str(&format!(" of {}.{}", d.table, d.name));
+        if d.table.is_empty() {
+            summary.push_str(&format!(" of {}", d.name));
+        } else {
+            summary.push_str(&format!(" of {}.{}", d.table, d.name));
+        }
     }
     let heap_top = u64::from(u16_be(page, 40).unwrap_or(0));
     cx.emit(
@@ -488,9 +534,11 @@ pub async fn body(cx: &Cx, state: &PageState, span: Span, page: &[u8]) -> Result
         );
     }
     let slots = u64::from(u16_be(page, 38).unwrap_or(0));
-    let trailer = space.geo.trailer();
     let dir_len = slots.saturating_mul(2);
-    let dir_start = span.len.saturating_sub(trailer).saturating_sub(dir_len);
+    let dir_start = span
+        .len
+        .saturating_sub(state.trailer())
+        .saturating_sub(dir_len);
     if dir_start > heap_top {
         cx.emit(
             Node::new("Free space")
@@ -505,6 +553,241 @@ pub async fn body(cx: &Cx, state: &PageState, span: Span, page: &[u8]) -> Result
             .desc("Every few records in key order, from the end of the page backwards, for binary search")
             .lazy(directory, (state.clone(), dir_start, slots)),
     );
+}
+
+/// A compressed index page: the zlib stream, the modification log, the
+/// columns kept uncompressed, the dense directory, and the page they
+/// rebuild.
+async fn zip_body(cx: &Cx, state: &PageState, span: Span) -> Result<()> {
+    let space = &state.space;
+    let stream_span = span.sub(PAGE_DATA, span.len.saturating_sub(PAGE_DATA));
+    let v = match zip::view(cx, span, space.geo.logical).await {
+        Ok(v) => v,
+        Err(e) => {
+            cx.emit(
+                content(
+                    "Compressed records",
+                    space.input.nested(stream_span),
+                    stream_span,
+                    Codec::Zlib,
+                    None,
+                )
+                .summary("zlib stream, then the modification log and the dense page directory")
+                .diag(e),
+            );
+            return Ok(());
+        }
+    };
+    let z = &v.zip;
+    let phys = span.len;
+    let stream = span.sub(PAGE_DATA, z.stream);
+    let mut node = Node::new("Compressed stream")
+        .span(stream)
+        .summary(format!(
+            "zlib: {} describing the fields, {} of records ({} of the heap)",
+            size(z.fields_len),
+            size(z.inflated.saturating_sub(z.fields_len)),
+            plural(z.from_stream, "record")
+        ))
+        .lazy(zip_stream, (state.clone(), span));
+    if !z.adler_ok {
+        node = node.diag(Diagnostic::malformed(
+            "the stream's Adler-32 does not match",
+        ));
+    }
+    cx.emit(node);
+    let log_start = PAGE_DATA.saturating_add(z.stream);
+    cx.emit(
+        Node::new("Modification log")
+            .span(span.sub(
+                log_start,
+                z.log_end.saturating_add(1).saturating_sub(log_start),
+            ))
+            .summary(grouped_count(to_u64(z.entries.len()), "entry", "entries"))
+            .desc("Records written since the page was last compressed: heap number, extra bytes backwards, data")
+            .lazy(zip_log, (state.clone(), span)),
+    );
+    let trailer = z.trailer_start(phys);
+    let log_after = z.log_end.saturating_add(1);
+    if trailer > log_after {
+        cx.emit(
+            Node::new("Free space")
+                .span(span.sub(log_after, trailer.saturating_sub(log_after)))
+                .summary(size(trailer.saturating_sub(log_after))),
+        );
+    }
+    let dir_start = z.dir_start(phys);
+    if dir_start > trailer {
+        let mut what = match z.kind {
+            zip::Kind::Clustered => format!(
+                "DB_TRX_ID and DB_ROLL_PTR of {}",
+                plural(z.n_dense, "record")
+            ),
+            zip::Kind::NodePtr => {
+                format!("child page numbers of {}", plural(z.n_dense, "record"))
+            }
+            zip::Kind::Secondary => String::new(),
+        };
+        if z.n_blobs != 0 {
+            what.push_str(&format!(
+                ", {}",
+                plural(z.n_blobs, "off-page column reference")
+            ));
+        }
+        cx.emit(
+            Node::new("Uncompressed columns")
+                .span(span.sub(trailer, dir_start.saturating_sub(trailer)))
+                .summary(what)
+                .desc("Kept outside the stream so they can be updated in place, in heap order from the directory backwards"),
+        );
+    }
+    cx.emit(
+        Node::new("Dense directory")
+            .span(span.sub(dir_start, phys.saturating_sub(dir_start)))
+            .summary(grouped_count(z.n_dense, "entry", "entries"))
+            .desc("Every record in the heap from the end of the page backwards: user records in key order, then the free list")
+            .lazy(zip_directory, (state.clone(), span)),
+    );
+    let mut view = Node::new("Uncompressed page")
+        .span(v.span)
+        .summary(format!("{}, as InnoDB rebuilds it", size(v.span.len)))
+        .lazy(
+            zip_page,
+            PageState {
+                view: Some(v.span),
+                ..state.clone()
+            },
+        );
+    if let Some(p) = &z.problem {
+        view = view.diag(Diagnostic::malformed(p.clone()));
+    }
+    cx.emit(view);
+    Ok(())
+}
+
+/// The rebuilt page of a compressed index page, with the dictionary's
+/// definition of the index or else the page's own field description.
+async fn zip_page(cx: Cx, state: PageState) -> Result<()> {
+    let Some(file) = state.space.page(state.no) else {
+        return Ok(());
+    };
+    let v = zip::view(&cx, file, state.space.geo.logical).await?;
+    let page = cx.read(v.span).await?;
+    let def = match definition(&cx, &state.space, &page).await {
+        Some(d) if !d.fields.is_empty() => d,
+        _ => v.zip.def.clone(),
+    };
+    records_body(&cx, &state, v.span, &page, Some(def));
+    Ok(())
+}
+
+/// The zlib stream: its header, the field description, the data and the
+/// checksum.
+async fn zip_stream(cx: Cx, (state, span): (PageState, Span)) -> Result<()> {
+    let v = zip::view(&cx, span, state.space.geo.logical).await?;
+    let z = &v.zip;
+    let stream = span.sub(PAGE_DATA, z.stream);
+    cx.emit(Node::new("zlib header").span(stream.sub(0, 2)).value(hex(
+        u16_be(&cx.read(stream.sub(0, 2)).await?, 0).unwrap_or(0),
+        16,
+    )));
+    let fields: Vec<String> = z
+        .def
+        .fields
+        .iter()
+        .map(|f| {
+            let len = f.fixed.map_or_else(
+                || {
+                    if f.big {
+                        "long variable".to_owned()
+                    } else {
+                        "variable".to_owned()
+                    }
+                },
+                |n| format!("{n} bytes"),
+            );
+            format!("{}{}", len, if f.nullable { " or NULL" } else { "" })
+        })
+        .collect();
+    cx.emit(
+        Node::new("Field description")
+            .summary(clip(&fields.join(", "), 160))
+            .desc("The first deflate block: each field's length (consecutive fixed-length columns that cannot be NULL as one), then where the transaction ID is (leaves) or how many fields can be NULL (node pointers)"),
+    );
+    cx.emit(content(
+        "Decompressed",
+        state.space.input.nested(stream),
+        stream,
+        Codec::Zlib,
+        Some(z.inflated),
+    ));
+    let mut adler = Node::new("Adler-32").span(stream.sub(z.stream.saturating_sub(4), 4));
+    adler = if z.adler_ok {
+        adler.summary("valid")
+    } else {
+        adler.diag(Diagnostic::malformed(
+            "the stream's Adler-32 does not match",
+        ))
+    };
+    cx.emit(adler);
+    Ok(())
+}
+
+async fn zip_log(cx: Cx, (state, span): (PageState, Span)) -> Result<()> {
+    let v = zip::view(&cx, span, state.space.geo.logical).await?;
+    cx.set_count(Count::Exact(to_u64(v.zip.entries.len())));
+    for (i, e) in v.zip.entries.iter().enumerate() {
+        let what = if e.cleared {
+            format!("heap no {}: data cleared", e.heap_no)
+        } else {
+            format!("heap no {}: {} bytes", e.heap_no, e.len)
+        };
+        cx.push(
+            Node::new(format!("Entry {i}"))
+                .span(span.sub(e.at, e.len))
+                .summary(what),
+        )
+        .await;
+    }
+    Ok(())
+}
+
+async fn zip_directory(cx: Cx, (state, span): (PageState, Span)) -> Result<()> {
+    let v = zip::view(&cx, span, state.space.geo.logical).await?;
+    let n = v.zip.n_dense;
+    let head = cx.read(span.sub(54, 2)).await?;
+    let n_recs = u64::from(u16_be(&head, 0).unwrap_or(0));
+    let start = v.zip.dir_start(span.len);
+    let b = cx.read(span.sub(start, n.saturating_mul(2))).await?;
+    cx.set_count(Count::Exact(n));
+    for i in 0..n {
+        let at = n.saturating_sub(1).saturating_sub(i).saturating_mul(2);
+        let raw = u16_be(&b, to_usize(at)).unwrap_or(0);
+        let off = raw & 0x3fff;
+        let mut flags = Vec::new();
+        if i >= n_recs {
+            flags.push("free");
+        }
+        if raw & 0x4000 != 0 {
+            flags.push("owns a directory slot");
+        }
+        if raw & 0x8000 != 0 {
+            flags.push("deleted");
+        }
+        let summary = if flags.is_empty() {
+            format!("record at {off:#x}")
+        } else {
+            format!("record at {off:#x}, {}", flags.join(", "))
+        };
+        let mut node = Node::new(format!("Entry {i}"))
+            .span(span.sub(start.saturating_add(at), 2))
+            .value(hex(raw, 16))
+            .summary(summary);
+        if u64::from(off) < v.span.len {
+            node = node.target(v.span.sub(off.into(), 1));
+        }
+        cx.push(node).await;
+    }
     Ok(())
 }
 
@@ -581,8 +864,7 @@ async fn records_list(
     cx: Cx,
     (state, def, free): (PageState, Option<Arc<IndexDef>>, bool),
 ) -> Result<()> {
-    let space = &state.space;
-    let Some(span) = space.page(state.no) else {
+    let Some(span) = state.span() else {
         return Ok(());
     };
     let page = cx.read(span).await?;
@@ -651,8 +933,7 @@ const RECORD_STATUS: EnumTable = &[
 
 async fn record_fields(cx: Cx, rs: RecordState) -> Result<()> {
     let state = &rs.page;
-    let space = &state.space;
-    let Some(span) = space.page(state.no) else {
+    let Some(span) = state.span() else {
         return Ok(());
     };
     let page = cx.read(span).await?;
@@ -724,6 +1005,14 @@ async fn record_fields(cx: Cx, rs: RecordState) -> Result<()> {
             .span(at(hstart.saturating_add(1), 2))
             .value(uint(rec.heap_no, 16)),
     );
+    if let Some((off, v)) = rec.version {
+        cx.emit(
+            Node::new("Row version")
+                .span(at(off, 1))
+                .value(uint(v, 8))
+                .desc("Instant ADD/DROP COLUMN: the record holds the columns of this version of the table"),
+        );
+    }
     if rec.compact {
         cx.emit(
             Node::new("Status")
@@ -763,14 +1052,16 @@ async fn record_fields(cx: Cx, rs: RecordState) -> Result<()> {
     };
     cx.emit(next);
     if rec.status >= 2 {
+        // "infimum\0" and "supremum" (compact) or "supremum\0" (redundant).
+        let end = rec
+            .end
+            .unwrap_or(rs.origin)
+            .min(rs.origin.saturating_add(9));
         cx.emit(
             Node::new("Data")
-                .span(at(
-                    rs.origin,
-                    rec.end.unwrap_or(rs.origin).saturating_sub(rs.origin),
-                ))
+                .span(at(rs.origin, end.saturating_sub(rs.origin)))
                 .value(crate::formats::util::val::text(crate::text::until_nul(
-                    page.get(to_usize(rs.origin)..to_usize(rs.origin.saturating_add(9)))
+                    page.get(to_usize(rs.origin)..to_usize(end))
                         .unwrap_or_default(),
                 ))),
         );
@@ -847,7 +1138,7 @@ async fn record_fields(cx: Cx, rs: RecordState) -> Result<()> {
 /// source.
 async fn external_value(cx: Cx, (rs, slot): (RecordState, Slot)) -> Result<()> {
     let space = &rs.page.space;
-    let Some(span) = space.page(rs.page.no) else {
+    let Some(span) = rs.page.span() else {
         return Ok(());
     };
     let local = slot.len.saturating_sub(20);
@@ -907,7 +1198,7 @@ async fn external_value(cx: Cx, (rs, slot): (RecordState, Slot)) -> Result<()> {
 }
 
 async fn directory(cx: Cx, (state, start, slots): (PageState, u64, u64)) -> Result<()> {
-    let Some(span) = state.space.page(state.no) else {
+    let Some(span) = state.span() else {
         return Ok(());
     };
     let b = cx.read(span.sub(start, slots.saturating_mul(2))).await?;

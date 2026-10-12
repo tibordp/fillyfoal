@@ -16,7 +16,15 @@
 //! zlib-compressed JSON in an SDI B-tree whose root page 0 names. Those are
 //! decoded (`dict`) and used to split records into typed columns; without
 //! them (MariaDB, MySQL 5.7) records of the redundant format still split
-//! into fields, compact ones show their header and data.
+//! into fields, compact ones show their header and data. Tables altered
+//! with MySQL 8.0.29+'s instant ADD/DROP COLUMN carry a row version in
+//! their records; the dictionary says which columns each version holds.
+//!
+//! Index pages of compressed tables (`ROW_FORMAT=COMPRESSED`) are rebuilt
+//! into the uncompressed page InnoDB works on (`zip`), whose records then
+//! split as above; without a dictionary, the compressed page's own
+//! description of the index's fields splits them. Off-page values of
+//! compressed tables (zlib streams over BLOB page chains) are decoded too.
 //!
 //! Expanding the file reads page 0 and the dictionary; everything else is
 //! lazy: the index B-trees from their roots, and every page by number
@@ -25,6 +33,7 @@
 mod dict;
 mod index;
 mod page;
+mod zip;
 
 use std::sync::Arc;
 
