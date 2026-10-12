@@ -162,6 +162,8 @@ struct Folder {
     pack_sizes: Vec<u64>,
     /// Files (substreams) in this folder.
     streams: u64,
+    /// The CRC-32 of the folder's output, if recorded.
+    crc: Option<u32>,
 }
 
 impl Folder {
@@ -186,6 +188,8 @@ struct Streams {
     folders: Vec<Folder>,
     /// Sizes of the substreams of all folders, in order.
     sizes: Vec<u64>,
+    /// CRC-32s of the substreams, where recorded (aligned with `sizes`).
+    crcs: Vec<Option<u32>>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -369,19 +373,19 @@ impl Parser<'_> {
         }
     }
 
-    async fn digests(&mut self, n: u64) -> P<Item> {
+    async fn digests(&mut self, n: u64) -> P<(Item, Vec<Option<u32>>)> {
         let start = self.at.saturating_sub(1);
         let defined = self.defined(n)?;
+        let mut values = Vec::new();
         for d in &defined {
             self.cx.checkpoint().await;
-            if *d {
-                self.u32()?;
-            }
+            values.push(if *d { Some(self.u32()?) } else { None });
         }
         let crcs = defined.iter().filter(|&&d| d).count();
-        Ok(self
+        let item = self
             .item("kCRC", start)
-            .with_summary(count(to_u64(crcs), "CRC", "CRCs")))
+            .with_summary(count(to_u64(crcs), "CRC", "CRCs"));
+        Ok((item, values))
     }
 
     async fn pack_info(&mut self, s: &mut Streams) -> P<Item> {
@@ -403,7 +407,7 @@ impl Parser<'_> {
                             .with_summary(count(n, "size", "sizes")),
                     );
                 }
-                0x0a => children.push(self.digests(n).await?),
+                0x0a => children.push(self.digests(n).await?.0),
                 _ => return Err("unexpected property in pack info"),
             }
         }
@@ -504,7 +508,13 @@ impl Parser<'_> {
         loop {
             match self.byte()? {
                 0x00 => break,
-                0x0a => children.push(self.digests(n).await?),
+                0x0a => {
+                    let (item, crcs) = self.digests(n).await?;
+                    for (f, crc) in s.folders.iter_mut().zip(crcs) {
+                        f.crc = crc;
+                    }
+                    children.push(item);
+                }
                 _ => return Err("unexpected property in unpack info"),
             }
         }
@@ -558,11 +568,28 @@ impl Parser<'_> {
             match kind {
                 0x00 => break,
                 0x0a => {
+                    // Digests for the streams whose CRC the folder does not
+                    // already give (a folder of one stream with a CRC).
+                    let known = |f: &Folder| f.streams == 1 && f.crc.is_some();
                     let n = s
                         .folders
                         .iter()
+                        .filter(|f| !known(f))
                         .fold(0u64, |a, f| a.saturating_add(f.streams));
-                    children.push(self.digests(n).await?);
+                    let (item, crcs) = self.digests(n).await?;
+                    let mut crcs = crcs.into_iter();
+                    s.crcs.clear();
+                    for f in &s.folders {
+                        self.cx.checkpoint().await;
+                        if known(f) {
+                            s.crcs.push(f.crc);
+                        } else {
+                            for _ in 0..f.streams {
+                                s.crcs.push(crcs.next().flatten());
+                            }
+                        }
+                    }
+                    children.push(item);
                 }
                 _ => return Err("unexpected property in substreams info"),
             }
@@ -606,6 +633,15 @@ impl Parser<'_> {
             for f in &s.folders {
                 self.cx.checkpoint().await;
                 s.sizes.push(f.unpack_size());
+                s.crcs.push(f.crc);
+            }
+        } else if s.crcs.is_empty() {
+            // No substream digests: a folder of one stream may have its own.
+            for f in &s.folders {
+                self.cx.checkpoint().await;
+                for _ in 0..f.streams {
+                    s.crcs.push(if f.streams == 1 { f.crc } else { None });
+                }
             }
         }
         Ok(items)
@@ -1075,17 +1111,42 @@ async fn folder_output(cx: &Cx, span: Span, plan: &Plan) -> Result<(Span, Option
 }
 
 /// Expander: decodes a folder and dissects `len` bytes at `offset` of its
-/// output (a file, or the whole folder).
+/// output (a file, or the whole folder), checking its CRC-32 if recorded.
 async fn folder_part(
     cx: Cx,
-    (input, span, plan, offset, len): (Input, Span, Arc<Plan>, u64, u64),
+    (input, span, plan, offset, len, crc): (Input, Span, Arc<Plan>, u64, u64, Option<u32>),
 ) -> Result<()> {
     let (out, error) = folder_output(&cx, span, &plan).await?;
     if let Some(e) = error {
         cx.diag(e);
     }
     cx.annotate(format!("{:#x} bytes {}", len, plan.codec.verb()));
-    dissect_or_data(cx, input.nested(out.sub(offset, len))).await
+    let part = out.sub(offset, len);
+    check_crc(&cx, part, len, crc).await?;
+    dissect_or_data(cx, input.nested(part)).await
+}
+
+/// A "CRC32" node comparing `span` (which should hold `len` bytes) with
+/// the recorded CRC-32, for content small enough to read just for that.
+async fn check_crc(cx: &Cx, span: Span, len: u64, crc: Option<u32>) -> Result<()> {
+    let Some(want) = crc else { return Ok(()) };
+    if len > super::rar::CRC_LIMIT {
+        return Ok(());
+    }
+    let (got, read) = super::rar::crc_of(cx, span).await?;
+    let node = Node::new("CRC32").value(hex(got, 64));
+    cx.emit(if read < len {
+        node.diag(Diagnostic::malformed(format!(
+            "decoded {read:#x} of {len:#x} bytes"
+        )))
+    } else if got != want {
+        node.diag(Diagnostic::warning(format!(
+            "CRC32 mismatch: stored {want:#010x}"
+        )))
+    } else {
+        node.summary("valid")
+    });
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -1356,7 +1417,7 @@ async fn list_folders(
                 let size = f.unpack_size();
                 Node::new("Data")
                     .span(span)
-                    .lazy(folder_part, (input, span, Arc::new(p), 0, size))
+                    .lazy(folder_part, (input, span, Arc::new(p), 0, size, f.crc))
             }
             Err(why) => unsupported("Data", span, &why),
         });
@@ -1415,6 +1476,7 @@ async fn list_files(cx: Cx, (input, archive, pack_base): (Input, Arc<Archive>, u
                 offset_in_folder = 0;
             }
             let size = archive.streams.sizes.get(stream).copied().unwrap_or(0);
+            let crc = archive.streams.crcs.get(stream).copied().flatten();
             let fo = archive.streams.folders.get(folder);
             let span = spans.get(folder).copied().unwrap_or(file.sub(0, 0));
             children.push(
@@ -1434,7 +1496,7 @@ async fn list_files(cx: Cx, (input, archive, pack_base): (Input, Arc<Archive>, u
                     node = node.span(span);
                     let mut c = Node::new("Content").span(span).lazy(
                         folder_part,
-                        (input, span, Arc::new(p), offset_in_folder, size),
+                        (input, span, Arc::new(p), offset_in_folder, size, crc),
                     );
                     if fo.is_some_and(|f| f.streams > 1) {
                         c = c.summary(format!(
