@@ -629,6 +629,27 @@ impl Section {
                 .unwrap_or_default(),
         )
     }
+
+    /// The entries in order of precedence, the first for each number
+    /// winning: the table's in-use entries, then the hybrid stream's, then
+    /// the free entries of both. A hybrid section's table may mark an
+    /// object that lives in an object stream free, so that readers before
+    /// PDF 1.5 skip it; the stream's entry is the one that counts (MuPDF
+    /// resolves it the same way). A free entry still masks older sections.
+    pub fn effective_entries(&self) -> impl Iterator<Item = &(u32, Loc)> {
+        let hybrid = self
+            .hybrid
+            .as_deref()
+            .map(|h| h.entries.as_slice())
+            .unwrap_or_default();
+        let free = |e: &&(u32, Loc)| matches!(e.1, Loc::Free { .. });
+        self.entries
+            .iter()
+            .filter(move |e| !free(e))
+            .chain(hybrid.iter().filter(move |e| !free(e)))
+            .chain(self.entries.iter().filter(free))
+            .chain(hybrid.iter().filter(free))
+    }
 }
 
 /// The cross-reference section at `offset`.

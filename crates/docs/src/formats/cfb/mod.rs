@@ -16,6 +16,7 @@ mod apps;
 pub(crate) mod biff;
 mod msg;
 mod msi;
+mod offcrypto;
 mod officeart;
 mod ppt;
 mod propset;

@@ -313,11 +313,20 @@ pub fn name(kind: u16) -> String {
 /// The records at `span`, walked as a sequence (a drawing group, a
 /// drawing, or an Escher stream).
 pub async fn records_at(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
-    walk(cx, (input, span, 0)).await
+    walk(cx, (input, span, 0, None)).await
+}
+
+/// A drawing group whose pictures may live in a delay stream (Word's
+/// WordDocument stream): `delay` is where FBSE.foDelay points into.
+pub async fn records_with_delay(cx: Cx, (input, span, delay): (Input, Span, Span)) -> Result<()> {
+    walk(cx, (input, span, 0, Some(delay))).await
 }
 
 /// A record sequence: each record's header, and containers as lazy levels.
-pub async fn walk(cx: Cx, (input, span, depth): (Input, Span, u32)) -> Result<()> {
+pub async fn walk(
+    cx: Cx,
+    (input, span, depth, delay): (Input, Span, u32, Option<Span>),
+) -> Result<()> {
     let mut pos = 0u64;
     while pos.saturating_add(8) <= span.len {
         let head = cx.read(span.sub(pos, 8)).await?;
@@ -340,15 +349,15 @@ pub async fn walk(cx: Cx, (input, span, depth): (Input, Span, u32)) -> Result<()
                 )))
             } else {
                 node.lazy(
-                    crate::expander!(self::container: (Input, Span, u32)),
-                    (input, whole, depth.saturating_add(1)),
+                    crate::expander!(self::container: (Input, Span, u32, Option<Span>)),
+                    (input, whole, depth.saturating_add(1), delay),
                 )
             };
         } else {
             let peek = cx.read_avail(body.sub(0, 512)).await?;
             node = node
                 .summary(atom_summary(kind, inst, &peek, body.len))
-                .lazy(atom, (input, whole));
+                .lazy(atom, (input, whole, delay));
         }
         cx.progress_in(span, whole.offset);
         cx.push(node).await;
@@ -372,9 +381,12 @@ pub async fn walk(cx: Cx, (input, span, depth): (Input, Span, u32)) -> Result<()
 }
 
 /// A container: its header, then its children.
-async fn container(cx: Cx, (input, whole, depth): (Input, Span, u32)) -> Result<()> {
+async fn container(
+    cx: Cx,
+    (input, whole, depth, delay): (Input, Span, u32, Option<Span>),
+) -> Result<()> {
     header(&cx, whole).await?;
-    walk(cx, (input, whole.tail(8), depth)).await
+    walk(cx, (input, whole.tail(8), depth, delay)).await
 }
 
 /// The record header as fields.
@@ -455,7 +467,7 @@ fn atom_summary(kind: u16, inst: u16, data: &[u8], len: u64) -> String {
 }
 
 /// An atom: its header and decoded fields.
-async fn atom(cx: Cx, (input, whole): (Input, Span)) -> Result<()> {
+async fn atom(cx: Cx, (input, whole, delay): (Input, Span, Option<Span>)) -> Result<()> {
     header(&cx, whole).await?;
     let head = cx.read(whole.sub(0, 8)).await?;
     let inst = u16_le(&head, 0).unwrap_or(0) >> 4;
@@ -516,12 +528,28 @@ async fn atom(cx: Cx, (input, whole): (Input, Span)) -> Result<()> {
                 .desc("MD4 of the picture data")
                 .emit()?;
             f.u16("tag").emit()?;
-            f.u32("size").emit()?;
+            let size = f.u32("size").emit()?;
             f.u32("cRef").emit()?;
-            f.u32("foDelay")
+            let fo_delay = f
+                .u32("foDelay")
                 .hex()
                 .desc("Offset of the picture in the delay stream, if not embedded")
                 .emit()?;
+            if let Some(stream) = delay
+                && fo_delay != u32::MAX
+                && size > 0
+            {
+                let blip = stream.sub(fo_delay.into(), size.into());
+                cx.emit(
+                    Node::new("Delayed blip")
+                        .span(blip)
+                        .summary(format!("{} bytes in the delay stream", blip.len))
+                        .lazy(
+                            crate::expander!(self::walk: (Input, Span, u32, Option<Span>)),
+                            (input, blip, 1, None),
+                        ),
+                );
+            }
             f.u8("unused1").emit()?;
             let cb_name = f.u8("cbName").emit()?;
             f.u8("unused2").emit()?;
@@ -531,8 +559,8 @@ async fn atom(cx: Cx, (input, whole): (Input, Span)) -> Result<()> {
             }
             if f.remaining() >= 8 {
                 cx.emit(Node::new("Embedded blip").span(body.tail(f.pos())).lazy(
-                    crate::expander!(self::walk: (Input, Span, u32)),
-                    (input, body.tail(f.pos()), 1),
+                    crate::expander!(self::walk: (Input, Span, u32, Option<Span>)),
+                    (input, body.tail(f.pos()), 1, None),
                 ));
                 f.seek(body.len);
             }

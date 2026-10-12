@@ -1,0 +1,125 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ hybrid-free.pdf — PDF 1.5, 1 page  [0x0+0x22a]
+    Header: "1.5"  [0x0+0x8]
+    Binary marker: e2 e3 cf d3  |....|  [0x9+0x5]
+  ▾ Trailer — 3 entries  [0x1e7+0x2e]
+      /Size: 6  [0x1f2+0x7]
+      /Root: "1 0 R"  [0x1fa+0xb] → 0xf+0x0
+      /XRefStm: 258  [0x206+0xc]
+  ▾ Document Catalog: "1 0 R" — /Catalog, 2 entries  [0x200+0x5] → 0xf+0x0
+      /Type: "/Catalog"  [0x1a+0xe]
+    ▾ /Pages: "2 0 R" — /Pages, 3 entries  [0x29+0xc] → 0x40+0x0
+        /Type: "/Pages"  [0x4b+0xc]
+      ▾ /Kids — [3 0 R]  [0x58+0xd]
+        ▾ [0]: "3 0 R" — /Page, 3 entries  [0x5f+0x5]
+            /Type: "/Page"  [0xbc+0xb]
+            /Parent: "2 0 R"  [0xc8+0xd] → 0x40+0x0
+          ▾ /MediaBox — [0 0 100 100]  [0xd6+0x17]
+              [0]: 0  [0xe1+0x1]
+              [1]: 0  [0xe3+0x1]
+              [2]: 100  [0xe5+0x3]
+              [3]: 100  [0xe9+0x3]
+        /Count: 1  [0x66+0x8]
+  ▾ Pages — 1 page
+    ▾ Page 1 — /Page, 3 entries  [0xb9+0x37]
+        /Type: "/Page"  [0xbc+0xb]
+        /Parent: "2 0 R"  [0xc8+0xd] → 0x40+0x0
+      ▾ /MediaBox — [0 0 100 100]  [0xd6+0x17]
+          [0]: 0  [0xe1+0x1]
+          [1]: 0  [0xe3+0x1]
+          [2]: 100  [0xe5+0x3]
+          [3]: 100  [0xe9+0x3]
+  ▾ Objects — 6 entries
+      Object 0: 0 — free, next free object 0, generation 65535
+      Object 1 0: 0xf — /Catalog, 2 entries (in use, generation 0) → 0xf+0x30
+      Object 2 0: 0x40 — /Pages, 3 entries (in use, generation 0) → 0x40+0x38
+      Object 3: 4 — /Page, 3 entries (in object stream 4, index 0) → 0xb9+0x37
+      Object 4 0: 0x79 — stream, object stream, 1 object, /ObjStm, 4 entries, 59 bytes (in use, generation 0) → 0x79+0x88
+      Object 5 0: 0x102 — stream, cross-reference stream, /XRef, 5 entries, 7 bytes (in use, generation 0) → 0x102+0x63
+  ▾ Revisions — 1 cross-reference section
+    ▾ Revision 1 — original: 4 objects, hybrid cross-reference table and stream at 0x166 with 7 entries  [0x0+0x22a]
+      ▾ Body — 4 objects  [0x0+0x166]
+        ▾ Object 1 0 — /Catalog, 2 entries  [0xf+0x30]
+            Object header: "1 0 obj"  [0xf+0x8]
+            /Type: "/Catalog"  [0x1a+0xe]
+            /Pages: "2 0 R"  [0x29+0xc] → 0x40+0x0
+            End keywords: "endobj"  [0x38+0x7]
+        ▾ Object 2 0 — /Pages, 3 entries  [0x40+0x38]
+            Object header: "2 0 obj"  [0x40+0x8]
+            /Type: "/Pages"  [0x4b+0xc]
+          ▾ /Kids — [3 0 R]  [0x58+0xd]
+              [0]: "3 0 R" — in object stream 4  [0x5f+0x5]
+            /Count: 1  [0x66+0x8]
+            End keywords: "endobj"  [0x71+0x7]
+        ▾ Object 4 0 — stream, object stream, 1 object, /ObjStm, 4 entries, 59 bytes  [0x79+0x88]
+            Object header: "4 0 obj"  [0x79+0x8]
+            /Type: "/ObjStm"  [0x84+0xd]
+            /N: 1  [0x92+0x4]
+            /First: 4  [0x97+0x8]
+            /Length: 59  [0xa0+0xa]
+            Stream keyword: "stream"  [0xad+0x8]
+          ▾ Stream data — 1 object, 0x3b bytes decoded  [0xb5+0x3b]
+            ▾ Offsets — 1 pair of object number and offset  [0xb5+0x4]
+                Object 3: 0 — at 0x4 in the decoded stream  [0xb5+0x3] → 0xb9+0x0
+            ▾ Object 3 — /Page, 3 entries  [0xb9+0x37]
+                /Type: "/Page"  [0xbc+0xb]
+                /Parent: "2 0 R"  [0xc8+0xd] → 0x40+0x0
+              ▾ /MediaBox — [0 0 100 100]  [0xd6+0x17]
+                  [0]: 0  [0xe1+0x1]
+                  [1]: 0  [0xe3+0x1]
+                  [2]: 100  [0xe5+0x3]
+                  [3]: 100  [0xe9+0x3]
+            End keywords: "endstream endobj"  [0xf0+0x11]
+        ▾ Object 5 0 — stream, cross-reference stream, /XRef, 5 entries, 7 bytes  [0x102+0x63]
+            Object header: "5 0 obj"  [0x102+0x8]
+            /Type: "/XRef"  [0x10d+0xb]
+            /Size: 6  [0x119+0x7]
+          ▾ /W — [1 4 2]  [0x121+0xa]
+              [0]: 1  [0x125+0x1]
+              [1]: 4  [0x127+0x1]
+              [2]: 2  [0x129+0x1]
+          ▾ /Index — [3 1]  [0x12c+0xc]
+              [0]: 3  [0x134+0x1]
+              [1]: 1  [0x136+0x1]
+            /Length: 7  [0x139+0x9]
+            Stream keyword: "stream"  [0x145+0x8]
+          ▾ Stream data — 1 entry, 0x7 bytes decoded in rows of 1+4+2 bytes (type, field 2, field 3)  [0x14d+0x7]
+            ▾ Object 3 — 1 entry  [0x14d+0x7]
+                Object 3: 4 — in object stream 4, index 0  [0x14d+0x7]
+            End keywords: "endstream endobj"  [0x154+0x11]
+      ▾ Cross-reference table — 6 entries in 1 subsection  [0x166+0x81]
+          Keyword: "xref"  [0x166+0x4]
+        ▾ Objects 0–5 — 6 entries  [0x16b+0x7c]
+            Header: "0 6"  [0x16b+0x3]
+            Object 0: 0 — free, next free object 0, generation 65535  [0x16f+0x14]
+            Object 1: 0xf — in use, generation 0  [0x183+0x14] → 0xf+0x0
+            Object 2: 0x40 — in use, generation 0  [0x197+0x14] → 0x40+0x0
+            Object 3: 0 — free, next free object 0, generation 65535  [0x1ab+0x14]
+            Object 4: 0x79 — in use, generation 0  [0x1bf+0x14] → 0x79+0x0
+            Object 5: 0x102 — in use, generation 0  [0x1d3+0x14] → 0x102+0x0
+      ▾ Trailer — 3 entries  [0x1e7+0x2e]
+          /Size: 6  [0x1f2+0x7]
+          /Root: "1 0 R"  [0x1fa+0xb] → 0xf+0x0
+          /XRefStm: 258  [0x206+0xc]
+      ▾ Cross-reference stream (/XRefStm) — stream, cross-reference stream, /XRef, 5 entries, 7 bytes  [0x102+0x63]
+          Object header: "5 0 obj"  [0x102+0x8]
+          /Type: "/XRef"  [0x10d+0xb]
+          /Size: 6  [0x119+0x7]
+        ▾ /W — [1 4 2]  [0x121+0xa]
+            [0]: 1  [0x125+0x1]
+            [1]: 4  [0x127+0x1]
+            [2]: 2  [0x129+0x1]
+        ▾ /Index — [3 1]  [0x12c+0xc]
+            [0]: 3  [0x134+0x1]
+            [1]: 1  [0x136+0x1]
+          /Length: 7  [0x139+0x9]
+          Stream keyword: "stream"  [0x145+0x8]
+        ▾ Stream data — 1 entry, 0x7 bytes decoded in rows of 1+4+2 bytes (type, field 2, field 3)  [0x14d+0x7]
+          ▾ Object 3 — 1 entry  [0x14d+0x7]
+              Object 3: 4 — in object stream 4, index 0  [0x14d+0x7]
+          End keywords: "endstream endobj"  [0x154+0x11]
+        startxref: 0x166  [0x216+0xd] → 0x166+0x4
+        End-of-file marker: "%%EOF"  [0x224+0x5]
