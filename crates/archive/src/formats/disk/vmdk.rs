@@ -19,8 +19,8 @@ use crate::fields::{Endian, Fields, parse};
 use crate::formats::disk::qcow::{Regions, decoded_leaf};
 use crate::formats::disk::{PieceList, size};
 use crate::formats::util::fmt::plural;
-use crate::formats::util::val::{enumv, uint};
-use crate::formats::{Codec, Format, Input, Probe, dissect_or_data};
+use crate::formats::util::val::{enumv, text, uint};
+use crate::formats::{Codec, Format, Head, Input, Probe, dissect_or_data};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -52,6 +52,15 @@ pub static DESCRIPTOR: Format = Format {
     mime: "text/x-vmdk-descriptor",
     probe: Probe::Magic(&[(0, b"# Disk DescriptorFile")]),
     dissect: crate::expander!(descriptor_file: Input),
+};
+
+pub static ENCRYPTED_DESCRIPTOR: Format = Format {
+    name: "vmdk-encrypted-descriptor",
+    title: "VMware encrypted virtual disk descriptor",
+    extensions: &["vmdk"],
+    mime: "application/x-vmdk-encrypted-descriptor",
+    probe: Probe::Custom(encrypted_probe),
+    dissect: crate::expander!(encrypted_descriptor: Input),
 };
 
 const FLAGS: FlagTable = &[
@@ -869,4 +878,221 @@ async fn descriptor_file(cx: Cx, input: Input) -> Result<()> {
         );
     }
     descriptor_lines(cx, (span, used)).await
+}
+
+// ---------------------------------------------------------------------------
+// Encrypted descriptors
+
+/// How a key safe starts (see `encrypted_descriptor`).
+const KEY_SAFE: &[u8] = b"vmware:key/list/";
+/// Largest clear header before the key safe.
+const MAX_CLEAR_HEADER: u32 = 256;
+/// Largest key safe shown.
+const MAX_KEY_SAFE: u64 = 64 << 10;
+
+fn encrypted_probe(h: &Head<'_>) -> bool {
+    u32_le(h.data, 0)
+        .filter(|&n| n <= MAX_CLEAR_HEADER)
+        .and_then(|n| usize::try_from(n).ok()?.checked_add(8))
+        .is_some_and(|at| h.at(at, KEY_SAFE))
+}
+
+/// A length-prefixed block: the `u32` length field and the block.
+async fn sized_block(cx: &Cx, file: Span, at: u64) -> Result<(Span, Span)> {
+    let field = file.sub(at, 4);
+    let len = u32_le(&cx.read_avail(field).await?, 0).map_or(0, u64::from);
+    Ok((field, file.sub(at.saturating_add(4), len)))
+}
+
+/// The descriptor of a disk in an encrypted VMware Workstation/Fusion VM
+/// (also what Fusion and Workstation write for VMs that are only encrypted
+/// to protect a virtual TPM): a short clear header, the key safe that
+/// wraps the descriptor's key, and the encrypted descriptor text. Each
+/// block is preceded by its `u32` length. The extent files stay plain.
+///
+/// The layout comes from VMware-written files; it is not documented. The
+/// clear header holds the adapter type (16 bytes, NUL-padded) and two
+/// `u32` values whose meaning is not known.
+async fn encrypted_descriptor(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let (len_field, header) = sized_block(&cx, file, 0).await?;
+    cx.emit(
+        Node::new("Header length")
+            .span(len_field)
+            .value(uint(header.len, 32)),
+    );
+    let head = cx.read_avail(header).await?;
+    let adapter = crate::text::until_nul(head.get(..16).unwrap_or(&head));
+    let mut fields = vec![
+        Node::new("Adapter type")
+            .span(header.sub(0, 16))
+            .value(text(adapter.clone()))
+            .desc("Virtual controller (ddb.adapterType), kept in the clear"),
+    ];
+    for (i, at) in [16u64, 20].into_iter().enumerate() {
+        if let Some(v) = usize::try_from(at).ok().and_then(|a| u32_le(&head, a)) {
+            let mut node = Node::new(format!("Value {}", i.saturating_add(1)))
+                .span(header.sub(at, 4))
+                .value(uint(v, 32))
+                .desc("Meaning not documented");
+            if i == 1 {
+                node = node.summary(format!("{v:#010x}"));
+            }
+            fields.push(node);
+        }
+    }
+    for node in fields {
+        cx.emit(node);
+    }
+    let at = len_field.len.saturating_add(header.len);
+    let (ks_field, key_safe) = sized_block(&cx, file, at).await?;
+    cx.emit(
+        Node::new("Key safe length")
+            .span(ks_field)
+            .value(uint(key_safe.len, 32)),
+    );
+    let ks_text = crate::text::until_nul(&cx.read_avail(key_safe.sub(0, MAX_KEY_SAFE)).await?);
+    let pairs = key_safe_pairs(&ks_text);
+    cx.emit(
+        Node::new("Key safe")
+            .span(key_safe)
+            .summary(crate::formats::util::fmt::count(
+                to_u64(pairs.len()),
+                "key locator",
+                "key locators",
+            ))
+            .desc("The descriptor key, wrapped by each listed key (vmware:key/list)")
+            .lazy(
+                crate::expander!(key_safe_nodes: (Span, Arc<str>)),
+                (key_safe, Arc::from(ks_text.as_str())),
+            ),
+    );
+    let at = at.saturating_add(ks_field.len).saturating_add(key_safe.len);
+    let (ct_field, ciphertext) = sized_block(&cx, file, at).await?;
+    cx.emit(
+        Node::new("Encrypted descriptor length")
+            .span(ct_field)
+            .value(uint(ciphertext.len, 32)),
+    );
+    cx.emit(
+        Node::new("Encrypted descriptor")
+            .span(ciphertext)
+            .summary(size(ciphertext.len))
+            .desc("The disk descriptor text, encrypted with the key from the key safe"),
+    );
+    let end = at
+        .saturating_add(ct_field.len)
+        .saturating_add(ciphertext.len);
+    if end < file.len {
+        cx.emit(
+            Node::new("Trailing data")
+                .span(file.tail(end))
+                .summary(size(file.len.saturating_sub(end))),
+        );
+    } else if end > file.len {
+        cx.diag(
+            Diagnostic::malformed("encrypted descriptor runs past the end of the file")
+                .at(ciphertext),
+        );
+    }
+    let locks: Vec<String> = pairs.iter().map(|p| p.locator.clone()).collect();
+    cx.annotate(format!(
+        "Encrypted VMDK descriptor ({adapter}), key wrapped by {}",
+        if locks.is_empty() {
+            "nothing".to_owned()
+        } else {
+            locks.join(", ")
+        }
+    ));
+    Ok(())
+}
+
+struct KeyPair {
+    /// Byte range of the pair in the key safe text.
+    range: (usize, usize),
+    /// What wraps the key: `null` (an empty key), `phrase` (a password), ...
+    locator: String,
+    id: String,
+    hmac: String,
+    wrapped_len: usize,
+}
+
+/// `vmware:key/list/(pair/(LOCATOR,HMAC,DATA),pair/(...))`, components
+/// percent-encoded, a locator being `kind/id[/...]`.
+fn key_safe_pairs(text: &str) -> Vec<KeyPair> {
+    let mut out = Vec::new();
+    let Some(list) = text.strip_prefix("vmware:key/list/(") else {
+        return out;
+    };
+    let base = text.len().saturating_sub(list.len());
+    let mut depth = 0usize;
+    let mut start = 0usize;
+    for (i, c) in list.char_indices() {
+        match c {
+            '(' => depth = depth.saturating_add(1),
+            ')' if depth == 0 => {
+                push_pair(
+                    &mut out,
+                    list.get(start..i).unwrap_or(""),
+                    base.saturating_add(start),
+                );
+                break;
+            }
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                push_pair(
+                    &mut out,
+                    list.get(start..i).unwrap_or(""),
+                    base.saturating_add(start),
+                );
+                start = i.saturating_add(1);
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+fn push_pair(out: &mut Vec<KeyPair>, pair: &str, at: usize) {
+    let Some(body) = pair
+        .strip_prefix("pair/(")
+        .and_then(|b| b.strip_suffix(')'))
+    else {
+        return;
+    };
+    let mut parts = body.splitn(3, ',');
+    let locator = parts.next().unwrap_or("");
+    let hmac = parts.next().unwrap_or("");
+    let data = parts.next().unwrap_or("");
+    let mut loc = locator.splitn(3, '/');
+    let kind = loc.next().unwrap_or("");
+    let id = loc.next().unwrap_or("");
+    let decode = crate::text::url::percent_decode;
+    out.push(KeyPair {
+        range: (at, at.saturating_add(pair.len())),
+        locator: kind.to_owned(),
+        id: decode(id),
+        hmac: decode(hmac),
+        wrapped_len: data.len(),
+    });
+}
+
+async fn key_safe_nodes(cx: Cx, (span, text): (Span, Arc<str>)) -> Result<()> {
+    for p in key_safe_pairs(&text) {
+        let (start, end) = (to_u64(p.range.0), to_u64(p.range.1));
+        let pspan = span.sub(start, end.saturating_sub(start));
+        cx.push(
+            Node::new("Key locator")
+                .span(pspan)
+                .value(text_value(&p.locator))
+                .summary(format!("{} {}, {}, wrapped key {} encoded", p.locator, p.id, p.hmac, size(to_u64(p.wrapped_len))))
+                .desc("What wraps the descriptor key: null (no password: an empty key), phrase (a password), ..."),
+        )
+        .await;
+    }
+    Ok(())
+}
+
+fn text_value(s: &str) -> Value {
+    text(s.to_owned())
 }

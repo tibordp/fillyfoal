@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ phrase.vmdk — Encrypted VMDK descriptor (nvme), key wrapped by phrase, null  [0x0+0x480]
+    Header length: 24  [0x0+0x4]
+    Adapter type: "nvme"  [0x4+0x10]
+    Value 1: 22  [0x14+0x4]
+    Value 2: 305419896 — 0x12345678  [0x18+0x4]
+    Key safe length: 568  [0x1c+0x4]
+  ▾ Key safe — 2 key locators  [0x20+0x238]
+      Key locator: "phrase" — phrase fillyfoal-test, HMAC-SHA-1, wrapped key 196 bytes encoded  [0x31+0x126]
+      Key locator: "null" — null <VMWARE-EMPTYSTRING>, HMAC-SHA-1, wrapped key 200 bytes encoded  [0x158+0xfe]
+    Encrypted descriptor length: 548  [0x258+0x4]
+    Encrypted descriptor — 548 bytes  [0x25c+0x224]

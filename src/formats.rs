@@ -875,6 +875,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "archive")]
     &disk::vmdk::DESCRIPTOR,
     #[cfg(feature = "archive")]
+    &disk::vmdk::ENCRYPTED_DESCRIPTOR,
+    #[cfg(feature = "archive")]
     &disk::vdi::FORMAT,
     #[cfg(feature = "archive")]
     &disk::parallels::FORMAT,
