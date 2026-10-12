@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ structured.npy — NumPy array [('id', '<i2'), ('v', '<f4'), ('tag', '|…, shape (3), C order  [0x0+0xdb]
+▾ structured.npy — NumPy array [('id', '<i2'), ('v', '<f4'), ('tag', '|…, shape (3,), C order  [0x0+0xdb]
     Magic: 93 4e 55 4d 50 59  |.NUMPY|  [0x0+0x6]
     Major version: 1  [0x6+0x1]
     Minor version: 0  [0x7+0x1]
@@ -10,5 +10,17 @@ expression: "common::explore(&display_name(&path), &data)"
     Header: "{'descr': [('id', '<i2'), ('v', '<f4'), ('tag', '|S3')], 'fortran_order': False, 'shape': (3,), }"  [0xa+0xb6]
     dtype: "[('id', '<i2'), ('v', '<f4'), ('tag', '|S3')]"
     Fortran order: false
-    Shape: "(3)"
-    Data  [0xc0+0x1b]
+    Shape: "(3,)"
+  ▾ Data — 3 elements, 27 bytes  [0xc0+0x1b]
+    ▾ [0] — id=1, v=1.5, tag="ab"  [0xc0+0x9]
+        id: 1  [0xc0+0x2]
+        v: 1.5  [0xc2+0x4]
+        tag: "ab"  [0xc6+0x3]
+    ▾ [1] — id=2, v=-2.25, tag="cde"  [0xc9+0x9]
+        id: 2  [0xc9+0x2]
+        v: -2.25  [0xcb+0x4]
+        tag: "cde"  [0xcf+0x3]
+    ▾ [2] — id=3, v=0, tag=""  [0xd2+0x9]
+        id: 3  [0xd2+0x2]
+        v: 0  [0xd4+0x4]
+        tag: ""  [0xd8+0x3]

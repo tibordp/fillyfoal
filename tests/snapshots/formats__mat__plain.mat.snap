@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ plain.mat — MATLAB 5.0 MAT-file Platform: posix  [0x0+0x390]
+▾ plain.mat — MATLAB 5.0 MAT-file, Platform: posix  [0x0+0x390]
     Description: "MATLAB 5.0 MAT-file Platform: posix, Created on: Thu Jan  1 00:00:00 2026"  [0x0+0x74]
     Subsystem data offset: 00 00 00 00 00 00 00 00  |........|  [0x74+0x8]
     Version: 0x100  [0x7c+0x2]

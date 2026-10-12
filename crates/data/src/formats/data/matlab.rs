@@ -162,7 +162,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 "big-endian"
             }),
     );
-    cx.annotate(text.split(',').next().unwrap_or("MAT-file").to_owned());
+    cx.annotate(annotation(&text));
     elements(
         cx,
         Level {
@@ -438,4 +438,51 @@ async fn inflate(cx: Cx, level: Level) -> Result<()> {
         },
     )
     .await
+}
+
+/// The file summary from the header text: the format name and the
+/// platform or writer, without the creation time. Writers differ in
+/// punctuation: MATLAB writes `MATLAB 5.0 MAT-file, Platform: GLNXA64,
+/// Created on: ...`, SciPy `MATLAB 5.0 MAT-file Platform: posix, Created
+/// on: ...` and Octave `MATLAB 5.0 MAT-file, written by Octave 9.4.0, ...`.
+fn annotation(text: &str) -> String {
+    let text = text.trim_end_matches(['\0', ' ']);
+    let Some(at) = text.find("MAT-file") else {
+        return text
+            .split(',')
+            .next()
+            .unwrap_or("MAT-file")
+            .trim()
+            .to_owned();
+    };
+    let end = at.saturating_add("MAT-file".len());
+    let mut out = text.get(..end).unwrap_or("MAT-file").to_owned();
+    for part in text.get(end..).unwrap_or_default().split(',') {
+        let part = part.trim();
+        if part.starts_with("Platform:") || part.starts_with("written by") {
+            out = format!("{out}, {part}");
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod annotation_tests {
+    use super::annotation;
+
+    #[test]
+    fn writers() {
+        assert_eq!(
+            annotation("MATLAB 5.0 MAT-file Platform: posix, Created on: Thu Jan  1 00:00:00 2026"),
+            "MATLAB 5.0 MAT-file, Platform: posix"
+        );
+        assert_eq!(
+            annotation("MATLAB 5.0 MAT-file, Platform: GLNXA64, Created on: Mon Jan  1 2024   "),
+            "MATLAB 5.0 MAT-file, Platform: GLNXA64"
+        );
+        assert_eq!(
+            annotation("MATLAB 5.0 MAT-file, written by Octave 9.4.0, 2026-01-01 00:00:00 UTC"),
+            "MATLAB 5.0 MAT-file, written by Octave 9.4.0"
+        );
+    }
 }

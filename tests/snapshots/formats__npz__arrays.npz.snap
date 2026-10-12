@@ -37,7 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 152  [0x16+0x4]
           File name length: 5  [0x1a+0x2]
           Extra field length: 0  [0x1c+0x2]
-      ▾ Content — NumPy array <f8, shape (3), C order  [0x23+0x98]
+      ▾ Content — NumPy array <f8, shape (3,), C order  [0x23+0x98]
           Magic: 93 4e 55 4d 50 59  |.NUMPY|  [0x23+0x6]
           Major version: 1  [0x29+0x1]
           Minor version: 0  [0x2a+0x1]
@@ -45,8 +45,11 @@ expression: "common::explore(&display_name(&path), &data)"
           Header: "{'descr': '<f8', 'fortran_order': False, 'shape': (3,), }"  [0x2d+0x76]
           dtype: "<f8"
           Fortran order: false
-          Shape: "(3)"
-          Data — 3 elements, 24 bytes  [0xa3+0x18]
+          Shape: "(3,)"
+        ▾ Data — 3 elements, 24 bytes  [0xa3+0x18]
+            [0]: 1  [0xa3+0x8]
+            [1]: 2  [0xab+0x8]
+            [2]: 3  [0xb3+0x8]
     ▾ labels.npy — stored, 144 → 144 bytes  [0x1a6+0x38]
       ▾ Central Directory Header  [0x1a6+0x2e]
           Signature: 50 4b 01 02  |PK..|  [0x1a6+0x4]
@@ -89,7 +92,11 @@ expression: "common::explore(&display_name(&path), &data)"
           dtype: "<i4"
           Fortran order: false
           Shape: "(2, 2)"
-          Data — 4 elements, 16 bytes  [0x163+0x10]
+        ▾ Data — 4 elements, 16 bytes  [0x163+0x10]
+            [0, 0]: 1  [0x163+0x4]
+            [0, 1]: 2  [0x167+0x4]
+            [1, 0]: 3  [0x16b+0x4]
+            [1, 1]: 4  [0x16f+0x4]
   ▾ End of Central Directory — at 0x1de  [0x1de+0x16]
       Signature: 50 4b 05 06  |PK..|  [0x1de+0x4]
       Number of this disk: 0  [0x1e2+0x2]

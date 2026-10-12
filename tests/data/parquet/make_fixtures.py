@@ -87,3 +87,13 @@ pq.write_table(
     use_deprecated_int96_timestamps=True,
     write_statistics=False,
 )
+
+# A dataset's `_metadata` summary file: only the footer, whose column
+# chunks point into another file (ColumnChunk.file_path).
+import os
+
+pq.write_table(t.select(["id", "city"]), "part0.parquet", compression="none")
+md = pq.read_metadata("part0.parquet")
+md.set_file_path("part0.parquet")
+pq.write_metadata(t.select(["id", "city"]).schema, "_metadata", metadata_collector=[md])
+os.remove("part0.parquet")
