@@ -1,0 +1,166 @@
+# zdb output for the committed members (zfsutils-linux 2.4.1)
+
+## zdb -l tank.img
+------------------------------------
+LABEL 0 
+------------------------------------
+    version: 5000
+    name: 'tank'
+    state: 1
+    txg: 36
+    pool_guid: 11916711983256961387
+    errata: 0
+    min_alloc: 512
+    max_alloc: 512
+    hostid: 252776688
+    hostname: 'fillyfoal'
+    top_guid: 17844103175882117940
+    guid: 17844103175882117940
+    vdev_children: 1
+    vdev_tree:
+        type: 'file'
+        id: 0
+        guid: 17844103175882117940
+        path: '/tmp/fixtures/zfs/tank.img'
+        metaslab_array: 69
+        metaslab_shift: 24
+        ashift: 9
+        asize: 62390272
+        min_alloc: 512
+        is_log: 0
+        create_txg: 4
+    features_for_read:
+        com.delphix:hole_birth
+        com.delphix:embedded_data
+        com.klarasystems:vdev_zaps_v2
+    labels = 0 1 2 3 
+
+## zdb -l mirror-a.img
+------------------------------------
+LABEL 0 
+------------------------------------
+    version: 5000
+    name: 'mpool'
+    state: 1
+    txg: 19
+    pool_guid: 14499252737253292487
+    errata: 0
+    min_alloc: 512
+    max_alloc: 512
+    hostid: 252776688
+    hostname: 'fillyfoal'
+    top_guid: 2872995617853817223
+    guid: 13275906430469465190
+    vdev_children: 1
+    vdev_tree:
+        type: 'mirror'
+        id: 0
+        guid: 2872995617853817223
+        metaslab_array: 70
+        metaslab_shift: 24
+        ashift: 9
+        asize: 62390272
+        min_alloc: 512
+        is_log: 0
+        create_txg: 4
+        children[0]:
+            type: 'file'
+            id: 0
+            guid: 13275906430469465190
+            path: '/tmp/fixtures/zfs/mirror-a.img'
+            create_txg: 4
+        children[1]:
+            type: 'file'
+            id: 1
+            guid: 6926636050236432740
+            path: '/tmp/fixtures/zfs/mirror-b.img'
+            create_txg: 4
+    features_for_read:
+        com.delphix:hole_birth
+        com.delphix:embedded_data
+        com.klarasystems:vdev_zaps_v2
+    labels = 0 1 2 3 
+
+## zdb -l raidz-a.img
+------------------------------------
+LABEL 0 
+------------------------------------
+    version: 5000
+    name: 'rz'
+    state: 1
+    txg: 19
+    pool_guid: 10831330300858251377
+    errata: 0
+    min_alloc: 4096
+    max_alloc: 4096
+    hostid: 252776688
+    hostname: 'fillyfoal'
+    top_guid: 12538584568083577706
+    guid: 16008632304228487386
+    vdev_children: 1
+    vdev_tree:
+        type: 'raidz'
+        id: 0
+        guid: 12538584568083577706
+        nparity: 1
+        metaslab_array: 134
+        metaslab_shift: 24
+        ashift: 12
+        asize: 187170816
+        min_alloc: 4096
+        is_log: 0
+        create_txg: 4
+        children[0]:
+            type: 'file'
+            id: 0
+            guid: 16008632304228487386
+            path: '/tmp/fixtures/zfs/raidz-a.img'
+            create_txg: 4
+        children[1]:
+            type: 'file'
+            id: 1
+            guid: 12765847125793091775
+            path: '/tmp/fixtures/zfs/raidz-b.img'
+            create_txg: 4
+        children[2]:
+            type: 'file'
+            id: 2
+            guid: 10063533314064339059
+            path: '/tmp/fixtures/zfs/raidz-c.img'
+            create_txg: 4
+    features_for_read:
+        com.delphix:hole_birth
+        com.delphix:embedded_data
+        com.klarasystems:vdev_zaps_v2
+    labels = 0 1 2 3 
+
+## zdb -e -uuu tank
+
+Uberblock:
+	magic = 0000000000bab10c
+	version = 5000
+	txg = 36
+	guid_sum = 11314071085429527711
+	timestamp = 1791832742 UTC = Mon Oct 12 19:19:02 2026
+	bp = DVA[0]=<0:79c00:200> DVA[1]=<0:105f600:200> DVA[2]=<0:203f800:200> [L0 DMU objset] fletcher4 lz4 unencrypted LE contiguous unique triple size=1000L/200P birth=36L/36P fill=67 cksum=0000000b31119b27:000004a134cc740f:0000f96dc753f6af:00239aeda03460ea
+	mmp_magic = 00000000a11cea11
+	mmp_delay = 0
+	mmp_valid = 0
+	checkpoint_txg = 0
+	raidz_reflow state=0 off=0
+
+## zdb -e -uuu rz
+
+Uberblock:
+	magic = 0000000000bab10c
+	version = 5000
+	txg = 19
+	guid_sum = 6867695391899092455
+	timestamp = 1791832742 UTC = Mon Oct 12 19:19:02 2026
+	bp = DVA[0]=<0:da000:2000> DVA[1]=<0:10d6000:2000> DVA[2]=<0:2094000:2000> [L0 DMU objset] fletcher4 uncompressed unencrypted LE contiguous unique triple size=1000L/1000P birth=19L/19P fill=47 cksum=0000000334b2c84e:00000c5143aa795c:0017b01483a447b0:1e66cc0a27003586
+	mmp_magic = 00000000a11cea11
+	mmp_delay = 0
+	mmp_valid = 0
+	checkpoint_txg = 0
+	raidz_reflow state=0 off=0
+
