@@ -115,3 +115,38 @@ fn millions_of_fixed_size_samples_are_listed_in_pages() {
     let last = host.session.node(*children.ids.last().unwrap()).unwrap();
     assert_eq!(last.name, "Sample 500");
 }
+
+/// A fragment whose `trun` claims 2^32-1 samples of the `tfhd` default
+/// size (1 byte, no per-sample fields) over a 64-byte `mdat`: its "Sample
+/// data" lists the samples that lie in the file and stops.
+#[test]
+fn a_fragment_run_stops_at_the_end_of_the_file() {
+    let ftyp = bx(b"ftyp", b"isom\0\0\x02\0isomiso6");
+    let moov = bx(b"moov", &full(b"mvhd", &[0; 96]));
+    // tfhd: default-base-is-moof + default sample size; track 1, size 1.
+    let mut tfhd = vec![0, 0x02, 0, 0x10];
+    tfhd.extend_from_slice(&be32(&[1, 1]));
+    let tfhd = bx(b"tfhd", &tfhd);
+    let build = |offset: u32| {
+        // trun: data offset only.
+        let mut trun = vec![0, 0, 0, 0x01];
+        trun.extend_from_slice(&be32(&[u32::MAX, offset]));
+        let traf = bx(b"traf", &[tfhd.clone(), bx(b"trun", &trun)].concat());
+        bx(b"moof", &[full(b"mfhd", &be32(&[1])), traf].concat())
+    };
+    let moof_len = build(0).len();
+    let moof = build((moof_len + 8) as u32);
+    let data = [ftyp, moov, moof, bx(b"mdat", &[0u8; 64])].concat();
+    let mut host = Host::named("frag.mp4", data, Limits::default());
+    let mut id = host.root;
+    for name in ["moof", "traf", "trun", "Sample data"] {
+        host.session.expand_more(id, 100);
+        host.run();
+        id = host
+            .child(id, name)
+            .unwrap_or_else(|| panic!("no {name:?} under:\n{}", host.render()));
+    }
+    host.explore(id, 1, 1000);
+    let children = host.session.children(id).unwrap();
+    assert_eq!(children.ids.len(), 64, "{}", host.render());
+}

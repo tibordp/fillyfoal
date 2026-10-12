@@ -22,6 +22,7 @@ use crate::formats::util::sound::{
 use crate::formats::util::val::name_or;
 use crate::formats::util::val::text;
 use crate::formats::util::vidutil::{self, khz};
+use crate::formats::{Format, Input, embedded_as};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -813,6 +814,142 @@ pub fn describe_id(id: &FourCc) -> Option<&'static str> {
 }
 
 // ---------------------------------------------------------------------------
+// Sample data
+
+/// The `data` chunk's samples: an embedded elementary stream for codecs
+/// that carry one (MPEG audio, AC-3, DTS, ADTS AAC), the blocks of the
+/// ADPCM codecs, else one leaf.
+fn samples_node(input: Input, data: Span, fmt: &WaveFormat) -> Node {
+    use crate::formats::audio;
+    let es: Option<&'static Format> = match fmt.codec() {
+        0x0050 | 0x0055 => Some(&audio::mpa::FORMAT),
+        0x2000 => Some(&audio::ac3::FORMAT),
+        0x2001 => Some(&audio::dts::FORMAT),
+        0x1600 => Some(&audio::adts::FORMAT),
+        _ => None,
+    };
+    if let Some(format) = es {
+        return embedded_as("Samples", input.nested(data), format);
+    }
+    let channels = u64::from(fmt.channels);
+    let header = match fmt.codec() {
+        // Per channel: predictor index, delta, two samples (7 bytes).
+        0x0002 => channels.saturating_mul(7),
+        // Per channel: first sample, step index, reserved (4 bytes).
+        0x0011 => channels.saturating_mul(4),
+        _ => 0,
+    };
+    let align = u64::from(fmt.align);
+    if header > 0 && align > header && channels > 0 {
+        let blocks = data.len.div_ceil(align);
+        return Node::new("Samples").span(data).lazy(
+            adpcm_blocks,
+            Adpcm {
+                data,
+                align,
+                channels: fmt.channels,
+                ms: fmt.codec() == 0x0002,
+                blocks,
+            },
+        );
+    }
+    Node::new("Samples").span(data)
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Adpcm {
+    data: Span,
+    align: u64,
+    channels: u16,
+    /// Microsoft ADPCM (else IMA ADPCM).
+    ms: bool,
+    blocks: u64,
+}
+
+impl Adpcm {
+    fn header(&self) -> u64 {
+        u64::from(self.channels).saturating_mul(if self.ms { 7 } else { 4 })
+    }
+}
+
+/// The blocks of an ADPCM `data` chunk, each `nBlockAlign` bytes.
+async fn adpcm_blocks(cx: Cx, a: Adpcm) -> Result<()> {
+    cx.set_count(crate::node::Count::Exact(a.blocks));
+    let mut i = cx.resume::<u64>().unwrap_or(0);
+    while i < a.blocks {
+        let span = a.data.sub(i.saturating_mul(a.align), a.align);
+        let index = i;
+        cx.mark(move || index);
+        let mut node = Node::new(format!("Block {i}"))
+            .span(span)
+            .summary(format!("{} bytes", span.len))
+            .lazy(adpcm_block, (a, span));
+        if span.len < a.header() {
+            node = node.diag(crate::error::Diagnostic::truncated(
+                span.sub(0, a.header()),
+                span.len,
+            ));
+        }
+        cx.push(node).await;
+        i = i.saturating_add(1);
+    }
+    Ok(())
+}
+
+/// One ADPCM block: the per-channel header, then the nibbles.
+async fn adpcm_block(cx: Cx, (a, span): (Adpcm, Span)) -> Result<()> {
+    let header = span.sub(0, a.header());
+    let block = cx.block(header).await?;
+    let mut f = Fields::emitting(&cx, &block, Endian::Little);
+    let n = usize::from(a.channels);
+    if a.ms {
+        // Microsoft ADPCM: each field for every channel in turn.
+        for c in 0..n {
+            f.u8("Predictor index")
+                .summary(format!("channel {c}"))
+                .emit()?;
+        }
+        for c in 0..n {
+            f.int::<i16>("Delta")
+                .summary(format!("channel {c}"))
+                .emit()?;
+        }
+        for c in 0..n {
+            f.int::<i16>("Sample 1")
+                .summary(format!("channel {c}"))
+                .emit()?;
+        }
+        for c in 0..n {
+            f.int::<i16>("Sample 2")
+                .summary(format!("channel {c}"))
+                .emit()?;
+        }
+    } else {
+        for c in 0..n {
+            f.int::<i16>("First sample")
+                .summary(format!("channel {c}"))
+                .emit()?;
+            f.u8("Step index").summary(format!("channel {c}")).emit()?;
+            f.u8("Reserved").summary(format!("channel {c}")).emit()?;
+        }
+    }
+    let rest = span.tail(a.header());
+    if rest.len > 0 {
+        cx.emit(
+            Node::new("Nibbles")
+                .span(rest)
+                .summary(format!("{} bytes", rest.len))
+                .desc(if a.ms {
+                    "4-bit codes, high nibble first, channels interleaved"
+                } else {
+                    "4-bit codes, low nibble first, 4 bytes per channel in turn"
+                }),
+        );
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Lookups across chunks
 
 async fn fmt_of(cx: &Cx, chunk: &Chunk) -> Option<WaveFormat> {
@@ -1013,6 +1150,7 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
         b"data" => {
             let mut node = Node::new("Samples").span(data);
             if let Some(fmt) = fmt_of(cx, chunk).await {
+                node = samples_node(chunk.input(), data, &fmt);
                 let samples = fact_samples(cx, chunk).await;
                 let mut parts = Vec::new();
                 if let Some(n) = fmt.frames(chunk.size, samples) {

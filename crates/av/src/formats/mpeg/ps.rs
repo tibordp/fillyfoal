@@ -5,7 +5,8 @@
 //! PES packets decode their header; private stream 1 packets also their
 //! DVD sub-stream header (AC-3, DTS, LPCM, subpictures), and private
 //! stream 2 the DVD navigation packets. The first packet of each stream
-//! gives its codec details for the file summary.
+//! gives its codec details for the file summary. Each stream's payload is
+//! reassembled into its elementary stream (see `es`) on expansion.
 
 use std::collections::BTreeMap;
 
@@ -19,6 +20,7 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::EnumTable;
 
+use super::es::{Parts, Target};
 use super::{mpeg1_pts, pes_header, pes_times, seconds_90k, stream_id_name};
 use crate::formats::util::fmt::plural;
 
@@ -155,12 +157,19 @@ struct Unit {
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    cx.annotate(
-        summary(&cx, file)
-            .await?
-            .unwrap_or_else(|| "MPEG program stream".to_owned()),
-    );
-    let mut pos = cx.resume::<u64>().unwrap_or(0);
+    let (text, streams) = summary(&cx, file).await?;
+    cx.annotate(text);
+    let resumed = cx.resume::<u64>();
+    if resumed.is_none() && !streams.is_empty() {
+        let names: Vec<String> = streams.iter().map(Stream::label).collect();
+        cx.emit(
+            Node::new("Elementary streams")
+                .summary(names.join(" + "))
+                .desc("Each stream's PES payloads reassembled; a stream walks the whole file when expanded")
+                .lazy(streams_node, (input, streams)),
+        );
+    }
+    let mut pos = resumed.unwrap_or(0);
     while pos < file.len {
         let d = cx.read_avail(file.sub(pos, 32)).await?;
         let len = if d.starts_with(&[0, 0, 1]) {
@@ -583,9 +592,132 @@ fn h264_detail(d: &[u8]) -> Option<String> {
     None
 }
 
-/// "MPEG-2 program stream, MPEG-2 video ... + AC-3 ..., 00:00:00.120".
-async fn summary(cx: &Cx, file: Span) -> Result<Option<String>> {
-    let mut streams: BTreeMap<(u8, u8), Option<String>> = BTreeMap::new();
+/// An elementary stream found among the first packets.
+#[derive(Clone, Debug)]
+struct Stream {
+    /// PES stream ID.
+    code: u8,
+    /// DVD sub-stream ID (private stream 1), else 0.
+    sub: u8,
+    detail: Option<String>,
+    target: Target,
+}
+
+impl Stream {
+    fn label(&self) -> String {
+        match &self.detail {
+            Some(d) => d.clone(),
+            None => stream_id_name(self.code).to_lowercase(),
+        }
+    }
+
+    fn name(&self) -> String {
+        match (self.code, substream(self.sub)) {
+            (0xbd, Some((kind, n))) => format!("Private stream 1 ({kind} {n})"),
+            _ => stream_id_name(self.code),
+        }
+    }
+}
+
+/// How a stream's payload is dissected: from the stream ID and the first
+/// bytes of its first payload (`d`, after any DVD sub-stream header).
+fn target(code: u8, sub: u8, d: &[u8]) -> Target {
+    use crate::formats::{audio, video};
+    let audio_es = || match (d.first(), d.get(1)) {
+        (Some(0x0b), Some(0x77)) => Target::Format(&audio::ac3::FORMAT),
+        (Some(0x7f), Some(0xfe)) => Target::Format(&audio::dts::FORMAT),
+        (Some(0xff), Some(b)) if b & 0xf6 == 0xf0 => Target::Format(&audio::adts::FORMAT),
+        (Some(0xff), Some(b)) if b & 0xe0 == 0xe0 => Target::Format(&audio::mpa::FORMAT),
+        _ => Target::Detect,
+    };
+    match code {
+        0xe0..=0xef => match es_detail(code, d) {
+            Some(s) if s.starts_with("MPEG-2 video") => Target::Format(&super::video::MPEG2_VIDEO),
+            Some(s) if s.starts_with("MPEG-1 video") => Target::Format(&super::video::MPEG1_VIDEO),
+            Some(s) if s.starts_with("MPEG-4 Visual") => Target::Format(&super::mpeg4::FORMAT),
+            Some(s) if s.starts_with("H.264") => Target::Format(&video::annexb::H264),
+            _ => Target::Detect,
+        },
+        0xc0..=0xdf => audio_es(),
+        0xbd => match substream(sub) {
+            Some(("AC-3" | "E-AC-3", _)) => Target::Format(&audio::ac3::FORMAT),
+            Some(("DTS", _)) => Target::Format(&audio::dts::FORMAT),
+            _ => Target::Data,
+        },
+        _ => Target::Data,
+    }
+}
+
+/// Bytes of the DVD sub-stream header that precede the data.
+fn substream_header(sub: u8) -> u64 {
+    match substream(sub) {
+        Some(("AC-3" | "DTS" | "E-AC-3" | "SDDS", _)) => 4,
+        Some(("LPCM", _)) => 7,
+        _ => 1,
+    }
+}
+
+/// The elementary streams.
+async fn streams_node(cx: Cx, (input, streams): (Input, Vec<Stream>)) -> Result<()> {
+    for s in &streams {
+        cx.emit(
+            Node::new(s.name())
+                .summary(s.label())
+                .lazy(stream_node, (input, s.clone())),
+        );
+    }
+    Ok(())
+}
+
+/// One stream's payload, walking every packet of the file.
+async fn stream_node(cx: Cx, (input, stream): (Input, Stream)) -> Result<()> {
+    let file = input.span;
+    let mut parts = Parts::new(input, stream.target, "mpeg-ps-stream");
+    let mut pos = 0u64;
+    while pos < file.len {
+        let d = cx.read_avail(file.sub(pos, 32)).await?;
+        let len = if d.starts_with(&[0, 0, 1]) {
+            unit_len(&d).filter(|&l| l > 0)
+        } else {
+            None
+        };
+        let Some(len) = len else {
+            match vidutil::next_start_code(&cx, file, pos.saturating_add(1)).await? {
+                Some(next) => pos = next,
+                None => break,
+            }
+            continue;
+        };
+        let code = d.get(3).copied().unwrap_or(0);
+        if code == stream.code {
+            let mut header = payload_offset(&d);
+            let mut ours = true;
+            if code == 0xbd {
+                let sub = cx
+                    .read_avail(file.sub(pos.saturating_add(header), 1))
+                    .await?;
+                ours = sub.first() == Some(&stream.sub);
+                header = header.saturating_add(substream_header(stream.sub));
+            }
+            if ours && header < len {
+                let piece = file.sub(pos.saturating_add(header), len.saturating_sub(header));
+                parts.add(&cx, piece).await;
+            }
+        }
+        cx.progress_in(file, file.offset.saturating_add(pos));
+        pos = pos.saturating_add(len);
+        if code == 0xb9 {
+            break;
+        }
+    }
+    parts.finish(&cx).await;
+    Ok(())
+}
+
+/// "MPEG-2 program stream, MPEG-2 video ... + AC-3 ..., 00:00:00.120",
+/// and the streams found.
+async fn summary(cx: &Cx, file: Span) -> Result<(String, Vec<Stream>)> {
+    let mut streams: BTreeMap<(u8, u8), Stream> = BTreeMap::new();
     let mut first_scr = None;
     let mut pos = 0u64;
     let mut kind = "MPEG program stream";
@@ -626,6 +758,13 @@ async fn summary(cx: &Cx, file: Span) -> Result<Option<String>> {
                     len.saturating_sub(header).min(2048),
                 );
                 let data = cx.read_avail(payload).await?;
+                let es_data = if code == 0xbd {
+                    data.get(vidutil::us(substream_header(sub))..)
+                        .unwrap_or_default()
+                } else {
+                    &data
+                };
+                let target = target(code, sub, es_data);
                 let detail = if code == 0xbd {
                     substream(sub).map(|(k, n)| {
                         if k == "LPCM" {
@@ -639,7 +778,15 @@ async fn summary(cx: &Cx, file: Span) -> Result<Option<String>> {
                 } else {
                     es_detail(code, &data)
                 };
-                streams.insert(key, detail);
+                streams.insert(
+                    key,
+                    Stream {
+                        code,
+                        sub,
+                        detail,
+                        target,
+                    },
+                );
             }
         }
         pos = pos.saturating_add(len);
@@ -651,13 +798,7 @@ async fn summary(cx: &Cx, file: Span) -> Result<Option<String>> {
         kind.to_owned()
     }];
     if !streams.is_empty() {
-        let names: Vec<String> = streams
-            .iter()
-            .map(|(&(code, _), detail)| match detail {
-                Some(d) => d.clone(),
-                None => stream_id_name(code).to_lowercase(),
-            })
-            .collect();
+        let names: Vec<String> = streams.values().map(Stream::label).collect();
         parts.push(names.join(" + "));
     }
     // The last SCR: search the tail for a pack header.
@@ -675,5 +816,5 @@ async fn summary(cx: &Cx, file: Span) -> Result<Option<String>> {
     {
         parts.push(vidutil::seconds_f64(b.saturating_sub(a) as f64 / 90_000.0));
     }
-    Ok(Some(parts.join(", ")))
+    Ok((parts.join(", "), streams.into_values().collect()))
 }

@@ -511,6 +511,23 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
             })
             .await?;
         }
+        b"clef" | b"prof" | b"enof" => {
+            // QuickTime track aperture dimensions: clean, production and
+            // encoded apertures, 16.16 fixed point.
+            emit_fields(cx, body, |f| {
+                full_box(f)?;
+                f.u32("Width")
+                    .with(|&r, n| n.summary(num(fixed16(r))))
+                    .desc("Pixels, 16.16 fixed point")
+                    .emit()?;
+                f.u32("Height")
+                    .with(|&r, n| n.summary(num(fixed16(r))))
+                    .desc("Pixels, 16.16 fixed point")
+                    .emit()?;
+                Ok(())
+            })
+            .await?;
+        }
         b"frma" => {
             emit_fields(cx, body, |f| {
                 f.ascii("Original format", 4)
@@ -734,6 +751,9 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
             | b"pssh"
             | b"tenc"
             | b"frma"
+            | b"clef"
+            | b"prof"
+            | b"enof"
             | b"schm"
             | b"prft"
             | b"emsg"
@@ -892,6 +912,18 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
             } else {
                 format!("{iv}-byte IVs, KID {}", uuid(kid))
             })
+        }
+        b"clef" | b"prof" | b"enof" => {
+            let aperture = match kind {
+                b"clef" => "clean aperture",
+                b"prof" => "production aperture",
+                _ => "encoded pixels",
+            };
+            Some(format!(
+                "{aperture} {}×{}",
+                num(fixed16(u32_be(&d, 4)?)),
+                num(fixed16(u32_be(&d, 8)?))
+            ))
         }
         b"frma" => {
             let t = d.get(..4)?;

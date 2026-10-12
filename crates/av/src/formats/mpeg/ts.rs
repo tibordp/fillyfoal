@@ -9,7 +9,8 @@
 //! video sequence headers, audio frame headers). The duration comes from
 //! the PCR (or PTS) at both ends. Packets are listed in pages, each
 //! decoded on expansion; a per-PID view counts packets and continuity
-//! errors over the whole stream.
+//! errors over the whole stream, and each elementary stream's PES payloads
+//! are reassembled into the stream itself (see `es`).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -23,6 +24,7 @@ use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, Value};
 
+use super::es::{Parts, Target};
 use super::si::{self, STREAM_TYPES};
 use super::{pes_header, pes_summary, pes_times, seconds_90k};
 use crate::formats::util::fmt::plural;
@@ -367,6 +369,24 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .desc("Walks every packet of the stream when expanded")
             .lazy(pids_node, ts.clone()),
     );
+    let streams: Vec<String> = psi
+        .programs
+        .iter()
+        .flat_map(|p| {
+            p.streams
+                .iter()
+                .filter(|s| !si::carries_sections(s.kind, s.is_scte35(p.registration, ts.m2ts())))
+                .map(|s| s.codec(p.registration, ts.m2ts()))
+        })
+        .collect();
+    if !streams.is_empty() {
+        cx.emit(
+            Node::new("Elementary streams")
+                .summary(streams.join(" + "))
+                .desc("Each stream's PES payloads reassembled; a stream walks every packet when expanded")
+                .lazy(streams_node, ts.clone()),
+        );
+    }
     cx.emit(
         Node::new("Packets")
             .span(input.span.sub(0, total))
@@ -1186,6 +1206,122 @@ fn pid_fields(ts: &Ts, s: PidStats) -> Vec<Node> {
         out.push(uint("First continuity error", ts.packet(e), e, 64).summary("packet index"));
     }
     out
+}
+
+// ---------------------------------------------------------------------------
+// Elementary streams
+
+/// The format a stream's payload is dissected as.
+fn target(codec: &str) -> Target {
+    use crate::formats::{audio, video};
+    match codec {
+        "H.264" => Target::Format(&video::annexb::H264),
+        "HEVC" => Target::Format(&video::annexb::HEVC),
+        "MPEG-1 video" => Target::Format(&super::video::MPEG1_VIDEO),
+        "MPEG-2 video" => Target::Format(&super::video::MPEG2_VIDEO),
+        "MPEG-4 Visual" => Target::Format(&super::mpeg4::FORMAT),
+        "AAC" => Target::Format(&audio::adts::FORMAT),
+        "AC-3" | "E-AC-3" => Target::Format(&audio::ac3::FORMAT),
+        "DTS" => Target::Format(&audio::dts::FORMAT),
+        "MPEG-1 audio" | "MPEG-2 audio" => Target::Format(&audio::mpa::FORMAT),
+        _ => Target::Data,
+    }
+}
+
+async fn streams_node(cx: Cx, ts: Ts) -> Result<()> {
+    for p in &ts.psi.programs {
+        for s in &p.streams {
+            if si::carries_sections(s.kind, s.is_scte35(p.registration, ts.m2ts())) {
+                continue;
+            }
+            let codec = s.codec(p.registration, ts.m2ts());
+            let mut summary = stream_text(&codec, s.detail.as_deref());
+            if let Some(l) = s.language() {
+                summary = format!("{summary} [{l}]");
+            }
+            let target = target(&codec);
+            cx.emit(
+                Node::new(format!("PID {:#06x}", s.pid))
+                    .summary(summary)
+                    .lazy(stream_node, (ts.clone(), s.pid, target)),
+            );
+        }
+    }
+    Ok(())
+}
+
+/// One stream's payload, walking every packet: from each PES packet's
+/// payload start to the next unit start on the PID.
+async fn stream_node(cx: Cx, (ts, pid, target): (Ts, u16, Target)) -> Result<()> {
+    let stride = ts.layout.stride;
+    let mut parts = Parts::new(ts.input, target, "mpegts-stream");
+    let mut started = false;
+    // PES header bytes still to skip in the next packet.
+    let mut skip = 0u64;
+    let mut scrambled = 0u64;
+    let mut i = 0u64;
+    while i < ts.count {
+        let n = ts.count.saturating_sub(i).min(PAGE);
+        let page = ts
+            .input
+            .span
+            .sub(i.saturating_mul(stride), n.saturating_mul(stride));
+        let data = cx.read_avail(page).await?;
+        for j in 0..n {
+            let at = vidutil::us(j.saturating_mul(stride).saturating_add(ts.layout.prefix));
+            let Some(p) = data.get(at..at.saturating_add(188)) else {
+                break;
+            };
+            if p.first() != Some(&0x47) || pid_of(p) != pid {
+                continue;
+            }
+            if p.get(1).is_some_and(|b| b & 0x80 != 0) {
+                // Transport error: the packet is not trusted.
+                continue;
+            }
+            if p.get(3).is_some_and(|b| b & 0xc0 != 0) {
+                scrambled = scrambled.saturating_add(1);
+                started = false;
+                continue;
+            }
+            let Some((start, pusi)) = payload_start(p) else {
+                continue;
+            };
+            let payload = p.get(start..).unwrap_or_default();
+            let mut from = 0u64;
+            if pusi {
+                if !payload.starts_with(&[0, 0, 1]) {
+                    started = false;
+                    continue;
+                }
+                started = true;
+                skip = pes_payload_offset(payload);
+            } else if !started {
+                continue;
+            }
+            let len = to_u64(payload.len());
+            from = from.saturating_add(skip.min(len));
+            skip = skip.saturating_sub(len);
+            if from < len {
+                let piece = page.sub(
+                    to_u64(at.saturating_add(start)).saturating_add(from),
+                    len.saturating_sub(from),
+                );
+                parts.add(&cx, piece).await;
+            }
+        }
+        i = i.saturating_add(n);
+        cx.progress(i, ts.count);
+    }
+    parts.finish(&cx).await;
+    if scrambled > 0 {
+        cx.emit(
+            Node::new("Scrambled packets")
+                .value(crate::formats::util::val::uint(scrambled, 64))
+                .diag(Diagnostic::unsupported("scrambled payload left out")),
+        );
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

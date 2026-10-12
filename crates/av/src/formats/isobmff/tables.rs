@@ -445,11 +445,13 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
         b"trun" => {
             let file = st.input.span;
             let base = base_data_offset(cx, st).await?;
-            let (flags, count, at) = header(cx, body, |f| {
+            let (flags, count, at, data_offset) = header(cx, body, |f| {
                 let (_, flags) = super::full_box_flags(f, TRUN_FLAGS)?;
                 let n = f.u32("Sample count").emit()?;
+                let mut data_offset = None;
                 if flags & 0x1 != 0 {
-                    f.i32("Data offset")
+                    let off = f
+                        .i32("Data offset")
                         .desc("Relative to the base data offset (tfhd), usually the moof")
                         .with(
                             |&off, n| match base.and_then(|b| b.checked_add_signed(off.into())) {
@@ -458,6 +460,7 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
                             },
                         )
                         .emit()?;
+                    data_offset = Some(off);
                 }
                 if flags & 0x4 != 0 {
                     f.u32("First sample flags")
@@ -465,7 +468,7 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
                         .with(|&v, n| n.summary(sample_flags(v)))
                         .emit()?;
                 }
-                Ok((flags, n, f.pos()))
+                Ok((flags, n, f.pos(), data_offset))
             })
             .await?;
             let stride = trun_stride(flags);
@@ -477,6 +480,29 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
                 node = node.lazy(trun_samples, (entries, u64::from(count), flags));
             }
             cx.emit(node);
+            // Without a data offset, a run's data follows the previous
+            // run's; only the first run of a track fragment is located.
+            let start = match data_offset {
+                Some(off) => base.and_then(|b| b.checked_add_signed(off.into())),
+                None => {
+                    let first = super::find_child(cx, st.ctx.siblings, b"trun").await?;
+                    base.filter(|_| first.is_some_and(|(_, s)| s.offset == st.span.offset))
+                }
+            };
+            if let Some(start) = start.filter(|&s| s <= file.len)
+                && let Some(node) = super::samples::run_node(
+                    cx,
+                    st.input,
+                    st.ctx.siblings,
+                    entries,
+                    count.into(),
+                    flags,
+                    start,
+                )
+                .await?
+            {
+                cx.emit(node);
+            }
         }
         b"sdtp" => {
             header(cx, body, |f| full_box(f).map(|_| ())).await?;

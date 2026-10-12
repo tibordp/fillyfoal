@@ -1448,8 +1448,17 @@ fn splice_info(w: &mut Walker, crc_at: usize) -> Option<String> {
                 .saturating_add(usize::try_from(len).ok()?.saturating_mul(8));
             w.x("identifier", 32)?;
             if tag == 2 && body_end >= w.pos().saturating_add(40) {
-                w.x("segmentation_event_id", 32)?;
-                w.flag("segmentation_event_cancel_indicator")?;
+                let mut body = w.sub(w.pos() >> 3, body_end.saturating_sub(w.pos()) >> 3);
+                let summary = segmentation_descriptor(&mut body);
+                for node in body.finish(summary.is_some()) {
+                    w.push(node);
+                }
+                w.seek(body_end.min(end));
+                match summary {
+                    Some(text) => w.end_summary(|| text),
+                    None => w.end(),
+                }
+                continue;
             }
             w.seek(body_end.min(end));
             w.end();
@@ -1464,4 +1473,152 @@ fn splice_info(w: &mut Walker, crc_at: usize) -> Option<String> {
         )?;
     }
     Some(summary)
+}
+
+/// SCTE 35 `segmentation_type_id` values.
+const SEGMENTATION_TYPES: EnumTable = &[
+    (0x00, "Not Indicated"),
+    (0x01, "Content Identification"),
+    (0x02, "Call Ad Server"),
+    (0x10, "Program Start"),
+    (0x11, "Program End"),
+    (0x12, "Program Early Termination"),
+    (0x13, "Program Breakaway"),
+    (0x14, "Program Resumption"),
+    (0x15, "Program Runover Planned"),
+    (0x16, "Program Runover Unplanned"),
+    (0x17, "Program Overlap Start"),
+    (0x18, "Program Blackout Override"),
+    (0x19, "Program Join"),
+    (0x20, "Chapter Start"),
+    (0x21, "Chapter End"),
+    (0x22, "Break Start"),
+    (0x23, "Break End"),
+    (0x24, "Opening Credit Start"),
+    (0x25, "Opening Credit End"),
+    (0x26, "Closing Credit Start"),
+    (0x27, "Closing Credit End"),
+    (0x30, "Provider Advertisement Start"),
+    (0x31, "Provider Advertisement End"),
+    (0x32, "Distributor Advertisement Start"),
+    (0x33, "Distributor Advertisement End"),
+    (0x34, "Provider Placement Opportunity Start"),
+    (0x35, "Provider Placement Opportunity End"),
+    (0x36, "Distributor Placement Opportunity Start"),
+    (0x37, "Distributor Placement Opportunity End"),
+    (0x38, "Provider Overlay Placement Opportunity Start"),
+    (0x39, "Provider Overlay Placement Opportunity End"),
+    (0x3a, "Distributor Overlay Placement Opportunity Start"),
+    (0x3b, "Distributor Overlay Placement Opportunity End"),
+    (0x3c, "Provider Promo Start"),
+    (0x3d, "Provider Promo End"),
+    (0x3e, "Distributor Promo Start"),
+    (0x3f, "Distributor Promo End"),
+    (0x40, "Unscheduled Event Start"),
+    (0x41, "Unscheduled Event End"),
+    (0x42, "Alternate Content Opportunity Start"),
+    (0x43, "Alternate Content Opportunity End"),
+    (0x44, "Provider Ad Block Start"),
+    (0x45, "Provider Ad Block End"),
+    (0x46, "Distributor Ad Block Start"),
+    (0x47, "Distributor Ad Block End"),
+    (0x50, "Network Start"),
+    (0x51, "Network End"),
+];
+
+/// SCTE 35 `segmentation_upid_type` values.
+const UPID_TYPES: EnumTable = &[
+    (0x00, "not used"),
+    (0x01, "user defined (deprecated)"),
+    (0x02, "ISCI (deprecated)"),
+    (0x03, "Ad-ID"),
+    (0x04, "UMID"),
+    (0x05, "ISAN (deprecated)"),
+    (0x06, "ISAN"),
+    (0x07, "TID"),
+    (0x08, "TI (AiringID)"),
+    (0x09, "ADI"),
+    (0x0a, "EIDR"),
+    (0x0b, "ATSC content identifier"),
+    (0x0c, "MPU"),
+    (0x0d, "MID"),
+    (0x0e, "ADS information"),
+    (0x0f, "URI"),
+    (0x10, "UUID"),
+    (0x11, "SCR"),
+];
+
+const DEVICE_RESTRICTIONS: EnumTable = &[
+    (0, "restrict group 0"),
+    (1, "restrict group 1"),
+    (2, "restrict group 2"),
+    (3, "none"),
+];
+
+/// The body of a `segmentation_descriptor()` after `identifier` (SCTE 35
+/// section 10.3.3.1). `w` covers exactly the rest of the descriptor, so
+/// the optional sub-segment fields are read only when present.
+fn segmentation_descriptor(w: &mut Walker) -> Option<String> {
+    let id = w.x("segmentation_event_id", 32)?;
+    let cancel = w.flag("segmentation_event_cancel_indicator")?;
+    w.flag("segmentation_event_id_compliance_indicator")?;
+    w.u("reserved", 6)?;
+    if cancel {
+        return Some(format!("event {id:#x} cancelled"));
+    }
+    let program = w.flag("program_segmentation_flag")?;
+    let has_duration = w.flag("segmentation_duration_flag")?;
+    let unrestricted = w.flag("delivery_not_restricted_flag")?;
+    if unrestricted {
+        w.u("reserved", 5)?;
+    } else {
+        w.flag("web_delivery_allowed_flag")?;
+        w.flag("no_regional_blackout_flag")?;
+        w.flag("archive_allowed_flag")?;
+        w.en("device_restrictions", 2, DEVICE_RESTRICTIONS)?;
+    }
+    if !program {
+        let n = w.u("component_count", 8)?;
+        for _ in 0..n {
+            w.begin("Component");
+            let tag = w.u("component_tag", 8)?;
+            w.u("reserved", 7)?;
+            let offset = w.u("pts_offset", 33)?;
+            w.summary(|| super::seconds_90k(offset));
+            w.end_summary(|| format!("tag {tag}, {}", super::seconds_90k(offset)));
+        }
+    }
+    let mut duration = None;
+    if has_duration {
+        let d = w.u("segmentation_duration", 40)?;
+        w.summary(|| super::seconds_90k(d));
+        duration = Some(d);
+    }
+    let upid_type = w.en("segmentation_upid_type", 8, UPID_TYPES)?;
+    let upid_len = usize::try_from(w.u("segmentation_upid_length", 8)?).ok()?;
+    if upid_len > 0 {
+        let upid = w.bytes("segmentation_upid", upid_len)?;
+        // URIs and the text identifiers read as text.
+        if matches!(upid_type, 0x01..=0x03 | 0x07 | 0x09 | 0x0f)
+            && upid.iter().all(|b| (0x20..0x7f).contains(b))
+        {
+            let text = String::from_utf8_lossy(&upid).into_owned();
+            w.summary(|| text);
+        }
+    }
+    let kind = w.en("segmentation_type_id", 8, SEGMENTATION_TYPES)?;
+    let num = w.u("segment_num", 8)?;
+    let expected = w.u("segments_expected", 8)?;
+    if matches!(kind, 0x34 | 0x36 | 0x38 | 0x3a) && w.bits_left() >= 16 {
+        w.u("sub_segment_num", 8)?;
+        w.u("sub_segments_expected", 8)?;
+    }
+    let mut s = format!(
+        "{}, event {id:#x}, segment {num}/{expected}",
+        lookup_or(SEGMENTATION_TYPES, kind)
+    );
+    if let Some(d) = duration {
+        s.push_str(&format!(", {}", super::seconds_90k(d)));
+    }
+    Some(s)
 }
