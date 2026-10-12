@@ -2,60 +2,14 @@
 
 use crate::cx::Cx;
 use crate::declare_format;
-use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
-use crate::fields::Endian;
 use crate::formats::{Codec, Input, Probe, content};
 use crate::node::Node;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::Value;
 
-const BE: Endian = Endian::Big;
-
-// KeePass lives in its own module; re-exported for the format table.
+// KeePass and the GnuPG keybox live in their own modules; re-exported for the format table.
 pub use super::keepass::{KDB, KDBX};
-
-// ---------------------------------------------------------------------------
-// GnuPG keybox
-
-fn keybox_probe(h: &crate::formats::Head<'_>) -> bool {
-    h.at(8, b"KBXf")
-}
-
-declare_format!(pub KEYBOX = "keybox", "GnuPG keybox", ["kbx"], "application/x-gnupg-keybox",
-    Probe::Custom(keybox_probe), keybox);
-
-const KEYBOX_TYPES: EnumTable = &[(0, "empty"), (1, "header"), (2, "OpenPGP"), (3, "X.509")];
-
-async fn keybox(cx: Cx, input: Input) -> Result<()> {
-    let mut cur = Cursor::new(&cx, input.span, BE);
-    let mut counts = [0u32; 4];
-    while cur.remaining() >= 5 {
-        let start = cur.pos();
-        let len = cur.u32().await?;
-        let kind = cur.u8().await?;
-        if len < 5 {
-            cx.diag(Diagnostic::malformed("blob shorter than its header").at(cur.since(start)));
-            break;
-        }
-        cur.seek(start.saturating_add(len.into()));
-        if let Some(c) = counts.get_mut(usize::from(kind)) {
-            *c = c.saturating_add(1);
-        }
-        let name = lookup(KEYBOX_TYPES, kind.into()).unwrap_or("unknown");
-        cx.progress_in(input.span, input.span.offset.saturating_add(start));
-        cx.push(
-            Node::new(format!("{name} blob"))
-                .span(cur.since(start))
-                .summary(format!("{len} bytes")),
-        )
-        .await;
-    }
-    cx.annotate(format!(
-        "{} OpenPGP and {} X.509 blob(s)",
-        counts[2], counts[3]
-    ));
-    Ok(())
-}
+pub use super::keybox::KEYBOX;
 
 // ---------------------------------------------------------------------------
 // Android backup (adb backup)
