@@ -496,31 +496,39 @@ const UPAK_VERSIONS: crate::value::EnumTable = &[
 ];
 
 /// FPakInfo, from the key GUID (v7+) or the encrypted-index byte (v4+) to
-/// the end of the file. Returns the index offset and size.
-fn upak_info(f: &mut Fields<'_>, &(version, back): &(u32, usize)) -> Result<(u64, u64)> {
+/// the end of the file.
+fn upak_info(
+    f: &mut Fields<'_>,
+    &(version, back): &(u32, usize),
+) -> Result<super::unreal_pak::PakFooter> {
     if version >= 7 {
         f.guid("Encryption key GUID").emit()?;
     }
-    if version >= 4 {
-        f.u8("Encrypted index").emit()?;
-    }
+    let encrypted = version >= 4 && f.u8("Encrypted index").emit()? != 0;
     f.u32("Magic").hex().emit()?;
     f.u32("Version").enumeration(UPAK_VERSIONS).emit()?;
-    let offset = f.u64("Index offset").hex().emit()?;
-    let size = f.u64("Index size").emit()?;
+    let index_offset = f.u64("Index offset").hex().emit()?;
+    let index_size = f.u64("Index size").emit()?;
     f.bytes("Index hash (SHA-1)", 20).emit()?;
-    if back == 205 {
-        f.u8("Frozen index").emit()?;
-    }
+    let frozen = back == 205 && f.u8("Frozen index").emit()? != 0;
     let names = match back {
         172 => 4,
         204 | 205 => 5,
         _ => 0,
     };
+    let mut methods = Vec::new();
     for _ in 0..names {
-        f.ascii("Compression method", 32).emit()?;
+        methods.push(f.ascii("Compression method", 32).emit()?);
     }
-    Ok((offset, size))
+    Ok(super::unreal_pak::PakFooter {
+        version,
+        narrow_method: back == 172,
+        encrypted,
+        frozen,
+        index_offset,
+        index_size,
+        methods: methods.into(),
+    })
 }
 
 async fn unreal_pak(cx: Cx, input: Input) -> Result<()> {
@@ -539,15 +547,24 @@ async fn unreal_pak(cx: Cx, input: Input) -> Result<()> {
     };
     let footer_len = crate::bytes::to_u64(back).saturating_add(prefix);
     let footer = file.sub(file.len.saturating_sub(footer_len), footer_len);
-    let (index_offset, index_size) =
-        crate::fields::parse(&cx, footer, LE, &(version, back), upak_info).await?;
-    cx.emit(Node::new("Data").span(file.sub(0, index_offset)));
-    cx.emit(Node::new("Index").span(file.sub(index_offset, index_size)));
+    let info = crate::fields::parse(&cx, footer, LE, &(version, back), upak_info).await?;
+    cx.emit(Node::new("Data").span(file.sub(0, info.index_offset)));
+    let index = file.sub(info.index_offset, info.index_size);
+    let note = format!(
+        "Unreal pak v{version}, index {} bytes{}",
+        info.index_size,
+        if info.encrypted {
+            ", encrypted index"
+        } else {
+            ""
+        }
+    );
+    cx.emit(super::unreal_pak::pak_index_node(input, index, info));
     cx.emit(
         crate::fields::struct_node("Footer", footer, LE, (version, back), upak_info)
             .summary(format!("version {version}")),
     );
-    cx.annotate(format!("Unreal pak v{version}, index {index_size} bytes"));
+    cx.annotate(note);
     Ok(())
 }
 

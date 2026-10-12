@@ -4,7 +4,10 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ v9.pak — Unreal pak v9, index 23 bytes  [0x0+0x137]
     Data  [0x0+0x42]
-    Index  [0x42+0x17]
+  ▾ Index  [0x42+0x17]
+      Mount point: "../../../Game/"  [0x42+0x13]
+      Entry count: 0  [0x55+0x4]
+    ▾ Files — 0 files under "../../../Game/"
   ▾ Footer — version 9  [0x59+0xde]
       Encryption key GUID: {11111111-1111-1111-1111-111111111111}  [0x59+0x10]
       Encrypted index: 0  [0x69+0x1]

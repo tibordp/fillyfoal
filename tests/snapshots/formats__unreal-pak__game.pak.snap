@@ -4,7 +4,8 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ game.pak — Unreal pak v3, index 31 bytes  [0x0+0x7f]
     Data  [0x0+0x34]
-    Index  [0x34+0x1f]
+  ▾ Index  [0x34+0x1f]
+      ! malformed: string length 774843950 [0x34+0x4]
   ▾ Footer — version 3  [0x53+0x2c]
       Magic: 0x5a6f12e1  [0x53+0x4]
       Version: CompressionEncryption (0x3)  [0x57+0x4]

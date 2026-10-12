@@ -1,0 +1,30 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ unversioned.uasset — Unreal Engine 5 package "/Game/Props/Crate", unversioned, 9 names  [0x0+0x127]
+  ▾ Package summary  [0x0+0x42]
+      Tag: 0x9e2a83c1  [0x0+0x4]
+      Legacy file version: -8  [0x4+0x4]
+      Legacy UE3 version: 0  [0x8+0x4]
+      UE4 object version: 0  [0xc+0x4]
+      UE5 object version: 0  [0x10+0x4]
+      Licensee version: 0  [0x14+0x4]
+      Custom versions: 0  [0x18+0x4]
+      Total header size: 247  [0x1c+0x4]
+      Package name: "/Game/Props/Crate"  [0x20+0x16]
+      Package flags: 0x80002200 [Cooked | UnversionedProperties | FilterEditorOnly]  [0x36+0x4]
+      Name count: 9  [0x3a+0x4]
+      Name offset: 66  [0x3e+0x4]
+  ▾ Name table — 9 names  [0x42+0xb5]
+      /Game/Props/Crate — #0  [0x42+0x1a]
+      /Script/CoreUObject — #1  [0x5c+0x1c]
+      /Script/Engine — #2  [0x78+0x17]
+      Class — #3  [0x8f+0xe]
+      Crate — #4  [0x9d+0xe]
+      Default__StaticMesh — #5  [0xab+0x1c]
+      None — #6  [0xc7+0xd]
+      Package — #7  [0xd4+0x10]
+      StaticMesh — #8  [0xe4+0x13]
+    Import and export tables
+      ! unsupported: unversioned package: the rest of the summary depends on the engine version

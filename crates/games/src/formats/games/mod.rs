@@ -21,3 +21,5 @@ pub mod nw4;
 pub mod packages;
 pub mod packfiles;
 pub mod unity;
+pub mod unreal;
+pub mod unreal_pak;
