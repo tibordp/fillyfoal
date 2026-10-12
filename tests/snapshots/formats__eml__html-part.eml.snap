@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ html-part.eml — E-mail: Notes — from a@example.com  [0x0+0xe6]
+  ▾ Headers — 7 fields  [0x0+0xb0]
+      From: "a@example.com"  [0x0+0x13]
+      To: "b@example.com"  [0x14+0x11]
+      Subject: "Notes"  [0x26+0xe]
+      Date: 2024-01-01 12:00:00 UTC — Mon, 1 Jan 2024 12:00:00 +0000  [0x35+0x24]
+      Message-ID: "<2@example.com>"  [0x5a+0x1b]
+      MIME-Version: "1.0"  [0x76+0x11]
+      Content-Type: "text/html; charset=utf-8"  [0x88+0x26]
+  ▾ Body — HTML document  [0xb0+0x36]
+      #text: "Hello Bob,"  [0xb0+0xa]
+      br  [0xba+0x4]
+      #text: "see you"  [0xbe+0x9]
+      b: "soon"  [0xc7+0xb]
+      #text: "."  [0xd2+0x1]
+      br  [0xd3+0x4]
+      #text: "--"  [0xd7+0x4]
+      i: "Ana"  [0xdb+0xa]

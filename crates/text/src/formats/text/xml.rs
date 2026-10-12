@@ -1468,6 +1468,9 @@ async fn element_node(
 
 /// Expands an element: attributes, then content.
 pub async fn element(cx: Cx, e: Elem) -> Result<()> {
+    // Resume marks: the lexer position of the next content node (a resumed
+    // run re-reads the start tag but does not push the attributes again).
+    let resumed = cx.resume::<u64>();
     let mut lex = Lexer::new(&cx, e.span, e.mode);
     let open = lex.next().await?;
     if open.kind != Kind::Start {
@@ -1476,7 +1479,7 @@ pub async fn element(cx: Cx, e: Elem) -> Result<()> {
     let own_name = lex.name(&open).await?;
     let tag = lex.owned(&open, 1 << 20).await?;
     let attrs = attributes(tag.piece());
-    for a in &attrs {
+    for a in attrs.iter().filter(|_| resumed.is_none()) {
         let mut node = Node::new(format!("@{}", a.name.text())).span(a.whole.span());
         if let Some(v) = a.value {
             let raw = v.text();
@@ -1506,6 +1509,9 @@ pub async fn element(cx: Cx, e: Elem) -> Result<()> {
     }
     let mut inner: Vec<Vec<u8>> = e.ancestors.iter().take(MAX_STACK).cloned().collect();
     inner.push(own_name.clone());
+    if let Some(pos) = resumed {
+        lex.seek(pos);
+    }
     content(
         &cx,
         &mut lex,
@@ -1528,6 +1534,11 @@ async fn content(
     ancestors: &Ancestors,
 ) -> Result<()> {
     loop {
+        if own.is_some() {
+            // An element's children: resume marks (see `element`).
+            let at = lex.pos;
+            cx.mark(move || at);
+        }
         let t = lex.next().await?;
         let span = lex.span(&t);
         let node = match t.kind {

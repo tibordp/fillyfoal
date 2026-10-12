@@ -1,11 +1,11 @@
 //! Character sets: single-byte code pages and the double-byte East Asian
-//! code pages ([`MultiByte`]: Shift_JIS, GBK, EUC-KR/UHC, Big5) decoded to
+//! code pages ([`MultiByte`]: Shift_JIS, GBK, EUC-KR/UHC, Big5, EUC-JP) decoded to
 //! text, and the lookup of charset names (`charset=` in MIME, `encoding=`
 //! in XML, `<meta charset>`) by the labels of the WHATWG Encoding Standard.
 //!
 //! The tables in [`tables`] are generated with Python's `codecs` module and
 //! checked against it in the tests; so are the double-byte tables (see
-//! [`multi`]). Other multi-byte encodings (EUC-JP, ISO-2022, GB18030's
+//! [`multi`]). Other multi-byte encodings (ISO-2022, GB18030's
 //! four-byte sequences) are recognised by name ([`Label::Unsupported`]) but
 //! not decoded.
 
@@ -397,7 +397,7 @@ const LABELS: &[(Label, &[&str])] = {
             M(Cp950),
             &["big5", "big5-hkscs", "cn-big5", "csbig5", "x-x-big5"],
         ),
-        (U("EUC-JP"), &["cseucpkdfmtjapanese", "euc-jp", "x-euc-jp"]),
+        (M(EucJp), &["cseucpkdfmtjapanese", "euc-jp", "x-euc-jp"]),
         (U("ISO-2022-JP"), &["csiso2022jp", "iso-2022-jp"]),
         (
             M(Cp932),
@@ -538,7 +538,7 @@ mod tests {
         assert_eq!(lookup("windows-949"), Some(Label::Multi(MultiByte::Cp949)));
         assert_eq!(lookup("cp936"), Some(Label::Multi(MultiByte::Cp936)));
         assert_eq!(lookup("big5-hkscs"), Some(Label::Multi(MultiByte::Cp950)));
-        assert_eq!(lookup("euc-jp"), Some(Label::Unsupported("EUC-JP")));
+        assert_eq!(lookup("euc-jp"), Some(Label::Multi(MultiByte::EucJp)));
         assert_eq!(lookup("latin-1"), Some(Label::Single(Charset::Windows1252)));
         assert_eq!(lookup("ibm437"), Some(Label::Single(Charset::Cp437)));
         assert_eq!(lookup("klingon"), None);

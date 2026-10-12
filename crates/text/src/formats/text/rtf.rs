@@ -13,7 +13,9 @@ use crate::value::Value;
 use super::decode::{Transform, decoded_node, preview};
 use super::scan::Scanner;
 use super::{plural, text_node};
-use crate::codec::charset::{self, Charset, Label};
+use crate::codec::charset::{self, Label};
+
+use super::encoding::Encoding;
 
 pub static FORMAT: Format = Format {
     name: "rtf",
@@ -318,10 +320,10 @@ fn date(params: &[(String, i64)]) -> Option<String> {
 struct Group {
     input: Input,
     span: Span,
-    cs: Charset,
+    cs: Encoding,
 }
 
-fn group_node(info: &GroupInfo, span: Span, input: Input, cs: Charset) -> Node {
+fn group_node(info: &GroupInfo, span: Span, input: Input, cs: Encoding) -> Node {
     let name = match (info.dest.as_str(), info.dest_param) {
         ("", _) => "{group}".to_owned(),
         (d, Some(p)) => format!("\\{d}{p}"),
@@ -377,7 +379,7 @@ async fn group(cx: Cx, g: Group) -> Result<()> {
 }
 
 /// Pushes tokens until the group's closing brace (or the end).
-async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input, cs: Charset) -> Result<()> {
+async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input, cs: Encoding) -> Result<()> {
     // Text runs (with \'hh escapes) merge into one node. Only the first
     // RUN_CAP bytes are kept (the rest are counted), and none where the
     // text is not shown.
@@ -531,7 +533,7 @@ struct Run {
 }
 
 impl Run {
-    fn extend(&mut self, bytes: &[u8], cs: Charset) {
+    fn extend(&mut self, bytes: &[u8], cs: Encoding) {
         let room = RUN_CAP.saturating_sub(self.bytes.len());
         let (keep, rest) = bytes.split_at(room.min(bytes.len()));
         self.bytes.extend_from_slice(keep);
@@ -549,7 +551,7 @@ async fn flush(
     run: &Run,
     dest: &str,
     data: &mut Option<(u64, u64)>,
-    cs: Charset,
+    cs: Encoding,
 ) {
     if dest == "colortbl" {
         return;
@@ -635,7 +637,7 @@ fn describe(word: &str) -> Option<&'static str> {
 #[derive(Clone, Debug)]
 struct Doc {
     span: Span,
-    cs: Charset,
+    cs: Encoding,
 }
 
 /// Paragraphs of document text, skipping non-text destinations.
@@ -650,10 +652,14 @@ async fn paragraphs(cx: Cx, d: Doc) -> Result<()> {
     let mut number = 0u64;
     let mut just_opened = false;
     let mut star = false;
+    // Double-byte code pages: the lead byte of a `\'hh\'hh` pair (or of
+    // `\'hh` and a literal trail byte), and its token.
+    let mut lead: Option<(u8, Tok)> = None;
     loop {
         lex.scan.tick().await;
         let t = lex.next().await?;
         let (skipping, uc) = stack.last().copied().unwrap_or((false, 1));
+        let skip_next = pending_skip > 0;
         let mut emit = |ch: &str, t: &Tok, text: &mut String| {
             if pending_skip > 0 {
                 pending_skip = pending_skip.saturating_sub(1);
@@ -667,6 +673,12 @@ async fn paragraphs(cx: Cx, d: Doc) -> Result<()> {
                 end = t.end;
             }
         };
+        // A lead byte without its trail byte.
+        if !matches!(t.kind, Kind::Hex | Kind::Text)
+            && let Some((byte, lt)) = lead.take()
+        {
+            emit(&d.cs.decode(&[byte]), &lt, &mut text);
+        }
         match t.kind {
             Kind::Eof => break,
             Kind::Open => {
@@ -704,10 +716,29 @@ async fn paragraphs(cx: Cx, d: Doc) -> Result<()> {
             }
             Kind::Hex => {
                 let byte = t.param.and_then(|p| u8::try_from(p).ok()).unwrap_or(b'?');
-                emit(&d.cs.decode(&[byte]), &t, &mut text);
+                match (d.cs, lead.take()) {
+                    // Bytes of a `\u` fallback (\ucN counts bytes).
+                    _ if skip_next => emit("", &t, &mut text),
+                    (Encoding::Multi(m), Some((first, lt))) => {
+                        let pair = Tok { end: t.end, ..lt };
+                        emit(&m.decode(&[first, byte]), &pair, &mut text);
+                    }
+                    (Encoding::Multi(m), None) if m.is_lead(byte) => lead = Some((byte, t)),
+                    _ => emit(&d.cs.decode(&[byte]), &t, &mut text),
+                }
             }
             Kind::Text => {
-                let bytes = lex.scan.bytes(t.start, t.end, 4096).await?;
+                let mut bytes = lex.scan.bytes(t.start, t.end, 4096).await?;
+                if let Some((first, lt)) = lead.take() {
+                    // A trail byte in the ASCII range, written literally.
+                    let trail = bytes.first().copied().unwrap_or(b'?');
+                    let pair = Tok {
+                        end: lt.end.saturating_add(1),
+                        ..lt
+                    };
+                    emit(&d.cs.decode(&[first, trail]), &pair, &mut text);
+                    bytes.drain(..1.min(bytes.len()));
+                }
                 for ch in d.cs.decode(&bytes).chars() {
                     emit(&ch.to_string(), &t, &mut text);
                 }
@@ -779,11 +810,11 @@ async fn paragraphs(cx: Cx, d: Doc) -> Result<()> {
 }
 
 /// The code page of `\'hh` escapes and 8-bit text: `\ansicpgN` in the
-/// header, else Windows-1252. A double-byte code page (932, 936, 949, 950)
-/// is reported and shown as Windows-1252.
-fn code_page(cx: &Cx, head: &[u8]) -> Charset {
+/// header (single-byte, or double-byte: 932, 936, 949, 950), else
+/// Windows-1252.
+fn code_page(cx: &Cx, head: &[u8]) -> Encoding {
     let Some(at) = super::probe::find(head, b"\\ansicpg") else {
-        return Charset::Windows1252;
+        return Encoding::Windows1252;
     };
     let digits: String = head
         .get(at.saturating_add(8)..)
@@ -794,7 +825,7 @@ fn code_page(cx: &Cx, head: &[u8]) -> Charset {
         .map(|&b| char::from(b))
         .collect();
     let label = match digits.as_str() {
-        "" | "0" | "1252" => return Charset::Windows1252,
+        "" | "0" | "1252" => return Encoding::Windows1252,
         "932" => "shift_jis".to_owned(),
         "936" => "gbk".to_owned(),
         "949" => "euc-kr".to_owned(),
@@ -803,19 +834,20 @@ fn code_page(cx: &Cx, head: &[u8]) -> Charset {
         n => format!("cp{n}"),
     };
     match charset::lookup(&label) {
-        Some(Label::Single(c)) => c,
+        Some(Label::Single(c)) => Encoding::Single(c),
+        Some(Label::Multi(m)) => Encoding::Multi(m),
         Some(other) => {
             cx.diag(Diagnostic::unsupported(format!(
                 "code page {} (\\ansicpg{digits}) is not decoded (shown as Windows-1252)",
                 other.name()
             )));
-            Charset::Windows1252
+            Encoding::Windows1252
         }
         None => {
             cx.diag(Diagnostic::unsupported(format!(
                 "unknown code page \\ansicpg{digits} (shown as Windows-1252)"
             )));
-            Charset::Windows1252
+            Encoding::Windows1252
         }
     }
 }

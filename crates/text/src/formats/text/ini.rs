@@ -196,11 +196,14 @@ fn first_section(h: &Head<'_>) -> Option<Vec<u8>> {
     (!name.is_empty() && !name.contains(&b'[') && name.len() < 128).then(|| name.to_vec())
 }
 
-/// Plain INI: a section first, and key/value lines (no TOML-only syntax).
+/// Plain INI: a section first, and key/value lines (no TOML-only syntax);
+/// or no sections at all (see [`probe_flat`]).
 fn probe_ini(h: &Head<'_>) -> bool {
     let head = probe::head(h);
+    if first_section(h).is_none() {
+        return probe_flat(h);
+    }
     let mut lines = probe::significant(&head, &[b";", b"#"]);
-    let starts_with_section = first_section(h).is_some();
     let mut entries = 0usize;
     let mut sections = 0usize;
     for line in lines.by_ref().take(40) {
@@ -217,7 +220,58 @@ fn probe_ini(h: &Head<'_>) -> bool {
             return false;
         }
     }
-    starts_with_section && sections >= 1 && entries >= 1 && probe::is_text(h)
+    sections >= 1 && entries >= 1 && probe::is_text(h)
+}
+
+/// Section-less `key=value` files: Java `.properties`, `os-release`,
+/// `.env`. Every significant line (of the first 40) is `KEY=value`, with an
+/// identifier-like key (optionally after `export `), and there are at
+/// least three. Only `=` counts as a separator (`key: value` lines are
+/// YAML's), and a value starting with `=` is a pip requirement
+/// (`requests==2.31`). Shebang scripts are left to the script probe.
+fn probe_flat(h: &Head<'_>) -> bool {
+    let head = probe::head(h);
+    if head.starts_with(b"#!") || !probe::is_text(h) {
+        return false;
+    }
+    let mut lines: Vec<&[u8]> = probe::significant(&head, &[b";", b"#", b"!"])
+        .take(41)
+        .collect();
+    // The head may end inside the last line.
+    if !probe::complete(h) || lines.len() > 40 {
+        lines.pop();
+    }
+    let mut entries = 0usize;
+    let mut continued = false;
+    for line in lines {
+        let line = probe::trim(line);
+        let was_continued = continued;
+        // `.properties` values continue after a trailing backslash.
+        continued = line.ends_with(b"\\");
+        if was_continued {
+            continue;
+        }
+        let line = line
+            .strip_prefix(b"export ")
+            .map_or(line, probe::trim_start);
+        let Some(eq) = line.iter().position(|&b| b == b'=') else {
+            return false;
+        };
+        let key = probe::trim(line.get(..eq).unwrap_or_default());
+        let value = probe::trim_start(line.get(eq.saturating_add(1)..).unwrap_or_default());
+        let identifier = key
+            .first()
+            .is_some_and(|&b| b.is_ascii_alphabetic() || b == b'_')
+            && key.len() <= 128
+            && key
+                .iter()
+                .all(|&b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'));
+        if !identifier || value.starts_with(b"=") {
+            return false;
+        }
+        entries = entries.saturating_add(1);
+    }
+    entries >= 3
 }
 
 // ---------------------------------------------------------------------------
@@ -236,19 +290,20 @@ fn is_comment(line: &Piece<'_>, flavor: Flavor) -> bool {
     match t.first() {
         Some(b';') => true,
         Some(b'#') => flavor != Flavor::Reg,
-        Some(b'!') => flavor == Flavor::Ass,
+        // ASS comments; `.properties` comments (in plain INI).
+        Some(b'!') => matches!(flavor, Flavor::Ass | Flavor::Ini),
         _ => false,
     }
 }
 
-/// Reads one logical line: `.reg` values continue on the next line after a
-/// trailing backslash.
-async fn logical(lines: &mut Lines<'_>, flavor: Flavor) -> Result<Option<(LineBuf, Span)>> {
+/// Reads one logical line: with `continued` (`.reg` values, `.properties`
+/// entries), a value continues on the next line after a trailing backslash.
+async fn logical(lines: &mut Lines<'_>, continued: bool) -> Result<Option<(LineBuf, Span)>> {
     let Some(first) = lines.next().await? else {
         return Ok(None);
     };
     let mut full = first.span;
-    if flavor == Flavor::Reg {
+    if continued {
         let mut last = first.piece().trim_end().last();
         while last == Some(b'\\') {
             let Some(more) = lines.next().await? else {
@@ -273,6 +328,9 @@ struct Section {
     /// Lines to skip (the header).
     skip_header: bool,
     reg_version: u8,
+    /// Values continue after a trailing backslash (`.reg`; INI entries
+    /// before any section, as in `.properties` files).
+    continued: bool,
 }
 
 pub async fn dissect(cx: Cx, input: Input, flavor: Flavor) -> Result<()> {
@@ -297,7 +355,7 @@ pub async fn dissect(cx: Cx, input: Input, flavor: Flavor) -> Result<()> {
     let mut globals = 0u64;
     loop {
         let before = lines.pos();
-        let next = logical(&mut lines, flavor).await?;
+        let next = logical(&mut lines, flavor == Flavor::Reg).await?;
         let header = next
             .as_ref()
             .and_then(|(line, _)| section_name(&line.piece()).map(|n| n.text()));
@@ -315,6 +373,7 @@ pub async fn dissect(cx: Cx, input: Input, flavor: Flavor) -> Result<()> {
                         flavor,
                         skip_header: false,
                         reg_version,
+                        continued: matches!(flavor, Flavor::Reg | Flavor::Ini),
                     };
                     entries(cx.clone(), state).await?;
                 }
@@ -358,6 +417,7 @@ async fn push_section(
         flavor,
         skip_header: true,
         reg_version,
+        continued: flavor == Flavor::Reg,
     };
     node = if entries > 0 {
         node.lazy(self::entries, state)
@@ -373,7 +433,7 @@ async fn entries(cx: Cx, s: Section) -> Result<()> {
         lines.next().await?;
     }
     let mut format: Option<Arc<Vec<String>>> = None;
-    while let Some((line, full)) = logical(&mut lines, s.flavor).await? {
+    while let Some((line, full)) = logical(&mut lines, s.continued).await? {
         let p = line.piece();
         if p.trim().is_empty() || is_comment(&p, s.flavor) {
             continue;
@@ -393,7 +453,13 @@ async fn entries(cx: Cx, s: Section) -> Result<()> {
             .await;
             continue;
         };
-        let key = p.to(sep).trim();
+        let mut key = p.to(sep).trim();
+        // `.env` files: `export NAME=value`.
+        if s.flavor == Flavor::Ini
+            && let Some(name) = key.strip_prefix(b"export ")
+        {
+            key = name.trim();
+        }
         let value = p.from(sep.saturating_add(1)).trim();
         let node = match s.flavor {
             Flavor::Reg => {
@@ -419,6 +485,13 @@ async fn entries(cx: Cx, s: Section) -> Result<()> {
                     text_node(name, value.span(), &value.text())
                 }
             }
+            Flavor::Ini if full.len > line.span.len => {
+                // A `.properties` value continued over several lines.
+                let start = value.span().offset;
+                let span = Span::new(full.source, start, full.end().saturating_sub(start));
+                let raw = cx.read(span.sub(0, 64 * 1024)).await?;
+                text_node(key.text(), span, &joined(&raw))
+            }
             _ => {
                 let text = value.unquote().text();
                 let node = text_node(key.text(), value.span(), &text);
@@ -437,6 +510,27 @@ async fn entries(cx: Cx, s: Section) -> Result<()> {
         cx.push(node).await;
     }
     Ok(())
+}
+
+/// A value continued over lines ending in a backslash, joined: the
+/// backslashes, line breaks and the indentation after them removed.
+fn joined(raw: &[u8]) -> String {
+    let mut out = Vec::with_capacity(raw.len());
+    let mut lines = probe::lines(raw).peekable();
+    let mut first = true;
+    while let Some(line) = lines.next() {
+        let line = if first { line } else { probe::trim_start(line) };
+        first = false;
+        let line = match lines.peek() {
+            Some(_) => {
+                let t = line.trim_ascii_end();
+                t.strip_suffix(b"\\").unwrap_or(t)
+            }
+            None => line.trim_ascii_end(),
+        };
+        out.extend_from_slice(line);
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 // ---------------------------------------------------------------------------

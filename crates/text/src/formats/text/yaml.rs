@@ -15,7 +15,7 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::Value;
 
-use super::encoding::{decode_8bit, prepare};
+use super::encoding::{decode_8bit, prepare_resuming};
 use super::piece::Piece;
 use super::scan::{LineBuf, Lines, Scanner};
 use super::{VALUE_CAP, parse_datetime, plural, probe, text_node};
@@ -252,8 +252,25 @@ fn is_marker(line: &[u8]) -> bool {
         && matches!(line.get(3), None | Some(b' ' | b'\t' | b'\r'))
 }
 
+/// A resume mark (see `Cx::mark`).
+#[derive(Clone, Copy, Debug)]
+enum Mark {
+    /// In a block, before the entry whose first line starts at `pos`.
+    Entry {
+        pos: u64,
+        base: u64,
+        sequence: bool,
+        index: u64,
+    },
+    /// Among the further documents of a stream, before the one whose `---`
+    /// line starts at `pos`; `number` documents came before it.
+    Document { pos: u64, number: u64 },
+}
+
 /// An entry being collected: its first line and where it starts.
 struct Pending {
+    /// Where the first line starts (relative to the block).
+    line: u64,
     first: LineBuf,
     /// Column at which the entry's content starts on its first line.
     col: u64,
@@ -263,19 +280,44 @@ struct Pending {
     rest: u64,
 }
 
-/// Pushes the entries of a block; returns where it stopped (a document
-/// marker or the end).
-async fn block_entries(cx: &Cx, b: &Block) -> Result<u64> {
+/// Records a resume mark before the entry `p` is pushed.
+fn mark(cx: &Cx, p: &Pending, base: Option<u64>, sequence: bool, index: u64) {
+    let at = Mark::Entry {
+        pos: p.line,
+        base: base.unwrap_or(p.col),
+        sequence,
+        index,
+    };
+    cx.mark(move || at);
+}
+
+/// Pushes the entries of a block, from a resume mark if given; returns
+/// where it stopped (a document marker or the end).
+async fn block_entries(cx: &Cx, b: &Block, resumed: Option<Mark>) -> Result<u64> {
     let mut lines = Lines::new(cx, b.span);
     let mut base: Option<u64> = None;
     let mut sequence = false;
     let mut pending: Option<Pending> = None;
     let mut index = 0u64;
     let mut first_line = true;
+    if let Some(Mark::Entry {
+        pos,
+        base: col,
+        sequence: seq,
+        index: i,
+    }) = resumed
+    {
+        lines.seek(pos, 0);
+        base = Some(col);
+        sequence = seq;
+        index = i;
+        first_line = pos == 0;
+    }
     loop {
         let before = lines.pos();
         let Some(line) = lines.next().await? else {
             if let Some(p) = pending.take() {
+                mark(cx, &p, base, sequence, index);
                 entry(cx, b, p, before, sequence, &mut index).await?;
             }
             return Ok(before);
@@ -288,6 +330,7 @@ async fn block_entries(cx: &Cx, b: &Block) -> Result<u64> {
         }
         if offset == 0 && is_marker(&line.bytes) {
             if let Some(p) = pending.take() {
+                mark(cx, &p, base, sequence, index);
                 entry(cx, b, p, before, sequence, &mut index).await?;
             }
             return Ok(before);
@@ -304,10 +347,12 @@ async fn block_entries(cx: &Cx, b: &Block) -> Result<u64> {
             continue;
         }
         if let Some(p) = pending.take() {
+            mark(cx, &p, base, sequence, index);
             entry(cx, b, p, before, sequence, &mut index).await?;
         }
         let start = line.start.saturating_add(indent(&line.bytes));
         pending = Some(Pending {
+            line: before,
             first: line.clone(),
             col,
             start,
@@ -376,7 +421,8 @@ fn block_node(name: String, span: Span, col: u64, kind: &str) -> Node {
 }
 
 async fn expand_block(cx: Cx, b: Block) -> Result<()> {
-    block_entries(&cx, &b).await.map(|_| ())
+    let resumed = cx.resume::<Mark>();
+    block_entries(&cx, &b, resumed).await.map(|_| ())
 }
 
 /// The node for a value whose inline part is `value` and whose following
@@ -776,7 +822,7 @@ yaml_variant!(
 );
 
 async fn document(cx: Cx, input: Input, title: &str, detail: Option<Detail>) -> Result<()> {
-    let prepared = prepare(&cx, input).await?;
+    let (prepared, resumed) = prepare_resuming::<Mark>(&cx, input).await?;
     let span = prepared.span;
     let head = cx.read_avail(span.sub(0, 16 * 1024)).await?;
     let title = match detail.and_then(|d| d(&head)) {
@@ -790,7 +836,10 @@ async fn document(cx: Cx, input: Input, title: &str, detail: Option<Detail>) -> 
     while let Some(line) = lines.next().await? {
         let t = line.piece().trim();
         if t.starts_with(b"%") {
-            cx.push(text_node("Directive", line.span, &t.text())).await;
+            // A resumed run continues after the directives.
+            if resumed.is_none() {
+                cx.push(text_node("Directive", line.span, &t.text())).await;
+            }
             start = line.next;
             continue;
         }
@@ -806,12 +855,17 @@ async fn document(cx: Cx, input: Input, title: &str, detail: Option<Detail>) -> 
         span: span.tail(start),
         col: 0,
     };
-    let stop = start.saturating_add(block_entries(&cx, &first).await?);
-    // Further documents.
+    // Further documents start after the first one, or at a resume mark.
+    let (stop, mut number) = match resumed {
+        Some(Mark::Document { pos, number }) => (pos, number),
+        _ => (
+            start.saturating_add(block_entries(&cx, &first, resumed).await?),
+            1u64,
+        ),
+    };
     let mut lines = Lines::new(&cx, span);
     lines.seek(stop, 0);
-    let mut number = 1u64;
-    let mut doc: Option<u64> = None;
+    let mut doc: Option<(u64, u64)> = None; // (marker line, body start)
     loop {
         let before = lines.pos();
         let line = lines.next().await?;
@@ -819,9 +873,14 @@ async fn document(cx: Cx, input: Input, title: &str, detail: Option<Detail>) -> 
         if line.is_some() && !marker {
             continue;
         }
-        if let Some(begin) = doc.take() {
+        if let Some((marker_at, begin)) = doc.take() {
             let body = span.sub(begin, before.saturating_sub(begin));
             if !is_blank(&cx, body).await? {
+                let at = Mark::Document {
+                    pos: marker_at,
+                    number,
+                };
+                cx.mark(move || at);
                 number = number.saturating_add(1);
                 cx.push(
                     Node::new(format!("Document {number}"))
@@ -835,7 +894,7 @@ async fn document(cx: Cx, input: Input, title: &str, detail: Option<Detail>) -> 
             break;
         };
         if l.bytes.starts_with(b"---") {
-            doc = Some(l.next);
+            doc = Some((l.start, l.next));
         }
     }
     if number > 1 {

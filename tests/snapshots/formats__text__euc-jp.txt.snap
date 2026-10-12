@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ euc-jp.txt — EUC-JP text, LF line endings, 5 lines  [0x0+0x101]
+    Encoding: "EUC-JP" — recognised from the characters
+    Line endings: "LF" — 5 LF, 0 CRLF, 0 CR
+  ▾ Lines — 5 lines  [0x0+0x101]
+      Line 1: "これは日本語のテキストファイルです。"  [0x0+0x24]
+      Line 2: "文字コードはEUC-JPで保存されています。"  [0x25+0x26]
+      Line 3: "昨日は雨が降っていましたが、今日はとても良い天気です。"  [0x4c+0x36]
+      Line 4: "駅の近くに新しい本屋ができたので、週末に行ってみようと思います。"  [0x83+0x40]
+      Line 5: "このファイルは文字コードの判定を確認するために作られました。"  [0xc4+0x3c]

@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ os-release — INI configuration  [0x0+0x77]
+    PRETTY_NAME: "Fillyfoal Linux 1.0"  [0xc+0x15]
+    NAME: "Fillyfoal Linux"  [0x27+0x11]
+    VERSION_ID: "1.0"  [0x44+0x5]
+    ID: "fillyfoal"  [0x4d+0x9]
+    HOME_URL: "https://example.com/"  [0x60+0x16]

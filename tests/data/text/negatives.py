@@ -175,3 +175,47 @@ plist = """<?xml version="1.0" encoding="UTF-8"?>
 </plist>
 """
 write("emlx", "1.emlx", f"{len(message.encode())}\n{message}{plist}")
+
+# Section-less key=value files are INI-style configuration, not plain text.
+write("ini", "app.properties", """# Application settings
+! written by hand for fillyfoal
+app.name=fillyfoal demo
+app.version = 1.2.0
+server.port=8080
+server.url=http://localhost:8080/
+greeting=Hello, \\
+    world
+log-level=info
+""")
+write("ini", "os-release", """PRETTY_NAME="Fillyfoal Linux 1.0"
+NAME="Fillyfoal Linux"
+VERSION_ID="1.0"
+ID=fillyfoal
+HOME_URL="https://example.com/"
+""")
+write("ini", "demo.env", """# local development
+export DATABASE_URL=postgres://localhost/demo
+DEBUG=true
+SECRET_KEY='not-a-secret'
+PORT=3000
+""")
+# Pinned requirements are not key=value entries.
+write("text", "requirements-lock.txt", """requests==2.31.0
+urllib3==2.2.1
+idna==3.6
+certifi==2024.2.2
+""")
+
+# A text/html part is HTML even when it starts like plain text.
+write("eml", "html-part.eml", """From: a@example.com
+To: b@example.com
+Subject: Notes
+Date: Mon, 1 Jan 2024 12:00:00 +0000
+Message-ID: <2@example.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+Hello Bob,<br>
+see you <b>soon</b>.<br>
+-- <i>Ana</i>
+""")

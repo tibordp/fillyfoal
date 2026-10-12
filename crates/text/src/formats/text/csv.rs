@@ -15,7 +15,7 @@ use crate::span::Span;
 use crate::value::Value;
 
 use super::decode::preview;
-use super::encoding::{decode_8bit, prepare};
+use super::encoding::{decode_8bit, prepare_resuming};
 use super::scan::Scanner;
 use super::{count, plural, probe, text_node};
 
@@ -265,7 +265,8 @@ pub async fn dissect_tsv(cx: Cx, input: Input) -> Result<()> {
 }
 
 async fn dissect(cx: Cx, input: Input, candidates: &[u8]) -> Result<()> {
-    let prepared = prepare(&cx, input).await?;
+    // Resume marks: (position of the record, records before it).
+    let (prepared, resumed) = prepare_resuming::<(u64, u64)>(&cx, input).await?;
     let span = prepared.span;
     let head = cx.read_avail(span.sub(0, crate::formats::HEAD_LEN)).await?;
     let fallback = candidates.first().copied().unwrap_or(b',');
@@ -327,8 +328,12 @@ async fn dissect(cx: Cx, input: Input, candidates: &[u8]) -> Result<()> {
         plural(first.count, "column", "columns"),
         count(estimate)
     ));
-    cx.emit(Node::new("Delimiter").value(Value::Text(delim_name.to_owned())));
-    if header {
+    // A resumed run continues with the records (the children before them
+    // were produced by the first run).
+    if resumed.is_none() {
+        cx.emit(Node::new("Delimiter").value(Value::Text(delim_name.to_owned())));
+    }
+    if header && resumed.is_none() {
         let span = scan.span(first.start, first.end);
         cx.emit(
             Node::new("Header")
@@ -348,10 +353,10 @@ async fn dissect(cx: Cx, input: Input, candidates: &[u8]) -> Result<()> {
         );
     }
 
-    let mut pos = if header { first.next } else { 0 };
-    let mut index = 0u64;
+    let (mut pos, mut index) = resumed.unwrap_or((if header { first.next } else { 0 }, 0));
     while let Some(rec) = record(&mut scan, pos, delim).await? {
         cx.checkpoint().await;
+        let at = (pos, index);
         pos = rec.next.max(pos.saturating_add(1));
         cx.progress_in(span, span.offset.saturating_add(pos));
         if rec.start == rec.end {
@@ -373,6 +378,7 @@ async fn dissect(cx: Cx, input: Input, candidates: &[u8]) -> Result<()> {
         if rec.unterminated {
             node = node.diag(Diagnostic::malformed("quoted field not closed"));
         }
+        cx.mark(move || at);
         cx.push(node).await;
     }
     Ok(())

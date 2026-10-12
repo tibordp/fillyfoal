@@ -295,7 +295,7 @@ const MULTI_SAMPLE: usize = 16 * 1024;
 /// a few double-byte characters, and nine in ten of them must be the
 /// common characters of the language the code page is for, as the code
 /// pages order them: the 2965 level-1 kanji, kana and punctuation of
-/// Shift_JIS (with at least some kana), the 3755 level-1 hanzi of GBK
+/// Shift_JIS and EUC-JP (with at least some kana), the 3755 level-1 hanzi of GBK
 /// (GB 2312's first level), the 5401 frequent characters of Big5, and the
 /// 2350 hangul syllables of EUC-KR (with spaces between words, which
 /// Chinese lacks: Korean hangul bytes are also common GBK and Big5 hanzi).
@@ -374,6 +374,18 @@ fn multi_score(m: MultiByte, data: &[u8]) -> Option<u64> {
                     }
                     is_hangul || in_range(code, (0xa1, 0xa3), (0xa1, 0xfe))
                 }
+                MultiByte::EucJp => {
+                    let is_kana = (0xa4a1..=0xa4f3).contains(&code)
+                        || (0xa5a1..=0xa5f6).contains(&code)
+                        || b0 == 0x8e;
+                    if is_kana {
+                        kana = kana.saturating_add(1);
+                    }
+                    // Kana, punctuation and full-width letters, level-1 kanji.
+                    is_kana
+                        || in_range(code, (0xa1, 0xa3), (0xa1, 0xfe))
+                        || in_range(code, (0xb0, 0xcf), (0xa1, 0xfe))
+                }
             };
             if good {
                 common = common.saturating_add(1);
@@ -388,7 +400,7 @@ fn multi_score(m: MultiByte, data: &[u8]) -> Option<u64> {
     }
     let spaced_out = spaced.saturating_mul(12) >= chars;
     let plausible = match m {
-        MultiByte::Cp932 => kana.saturating_mul(10) >= chars,
+        MultiByte::Cp932 | MultiByte::EucJp => kana.saturating_mul(10) >= chars,
         MultiByte::Cp949 => hangul.saturating_mul(2) >= chars && spaced_out,
         MultiByte::Cp936 | MultiByte::Cp950 => !spaced_out,
     };
@@ -452,6 +464,19 @@ pub async fn prepare(cx: &Cx, input: Input) -> Result<Prepared> {
     prepare_declared(cx, input, None).await
 }
 
+/// [`prepare`] for a walker that records resume marks (see `Cx::mark`):
+/// takes the resume key before anything is emitted, and on a resumed run
+/// does not emit the byte order mark again (the next child must be the one
+/// the mark was taken before).
+pub async fn prepare_resuming<K: std::any::Any + Send + Sync + Clone>(
+    cx: &Cx,
+    input: Input,
+) -> Result<(Prepared, Option<K>)> {
+    let resumed = cx.resume::<K>();
+    let prepared = prepare_with(cx, input, None, resumed.is_none()).await?;
+    Ok((prepared, resumed))
+}
+
 /// Whether `data` is UTF-8 (allowing a character cut off at the end).
 fn is_utf8(data: &[u8]) -> bool {
     match std::str::from_utf8(data) {
@@ -494,6 +519,15 @@ fn declared_legacy(cx: Option<&Cx>, head: &[u8], declared: Option<Label>) -> Opt
 /// The decision is made from the head of the text: if that is plain ASCII
 /// (or valid UTF-8), the text is used as it is.
 pub async fn prepare_declared(cx: &Cx, input: Input, declared: Option<Label>) -> Result<Prepared> {
+    prepare_with(cx, input, declared, true).await
+}
+
+async fn prepare_with(
+    cx: &Cx,
+    input: Input,
+    declared: Option<Label>,
+    emit_bom: bool,
+) -> Result<Prepared> {
     let span = input.span;
     let head = cx.read_avail(span.sub(0, 512)).await?;
     let (encoding, bom_len) = match bom(&head) {
@@ -526,7 +560,7 @@ pub async fn prepare_declared(cx: &Cx, input: Input, declared: Option<Label>) ->
         }
     }
     let bom = (bom_len > 0).then(|| span.sub(0, bom_len));
-    if let Some(b) = bom {
+    if let Some(b) = bom.filter(|_| emit_bom) {
         cx.emit(
             Node::new("Byte order mark")
                 .span(b)
@@ -734,11 +768,18 @@ mod tests {
     const GBK: &[u8] = include_bytes!("../../../../../tests/fixtures/synthetic/text/gbk.txt");
     const BIG5: &[u8] = include_bytes!("../../../../../tests/fixtures/synthetic/text/big5.txt");
     const EUC_KR: &[u8] = include_bytes!("../../../../../tests/fixtures/synthetic/text/euc-kr.txt");
+    const EUC_JP: &[u8] = include_bytes!("../../../../../tests/fixtures/synthetic/text/euc-jp.txt");
 
     #[test]
     fn double_byte_code_pages_are_recognised() {
         use MultiByte::*;
-        for (data, m) in [(SJIS, Cp932), (GBK, Cp936), (BIG5, Cp950), (EUC_KR, Cp949)] {
+        for (data, m) in [
+            (SJIS, Cp932),
+            (GBK, Cp936),
+            (BIG5, Cp950),
+            (EUC_KR, Cp949),
+            (EUC_JP, EucJp),
+        ] {
             assert_eq!(classify(data), Some(Encoding::Multi(m)), "{m:?}");
             // Each reads as some other code page too, but not well.
             for &other in MultiByte::ALL.iter().filter(|&&o| o != m) {
