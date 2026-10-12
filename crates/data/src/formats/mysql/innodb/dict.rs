@@ -90,6 +90,8 @@ pub struct IndexDef {
 pub struct Dict {
     pub objects: u64,
     pub space_name: Option<String>,
+    /// Object names by (type, ID).
+    pub names: BTreeMap<(u32, u64), String>,
     pub indexes: BTreeMap<u64, Arc<IndexDef>>,
     pub problems: Vec<Diagnostic>,
 }
@@ -401,6 +403,13 @@ async fn build(cx: &Cx, space: &SpaceRef) -> Dict {
         let Some(dd) = json.get("dd_object") else {
             continue;
         };
+        if let Some(name) = dd.get("name").and_then(Json::as_str) {
+            let name = match dd.get("schema_ref").and_then(Json::as_str) {
+                Some(s) => format!("{s}.{name}"),
+                None => name.to_owned(),
+            };
+            dict.names.insert((o.kind, o.id), name);
+        }
         match o.kind {
             2 => {
                 if let Some(name) = dd.get("name").and_then(Json::as_str) {
@@ -951,9 +960,11 @@ pub async fn sdi_objects(cx: Cx, space: SpaceRef) -> Result<()> {
         cx.diag(p);
     }
     cx.set_count(Count::Exact(to_u64(list.len())));
+    // Names come from the dictionary, decoded once (and within its limits).
+    let dict = load(&cx, &space).await;
     for o in list {
         let kind = crate::value::lookup(SDI_TYPES, o.kind.into()).unwrap_or("object");
-        let name = match decode_name(&cx, &o).await {
+        let name = match dict.names.get(&(o.kind, o.id)) {
             Some(n) => format!("{} {n}", crate::formats::util::fmt::capitalize(kind)),
             None => format!("{} {}", crate::formats::util::fmt::capitalize(kind), o.id),
         };
@@ -972,16 +983,6 @@ pub async fn sdi_objects(cx: Cx, space: SpaceRef) -> Result<()> {
         .await;
     }
     Ok(())
-}
-
-async fn decode_name(cx: &Cx, o: &SdiObject) -> Option<String> {
-    let j = decode(cx, o).await?;
-    let dd = j.get("dd_object")?;
-    let name = dd.get("name").and_then(Json::as_str)?;
-    Some(match dd.get("schema_ref").and_then(Json::as_str) {
-        Some(s) => format!("{s}.{name}"),
-        None => name.to_owned(),
-    })
 }
 
 async fn sdi_object(cx: Cx, (input, o, page_span): (Input, SdiObject, Span)) -> Result<()> {

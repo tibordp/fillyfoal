@@ -741,8 +741,7 @@ async fn meta_fields(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Root page")
             .span(at(32, 4))
-            .value(uint(u(32), 32))
-            .target(span.sub(0, 0)),
+            .value(uint(u(32), 32)),
     );
     cx.emit(
         Node::new("Root level")

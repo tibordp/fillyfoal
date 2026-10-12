@@ -819,7 +819,10 @@ async fn record_fields(cx: Cx, rs: RecordState) -> Result<()> {
                 Some(f) => {
                     let (v, short) = dict::value(f, b);
                     n = n.value(v);
-                    if matches!(f.ty, dict::Ty::RollPtr) {
+                    if matches!(
+                        f.ty,
+                        dict::Ty::RollPtr | dict::Ty::Enum(_) | dict::Ty::Set(_)
+                    ) {
                         n = n.summary(short);
                     }
                     if matches!(f.ty, dict::Ty::Binary) && def.is_some_and(|d| d.id == 0) {

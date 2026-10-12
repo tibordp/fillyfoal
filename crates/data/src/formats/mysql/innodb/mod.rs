@@ -86,7 +86,11 @@ fn probe(h: &Head<'_>) -> bool {
     match geo.sum {
         Sum::Classic => lsn.is_some() && u32_be(d, end.saturating_sub(4)) == lsn,
         Sum::FullCrc32 => lsn.is_some() && u32_be(d, end.saturating_sub(8)) == lsn,
-        Sum::Zip => d.len() >= end && u32_be(d, 16).is_some_and(|hi| hi != FIL_NULL),
+        // No trailer: the page's own checksum (or the "none" magic).
+        Sum::Zip => d.get(..end).is_some_and(|page| {
+            let stored = u32_be(page, 0);
+            stored == Some(0xdead_beef) || stored == Some(page::zip_checksum(page))
+        }),
     }
 }
 

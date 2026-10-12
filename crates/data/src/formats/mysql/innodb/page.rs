@@ -196,6 +196,13 @@ fn fold(data: &[u8]) -> u64 {
     })
 }
 
+/// The CRC-32C variant of compressed pages (`page_zip_calc_checksum`):
+/// the header without the checksum, LSN and flush LSN, and the rest.
+pub fn zip_checksum(page: &[u8]) -> u32 {
+    let range = |a: usize, b: usize| page.get(a..b).unwrap_or_default();
+    crc32c(range(4, 16)) ^ crc32c(range(24, 26)) ^ crc32c(range(34, page.len()))
+}
+
 /// Checks a whole page's checksum.
 pub fn verify(space: &Space, page: &[u8]) -> Check {
     if page.iter().all(|&b| b == 0) {
@@ -218,7 +225,7 @@ pub fn verify(space: &Space, page: &[u8]) -> Check {
             if stored == 0xdead_beef {
                 return Check::NoChecksum;
             }
-            let crc = crc32c(range(4, 16)) ^ crc32c(range(24, 26)) ^ crc32c(range(34, len));
+            let crc = zip_checksum(page);
             if crc == stored {
                 Check::Valid("CRC-32C (compressed page)")
             } else {

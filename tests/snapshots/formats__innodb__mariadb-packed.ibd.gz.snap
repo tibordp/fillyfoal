@@ -95,7 +95,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Page number: 3  [0x3004+0x4]
           Previous page: 0xffffffff — none  [0x3008+0x4]
           Next page: 0xffffffff — none  [0x300c+0x4]
-          LSN: 58797  [0x3010+0x8]
+          LSN: 58812  [0x3010+0x8]
           Page type: B-tree index (0x45bf)  [0x3018+0x2]
           Flush LSN: 0  [0x301a+0x8]
           Space ID: 7  [0x3022+0x4]

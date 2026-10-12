@@ -5,7 +5,9 @@
 # down cleanly, and its files are copied out.
 #
 # MySQL: fruit.ibd (dynamic rows, SDI dictionary, a secondary index, a
-# deleted row), notes.ibd (redundant rows, an off-page LOB), the first 16
+# deleted row), crate.ibd from a second server initialised with 4 KiB pages
+# (mysql-4k.sql: CHAR, ENUM, SET, DATE, DATETIME(3), FLOAT, DOUBLE and
+# BIGINT columns), notes.ibd (redundant rows, an off-page LOB), the first 16
 # pages of ibdata1 and the first 8 of undo_001 (the full files are 12 and
 # 16 MiB), the redo file in use (#innodb_redo/#ib_redoN, 256 KiB with
 # --innodb-redo-log-capacity=8M) and two MyISAM data files.
@@ -46,6 +48,18 @@ docker cp fillyfoal-mysql:/var/lib/mysql/undo_001 "$work/mysql/undo_001"
 docker cp "fillyfoal-mysql:/var/lib/mysql/#innodb_redo" "$work/mysql/redo"
 docker rm fillyfoal-mysql >/dev/null
 
+# MySQL with 4 KiB pages (the page size is fixed when the data directory
+# is initialised).
+docker rm -f fillyfoal-mysql4k >/dev/null 2>&1 || true
+docker run -d --name fillyfoal-mysql4k --hostname fillyfoal -e MYSQL_ALLOW_EMPTY_PASSWORD=1 \
+	mysql:9.7.1 --innodb-page-size=4k --innodb-redo-log-capacity=8M --innodb-buffer-pool-size=32M \
+	--skip-log-bin >/dev/null
+wait_ready fillyfoal-mysql4k
+docker exec -i fillyfoal-mysql4k mysql -uroot <"$here/mysql-4k.sql"
+docker stop -t 120 fillyfoal-mysql4k >/dev/null
+docker cp fillyfoal-mysql4k:/var/lib/mysql/shop/crate.ibd "$work/mysql/crate-4k.ibd"
+docker rm fillyfoal-mysql4k >/dev/null
+
 # MariaDB
 docker rm -f fillyfoal-mariadb >/dev/null 2>&1 || true
 docker run -d --name fillyfoal-mariadb --hostname fillyfoal -e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=1 \
@@ -61,6 +75,7 @@ out="$root/tests/fixtures/external"
 mkdir -p "$out/innodb" "$out/innodb-redo" "$out/myisam-data"
 gzip -9 -n <"$work/mysql/shop/fruit.ibd" >"$out/innodb/mysql-fruit.ibd.gz"
 gzip -9 -n <"$work/mysql/shop/notes.ibd" >"$out/innodb/mysql-notes.ibd.gz"
+gzip -9 -n <"$work/mysql/crate-4k.ibd" >"$out/innodb/mysql-4k.ibd.gz"
 head -c 262144 "$work/mysql/ibdata1" | gzip -9 -n >"$out/innodb/mysql-ibdata1-head.gz"
 head -c 131072 "$work/mysql/undo_001" | gzip -9 -n >"$out/innodb/mysql-undo_001-head.gz"
 gzip -9 -n <"$work/mariadb/shop/fruit.ibd" >"$out/innodb/mariadb-fruit.ibd.gz"
