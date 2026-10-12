@@ -196,7 +196,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Last commit before revert: "generation 0, sector 0, byte 0"  [0x12e4+0x8]
       Unused  [0x12ec+0xd14]
   ▾ Catalog — 6 tables
-    ▾ Fixtures: 0x0 [] — object 8, root page 31, 18 columns, 2 indexes, long values at page 33
+    ▾ Fixtures — object 8, root page 31, 18 columns, 2 indexes, long values at page 33
       ▾ Catalog entry  [0xf455+0x3f]
           Record header: "fixed 1–13, variable 128–128" — fixed data ends at 0x35  [0xf455+0x4]
           Null bitmap: 00 ef  |..|  [0xf488+0x2]
@@ -2182,7 +2182,7 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Available extents — 16 pages in 2 extents, tree at page 48
             Pages 62–62: 1  [0x31038+0xa]
             Pages 135–149: 15  [0x31042+0xa]
-    ▾ Small: 0x0 [] — object 11, root page 150, 2 columns, 1 index
+    ▾ Small — object 11, root page 150, 2 columns, 1 index
       ▾ Catalog entry  [0xf994+0x3c]
           Record header: "fixed 1–13, variable 128–128" — fixed data ends at 0x35  [0xf994+0x4]
           Null bitmap: 00 ef  |..|  [0xf9c7+0x2]
@@ -3221,4 +3221,5 @@ expression: "common::explore(&display_name(&path), &data)"
               Name: "SpaceDeferredLVHints" — Text, 20 bytes  [0xe5da+0x14]
           ▾ Record 29 — ObjidTable=2, Type=2, Id=261, ColtypOrPgnoFDP=11, …  [0xe5f4+0x2b]
               Record header: "fixed 1–7, variable 128–128" — fixed data ends at 0x1f  [0xe5f4+0x4]
-… snapshot cut at 256 KiB: 3326 more lines
+              Null bitmap: 80  |.|  [0xe612+0x1]
+… snapshot cut at 256 KiB: 3325 more lines

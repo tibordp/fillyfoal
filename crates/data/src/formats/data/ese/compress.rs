@@ -1,13 +1,16 @@
 //! Compressed column values and long-value chunks (tagged value flag 0x02,
 //! Windows 7 and later). The top five bits of the first byte name the
-//! scheme, as libesedb reads them: 1 is 7-bit ASCII and 2 7-bit Unicode
-//! (seven-bit characters packed least significant bit first after that
-//! byte, Unicode ones widened to UTF-16LE), 3 Xpress (Plain LZ77, after the
-//! byte and a 16-bit decompressed size). Later schemes (Xpress9, Xpress10,
-//! LZ4) are reported as unsupported.
+//! scheme (ESE's `COMPRESSION_SCHEME`, `compression.cxx`): 1 is 7-bit ASCII
+//! and 2 7-bit Unicode (seven-bit characters packed least significant bit
+//! first after that byte, Unicode ones widened to UTF-16LE; the byte's low
+//! three bits are the number of bits used in the last byte, minus one),
+//! 3 Xpress (Plain LZ77) and 7 LZ4 (a raw LZ4 block), both after the byte
+//! and a 16-bit decompressed size. Scrub (4), Xpress9 (5) and Xpress10 (6)
+//! are reported as unsupported.
 //!
-//! Not yet checked against a database written by esent.dll with
-//! compression on: the layout follows libesedb_compression.c.
+//! Checked against databases written by esent.dll 10.0.26100 (Windows 11):
+//! it stores short values as 7-bit ASCII or Unicode and compresses each
+//! long-value chunk on its own with LZ4.
 
 use crate::bytes::u16_le;
 use crate::codec::Codec;
@@ -23,16 +26,25 @@ pub fn scheme_name(b: &[u8]) -> Option<&'static str> {
         1 => Some("7-bit ASCII"),
         2 => Some("7-bit Unicode"),
         3 => Some("Xpress"),
+        7 => Some("LZ4"),
         _ => None,
     }
 }
 
 /// Unpacks 7-bit characters (after the scheme byte), widening each to two
-/// bytes for Unicode. The last byte's padding bits may make a NUL
-/// character, which is dropped.
+/// bytes for Unicode. The scheme byte's low three bits give the bits used
+/// in the last byte (minus one), so the count is exact, as ESE computes it.
 pub fn seven_bit(b: &[u8], wide: bool) -> Vec<u8> {
     let payload = b.get(1..).unwrap_or_default();
-    let chars = payload.len().saturating_mul(8) / 7;
+    let last_bits = usize::from(b.first().map_or(7, |x| x & 7)).saturating_add(1);
+    let bits = match payload.len() {
+        0 => 0,
+        n => n
+            .saturating_sub(1)
+            .saturating_mul(8)
+            .saturating_add(last_bits),
+    };
+    let chars = bits / 7;
     let mut out = Vec::with_capacity(chars.saturating_mul(if wide { 2 } else { 1 }));
     let mut acc: u32 = 0;
     let mut bits = 0u32;
@@ -48,10 +60,7 @@ pub fn seven_bit(b: &[u8], wide: bool) -> Vec<u8> {
             bits = bits.saturating_sub(7);
         }
     }
-    let width = if wide { 2 } else { 1 };
-    while out.len() >= width && out.iter().rev().take(width).all(|&c| c == 0) {
-        out.truncate(out.len().saturating_sub(width));
-    }
+    out.truncate(chars.saturating_mul(if wide { 2 } else { 1 }));
     out
 }
 
@@ -78,23 +87,34 @@ pub async fn value(cx: &Cx, span: Span, b: &[u8]) -> Result<(&'static str, Span)
             )?;
             Ok((if wide { "7-bit Unicode" } else { "7-bit ASCII" }, d.span))
         }
-        3 => {
-            let size = u16_le(b, 1)
-                .ok_or_else(|| Diagnostic::malformed("Xpress value lacks its size").at(span))?;
-            let d = crate::codec::decode_span(
-                cx,
-                span.tail(3),
-                &Codec::Xpress {
+        3 | 7 => {
+            let name = if scheme == 3 { "Xpress" } else { "LZ4" };
+            let size = u16_le(b, 1).ok_or_else(|| {
+                Diagnostic::malformed(format!("{name} value lacks its size")).at(span)
+            })?;
+            let codec = if scheme == 3 {
+                Codec::Xpress {
                     size: Some(size.into()),
-                },
-                Some(size.into()),
-            )
-            .await?;
+                }
+            } else {
+                Codec::Lz4Block
+            };
+            let d = crate::codec::decode_span(cx, span.tail(3), &codec, Some(size.into())).await?;
             if let Some(e) = d.error {
                 return Err(e);
             }
-            Ok(("Xpress", d.span))
+            if d.span.len != u64::from(size) {
+                return Err(Diagnostic::malformed(format!(
+                    "{name} value decompressed to {} of {size} bytes",
+                    d.span.len
+                ))
+                .at(span));
+            }
+            Ok((name, d.span))
         }
+        4 => Err(Diagnostic::unsupported("scrubbed value (compression scheme 4)").at(span)),
+        5 => Err(Diagnostic::unsupported("Xpress9 compression").at(span)),
+        6 => Err(Diagnostic::unsupported("Xpress10 compression").at(span)),
         s => Err(Diagnostic::unsupported(format!("compression scheme {s}")).at(span)),
     }
 }
@@ -104,9 +124,10 @@ pub async fn value(cx: &Cx, span: Span, b: &[u8]) -> Result<(&'static str, Span)
 mod tests {
     use super::*;
 
-    /// Packs ASCII as ESE's 7-bit scheme does (scheme byte 0x08 | unused).
+    /// Packs ASCII as ESE's 7-bit scheme does (scheme byte, then the bits
+    /// used in the last byte minus one).
     fn pack(s: &[u8], scheme: u8) -> Vec<u8> {
-        let mut out = vec![scheme << 3];
+        let mut out = vec![scheme << 3 | ((s.len() * 7 + 7) % 8) as u8];
         let (mut acc, mut bits) = (0u32, 0u32);
         for &c in s {
             acc |= u32::from(c) << bits;
@@ -125,7 +146,14 @@ mod tests {
 
     #[test]
     fn seven_bit_round_trips() {
-        for s in [&b"a"[..], b"fillyfoal", b"12345678", b"exactly sixteen!"] {
+        // A trailing NUL character survives: the count comes from the header.
+        for s in [
+            &b"a"[..],
+            b"fillyfoal",
+            b"12345678",
+            b"exactly sixteen!",
+            b"nul\0",
+        ] {
             assert_eq!(seven_bit(&pack(s, 1), false), s, "{s:?}");
             let wide: Vec<u8> = s.iter().flat_map(|&c| [c, 0]).collect();
             assert_eq!(seven_bit(&pack(s, 2), true), wide, "{s:?}");
