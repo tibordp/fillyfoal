@@ -319,7 +319,10 @@ fn le_int(b: &[u8], signed: bool) -> i64 {
 /// A run: cluster count and starting cluster (`None` for sparse runs).
 fn parse_runs(data: &[u8]) -> (Vec<(u64, Option<u64>)>, Option<Diagnostic>) {
     let (runs, problem) = located_runs(data);
-    (runs.into_iter().map(|r| (r.count, r.lcn)).collect(), problem)
+    (
+        runs.into_iter().map(|r| (r.count, r.lcn)).collect(),
+        problem,
+    )
 }
 
 /// A decoded run and where its bytes are in the runlist.
@@ -1049,8 +1052,7 @@ async fn wof_content(cx: &Cx, fs: &Vol, attrs: &[Attr], data: &Attr) -> Result<O
         return Ok(None);
     };
     let raw = cx.read_avail(reparse.sub(0, 24)).await?;
-    if u32_le(&raw, 0) != Some(IO_REPARSE_TAG_WOF) || u32_le(&raw, 12) != Some(WOF_PROVIDER_FILE)
-    {
+    if u32_le(&raw, 0) != Some(IO_REPARSE_TAG_WOF) || u32_le(&raw, 12) != Some(WOF_PROVIDER_FILE) {
         return Ok(None);
     }
     let Some(stream) = find_attr(attrs, 0x80, "WofCompressedData") else {
@@ -1059,9 +1061,9 @@ async fn wof_content(cx: &Cx, fs: &Vol, attrs: &[Attr], data: &Attr) -> Result<O
     let algorithm = u32_le(&raw, 20).unwrap_or(u32::MAX);
     let name = name_or(WOF_ALGORITHMS, algorithm.into(), "algorithm");
     let Some((kind, chunk)) = wof_chunks(algorithm) else {
-        return Ok(Some(Node::new("Content").diag(Diagnostic::unsupported(
-            format!("WOF compression {name}"),
-        ))));
+        return Ok(Some(
+            Node::new("Content").diag(Diagnostic::unsupported(format!("WOF compression {name}"))),
+        ));
     };
     let span = match stream.resident {
         Some(value) => value,
@@ -2428,7 +2430,11 @@ fn reparse_summary(raw: &[u8]) -> String {
         IO_REPARSE_TAG_WOF => match u32_le(raw, 12) {
             Some(WOF_PROVIDER_FILE) => format!(
                 "compressed, {}",
-                name_or(WOF_ALGORITHMS, u32_le(raw, 20).unwrap_or(0).into(), "algorithm")
+                name_or(
+                    WOF_ALGORITHMS,
+                    u32_le(raw, 20).unwrap_or(0).into(),
+                    "algorithm"
+                )
             ),
             Some(WOF_PROVIDER_WIM) => "backed by a WIM image".to_string(),
             _ => String::new(),
