@@ -16,4 +16,5 @@ pub mod eda_text;
 pub mod fabrication;
 pub mod meshes;
 pub mod models;
+pub mod ply;
 pub mod simulation;

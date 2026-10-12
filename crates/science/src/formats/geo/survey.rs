@@ -5,13 +5,15 @@ use crate::bytes::{u16_le, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
-use crate::error::Result;
+use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::fmt;
+use crate::formats::util::val::uint;
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, lookup};
+use crate::value::{EnumTable, Value, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -104,23 +106,350 @@ async fn shp(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
+record! {
+    pub struct ShpRecordHeader {
+        number: u32 "Record number",
+        words: u32 "Content length (16-bit words)",
+    }
+}
+
+/// M values below this mean "no data" (ESRI Shapefile Technical
+/// Description, 1998, p. 2).
+const SHP_NO_DATA: f64 = -1e38;
+
+/// Elements decoded per read when listing a coordinate array.
+const SHP_BATCH: u64 = 256;
+
+const MULTIPATCH_PARTS: EnumTable = &[
+    (0, "Triangle strip"),
+    (1, "Triangle fan"),
+    (2, "Outer ring"),
+    (3, "Inner ring"),
+    (4, "First ring"),
+    (5, "Ring"),
+];
+
+fn num(v: f64) -> String {
+    crate::render::value(&Value::Float(v))
+}
+
+fn m_text(v: f64) -> String {
+    if v < SHP_NO_DATA {
+        "no data".to_owned()
+    } else {
+        num(v)
+    }
+}
+
+/// The base shape of a type: 0 null, 1 point, 3 polyline, 5 polygon, 8
+/// multipoint, 31 multipatch (Z and M variants map onto these).
+fn shape_base(kind: u32) -> Option<u32> {
+    match kind {
+        0 => Some(0),
+        1 | 11 | 21 => Some(1),
+        3 | 13 | 23 => Some(3),
+        5 | 15 | 25 => Some(5),
+        8 | 18 | 28 => Some(8),
+        31 => Some(31),
+        _ => None,
+    }
+}
+
+fn shape_has_z(kind: u32) -> bool {
+    matches!(kind, 11 | 13 | 15 | 18 | 31)
+}
+
+fn shape_has_m(kind: u32) -> bool {
+    matches!(kind, 21 | 23 | 25 | 28)
+}
+
+/// A record's one-line summary from the start of its content.
+fn shp_summary(content: &[u8]) -> String {
+    let f = |off: usize| crate::bytes::f64_le(content, off).map_or_else(|| "?".to_owned(), num);
+    let Some(kind) = u32_le(content, 0) else {
+        return "empty".to_owned();
+    };
+    let name = lookup(SHAPE_TYPES, kind.into()).unwrap_or("unknown shape");
+    let count = |off: usize, noun: &str| {
+        u32_le(content, off).map_or_else(|| format!("? {noun}s"), |n| fmt::plural(n, noun))
+    };
+    match shape_base(kind) {
+        Some(1) if kind == 11 => format!("{name} ({}, {}, {})", f(4), f(12), f(20)),
+        Some(1) => format!("{name} ({}, {})", f(4), f(12)),
+        Some(8) => format!("{name}, {}", count(36, "point")),
+        Some(3 | 5 | 31) => format!("{name}, {}, {}", count(36, "part"), count(40, "point")),
+        _ => name.to_owned(),
+    }
+}
+
 async fn shp_records(cx: Cx, span: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, BE);
-    while cur.remaining() >= 12 {
+    if let Some(pos) = cx.resume::<u64>() {
+        cur.seek(pos);
+    }
+    while cur.remaining() >= 8 {
         cx.progress_in(span, span.offset.saturating_add(cur.pos()));
         let start = cur.pos();
+        cx.mark(move || start);
         let number = cur.u32().await?;
         let words = cur.u32().await?;
-        let content = cur.span(u64::from(words).saturating_mul(2));
-        let kind = u32_le(&cx.read_avail(content.sub(0, 4)).await?, 0).unwrap_or(0);
-        cur.skip(u64::from(words).saturating_mul(2));
-        let name = lookup(SHAPE_TYPES, kind.into()).unwrap_or("unknown");
-        cx.push(
-            Node::new(format!("Record {number}"))
-                .span(cur.since(start))
-                .summary(name),
+        let len = u64::from(words).saturating_mul(2);
+        let content = cur.span(len);
+        let head = cx.read_avail(content.sub(0, 44)).await?;
+        cur.skip(len);
+        let mut node = Node::new(format!("Record {number}"))
+            .span(cur.since(start))
+            .summary(shp_summary(&head))
+            .lazy(shp_record, (cur.since(start), content));
+        if content.len < len {
+            node = node.diag(Diagnostic::truncated(
+                Span::new(content.source, content.offset, len),
+                content.len,
+            ));
+        }
+        cx.push(node).await;
+    }
+    if !cur.at_end() {
+        cx.diag(Diagnostic::malformed("trailing bytes after the last record").at(cur.span(8)));
+    }
+    Ok(())
+}
+
+/// Reads a little-endian f64 and emits it as a field.
+async fn shp_f64(cx: &Cx, cur: &mut Cursor<'_>, name: &'static str) -> Result<f64> {
+    let span = cur.span(8);
+    let v = f64::from_bits(cur.u64().await?);
+    cx.emit(Node::new(name).span(span).value(Value::Float(v)));
+    Ok(v)
+}
+
+/// Reads a little-endian u32 count and emits it as a field.
+async fn shp_count(cx: &Cx, cur: &mut Cursor<'_>, name: &'static str) -> Result<u64> {
+    let span = cur.span(4);
+    let v = cur.u32().await?;
+    cx.emit(Node::new(name).span(span).value(uint(v, 32)));
+    Ok(u64::from(v))
+}
+
+/// Reads a (min, max) pair as one field.
+async fn shp_range(cx: &Cx, cur: &mut Cursor<'_>, name: &'static str, m: bool) -> Result<()> {
+    let span = cur.span(16);
+    let lo = f64::from_bits(cur.u64().await?);
+    let hi = f64::from_bits(cur.u64().await?);
+    let text = if m {
+        format!("{}..{}", m_text(lo), m_text(hi))
+    } else {
+        format!("{}..{}", num(lo), num(hi))
+    };
+    cx.emit(Node::new(name).span(span).summary(text));
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ShpArray {
+    /// Part start indices, given the total point count.
+    Parts(u64),
+    PartTypes,
+    Points,
+    Z,
+    M,
+}
+
+impl ShpArray {
+    fn size(self) -> u64 {
+        match self {
+            ShpArray::Parts(_) | ShpArray::PartTypes => 4,
+            ShpArray::Points => 16,
+            ShpArray::Z | ShpArray::M => 8,
+        }
+    }
+}
+
+/// Emits the node for an array of `n` elements at the cursor and skips it;
+/// an array that overruns the record ends the decode with an error.
+fn shp_array(
+    cx: &Cx,
+    cur: &mut Cursor<'_>,
+    name: &'static str,
+    n: u64,
+    kind: ShpArray,
+) -> Result<()> {
+    let len = n.saturating_mul(kind.size());
+    let region = cur.region();
+    let span = region.sub_exact(cur.pos(), len).map_err(|_| {
+        Diagnostic::truncated(
+            Span::new(region.source, region.offset.saturating_add(cur.pos()), len),
+            cur.remaining(),
         )
-        .await;
+    })?;
+    let mut node = Node::new(name).span(span).summary(match kind {
+        ShpArray::Parts(_) | ShpArray::PartTypes => fmt::plural(n, "part"),
+        ShpArray::Points => fmt::plural(n, "point"),
+        ShpArray::Z | ShpArray::M => fmt::plural(n, "value"),
+    });
+    if n > 0 {
+        node = node.lazy(shp_list, (span, kind));
+    }
+    cx.emit(node);
+    cur.skip(len);
+    Ok(())
+}
+
+/// Lists the elements of a coordinate array, a batch per read.
+async fn shp_list(cx: Cx, (span, kind): (Span, ShpArray)) -> Result<()> {
+    let size = kind.size();
+    let n = span.len.checked_div(size).unwrap_or(0);
+    cx.set_count(Count::Exact(n));
+    let mut i = cx.resume::<u64>().unwrap_or(0);
+    while i < n {
+        let batch = SHP_BATCH.min(n.saturating_sub(i));
+        // One element more, for the end of the batch's last part.
+        let extra = u64::from(matches!(kind, ShpArray::Parts(_)) && i.saturating_add(batch) < n);
+        let data = cx
+            .read(span.sub(
+                i.saturating_mul(size),
+                batch.saturating_add(extra).saturating_mul(size),
+            ))
+            .await?;
+        for k in 0..batch {
+            let at = i;
+            cx.mark(move || at);
+            let off = crate::bytes::to_usize(k.saturating_mul(size));
+            let espan = span.sub(i.saturating_mul(size), size);
+            let f =
+                |o: usize| crate::bytes::f64_le(&data, off.saturating_add(o)).unwrap_or(f64::NAN);
+            let node =
+                match kind {
+                    ShpArray::Points => Node::new(format!("Point {i}"))
+                        .span(espan)
+                        .summary(format!("({}, {})", num(f(0)), num(f(8)))),
+                    ShpArray::Z => Node::new(format!("Z {i}"))
+                        .span(espan)
+                        .value(Value::Float(f(0))),
+                    ShpArray::M => {
+                        let v = f(0);
+                        let node = Node::new(format!("M {i}"))
+                            .span(espan)
+                            .value(Value::Float(v));
+                        if v < SHP_NO_DATA {
+                            node.summary("no data")
+                        } else {
+                            node
+                        }
+                    }
+                    ShpArray::Parts(points) => {
+                        let first = u32_le(&data, off).map_or(0, u64::from);
+                        let end = if extra == 0 && k.saturating_add(1) == batch {
+                            points
+                        } else {
+                            u32_le(&data, off.saturating_add(4)).map_or(points, u64::from)
+                        };
+                        Node::new(format!("Part {i}"))
+                            .span(espan)
+                            .value(uint(first, 32))
+                            .summary(format!(
+                                "points {first}..{end}, {}",
+                                fmt::count(end.saturating_sub(first), "point", "points")
+                            ))
+                    }
+                    ShpArray::PartTypes => {
+                        let t = u32_le(&data, off).unwrap_or(u32::MAX);
+                        Node::new(format!("Part {i} type"))
+                            .span(espan)
+                            .value(Value::Enum {
+                                raw: t.into(),
+                                bits: 32,
+                                name: lookup(MULTIPATCH_PARTS, t.into()),
+                            })
+                    }
+                };
+            cx.push(node).await;
+            i = i.saturating_add(1);
+        }
+    }
+    Ok(())
+}
+
+/// A record's header and geometry (ESRI Shapefile Technical Description,
+/// 1998, pp. 5-21).
+async fn shp_record(cx: Cx, (record, content): (Span, Span)) -> Result<()> {
+    cx.emit(ShpRecordHeader::node("Record header", record.sub(0, 8), BE));
+    let mut cur = Cursor::new(&cx, content, LE);
+    let span = cur.span(4);
+    let kind = cur.u32().await?;
+    cx.emit(Node::new("Shape type").span(span).value(Value::Enum {
+        raw: kind.into(),
+        bits: 32,
+        name: lookup(SHAPE_TYPES, kind.into()),
+    }));
+    let Some(base) = shape_base(kind) else {
+        return Err(Diagnostic::unsupported(format!("shape type {kind}")).at(span));
+    };
+    let z = shape_has_z(kind);
+    let m = shape_has_m(kind);
+    match base {
+        0 => {}
+        1 => {
+            shp_f64(&cx, &mut cur, "X").await?;
+            shp_f64(&cx, &mut cur, "Y").await?;
+            if z {
+                shp_f64(&cx, &mut cur, "Z").await?;
+            }
+            // M is optional in PointZ.
+            if m || (z && cur.remaining() >= 8) {
+                let span = cur.span(8);
+                let v = f64::from_bits(cur.u64().await?);
+                let node = Node::new("M").span(span).value(Value::Float(v));
+                cx.emit(if v < SHP_NO_DATA {
+                    node.summary("no data")
+                } else {
+                    node
+                });
+            }
+        }
+        _ => {
+            let span = cur.span(32);
+            let x_min = f64::from_bits(cur.u64().await?);
+            let y_min = f64::from_bits(cur.u64().await?);
+            let x_max = f64::from_bits(cur.u64().await?);
+            let y_max = f64::from_bits(cur.u64().await?);
+            cx.emit(Node::new("Box").span(span).summary(format!(
+                "x {}..{}, y {}..{}",
+                num(x_min),
+                num(x_max),
+                num(y_min),
+                num(y_max)
+            )));
+            let parts = if base == 8 {
+                0
+            } else {
+                shp_count(&cx, &mut cur, "Number of parts").await?
+            };
+            let points = shp_count(&cx, &mut cur, "Number of points").await?;
+            if base != 8 {
+                shp_array(&cx, &mut cur, "Parts", parts, ShpArray::Parts(points))?;
+            }
+            if base == 31 {
+                shp_array(&cx, &mut cur, "Part types", parts, ShpArray::PartTypes)?;
+            }
+            shp_array(&cx, &mut cur, "Points", points, ShpArray::Points)?;
+            if z {
+                shp_range(&cx, &mut cur, "Z range", false).await?;
+                shp_array(&cx, &mut cur, "Z values", points, ShpArray::Z)?;
+            }
+            // M is optional after Z.
+            if m || (z && !cur.at_end()) {
+                shp_range(&cx, &mut cur, "M range", true).await?;
+                shp_array(&cx, &mut cur, "M values", points, ShpArray::M)?;
+            }
+        }
+    }
+    if !cur.at_end() {
+        cx.emit(
+            Node::new("Unused")
+                .span(content.tail(cur.pos()))
+                .diag(Diagnostic::warning("bytes after the shape")),
+        );
     }
     Ok(())
 }
@@ -271,10 +600,22 @@ fn dbf_probe(h: &Head<'_>) -> bool {
 declare_format!(pub DBF = "dbf", "dBase table", ["dbf"], "application/x-dbf",
     Probe::Custom(dbf_probe), dbf);
 
+/// The last-update year: dBase counts from 1900 (126 is 2026), Visual
+/// FoxPro and Python's `dbf` for VFP tables store the year modulo 100 (26).
+fn dbf_year(y: u8) -> u16 {
+    if y < 80 {
+        2000u16.saturating_add(y.into())
+    } else {
+        1900u16.saturating_add(y.into())
+    }
+}
+
 record! {
     pub struct DbfHeader {
         version: u8 "Version" .enumeration(DBF_VERSIONS),
-        year: u8 "Last update: year (since 1900)",
+        year: u8 "Last update: year"
+            .desc("Years since 1900 as dBase, shapelib and GDAL write it; Visual FoxPro writes the year modulo 100, so values below 80 are read as 20xx (as dbfread does)")
+            .with(|&y, node| node.summary(dbf_year(y).to_string())),
         month: u8 "Last update: month",
         day: u8 "Last update: day",
         records: u32 "Records",

@@ -1082,14 +1082,22 @@ impl Reader<'_> {
     fn date(&mut self, name: &'static str) -> Option<Node> {
         let (day, a) = self.u32()?;
         let (ms, _) = self.u32()?;
-        Some(
-            Node::new(name)
-                .span(Span::new(a.source, a.offset, 8))
-                .value(Value::Timestamp {
-                    unix_seconds: julian(day, ms),
-                })
-                .desc("Julian day and milliseconds"),
-        )
+        let node = Node::new(name)
+            .span(Span::new(a.source, a.offset, 8))
+            .desc("Julian day and milliseconds");
+        // Day 0 (4713 BC) means the date was never set (LibreDWG writes it).
+        Some(if day == 0 && ms == 0 {
+            node.value(Value::UInt {
+                value: 0,
+                bits: 32,
+                radix: crate::value::Radix::Dec,
+            })
+            .summary("not set")
+        } else {
+            node.value(Value::Timestamp {
+                unix_seconds: julian(day, ms),
+            })
+        })
     }
 
     fn bytes(&mut self, name: &'static str, n: usize) -> Option<Node> {
