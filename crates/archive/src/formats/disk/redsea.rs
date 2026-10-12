@@ -34,7 +34,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::disk::{content_node, size, trailing_node};
-use crate::formats::util::civil::civil_to_unix;
+use crate::formats::util::civil::{self, templeos_cdate_raw};
 use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe, embedded_as};
 use crate::node::Node;
@@ -142,78 +142,13 @@ const ATTR_DIR: u16 = 0x10;
 const ATTR_DELETED: u16 = 0x100;
 const ATTR_COMPRESSED: u16 = 0x400;
 
-/// Year-start days as `YearStartDate` in `Kernel/KDate.HC` counts them:
-/// days since 1 January of year 0, which has 365 days, with the Gregorian
-/// leap years and TempleOS's own skipped leap day every 4000 years.
-fn year_start(year: i64) -> i64 {
-    let y1 = year.saturating_sub(1);
-    year.saturating_mul(365)
-        .saturating_add(y1 / 4)
-        .saturating_sub(y1 / 100)
-        .saturating_add(y1 / 400)
-        .saturating_sub(y1 / 4000)
-}
-
-const MONTH_STARTS: [i64; 13] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365];
-const MONTH_STARTS_LEAP: [i64; 13] = [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366];
-
-/// A `CDate` (days since year 0, and the time of day in units of 2^-32
-/// day) as Unix seconds of the date and time TempleOS shows for it
-/// (`Date2Struct`). TempleOS keeps local time.
-pub fn cdate_to_unix(time: u32, date: i32) -> i64 {
-    let date = i64::from(date);
-    let mut year = date.saturating_add(1).saturating_mul(100_000) / 36_524_225;
-    let mut start = year_start(year);
-    for _ in 0..8 {
-        if start <= date {
-            break;
-        }
-        year = year.saturating_sub(1);
-        start = year_start(year);
-    }
-    let mut day = date.saturating_sub(start);
-    let table = if year_start(year.saturating_add(1)).saturating_sub(start) == 365 {
-        &MONTH_STARTS
-    } else {
-        &MONTH_STARTS_LEAP
-    };
-    let mut month = 0usize;
-    while month < 11
-        && table
-            .get(month.saturating_add(1))
-            .is_some_and(|&s| day >= s)
-    {
-        month = month.saturating_add(1);
-    }
-    day = day.saturating_sub(table.get(month).copied().unwrap_or(0));
-    // Ten-thousandths of a second, as `Date2Struct` rounds them.
-    let k = (421_875u64.saturating_mul(time.into()) >> 21).saturating_add(1);
-    let secs = k / 10_000;
-    let hour = u32::try_from(secs / 3600).unwrap_or(0);
-    let min = u32::try_from(secs / 60 % 60).unwrap_or(0);
-    let sec = u32::try_from(secs % 60).unwrap_or(0);
-    let unix = civil_to_unix(
-        year,
-        u32::try_from(month.saturating_add(1)).unwrap_or(1),
-        1,
-        hour,
-        min,
-        sec,
-    );
-    // Days past the first of the month (a day number may run past the
-    // month's end in a damaged entry; it simply carries on).
-    unix.saturating_add(day.saturating_mul(86_400))
-}
-
 /// Decorator for a `CDate` (`time` in the low 32 bits, `date` above).
 fn cdate(v: &u64, node: Node) -> Node {
     if *v == 0 {
         return node.summary("not set");
     }
-    let time = u32::try_from(v & 0xffff_ffff).unwrap_or(0);
-    let date = i32::from_le_bytes(u32::try_from(v >> 32).unwrap_or(0).to_le_bytes());
     node.value(Value::Timestamp {
-        unix_seconds: cdate_to_unix(time, date),
+        unix_seconds: templeos_cdate_raw(*v),
     })
     .desc("CDate: days since year 0 (high half), time of day in 2^-32 days (low half); local time")
 }
@@ -504,12 +439,7 @@ fn entry_node(fs: &FsRef, e: &Entry, at: Span, ancestors: &Arc<Vec<u64>>) -> Nod
     let when = if e.datetime == 0 {
         String::new()
     } else {
-        let time = u32::try_from(e.datetime & 0xffff_ffff).unwrap_or(0);
-        let date = i32::from_le_bytes(u32::try_from(e.datetime >> 32).unwrap_or(0).to_le_bytes());
-        format!(
-            ", {}",
-            crate::formats::util::civil::date(cdate_to_unix(time, date))
-        )
+        format!(", {}", civil::date(templeos_cdate_raw(e.datetime)))
     };
     let node = Node::new(e.name.clone()).span(at);
     if e.attr & ATTR_DELETED != 0 {
