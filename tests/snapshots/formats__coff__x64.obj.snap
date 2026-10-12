@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ x64.obj — COFF object, AMD64, 11 sections, 35 symbols, directives: /DEFAULTLIB:user32.lib  [0x0+0x639]
   ▾ File Header  [0x0+0x14]
@@ -410,9 +410,10 @@ expression: "common::explore(&name, &data)"
         NumberOfAuxSymbols: 1  [0x59f+0x1]
         File name: "obj.c"  [0x5a0+0x12]
   ▾ String Table  [0x5b2+0x87]
-      0x0: "shared_answer"  [0x5b6+0xe]
-      0xe: "external_counter"  [0x5c4+0x11]
-      0x1f: ".llvm_addrsig"  [0x5d5+0xe]
-      0x2d: "__imp_MessageBoxA"  [0x5e3+0x12]
-      0x3f: "??_C@_09CCFJPLCJ@fillyfoal?$AA@"  [0x5f5+0x20]
-      0x5f: "??_C@_0M@GPKKIJEG@relocate?5me?$AA@"  [0x615+0x24]
+      Size: 135  [0x5b2+0x4]
+      0x4: "shared_answer"  [0x5b6+0xe]
+      0x12: "external_counter"  [0x5c4+0x11]
+      0x23: ".llvm_addrsig"  [0x5d5+0xe]
+      0x31: "__imp_MessageBoxA"  [0x5e3+0x12]
+      0x43: "??_C@_09CCFJPLCJ@fillyfoal?$AA@"  [0x5f5+0x20]
+      0x63: "??_C@_0M@GPKKIJEG@relocate?5me?$AA@"  [0x615+0x24]

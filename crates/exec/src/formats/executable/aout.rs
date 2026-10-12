@@ -295,7 +295,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("String Table")
                 .span(strings)
-                .lazy(crate::formats::util::binutil::cstrings, strings.tail(4)),
+                .lazy(super::coff::string_table, (strings, e)),
         );
     }
     Ok(())

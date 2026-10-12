@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ i386-mingw.obj — COFF object, I386, 8 sections, 28 symbols  [0x0+0x4e0]
   ▾ File Header  [0x0+0x14]
@@ -319,8 +319,9 @@ expression: "common::explore(&name, &data)"
         NumberOfAuxSymbols: 1  [0x461+0x1]
         File name: "obj.c"  [0x462+0x12]
   ▾ String Table  [0x474+0x6c]
-      0x0: "_shared_answer"  [0x478+0xf]
-      0xf: ".data$shared_answer"  [0x487+0x14]
-      0x23: ".rdata$.refptr._external_counter"  [0x49b+0x21]
-      0x44: ".llvm_addrsig"  [0x4bc+0xe]
-      0x52: "__imp__MessageBoxA@16"  [0x4ca+0x16]
+      Size: 108  [0x474+0x4]
+      0x4: "_shared_answer"  [0x478+0xf]
+      0x13: ".data$shared_answer"  [0x487+0x14]
+      0x27: ".rdata$.refptr._external_counter"  [0x49b+0x21]
+      0x48: ".llvm_addrsig"  [0x4bc+0xe]
+      0x56: "__imp__MessageBoxA@16"  [0x4ca+0x16]
