@@ -343,7 +343,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut by_offset = BTreeMap::new();
     let mut n = 0u32;
     for section in &sections {
-        for &(num, loc) in section.all_entries() {
+        for &(num, loc) in section.effective_entries() {
             n = n.wrapping_add(1);
             if n.is_multiple_of(1024) {
                 cx.checkpoint().await;
