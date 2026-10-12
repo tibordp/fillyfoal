@@ -951,7 +951,6 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 2048  [#6:0x160+0x8]
             Data size: 2048 — 2 KiB  [#6:0x168+0x8]
             Initialized size: 2048  [#6:0x170+0x8]
-            Compressed size: 13511017930227748  [#6:0x178+0x8]
             Name: "$I30"  [#6:0x178+0x8]
           Run 0 — VCN 0: 4 clusters at LCN 88  [#6:0x180+0x3] → 0xb000+0x800
         ▾ Content — 2 KiB  [0xb000+0x800]
@@ -2238,7 +2237,6 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 2048  [#6:0x160+0x8]
             Data size: 2048 — 2 KiB  [#6:0x168+0x8]
             Initialized size: 2048  [#6:0x170+0x8]
-            Compressed size: 13511017930227748  [#6:0x178+0x8]
             Name: "$I30"  [#6:0x178+0x8]
           Run 0 — VCN 0: 4 clusters at LCN 88  [#6:0x180+0x3] → 0xb000+0x800
         ▾ Content — 2 KiB  [0xb000+0x800]
