@@ -241,10 +241,11 @@ def leica(at):
     # the Exif TIFF header.
     e = "<"
     head = b"LEICA\0\x08\0"
+    # Tags of ExifTool's Leica5 table (which it uses for the Q).
     entries = [
-        (0x0300, "A", b"Leica Summilux 1:1.7/28 ASPH.\0"),
-        (0x0301, "L", [3]),
-        (0x0304, "L", [42]),
+        (0x0305, "L", [4321]),
+        (0x0407, "A", b"L1000123.JPG\0"),
+        (0x0412, "A", b"Standard\0"),
     ]
     return head + ifd(e, at + len(head), entries)[0]
 
@@ -289,7 +290,6 @@ def leica_m246(at):
         (0x0300, "U", list(JPEG)),
         (0x0303, "A", b"Summicron-M 1:2/50\0"),
         (0x0304, "L", [3000]),
-        (0x0320, "R", [(1, 125)]),
     ]
     return head + ifd(e, at + len(head), entries, base=-TIFF_IN_JPEG)[0]
 

@@ -32,6 +32,16 @@ expression: "common::explore(&display_name(&path), &data)"
         /NumBlock: 1  [0x455+0xb]
         /RoundtripStreamType: 1  [0x461+0x16]
         /RoundtripVersion: 24  [0x478+0x14]
+  ▾ Illustrator artwork
+      Native data — 1 block, 133 bytes  [0x5a5+0x85]
+      Marker: "%AI12_CompressedData"  [0x5a5+0x14]
+    ▾ Artwork — Adobe Illustrator artwork (PostScript) (Adobe Illustrator(R) 24.0)  [0x5b9+0x71]
+      ▾ Header  [#1:0x0+0x44]
+          Version: "%!PS-Adobe-3.0"  [#1:0x0+0xe]
+          Creator: "Adobe Illustrator(R) 24.0"  [#1:0x1a+0x19]
+          AI9_DataStream  [#1:0x34+0xf]
+      ▾ Code  [#1:0x44+0x37]
+          Line 4: "fillyfoal placeholder for Illustrator's native artwork"  [#1:0x44+0x36]
   ▾ Trailer — 2 entries  [0x70e+0x22]
       /Size: 10  [0x719+0x8]
       /Root: "1 0 R"  [0x722+0xb] → 0xf+0x0

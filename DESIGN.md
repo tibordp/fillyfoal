@@ -76,8 +76,9 @@ exploration pays for additional work only as needed.
     XPRESS (plain, Huffman) and LZNT1,
     PKWARE implode and DCL implode, the LHA/ARJ/ZOO/`COMPRESS.EXE` LZSS and
     LZH family (`-lh1-`, `-lh4-`..`-lh7-`, `-lzs-`, `-lz5-`, ARJ 1-4, ZOO LZW,
-    SZDD, KWAJ), PSARC blocks, ACE 1.0/2.0 (acefile as oracle), the StuffIt
-    methods (RLE90, LZW, Huffman, LZAH, 13, Arsenic; no oracle), ADC;
+    SZDD, KWAJ, UEFI EFI/Tiano), PSARC blocks, ACE 1.0/2.0 (acefile as
+    oracle), the StuffIt methods (RLE90, LZW, Huffman, LZAH, 13, Arsenic; no
+    oracle), ADC;
   - format-specific: compressed RTF (LZFu), Guitar Pro 6 BCFZ, Heatshrink and
     MeatPack (Prusa binary G-code), DjVu BZZ, the DWG R2004+ LZ77 variant,
     SPSS bytecode and SAS7BDAT RLE/RDC row compression, Cap'n Proto packing,

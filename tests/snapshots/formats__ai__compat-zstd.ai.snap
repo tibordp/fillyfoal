@@ -1,0 +1,353 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ compat-zstd.ai — Adobe Illustrator artwork; PDF 1.6, 1 page  [0x0+0x7ac]
+    Header: "1.6"  [0x0+0x8]
+    Binary marker: e2 e3 cf d3  |....|  [0x9+0x5]
+  ▾ Illustrator data — 2 entries  [0x3bc+0x36]
+      /LastModified: "D:20260101000000Z"  [0x3bf+0x21]
+    ▾ /Private: "7 0 R" — 8 entries  [0x3e1+0xe] → 0x3fa+0x0
+      ▾ /AIMetaData: "8 0 R" — stream, 1 entry, 191 bytes  [0x405+0x11] → 0x4ae+0x0
+          /Length: 191  [0x4b9+0xb]
+        ▾ Stream data — Adobe Illustrator artwork (PostScript): compat-zstd.ai, 200×100 pt (Adobe Illustrator(R) 26.0)  [0x4cf+0xbf]
+          ▾ Header  [0x4cf+0xbf]
+              Version: "%!PS-Adobe-3.0 "  [0x4cf+0xf]
+              Creator: "Adobe Illustrator(R) 26.0"  [0x4ea+0x19]
+              AI8_CreatorVersion: "26.0.0"  [0x51a+0x6]
+              For: "(fillyfoal) ()"  [0x528+0xe]
+              Title: "(compat-zstd.ai)"  [0x540+0x10]
+              CreationDate: "1/1/2026 12:00 AM"  [0x561+0x11]
+              BoundingBox: "0 0 200 100" — 200×100 pt at (0, 0)  [0x582+0xb]
+        ▾ Operators
+      ▾ /AIPrivateData1: "9 0 R" — stream, 1 entry, 69 bytes  [0x417+0x15] → 0x5a0+0x0
+          /Length: 69  [0x5ab+0xa]
+        ▾ Stream data — 69 bytes  [0x5c0+0x45]
+            Data  [0x5c0+0x45]
+        ▾ Operators
+            �����m  [0x5fd+0x8]
+              ! warning: unknown operator
+      ▾ /AIPrivateData2: "10 0 R" — stream, 1 entry, 68 bytes  [0x42d+0x16] → 0x617+0x0
+          /Length: 68  [0x623+0xa]
+        ▾ Stream data — 68 bytes  [0x638+0x44]
+            Data  [0x638+0x44]
+        ▾ Operators
+            ! malformed: invalid character in hex string [0x63a+0x1]
+        /ContainerVersion: 12  [0x444+0x14]
+        /CreatorVersion: 26  [0x459+0x12]
+        /NumBlock: 2  [0x46c+0xb]
+        /RoundtripStreamType: 1  [0x478+0x16]
+        /RoundtripVersion: 26  [0x48f+0x14]
+  ▾ Illustrator artwork
+      Native data — 2 blocks, 137 bytes  [#1:0x0+0x89]
+      Marker: "%AI24_ZStandard_Data"  [#1:0x0+0x14]
+    ▾ Artwork — Adobe Illustrator artwork (PostScript) (Adobe Illustrator(R) 24.0)  [#1:0x14+0x75]
+      ▾ Header  [#2:0x0+0x44]
+          Version: "%!PS-Adobe-3.0"  [#2:0x0+0xe]
+          Creator: "Adobe Illustrator(R) 24.0"  [#2:0x1a+0x19]
+          AI9_DataStream  [#2:0x34+0xf]
+      ▾ Code  [#2:0x44+0x1a8]
+          Line 4: "fillyfoal placeholder for Illustrator's native artwork"  [#2:0x44+0x36]
+          Line 5: "%!PS-Adobe-3.0"  [#2:0x7b+0xe]
+          Line 6: "%%Creator: Adobe Illustrator(R) 24.0"  [#2:0x8a+0x24]
+          Line 7: "%AI9_DataStream"  [#2:0xaf+0xf]
+          Line 8: "fillyfoal placeholder for Illustrator's native artwork"  [#2:0xbf+0x36]
+          Line 9: "%!PS-Adobe-3.0"  [#2:0xf6+0xe]
+          Line 10: "%%Creator: Adobe Illustrator(R) 24.0"  [#2:0x105+0x24]
+          Line 11: "%AI9_DataStream"  [#2:0x12a+0xf]
+          Line 12: "fillyfoal placeholder for Illustrator's native artwork"  [#2:0x13a+0x36]
+          Line 13: "%!PS-Adobe-3.0"  [#2:0x171+0xe]
+          Line 14: "%%Creator: Adobe Illustrator(R) 24.0"  [#2:0x180+0x24]
+          Line 15: "%AI9_DataStream"  [#2:0x1a5+0xf]
+          Line 16: "fillyfoal placeholder for Illustrator's native artwork"  [#2:0x1b5+0x36]
+  ▾ Trailer — 2 entries  [0x774+0x22]
+      /Size: 11  [0x77f+0x8]
+      /Root: "1 0 R"  [0x788+0xb] → 0xf+0x0
+  ▾ Document Catalog: "1 0 R" — /Catalog, 3 entries  [0x78e+0x5] → 0xf+0x0
+      /Type: "/Catalog"  [0x1a+0xe]
+    ▾ /Pages: "3 0 R" — /Pages, 3 entries  [0x29+0xc] → 0x291+0x0
+        /Type: "/Pages"  [0x29c+0xc]
+      ▾ /Kids — [4 0 R]  [0x2a9+0xd]
+        ▾ [0]: "4 0 R" — /Page, 6 entries  [0x2b0+0x5] → 0x2ca+0x0
+            /Type: "/Page"  [0x2d5+0xb]
+            /Parent: "3 0 R"  [0x2e1+0xd] → 0x291+0x0
+          ▾ /MediaBox — [0 0 200 100]  [0x2ef+0x17]
+              [0]: 0  [0x2fa+0x1]
+              [1]: 0  [0x2fc+0x1]
+              [2]: 200  [0x2fe+0x3]
+              [3]: 100  [0x302+0x3]
+          ▾ /Contents: "5 0 R" — stream, 1 entry, 27 bytes  [0x307+0xf] → 0x367+0x0
+              /Length: 27  [0x372+0xa]
+            ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x387+0x1b]
+                Encoding: "UTF-8"
+                Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+              ▾ Lines — 1 line  [0x387+0x1b]
+                  Line 1: "0 0 1 rg 20 20 160 60 re f"  [0x387+0x1a]
+            ▾ Operators
+                rg: "0 0 1" — set non-stroking RGB  [0x387+0x8]
+                re: "20 20 160 60" — rectangle  [0x390+0xf]
+                f — fill  [0x3a0+0x1]
+          ▾ /PieceInfo — 1 entry  [0x317+0x23]
+            ▾ /Illustrator: "6 0 R" — 2 entries  [0x325+0x12] → 0x3b4+0x0
+                /LastModified: "D:20260101000000Z"  [0x3bf+0x21]
+              ▾ /Private: "7 0 R" — 8 entries  [0x3e1+0xe] → 0x3fa+0x0
+                ▾ /AIMetaData: "8 0 R" — stream, 1 entry, 191 bytes  [0x405+0x11] → 0x4ae+0x0
+                    /Length: 191  [0x4b9+0xb]
+                  ▾ Stream data — Adobe Illustrator artwork (PostScript): compat-zstd.ai, 200×100 pt (Adobe Illustrator(R) 26.0)  [0x4cf+0xbf]
+                    ▾ Header  [0x4cf+0xbf]
+                        Version: "%!PS-Adobe-3.0 "  [0x4cf+0xf]
+                        Creator: "Adobe Illustrator(R) 26.0"  [0x4ea+0x19]
+                        AI8_CreatorVersion: "26.0.0"  [0x51a+0x6]
+                        For: "(fillyfoal) ()"  [0x528+0xe]
+                        Title: "(compat-zstd.ai)"  [0x540+0x10]
+                        CreationDate: "1/1/2026 12:00 AM"  [0x561+0x11]
+                        BoundingBox: "0 0 200 100" — 200×100 pt at (0, 0)  [0x582+0xb]
+                  ▾ Operators
+                ▾ /AIPrivateData1: "9 0 R" — stream, 1 entry, 69 bytes  [0x417+0x15] → 0x5a0+0x0
+                    /Length: 69  [0x5ab+0xa]
+                  ▾ Stream data — 69 bytes  [0x5c0+0x45]
+                      Data  [0x5c0+0x45]
+                  ▾ Operators
+                      �����m  [0x5fd+0x8]
+                        ! warning: unknown operator
+                ▾ /AIPrivateData2: "10 0 R" — stream, 1 entry, 68 bytes  [0x42d+0x16] → 0x617+0x0
+                    /Length: 68  [0x623+0xa]
+                  ▾ Stream data — 68 bytes  [0x638+0x44]
+                      Data  [0x638+0x44]
+                  ▾ Operators
+                      ! malformed: invalid character in hex string [0x63a+0x1]
+                  /ContainerVersion: 12  [0x444+0x14]
+                  /CreatorVersion: 26  [0x459+0x12]
+                  /NumBlock: 2  [0x46c+0xb]
+                  /RoundtripStreamType: 1  [0x478+0x16]
+                  /RoundtripVersion: 26  [0x48f+0x14]
+            /LastModified: "D:20260101000000Z"  [0x33b+0x21]
+        /Count: 1  [0x2b7+0x8]
+    ▾ /Metadata: "2 0 R" — stream, XMP metadata, /Metadata /XML, 3 entries, 496 bytes  [0x36+0xf] → 0x50+0x0
+        /Type: "/Metadata"  [0x5b+0xf]
+        /Subtype: "/XML"  [0x6b+0xd]
+        /Length: 496  [0x79+0xb]
+      ▾ Stream data — XMP metadata, 2 properties: Adobe Illustrator 24.0 (fillyfoal placeholder)  [0x8f+0x1f0]
+        ▾ XMP Basic (xmp) — 1 property
+            xmp:CreatorTool: "Adobe Illustrator 24.0 (fillyfoal placeholder)"  [0x1bb+0x51]
+        ▾ illustrator — 1 property
+            illustrator:Type: "Document"  [0x210+0x2d]
+        ▾ XML — the packet as an XML tree  [0x8f+0x1f0]
+            ?xpacket: "begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\""  [0x8f+0x35]
+          ▾ x:xmpmeta — 1 element  [0xc5+0x1a6]
+              @xmlns:x: "adobe:ns:meta/"  [0xd9+0xe]
+            ▾ rdf:RDF — 1 element  [0xeb+0x173]
+                @xmlns:rdf: "http://www.w3.org/1999/02/22-rdf-syntax-ns#"  [0xff+0x2b]
+              ▾ rdf:Description — rdf:about="" (2 elements)  [0x12f+0x123]
+                  @rdf:about: ""  [0x14b+0x0]
+                  @xmlns:xmp: "http://ns.adobe.com/xap/1.0/"  [0x15c+0x1c]
+                  @xmlns:illustrator: "http://ns.adobe.com/illustrator/1.0/"  [0x191+0x24]
+                  xmp:CreatorTool: "Adobe Illustrator 24.0 (fillyfoal placeholder)"  [0x1bb+0x51]
+                  illustrator:Type: "Document"  [0x210+0x2d]
+            ?xpacket: "end=\"w\""  [0x26c+0x13]
+  ▾ Pages — 1 page
+    ▾ Page 1 — /Page, 6 entries  [0x2ca+0x9c]
+        /Type: "/Page"  [0x2d5+0xb]
+        /Parent: "3 0 R"  [0x2e1+0xd] → 0x291+0x0
+      ▾ /MediaBox — [0 0 200 100]  [0x2ef+0x17]
+          [0]: 0  [0x2fa+0x1]
+          [1]: 0  [0x2fc+0x1]
+          [2]: 200  [0x2fe+0x3]
+          [3]: 100  [0x302+0x3]
+      ▾ /Contents: "5 0 R" — stream, 1 entry, 27 bytes  [0x307+0xf] → 0x367+0x0
+          /Length: 27  [0x372+0xa]
+        ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x387+0x1b]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [0x387+0x1b]
+              Line 1: "0 0 1 rg 20 20 160 60 re f"  [0x387+0x1a]
+        ▾ Operators
+            rg: "0 0 1" — set non-stroking RGB  [0x387+0x8]
+            re: "20 20 160 60" — rectangle  [0x390+0xf]
+            f — fill  [0x3a0+0x1]
+      ▾ /PieceInfo — 1 entry  [0x317+0x23]
+        ▾ /Illustrator: "6 0 R" — 2 entries  [0x325+0x12] → 0x3b4+0x0
+            /LastModified: "D:20260101000000Z"  [0x3bf+0x21]
+          ▾ /Private: "7 0 R" — 8 entries  [0x3e1+0xe] → 0x3fa+0x0
+            ▾ /AIMetaData: "8 0 R" — stream, 1 entry, 191 bytes  [0x405+0x11] → 0x4ae+0x0
+                /Length: 191  [0x4b9+0xb]
+              ▾ Stream data — Adobe Illustrator artwork (PostScript): compat-zstd.ai, 200×100 pt (Adobe Illustrator(R) 26.0)  [0x4cf+0xbf]
+                ▾ Header  [0x4cf+0xbf]
+                    Version: "%!PS-Adobe-3.0 "  [0x4cf+0xf]
+                    Creator: "Adobe Illustrator(R) 26.0"  [0x4ea+0x19]
+                    AI8_CreatorVersion: "26.0.0"  [0x51a+0x6]
+                    For: "(fillyfoal) ()"  [0x528+0xe]
+                    Title: "(compat-zstd.ai)"  [0x540+0x10]
+                    CreationDate: "1/1/2026 12:00 AM"  [0x561+0x11]
+                    BoundingBox: "0 0 200 100" — 200×100 pt at (0, 0)  [0x582+0xb]
+              ▾ Operators
+            ▾ /AIPrivateData1: "9 0 R" — stream, 1 entry, 69 bytes  [0x417+0x15] → 0x5a0+0x0
+                /Length: 69  [0x5ab+0xa]
+              ▾ Stream data — 69 bytes  [0x5c0+0x45]
+                  Data  [0x5c0+0x45]
+              ▾ Operators
+                  �����m  [0x5fd+0x8]
+                    ! warning: unknown operator
+            ▾ /AIPrivateData2: "10 0 R" — stream, 1 entry, 68 bytes  [0x42d+0x16] → 0x617+0x0
+                /Length: 68  [0x623+0xa]
+              ▾ Stream data — 68 bytes  [0x638+0x44]
+                  Data  [0x638+0x44]
+              ▾ Operators
+                  ! malformed: invalid character in hex string [0x63a+0x1]
+              /ContainerVersion: 12  [0x444+0x14]
+              /CreatorVersion: 26  [0x459+0x12]
+              /NumBlock: 2  [0x46c+0xb]
+              /RoundtripStreamType: 1  [0x478+0x16]
+              /RoundtripVersion: 26  [0x48f+0x14]
+        /LastModified: "D:20260101000000Z"  [0x33b+0x21]
+  ▾ Objects — 11 entries
+      Object 0: 0 — free, next free object 0, generation 65535
+      Object 1 0: 0xf — /Catalog, 3 entries (in use, generation 0) → 0xf+0x40
+      Object 2 0: 0x50 — stream, XMP metadata, /Metadata /XML, 3 entries, 496 bytes (in use, generation 0) → 0x50+0x240
+      Object 3 0: 0x291 — /Pages, 3 entries (in use, generation 0) → 0x291+0x38
+      Object 4 0: 0x2ca — /Page, 6 entries (in use, generation 0) → 0x2ca+0x9c
+      Object 5 0: 0x367 — stream, 1 entry, 27 bytes (in use, generation 0) → 0x367+0x4c
+      Object 6 0: 0x3b4 — 2 entries (in use, generation 0) → 0x3b4+0x45
+      Object 7 0: 0x3fa — 8 entries (in use, generation 0) → 0x3fa+0xb3
+      Object 8 0: 0x4ae — stream, 1 entry, 191 bytes (in use, generation 0) → 0x4ae+0xf1
+      Object 9 0: 0x5a0 — stream, 1 entry, 69 bytes (in use, generation 0) → 0x5a0+0x76
+      Object 10 0: 0x617 — stream, 1 entry, 68 bytes (in use, generation 0) → 0x617+0x76
+  ▾ Revisions — 1 cross-reference section
+    ▾ Revision 1 — original: 10 objects, cross-reference table at 0x68e with 11 entries  [0x0+0x7ac]
+      ▾ Body — 10 objects  [0x0+0x68e]
+        ▾ Object 1 0 — /Catalog, 3 entries  [0xf+0x40]
+            Object header: "1 0 obj"  [0xf+0x8]
+            /Type: "/Catalog"  [0x1a+0xe]
+            /Pages: "3 0 R"  [0x29+0xc] → 0x291+0x0
+            /Metadata: "2 0 R"  [0x36+0xf] → 0x50+0x0
+            End keywords: "endobj"  [0x48+0x7]
+        ▾ Object 2 0 — stream, XMP metadata, /Metadata /XML, 3 entries, 496 bytes  [0x50+0x240]
+            Object header: "2 0 obj"  [0x50+0x8]
+            /Type: "/Metadata"  [0x5b+0xf]
+            /Subtype: "/XML"  [0x6b+0xd]
+            /Length: 496  [0x79+0xb]
+            Stream keyword: "stream"  [0x87+0x8]
+          ▾ Stream data — XMP metadata, 2 properties: Adobe Illustrator 24.0 (fillyfoal placeholder)  [0x8f+0x1f0]
+            ▾ XMP Basic (xmp) — 1 property
+                xmp:CreatorTool: "Adobe Illustrator 24.0 (fillyfoal placeholder)"  [0x1bb+0x51]
+            ▾ illustrator — 1 property
+                illustrator:Type: "Document"  [0x210+0x2d]
+            ▾ XML — the packet as an XML tree  [0x8f+0x1f0]
+                ?xpacket: "begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\""  [0x8f+0x35]
+              ▾ x:xmpmeta — 1 element  [0xc5+0x1a6]
+                  @xmlns:x: "adobe:ns:meta/"  [0xd9+0xe]
+                ▾ rdf:RDF — 1 element  [0xeb+0x173]
+                    @xmlns:rdf: "http://www.w3.org/1999/02/22-rdf-syntax-ns#"  [0xff+0x2b]
+                  ▾ rdf:Description — rdf:about="" (2 elements)  [0x12f+0x123]
+                      @rdf:about: ""  [0x14b+0x0]
+                      @xmlns:xmp: "http://ns.adobe.com/xap/1.0/"  [0x15c+0x1c]
+                      @xmlns:illustrator: "http://ns.adobe.com/illustrator/1.0/"  [0x191+0x24]
+                      xmp:CreatorTool: "Adobe Illustrator 24.0 (fillyfoal placeholder)"  [0x1bb+0x51]
+                      illustrator:Type: "Document"  [0x210+0x2d]
+                ?xpacket: "end=\"w\""  [0x26c+0x13]
+            End keywords: "endstream endobj"  [0x27f+0x11]
+        ▾ Object 3 0 — /Pages, 3 entries  [0x291+0x38]
+            Object header: "3 0 obj"  [0x291+0x8]
+            /Type: "/Pages"  [0x29c+0xc]
+          ▾ /Kids — [4 0 R]  [0x2a9+0xd]
+              [0]: "4 0 R"  [0x2b0+0x5] → 0x2ca+0x0
+            /Count: 1  [0x2b7+0x8]
+            End keywords: "endobj"  [0x2c2+0x7]
+        ▾ Object 4 0 — /Page, 6 entries  [0x2ca+0x9c]
+            Object header: "4 0 obj"  [0x2ca+0x8]
+            /Type: "/Page"  [0x2d5+0xb]
+            /Parent: "3 0 R"  [0x2e1+0xd] → 0x291+0x0
+          ▾ /MediaBox — [0 0 200 100]  [0x2ef+0x17]
+              [0]: 0  [0x2fa+0x1]
+              [1]: 0  [0x2fc+0x1]
+              [2]: 200  [0x2fe+0x3]
+              [3]: 100  [0x302+0x3]
+            /Contents: "5 0 R"  [0x307+0xf] → 0x367+0x0
+          ▾ /PieceInfo — 1 entry  [0x317+0x23]
+              /Illustrator: "6 0 R"  [0x325+0x12] → 0x3b4+0x0
+            /LastModified: "D:20260101000000Z"  [0x33b+0x21]
+            End keywords: "endobj"  [0x35f+0x7]
+        ▾ Object 5 0 — stream, 1 entry, 27 bytes  [0x367+0x4c]
+            Object header: "5 0 obj"  [0x367+0x8]
+            /Length: 27  [0x372+0xa]
+            Stream keyword: "stream"  [0x37f+0x8]
+          ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x387+0x1b]
+              Encoding: "UTF-8"
+              Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+            ▾ Lines — 1 line  [0x387+0x1b]
+                Line 1: "0 0 1 rg 20 20 160 60 re f"  [0x387+0x1a]
+          ▾ Operators
+              rg: "0 0 1" — set non-stroking RGB  [0x387+0x8]
+              re: "20 20 160 60" — rectangle  [0x390+0xf]
+              f — fill  [0x3a0+0x1]
+            End keywords: "endstream endobj"  [0x3a2+0x11]
+        ▾ Object 6 0 — 2 entries  [0x3b4+0x45]
+            Object header: "6 0 obj"  [0x3b4+0x8]
+            /LastModified: "D:20260101000000Z"  [0x3bf+0x21]
+            /Private: "7 0 R"  [0x3e1+0xe] → 0x3fa+0x0
+            End keywords: "endobj"  [0x3f2+0x7]
+        ▾ Object 7 0 — 8 entries  [0x3fa+0xb3]
+            Object header: "7 0 obj"  [0x3fa+0x8]
+            /AIMetaData: "8 0 R"  [0x405+0x11] → 0x4ae+0x0
+            /AIPrivateData1: "9 0 R"  [0x417+0x15] → 0x5a0+0x0
+            /AIPrivateData2: "10 0 R"  [0x42d+0x16] → 0x617+0x0
+            /ContainerVersion: 12  [0x444+0x14]
+            /CreatorVersion: 26  [0x459+0x12]
+            /NumBlock: 2  [0x46c+0xb]
+            /RoundtripStreamType: 1  [0x478+0x16]
+            /RoundtripVersion: 26  [0x48f+0x14]
+            End keywords: "endobj"  [0x4a6+0x7]
+        ▾ Object 8 0 — stream, 1 entry, 191 bytes  [0x4ae+0xf1]
+            Object header: "8 0 obj"  [0x4ae+0x8]
+            /Length: 191  [0x4b9+0xb]
+            Stream keyword: "stream"  [0x4c7+0x8]
+          ▾ Stream data — Adobe Illustrator artwork (PostScript): compat-zstd.ai, 200×100 pt (Adobe Illustrator(R) 26.0)  [0x4cf+0xbf]
+            ▾ Header  [0x4cf+0xbf]
+                Version: "%!PS-Adobe-3.0 "  [0x4cf+0xf]
+                Creator: "Adobe Illustrator(R) 26.0"  [0x4ea+0x19]
+                AI8_CreatorVersion: "26.0.0"  [0x51a+0x6]
+                For: "(fillyfoal) ()"  [0x528+0xe]
+                Title: "(compat-zstd.ai)"  [0x540+0x10]
+                CreationDate: "1/1/2026 12:00 AM"  [0x561+0x11]
+                BoundingBox: "0 0 200 100" — 200×100 pt at (0, 0)  [0x582+0xb]
+          ▾ Operators
+            End keywords: "endstream endobj"  [0x58e+0x11]
+        ▾ Object 9 0 — stream, 1 entry, 69 bytes  [0x5a0+0x76]
+            Object header: "9 0 obj"  [0x5a0+0x8]
+            /Length: 69  [0x5ab+0xa]
+            Stream keyword: "stream"  [0x5b8+0x8]
+          ▾ Stream data — 69 bytes  [0x5c0+0x45]
+              Data  [0x5c0+0x45]
+          ▾ Operators
+              �����m  [0x5fd+0x8]
+                ! warning: unknown operator
+            End keywords: "endstream endobj"  [0x605+0x11]
+        ▾ Object 10 0 — stream, 1 entry, 68 bytes  [0x617+0x76]
+            Object header: "10 0 obj"  [0x617+0x9]
+            /Length: 68  [0x623+0xa]
+            Stream keyword: "stream"  [0x630+0x8]
+          ▾ Stream data — 68 bytes  [0x638+0x44]
+              Data  [0x638+0x44]
+          ▾ Operators
+              ! malformed: invalid character in hex string [0x63a+0x1]
+            End keywords: "endstream endobj"  [0x67c+0x11]
+      ▾ Cross-reference table — 11 entries in 1 subsection  [0x68e+0xe6]
+          Keyword: "xref"  [0x68e+0x4]
+        ▾ Objects 0–10 — 11 entries  [0x693+0xe1]
+            Header: "0 11"  [0x693+0x4]
+            Object 0: 0 — free, next free object 0, generation 65535  [0x698+0x14]
+            Object 1: 0xf — in use, generation 0  [0x6ac+0x14] → 0xf+0x0
+            Object 2: 0x50 — in use, generation 0  [0x6c0+0x14] → 0x50+0x0
+            Object 3: 0x291 — in use, generation 0  [0x6d4+0x14] → 0x291+0x0
+            Object 4: 0x2ca — in use, generation 0  [0x6e8+0x14] → 0x2ca+0x0
+            Object 5: 0x367 — in use, generation 0  [0x6fc+0x14] → 0x367+0x0
+            Object 6: 0x3b4 — in use, generation 0  [0x710+0x14] → 0x3b4+0x0
+            Object 7: 0x3fa — in use, generation 0  [0x724+0x14] → 0x3fa+0x0
+            Object 8: 0x4ae — in use, generation 0  [0x738+0x14] → 0x4ae+0x0
+            Object 9: 0x5a0 — in use, generation 0  [0x74c+0x14] → 0x5a0+0x0
+            Object 10: 0x617 — in use, generation 0  [0x760+0x14] → 0x617+0x0
+      ▾ Trailer — 2 entries  [0x774+0x22]
+          /Size: 11  [0x77f+0x8]
+          /Root: "1 0 R"  [0x788+0xb] → 0xf+0x0
+        startxref: 0x68e  [0x797+0xe] → 0x68e+0x4
+        End-of-file marker: "%%EOF"  [0x7a6+0x5]

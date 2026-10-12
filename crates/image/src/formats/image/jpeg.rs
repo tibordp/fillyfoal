@@ -31,7 +31,7 @@ use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, flag, lookup};
+use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 
 use super::{ColorOrder, dims, palette, region};
 
@@ -2126,13 +2126,8 @@ async fn application(cx: &Cx, st: &SegState) -> Result<()> {
         }
         App::GainMap => {
             cx.emit(ident("Identifier"));
-            let block = cx.block(rest.sub(0, 4)).await?;
-            let mut f = Fields::emitting(cx, &block, BE);
-            f.u16("Minimum version").emit()?;
-            f.u16("Writer version").emit()?;
-            if rest.len > 4 {
-                cx.emit(Node::new("Metadata").span(rest.tail(4)));
-            }
+            let block = cx.block(rest).await?;
+            gain_map(&mut Fields::emitting(cx, &block, BE), &())?;
         }
         App::Jps => {
             cx.emit(ident("Identifier"));
@@ -2239,6 +2234,140 @@ fn jps(f: &mut Fields<'_>, _: &()) -> Result<()> {
         let n = f.u16("Comment block length").emit()?;
         f.ascii("Comment", n.into()).emit()?;
     }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// ISO 21496-1 gain map metadata
+
+const GAIN_MAP_FLAGS: FlagTable = &[
+    flag(0x80, "MULTI_CHANNEL"),
+    flag(0x40, "USE_BASE_COLOR_SPACE"),
+    flag(0x08, "COMMON_DENOMINATOR"),
+    flag(0x04, "BACKWARD_DIRECTION"),
+];
+
+/// The payload of the ISO 21496-1 APP2 segment (after its identifier), in
+/// libultrahdr's layout (`gainmapmetadata.cpp`): versions; then, in the gain
+/// map image (the primary image carries only the versions), flags, the
+/// headrooms and per channel the gain map's range, gamma and offsets, each a
+/// fraction (big-endian numerator and denominator, or numerators over one
+/// common denominator).
+fn gain_map(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    let min = f
+        .u16("Minimum version")
+        .desc("The lowest version a reader must support to use the metadata")
+        .emit()?;
+    f.u16("Writer version").emit()?;
+    if f.remaining() == 0 {
+        return Ok(());
+    }
+    if min != 0 {
+        f.node(
+            Node::new("Metadata")
+                .span(f.peek_span(f.remaining()))
+                .diag(Diagnostic::unsupported(format!("minimum version {min}"))),
+        );
+        return Ok(());
+    }
+    let flags = f.u8("Flags").hex().flags(GAIN_MAP_FLAGS).emit()?;
+    let channels: u8 = if flags & 0x80 != 0 { 3 } else { 1 };
+    let common = if flags & 0x08 != 0 {
+        Some(f.u32("Common denominator").emit()?)
+    } else {
+        None
+    };
+    fraction(
+        f,
+        "Base HDR headroom",
+        false,
+        common,
+        "log2 of the HDR capacity the base image is meant for",
+    )?;
+    fraction(
+        f,
+        "Alternate HDR headroom",
+        false,
+        common,
+        "log2 of the HDR capacity at which the gain map applies fully",
+    )?;
+    let per: u64 = if common.is_some() { 20 } else { 40 };
+    for c in 0..channels {
+        let name = match (channels, c) {
+            (1, _) => "All channels",
+            (_, 0) => "Red",
+            (_, 1) => "Green",
+            _ => "Blue",
+        };
+        let span = f.peek_span(per);
+        f.node(struct_node(
+            name,
+            span,
+            Endian::Big,
+            common,
+            gain_map_channel,
+        ));
+        f.skip(per);
+    }
+    if f.remaining() > 0 {
+        f.node(Node::new("Extra data").span(f.peek_span(f.remaining())));
+    }
+    Ok(())
+}
+
+fn gain_map_channel(f: &mut Fields<'_>, common: &Option<u32>) -> Result<()> {
+    let common = *common;
+    fraction(f, "Gain map min", true, common, "log2 of the smallest gain")?;
+    fraction(f, "Gain map max", true, common, "log2 of the largest gain")?;
+    fraction(f, "Gamma", false, common, "The gain map's encoding gamma")?;
+    fraction(
+        f,
+        "Base offset",
+        true,
+        common,
+        "Added to the base image before the gain",
+    )?;
+    fraction(
+        f,
+        "Alternate offset",
+        true,
+        common,
+        "Subtracted from the result after the gain",
+    )
+}
+
+/// A fraction of the gain map metadata: a numerator, then its denominator
+/// unless there is a common one; the value is the quotient.
+fn fraction(
+    f: &mut Fields<'_>,
+    name: &'static str,
+    signed: bool,
+    common: Option<u32>,
+    desc: &'static str,
+) -> Result<()> {
+    let len: u64 = if common.is_some() { 4 } else { 8 };
+    let span = f.peek_span(len);
+    let data = f.block().data.get(to_usize(f.pos())..).unwrap_or_default();
+    let (Some(raw), Some(d)) = (u32_be(data, 0), common.or_else(|| u32_be(data, 4))) else {
+        return Err(Diagnostic::truncated(span, to_u64(data.len())));
+    };
+    f.skip(len);
+    let n = if signed {
+        f64::from(i32::from_be_bytes(raw.to_be_bytes()))
+    } else {
+        f64::from(raw)
+    };
+    let text = if signed {
+        format!("{}/{d}", i32::from_be_bytes(raw.to_be_bytes()))
+    } else {
+        format!("{raw}/{d}")
+    };
+    let node = Node::new(name).span(span).desc(desc).summary(text);
+    f.node(if d == 0 {
+        node.diag(Diagnostic::malformed("zero denominator"))
+    } else {
+        node.value(Value::Float(n / f64::from(d)))
+    });
     Ok(())
 }
 

@@ -722,6 +722,8 @@ closely enough to credit:
   (public domain / MIT).
 - The static-Huffman LHA/ARJ layout (`crates/codec/src/codec/lzh.rs`): Haruhiko Okumura's
   ar002 (free).
+- UEFI and Tiano decompression (`Method::Uefi` in `crates/codec/src/codec/lzh.rs`): the
+  parameters of EDK2's `MdePkg/Library/BaseUefiDecompressLib` (BSD-2-Clause-Patent).
 - MBR and GPT partition-type names (`crates/archive/src/formats/disk/ptypes.rs`): util-linux
   `include/pt-mbr-partnames.h` and `pt-gpt-partnames.h` (public domain).
 - macOS keychain field naming (`crates/security/src/formats/security/keychain.rs`):
