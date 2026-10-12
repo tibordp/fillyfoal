@@ -337,7 +337,8 @@ pub async fn content(cx: &Cx, state: &StreamState, span: Span) -> Result<()> {
         (Context::Plain, "Workbook" | "Book") => super::biff::workbook(cx, input, span).await,
         (Context::Plain, "PowerPoint Document") => {
             let current = super::child_stream(cx, cfb, state.parent, "Current User").await;
-            super::ppt::document(cx, input, span, current).await
+            let pictures = super::child_stream(cx, cfb, state.parent, "Pictures").await;
+            super::ppt::document(cx, input, span, current, pictures).await
         }
         (Context::Plain, "Current User" | "Pictures" | "EscherStm" | "EscherDelayStm") => {
             super::officeart::walk(cx.clone(), (input, span, 0, None)).await

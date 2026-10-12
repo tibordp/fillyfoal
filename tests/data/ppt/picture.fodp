@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xlink="http://www.w3.org/1999/xlink" office:version="1.3" office:mimetype="application/vnd.oasis.opendocument.presentation">
+ <office:meta>
+  <dc:title>Fillyfoal picture</dc:title>
+  <meta:initial-creator>fillyfoal</meta:initial-creator>
+  <dc:creator>fillyfoal</dc:creator>
+  <meta:creation-date>2026-01-02T03:04:05</meta:creation-date>
+  <dc:date>2026-01-02T03:04:05</dc:date>
+ </office:meta>
+ <office:master-styles>
+  <style:master-page style:name="Default"/>
+ </office:master-styles>
+ <office:body>
+  <office:presentation>
+   <draw:page draw:name="Picture" draw:master-page-name="Default">
+    <draw:frame svg:x="4cm" svg:y="4cm" svg:width="4cm" svg:height="4cm"><draw:image><office:binary-data>iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAFklEQVR42mNgYPj/n4EBSiJYYCYOGQCeow/x8iYUDwAAAABJRU5ErkJggg==</office:binary-data></draw:image></draw:frame>
+   </draw:page>
+  </office:presentation>
+ </office:body>
+</office:document>

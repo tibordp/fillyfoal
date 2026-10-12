@@ -4,7 +4,8 @@
 //! `EncryptionInfo` and `EncryptedPackage` streams that wrap an encrypted
 //! Office Open XML package in a compound file.
 
-use crate::bytes::{to_u64, u16_le, u32_le};
+use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
+use crate::codec::crypto::office::Rc4Key;
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::Fields;
@@ -93,6 +94,32 @@ pub fn header(f: &mut Fields<'_>) -> Result<()> {
         standard(f)?;
     }
     Ok(())
+}
+
+/// The RC4 CryptoAPI key of an encryption header that starts with its
+/// version (MS-OFFCRYPTO 2.3.5.1: version 2.2, 3.2 or 4.2, flags, header
+/// size, EncryptionHeader, EncryptionVerifier) for `password`, and whether
+/// the verifier accepts it; `None` for another scheme or a short header.
+pub fn cryptoapi_key(info: &[u8], password: &str) -> Option<(Rc4Key, bool)> {
+    if !matches!((u16_le(info, 0)?, u16_le(info, 2)?), (2..=4, 2)) {
+        return None;
+    }
+    // Flags, header size, then the header: KeySize at offset 16.
+    let header = to_usize(u32_le(info, 8)?.into());
+    let bits = u32_le(info, 12usize.saturating_add(16))?;
+    let verifier = 12usize.checked_add(header)?;
+    let salt_len = to_usize(u32_le(info, verifier)?.into());
+    let salt_at = verifier.saturating_add(4);
+    let salt = info.get(salt_at..salt_at.checked_add(salt_len)?)?;
+    let v_at = salt_at.saturating_add(salt_len);
+    let encrypted_verifier = info.get(v_at..v_at.saturating_add(16))?;
+    let hash_len = to_usize(u32_le(info, v_at.saturating_add(16))?.into());
+    let h_at = v_at.saturating_add(20);
+    let hash = info.get(h_at..h_at.checked_add(hash_len)?)?;
+    let utf16: Vec<u8> = password.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    let key = Rc4Key::cryptoapi(&utf16, salt, bits);
+    let ok = key.verify(encrypted_verifier, hash);
+    Some((key, ok))
 }
 
 /// [`header`] as a layout, for a lazy node.

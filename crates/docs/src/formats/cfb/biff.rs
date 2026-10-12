@@ -3462,23 +3462,7 @@ fn filepass_key(data: &[u8], password: &str, biff8: bool) -> Option<(Codec, bool
             let ok = key.verify(data.get(22..38)?, data.get(38..54)?);
             (key, ok)
         }
-        (2..=4, 2) => {
-            // Flags, header size, then the header: KeySize at offset 16.
-            let header = to_usize(u32_le(data, 10)?.into());
-            let bits = u32_le(data, 14usize.saturating_add(16))?;
-            let verifier = 14usize.checked_add(header)?;
-            let salt_len = to_usize(u32_le(data, verifier)?.into());
-            let salt_at = verifier.saturating_add(4);
-            let salt = data.get(salt_at..salt_at.checked_add(salt_len)?)?;
-            let v_at = salt_at.saturating_add(salt_len);
-            let encrypted_verifier = data.get(v_at..v_at.saturating_add(16))?;
-            let hash_len = to_usize(u32_le(data, v_at.saturating_add(16))?.into());
-            let h_at = v_at.saturating_add(20);
-            let hash = data.get(h_at..h_at.checked_add(hash_len)?)?;
-            let key = Rc4Key::cryptoapi(&utf16, salt, bits);
-            let ok = key.verify(encrypted_verifier, hash);
-            (key, ok)
-        }
+        (2..=4, 2) => super::offcrypto::cryptoapi_key(data.get(2..)?, password)?,
         _ => return None,
     };
     Some((Codec::XlsRc4(key), ok))
