@@ -454,12 +454,16 @@ async fn members(cx: Cx, (region, start, layers): (Span, u64, bool)) -> Result<(
                 Ok(s) if !layers && !s.chars().any(char::is_control) => clip(s, 80),
                 _ => clip(&hex_string(&key), 80),
             };
+            // The member spans its key and its value.
+            let member = region.sub(k.start, v.end.saturating_sub(k.start));
             match v.kind {
                 Kind::Str { data, len } if layers => Node::new(name)
-                    .span(region.sub(v.start, v.end.saturating_sub(v.start)))
+                    .span(member)
                     .summary(format!("{} SHA-256 piece hashes", len / 32))
                     .lazy(pieces, (region.sub(data, len), 32)),
-                _ => item_node(&mut scan, region, name, &v, Some(&key)).await?,
+                _ => item_node(&mut scan, region, name, &v, Some(&key))
+                    .await?
+                    .span(member),
             }
         } else {
             let v = scan.item(pos).await?;

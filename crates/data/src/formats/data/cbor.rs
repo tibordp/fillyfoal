@@ -330,7 +330,10 @@ async fn members(cx: Cx, (region, start): (Span, u64)) -> Result<()> {
             } else {
                 key
             };
-            let node = item_node(&mut r, key_end, value_end, name).await?;
+            // The member spans its key and its value.
+            let node = item_node(&mut r, key_end, value_end, name)
+                .await?
+                .span(r.span(pos, value_end.saturating_sub(pos)));
             pos = value_end;
             node
         } else {
