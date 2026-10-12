@@ -920,7 +920,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
 
     let owned = probe_head(&cx, file).await?;
-    let label = match cx.registry().identify(&Head::from(&owned)) {
+    let (found, units) = cx.registry().identify_costed(&Head::from(&owned));
+    // Probes run synchronously over the head; charge them.
+    cx.charge(units).await;
+    let label = match found {
         Some(f) if f.name != "zip" => format!("{} ({} entries)", f.title, dir.entries),
         _ => format!("ZIP archive, {} entries", dir.entries),
     };

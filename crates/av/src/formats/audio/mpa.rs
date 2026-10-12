@@ -1326,12 +1326,14 @@ async fn behind_long_tag(cx: &Cx, file: Span) -> Result<Option<&'static Format>>
     }
     let rest = file.tail(len);
     let (data, tail) = crate::formats::head(cx, rest).await?;
-    let found = cx.registry().identify(&Head {
+    let (found, units) = cx.registry().identify_costed(&Head {
         data: &data,
         tail: &tail,
         len: rest.len,
         len_known: cx.len_known(rest.source),
     });
+    // Probes run synchronously over the head; charge them.
+    cx.charge(units).await;
     Ok(found.filter(|f| TAGGED.iter().any(|t| std::ptr::eq(*t, *f))))
 }
 
