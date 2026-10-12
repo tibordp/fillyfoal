@@ -843,3 +843,7 @@ closely enough to credit:
 - TempleOS formats (`crates/exec/src/formats/executable/templeos.rs` and the other TempleOS
   dissectors) and test fixtures from the TempleOS V5.03 distribution: Terry A. Davis's
   TempleOS (public domain).
+- TempleOS formats (DolDoc, HolyC, sprites, GR, the AutoComplete dictionary in
+  `crates/docs/src/formats/documents/doldoc.rs`, `templeos_ac.rs` and
+  `crates/image/src/formats/image/templeos.rs`): ported from Terry A. Davis's TempleOS V5.03
+  source (public domain).

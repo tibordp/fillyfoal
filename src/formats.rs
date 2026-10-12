@@ -367,6 +367,10 @@ pub static FORMATS: &[&Format] = &[
     &image::pcx::FORMAT,
     #[cfg(feature = "image")]
     &image::wbmp::FORMAT,
+    #[cfg(feature = "image")]
+    &image::templeos::GR,
+    #[cfg(feature = "image")]
+    &image::templeos::SPRITE,
     // -- end images --
 
     // -- audio & video --
@@ -864,6 +868,15 @@ pub static FORMATS: &[&Format] = &[
     &data::wire::flatbuffers::FORMAT,
     #[cfg(feature = "data")]
     &data::wire::capnp::PACKED,
+    // TempleOS DolDoc text and HolyC source, before the generic text probes.
+    #[cfg(feature = "docs")]
+    &documents::doldoc::HOLYC,
+    #[cfg(feature = "docs")]
+    &documents::doldoc::DOLDOC,
+    #[cfg(feature = "docs")]
+    &documents::templeos_ac::WORDS,
+    #[cfg(feature = "docs")]
+    &documents::templeos_ac::DEFS,
     // -- end documents --
 
     // -- disk images & filesystems --

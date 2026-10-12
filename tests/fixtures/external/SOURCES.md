@@ -1310,3 +1310,22 @@ Public domain (TempleOS). Extracted from its RedSea file system by
 | --- | --- | --- |
 | `templeos-kernel/0000Kernel.BIN.C` | TempleOS V5.03 HolyC compiler (`Cmp` of `Kernel/Kernel.PRJ`) | `/0000Boot/0000Kernel.BIN.C` in the ISO, stored contiguous and uncompressed; SHA-256 `5ee34ca1bcda574028d15c414a02541aa3d55d6981ac2f83aea0c75b9447ed5b` |
 | `templeos-bin/Compiler.BIN` | TempleOS V5.03 HolyC compiler (`Cmp` of `Compiler/Compiler.PRJ`) | `/Compiler/Compiler.BIN.Z` in the ISO, expanded with `TOSZ` built from the TempleOS sources' `Linux/TOSZ.CPP` (host `c++`); SHA-256 `1107033cc1c6bb508f9995d5ea1ad5e440b18c0ff2ac1fea69cc5b4d3d9f7d97` |
+## TempleOS V5.03: DolDoc, HolyC, GR and AutoComplete files
+Real files from the official TempleOS V5.03 distribution ISO
+(`https://web.archive.org/web/2017id_/http://www.templeos.org/Downloads/TempleOS.ISO`,
+`5d0fc944e5d89c155c0fc17c148646715bc1db6fa5750c0b913772cfec19ba26`), written by
+TempleOS itself. `tests/data/doldoc/extract.py` reads them from the ISO's RedSea file
+system and expands their `.Z` layer with Terry Davis's own `Linux/TOSZ.CPP` from the
+same release (the uncompressed copies in the TempleOS git repository have lost bytes
+0x0d and turned 0x1f into spaces, so they were not used). Public domain (TempleOS).
+| Fixture | Path in the ISO | Evidence and edits |
+| `doldoc/FileLowLevel.DD` | `/Doc/FileLowLevel.DD.Z` | unchanged: DolDoc text with links and one sprite bin (lines, text) |
+| `doldoc/Once.DD` | `/Doc/Once.DD.Z` | unchanged: links of several types, colors, no bins |
+| `doldoc/Compiler.MAP` | `/Compiler/Compiler.MAP.Z` | cut to its first 12 lines (`$LK...,BI=n$` per function) and the 11 `CDbgInfo` bins they refer to, kept byte for byte; the rest dropped |
+| `holyc/SpriteText.HC` | `/Demo/Graphics/SpriteText.HC.Z` | unchanged: HolyC with `$$` escapes, a sprite with dither colors, lines, circles and a PolyPoint |
+| `holyc/SpritePlot3D.HC` | `/Demo/Graphics/SpritePlot3D.HC.Z` | unchanged: a mesh sprite (6 vertices, 8 triangles), CP437 θ and φ in the code |
+| `holyc/AMouse.HC` | `/Adam/AMouse.HC.Z` | unchanged: two bitmap sprites (mouse pointers) and a vector one |
+| `holyc/Load.HC` | `/Apps/GrModels/Load.HC.Z` | unchanged: HolyC without DolDoc commands (`#help_index`) |
+| `templeos-gr/StadiumBG.GR` | `/Demo/Games/Stadium/StadiumBG.GR.Z` | unchanged: 641×473 device context, LZW-compressed body (`CT_8_BIT`), standard palette |
+| `templeos-ac-words/ACWords.DATA` | `/Adam/AutoComplete/ACWords.DATA.Z` | cut to its first 40 words, then the end marker (0) appended |
+| `templeos-ac-defs/ACDefs.DATA` | `/Adam/AutoComplete/ACDefs.DATA.Z` | cut to its first 11 entries ("A" to "Abaca", Webster's 1913), then the end marker (0) appended |

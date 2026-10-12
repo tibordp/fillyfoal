@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Load.HC — HolyC source (DolDoc), 0 commands  [0x0+0x69]
+    Text — 105 bytes, 0 commands  [0x0+0x69]
+  ▾ Plain text — UTF-8 text, LF line endings, 8 lines  [0x0+0x69]
+      Encoding: "UTF-8"
+      Line endings: "LF" — 8 LF, 0 CRLF, 0 CR
+    ▾ Lines — 8 lines  [#1:0x0+0x69]
+        Line 1: "#help_index \"Misc\""  [#1:0x0+0x12]
+        Line 2: ""  [#1:0x13+0x0]
+        Line 3: "Cd(__DIR__);;"  [#1:0x14+0xd]
+        Line 4: "#include \"ManGen\""  [#1:0x22+0x11]
+        Line 5: "#include \"BallGen\""  [#1:0x34+0x12]
+        Line 6: "#include \"Models\""  [#1:0x47+0x11]
+        Line 7: ""  [#1:0x59+0x0]
+        Line 8: "#help_index \"\""  [#1:0x5a+0xe]

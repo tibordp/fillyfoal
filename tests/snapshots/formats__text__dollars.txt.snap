@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ dollars.txt — UTF-8 text, LF line endings, 10 lines  [0x0+0x14f]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 10 LF, 0 CRLF, 0 CR
+  ▾ Lines — 10 lines  [0x0+0x14f]
+      Line 1: "Price list, autumn"  [0x0+0x12]
+      Line 2: ""  [0x13+0x0]
+      Line 3: "The small kit costs $5 and the large one $10; shipping is $3.50"  [0x14+0x3f]
+      Line 4: "for orders under $40. Bundles are $FG$-free (a typo the printer kept)."  [0x54+0x46]
+      Line 5: ""  [0x9b+0x0]
+      Line 6: "In the notes, the area is $A = \\pi r^2$ and the mean is $\\bar{x}$,"  [0x9c+0x42]
+      Line 7: "and $ID$ is the shell variable the build script reads, next to"  [0xdf+0x3e]
+      Line 8: "$HOME/bin and ${PATH}."  [0x11e+0x16]
+      Line 9: ""  [0x135+0x0]
+      Line 10: "Totals: $15 + $20 = $35."  [0x136+0x18]
