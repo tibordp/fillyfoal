@@ -762,15 +762,19 @@ async fn push_tables(cx: &Cx, db: &D, cat: &C, system: bool) {
         if let Some((_, fdp, _)) = t.lv {
             summary.push_str(&format!(", long values at page {fdp}"));
         }
+        let mut node = Node::new(t.name.clone());
+        // Most tables have no flags; an empty flag set says nothing.
+        if t.flags != 0 {
+            let (set, unknown) = decode_flags(TABLE_FLAGS, t.flags.into());
+            node = node.value(Value::Flags {
+                raw: t.flags.into(),
+                bits: 32,
+                set,
+                unknown,
+            });
+        }
         cx.push(
-            Node::new(t.name.clone())
-                .value(Value::Flags {
-                    raw: t.flags.into(),
-                    bits: 32,
-                    set: decode_flags(TABLE_FLAGS, t.flags.into()).0,
-                    unknown: decode_flags(TABLE_FLAGS, t.flags.into()).1,
-                })
-                .summary(summary)
+            node.summary(summary)
                 .lazy(table_view, (db.clone(), cat.clone(), i)),
         )
         .await;
@@ -1277,12 +1281,9 @@ async fn long_value(
             .diag(Diagnostic::malformed("table has no long-value tree"));
     };
     match gather(cx, db, fdp, &key).await {
-        Ok((size, pieces, chunks)) => {
+        Ok((size, pieces, offsets, chunks)) => {
             let total: u64 = pieces.iter().map(|p| p.len).sum();
-            let mut node = node.summary(format!(
-                "{tname}, long value {lid:#x}, {size} bytes in {chunks_chunk}",
-                chunks_chunk = plural(chunks, "chunk")
-            ));
+            let mut scheme = None;
             let data = if total == u64::from(size) {
                 cx.add_pieces(
                     Origin {
@@ -1293,8 +1294,18 @@ async fn long_value(
                 )
             } else {
                 // Chunks shorter than the value: compressed one by one.
-                compressed_chunks(cx, vspan, &pieces, size).await
+                compressed_chunks(cx, vspan, &pieces, &offsets, size)
+                    .await
+                    .map(|(span, s)| {
+                        scheme = s;
+                        span
+                    })
             };
+            let mut node = node.summary(format!(
+                "{tname}, long value {lid:#x}, {size} bytes in {chunks_chunk}{compressed}",
+                chunks_chunk = plural(chunks, "chunk"),
+                compressed = scheme.map(|s| format!(", {s}")).unwrap_or_default()
+            ));
             match data {
                 Ok(data) => {
                     let preview = cx.read_avail(data.sub(0, 0x1000)).await.unwrap_or_default();
@@ -1322,7 +1333,16 @@ async fn long_value(
 
 /// A long value whose chunks are each compressed: every chunk
 /// decompressed, joined into one source that must have the recorded size.
-async fn compressed_chunks(cx: &Cx, vspan: Span, pieces: &[Span], size: u32) -> Result<Span> {
+/// ESE keeps a chunk that does not shrink as it is: a chunk exactly as
+/// long as the gap to the next chunk's offset (or to the value's end) is
+/// stored raw.
+async fn compressed_chunks(
+    cx: &Cx,
+    vspan: Span,
+    pieces: &[Span],
+    offsets: &[u64],
+    size: u32,
+) -> Result<(Span, Option<String>)> {
     let size = u64::from(size);
     if size > compress::MAX_LONG {
         return Err(Diagnostic::unsupported(format!(
@@ -1330,15 +1350,31 @@ async fn compressed_chunks(cx: &Cx, vspan: Span, pieces: &[Span], size: u32) -> 
         )));
     }
     let mut out = Vec::new();
-    for piece in pieces {
+    // ESE picks the scheme per chunk: a short last chunk of text may be
+    // 7-bit while the others are LZ4.
+    let mut schemes: Vec<&'static str> = Vec::new();
+    for (k, piece) in pieces.iter().enumerate() {
         let b = cx.read(*piece).await?;
+        let start = offsets.get(k).copied().unwrap_or(0);
+        let end = offsets
+            .get(k.saturating_add(1))
+            .copied()
+            .unwrap_or(size)
+            .min(size);
+        if piece.len == end.saturating_sub(start) && to_u64(out.len()) == start {
+            out.extend_from_slice(&b);
+            continue;
+        }
         if compress::scheme_name(&b).is_none() {
             return Err(Diagnostic::unsupported(
                 "long value chunks shorter than the value and not in a known compression scheme",
             )
             .at(*piece));
         }
-        let (_, data) = compress::value(cx, *piece, &b).await?;
+        let (name, data) = compress::value(cx, *piece, &b).await?;
+        if !schemes.contains(&name) {
+            schemes.push(name);
+        }
         out.extend(cx.read(data).await?);
         if to_u64(out.len()) > size {
             break;
@@ -1360,11 +1396,17 @@ async fn compressed_chunks(cx: &Cx, vspan: Span, pieces: &[Span], size: u32) -> 
         consumed,
         None,
     )
-    .map(|d| d.span)
+    .map(|d| (d.span, Some(schemes.join(" and "))))
 }
 
 /// Size, chunk spans and chunk count of the long value with key `key`.
-async fn gather(cx: &Cx, db: &Db, root: u32, key: &[u8]) -> Result<(u32, Vec<Span>, u64)> {
+/// Also returns each chunk's offset in the value (the key's last four bytes).
+async fn gather(
+    cx: &Cx,
+    db: &Db,
+    root: u32,
+    key: &[u8],
+) -> Result<(u32, Vec<Span>, Vec<u64>, u64)> {
     let Some((mut page, mut i)) = page::seek(cx, db, root, key).await? else {
         return Err(Diagnostic::malformed("long value not found"));
     };
@@ -1374,6 +1416,7 @@ async fn gather(cx: &Cx, db: &Db, root: u32, key: &[u8]) -> Result<(u32, Vec<Spa
         .ok_or_else(|| Diagnostic::malformed("long value not found"))?;
     let size = u32_le(page.node_data(&head), 4).unwrap_or(0);
     let mut pieces = Vec::new();
+    let mut offsets = Vec::new();
     let mut chunks = 0u64;
     let mut steps = 0u32;
     i = i.saturating_add(1);
@@ -1396,10 +1439,13 @@ async fn gather(cx: &Cx, db: &Db, root: u32, key: &[u8]) -> Result<(u32, Vec<Spa
             break;
         }
         pieces.push(page::span_in(db, &page, n.data_at, n.data_len));
+        offsets.push(crate::formats::util::datakit::be_uint(
+            n.key.get(key.len()..).unwrap_or_default(),
+        ));
         chunks = chunks.saturating_add(1);
         i = i.saturating_add(1);
     }
-    Ok((size, pieces, chunks))
+    Ok((size, pieces, offsets, chunks))
 }
 
 /// The owned and available extents of the object rooted at `fdp`.

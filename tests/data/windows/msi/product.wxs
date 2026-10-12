@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  fillyfoal test MSI. Build with WiX 6:
+    wix build -arch x86 -d Version=1.0.0 -b files\1.0.0 product.wxs -o fillyfoal-test-1.0.0.msi
+  Version 1.0.1 keeps ProductCode and UpgradeCode (small/minor update), so a transform and a
+  patch between the two make sense.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="fillyfoal test"
+           Manufacturer="fillyfoal"
+           Version="$(Version)"
+           ProductCode="{6F1D2A3B-0C4E-4F51-9A6B-7C8D9E0F1A2B}"
+           UpgradeCode="{0F1E2D3C-4B5A-4697-8877-665544332211}"
+           Language="1033"
+           Codepage="1252"
+           Scope="perMachine"
+           Compressed="yes"
+           InstallerVersion="500">
+    <SummaryInformation Description="fillyfoal test installer" Manufacturer="fillyfoal" Keywords="fillyfoal; test" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of fillyfoal test is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFilesFolder">
+      <Directory Id="INSTALLFOLDER" Name="fillyfoal test">
+        <Component Id="ReadmeComp" Guid="{A1B2C3D4-0001-4000-8000-000000000001}">
+          <File Id="ReadmeTxt" Source="readme.txt" KeyPath="yes" />
+        </Component>
+        <Component Id="DataComp" Guid="{A1B2C3D4-0002-4000-8000-000000000002}">
+          <File Id="DataTxt" Source="data.txt" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Component Id="RegComp" Directory="INSTALLFOLDER" Guid="{A1B2C3D4-0003-4000-8000-000000000003}">
+      <RegistryValue Root="HKCU" Key="Software\fillyfoal" Name="Version" Type="string" Value="$(Version)" KeyPath="yes" />
+    </Component>
+
+    <Feature Id="Main" Title="fillyfoal test" Level="1">
+      <ComponentRef Id="ReadmeComp" />
+      <ComponentRef Id="DataComp" />
+      <ComponentRef Id="RegComp" />
+    </Feature>
+  </Package>
+</Wix>

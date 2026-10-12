@@ -419,6 +419,63 @@ Redistribution and use in source and binary forms, with or without modification,
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
+## ESE column compression — Microsoft Extensible Storage Engine
+
+The compressed-value handling in `crates/data/src/formats/data/ese/compress.rs`
+follows Microsoft's open-source ESE (<https://github.com/microsoft/Extensible-Storage-Engine>,
+`dev/ese/src/ese/compression.cxx`, consulted at commit
+`7030fe7407615160e54d152e4ef704eede2fdd7e`): the `COMPRESSION_SCHEME` numbers
+(7-bit ASCII 1, 7-bit Unicode 2, Xpress 3, Scrub 4, Xpress9 5, Xpress10 6,
+LZ4 7, in the top five bits of the first byte), the 3-byte `Lz4Header` and
+Xpress header (scheme byte, then the uncompressed size as a little-endian
+WORD) and the 7-bit header's low three bits (bits used in the last byte,
+minus one). No code was copied. ESE is under the MIT License; its
+`LICENSE` at that commit:
+
+```text
+    MIT License
+
+    Copyright (c) Microsoft Corporation.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE
+```
+
+## MSISAM page encryption — Jackcess Encrypt
+
+The Microsoft Money (MSISAM) page decryption in
+`crates/data/src/formats/data/jet/mod.rs` (`Msisam`, `plain_input`) follows
+Jackcess Encrypt's `MSISAMCryptCodecHandler` and
+`BaseCryptCodecHandler.applyPageNumber`
+(<https://jackcessencrypt.sourceforge.io>; Copyright (c) 2010 Vladimir
+Berezniker, per the source headers): the encryption flags at 0x298 (0x06 the
+hashed scheme, 0x20 SHA-1 instead of MD5), the 8-byte salt at 0x72, the
+upper-cased password in 40 zero bytes hashed and cut to 16 bytes, the check
+bytes at 0x2e9 plus the salt's first byte, the key made of the digest and the
+first four salt bytes with the page number XORed in, and the 14 encrypted
+pages. It was first written from memory of that class and checked only
+against two files Money wrote; the source of `jackcess-encrypt` 5.0.2 (its
+Maven Central sources jar) was then re-read and agrees. No code was copied.
+Jackcess Encrypt is under the Apache License, Version 2.0; the
+`jackcess-encrypt-5.0.2` tag of its source tree has no NOTICE file, and its
+`LICENSE.txt` is byte-for-byte the Apache License 2.0 text reproduced under
+"Test fixtures: Access database templates — Jackcess" below.
+
 ## Test fixture: ClrLoader.dll — clr_loader
 
 `tests/fixtures/external/pe/clrloader-amd64.dll` is

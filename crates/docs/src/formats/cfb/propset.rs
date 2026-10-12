@@ -490,9 +490,22 @@ fn decode(
             let text = codepage_text(codepage, raw)
                 .trim_end_matches('\0')
                 .to_owned();
+            // MS-OLEPS pads each string to 4 bytes, but Office (PowerPoint
+            // 2024's DocParts and HeadingPairs) packs the strings of a
+            // vector without padding. Padding is zeros, while the next
+            // element starts with its (nonzero) size, so only zeros up to
+            // the boundary are taken as padding.
+            let end = start.checked_add(size)?;
+            let padded = to_usize(align_up(to_u64(end), 4));
+            let pad = data
+                .get(end..padded)
+                .unwrap_or_default()
+                .iter()
+                .take_while(|&&b| b == 0)
+                .count();
             simple(
                 Some(Value::Text(text)),
-                to_usize(align_up(to_u64(size.saturating_add(4)), 4)),
+                end.saturating_add(pad).saturating_sub(at),
             )
         }
         0x001f => {

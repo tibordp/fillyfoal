@@ -148,6 +148,26 @@ impl IdTable {
     pub fn contains_key(&self, index: u32) -> bool {
         self.get(index).is_some()
     }
+
+    /// Copies `count` entries from `from` on in `source` to `to` on here
+    /// (GlobalIdTableEntry2FNDX and 3FNDX); indices `source` lacks are
+    /// skipped. Bounded by the entries `source` has, not by `count`.
+    pub fn copy_from(&mut self, source: &IdTable, from: u32, count: u32, to: u32) {
+        let end = from.saturating_add(count);
+        let found: Vec<(u32, [u8; 16])> = {
+            let log = lock(&source.log);
+            log.entries
+                .range(from..end)
+                .filter_map(|(&i, v)| {
+                    let n = v.partition_point(|e| e.0 < source.len);
+                    v.get(n.checked_sub(1)?).map(|e| (i, e.1))
+                })
+                .collect()
+        };
+        for (i, guid) in found {
+            self.insert(to.saturating_add(i.saturating_sub(from)), guid);
+        }
+    }
 }
 
 impl std::fmt::Debug for IdTable {
@@ -618,6 +638,9 @@ pub struct Body {
     pub file_ref: Option<String>,
     pub extension: Option<String>,
     pub cref: Option<u32>,
+    /// GlobalIdTableEntry2FNDX / 3FNDX: entries copied from the dependency
+    /// revision's table (first index there, count, first index here).
+    pub copy: Option<(u32, u32, u32)>,
 }
 
 impl Body {
@@ -790,13 +813,15 @@ pub fn body(f: &mut Fields<'_>, hdr: &Hdr, file: Span, table: Option<&IdTable>) 
             b.guid = Some(g.to_le_bytes());
         }
         0x025 => {
-            f.u32("iIndexMapFrom").emit()?;
-            f.u32("iIndexMapTo").emit()?;
+            let from = f.u32("iIndexMapFrom").emit()?;
+            let to = f.u32("iIndexMapTo").emit()?;
+            b.copy = Some((from, 1, to));
         }
         0x026 => {
-            f.u32("iIndexCopyFromStart").emit()?;
-            f.u32("cEntriesToCopy").emit()?;
-            f.u32("iIndexCopyToStart").emit()?;
+            let from = f.u32("iIndexCopyFromStart").emit()?;
+            let count = f.u32("cEntriesToCopy").emit()?;
+            let to = f.u32("iIndexCopyToStart").emit()?;
+            b.copy = Some((from, count, to));
         }
         0x02D | 0x02E => {
             b.fcr = Some(reference(f, hdr, file, "ObjectRef")?);
