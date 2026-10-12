@@ -584,6 +584,40 @@ fn encrypted_zip_entries_unlock_once_and_stay_locked_on_wrong_passwords() {
 }
 
 #[test]
+fn encrypted_rar5_unlocks_once_and_stays_locked_on_wrong_passwords() {
+    let render = |name: &str, passwords: &[&str]| {
+        let path = format!(
+            "{}/tests/fixtures/external/rar/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let mut host = Host::named(name, std::fs::read(path).unwrap(), Limits::default());
+        host.passwords = passwords.iter().map(|p| p.to_string()).collect();
+        host.explore_all();
+        (host.render(), host.secret_requests.len())
+    };
+    // File data only; a solid run of encrypted files; headers too (-hp).
+    for name in [
+        "v5-encrypted.rar",
+        "v5-encrypted-solid.rar",
+        "v5-encrypted-headers.rar",
+    ] {
+        let (text, asked) = render(name, &["fillyfoal"]);
+        assert!(text.contains("plain ascii"), "{name}:\n{text}");
+        assert!(!text.contains("CRC32 mismatch"), "{name}:\n{text}");
+        assert_eq!(asked, 1, "{name}: one prompt for the whole archive");
+
+        let (text, asked) = render(name, &["wrong", "fillyfoal"]);
+        assert!(text.contains("plain ascii"), "{name}");
+        assert_eq!(asked, 2, "{name}: a retry after the wrong password");
+
+        let (text, asked) = render(name, &[]);
+        assert!(!text.contains("plain ascii"), "{name}");
+        assert!(text.contains("no password, or a wrong one"), "{name}");
+        assert_eq!(asked, 1, "{name}: declining is remembered");
+    }
+}
+
+#[test]
 fn encrypted_pdfs_ask_only_when_needed() {
     let read = |name: &str| {
         std::fs::read(format!(

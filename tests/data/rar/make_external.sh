@@ -7,7 +7,7 @@
 #
 # Built in /tmp/fixtures/archive-rar with fixed modification times; RAR
 # records no user or host names. Reruns reproduce every archive byte for
-# byte except v5-encrypted.rar (random salt and IV).
+# byte except the v5-encrypted*.rar archives (random salts and IVs).
 set -eu
 repo=$(cd "${1:?usage: make_external.sh <repo>}" && pwd)
 work=/tmp/fixtures/archive-rar

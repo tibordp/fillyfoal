@@ -36,9 +36,18 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ Extra area — 1 record  [0x3c+0x31]
         ▾ Encryption  [0x3c+0x31]
             Type: encryption (0x1)  [0x3d+0x1]
-            Data: 00 03 0f 62 31 46 82 11 40 ed d5 48 ff c7 d7 b7 …  |...b1F..@..H....|  [0x3e+0x2f]
-      Encrypted data  [0x6d+0x20]
-        ! unsupported: encrypted file
+            Encryption version: 0 — AES-256  [0x3e+0x1]
+            Encryption flags: 0x3 [PASSWORD_CHECK | TWEAKED_CHECKSUMS]  [0x3f+0x1]
+            KDF count: 15 — 2^15 PBKDF2 iterations  [0x40+0x1]
+            Salt: 62 31 46 82 11 40 ed d5 48 ff c7 d7 b7 f7 4e 79  |b1F..@..H.....Ny|  [0x41+0x10]
+            IV: 22 50 45 25 5e c6 56 eb 8c eb 1c fb cb 1e e8 3f  |"PE%^.V........?|  [0x51+0x10]
+            Password check value: 76 4b 7b 07 78 30 04 d9 69 d7 b3 c4  |vK{.x0..i...|  [0x61+0xc]
+    ▾ Content — UTF-8 text, LF line endings, 1 line  [0x6d+0x20]
+        CRC32: 0x597d6495 — valid
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [#2:0x0+0xc]
+          Line 1: "plain ascii"  [#2:0x0+0xb]
   ▾ End of archive  [0x8d+0x8]
     ▾ Header  [0x8d+0x8]
         Header CRC32: 0x5156771d — valid  [0x8d+0x4]

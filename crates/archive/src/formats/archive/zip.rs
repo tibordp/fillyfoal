@@ -1432,6 +1432,9 @@ async fn entry_content(
     };
     match codec {
         Some((codec, stream)) if !(name_is_dir(cx, name_span).await) => {
+            if let Codec::Ppmd8 { .. } = codec {
+                cx.emit(ppmd_header(cx, data).await?);
+            }
             if stream.offset != data.offset {
                 cx.emit(lzma_header(
                     data.sub(0, stream.offset.saturating_sub(data.offset)),
@@ -1477,6 +1480,7 @@ async fn method_codec(
         95 => Codec::Xz,
         6 => implode(flags, size),
         10 => Codec::DclImplode,
+        98 => Codec::Ppmd8 { size },
         14 => {
             let head = cx.read(data.sub_exact(0, 4)?).await?;
             let (stream, codec) = lzma_stream(cx, &head, data, flags, size).await?;
@@ -1520,6 +1524,33 @@ async fn lzma_stream(
     let stream = data.sub(skip, data.len.saturating_sub(skip));
     let size = (flags & 0x0002 == 0).then(|| usize::try_from(size).unwrap_or(usize::MAX));
     Ok((stream, Codec::LzmaRaw { props, size, dict }))
+}
+
+/// A node for the parameter word that starts a method-98 (PPMd var. I)
+/// stream; the codec reads it too.
+async fn ppmd_header(cx: &Cx, data: Span) -> Result<Node> {
+    let span = data.sub(0, 2);
+    let head = cx.read(span).await?;
+    let mut node = Node::new("PPMd parameters").span(span);
+    match u16_le(&head, 0) {
+        Some(word) => {
+            let restore = match word >> 12 {
+                0 => "restart",
+                1 => "cut off",
+                2 => "freeze",
+                _ => "invalid",
+            };
+            node = node
+                .value(crate::formats::util::val::hex(u64::from(word), 16))
+                .summary(format!(
+                    "order {}, {} MiB, {restore} when full",
+                    (word & 0xf).saturating_add(1),
+                    ((word >> 4) & 0xff).saturating_add(1)
+                ));
+        }
+        None => node = node.diag(Diagnostic::malformed("truncated PPMd parameters")),
+    }
+    Ok(node)
 }
 
 /// A node for the LZMA properties header of a method-14 entry.
@@ -1719,6 +1750,16 @@ async fn encrypted_payload(
             "aes-ctr+dcl-implode",
             "aes-ctr+dcl-implode (lazy)",
             vec![decrypt, Codec::DclImplode],
+        ),
+        (98, true) => Codec::chain(
+            "zipcrypto+ppmd8",
+            "zipcrypto+ppmd8 (lazy)",
+            vec![decrypt, Codec::Ppmd8 { size: uncompressed }],
+        ),
+        (98, false) => Codec::chain(
+            "aes-ctr+ppmd8",
+            "aes-ctr+ppmd8 (lazy)",
+            vec![decrypt, Codec::Ppmd8 { size: uncompressed }],
         ),
         // The LZMA properties are encrypted too: decrypt first, then read them.
         (14, _) => {

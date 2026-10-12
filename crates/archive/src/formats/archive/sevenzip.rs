@@ -853,9 +853,9 @@ struct Plan {
     /// Post-filters, in the order they are applied, with the start offset
     /// of a branch converter.
     post: Vec<(Post, u32)>,
-    /// For a folder of several packed streams (BCJ2): the (offset, length)
-    /// of each, relative to the folder's packed data, in the order the
-    /// codec's input has them.
+    /// For a BCJ2 folder: the (offset, length) of its main, CALL, JMP and
+    /// range coder packed streams, relative to the folder's packed data.
+    /// The codec reads them interleaved (see `codec::bcj2::Schedule`).
     pieces: Vec<(u64, u64)>,
 }
 
@@ -974,10 +974,9 @@ fn decompressor(c: &Coder, size: u64) -> std::result::Result<Codec, String> {
 
 /// The plan of a BCJ2 folder: the BCJ2 coder's output is the folder's,
 /// and each of its four inputs (main, CALL, JMP, range coder) is a packed
-/// stream, either as is or through one decompressing coder. The codec's
-/// input is the packed streams reordered so the three small ones come
-/// first: the decoder reads all four side by side, and the main stream, by
-/// far the largest, is then read only as far as needed.
+/// stream, either as is or through one decompressing coder. The decoder
+/// reads all four side by side, so its input interleaves them (see
+/// `folder_output`).
 fn bcj2_plan(f: &Folder) -> std::result::Result<Plan, String> {
     use crate::codec::bcj2;
     let fail = || f.methods();
@@ -1029,35 +1028,15 @@ fn bcj2_plan(f: &Folder) -> std::result::Result<Plan, String> {
         let len = f.pack_sizes.get(p).copied().ok_or_else(fail)?;
         inputs.push((offset, len, codec, size.unwrap_or(len)));
     }
-    // The codec's input: CALL, JMP, range coder, then main.
     let mut pieces = Vec::new();
     let mut streams = Vec::new();
-    let mut at = 0u64;
-    for j in [1usize, 2, 3, 0] {
-        let (offset, len, _, _) = inputs.get(j).ok_or_else(fail)?;
-        pieces.push((*offset, *len));
-        streams.push((j, at));
-        at = at.saturating_add(*len);
+    for (offset, len, codec, size) in inputs {
+        pieces.push((offset, len));
+        streams.push(bcj2::Stream { len, codec, size });
     }
-    let stream = |j: usize| -> std::result::Result<bcj2::Stream, String> {
-        let (_, len, codec, size) = inputs.get(j).cloned().ok_or_else(fail)?;
-        let offset = streams
-            .iter()
-            .find(|&&(k, _)| k == j)
-            .map(|&(_, o)| o)
-            .ok_or_else(fail)?;
-        Ok(bcj2::Stream {
-            offset,
-            len,
-            codec,
-            size,
-        })
-    };
+    let streams: [bcj2::Stream; 4] = streams.try_into().map_err(|_| fail())?;
     let size = f.unpack_sizes.get(to_usize(last)).copied().unwrap_or(0);
-    let params = bcj2::Params {
-        streams: [stream(0)?, stream(1)?, stream(2)?, stream(3)?],
-        size,
-    };
+    let params = bcj2::Params { streams, size };
     Ok(Plan {
         codec: Codec::Bcj2(Arc::new(params)),
         size,
@@ -1108,15 +1087,28 @@ async fn folder_output(cx: &Cx, span: Span, plan: &Plan) -> Result<(Span, Option
     if codec == Codec::Stored {
         return Ok((span, None));
     }
-    // Several packed streams, in the order the codec reads them.
+    // Several packed streams (BCJ2), interleaved as the codec reads them,
+    // up to the first piece the folder's data does not hold whole (the
+    // codec then finds its input short). Each piece but the last of each
+    // stream is a full `bcj2::PIECE`, so the list is bounded by the data.
     let span = if plan.pieces.is_empty() {
         span
     } else {
-        let pieces = plan
-            .pieces
-            .iter()
-            .map(|&(offset, len)| span.sub(offset, len))
-            .collect();
+        let lens: [u64; 4] = std::array::from_fn(|k| plan.pieces.get(k).map_or(0, |p| p.1));
+        let mut pieces = Vec::new();
+        for (k, at, len) in crate::codec::bcj2::Schedule::new(lens) {
+            let start = plan.pieces.get(k).map_or(0, |p| p.0).saturating_add(at);
+            match span.sub_exact(start, len) {
+                Ok(piece) => pieces.push(piece),
+                Err(_) => {
+                    pieces.push(span.sub(start, len));
+                    break;
+                }
+            }
+            if pieces.len().is_multiple_of(256) {
+                cx.checkpoint().await;
+            }
+        }
         cx.add_pieces(
             crate::span::Origin {
                 parent: span,

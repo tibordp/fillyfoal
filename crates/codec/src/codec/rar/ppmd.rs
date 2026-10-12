@@ -37,13 +37,13 @@ pub type Trace = Vec<(u32, u32, u32)>;
 
 /// The heap, allocated in pages on first write.
 #[derive(Clone, Default)]
-struct Mem {
+pub(crate) struct Mem {
     pages: Vec<Option<Box<[u8]>>>,
 }
 
 impl Mem {
     /// Heap bytes a clone copies: the page table and the pages written.
-    fn heap_size(&self) -> usize {
+    pub(crate) fn heap_size(&self) -> usize {
         let written = self.pages.iter().filter(|p| p.is_some()).count();
         self.pages
             .capacity()
@@ -51,13 +51,13 @@ impl Mem {
             .saturating_add(written.saturating_mul(PAGE))
     }
 
-    fn reset(&mut self, size: u32) {
+    pub(crate) fn reset(&mut self, size: u32) {
         let n = (size >> PAGE_BITS).saturating_add(1) as usize;
         self.pages.clear();
         self.pages.resize_with(n, || None);
     }
 
-    fn r8(&self, a: u32) -> u8 {
+    pub(crate) fn r8(&self, a: u32) -> u8 {
         self.pages
             .get((a >> PAGE_BITS) as usize)
             .and_then(Option::as_ref)
@@ -66,7 +66,7 @@ impl Mem {
             .unwrap_or(0)
     }
 
-    fn w8(&mut self, a: u32, v: u8) {
+    pub(crate) fn w8(&mut self, a: u32, v: u8) {
         if let Some(slot) = self.pages.get_mut((a >> PAGE_BITS) as usize) {
             let page = slot.get_or_insert_with(|| vec![0u8; PAGE].into_boxed_slice());
             if let Some(b) = page.get_mut((a as usize) & (PAGE - 1)) {
@@ -75,25 +75,25 @@ impl Mem {
         }
     }
 
-    fn r16(&self, a: u32) -> u32 {
+    pub(crate) fn r16(&self, a: u32) -> u32 {
         u32::from(self.r8(a)) | u32::from(self.r8(a.wrapping_add(1))) << 8
     }
 
-    fn w16(&mut self, a: u32, v: u32) {
+    pub(crate) fn w16(&mut self, a: u32, v: u32) {
         self.w8(a, v as u8);
         self.w8(a.wrapping_add(1), (v >> 8) as u8);
     }
 
-    fn r32(&self, a: u32) -> u32 {
+    pub(crate) fn r32(&self, a: u32) -> u32 {
         self.r16(a) | self.r16(a.wrapping_add(2)) << 16
     }
 
-    fn w32(&mut self, a: u32, v: u32) {
+    pub(crate) fn w32(&mut self, a: u32, v: u32) {
         self.w16(a, v & 0xffff);
         self.w16(a.wrapping_add(2), v >> 16);
     }
 
-    fn copy(&mut self, dst: u32, src: u32, len: u32) {
+    pub(crate) fn copy(&mut self, dst: u32, src: u32, len: u32) {
         for i in 0..len {
             let b = self.r8(src.wrapping_add(i));
             self.w8(dst.wrapping_add(i), b);

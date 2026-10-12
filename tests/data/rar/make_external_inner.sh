@@ -26,3 +26,7 @@ rar a -ma4 -m5 -s -r -idq ../out/v4-solid-real.rar docs ascii.txt
 rar a -ma5 -m3 -r -idq ../out/v5-unicode.rar ascii.txt docs '日本語.txt'
 # RAR 5 with the archive password "fillyfoal" (data only).
 rar a -ma5 -m3 -pfillyfoal -idq ../out/v5-encrypted.rar ascii.txt
+# The same, solid: one dictionary across files encrypted one by one.
+rar a -ma5 -m3 -s -r -pfillyfoal -idq ../out/v5-encrypted-solid.rar docs ascii.txt
+# Headers encrypted too (-hp): everything after the encryption header.
+rar a -ma5 -m3 -hpfillyfoal -idq ../out/v5-encrypted-headers.rar ascii.txt docs/readme.txt

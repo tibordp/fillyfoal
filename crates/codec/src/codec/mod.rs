@@ -39,6 +39,7 @@ pub mod meatpack;
 pub mod palmdoc;
 pub mod pbz;
 pub mod pipeline;
+pub mod ppmd8;
 pub mod psarc;
 pub mod quantum;
 pub mod rar;
@@ -248,6 +249,9 @@ pub enum Codec {
     /// AES-CBC with this key; the IV is the first 16 bytes and the data is
     /// PKCS#7-padded (PDF AESV2/AESV3).
     AesCbc(crypto::Key),
+    /// AES-CBC with the IV apart from the data and no padding (RAR 5): the
+    /// key is the AES key followed by the 16-byte IV.
+    AesCbcRaw(crypto::Key),
     /// ACE LZ77/blocked data (see [`ace`]); solid archives list the files
     /// before the wanted one.
     Ace(ace::Params),
@@ -263,6 +267,11 @@ pub enum Codec {
     Ppmd7 {
         order: u8,
         mem: u32,
+        size: u64,
+    },
+    /// ZIP PPMd (method 98: variant I rev. 1, its parameters in the
+    /// stream's first two bytes), `size` bytes of output (see [`ppmd8`]).
+    Ppmd8 {
         size: u64,
     },
     /// A RAR 2.9/5.0 group of files (one, or a solid run) decoded as one
@@ -349,6 +358,7 @@ impl Codec {
             Codec::Rc4(_) => "rc4",
             Codec::XlsRc4(_) => "xls-rc4",
             Codec::AesCbc(_) => "aes-cbc",
+            Codec::AesCbcRaw(_) => "aes-cbc-raw",
             Codec::AsciiHex => "asciihex",
             Codec::Ascii85 => "ascii85",
             Codec::RunLength => "runlength",
@@ -407,6 +417,7 @@ impl Codec {
             Codec::Psarc(_) => "psarc",
             Codec::Rar(_) => "rar",
             Codec::Ppmd7 { .. } => "ppmd7",
+            Codec::Ppmd8 { .. } => "ppmd8",
             Codec::Bcj2(_) => "bcj2",
             Codec::PostFilter(lzma::Post::X86) => "bcj-x86",
             Codec::PostFilter(lzma::Post::Arm) => "bcj-arm",
@@ -445,6 +456,7 @@ impl Codec {
             Codec::Rc4(_) => "rc4 (lazy)",
             Codec::XlsRc4(_) => "xls-rc4 (lazy)",
             Codec::AesCbc(_) => "aes-cbc (lazy)",
+            Codec::AesCbcRaw(_) => "aes-cbc-raw (lazy)",
             Codec::AsciiHex => "asciihex (lazy)",
             Codec::Ascii85 => "ascii85 (lazy)",
             Codec::RunLength => "runlength (lazy)",
@@ -503,6 +515,7 @@ impl Codec {
             Codec::Psarc(_) => "psarc (lazy)",
             Codec::Rar(_) => "rar (lazy)",
             Codec::Ppmd7 { .. } => "ppmd7 (lazy)",
+            Codec::Ppmd8 { .. } => "ppmd8 (lazy)",
             Codec::Bcj2(_) => "bcj2 (lazy)",
             Codec::PostFilter(lzma::Post::X86) => "bcj-x86 (lazy)",
             Codec::PostFilter(lzma::Post::Arm) => "bcj-arm (lazy)",
@@ -538,6 +551,7 @@ impl Codec {
             | Codec::Rc4(_)
             | Codec::XlsRc4(_)
             | Codec::AesCbc(_)
+            | Codec::AesCbcRaw(_)
             | Codec::Eexec { .. } => "decrypted",
             Codec::Lzw { .. }
             | Codec::RunLength
@@ -585,9 +599,11 @@ impl Codec {
             Codec::SpssBytecode { .. } | Codec::SasRle | Codec::SasRdc => "decompressed",
             Codec::DwgLz77 { .. } => "decompressed",
             Codec::Lzh(_) | Codec::Psarc(_) => "decompressed",
-            Codec::Rar(_) | Codec::Ppmd7 { .. } | Codec::Bcj2(_) | Codec::Yaz0 { .. } => {
-                "decompressed"
-            }
+            Codec::Rar(_)
+            | Codec::Ppmd7 { .. }
+            | Codec::Ppmd8 { .. }
+            | Codec::Bcj2(_)
+            | Codec::Yaz0 { .. } => "decompressed",
             Codec::PostFilter(_) | Codec::PostFilterAt { .. } | Codec::BinHex => "decoded",
             Codec::AsciiHex
             | Codec::Ascii85
@@ -617,6 +633,7 @@ impl Codec {
             | Codec::Rc4(_)
             | Codec::XlsRc4(_)
             | Codec::AesCbc(_)
+            | Codec::AesCbcRaw(_)
             | Codec::Eexec { .. }
             | Codec::AsciiHex
             | Codec::Ascii85
@@ -684,7 +701,7 @@ impl Codec {
             // A 4 KiB RAR 5 match costs a few bits; PPMd runs cost less.
             Codec::Rar(_) => 1 << 16,
             // A highly probable symbol costs a small fraction of a bit.
-            Codec::Ppmd7 { .. } => 1 << 16,
+            Codec::Ppmd7 { .. } | Codec::Ppmd8 { .. } => 1 << 16,
             // As its main stream's codec (the other streams are smaller).
             Codec::Bcj2(p) => p.streams.first().map_or(1, |s| s.codec.max_ratio()),
             Codec::CabFolder(f) if f.method() == 0 => 1,
@@ -784,6 +801,7 @@ impl Codec {
             Codec::Ppmd7 { order, mem, size } => {
                 Box::new(Streaming(rar::Ppmd7::new(u32::from(*order), *mem, *size)))
             }
+            Codec::Ppmd8 { size } => Box::new(ppmd8::Ppmd8::new(*size)),
             Codec::Zstd => Box::new(Streaming(zstd::Zstd::new())),
             Codec::ZstdFrame => Box::new(Streaming(zstd::Zstd::single_frame())),
             Codec::ZstdDict(d) => Box::new(Streaming(zstd::Zstd::with_dictionary(d.clone()))),
@@ -820,6 +838,9 @@ impl Codec {
             ))),
             Codec::AesCbc(key) => Box::new(Streaming(filters::Bytes::new(
                 crypto::stream::AesCbcIvPrefixed::new(key),
+            ))),
+            Codec::AesCbcRaw(key) => Box::new(Streaming(filters::Bytes::new(
+                crypto::stream::AesCbcRaw::new(key),
             ))),
             Codec::ZipCrypto(key) => Box::new(Streaming(crypto::stream::ZipCrypto::new(key))),
             Codec::AesCtrLe(key) => match crypto::stream::AesCtrLe::new(key) {
