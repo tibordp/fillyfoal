@@ -64,6 +64,9 @@ struct ChdInfo {
     map: u64,
     meta: u64,
     compressed_map: bool,
+    /// v5: bytes per unit and the four compressors' FourCCs.
+    unit_bytes: u64,
+    codecs: [u32; 4],
 }
 
 fn chd_header(f: &mut Fields<'_>, _: &()) -> Result<(ChdInfo, String)> {
@@ -78,12 +81,15 @@ fn chd_header(f: &mut Fields<'_>, _: &()) -> Result<(ChdInfo, String)> {
     match version {
         5 => {
             let mut names = Vec::new();
-            for name in [
+            for (slot, name) in [
                 "Compressor 0",
                 "Compressor 1",
                 "Compressor 2",
                 "Compressor 3",
-            ] {
+            ]
+            .into_iter()
+            .enumerate()
+            {
                 let c = f
                     .u32(name)
                     .with(|&v, n| {
@@ -94,6 +100,9 @@ fn chd_header(f: &mut Fields<'_>, _: &()) -> Result<(ChdInfo, String)> {
                         }))
                     })
                     .emit()?;
+                if let Some(codec) = info.codecs.get_mut(slot) {
+                    *codec = c;
+                }
                 if c != 0 {
                     names.push(fourcc(&u32::to_be_bytes(c)));
                 }
@@ -108,7 +117,7 @@ fn chd_header(f: &mut Fields<'_>, _: &()) -> Result<(ChdInfo, String)> {
             info.map = f.u64("Map offset").hex().emit()?;
             info.meta = f.u64("Metadata offset").hex().emit()?;
             info.hunk_bytes = f.u32("Hunk size").emit()?.into();
-            f.u32("Unit size").emit()?;
+            info.unit_bytes = f.u32("Unit size").emit()?.into();
             f.bytes("Raw SHA-1", 20).emit()?;
             f.bytes("SHA-1", 20).emit()?;
             f.bytes("Parent SHA-1", 20).emit()?;
@@ -212,11 +221,15 @@ async fn chd(cx: Cx, input: Input) -> Result<()> {
         3 | 4 => 16,
         _ => 4,
     };
-    if info.version == 5 && info.compressed_map {
+    if info.version == 5 && info.compressed_map && info.map != 0 {
+        let raw = cx.read(file.sub(info.map, 4)).await?;
+        let packed = u64::from(u32_be(&raw, 0).unwrap_or(0));
+        let map = file.sub(info.map, packed.saturating_add(16));
         cx.emit(
             Node::new("Hunk map (compressed)")
-                .span(file.sub(info.map, 16))
-                .lazy(chd_v5_map_header, file.sub(info.map, 16)),
+                .span(map)
+                .summary(format!("{} hunks", info.hunks))
+                .lazy(chd_v5_map, (file, map, info)),
         );
     } else if info.map != 0 {
         let map = file.sub(info.map, info.hunks.saturating_mul(map_entry));
@@ -277,17 +290,397 @@ async fn chd_metadata(cx: Cx, (file, entries): (Span, Vec<u64>)) -> Result<()> {
     Ok(())
 }
 
-async fn chd_v5_map_header(cx: Cx, span: Span) -> Result<()> {
-    let block = cx.block(span).await?;
-    let mut f = Fields::emitting(&cx, &block, BE);
+fn chd_v5_map_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u32("Compressed map length").emit()?;
-    super::util::uint_be(&mut f, "First block offset", 6)?;
+    super::util::uint_be(f, "First block offset", 6)?;
     f.u16("Map CRC-16").hex().emit()?;
     f.u8("Bits for compressed length").emit()?;
     f.u8("Bits for self references").emit()?;
     f.u8("Bits for parent references").emit()?;
     f.u8("Reserved").emit()?;
-    cx.emit(Node::new("Huffman-coded map").diag(Diagnostic::unsupported("CHD v5 map decoding")));
+    Ok(())
+}
+
+async fn chd_v5_map(cx: Cx, (file, map, info): (Span, Span, ChdInfo)) -> Result<()> {
+    cx.emit(crate::fields::struct_node(
+        "Map header",
+        map.sub(0, 16),
+        BE,
+        (),
+        chd_v5_map_header,
+    ));
+    cx.emit(
+        Node::new("Hunks")
+            .span(map.tail(16))
+            .summary(format!(
+                "{} hunks, Huffman-coded types then bit-packed fields",
+                info.hunks
+            ))
+            .lazy(chd_v5_hunks, (file, map, info)),
+    );
+    Ok(())
+}
+
+// The v5 map's hunk types (MAME `chd.cpp`): four codecs, uncompressed,
+// a copy of another hunk, a range of the parent; then pseudo-types that
+// only occur in the compressed map.
+const V5_NONE: u32 = 4;
+const V5_SELF: u32 = 5;
+const V5_PARENT: u32 = 6;
+const V5_RLE_SMALL: u32 = 7;
+const V5_RLE_LARGE: u32 = 8;
+const V5_SELF_0: u32 = 9;
+const V5_SELF_1: u32 = 10;
+const V5_PARENT_SELF: u32 = 11;
+const V5_PARENT_0: u32 = 12;
+const V5_PARENT_1: u32 = 13;
+
+/// An MSB-first bit reader that reads zeros past the end, like MAME's
+/// `bitstream_in` (which then reports an overflow).
+struct Bits<'a> {
+    data: &'a [u8],
+    at: u64,
+}
+
+impl Bits<'_> {
+    fn peek(&self, n: u32) -> u32 {
+        let mut v = 0u32;
+        for i in 0..u64::from(n.min(32)) {
+            let bit = self.at.saturating_add(i);
+            let byte = self
+                .data
+                .get(crate::bytes::to_usize(bit / 8))
+                .copied()
+                .unwrap_or(0);
+            let shift = 7u64.saturating_sub(bit % 8);
+            v = (v << 1) | u32::from((byte >> shift) & 1);
+        }
+        v
+    }
+
+    fn read(&mut self, n: u32) -> u32 {
+        let v = self.peek(n);
+        self.at = self.at.saturating_add(n.into());
+        v
+    }
+
+    fn overflow(&self) -> bool {
+        self.at > crate::bytes::to_u64(self.data.len()).saturating_mul(8)
+    }
+}
+
+/// The 16-symbol, 8-bit-maximum canonical Huffman code the map's types
+/// use, as a 256-entry lookup of (symbol, length).
+struct Huffman([(u8, u8); 256]);
+
+impl Huffman {
+    /// MAME `huffman_context_base::import_tree_rle` with 16 codes of at
+    /// most 8 bits (4-bit length fields; 1 escapes a literal 1 or a repeat).
+    fn import(bits: &mut Bits<'_>) -> Result<Self> {
+        let bad = || Diagnostic::malformed("CHD map: bad Huffman tree");
+        let mut lens = [0u8; 16];
+        let mut cur = 0usize;
+        let put = |lens: &mut [u8; 16], len: u32, cur: &mut usize| -> Result<()> {
+            let slot = lens.get_mut(*cur).ok_or_else(bad)?;
+            *slot = u8::try_from(len).map_err(|_| bad())?;
+            *cur = cur.saturating_add(1);
+            Ok(())
+        };
+        while cur < 16 {
+            let len = bits.read(4);
+            if len != 1 {
+                put(&mut lens, len, &mut cur)?;
+                continue;
+            }
+            let len = bits.read(4);
+            if len == 1 {
+                put(&mut lens, 1, &mut cur)?;
+            } else {
+                let repeat = bits.read(4).saturating_add(3);
+                for _ in 0..repeat {
+                    put(&mut lens, len, &mut cur)?;
+                }
+            }
+        }
+        // Canonical codes, longest first (assign_canonical_codes).
+        let mut start = [0u32; 33];
+        for &len in &lens {
+            if len > 8 {
+                return Err(bad());
+            }
+            if let Some(n) = start.get_mut(usize::from(len)) {
+                *n = n.saturating_add(1);
+            }
+        }
+        let mut next = 0u32;
+        for len in (1..=32usize).rev() {
+            let count = start.get(len).copied().unwrap_or(0);
+            let sum = next.saturating_add(count);
+            if len != 1 && sum % 2 != 0 {
+                return Err(bad());
+            }
+            if let Some(n) = start.get_mut(len) {
+                *n = next;
+            }
+            next = sum >> 1;
+        }
+        let mut table = [(0u8, 0u8); 256];
+        for (symbol, &len) in lens.iter().enumerate() {
+            if len == 0 {
+                continue;
+            }
+            let slot = start.get_mut(usize::from(len)).ok_or_else(bad)?;
+            let code = *slot;
+            *slot = code.saturating_add(1);
+            let shift = 8u32.saturating_sub(len.into());
+            let first =
+                usize::try_from(code.checked_shl(shift).ok_or_else(bad)?).map_err(|_| bad())?;
+            let last = usize::try_from(code.saturating_add(1).checked_shl(shift).ok_or_else(bad)?)
+                .map_err(|_| bad())?;
+            for entry in table.get_mut(first..last).ok_or_else(bad)? {
+                *entry = (u8::try_from(symbol).unwrap_or(0), len);
+            }
+        }
+        Ok(Huffman(table))
+    }
+
+    fn decode(&self, bits: &mut Bits<'_>) -> Result<u32> {
+        let (symbol, len) = self
+            .0
+            .get(crate::bytes::to_usize(bits.peek(8).into()))
+            .copied()
+            .unwrap_or((0, 0));
+        if len == 0 {
+            return Err(Diagnostic::malformed("CHD map: invalid Huffman code"));
+        }
+        bits.read(len.into());
+        Ok(symbol.into())
+    }
+}
+
+/// The type sequence's reader and run-length state (MAME's `lastcomp` and
+/// `repcount`).
+#[derive(Clone, Copy, Default)]
+struct V5Types {
+    at: u64,
+    last: u32,
+    repeat: u32,
+}
+
+impl V5Types {
+    fn next(&mut self, data: &[u8], huffman: &Huffman) -> Result<u32> {
+        if self.repeat > 0 {
+            self.repeat = self.repeat.saturating_sub(1);
+            return Ok(self.last);
+        }
+        let mut bits = Bits { data, at: self.at };
+        let value = huffman.decode(&mut bits)?;
+        // A run repeats the last type for this hunk and `repcount` more.
+        match value {
+            V5_RLE_SMALL => self.repeat = 2u32.saturating_add(huffman.decode(&mut bits)?),
+            V5_RLE_LARGE => {
+                let high = huffman.decode(&mut bits)?;
+                let low = huffman.decode(&mut bits)?;
+                self.repeat = 18u32.saturating_add(high << 4).saturating_add(low);
+            }
+            v => self.last = v,
+        }
+        self.at = bits.at;
+        Ok(self.last)
+    }
+}
+
+/// Where a resumed walk over the hunks picks up.
+#[derive(Clone, Copy, Default)]
+struct V5Walk {
+    hunk: u64,
+    types: V5Types,
+    fields: u64,
+    offset: u64,
+    last_self: u64,
+    last_parent: u64,
+    crc: u64,
+}
+
+/// MAME's `crc16_creator`: CRC-16/CCITT-FALSE.
+const CRC16_CCITT_FALSE: crate::codec::crc::Crc =
+    crate::codec::crc::Crc::new(16, 0x1021, 0xffff, false, 0);
+
+/// MAME `chd_file::decompress_v5_map`, one hunk per child.
+async fn chd_v5_hunks(cx: Cx, (file, map, info): (Span, Span, ChdInfo)) -> Result<()> {
+    let header = cx.read(map.sub(0, 16)).await?;
+    let first = header
+        .get(4..10)
+        .unwrap_or_default()
+        .iter()
+        .fold(0u64, |a, &b| (a << 8) | u64::from(b));
+    let expected_crc = crate::bytes::u16_be(&header, 10).unwrap_or(0);
+    let length_bits = u32::from(header.get(12).copied().unwrap_or(0));
+    let self_bits = u32::from(header.get(13).copied().unwrap_or(0));
+    let parent_bits = u32::from(header.get(14).copied().unwrap_or(0));
+    let data = cx.read(map.tail(16)).await?;
+    let mut tree = Bits { data: &data, at: 0 };
+    let huffman = Huffman::import(&mut tree)?;
+    let types_start = V5Types {
+        at: tree.at,
+        ..V5Types::default()
+    };
+    // The fields follow the whole type sequence: find where it ends, once.
+    let fields_start = match cx.cached::<u64>(map, "chd-v5-fields") {
+        Some(at) => *at,
+        None => {
+            let mut types = types_start;
+            for i in 0..info.hunks {
+                if i % 4096 == 4095 {
+                    cx.checkpoint().await;
+                }
+                types.next(&data, &huffman)?;
+                // Each code covers at most 273 hunks, so types that run out
+                // before the hunks do mean a cut or lying map.
+                if (Bits {
+                    data: &data,
+                    at: types.at,
+                })
+                .overflow()
+                {
+                    return Err(Diagnostic::malformed(format!(
+                        "CHD map: hunk types end after {i} of {} hunks",
+                        info.hunks
+                    )));
+                }
+            }
+            cx.cache(map, "chd-v5-fields", std::sync::Arc::new(types.at));
+            types.at
+        }
+    };
+    cx.set_count(Count::Exact(info.hunks));
+    let mut w = cx.resume::<V5Walk>().unwrap_or(V5Walk {
+        types: types_start,
+        fields: fields_start,
+        offset: first,
+        crc: CRC16_CCITT_FALSE.init(),
+        ..V5Walk::default()
+    });
+    let units_per_hunk = info.hunk_bytes.checked_div(info.unit_bytes).unwrap_or(0);
+    while w.hunk < info.hunks {
+        let mark = w;
+        cx.mark(move || mark);
+        let raw = w.types.next(&data, &huffman)?;
+        let mut bits = Bits {
+            data: &data,
+            at: w.fields,
+        };
+        let mut kind = raw;
+        let mut offset = w.offset;
+        let mut length = 0u64;
+        let mut crc = 0u16;
+        match raw {
+            0..=3 => {
+                length = bits.read(length_bits).into();
+                w.offset = w.offset.saturating_add(length);
+                crc = u16::try_from(bits.read(16)).unwrap_or(0);
+            }
+            V5_NONE => {
+                length = info.hunk_bytes;
+                w.offset = w.offset.saturating_add(length);
+                crc = u16::try_from(bits.read(16)).unwrap_or(0);
+            }
+            V5_SELF => {
+                offset = bits.read(self_bits).into();
+                w.last_self = offset;
+            }
+            V5_PARENT => {
+                offset = bits.read(parent_bits).into();
+                w.last_parent = offset;
+            }
+            V5_SELF_0 | V5_SELF_1 => {
+                if raw == V5_SELF_1 {
+                    w.last_self = w.last_self.saturating_add(1);
+                }
+                kind = V5_SELF;
+                offset = w.last_self;
+            }
+            V5_PARENT_SELF => {
+                kind = V5_PARENT;
+                offset = w.hunk.saturating_mul(units_per_hunk);
+                w.last_parent = offset;
+            }
+            V5_PARENT_0 | V5_PARENT_1 => {
+                if raw == V5_PARENT_1 {
+                    w.last_parent = w.last_parent.saturating_add(units_per_hunk);
+                }
+                kind = V5_PARENT;
+                offset = w.last_parent;
+            }
+            _ => {
+                return Err(Diagnostic::malformed(format!(
+                    "CHD map: hunk {} has type {raw}",
+                    w.hunk
+                )));
+            }
+        }
+        w.fields = bits.at;
+        // The CRC covers the 12-byte entries MAME decodes the map into:
+        // type, 24-bit length, 48-bit offset, CRC-16, big-endian.
+        let mut entry = [0u8; 12];
+        let mut put = |at: usize, value: u64, width: usize| {
+            for k in 0..width {
+                if let Some(b) = entry.get_mut(at.saturating_add(k)) {
+                    let shift = width.saturating_sub(1).saturating_sub(k).saturating_mul(8);
+                    *b = value
+                        .checked_shr(u32::try_from(shift).unwrap_or(u32::MAX))
+                        .unwrap_or(0) as u8;
+                }
+            }
+        };
+        put(0, kind.into(), 1);
+        put(1, length, 3);
+        put(4, offset, 6);
+        put(10, crc.into(), 2);
+        w.crc = CRC16_CCITT_FALSE.update(w.crc, &entry);
+        let codec = |slot: u32| {
+            let c = info
+                .codecs
+                .get(crate::bytes::to_usize(slot.into()))
+                .copied()
+                .unwrap_or(0);
+            fourcc(&c.to_be_bytes())
+        };
+        let (summary, target) = match kind {
+            0..=3 => (
+                format!(
+                    "{}, {length} bytes at {offset:#x}, CRC-16 {crc:#06x}",
+                    codec(kind)
+                ),
+                Some(file.sub(offset, length)),
+            ),
+            V5_NONE => (
+                format!("uncompressed at {offset:#x}, CRC-16 {crc:#06x}"),
+                Some(file.sub(offset, length)),
+            ),
+            V5_SELF => (format!("same as hunk {offset}"), None),
+            _ => (format!("parent's unit {offset}"), None),
+        };
+        let mut node = Node::new(format!("Hunk {}", w.hunk))
+            .value(hex(offset, 64))
+            .summary(summary);
+        if let Some(target) = target {
+            node = node.target(target);
+        }
+        w.hunk = w.hunk.saturating_add(1);
+        if w.hunk == info.hunks {
+            let crc = CRC16_CCITT_FALSE.finish(w.crc);
+            if crc != u64::from(expected_crc) {
+                node = node.diag(Diagnostic::malformed(format!(
+                    "map CRC-16 {crc:#06x}, header says {expected_crc:#06x}"
+                )));
+            }
+            if bits.overflow() {
+                node = node.diag(Diagnostic::malformed("map ends early"));
+            }
+        }
+        cx.push(node).await;
+    }
     Ok(())
 }
 
