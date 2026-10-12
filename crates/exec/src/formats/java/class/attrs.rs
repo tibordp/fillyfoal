@@ -390,13 +390,14 @@ pub(super) async fn expand(
                 }
                 f.skip(to_u64(end.saturating_sub(at)));
                 let span = f.block().span.sub(start, f.pos().saturating_sub(start));
-                let node = Node::new(format!("parameter {p}"))
-                    .span(span)
-                    .summary(if types.is_empty() {
-                        "no annotations".to_owned()
-                    } else {
-                        types.join(" ")
-                    });
+                let node =
+                    Node::new(format!("parameter {p}"))
+                        .span(span)
+                        .summary(if types.is_empty() {
+                            "no annotations".to_owned()
+                        } else {
+                            types.join(" ")
+                        });
                 f.node(if count > 0 {
                     node.lazy(
                         crate::expander!(self::parameter_annotations: (Class, usize, u16)),
@@ -572,7 +573,11 @@ async fn stack_map_table(cx: &Cx, c: &Class, f: &mut Fields<'_>) -> Result<()> {
             }
             248..=250 => {
                 let d = f.u16("offset_delta").get()?;
-                ("chop", d, format!("{} locals removed", 251u8.saturating_sub(kind)))
+                (
+                    "chop",
+                    d,
+                    format!("{} locals removed", 251u8.saturating_sub(kind)),
+                )
             }
             251 => ("same_extended", f.u16("offset_delta").get()?, String::new()),
             252..=254 => {

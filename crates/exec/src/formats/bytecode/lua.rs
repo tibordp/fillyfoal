@@ -266,10 +266,8 @@ type Step<T> = Option<T>;
 
 impl Parser<'_> {
     fn at(&self, start: usize) -> Span {
-        self.span.sub(
-            to_u64(start),
-            to_u64(self.r.pos().saturating_sub(start)),
-        )
+        self.span
+            .sub(to_u64(start), to_u64(self.r.pos().saturating_sub(start)))
     }
 
     fn uint(&mut self, size: u8) -> Step<u64> {
@@ -427,9 +425,8 @@ impl Parser<'_> {
 /// One constant: its kind and value.
 fn constant(p: &mut Parser<'_>, tag: u8) -> Step<(&'static str, Value)> {
     let v = p.version;
-    let string = |p: &mut Parser<'_>| -> Step<Value> {
-        Some(text(p.string()?.unwrap_or_default()))
-    };
+    let string =
+        |p: &mut Parser<'_>| -> Step<Value> { Some(text(p.string()?.unwrap_or_default())) };
     Some(match (v, tag) {
         (_, 0) => ("nil", text("nil")),
         (0x51..=0x53, 1) => {
@@ -447,12 +444,18 @@ fn constant(p: &mut Parser<'_>, tag: u8) -> Step<(&'static str, Value)> {
     })
 }
 
-type ProtoFuture<'f> = std::pin::Pin<Box<dyn std::future::Future<Output = Step<usize>> + Send + 'f>>;
+type ProtoFuture<'f> =
+    std::pin::Pin<Box<dyn std::future::Future<Output = Step<usize>> + Send + 'f>>;
 
 /// Decodes the prototype at the parser's position (and, recursively, the
 /// ones it contains); returns its index. On a malformed field the
 /// prototype keeps what was decoded and `None` is returned.
-fn prototype<'f>(cx: &'f Cx, p: &'f mut Parser<'_>, depth: u32, parent: Option<String>) -> ProtoFuture<'f> {
+fn prototype<'f>(
+    cx: &'f Cx,
+    p: &'f mut Parser<'_>,
+    depth: u32,
+    parent: Option<String>,
+) -> ProtoFuture<'f> {
     Box::pin(async move {
         cx.checkpoint().await;
         let index = p.protos.len();
@@ -793,7 +796,11 @@ async fn debug(cx: &Cx, p: &mut Parser<'_>, index: usize) -> Step<()> {
         p.tick(cx).await;
         let one = p.r.pos();
         let name = p.string()?.unwrap_or_default();
-        names.push(Node::new(format!("[{i}]")).span(p.at(one)).value(text(name)));
+        names.push(
+            Node::new(format!("[{i}]"))
+                .span(p.at(one))
+                .value(text(name)),
+        );
     }
     let node = Node::new("upvalue names")
         .span(p.at(at))
@@ -830,11 +837,11 @@ async fn prototype_node(cx: Cx, (index, i): (Arc<Index>, usize)) -> Result<()> {
     let (start, len, items) = &proto.constants;
     if proto.seen & SEEN_CONSTANTS != 0 {
         cx.emit(group(
-        Node::new("constants")
-            .span(span((*start, *len)))
-            .summary(plural(to_u64(items.len()), "constant")),
-        items.as_ref().clone(),
-    ));
+            Node::new("constants")
+                .span(span((*start, *len)))
+                .summary(plural(to_u64(items.len()), "constant")),
+            items.as_ref().clone(),
+        ));
     }
     let (start, len, items) = &proto.upvalues;
     if proto.seen & SEEN_UPVALUES != 0 {
@@ -949,7 +956,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             main.instructions
         ));
         if functions > 0 {
-            summary.push_str(&format!(", {}", plural(to_u64(functions), "nested function")));
+            summary.push_str(&format!(
+                ", {}",
+                plural(to_u64(functions), "nested function")
+            ));
         }
     }
     cx.annotate(summary);
