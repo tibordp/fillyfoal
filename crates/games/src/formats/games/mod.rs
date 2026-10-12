@@ -10,6 +10,7 @@
 pub mod archives;
 pub mod bethesda;
 pub mod blizzard;
+pub mod bsa;
 pub mod consoles;
 pub mod dweep;
 pub mod engine_data;

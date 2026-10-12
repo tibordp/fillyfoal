@@ -572,68 +572,10 @@ async fn unreal_pak(cx: Cx, input: Input) -> Result<()> {
 // Bethesda BSA / BA2, Blizzard MPQ, RPG Maker RGSSAD
 
 declare_format!(pub BSA = "bsa", "Bethesda archive (BSA)", ["bsa"], "application/x-bsa",
-    Probe::Magic(&[(0, b"BSA\0")]), bsa);
-
-record! {
-    pub struct BsaHeader {
-        magic: ascii[4] "Magic",
-        version: u32 "Version" .enumeration(&[(103, "Oblivion"), (104, "Fallout 3 / Skyrim"), (105, "Skyrim SE")]),
-        offset: u32 "Folder records offset",
-        flags: u32 "Archive flags" .hex(),
-        folders: u32 "Folders",
-        files: u32 "Files",
-        folder_names: u32 "Total folder name length",
-        file_names: u32 "Total file name length",
-        content: u16 "Content flags" .hex(),
-        _padding: u16 "Padding",
-    }
-}
-
-async fn bsa(cx: Cx, input: Input) -> Result<()> {
-    let h: BsaHeader = emit_record(&cx, input.span.sub(0, BsaHeader::SIZE), LE).await?;
-    cx.emit(Node::new("Records and data").span(input.span.tail(BsaHeader::SIZE)));
-    let game = match h.version {
-        103 => "Oblivion",
-        104 => "Fallout 3 / Skyrim",
-        105 => "Skyrim SE",
-        _ => "unknown game",
-    };
-    cx.annotate(format!(
-        "BSA v{} ({game}), {} folders, {} files{}",
-        h.version,
-        h.folders,
-        h.files,
-        if h.flags & 4 != 0 { ", compressed" } else { "" }
-    ));
-    Ok(())
-}
+    Probe::Magic(&[(0, b"BSA\0")]), super::bsa::bsa);
 
 declare_format!(pub BA2 = "ba2", "Bethesda archive 2 (BA2)", ["ba2"], "application/x-ba2",
-    Probe::Magic(&[(0, b"BTDX")]), ba2);
-
-record! {
-    pub struct Ba2Header {
-        magic: ascii[4] "Magic",
-        version: u32 "Version",
-        kind: ascii[4] "Type" .desc("GNRL (general) or DX10 (textures)"),
-        files: u32 "Files",
-        names: u64 "Name table offset" .hex(),
-    }
-}
-
-async fn ba2(cx: Cx, input: Input) -> Result<()> {
-    let h: Ba2Header = emit_record(&cx, input.span.sub(0, Ba2Header::SIZE), LE).await?;
-    cx.emit(
-        Node::new("File records and data").span(
-            input
-                .span
-                .sub(Ba2Header::SIZE, h.names.saturating_sub(Ba2Header::SIZE)),
-        ),
-    );
-    cx.emit(Node::new("Name table").span(input.span.tail(h.names)));
-    cx.annotate(format!("BA2 v{} {}, {} files", h.version, h.kind, h.files));
-    Ok(())
-}
+    Probe::Magic(&[(0, b"BTDX")]), super::bsa::ba2);
 
 declare_format!(pub MPQ = "mpq", "Blizzard MPQ archive", ["mpq", "sc2map", "w3x", "w3m"], "application/x-mpq",
     Probe::Magic(&[(0, b"MPQ\x1a"), (0, b"MPQ\x1b")]), mpq);

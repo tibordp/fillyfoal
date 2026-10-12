@@ -1,0 +1,58 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ v105-embedded.bsa — BSA v105 (Skyrim SE), 2 folders, 3 files, compressed  [0x0+0x4f6]
+    Magic: "BSA"  [0x0+0x4]
+    Version: Skyrim SE (0x69)  [0x4+0x4]
+    Folder records offset: 36  [0x8+0x4]
+    Archive flags: 0x107 [DirectoryStrings | FileStrings | Compressed | EmbeddedFileNames]  [0xc+0x4]
+    Folders: 2  [0x10+0x4]
+    Files: 3  [0x14+0x4]
+    Total folder name length: 20  [0x18+0x4]
+    Total file name length: 30  [0x1c+0x4]
+    Content flags: 0x101 [Meshes | Misc]  [0x20+0x2]
+    Padding: 0  [0x22+0x2]
+  ▾ Folder records — 2 folders  [0x24+0x30]
+    ▾ Folder 0  [0x24+0x18]
+        Hash: 0x6f64046373  [0x24+0x8]
+        File count: 2  [0x2c+0x4]
+        Padding: 0  [0x30+0x4]
+        File block offset: 0x72  [0x34+0x8]
+    ▾ Folder 1  [0x3c+0x18]
+        Hash: 0x8948be786d0e6572  [0x3c+0x8]
+        File count: 1  [0x44+0x4]
+        Padding: 0  [0x48+0x4]
+        File block offset: 0x98  [0x4c+0x8]
+  ▾ File record blocks  [0x54+0x46]
+    ▾ docs\data.bin  [0x5a+0x10]
+        Hash: 0x8ce48c5a64047461  [0x5a+0x8]
+        Size: 1073742734 — 910 bytes, compression toggled  [0x62+0x4]
+        Data offset: 0xb8  [0x66+0x4]
+    ▾ docs\readme.txt  [0x6a+0x10]
+        Hash: 0xc7eddcea72066d65  [0x6a+0x8]
+        Size: 104 — 104 bytes  [0x72+0x4]
+        Data offset: 0x446  [0x76+0x4]
+    ▾ meshes\clutter\notes.txt  [0x8a+0x10]
+        Hash: 0x963fc2876e056573  [0x8a+0x8]
+        Size: 72 — 72 bytes  [0x92+0x4]
+        Data offset: 0x4ae  [0x96+0x4]
+    File names  [0x9a+0x1e]
+  ▾ Folders — 3 files
+    ▾ docs — 2 files  [0x54+0x26]
+      ▾ data.bin — UTF-8 text, 1 line  [0xc6+0x380] → 0x5a+0x10
+          Encoding: "UTF-8"
+          Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0xc6+0x380]
+            Line 1: "data block 00 data block 01 data block 02 data block 03 data block 04 data block 05 data block 06 data block 07 data block 08 data block 09 data block 10 data block 11 data block 12 data block 13 data block 14 data block 15 data block 16 data block 17 data block 18 data block 19 data block 20 data block 21 data block 22 data block 23 data block 24 data block 25 data block 26 data block 27 data block 28 data block 29 data block 30 data block 31 data block 32 data block 33 data block 34 data block 35 data block 36 data block 37 data block 38 data block 39 data block 40 data block 41 data block 42 data block 43 data block 44 data block 45 data block 46 data block 47 data block 48 data block 49 data block 50 data block 51 data block 52 data block 53 data block 54 data block 55 data block 56 data block 57 data block 58 data block 59 data block 60 data block 61 data block 62 data block 63 "  [0xc6+0x380]
+      ▾ readme.txt — UTF-8 text, LF line endings, 1 line  [0x45a+0x54] → 0x6a+0x10
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#1:0x0+0x45]
+            Line 1: "A Bethesda archive written by the ba2 crate for the fillyfoal tests."  [#1:0x0+0x44]
+    ▾ meshes\clutter — 1 file  [0x7a+0x20]
+      ▾ notes.txt — UTF-8 text, LF line endings, 1 line  [0x4cb+0x2b] → 0x8a+0x10
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#2:0x0+0x1c]
+            Line 1: "Notes: nothing to see here."  [#2:0x0+0x1b]

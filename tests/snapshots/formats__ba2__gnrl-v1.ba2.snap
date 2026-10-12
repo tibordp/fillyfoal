@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ gnrl-v1.ba2 — BA2 v1 GNRL, 2 files  [0x0+0xed]
+  ▾ Header  [0x0+0x18]
+      Magic: "BTDX"  [0x0+0x4]
+      Version: 1  [0x4+0x4]
+      Type: "GNRL"  [0x8+0x4]
+      Files: 2  [0xc+0x4]
+      Name table offset: 0xcc  [0x10+0x8]
+  ▾ Files — 2 files
+    ▾ misc\readme.txt — UTF-8 text, LF line endings, 1 line  [0x60+0x48] → 0x18+0x24
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [#1:0x0+0x45]
+          Line 1: "A Bethesda archive written by the ba2 crate for the fillyfoal tests."  [#1:0x0+0x44]
+    ▾ misc\notes.txt — UTF-8 text, LF line endings, 1 line  [0xa8+0x24] → 0x3c+0x24
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [#2:0x0+0x1c]
+          Line 1: "Notes: nothing to see here."  [#2:0x0+0x1b]
+    Name table  [0xcc+0x21]
