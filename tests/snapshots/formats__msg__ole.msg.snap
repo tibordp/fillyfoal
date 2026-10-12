@@ -2800,43 +2800,5 @@ expression: "common::explore(&display_name(&path), &data)"
             Flags: 0x6 [PROPATTR_READABLE | PROPATTR_WRITABLE]  [#35:0x5c+0x4]
             Size: 10  [#35:0x60+0x4]
             Reserved: 0  [#35:0x64+0x4]
-    ▾ PS_PUBLIC_STRINGS:Keywords [0] — property 0x8001, PtypMultipleString, 14 bytes  [#1:0x480+0x80]
-      ▾ Directory entry  [#1:0x480+0x80]
-          Name: "__substg1.0_8001101F-00000000"  [#1:0x480+0x40]
-          Name length: 60  [#1:0x4c0+0x2]
-          Object type: stream (0x2)  [#1:0x4c2+0x1]
-          Color: black (0x1)  [#1:0x4c3+0x1]
-          Left sibling: 16 — entry 16  [#1:0x4c4+0x4]
-          Right sibling: 10 — entry 10  [#1:0x4c8+0x4]
-          Child: 4294967295 — none  [#1:0x4cc+0x4]
-          CLSID: {00000000-0000-0000-0000-000000000000}  [#1:0x4d0+0x10]
-          State bits: 0x0  [#1:0x4e0+0x4]
-          Creation time: 1601-01-01 00:00:00 UTC  [#1:0x4e4+0x8]
-          Modification time: 1601-01-01 00:00:00 UTC  [#1:0x4ec+0x8]
-          Starting sector: 9 — sector 9  [#1:0x4f4+0x4]
-          Stream size: 14  [#1:0x4f8+0x8]
-      ▾ Sector chain — mini sectors
-          Link 0: 9 — mini sector → #3:0x240+0x40
-          Slack — 50 unused bytes after the end of the stream  [#3:0x24e+0x32]
-        Property: "PS_PUBLIC_STRINGS:Keywords" — PtypMultipleString, value 0
-        Value: "fixture"  [#36:0x0+0xe]
-    ▾ PS_PUBLIC_STRINGS:Keywords [1] — property 0x8001, PtypMultipleString, 18 bytes  [#1:0x500+0x80]
-      ▾ Directory entry  [#1:0x500+0x80]
-          Name: "__substg1.0_8001101F-00000001"  [#1:0x500+0x40]
-          Name length: 60  [#1:0x540+0x2]
-          Object type: stream (0x2)  [#1:0x542+0x1]
-          Color: black (0x1)  [#1:0x543+0x1]
-          Left sibling: 4294967295 — none  [#1:0x544+0x4]
-          Right sibling: 4294967295 — none  [#1:0x548+0x4]
-          Child: 4294967295 — none  [#1:0x54c+0x4]
-          CLSID: {00000000-0000-0000-0000-000000000000}  [#1:0x550+0x10]
-          State bits: 0x0  [#1:0x560+0x4]
-          Creation time: 1601-01-01 00:00:00 UTC  [#1:0x564+0x8]
-          Modification time: 1601-01-01 00:00:00 UTC  [#1:0x56c+0x8]
-          Starting sector: 10 — sector 10  [#1:0x574+0x4]
-          Stream size: 18  [#1:0x578+0x8]
-      ▾ Sector chain — mini sectors
-          Link 0: 10 — mini sector → #3:0x280+0x40
-          Slack — 46 unused bytes after the end of the stream  [#3:0x292+0x2e]
-        Property: "PS_PUBLIC_STRINGS:Keywords" — PtypMultipleString, value 1
-        Value: "fillyfoal"  [#37:0x0+0x12]
+    ▾ PS_PUBLIC_STRINGS:Keywords [0] — property 0x8001, PtypMultipleString, 14 bytes  [#1:0x480+0x80]  (+19 nodes elided)
+    ▾ PS_PUBLIC_STRINGS:Keywords [1] — property 0x8001, PtypMultipleString, 18 bytes  [#1:0x500+0x80]  (+19 nodes elided)

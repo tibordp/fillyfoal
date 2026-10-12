@@ -1386,6 +1386,12 @@ async fn lastlog(cx: Cx, input: Input) -> Result<()> {
     // empty ones in memory, rather than one read per UID.
     let (mut uid, mut logins) = cx.resume::<(u64, u64)>().unwrap_or((0, 0));
     while uid < count {
+        // Jump over holes the host or a file system image knows of.
+        let rest = file.tail(uid.saturating_mul(LASTLOG_RECORD));
+        match cx.next_data(rest).await {
+            None => break,
+            Some(skip) => uid = uid.saturating_add(skip / LASTLOG_RECORD),
+        }
         let n = LASTLOG_WINDOW.min(count.saturating_sub(uid));
         let at = uid.saturating_mul(LASTLOG_RECORD);
         cx.progress_in(file, file.offset.saturating_add(at));

@@ -89,9 +89,11 @@ fn seeks_back_from_a_mark(name: &str, data: &[u8], path: &[&str], first: &str) {
         "{name}: {} is not {first}",
         resumed[0]
     );
-    // Without marks the restart walks BACK children: half of `forward`.
+    // Without marks the restart walks BACK children: half of `forward`,
+    // plus identifying the window's children, which both seeks pay (about
+    // a tenth of `forward` for the YAML input).
     assert!(
-        back * 10 < forward,
+        back * 4 < forward,
         "{name}: seeking back took {back} work units, walking forward {forward}"
     );
 

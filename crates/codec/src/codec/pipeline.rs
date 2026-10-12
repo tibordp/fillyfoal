@@ -122,6 +122,19 @@ pub trait Decode: Clone + Send + 'static {
     fn boundary(&self) -> Option<usize> {
         None
     }
+
+    /// Whether this decoder reports every shortage of input as
+    /// [`DiagKind::Truncated`], and only that. [`Streaming`] then returns
+    /// its other errors (malformed data) at once, instead of rolling back
+    /// and waiting for more input in case they meant a shortage: damage
+    /// early in a large stream is reported where it is, rather than after
+    /// the whole input has been fed (and every step retried on the way).
+    /// Block codecs opt in easily by checking that a block is complete
+    /// before decoding it. The default, `false`, treats malformed data as
+    /// a possible shortage until the end of the input.
+    fn truncation_is_exact(&self) -> bool {
+        false
+    }
 }
 
 /// Status of a [`Decoder`] step.
@@ -191,14 +204,17 @@ pub trait Decoder: Send {
 }
 
 /// Whether a step's error may only mean that the input ran out: codecs
-/// report that as truncated or malformed data. A limit (output that would
-/// exceed it), an unsupported feature or an internal error does not depend
-/// on input not yet seen, so it is final at once.
-fn may_be_shortage(e: &Diagnostic) -> bool {
-    !matches!(
-        e.kind,
-        DiagKind::Limit | DiagKind::Unsupported | DiagKind::Internal
-    )
+/// report that as truncated or malformed data (only as truncated data if
+/// they say their truncation is `exact`, see
+/// [`Decode::truncation_is_exact`]). A limit (output that would exceed
+/// it), an unsupported feature or an internal error does not depend on
+/// input not yet seen, so it is final at once.
+fn may_be_shortage(e: &Diagnostic, exact: bool) -> bool {
+    match e.kind {
+        DiagKind::Limit | DiagKind::Unsupported | DiagKind::Internal => false,
+        DiagKind::Truncated => true,
+        _ => !exact,
+    }
 }
 
 /// Adapts a [`Decode`] into a [`Decoder`] by rolling back steps that ran out
@@ -220,7 +236,7 @@ impl<D: Decode> Decoder for Streaming<D> {
         match self.0.step(input, eof, out, step, limit) {
             Ok(Step::More) => Ok(Status::More),
             Ok(Step::Done) => Ok(Status::Done),
-            Err(e) if !eof && may_be_shortage(&e) => {
+            Err(e) if !eof && may_be_shortage(&e, saved.truncation_is_exact()) => {
                 // Possibly a shortage of input; retry once more arrives. A
                 // genuine error recurs at the end of the input (or once the
                 // caller gives up waiting for input that does not help).
@@ -589,6 +605,45 @@ mod tests {
 
     fn status(kind: DiagKind) -> Result<Status> {
         Streaming(FailsWith(kind)).decode(b"x", false, &mut Vec::new(), 1, 1)
+    }
+
+    /// Like [`FailsWith`], for a decoder whose shortages are always
+    /// [`DiagKind::Truncated`].
+    #[derive(Clone)]
+    struct ExactFailsWith(DiagKind);
+
+    impl Decode for ExactFailsWith {
+        fn step(
+            &mut self,
+            input: &[u8],
+            eof: bool,
+            out: &mut Vec<u8>,
+            step: usize,
+            limit: usize,
+        ) -> Result<Step> {
+            FailsWith(self.0).step(input, eof, out, step, limit)
+        }
+
+        fn consumed(&self) -> usize {
+            0
+        }
+
+        fn truncation_is_exact(&self) -> bool {
+            true
+        }
+    }
+
+    /// A decoder whose truncation is exact has its malformed data reported
+    /// at once; a truncation still waits for input.
+    #[test]
+    fn exact_decoders_report_damage_at_once() {
+        let status =
+            |kind| Streaming(ExactFailsWith(kind)).decode(b"x", false, &mut Vec::new(), 1, 1);
+        assert_eq!(status(DiagKind::Truncated), Ok(Status::NeedInput));
+        assert_eq!(
+            status(DiagKind::Malformed).unwrap_err().kind,
+            DiagKind::Malformed
+        );
     }
 
     /// Only errors that may mean the input ran out wait for more input.

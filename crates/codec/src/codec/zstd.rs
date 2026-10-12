@@ -12,6 +12,15 @@ fn bad(what: &str) -> Diagnostic {
     Diagnostic::malformed(format!("zstd: {what}"))
 }
 
+/// The input ends inside a frame: the decoder reports every shortage this
+/// way, and only shortages (see [`Decode::truncation_is_exact`]).
+fn short(what: &str) -> Diagnostic {
+    Diagnostic::new(
+        crate::error::DiagKind::Truncated,
+        format!("zstd: truncated {what}"),
+    )
+}
+
 fn le(bytes: &[u8]) -> u64 {
     bytes.iter().rev().fold(0u64, |a, &b| a << 8 | u64::from(b))
 }
@@ -1121,7 +1130,7 @@ impl Zstd {
         let pos = self.pos;
         let Some(magic) = input.get(pos..pos.saturating_add(4)).map(le) else {
             if !eof {
-                return Err(bad("truncated frame magic"));
+                return Err(short("frame magic"));
             }
             if self.single && self.frames == 0 {
                 return Err(bad("missing frame"));
@@ -1140,7 +1149,7 @@ impl Zstd {
             });
             match end {
                 Some(end) if end <= input.len() => self.pos = end,
-                _ if !eof => return Err(bad("truncated skippable frame")),
+                _ if !eof => return Err(short("skippable frame")),
                 _ => {
                     self.pos = input.len();
                     if self.single && self.frames == 0 {
@@ -1159,7 +1168,7 @@ impl Zstd {
             return Ok(());
         }
         let mut at = pos.saturating_add(4);
-        let fhd = *input.get(at).ok_or_else(|| bad("truncated frame header"))?;
+        let fhd = *input.get(at).ok_or_else(|| short("frame header"))?;
         at = at.saturating_add(1);
         let single = fhd & 0x20 != 0;
         let dict_len = match fhd & 3 {
@@ -1176,7 +1185,7 @@ impl Zstd {
         };
         let mut window = None;
         if !single {
-            let wd = *input.get(at).ok_or_else(|| bad("truncated frame header"))?;
+            let wd = *input.get(at).ok_or_else(|| short("frame header"))?;
             let base = 1u64 << (10u32.saturating_add(u32::from(wd >> 3)));
             let add = (base / 8).saturating_mul(u64::from(wd & 7));
             window = Some(base.saturating_add(add));
@@ -1184,7 +1193,7 @@ impl Zstd {
         }
         let dict = le(input
             .get(at..at.saturating_add(dict_len))
-            .ok_or_else(|| bad("truncated frame header"))?);
+            .ok_or_else(|| short("frame header"))?);
         let dict = u32::try_from(dict).unwrap_or(u32::MAX);
         let st = match &self.dict {
             Some(d) if dict == 0 || dict == d.0.id => d.0.st.clone(),
@@ -1198,7 +1207,7 @@ impl Zstd {
         at = at.saturating_add(dict_len);
         let fcs = le(input
             .get(at..at.saturating_add(fcs_len))
-            .ok_or_else(|| bad("truncated frame header"))?);
+            .ok_or_else(|| short("frame header"))?);
         at = at.saturating_add(fcs_len);
         let size = match fcs_len {
             0 => None,
@@ -1230,7 +1239,7 @@ impl Zstd {
         let mut pos = self.pos;
         let h = le(input
             .get(pos..pos.saturating_add(3))
-            .ok_or_else(|| bad("truncated block header"))?);
+            .ok_or_else(|| short("block header"))?);
         pos = pos.saturating_add(3);
         let last = h & 1 != 0;
         let kind = (h >> 1) & 3;
@@ -1240,14 +1249,14 @@ impl Zstd {
             0 => {
                 let body = input
                     .get(pos..pos.saturating_add(size))
-                    .ok_or_else(|| bad("truncated raw block"))?;
+                    .ok_or_else(|| short("raw block"))?;
                 if before.saturating_add(size) > limit {
                     return Err(Diagnostic::output_limit(limit));
                 }
                 out.extend_from_slice(body);
             }
             1 => {
-                let b = *input.get(pos).ok_or_else(|| bad("truncated RLE block"))?;
+                let b = *input.get(pos).ok_or_else(|| short("RLE block"))?;
                 if before.saturating_add(size) > limit {
                     return Err(Diagnostic::output_limit(limit));
                 }
@@ -1256,7 +1265,7 @@ impl Zstd {
             2 => {
                 let block = input
                     .get(pos..pos.saturating_add(size))
-                    .ok_or_else(|| bad("truncated compressed block"))?;
+                    .ok_or_else(|| short("compressed block"))?;
                 // The dictionary is valid until the frame has produced a
                 // window's worth (and until then none of the frame's output
                 // has been released, so it directly precedes the frame).
@@ -1295,7 +1304,7 @@ impl Zstd {
             if let Some(hash) = &frame.hash {
                 let stored = le(input
                     .get(pos..pos.saturating_add(4))
-                    .ok_or_else(|| bad("truncated checksum"))?);
+                    .ok_or_else(|| short("checksum"))?);
                 if hash.finish() & 0xffff_ffff != stored {
                     return Err(bad("content checksum mismatch"));
                 }
@@ -1405,11 +1414,19 @@ impl Decode for Zstd {
         // Between frames.
         (self.frame.is_none() && !self.done).then_some(self.pos)
     }
+
+    /// Headers, blocks and checksums are checked to be whole before they
+    /// are decoded, so whatever goes wrong inside one is damage.
+    fn truncation_is_exact(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
     clippy::arithmetic_side_effects,
     clippy::indexing_slicing
 )]
@@ -1468,6 +1485,83 @@ mod tests {
         }
         assert!(seen_mid && seen_between);
         assert_eq!(out.len(), 320_000 + 1000 + 8192 + 30_000);
+    }
+
+    /// Feeds `input` to a streaming decoder 4 KiB more at a time, as a lazy
+    /// read does; returns the error and how much input had been fed.
+    fn stream_until_error(input: &[u8]) -> (Diagnostic, usize) {
+        use crate::codec::pipeline::{Decoder, Status};
+        let mut d = Streaming(Zstd::new());
+        let mut out = Vec::new();
+        let mut fed = 0;
+        loop {
+            fed = (fed + 4096).min(input.len());
+            loop {
+                match d.decode(
+                    &input[..fed],
+                    fed == input.len(),
+                    &mut out,
+                    1 << 16,
+                    1 << 30,
+                ) {
+                    Ok(Status::More) => {}
+                    Ok(Status::NeedInput) => break,
+                    Ok(Status::Done) => panic!("decoded without an error"),
+                    Err(e) => return (e, fed),
+                }
+            }
+        }
+    }
+
+    /// Where the first block header of the frame at the start of `data` is.
+    fn first_block(data: &[u8]) -> usize {
+        let fhd = data[4];
+        let single = fhd & 0x20 != 0;
+        let dict = [0, 1, 2, 4][usize::from(fhd & 3)];
+        let fcs = [usize::from(single), 2, 4, 8][usize::from(fhd >> 6)];
+        5 + usize::from(!single) + dict + fcs
+    }
+
+    /// Every shortage is reported as truncated, so damage in a large
+    /// stream is reported once the damaged block is in, not after the
+    /// whole stream has been fed (retrying every step on the way).
+    #[test]
+    fn damage_is_reported_once_its_block_is_in() {
+        // 40 copies of words8.zst: about 1 MB of input, 14 MB of output.
+        let whole: Vec<u8> = WORDS8.repeat(40);
+        let block = first_block(&whole);
+
+        // A reserved block type in the first block header.
+        let mut data = whole.clone();
+        data[block] |= 0b110;
+        let (e, fed) = stream_until_error(&data);
+        assert_eq!(e.kind, crate::error::DiagKind::Malformed, "{e}");
+        assert!(e.message.contains("reserved block type"), "{e}");
+        assert_eq!(fed, 4096);
+
+        // Damage inside the first compressed block: the first byte of its
+        // body whose corruption the decoder detects.
+        let header = u32::from(whole[block])
+            | u32::from(whole[block + 1]) << 8
+            | u32::from(whole[block + 2]) << 16;
+        assert_eq!((header >> 1) & 3, 2, "a compressed block");
+        let size = (header >> 3) as usize;
+        let body = block + 3;
+        let found = (body..body + size).find_map(|at| {
+            let mut data = whole.clone();
+            data[at] ^= 0xff;
+            let (e, fed) = stream_until_error(&data);
+            (e.kind == crate::error::DiagKind::Malformed).then_some(fed)
+        });
+        let fed = found.expect("some damage is detected");
+        assert!(fed <= body + size + 4096, "{fed}");
+
+        // A stream that is merely cut short still waits for input, and
+        // is reported as truncated at its end.
+        let cut = &whole[..whole.len() - 100];
+        let (e, fed) = stream_until_error(cut);
+        assert_eq!(e.kind, crate::error::DiagKind::Truncated, "{e}");
+        assert_eq!(fed, cut.len());
     }
 
     #[test]

@@ -218,7 +218,20 @@ impl Registry {
 
     /// Picks the first format whose probe matches.
     pub fn identify(&self, head: &Head<'_>) -> Option<&'static Format> {
-        self.formats.iter().copied().find(|f| f.probe.matches(head))
+        self.identify_costed(head).0
+    }
+
+    /// Like [`Registry::identify`], also returning the work units it cost
+    /// (see [`identify_units`]), which an expansion charges.
+    pub fn identify_costed(&self, head: &Head<'_>) -> (Option<&'static Format>, u64) {
+        let mut custom = 0u64;
+        let found = self.formats.iter().copied().find(|f| {
+            if matches!(f.probe, Probe::Custom(_)) {
+                custom = custom.saturating_add(1);
+            }
+            f.probe.matches(head)
+        });
+        (found, identify_units(custom, head.data.len()))
     }
 
     /// The second-phase probes that run after the first phase settled on
@@ -264,6 +277,21 @@ impl Registry {
     pub fn streams(&self, format: &Format) -> bool {
         self.streaming.iter().any(|f| std::ptr::eq(*f, format))
     }
+}
+
+/// Head bytes per unit of work charged for each custom probe that ran.
+/// Custom probes scan the head (text probes split it into lines, sample
+/// records, check encodings): over a full 66 KiB head that matches
+/// nothing, the ~740 custom probes took 0.75 ms (random bytes) to 4.8 ms
+/// (zeros) on a loaded machine (2026-10), about 1-6 µs each, so a full
+/// miss is charged about 1,500 units (2 a probe).
+const PROBE_BYTES_PER_UNIT: u64 = 64 << 10;
+
+/// Work units for an identification that ran `custom` custom probes over a
+/// head of `len` bytes (magic probes are cheap and not counted).
+pub fn identify_units(custom: u64, len: usize) -> u64 {
+    let per = crate::bytes::to_u64(len).div_ceil(PROBE_BYTES_PER_UNIT);
+    custom.saturating_mul(per).max(1)
 }
 
 /// Names the registry a [`crate::session::Session`] uses.
@@ -379,7 +407,9 @@ async fn settle(
                 len_known: cx.len_known(input.span.source),
             };
             let registry = cx.registry();
-            let first = registry.identify(&probe);
+            let (first, units) = registry.identify_costed(&probe);
+            // Probes run synchronously over the head; charge them.
+            cx.charge(units).await;
             let mut candidates = registry.deep_candidates(first).peekable();
             let format = if candidates.peek().is_none() {
                 first
@@ -433,12 +463,14 @@ pub async fn dissect_unsized(cx: Cx, input: Input) -> Result<()> {
         None if cx.len_known(span.source) => None,
         None => {
             let (data, tail) = head(&cx, span).await?;
-            cx.registry().identify(&Head {
+            let (format, units) = cx.registry().identify_costed(&Head {
                 data: &data,
                 tail: &tail,
                 len: span.len,
                 len_known: false,
-            })
+            });
+            cx.charge(units).await;
+            format
         }
     };
     if format.is_some_and(|f| !cx.registry().streams(f)) && !cx.len_known(span.source) {

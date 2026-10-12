@@ -16,7 +16,9 @@ use common::Host;
 use fillyfoal::Limits;
 
 /// Work (budget units, the same on every machine) to open `file` of
-/// chmcmd.chm once the file list is shown, and the rendered tree.
+/// chmcmd.chm once the file list is shown, and the rendered tree. This
+/// includes identifying the file's content (about the same for any small
+/// file), so tests compare files rather than absolute counts.
 fn open(file: &str) -> (u64, String) {
     let data = std::fs::read(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -41,7 +43,12 @@ fn late_files_decode_from_the_nearest_reset() {
     // (offset 0x1bf90) lies in frame 3, so it decodes frames 2 and 3.
     let (work, tree) = open("/#STRINGS");
     assert!(!tree.contains("malformed"), "{tree}");
-    // 18 units from the reset; decoding from the start (all four frames)
-    // took 36.
-    assert!(work < 27, "{work} units");
+    // `/$OBJINST` (offset 0) decodes frame 0 only. With seeds, `/#STRINGS`
+    // costs 2 units more (frames 2 and 3 from the reset); decoding from the
+    // start (all four frames) cost 20 more.
+    let (first, _) = open("/$OBJINST");
+    assert!(
+        work < first + 11,
+        "{work} units, {first} for a file in frame 0"
+    );
 }

@@ -143,13 +143,45 @@ fn a_forced_mp3_is_not_handed_off() {
     host.explore(host.root, 1, 100);
     let flac = host.session.interpretation(host.root).unwrap();
     assert_eq!(flac.format.map(|f| f.name), Some("flac"));
+    let summary = |host: &Host| host.session.node(host.root).unwrap().summary.clone();
+    assert!(summary(&host).unwrap().starts_with("FLAC, "));
     assert!(host.session.reinterpret(host.root, Some(mp3)));
+    // The FLAC annotation described the old interpretation.
+    assert_eq!(summary(&host), None);
     host.explore(host.root, 1, 100);
     let forced = host.session.interpretation(host.root).unwrap();
     assert_eq!(forced.format.map(|f| f.name), Some("mp3"));
     assert!(forced.forced);
+    assert!(!summary(&host).unwrap_or_default().starts_with("FLAC"));
     // The MP3 dissector ran: it looked for frames after the tag.
     assert!(host.child(host.root, "Data").is_some(), "{}", host.render());
+    // Back to identification, and to the FLAC annotation.
+    assert!(host.session.reinterpret(host.root, None));
+    host.explore(host.root, 1, 100);
+    assert!(summary(&host).unwrap().starts_with("FLAC, "));
+}
+
+/// `Session::open_as` forces the format, as "inspect as" does: the MP3
+/// dissector carries on as itself instead of handing the FLAC stream
+/// behind the long tag over, and `None` returns to identification.
+#[test]
+fn open_as_mp3_is_not_handed_off() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/external/flac/tone.flac");
+    let mut data = id3_tag(100_000);
+    data.extend(std::fs::read(path).unwrap());
+    let mp3 = fillyfoal::formats::by_name("mp3").unwrap();
+    let mut host = Host::open("tagged", data, Limits::default(), Some(mp3));
+    host.explore(host.root, 1, 100);
+    let forced = host.session.interpretation(host.root).unwrap();
+    assert_eq!(forced.format.map(|f| f.name), Some("mp3"));
+    assert!(forced.forced);
+    assert!(host.child(host.root, "Data").is_some(), "{}", host.render());
+    assert!(host.session.reinterpret(host.root, None));
+    host.explore(host.root, 1, 100);
+    let identified = host.session.interpretation(host.root).unwrap();
+    assert_eq!(identified.format.map(|f| f.name), Some("flac"));
+    assert!(!identified.forced);
 }
 
 /// One Ogg page holding `packet` whole (it must be under 64 KiB).

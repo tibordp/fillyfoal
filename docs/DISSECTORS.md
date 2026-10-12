@@ -213,6 +213,16 @@ are all pushed in the loop (see `tar.rs`, `zip.rs`, `text/plain.rs`).
 `cx.skipping()` tells a walker that the next child lies before the host's
 window and will be dropped, if building it is expensive.
 
+A walker over a file that is mostly holes (lastlog, indexed by UID; a
+sparse table) asks `cx.next_data(span).await` where data may resume, like
+`SEEK_DATA`: the offset into `span` of the first byte not known to be a
+hole, or `None` if the rest is holes. Holes are what the host declared
+with `Session::set_holes` (from `SEEK_HOLE`/`SEEK_DATA` or `FIEMAP`) and
+the zero pieces of piecewise sources (sparse files inside a file system
+image); a host that declares none gets `Some(0)`, so the walker behaves
+as before. Reads wholly inside declared holes are answered as zeros
+without asking the host.
+
 A walker that does not know its count up front (tar, a scan over records)
 should report progress for the host's display: `cx.progress(done, total)`,
 or `cx.progress_in(input.span, pos)` with its position in its input (over a
@@ -233,8 +243,15 @@ it: the core has no clock and no preemption, by design. Budget units are
 the only signal, so work that is not charged is invisible.
 
 - Suspension points: a read (`cx.read`, `read_avail`, `block`, `cstr`),
-  `cx.push`, and `cx.checkpoint().await` (1 unit). Reads charge for their
-  size, and reads of lazily decoded sources charge as they decode.
+  `cx.push`, `cx.checkpoint().await` (1 unit) and `cx.charge(n).await`
+  (n units, for bounded synchronous work already done). Reads charge for
+  their size, and reads of lazily decoded sources charge as they decode.
+  Identification charges for the custom probes it ran over the head
+  (about 1,500 units when nothing matches a full head), so content
+  identified many times over (one node per BGZF block) is not free.
+  Probes run on every identification: keep them cheap, and remember that
+  dozens of them see the same head (text probes share one memoized
+  encoding check, `text::encoding::classify`).
 - Any loop whose iteration count depends on the input must reach one every
   iteration or every few hundred to few thousand cheap iterations. A single
   read does not pay for a loop over what it returned: reading 16 MiB costs
@@ -307,8 +324,9 @@ an input a thousand times larger than the fixture.
   When `input` is what the node's own detection step settled, the node's
   interpretation becomes `format`, so the host shows (and "inspect as"
   starts from) the real format. `hand_off` returns `false` when the host
-  forced the node's format with `Session::reinterpret`; the dissector then
-  carries on as itself. Hand off only to a format that will not hand back,
+  forced the node's format with `Session::reinterpret` (or opened it with
+  `Session::open_as`, which forces the root's format the same way); the
+  dissector then carries on as itself. Hand off only to a format that will not hand back,
   and only content you were given; content found inside is embedded. (A
   family sharing one dissector, like ZIP's, needs no hand-off: the probes
   already picked the member, and `zip.rs` only refines its label when it
@@ -318,7 +336,13 @@ an input a thousand times larger than the fixture.
   out of input is just an error) and add a `Codec` variant. `Streaming`
   makes it resumable by rolling back steps that ran short, so it works
   lazily and inside chains with no extra effort. Report checksum problems
-  through `Decode::warning`.
+  through `Decode::warning`. By default a malformed-data error counts as a
+  possible shortage until the input ends, so damage early in a large
+  stream surfaces only once the whole stream has been fed; a codec that
+  reports every shortage as `DiagKind::Truncated` (and nothing else as
+  truncated) returns `true` from `Decode::truncation_is_exact`, and its
+  other errors are reported at once. Block codecs get there by checking a
+  block is whole before decoding it (see `zstd.rs`).
 - Look at the `Codec` enum before writing a decoder: most compression
   schemes in the wild already have a variant (see the list in `DESIGN.md`).
   Container framings that wrap a codec (WIM chunk tables, CAB folders,
@@ -487,3 +511,23 @@ it must be identified as (`fixtures_are_identified_correctly`).
 
 Review the snapshot by eye: it is the best check that values and spans are
 right.
+
+**Snapshot size.** Every fixture is explored completely (the robustness
+and resume tests compare whole trees), but its snapshot renders a bounded
+view (`common::snapshot_tree`), so a large fixture cannot bloat the
+repository with repetition:
+
+- A list of at most 8 children (a file's sections, a record's fields) is
+  always rendered whole.
+- A longer list renders its children with their subtrees, in order, until
+  it has rendered 64 KiB; later children show their own line (and
+  diagnostics) with `(+N nodes elided)` for the subtree left out; after 256
+  of those, `… K more children elided (N nodes)` stands for the rest,
+  followed by the last child's line.
+- Whatever remains is cut at 256 KiB, with a last line counting what was
+  cut.
+
+Elision lines count nodes and diagnostics, so a change in an elided part
+still changes the snapshot. To review a part that is elided, run the
+inspector on the fixture. If a fixture's snapshot hits the 256 KiB cut,
+its interesting part may well be cut too: shrink the fixture.

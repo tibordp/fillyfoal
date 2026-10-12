@@ -163,8 +163,39 @@ fn plausible_chars(text: &str) -> bool {
     control.saturating_mul(100) <= text.chars().count()
 }
 
+/// Inputs at least this long have their classification remembered.
+const MEMO_MIN: usize = 4096;
+
+thread_local! {
+    /// The last large input classified on this thread and the answer.
+    /// Identification runs dozens of text-based probes over the same head,
+    /// each asking; the copy is compared in full, so a hit is exact.
+    static MEMO: std::cell::RefCell<(Vec<u8>, Option<Encoding>)> =
+        const { std::cell::RefCell::new((Vec::new(), None)) };
+}
+
 /// The encoding of text-like data, or `None` if it looks binary.
 pub fn classify(data: &[u8]) -> Option<Encoding> {
+    if data.len() < MEMO_MIN {
+        return classify_once(data);
+    }
+    if let Some(found) = MEMO.with(|m| {
+        let m = m.borrow();
+        (m.0 == data).then_some(m.1)
+    }) {
+        return found;
+    }
+    let found = classify_once(data);
+    MEMO.with(|m| {
+        let mut m = m.borrow_mut();
+        m.0.clear();
+        m.0.extend_from_slice(data);
+        m.1 = found;
+    });
+    found
+}
+
+fn classify_once(data: &[u8]) -> Option<Encoding> {
     if let Some((encoding, len)) = bom(data) {
         let rest = data.get(to_usize(len)..).unwrap_or_default();
         return (rest.is_empty() || plausible_chars(&encoding.decode(rest))).then_some(encoding);
@@ -175,9 +206,10 @@ pub fn classify(data: &[u8]) -> Option<Encoding> {
     if data.is_empty() {
         return None;
     }
-    let utf8 = is_utf8(data);
     // Control characters other than layout ones. A terminal escape
     // (`ESC[32m` colours) and nroff overstrike (`N\bN`, `_\bx`) are text.
+    // Counting stops once there are too many: binary data gets there fast.
+    let limit = data.len() / 100;
     let control = data
         .iter()
         .enumerate()
@@ -190,9 +222,20 @@ pub fn classify(data: &[u8]) -> Option<Encoding> {
                     .zip(next)
                     .is_some_and(|(&p, n)| p > 0x20 && p < 0x7f && (p == n || p == b'_'));
             let layout = matches!(b, 0 | b'\t' | b'\n' | b'\r' | 0x0c);
-            (b < 0x20 && !layout && !escape && !overstrike) || (b == 0x7f && !utf8)
+            b < 0x20 && !layout && !escape && !overstrike
         })
+        .take(limit.saturating_add(1))
         .count();
+    if control > limit {
+        return None;
+    }
+    let utf8 = is_utf8(data);
+    // DEL counts as a control character outside UTF-8.
+    let control = if utf8 {
+        control
+    } else {
+        control.saturating_add(data.iter().filter(|&&b| b == 0x7f).count())
+    };
     if control.saturating_mul(100) > data.len() {
         return None;
     }

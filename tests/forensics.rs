@@ -66,6 +66,66 @@ fn a_sparse_lastlog_is_read_in_windows() {
     assert_eq!(child_names(&host, root), ["UID 0", "UID 119999"]);
 }
 
+/// A 1.25 TB lastlog (UIDs up to about 4.3 billion) with two logins, from
+/// a host that declares the holes of the sparse file
+/// (`Session::set_holes`): the walk jumps over them, so it reads two
+/// windows and costs a handful of units, where reading through the holes
+/// stopped at `max_work`.
+#[test]
+fn a_sparse_lastlog_skips_declared_holes() {
+    let n: u64 = 4_294_967_295;
+    let len = n * 292;
+    let first = lastlog_record(1_700_000_000, "tty1", "");
+    let last = lastlog_record(1_700_000_100, "pts/0", "10.0.0.2");
+    let bytes_at = |offset: u64, want: u64| -> Vec<u8> {
+        let end = (offset + want).min(len);
+        (offset..end)
+            .map(|o| {
+                if o < 292 {
+                    first[o as usize]
+                } else if o >= len - 292 {
+                    last[(o - (len - 292)) as usize]
+                } else {
+                    0
+                }
+            })
+            .collect()
+    };
+    let format = formats::by_name("lastlog").unwrap();
+    let mut session = fillyfoal::Session::new(Limits::default());
+    let root = session.open_as("lastlog", len, format);
+    let source = session.node(root).unwrap().span.unwrap().source;
+    // As SEEK_DATA/SEEK_HOLE would report it, at 4 KiB granularity.
+    let hole = 4096..(len - 292) / 4096 * 4096;
+    session.set_holes(source, std::slice::from_ref(&hole));
+    session.expand(root, 100);
+    let mut supplied = 0u64;
+    for _ in 0..10_000 {
+        match session.poll(5_000) {
+            Progress::Idle => break,
+            Progress::Yielded => {}
+            Progress::NeedSecret(_) => panic!("no secrets here"),
+            Progress::NeedBytes(requests) => {
+                for r in requests {
+                    let data = bytes_at(r.offset, r.len);
+                    supplied += data.len() as u64;
+                    session.supply(r.source, r.offset, &data);
+                }
+            }
+        }
+    }
+    let children = session.children(root).unwrap();
+    let names: Vec<String> = children
+        .ids
+        .iter()
+        .map(|&c| session.node(c).unwrap().name.to_string())
+        .collect();
+    assert_eq!(names, ["UID 0".to_owned(), format!("UID {}", n - 1)]);
+    assert!(children.error.is_none(), "{:?}", children.error);
+    assert!(supplied < 4 << 20, "{supplied} bytes supplied");
+    assert!(session.work_done() < 1_000, "{} units", session.work_done());
+}
+
 /// The external `fillyfoal.evtx` (4 chunks: records 1–181, 182–360,
 /// 361–540, 541–600) with its chunk ring wrapped: physical order
 /// [c2, c3, c0, c1], first chunk 2, last chunk 1, header CRC fixed.

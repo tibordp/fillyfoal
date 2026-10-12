@@ -176,7 +176,7 @@ fn fixtures_are_invariant_under_host_pressure() {
                         continue;
                     }
                     let name = display_name(path);
-                    let expected = common::explore_as(&name, &data, chosen_format(path));
+                    let expected = common::explore_full_as(&name, &data, chosen_format(path));
                     let mut host = common::Host::open(
                         &name,
                         data,
@@ -271,7 +271,7 @@ fn fixtures_survive_random_host_behaviour() {
                         continue;
                     }
                     let name = display_name(path);
-                    let expected = common::explore_as(&name, &data, chosen_format(path));
+                    let expected = common::explore_full_as(&name, &data, chosen_format(path));
                     let mut host = common::Host::open(
                         &name,
                         data,
