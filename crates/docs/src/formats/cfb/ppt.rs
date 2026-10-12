@@ -693,11 +693,25 @@ async fn document_as(
                 ),
         );
     }
+    // Only the CryptSession10Container, the persist directories and the
+    // user edits are plaintext (MS-PPT 2.3.7). PowerPoint writes them after
+    // the encrypted persist objects, so the records are walked from the
+    // container on; walking the ciphertext would only find noise.
+    let plain = session.offset.saturating_sub(span.offset).min(span.len);
+    if plain > 0 {
+        cx.emit(
+            Node::new("Encrypted persist objects")
+                .span(span.sub(0, plain))
+                .summary(format!(
+                    "{plain} bytes of ciphertext; see the decrypted document"
+                )),
+        );
+    }
     cx.emit(
         Node::new("Records")
-            .span(span)
-            .summary("encrypted persist objects; see the decrypted document")
-            .lazy(officeart::records_at, (input, span)),
+            .span(span.tail(plain))
+            .summary("the plaintext records after the encrypted persist objects")
+            .lazy(officeart::records_at, (input, span.tail(plain))),
     );
     cx.annotate(format!(
         "PowerPoint 97–2003 presentation, encrypted ({scheme})"

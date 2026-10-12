@@ -24,21 +24,25 @@
 //!
 //! Provenance: written from memory of [MS-ONESTORE] and [MS-ONE] (no copy
 //! of either was at hand), cross-checked against pyOneNote, an independent
-//! reader. No OneNote writer was available, so the fixtures come from our
-//! own generator; they do not prove agreement with files OneNote writes.
-//! In particular from memory: the transaction log fragment layout, the
+//! reader. Two files OneNote 2024 (16.0.17932) wrote, a section and its
+//! notebook's `.onetoc2` (`tests/fixtures/external/onenote`, `onetoc2`),
+//! now check it against the real writer; the other fixtures come from our
+//! own generator. In particular from memory: the transaction log fragment layout, the
 //! free chunk list layout, whether a ChunkTerminatorFND counts towards a
 //! list's committed node count (here it does not), the FileDataStoreObject
 //! header and footer GUIDs, and the JCIDs and property IDs (which match
 //! pyOneNote's tables). Not handled: password-protected sections (object
-//! data is encrypted; shown as unsupported), global identification table
-//! entries copied from a dependency revision (GlobalIdTableEntry2FNDX and
-//! 3FNDX, used by `.onetoc2`), and files referenced outside the section
+//! data is encrypted; shown as unsupported) and files referenced outside the section
 //! (`<file>` references into the `onefiles` folder). Sections in the
 //! alternative packaging of [MS-ONESTORE] 2.8 (guidFileFormat
 //! {638DE92F-...}: the revision store inside an MS-FSSHTTPB data element
 //! package, as OneNote for the web hands them out) are recognized; only
 //! their fixed prefix is shown and the package is reported as unsupported.
+//! Global identification table entries copied from the dependency
+//! revision (GlobalIdTableEntry2FNDX and 3FNDX, which OneNote writes in
+//! `.onetoc2` files) are resolved from that revision's final table. The
+//! md5Hash of read-only object declarations is not the MD5 of the stored
+//! bytes in OneNote's own files, so a difference is only noted.
 
 mod model;
 mod props;
@@ -418,6 +422,10 @@ fn list_node(name: &'static str, input: Input, fcr: Fcr, path: &Path) -> Node {
 struct Tables {
     frozen: Arc<IdTable>,
     building: IdTable,
+    /// The current revision and the one it depends on.
+    rid: Option<(store::ExGuid, store::ExGuid)>,
+    /// Finished revisions' tables, for entries copied from them.
+    by_rid: BTreeMap<store::ExGuid, Arc<IdTable>>,
 }
 
 impl Tables {
@@ -427,6 +435,22 @@ impl Tables {
                 self.building.clear();
                 if hdr.id != 0x021 && hdr.id != 0x022 {
                     self.frozen = Arc::default();
+                    self.rid = Some((
+                        body.rid.unwrap_or_default(),
+                        body.dependent.unwrap_or_default(),
+                    ));
+                }
+            }
+            0x01C => {
+                if let Some((rid, _)) = self.rid.take() {
+                    self.by_rid.insert(rid, self.frozen.clone());
+                }
+            }
+            0x025 | 0x026 => {
+                let source = self.rid.and_then(|(_, dep)| self.by_rid.get(&dep));
+                if let (Some(source), Some((from, count, to))) = (source, body.copy) {
+                    let source = source.clone();
+                    self.building.copy_from(&source, from, count, to);
                 }
             }
             0x024 => {
@@ -659,7 +683,10 @@ async fn file_node_view(cx: Cx, st: NodeState) -> Result<()> {
         return Ok(());
     };
     if matches!(hdr.id, 0x0C2 | 0x0C4 | 0x0C5) {
-        // guidHash / md5Hash: the MD5 of the referenced data.
+        // guidHash / md5Hash: the MD5 of the referenced data, says
+        // [MS-ONESTORE]. In files OneNote 2024 writes it is not the MD5 of
+        // the stored bytes (nor of any byte range near them), so a
+        // difference is shown, not reported as damage.
         let stored = block
             .data
             .get(block.data.len().saturating_sub(16)..)
@@ -672,7 +699,7 @@ async fn file_node_view(cx: Cx, st: NodeState) -> Result<()> {
             .span(st.span.sub(st.span.len.saturating_sub(16), 16))
             .value(Value::Bool(digest == stored));
         if digest != stored {
-            node = node.diag(Diagnostic::warning("does not match"));
+            node = node.summary("differs; OneNote does not always hash the stored bytes");
         }
         cx.emit(node);
     }

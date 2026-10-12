@@ -68,7 +68,10 @@ record! {
         signature: ascii[21] "Signature" .desc("\"Visio (TM) Drawing\\r\\n\" and a NUL"),
         _unknown: bytes[5] "Unknown",
         version: u8 "Version" .enumeration(VERSIONS),
-        _rest: bytes[9] "Unknown",
+        _pad: bytes[1] "Unknown",
+        length: u32 "Document length"
+            .desc("The VisioDocument stream's length (as Visio 2003-2010 write it)"),
+        _rest: bytes[4] "Unknown",
     }
 }
 
@@ -115,6 +118,12 @@ pub async fn document(cx: &Cx, input: Input, span: Span) -> Result<()> {
                 ))),
         );
         return Ok(());
+    }
+    if h.version == 11 && h.length != 0 && u64::from(h.length) != span.len {
+        cx.diag(Diagnostic::warning(format!(
+            "the header gives a document length of {} bytes; the stream has {}",
+            h.length, span.len
+        )));
     }
     let at = span.sub(Header::SIZE, Pointer::SIZE);
     let p = parse(cx, at, LE, &(), Pointer::layout).await?;

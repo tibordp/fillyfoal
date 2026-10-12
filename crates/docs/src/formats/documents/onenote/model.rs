@@ -306,6 +306,9 @@ impl Builder<'_> {
         let mut cur: Option<Revision> = None;
         let mut table: Arc<IdTable> = Arc::default();
         let mut building = IdTable::new();
+        // Each finished revision's global ID table, for the revisions that
+        // copy entries from it (their dependency).
+        let mut by_rid: BTreeMap<ExGuid, Arc<IdTable>> = BTreeMap::new();
         for (n, node) in list.nodes.iter().enumerate() {
             if n % 256 == 255 {
                 self.cx.checkpoint().await;
@@ -332,6 +335,7 @@ impl Builder<'_> {
                 }
                 0x01C => {
                     if let Some(r) = cur.take() {
+                        by_rid.insert(r.rid, table.clone());
                         space.events.push(Event::Revision(space.revisions.len()));
                         space.revisions.push(r);
                     }
@@ -354,12 +358,20 @@ impl Builder<'_> {
                         building.insert(i, g);
                     }
                 }
-                0x025 | 0x026 => self.diags.push(
-                    Diagnostic::unsupported(
-                        "global ID table entries copied from a dependency revision are not resolved",
-                    )
-                    .at(node.span),
-                ),
+                0x025 | 0x026 => {
+                    let dep = cur.as_ref().map(|r| r.dependent);
+                    match (dep.and_then(|d| by_rid.get(&d)), b.copy) {
+                        (Some(source), Some((from, count, to))) => {
+                            building.copy_from(source, from, count, to);
+                        }
+                        _ => self.diags.push(
+                            Diagnostic::malformed(
+                                "global ID table entries copied from a revision not seen before",
+                            )
+                            .at(node.span),
+                        ),
+                    }
+                }
                 0x028 => table = Arc::new(building.clone()),
                 0x02D | 0x02E | 0x041 | 0x042 => {
                     if let (Some(r), Some(o)) = (cur.as_mut(), self.object(node, &b, &table)) {
