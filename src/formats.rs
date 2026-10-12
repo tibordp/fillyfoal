@@ -710,6 +710,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "docs")]
     &cfb::propstore::FORMAT,
     #[cfg(feature = "docs")]
+    &pdf::AI,
+    #[cfg(feature = "docs")]
     &pdf::FORMAT,
     #[cfg(feature = "security")]
     &asn1::X509,
@@ -1032,6 +1034,10 @@ pub static FORMATS: &[&Format] = &[
     &archive::zip::SKETCH,
     #[cfg(feature = "archive")]
     &archive::zip::USDZ,
+    #[cfg(feature = "archive")]
+    &archive::zip::PKPASS,
+    #[cfg(feature = "archive")]
+    &archive::zip::OLM,
     #[cfg(feature = "archive")]
     &archive::zip::KRITA,
     #[cfg(feature = "archive")]
@@ -3051,6 +3057,8 @@ pub static FORMATS: &[&Format] = &[
     &text::rtf::FORMAT,
     #[cfg(feature = "text")]
     &text::postscript::DOS_EPS,
+    #[cfg(feature = "text")]
+    &text::postscript::AI_PS,
     #[cfg(feature = "text")]
     &text::postscript::EPS,
     #[cfg(feature = "text")]
