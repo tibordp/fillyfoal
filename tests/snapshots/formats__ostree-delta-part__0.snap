@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ 0 — OSTree static delta part  [0x0+0x1dd]
+    Compression: xz (0x78)  [0x0+0x1]
+  ▾ Payload — OSTree delta payload, 490 bytes of data, 34 bytes of operations  [0x1+0x1dc]
+    ▾ Modes — 1 mode  [#1:0x0+0xc]
+        [0]: "0100644" — -rw-r--r-- 0:0  [#1:0x0+0xc]
+    ▾ Extended attributes — aa(ayay), 1 element  [#1:0xc+0x1]
+        [0] — a(ayay), 0 elements  [#1:0xc+0x0]
+      Raw data — 490 bytes  [#1:0xd+0x1ea]
+      Operations — 34 bytes  [#1:0x1f7+0x22]

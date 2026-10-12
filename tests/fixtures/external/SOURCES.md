@@ -1118,3 +1118,16 @@ Made by `sh tests/data/audio-codecs/make.sh OUTDIR` (fedora:42, `tests/data/audi
 | `mssql-data/shop_extra.ndf.gz` | Microsoft SQL Server 2022 16.0.4295.3 Developer Edition (`mcr.microsoft.com/mssql/server:2022-latest`, linux/amd64) | `sh tests/data/mssql/make.sh .` runs `tests/data/mssql/shop.sql` and detaches the database: a secondary data file with a table's data and IAM pages. Page layouts and checksums checked against `DBCC PAGE`. Not byte-reproducible (GUIDs, LSNs, times); `gzip -9 -n` |
 | `mssql-data/shop-head.mdf.gz` | the same | same script: the first 16 pages (128 KiB) of the 5 MiB primary data file (file header, allocation pages, boot page). **Truncated**; `gzip -9 -n` |
 | `mssql-log/shop_log-head.ldf.gz` | the same | same script: the first 64 KiB of the 1 MiB transaction log (file header page, the first virtual log file's header and log blocks). **Truncated**; `gzip -9 -n` |
+## GLib and OSTree (Alpine 3.22 in Docker)
+| `gresource/demo.gresource` | glib-compile-resources (GLib 2.84.4, Alpine 3.22 `glib-dev`) | reproduced byte for byte by `sh tests/data/gvdb/make.sh OUTDIR` (`gresource.sh`): three files under `/org/example/demo`, one aliased to `ui/window.ui`, one `compressed="true"` (zlib) |
+| `dconf/local` | dconf compile (dconf 0.40, Alpine 3.22 `dconf`) | same script (`dconf.sh`): a keyfile with boolean, integer, double, string, object path, array, tuple, maybe, dictionary, byte and int64 keys and one lock (the nested `.locks` table); reproduced byte for byte |
+| `gvdb/gschemas.compiled` | glib-compile-schemas (GLib 2.84.4) | same script (`gschemas.sh`): one schema with an enum key, a ranged key and a summary; reproduced byte for byte |
+| `ostree-commit/` | libostree 2025.2 (Alpine 3.22 `ostree`) | `sh tests/data/ostree/make.sh OUTDIR` (`ostree.sh`): an archive-mode repository holding two commits of a small tree with fixed times (`ostree commit --timestamp`, owner 0:0, no xattrs, metadata strings, a detached metadata string); its objects are copied out under short names (`demo.commit` for `<checksum>.commit`, ...). Objects reproduce byte for byte |
+| `ostree-commitmeta/` | libostree 2025.2 | same script: the first commit's detached metadata |
+| `ostree-dirtree/` | libostree 2025.2 | same script: the root tree (two directories) and `/etc` (a file and a symbolic link) |
+| `ostree-dirmeta/` | libostree 2025.2 | same script: the metadata shared by every directory (0755, 0:0) |
+| `ostree-filez/` | libostree 2025.2 | same script: a regular file (raw DEFLATE content) and a symbolic link |
+| `ostree-summary/` | libostree 2025.2 | same script, `ostree summary -u`: one ref; records the time it was written |
+| `ostree-delta/` | libostree 2025.2 | same script: the superblock of `ostree static-delta generate --empty --inline` (`inline.superblock`, its xz part inline in the metadata) and of the delta between the two commits (`superblock`); they record the time they were written |
+| `ostree-delta-part/` | libostree 2025.2 | same script: part `0` of the delta between the commits (xz) |
+| `flatpak/demo.flatpak` | flatpak 1.16.1 (Alpine 3.22 `flatpak`) | same script (`flatpak.sh`): `flatpak build-export` of a hand-made app directory (metadata keyfile, one shell script) with a fixed timestamp, then `flatpak build-bundle`; the superblock records the time it was written |

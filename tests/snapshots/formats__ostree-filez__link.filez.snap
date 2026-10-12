@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ link.filez — OSTree content object, symlink to ../usr/share/demo/hello.txt  [0x0+0x3d]
+    Header size: 53  [0x0+0x4]
+    Padding  [0x4+0x4]
+    Size: 0  [0x8+0x8]
+    Uid: 0  [0x10+0x4]
+    Gid: 0  [0x14+0x4]
+    Mode: "0120777" — lrwxrwxrwx  [0x18+0x4]
+    Rdev: 0  [0x1c+0x4]
+    Symlink target: "../usr/share/demo/hello.txt"  [0x20+0x1c]
+    Extended attributes — none  [0x3c+0x0]

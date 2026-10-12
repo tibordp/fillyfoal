@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ demo.commitmeta — OSTree detached metadata, 1 entry  [0x0+0x16]
+  ▾ Metadata — 1 entry  [0x0+0x16]
+      note: "fillyfoal" — <s>  [0x0+0x15]

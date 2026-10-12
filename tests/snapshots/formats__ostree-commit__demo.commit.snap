@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ demo.commit — OSTree commit, Demo commit, 2024-01-02 03:04:05 UTC  [0x0+0xb6]
+  ▾ Metadata — 2 entries  [0x0+0x3b]
+      version: "1.0" — <s>  [0x0+0xf]
+    ▾ ostree.ref-binding — <as>, 1 element  [0x10+0x29]
+        [0]: "demo/stable"  [0x28+0xc]
+    Parent — none  [0x3b+0x0]
+    Related — a(say), 0 elements  [0x3b+0x0]
+    Subject: "Demo commit"  [0x3b+0xc]
+    Body: "A small tree for fillyfoal."  [0x47+0x1c]
+    Timestamp: 2024-01-02 03:04:05 UTC  [0x68+0x8]
+    Root tree: "2f67f182231db541d02a57bf059ba728dd25d750a93c00a3a591be325e611e42"  [0x70+0x20]
+    Root metadata: "446a0ef11b7cc167f3b603e585c7eeeeb675faa412d5ec73f62988eb0b6c5488"  [0x90+0x20]

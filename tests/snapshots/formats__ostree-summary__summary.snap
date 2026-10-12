@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ summary — OSTree summary, 1 ref  [0x0+0x278]
+  ▾ Refs — 1 ref  [0x0+0x80]
+    ▾ demo/stable: "7913dcbbb07cfe7e7b1e4e052c9e80363b67647751c03fbee2295a27f17f9e04"  [0x0+0x7f]
+        Commit size: 190  [0x10+0x8]
+        Commit: "7913dcbbb07cfe7e7b1e4e052c9e80363b67647751c03fbee2295a27f17f9e04"  [0x18+0x20]
+      ▾ Metadata — 2 entries  [0x38+0x45]
+          ostree.commit.version: "1.1" — <s>  [0x38+0x1f]
+          ostree.commit.timestamp: 2024-02-03 04:05:06 UTC — <t>  [0x58+0x23]
+  ▾ Metadata — 5 entries  [0x80+0x1f6]
+      ostree.summary.mode: "archive-z2" — <s>  [0x80+0x26]
+      ostree.summary.last-modified: 2026-10-12 04:51:18 UTC — <t>  [0xa8+0x2b]
+      ostree.summary.tombstone-commits: false — <b>  [0xd8+0x2c]
+    ▾ ostree.static-deltas — <a{sv}>, 2 elements  [0x108+0x140]
+        336b21f74a04049c652f099a04286629c43d0fb407dbc5e012b70bb8e1b35180: 6f c3 2b d7 b8 ff e6 b3 6e a3 ed c0 07 1c 29 83 …  |o.+.....n.....).| — <ay>, 32 bytes  [0x120+0x6c]
+        336b21f74a04049c652f099a04286629c43d0fb407dbc5e012b70bb8e1b35180-7913dcbbb07cfe7…: 90 cc 24 08 77 be f1 29 c2 08 a0 c4 37 bd 8a 2c …  |..$.w..)....7..,| — <ay>, 32 bytes  [0x190+0xac]
+      ostree.summary.indexed-deltas: true — <b>  [0x248+0x24]

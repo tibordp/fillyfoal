@@ -112,6 +112,16 @@ pub static DEEP: &[&DeepProbe] = &[
     &geo::survey::SHX_DEEP,
     #[cfg(feature = "science")]
     &geo::survey::SHP_DEEP,
+    #[cfg(feature = "system")]
+    &system::ostree::DIRTREE_DEEP,
+    #[cfg(feature = "system")]
+    &system::ostree::DIRMETA_DEEP,
+    #[cfg(feature = "system")]
+    &system::ostree::COMMITMETA_DEEP,
+    #[cfg(feature = "system")]
+    &system::ostree::SUMMARY_DEEP,
+    #[cfg(feature = "system")]
+    &system::ostree::DELTA_DEEP,
 ];
 
 /// Every format.
@@ -676,12 +686,38 @@ pub static FORMATS: &[&Format] = &[
     &ml::gguf::FORMAT,
     #[cfg(feature = "data")]
     &data::pickle::FORMAT,
+    #[cfg(feature = "data")]
+    &data::gvdb::GRESOURCE,
+    #[cfg(feature = "data")]
+    &data::gvdb::DCONF,
+    #[cfg(feature = "data")]
+    &data::gvdb::GVDB,
     #[cfg(feature = "system")]
     &system::git::PACK,
     #[cfg(feature = "system")]
     &system::git::PACK_INDEX,
     #[cfg(feature = "system")]
     &system::git::INDEX,
+    #[cfg(feature = "system")]
+    &system::ostree::FLATPAK,
+    #[cfg(feature = "system")]
+    &system::ostree::DELTA,
+    #[cfg(feature = "system")]
+    &system::ostree::DELTA_PART,
+    #[cfg(feature = "system")]
+    &system::ostree::DELTA_PAYLOAD,
+    #[cfg(feature = "system")]
+    &system::ostree::COMMIT_OBJECT,
+    #[cfg(feature = "system")]
+    &system::ostree::FILE_OBJECT,
+    #[cfg(feature = "system")]
+    &system::ostree::DIRTREE_OBJECT,
+    #[cfg(feature = "system")]
+    &system::ostree::DIRMETA_OBJECT,
+    #[cfg(feature = "system")]
+    &system::ostree::COMMITMETA_OBJECT,
+    #[cfg(feature = "system")]
+    &system::ostree::SUMMARY_FILE,
     #[cfg(feature = "docs")]
     &documents::chm::FORMAT,
     #[cfg(feature = "docs")]

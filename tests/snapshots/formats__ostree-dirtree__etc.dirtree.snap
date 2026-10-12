@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ etc.dirtree — OSTree directory tree, 2 files, 0 directories  [0x0+0x5a]
+  ▾ Files — 2 entries  [0x0+0x59]
+      demo.conf: "df4daac19a53a9e5bcf38efd56dbca8e7bad00c4680e2752c6a1dc94bce204d0" — file  [0x0+0x2b]
+      hello-link: "d2b846987f850f17d3312464f33dd484a8da32e9ac8408702809a6d2c370dc52" — file  [0x2b+0x2c]
+    Directories — 0 entries  [0x59+0x0]

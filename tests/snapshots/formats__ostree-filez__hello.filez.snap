@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ hello.filez — OSTree content object, -rw-r--r-- 15 bytes  [0x0+0x33]
+    Header size: 26  [0x0+0x4]
+    Padding  [0x4+0x4]
+    Size: 15  [0x8+0x8]
+    Uid: 0  [0x10+0x4]
+    Gid: 0  [0x14+0x4]
+    Mode: "0100644" — -rw-r--r--  [0x18+0x4]
+    Rdev: 0  [0x1c+0x4]
+    Symlink target: ""  [0x20+0x1]
+    Extended attributes — none  [0x21+0x0]
+  ▾ Content — UTF-8 text, LF line endings, 1 line  [0x22+0x11]
+      Encoding: "UTF-8"
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [#1:0x0+0xf]
+        Line 1: "Hello, OSTree!"  [#1:0x0+0xe]
