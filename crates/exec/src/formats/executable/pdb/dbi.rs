@@ -524,3 +524,87 @@ pub(super) async fn section_headers(cx: Cx, span: Span) -> Result<()> {
     }
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// FPO and OMAP streams
+
+const FRAME_DATA_FLAGS: FlagTable = &[
+    flag(0x1, "has SEH"),
+    flag(0x2, "has C++ EH"),
+    flag(0x4, "function start"),
+];
+
+/// One `FRAMEDATA` record (32 bytes, `cvinfo.h`).
+fn frame_data(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.u32("RVA start").hex().emit()?;
+    f.u32("Code size").hex().emit()?;
+    f.u32("Locals size").hex().emit()?;
+    f.u32("Parameters size").hex().emit()?;
+    f.u32("Maximum stack size").hex().emit()?;
+    f.u32("Frame program")
+        .hex()
+        .desc("Offset of the program in /names")
+        .emit()?;
+    f.u16("Prolog size").hex().emit()?;
+    f.u16("Saved registers size").hex().emit()?;
+    f.u32("Flags").flags(FRAME_DATA_FLAGS).emit()?;
+    Ok(())
+}
+
+/// The new FPO stream: `FRAMEDATA` records whose frame programs (stack
+/// unwinding expressions) are strings in `/names`.
+pub(super) async fn new_fpo(cx: Cx, (span, names): (Span, Option<Span>)) -> Result<()> {
+    let n = span.len / 32;
+    cx.set_count(Count::Exact(n));
+    for i in 0..n {
+        let at = span.sub(i.saturating_mul(32), 32);
+        let data = cx.read(at).await?;
+        let rva = u32_le(&data, 0).unwrap_or(0);
+        let len = u32_le(&data, 4).unwrap_or(0);
+        let program = u32_le(&data, 20).unwrap_or(0);
+        let mut node = struct_node(format!("#{i}"), at, LE, (), frame_data);
+        let mut summary = format!("RVA {rva:#x}, {len:#x} bytes");
+        if let Some(names) = names
+            && let Ok((s, _)) =
+                crate::formats::util::binutil::string_at(&cx, names, program.into()).await
+        {
+            summary.push_str(&format!(": {s}"));
+            node = node.value(text(s));
+        }
+        cx.push(node.summary(summary)).await;
+    }
+    if !span.len.is_multiple_of(32) {
+        cx.diag(
+            Diagnostic::malformed("the stream is not a whole number of FRAMEDATA records")
+                .at(span.tail(n.saturating_mul(32))),
+        );
+    }
+    Ok(())
+}
+
+/// An OMAP stream: pairs of RVAs mapping addresses of an image rewritten
+/// after linking (by a post-link optimizer) to or from the original.
+pub(super) async fn omap(cx: Cx, span: Span) -> Result<()> {
+    let n = span.len / 8;
+    cx.set_count(Count::Exact(n));
+    for i in 0..n {
+        let at = span.sub(i.saturating_mul(8), 8);
+        let data = cx.read(at).await?;
+        let from = u32_le(&data, 0).unwrap_or(0);
+        let to = u32_le(&data, 4).unwrap_or(0);
+        cx.push(
+            Node::new(format!("#{i}"))
+                .span(at)
+                .value(hex(from, 32))
+                .summary(format!("{from:#x} → {to:#x}")),
+        )
+        .await;
+    }
+    if !span.len.is_multiple_of(8) {
+        cx.diag(
+            Diagnostic::malformed("the stream is not a whole number of OMAP entries")
+                .at(span.tail(n.saturating_mul(8))),
+        );
+    }
+    Ok(())
+}

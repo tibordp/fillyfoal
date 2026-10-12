@@ -357,7 +357,7 @@ fn fpo_record(f: &mut Fields<'_>, _: &()) -> Result<()> {
     Ok(())
 }
 
-async fn fpo(cx: Cx, span: Span) -> Result<()> {
+pub(crate) async fn fpo(cx: Cx, span: Span) -> Result<()> {
     let count = span.len / 16;
     cx.set_count(Count::Exact(count));
     for i in 0..count {
