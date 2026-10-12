@@ -1,0 +1,12 @@
+CREATE DATABASE shop;
+USE shop;
+CREATE TABLE fruit (id INT NOT NULL PRIMARY KEY, name VARCHAR(32) NOT NULL, price DECIMAL(6,2) NULL, note TEXT NULL, KEY by_name (name)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
+INSERT INTO fruit VALUES (1,'apple',0.50,NULL),(2,'banana',0.25,'ripe'),(3,'cherry',4.00,NULL),(4,'damson',2.10,'out of season');
+CREATE TABLE compact (k INT NOT NULL PRIMARY KEY, v VARCHAR(10)) ENGINE=InnoDB ROW_FORMAT=COMPACT;
+INSERT INTO compact VALUES (1,'one'),(2,NULL),(3,'three');
+CREATE TABLE packed (k INT NOT NULL PRIMARY KEY, v VARCHAR(100)) ENGINE=InnoDB ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=4;
+INSERT INTO packed VALUES (1,'compressed row one'),(2,'compressed row two');
+CREATE TABLE legacy (id INT NOT NULL PRIMARY KEY, name VARCHAR(20), qty INT) ENGINE=MyISAM;
+INSERT INTO legacy VALUES (1,'alpha',10),(2,'beta',NULL),(3,'gamma',30);
+DELETE FROM legacy WHERE id=2;
+INSERT INTO legacy VALUES (4,'a much longer name',40);

@@ -25,6 +25,12 @@ pub use fillyfoal_av::formats::video;
 #[cfg(feature = "data")]
 pub use fillyfoal_data::formats::data;
 #[cfg(feature = "data")]
+pub use fillyfoal_data::formats::mssql;
+#[cfg(feature = "data")]
+pub use fillyfoal_data::formats::mysql;
+#[cfg(feature = "data")]
+pub use fillyfoal_data::formats::postgres;
+#[cfg(feature = "data")]
 pub use fillyfoal_data::formats::sqlite;
 #[cfg(feature = "docs")]
 pub use fillyfoal_docs::formats::cfb;
@@ -2901,6 +2907,24 @@ pub static FORMATS: &[&Format] = &[
     &data::dumps::MYSQL_FRM,
     #[cfg(feature = "data")]
     &data::dumps::MYISAM,
+    #[cfg(feature = "data")]
+    &mysql::innodb::FORMAT,
+    #[cfg(feature = "data")]
+    &mysql::redo::FORMAT,
+    #[cfg(feature = "data")]
+    &mysql::myd::FORMAT,
+    #[cfg(feature = "data")]
+    &postgres::control::FORMAT,
+    #[cfg(feature = "data")]
+    &postgres::wal::FORMAT,
+    #[cfg(feature = "data")]
+    &postgres::relation::FORMAT,
+    #[cfg(feature = "data")]
+    &postgres::relation::IMAGE,
+    #[cfg(feature = "data")]
+    &mssql::DATA,
+    #[cfg(feature = "data")]
+    &mssql::LOG,
     #[cfg(feature = "data")]
     &data::dumps::H2,
     #[cfg(feature = "data")]
