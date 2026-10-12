@@ -5,7 +5,11 @@
 //! time, never whole. Video samples of AVC, HEVC, AV1 and VP9 tracks split
 //! into NAL units, OBUs or the VP9 frame header ([`coded`]), also behind
 //! `encv` when `sinf`/`frma` names the original format; 3GPP timed text
-//! (`tx3g`) samples show their text.
+//! (`tx3g`) and WebVTT (`wvtt`) samples show their text. Audio samples
+//! show their frame: AC-3/E-AC-3, DTS and MPEG audio frames, the first
+//! syntactic element of an AAC raw data block (when the `esds`
+//! AudioSpecificConfig names a GA object type), the Opus TOC, the FLAC
+//! frame header and the first ALAC element header.
 //!
 //! Fragmented files list the samples of each track run (`trun`) the same
 //! way, located from the base data offset (`tfhd`), the run's data offset
@@ -17,8 +21,11 @@ use crate::bytes::{to_u64, u16_be, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::Input;
+use crate::formats::audio::{ac3, adts, dts, flac, mpa, ogg};
 use crate::formats::util::fmt::plural;
+use crate::formats::util::sound::{self, Bits, FrameSyntax};
 use crate::formats::util::vidutil::nal::NalCodec;
+use crate::formats::util::vidutil::{detached, esds, nal};
 use crate::formats::video::coded;
 use crate::node::Node;
 use crate::span::Span;
@@ -54,6 +61,24 @@ struct Tables {
     configs: Arc<Vec<Decode>>,
 }
 
+/// Audio codecs whose samples are frames with their own sync and header.
+#[derive(Clone, Copy, Debug)]
+enum Framed {
+    Ac3,
+    Dts,
+    Mpa,
+}
+
+impl Framed {
+    fn syntax(self) -> &'static FrameSyntax {
+        match self {
+            Framed::Ac3 => &ac3::SYNTAX,
+            Framed::Dts => &dts::SYNTAX,
+            Framed::Mpa => &mpa::SYNTAX,
+        }
+    }
+}
+
 /// How the samples of one sample description are decoded.
 #[derive(Clone, Debug)]
 enum Decode {
@@ -61,6 +86,19 @@ enum Decode {
     Coded(Arc<coded::Config>),
     /// 3GPP timed text: a 16-bit length, then UTF-8 (or UTF-16) text.
     Tx3g,
+    /// WebVTT cues: `vttc` boxes with `payl` text, `vtte` gaps.
+    Wvtt,
+    /// Self-framed audio (AC-3, E-AC-3, DTS, MPEG audio): one frame or
+    /// several per sample.
+    Frames(Framed),
+    /// AAC (GA object types): one raw data block per sample.
+    Aac,
+    /// One Opus packet per sample.
+    Opus,
+    /// One FLAC frame per sample.
+    Flac,
+    /// One ALAC frame per sample.
+    Alac,
     /// Protected (`encv`) AVC/HEVC: length-prefixed NAL units whose
     /// headers are clear (ISO 23001-7 subsample encryption) but whose
     /// payloads are not decoded.
@@ -83,6 +121,12 @@ impl Decode {
                 },
             ),
             Decode::Tx3g => node.lazy(tx3g_sample, span),
+            Decode::Wvtt => node.lazy(wvtt_sample, span),
+            Decode::Frames(f) => node.lazy(sound::expand_frames, (span, f.syntax())),
+            Decode::Aac => node.lazy(aac_sample, span),
+            Decode::Opus => node.lazy(opus_sample, span),
+            Decode::Flac => node.lazy(flac_sample, span),
+            Decode::Alac => node.lazy(alac_sample, span),
             Decode::Protected(codec, len) => node.lazy(protected_sample, (span, *codec, *len)),
             _ => node,
         }
@@ -157,6 +201,244 @@ async fn tx3g_sample(cx: Cx, span: Span) -> Result<()> {
         );
     }
     Ok(())
+}
+
+/// Boxes listed in one WebVTT sample or cue.
+const MAX_CUE_BOXES: usize = 256;
+
+/// The boxes of `d` from `from` to `to`: (type, offset, length clamped to
+/// `to`), at most [`MAX_CUE_BOXES`].
+fn boxes_in(d: &[u8], from: u64, to: u64) -> Vec<([u8; 4], u64, u64)> {
+    let mut out = Vec::new();
+    let mut at = from;
+    while at.saturating_add(8) <= to && out.len() < MAX_CUE_BOXES {
+        let i = crate::bytes::to_usize(at);
+        let (Some(size), Some(kind)) = (
+            u32_be(d, i),
+            crate::bytes::array::<4>(d, i.saturating_add(4)),
+        ) else {
+            break;
+        };
+        let size = u64::from(size);
+        if size < 8 {
+            break;
+        }
+        out.push((kind, at, size.min(to.saturating_sub(at))));
+        at = at.saturating_add(size);
+    }
+    out
+}
+
+/// The body of the box at `at` (`len` bytes) of `d`, as text.
+fn box_text(d: &[u8], at: u64, len: u64) -> String {
+    let from = crate::bytes::to_usize(at.saturating_add(8));
+    let to = crate::bytes::to_usize(at.saturating_add(len));
+    String::from_utf8_lossy(d.get(from..to).unwrap_or_default()).into_owned()
+}
+
+/// A WebVTT sample (ISO 14496-30 5.2): `vttc` cues, `vtte` for a stretch
+/// without cues, `vtta` comments.
+async fn wvtt_sample(cx: Cx, span: Span) -> Result<()> {
+    let d = cx.read_avail(span.sub(0, 0x1_0000)).await?;
+    for (kind, at, len) in boxes_in(&d, 0, to_u64(d.len())) {
+        let b = span.sub(at, len);
+        let node = match &kind {
+            b"vttc" => {
+                let node = Node::new("Cue (vttc)").span(b).lazy(vttc_cue, b);
+                let payl = boxes_in(&d, at.saturating_add(8), at.saturating_add(len))
+                    .into_iter()
+                    .find(|(k, _, _)| k == b"payl");
+                match payl {
+                    Some((_, a, l)) => node.summary(sound::clip(&box_text(&d, a, l), 80)),
+                    None => node,
+                }
+            }
+            b"vtte" => Node::new("No cue (vtte)").span(b),
+            b"vtta" => Node::new("Comment (vtta)")
+                .span(b)
+                .value(crate::formats::util::val::text(box_text(&d, at, len))),
+            _ => Node::new(sound::fourcc(&kind))
+                .span(b)
+                .summary(format!("{len} bytes")),
+        };
+        cx.emit(node);
+    }
+    Ok(())
+}
+
+/// The boxes of a WebVTT cue: its text (`payl`), settings (`sttg`),
+/// identifier (`iden`) and current time (`ctim`).
+async fn vttc_cue(cx: Cx, span: Span) -> Result<()> {
+    let d = cx.read_avail(span.sub(0, 0x1_0000)).await?;
+    for (kind, at, len) in boxes_in(&d, 8, to_u64(d.len())) {
+        let name = match &kind {
+            b"payl" => "Cue text (payl)",
+            b"sttg" => "Settings (sttg)",
+            b"iden" => "Identifier (iden)",
+            b"ctim" => "Current time (ctim)",
+            _ => "Box",
+        };
+        cx.emit(
+            Node::new(name)
+                .span(span.sub(at, len))
+                .value(crate::formats::util::val::text(box_text(&d, at, len))),
+        );
+    }
+    Ok(())
+}
+
+/// An AAC raw data block (ISO 14496-3 4.4.2.1): the first syntactic
+/// element's header, then the rest; a program config element is decoded.
+async fn aac_sample(cx: Cx, span: Span) -> Result<()> {
+    let d = cx.read_avail(span.sub(0, 4)).await?;
+    if d.first().is_some_and(|b| b >> 5 == 5) {
+        cx.emit(adts::raw_block(span, &d));
+        return Ok(());
+    }
+    let mut b = Bits::emitting(&cx, &d, span);
+    let id = b.field("Element ID", 3).enumeration(adts::ELEMENT).emit()?;
+    match id {
+        // SCE, LFE: individual_channel_stream() starts with global_gain.
+        0 | 3 => {
+            b.field("Element instance tag", 4).emit()?;
+            b.field("Global gain", 8).emit()?;
+        }
+        1 => {
+            b.field("Element instance tag", 4).emit()?;
+            b.field("Common window", 1).flag().emit()?;
+        }
+        2 | 4 => {
+            b.field("Element instance tag", 4).emit()?;
+        }
+        6 => {
+            b.field("Count", 4).emit()?;
+        }
+        _ => {}
+    }
+    let rest = span.tail(b.pos().div_ceil(8));
+    if !rest.is_empty() {
+        cx.emit(
+            Node::new("Element data")
+                .span(rest)
+                .summary(format!("{} bytes", rest.len))
+                .desc("The rest of this element and the elements after it, up to END"),
+        );
+    }
+    Ok(())
+}
+
+async fn opus_sample(cx: Cx, span: Span) -> Result<()> {
+    let d = cx.read_avail(span.sub(0, 2)).await?;
+    ogg::opus_packet(&cx, span, &d)
+}
+
+async fn flac_sample(cx: Cx, span: Span) -> Result<()> {
+    let d = cx.read_avail(span.sub(0, 32)).await?;
+    cx.emit(flac::frame_node(&d, span).unwrap_or_else(|| {
+        Node::new("Data")
+            .span(span)
+            .diag(Diagnostic::malformed("no FLAC frame header"))
+    }));
+    Ok(())
+}
+
+/// An ALAC frame: the first element's header and, for a compressed
+/// channel element, the mixing and predictor parameters (as Apple's
+/// `ALACDecoder::Decode` reads them), then the residuals.
+async fn alac_sample(cx: Cx, span: Span) -> Result<()> {
+    // Header (23 bits), sample count (32), mix (16) and two channels of
+    // predictor parameters (16 bits and at most 31 coefficients each).
+    let d = cx.read_avail(span.sub(0, 160)).await?;
+    let mut b = Bits::emitting(&cx, &d, span);
+    let tag = b
+        .field("Element tag", 3)
+        .enumeration(adts::ELEMENT)
+        .emit()?;
+    if !matches!(tag, 0 | 1 | 3) {
+        cx.emit(Node::new("Element data").span(span.tail(b.pos() / 8)));
+        return Ok(());
+    }
+    b.field("Element instance tag", 4).emit()?;
+    b.field("Unused", 12)
+        .with(|v, n| {
+            if v == 0 {
+                n
+            } else {
+                n.diag(Diagnostic::malformed("should be 0"))
+            }
+        })
+        .emit()?;
+    let partial = b
+        .field("Partial frame", 1)
+        .flag()
+        .desc("The frame holds fewer samples than the stream's frame length")
+        .emit()?;
+    b.field("Bytes shifted", 2)
+        .desc("Low bytes of each sample stored uncompressed after the residuals")
+        .emit()?;
+    let escape = b
+        .field("Escape", 1)
+        .flag()
+        .desc("The samples are stored uncompressed")
+        .emit()?;
+    if partial == 1 {
+        b.field("Samples", 32).emit()?;
+    }
+    if escape == 0 {
+        b.field("Mix bits", 8).emit()?;
+        b.field("Mix residual", 8).signed().emit()?;
+        let channels = if tag == 1 { 2 } else { 1 };
+        for _ in 0..channels {
+            b.field("Prediction mode", 4).emit()?;
+            b.field("Denominator shift", 4).emit()?;
+            b.field("Rice parameter factor", 3).emit()?;
+            let n = b.field("Coefficients", 5).emit()?;
+            for _ in 0..n {
+                b.field("Coefficient", 16).signed().emit()?;
+            }
+        }
+    }
+    let rest = span.tail(b.pos().div_ceil(8));
+    if !rest.is_empty() {
+        cx.emit(
+            Node::new(if escape == 0 { "Residuals" } else { "Samples" })
+                .span(rest)
+                .summary(format!("{} bytes", rest.len)),
+        );
+    }
+    Ok(())
+}
+
+/// How the samples of an `mp4a` entry (whose body is `d`) decode, from
+/// its `esds`: AAC raw data blocks for the GA object types, MPEG audio,
+/// AC-3 or DTS frames.
+fn mp4a_decode(d: &[u8]) -> Decode {
+    // The boxes follow 28 bytes of sound sample entry fields, or 44/64 in
+    // QuickTime sound descriptions version 1 and 2.
+    let found = [28usize, 44, 64].into_iter().find_map(|at| {
+        super::sample::child_boxes(d, at)
+            .into_iter()
+            .find(|(k, _)| k == b"esds")
+            .and_then(|(_, b)| esds::esds_info(b.get(4..)?))
+    });
+    let Some((oti, dsi, _)) = found else {
+        return Decode::None;
+    };
+    match oti {
+        0x69 | 0x6b => Decode::Frames(Framed::Mpa),
+        0xa5 | 0xa6 => Decode::Frames(Framed::Ac3),
+        0xa9 => Decode::Frames(Framed::Dts),
+        _ if esds::is_aac(oti) => {
+            let asc = dsi.and_then(|d| nal::asc(d, detached(d.len()), false).0);
+            // The GA object types, whose access units are raw data blocks
+            // (HE-AAC's core is AAC-LC).
+            match asc.map(|a| a.object_type) {
+                Some(1..=4 | 6 | 7) => Decode::Aac,
+                _ => Decode::None,
+            }
+        }
+        _ => Decode::None,
+    }
 }
 
 /// The walker's position: everything the loop carries, for resume marks.
@@ -331,8 +613,20 @@ async fn configs(cx: &Cx, stbl: Span) -> Result<Vec<Decode>> {
                 fourcc = o;
             }
         }
-        if &fourcc == b"tx3g" {
-            out.push(Decode::Tx3g);
+        let direct = match &fourcc {
+            b"tx3g" => Some(Decode::Tx3g),
+            b"wvtt" => Some(Decode::Wvtt),
+            b"ac-3" | b"ec-3" => Some(Decode::Frames(Framed::Ac3)),
+            b"dtsc" | b"dtsh" | b"dtsl" | b"dtse" => Some(Decode::Frames(Framed::Dts)),
+            b".mp3" => Some(Decode::Frames(Framed::Mpa)),
+            b"Opus" => Some(Decode::Opus),
+            b"fLaC" => Some(Decode::Flac),
+            b"alac" => Some(Decode::Alac),
+            b"mp4a" => Some(mp4a_decode(&small(cx, body).await?)),
+            _ => None,
+        };
+        if let Some(decode) = direct {
+            out.push(decode);
             pos = pos.saturating_add(e.size);
             if e.to_end {
                 break;

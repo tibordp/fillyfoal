@@ -16,7 +16,7 @@ use crate::bytes::{to_u64, to_usize, u16_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, Layout, parse, struct_node};
-use crate::formats::audio::{adts, ape, flac, musepack, tta, wavpack};
+use crate::formats::audio::{ac3, adts, ape, dts, flac, musepack, tta, wavpack};
 use crate::formats::util::arcutil::human_size;
 use crate::formats::util::sound::{
     Bits, CRC16_MPEG, FrameSyntax, bits_node, duration, junk_node, leaf, resync, tail_node,
@@ -515,7 +515,7 @@ fn header_fields(b: &mut Bits<'_>) -> Result<()> {
 }
 
 /// For [`resync`]: frames whose length the header gives.
-static SYNTAX: FrameSyntax = FrameSyntax {
+pub static SYNTAX: FrameSyntax = FrameSyntax {
     peek: 4,
     sync: &[0xff],
     parse: parse_frame,
@@ -1302,9 +1302,11 @@ fn window_stats(window: &[u8], skip_first: bool, free: u64, stream_len: u64) -> 
 }
 
 /// Formats that dissect a leading ID3v2 tag themselves.
-const TAGGED: [&Format; 6] = [
+const TAGGED: [&Format; 8] = [
     &flac::FORMAT,
     &adts::FORMAT,
+    &ac3::FORMAT,
+    &dts::FORMAT,
     &ape::FORMAT,
     &wavpack::FORMAT,
     &musepack::FORMAT,

@@ -97,6 +97,9 @@ fn audio_behind_a_long_id3_tag_is_dissected_as_itself() {
     for (path, annotation, format) in [
         ("external/flac/tone.flac", "FLAC, ", "flac"),
         ("external/aac/tone.aac", "AAC LC, ", "aac"),
+        ("external/ac3/tone.ac3", "AC-3, ", "ac3"),
+        ("external/ac3/tone.eac3", "E-AC-3, ", "ac3"),
+        ("external/dts/surround.dts", "DTS core, ", "dts"),
         ("external/tta/tone.tta", "TTA 16-bit", "tta"),
         ("external/wavpack/tone.wv", "WavPack 16-bit", "wavpack"),
         ("synthetic/ape/tone.ape", "Monkey's Audio", "ape"),

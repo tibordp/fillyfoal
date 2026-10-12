@@ -654,6 +654,27 @@ async fn list_frames(cx: Cx, (region, syntax): (Span, &'static FrameSyntax)) -> 
     Ok(())
 }
 
+/// Expands `span`, a sample a container framed (an MP4 sample of AC-3 or
+/// MPEG audio), as the frames of `syntax` it holds: the frame's own
+/// children when it is one frame, else the frames listed.
+pub async fn expand_frames(cx: Cx, (span, syntax): (Span, &'static FrameSyntax)) -> Result<()> {
+    let head = cx.read_avail(span.sub(0, syntax.peek)).await?;
+    match (syntax.parse)(&head) {
+        Some((len, _)) if len >= span.len => {
+            let f = FrameRef {
+                span,
+                header: span.sub(0, (syntax.header)(&head)),
+                syntax,
+            };
+            match syntax.expand {
+                Some(expand) => expand(cx, f).await,
+                None => frame(cx, f).await,
+            }
+        }
+        _ => list_frames(cx, (span, syntax)).await,
+    }
+}
+
 async fn frame(cx: Cx, f: FrameRef) -> Result<()> {
     cx.emit(bits_node("Header", f.header, f.syntax.layout, false));
     let payload = f.span.tail(f.header.len);

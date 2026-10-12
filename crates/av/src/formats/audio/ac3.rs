@@ -16,7 +16,7 @@ use crate::formats::util::sound::{
     Bits, CRC16_BUYPASS, FrameRef, FrameSyntax, bits_node, duration, frames_node, leaf,
 };
 use crate::formats::util::val::hex;
-use crate::formats::{Format, Head, Input, Probe};
+use crate::formats::{Format, Head, Input, Probe, audio::id3};
 use crate::node::Node;
 use crate::span::{SourceId, Span};
 use crate::value::{EnumTable, FlagTable, flag, lookup};
@@ -31,9 +31,12 @@ pub static FORMAT: Format = Format {
 };
 
 fn probe(h: &Head<'_>) -> bool {
-    match parse(h.data) {
-        Some((len, _)) => match h.data.get(to_usize(len)..) {
-            Some(next) if next.len() >= 8 => parse(next).is_some(),
+    let data = id3::past_tag(h.data);
+    match parse(data) {
+        Some((len, _)) => match data.get(to_usize(len)..) {
+            Some(next) if next.len() >= 8 => {
+                parse(next).is_some() || id3::starts_trailing_tag(next)
+            }
             _ => true,
         },
         None => false,
@@ -726,7 +729,7 @@ fn header_len(d: &[u8]) -> u64 {
     b.pos().div_ceil(8)
 }
 
-static SYNTAX: FrameSyntax = FrameSyntax {
+pub static SYNTAX: FrameSyntax = FrameSyntax {
     peek: 160,
     sync: &[0x0b],
     parse,
@@ -808,7 +811,10 @@ async fn frame(cx: Cx, f: FrameRef) -> Result<()> {
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
+    // Taggers put ID3v2 before (and ID3v1 or APE after) raw streams too.
+    let input = id3::leading_tag(&cx, input).await?;
+    let trailing = id3::trailing_tags(&cx, input, input.span, 0).await?;
+    let file = input.span.sub(0, trailing.end);
     let window = cx.read_avail(file.sub(0, 0x10000)).await?;
     if let Some(first) = info(&window) {
         // Count the frames of the first independent substream; note what
@@ -878,5 +884,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.annotate(line);
     }
     cx.emit(frames_node(file, &SYNTAX));
+    for node in trailing.nodes {
+        cx.emit(node);
+    }
     Ok(())
 }

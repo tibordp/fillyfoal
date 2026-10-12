@@ -9,7 +9,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::arcutil::human_size;
 use crate::formats::util::sound::{Bits, FrameRef, FrameSyntax, bits_node, duration, frames_node};
-use crate::formats::{Format, Input, Probe};
+use crate::formats::{Format, Input, Probe, audio::id3};
 use crate::node::Node;
 use crate::span::{SourceId, Span};
 use crate::value::{EnumTable, lookup};
@@ -20,9 +20,12 @@ pub static FORMAT: Format = Format {
     extensions: &["dts", "dtshd", "cpt"],
     mime: "audio/vnd.dts",
     probe: Probe::Custom(|h| {
-        parse_core(h.data).is_some_and(|(len, _)| match h.data.get(to_usize(len)..) {
+        let data = id3::past_tag(h.data);
+        parse_core(data).is_some_and(|(len, _)| match data.get(to_usize(len)..) {
             Some(next) if next.len() >= 4 => {
-                next.starts_with(&CORE) || next.starts_with(&SUBSTREAM)
+                next.starts_with(&CORE)
+                    || next.starts_with(&SUBSTREAM)
+                    || id3::starts_trailing_tag(next)
             }
             _ => true,
         })
@@ -377,7 +380,7 @@ fn substream_layout(b: &mut Bits<'_>) -> Result<()> {
     Ok(())
 }
 
-static SYNTAX: FrameSyntax = FrameSyntax {
+pub static SYNTAX: FrameSyntax = FrameSyntax {
     peek: 32,
     sync: &[0x7f, 0x64],
     parse,
@@ -409,7 +412,10 @@ async fn frame(cx: Cx, f: FrameRef) -> Result<()> {
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
+    // Taggers put ID3v2 before (and ID3v1 or APE after) raw streams too.
+    let input = id3::leading_tag(&cx, input).await?;
+    let trailing = id3::trailing_tags(&cx, input, input.span, 0).await?;
+    let file = input.span.sub(0, trailing.end);
     let window = cx.read_avail(file.sub(0, 0x10000)).await?;
     if let Some(first) = core(&window) {
         let mut at = 0usize;
@@ -452,5 +458,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         ));
     }
     cx.emit(frames_node(file, &SYNTAX));
+    for node in trailing.nodes {
+        cx.emit(node);
+    }
     Ok(())
 }

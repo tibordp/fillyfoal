@@ -3,8 +3,8 @@ that FFmpeg does not write: CAT, NIT, an SDT with DVB-encoded strings
 (ISO/IEC 6937 diacritics and UTF-8), an EIT event long enough to span two
 packets, TDT and TOT, a PMT with registration, video, AC-3, teletext,
 subtitling, language and maximum-bitrate descriptors, an SCTE-35
-splice_insert section and a time_signal section with a segmentation
-descriptor, PCRs at both ends, and one continuity counter
+splice_insert section (sent twice) and a time_signal section with a
+segmentation descriptor, PCRs at both ends, and one continuity counter
 error.
 
     python3 tests/data/mpegts/dvb_si.py
@@ -186,7 +186,8 @@ def main():
     # protocol_version, encrypted/algorithm/pts_adjustment (40 bits), cw_index,
     # tier (12) + splice_command_length (12), command type.
     body = bytes([0x00]) + bytes(5) + bytes([0xFF]) + bytes([0xFF, 0xF0 | (len(cmd) >> 8), len(cmd) & 0xFF]) + bytes([0x05]) + cmd + struct.pack(">H", 0)
-    m.section(0x0105, section(0xFC, 0, body, syntax=False, crc=True))
+    splice_insert = section(0xFC, 0, body, syntax=False, crc=True)
+    m.section(0x0105, splice_insert)
     # SCTE-35 time_signal at PTS 3 s with a segmentation_descriptor (SCTE 35
     # section 10.3.3.1): Provider Placement Opportunity Start, event
     # 0x48000002, delivery restricted (web, no blackout, archive, no device
@@ -200,6 +201,9 @@ def main():
     body = bytes([0x00]) + bytes(5) + bytes([0xFF]) + bytes([0xFF, 0xF0 | (len(cmd) >> 8), len(cmd) & 0xFF]) + bytes([0x06]) + cmd
     body += struct.pack(">H", len(descs)) + descs
     m.section(0x0105, section(0xFC, 0, body, syntax=False, crc=True))
+    # The splice_insert again, as encoders repeat a cue: the same section,
+    # listed once.
+    m.section(0x0105, splice_insert)
     # Null packets, then the closing PCR.
     for _ in range(2):
         m.packet(0x1FFF, b"\xff" * 184)

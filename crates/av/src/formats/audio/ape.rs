@@ -237,7 +237,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             "Seek bit table" => Node::new(name)
                 .span(span)
                 .desc("Bit offsets within the first byte of each frame (before 3.81)"),
-            "WAV header" => crate::formats::embedded(name, input.nested(span)),
+            // Only the header is stored: its data chunk's samples are the
+            // APE frames, so the RIFF view must not call it truncated.
+            "WAV header" => Node::new(name)
+                .span(span)
+                .desc("The original file's RIFF header, without its sample data")
+                .lazy(
+                    crate::expander!(crate::formats::iff::header_only: Input),
+                    input.nested(span),
+                ),
             _ => Node::new(name)
                 .span(span)
                 .summary(format!("{} bytes", span.len)),
