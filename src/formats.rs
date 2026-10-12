@@ -2076,6 +2076,16 @@ pub static FORMATS: &[&Format] = &[
     &compression::containers::ZPAQ,
     #[cfg(feature = "av")]
     &video::pgs::PGS,
+    #[cfg(feature = "av")]
+    &video::dvd::IFO,
+    #[cfg(feature = "av")]
+    &video::bluray::INDEX,
+    #[cfg(feature = "av")]
+    &video::bluray::MOVIE_OBJECT,
+    #[cfg(feature = "av")]
+    &video::bluray::PLAYLIST,
+    #[cfg(feature = "av")]
+    &video::bluray::CLIP_INFO,
     #[cfg(feature = "games")]
     &games::archives::SARC,
     #[cfg(feature = "games")]
