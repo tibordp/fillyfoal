@@ -80,8 +80,8 @@ $ cargo run --example inspect -- test.gb --depth 2
 ```
 
 `cargo run --example formats` lists everything it recognises. `DESIGN.md`
-explains how it's put together, and `docs/DISSECTORS.md` covers writing a
-new dissector.
+explains how it's put together, `docs/DISSECTORS.md` covers writing a
+new dissector, and `ROADMAP.md` sketches where it could go next.
 
 ## License
 

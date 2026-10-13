@@ -293,7 +293,8 @@ deflate through the in-house inflate), tar.gz with lazily decoded members
 and decoder checkpoints, SQLite (page graph, overflow chains as piecewise
 sources), MP4 (recursive boxes, large sample tables) and PDF (xref,
 incremental updates, object streams), and the core carries all of them.
-What remains open is listed under "Open questions".
+What remains open is listed under "Open questions"; where the project could
+go next is in `ROADMAP.md`.
 
 ## Findings from the PE slice
 
