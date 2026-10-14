@@ -9,12 +9,13 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::unix_mode;
+use crate::formats::disk::{PieceList, content_node};
+use crate::formats::util::arcutil::{push_nodes, unix_mode};
 use crate::formats::util::fmt;
 use crate::formats::util::fmt::count;
 use crate::formats::util::val::{hex, uint};
 use crate::formats::{Codec, Format, Input, Probe, content, embedded};
-use crate::node::{Count, Node};
+use crate::node::Node;
 use crate::record;
 use crate::span::Span;
 use crate::value::{FlagTable, flag};
@@ -249,17 +250,46 @@ async fn cram_entry(cx: Cx, e: CramEntry) -> Result<()> {
                         .summary(fmt::size(*expected)),
                 );
             } else {
-                cx.set_count(Count::AtLeast(blocks));
-                for (i, (span, expected)) in nodes.into_iter().enumerate() {
-                    cx.push(content(
-                        format!("Block {i}"),
-                        e.input,
-                        span,
-                        Codec::Zlib,
-                        Some(expected),
-                    ))
-                    .await;
+                // The pages decoded only when a read reaches them, assembled
+                // into one stream; the blocks themselves go in a group.
+                let mut list = PieceList::new(ptrs);
+                for (i, &(span, expected)) in nodes.iter().enumerate() {
+                    if i % 256 == 0 {
+                        cx.checkpoint().await;
+                    }
+                    if span.len == 0 {
+                        // A hole (the HOLES flag): a page of zeros.
+                        list.hole(&cx, expected)?;
+                        continue;
+                    }
+                    match cx.decode_lazy(span, &Codec::Zlib, expected) {
+                        Ok(d) => list.data(d),
+                        Err(err) => {
+                            cx.diag(err);
+                            break;
+                        }
+                    }
                 }
+                let blocks: Vec<Node> = nodes
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, (span, expected))| {
+                        content(
+                            format!("Block {i}"),
+                            e.input,
+                            span,
+                            Codec::Zlib,
+                            Some(expected),
+                        )
+                    })
+                    .collect();
+                cx.emit(
+                    Node::new("Blocks")
+                        .summary(fmt::plural(blocks.len(), "page"))
+                        .lazy(push_nodes, Arc::new(blocks)),
+                );
+                let data = list.finish(&cx, "cramfs").await?;
+                cx.emit(content_node(&e.input, data));
             }
         }
         _ => {}

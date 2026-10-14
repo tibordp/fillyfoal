@@ -23,7 +23,7 @@ The workspace splits it into a core (`crates/core`, with the codecs in
 each category is a feature, all on by default, so it's still the only
 dependency you need, from a path or straight from git.
 
-About 1,500 formats so far: executables, archives, disk images and
+About 1,600 formats so far: executables, archives, disk images and
 filesystems, audio and video, images, documents, databases, game assets,
 ROMs, scientific data, logs, and a long tail of random ones you've probably
 never heard of.
