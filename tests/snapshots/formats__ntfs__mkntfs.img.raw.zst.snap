@@ -112,7 +112,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 139264  [#1:0x128+0x8]
             Data size: 139264 — 136 KiB  [#1:0x130+0x8]
             Initialized size: 139264  [#1:0x138+0x8]
-          Run 0 — VCN 0: 34 clusters at LCN 4  [#1:0x140+0x3] → 0x4000+0x22000
+        ▾ Runs — 1 run  [#1:0x140+0x8]
+            Run 0 — VCN 0: 34 clusters at LCN 4  [#1:0x140+0x3] → 0x4000+0x22000
       ▾ $BITMAP — non-resident, 24 bytes  [#1:0x148+0x48]
         ▾ Header  [#1:0x148+0x40]
             Type: $BITMAP (0xb0)  [#1:0x148+0x4]
@@ -130,7 +131,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 4096  [#1:0x170+0x8]
             Data size: 24 — 24 bytes  [#1:0x178+0x8]
             Initialized size: 24  [#1:0x180+0x8]
-          Run 0 — VCN 0: 1 cluster at LCN 2  [#1:0x188+0x3] → 0x2000+0x1000
+        ▾ Runs — 1 run  [#1:0x188+0x8]
+            Run 0 — VCN 0: 1 cluster at LCN 2  [#1:0x188+0x3] → 0x2000+0x1000
           Slack — allocated past the end of the data  [0x2018+0xfe8]
         ▾ Content — bitmap of 136 entries  [0x2000+0x18]
             Bits set: 39 — of 136  [0x2000+0x11]
@@ -225,7 +227,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 4096  [#3:0x130+0x8]
             Data size: 4096 — 4 KiB  [#3:0x138+0x8]
             Initialized size: 4096  [#3:0x140+0x8]
-          Run 0 — VCN 0: 1 cluster at LCN 137  [#3:0x148+0x4] → 0x89000+0x1000
+        ▾ Runs — 1 run  [#3:0x148+0x8]
+            Run 0 — VCN 0: 1 cluster at LCN 137  [#3:0x148+0x4] → 0x89000+0x1000
       ▾ Clusters — contiguous, 4 KiB
           Fragment 0 — file offset 0x0, 4 KiB  [0x89000+0x1000]
       ▾ Content — NTFS MFT, 4 records of 1024 bytes, 4 in use (0 directories)  [0x89000+0x1000]
@@ -316,7 +319,8 @@ expression: "common::explore(&display_name(&path), &data)"
                 Allocated size: 139264  [#137:0x128+0x8]
                 Data size: 139264 — 136 KiB  [#137:0x130+0x8]
                 Initialized size: 139264  [#137:0x138+0x8]
-              Run 0 — VCN 0: 34 clusters at LCN 4  [#137:0x140+0x3]
+            ▾ Runs — 1 run  [#137:0x140+0x8]
+                Run 0 — VCN 0: 34 clusters at LCN 4  [#137:0x140+0x3]
           ▾ $BITMAP — non-resident, 24 bytes  [#137:0x148+0x48]
             ▾ Header  [#137:0x148+0x40]
                 Type: $BITMAP (0xb0)  [#137:0x148+0x4]
@@ -334,7 +338,8 @@ expression: "common::explore(&display_name(&path), &data)"
                 Allocated size: 4096  [#137:0x170+0x8]
                 Data size: 24 — 24 bytes  [#137:0x178+0x8]
                 Initialized size: 24  [#137:0x180+0x8]
-              Run 0 — VCN 0: 1 cluster at LCN 2  [#137:0x188+0x3]
+            ▾ Runs — 1 run  [#137:0x188+0x8]
+                Run 0 — VCN 0: 1 cluster at LCN 2  [#137:0x188+0x3]
         ▾ Record 1: 1970-01-01 00:00:00 UTC — $MFTMirr — file  [0x89400+0x400]
           ▾ Header  [#138:0x0+0x38]
               Magic: "FILE"  [#138:0x0+0x4]
@@ -422,7 +427,8 @@ expression: "common::explore(&display_name(&path), &data)"
                 Allocated size: 4096  [#138:0x130+0x8]
                 Data size: 4096 — 4 KiB  [#138:0x138+0x8]
                 Initialized size: 4096  [#138:0x140+0x8]
-              Run 0 — VCN 0: 1 cluster at LCN 137  [#138:0x148+0x4]
+            ▾ Runs — 1 run  [#138:0x148+0x8]
+                Run 0 — VCN 0: 1 cluster at LCN 137  [#138:0x148+0x4]
         ▾ Record 2: 1970-01-01 00:00:00 UTC — $LogFile — file  [0x89800+0x400]
           ▾ Header  [#139:0x0+0x38]
               Magic: "FILE"  [#139:0x0+0x4]
@@ -510,7 +516,8 @@ expression: "common::explore(&display_name(&path), &data)"
                 Allocated size: 262144  [#139:0x130+0x8]
                 Data size: 262144 — 256 KiB  [#139:0x138+0x8]
                 Initialized size: 262144  [#139:0x140+0x8]
-              Run 0 — VCN 0: 64 clusters at LCN 138  [#139:0x148+0x4]
+            ▾ Runs — 1 run  [#139:0x148+0x8]
+                Run 0 — VCN 0: 64 clusters at LCN 138  [#139:0x148+0x4]
         ▾ Record 3: 1970-01-01 00:00:00 UTC — $Volume — file  [0x89c00+0x400]
           ▾ Header  [#140:0x0+0x38]
               Magic: "FILE"  [#140:0x0+0x4]
@@ -752,7 +759,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 262144  [#4:0x130+0x8]
             Data size: 262144 — 256 KiB  [#4:0x138+0x8]
             Initialized size: 262144  [#4:0x140+0x8]
-          Run 0 — VCN 0: 64 clusters at LCN 138  [#4:0x148+0x4] → 0x8a000+0x40000
+        ▾ Runs — 1 run  [#4:0x148+0x8]
+            Run 0 — VCN 0: 64 clusters at LCN 138  [#4:0x148+0x4] → 0x8a000+0x40000
       ▾ Clusters — contiguous, 256 KiB
           Fragment 0 — file offset 0x0, 256 KiB  [0x8a000+0x40000]
       ▾ Content — transaction log, not initialised  [0x8a000+0x40000]
@@ -1036,7 +1044,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 4096  [#5:0x198+0x8]
             Data size: 2560 — 2.5 KiB  [#5:0x1a0+0x8]
             Initialized size: 2560  [#5:0x1a8+0x8]
-          Run 0 — VCN 0: 1 cluster at LCN 41  [#5:0x1b0+0x3] → 0x29000+0x1000
+        ▾ Runs — 1 run  [#5:0x1b0+0x8]
+            Run 0 — VCN 0: 1 cluster at LCN 41  [#5:0x1b0+0x3] → 0x29000+0x1000
           Slack — allocated past the end of the data  [0x29a00+0x600]
       ▾ Clusters — contiguous, 2.5 KiB
           Fragment 0 — file offset 0x0, 2.5 KiB  [0x29000+0xa00]
@@ -1245,7 +1254,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 8192  [#6:0x108+0x8]
             Data size: 4140 — 4.0 KiB  [#6:0x110+0x8]
             Initialized size: 4140  [#6:0x118+0x8]
-          Run 0 — VCN 0: 2 clusters at LCN 38  [#6:0x120+0x3] → 0x26000+0x2000
+        ▾ Runs — 1 run  [#6:0x120+0x8]
+            Run 0 — VCN 0: 2 clusters at LCN 38  [#6:0x120+0x3] → 0x26000+0x2000
           Slack — allocated past the end of the data  [0x2702c+0xfd4]
         ▾ Content — owner SYSTEM, group SYSTEM, DACL 8 ACEs  [0x26000+0x102c]
             Revision: 1  [0x26000+0x1]
@@ -1361,7 +1371,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Data size: 4096 — 4 KiB  [#6:0x1b0+0x8]
             Initialized size: 4096  [#6:0x1b8+0x8]
             Name: "$I30"  [#6:0x1c0+0x8]
-          Run 0 — VCN 0: 1 cluster at LCN 40  [#6:0x1c8+0x3] → 0x28000+0x1000
+        ▾ Runs — 1 run  [#6:0x1c8+0x8]
+            Run 0 — VCN 0: 1 cluster at LCN 40  [#6:0x1c8+0x3] → 0x28000+0x1000
         ▾ Index records — NTFS index, 1 buffer, 19 entries  [0x28000+0x1000]
           ▾ Buffer 0 (VCN 0) — 19 entries  [0x28000+0x1000]
             ▾ Header  [#141:0x0+0x28]
@@ -1720,11 +1731,11 @@ expression: "common::explore(&display_name(&path), &data)"
             Name: "$I30"  [#6:0x1e8+0x8]
         ▾ Value — bitmap of 64 bits  [#6:0x1f0+0x8]
             Bits set: 1 — of 64  [#6:0x1f0+0x8]
-    ▾ Record 6 — $Bitmap  [0x5800+0x400]  (+93 nodes elided)
-    ▾ Record 7 — $Boot  [0x5c00+0x400]  (+127 nodes elided)
-    ▾ Record 8 — $BadClus  [0x6000+0x400]  (+108 nodes elided)
-    ▾ Record 9 — $Secure  [0x6400+0x400]  (+413 nodes elided)
-    ▾ Record 10 — $UpCase  [0x6800+0x400]  (+137 nodes elided)
+    ▾ Record 6 — $Bitmap  [0x5800+0x400]  (+94 nodes elided)
+    ▾ Record 7 — $Boot  [0x5c00+0x400]  (+128 nodes elided)
+    ▾ Record 8 — $BadClus  [0x6000+0x400]  (+109 nodes elided)
+    ▾ Record 9 — $Secure  [0x6400+0x400]  (+414 nodes elided)
+    ▾ Record 10 — $UpCase  [0x6800+0x400]  (+138 nodes elided)
     ▾ Record 11 — $Extend  [0x6c00+0x400]  (+154 nodes elided)
     ▾ Record 12 — no file name  [0x7000+0x400]  (+96 nodes elided)
     ▾ Record 13 — no file name  [0x7400+0x400]  (+96 nodes elided)
@@ -1744,7 +1755,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Record 27 — dir  [0xac00+0x400]  (+171 nodes elided)
     ▾ Record 28 — sub  [0xb000+0x400]  (+171 nodes elided)
     ▾ Record 29 — nested.txt  [0xb400+0x400]  (+141 nodes elided)
-    ▾ Record 30 — many  [0xb800+0x400]  (+423 nodes elided)
+    ▾ Record 30 — many  [0xb800+0x400]  (+424 nodes elided)
     ▾ Record 31 — entry-01-000000000000000000000000000000  [0xbc00+0x400]  (+141 nodes elided)
     ▾ Record 32 — entry-02-000000000000000000000000000000  [0xc000+0x400]  (+141 nodes elided)
     ▾ Record 33 — entry-03-000000000000000000000000000000  [0xc400+0x400]  (+141 nodes elided)
@@ -1758,8 +1769,8 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Record 41 — entry-11-000000000000000000000000000000  [0xe400+0x400]  (+141 nodes elided)
     ▾ Record 42 — entry-12-000000000000000000000000000000  [0xe800+0x400]  (+141 nodes elided)
     ▾ Record 43 — hello.txt  [0xec00+0x400]  (+141 nodes elided)
-    ▾ Record 44 — numbers.txt  [0xf000+0x400]  (+148 nodes elided)
-    ▾ Record 45 — pattern.bin  [0xf400+0x400]  (+144 nodes elided)
+    ▾ Record 44 — numbers.txt  [0xf000+0x400]  (+149 nodes elided)
+    ▾ Record 45 — pattern.bin  [0xf400+0x400]  (+145 nodes elided)
     ▾ Record 46 — A file with a long name.txt  [0xf800+0x400]  (+141 nodes elided)
     ▾ Record 47 — not in use  [0xfc00+0x400]  (+15 nodes elided)
     ▾ Record 48 — not in use  [0x10000+0x400]  (+15 nodes elided)
@@ -1935,7 +1946,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 8192  [#6:0x108+0x8]
             Data size: 4140 — 4.0 KiB  [#6:0x110+0x8]
             Initialized size: 4140  [#6:0x118+0x8]
-          Run 0 — VCN 0: 2 clusters at LCN 38  [#6:0x120+0x3] → 0x26000+0x2000
+        ▾ Runs — 1 run  [#6:0x120+0x8]
+            Run 0 — VCN 0: 2 clusters at LCN 38  [#6:0x120+0x3] → 0x26000+0x2000
           Slack — allocated past the end of the data  [0x2702c+0xfd4]
         ▾ Content — owner SYSTEM, group SYSTEM, DACL 8 ACEs  [0x26000+0x102c]
             Revision: 1  [0x26000+0x1]
@@ -2051,7 +2063,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Data size: 4096 — 4 KiB  [#6:0x1b0+0x8]
             Initialized size: 4096  [#6:0x1b8+0x8]
             Name: "$I30"  [#6:0x1c0+0x8]
-          Run 0 — VCN 0: 1 cluster at LCN 40  [#6:0x1c8+0x3] → 0x28000+0x1000
+        ▾ Runs — 1 run  [#6:0x1c8+0x8]
+            Run 0 — VCN 0: 1 cluster at LCN 40  [#6:0x1c8+0x3] → 0x28000+0x1000
         ▾ Index records — NTFS index, 1 buffer, 19 entries  [0x28000+0x1000]
           ▾ Buffer 0 (VCN 0) — 19 entries  [0x28000+0x1000]
             ▾ Header  [#141:0x0+0x28]
@@ -2534,7 +2547,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 4096  [#5:0x198+0x8]
             Data size: 2560 — 2.5 KiB  [#5:0x1a0+0x8]
             Initialized size: 2560  [#5:0x1a8+0x8]
-          Run 0 — VCN 0: 1 cluster at LCN 41  [#5:0x1b0+0x3] → 0x29000+0x1000
+        ▾ Runs — 1 run  [#5:0x1b0+0x8]
+            Run 0 — VCN 0: 1 cluster at LCN 41  [#5:0x1b0+0x3] → 0x29000+0x1000
           Slack — allocated past the end of the data  [0x29a00+0x600]
       ▾ Clusters — contiguous, 2.5 KiB
           Fragment 0 — file offset 0x0, 2.5 KiB  [0x29000+0xa00]
@@ -2762,7 +2776,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Data size: 1122304 — 1.1 MiB  [#9:0x150+0x8]
             Initialized size: 0  [#9:0x158+0x8]
             Name: "$Bad"  [#9:0x160+0x8]
-          Run 0 — VCN 0: 274 sparse clusters  [#9:0x168+0x3]
+        ▾ Runs — 1 run  [#9:0x168+0x8]
+            Run 0 — VCN 0: 274 sparse clusters  [#9:0x168+0x3]
         ▾ Clusters — contiguous, 1.1 MiB
             Fragment 0 — file offset 0x0, 1.1 MiB  [#4294967295:0x0+0x112000]
         ▾ Content — 1.1 MiB  [#4294967295:0x0+0x112000]
@@ -2856,7 +2871,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 4096  [#7:0x128+0x8]
             Data size: 40 — 40 bytes  [#7:0x130+0x8]
             Initialized size: 40  [#7:0x138+0x8]
-          Run 0 — VCN 0: 1 cluster at LCN 42  [#7:0x140+0x3] → 0x2a000+0x1000
+        ▾ Runs — 1 run  [#7:0x140+0x8]
+            Run 0 — VCN 0: 1 cluster at LCN 42  [#7:0x140+0x3] → 0x2a000+0x1000
           Slack — allocated past the end of the data  [0x2a028+0xfd8]
       ▾ Clusters — contiguous, 40 bytes
           Fragment 0 — file offset 0x0, 40 bytes  [0x2a000+0x28]
@@ -2987,7 +3003,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Allocated size: 8192  [#8:0x190+0x8]
             Data size: 8192 — 8 KiB  [#8:0x198+0x8]
             Initialized size: 8192  [#8:0x1a0+0x8]
-          Run 0 — VCN 0: 2 clusters at LCN 0  [#8:0x1a8+0x3] → 0x0+0x2000
+        ▾ Runs — 1 run  [#8:0x1a8+0x8]
+            Run 0 — VCN 0: 2 clusters at LCN 0  [#8:0x1a8+0x3] → 0x0+0x2000
       ▾ Clusters — contiguous, 8 KiB
           Fragment 0 — file offset 0x0, 8 KiB  [0x0+0x2000]
         Content — the volume's boot sector and loader (shown at the top level)  [0x0+0x2000]
@@ -3519,20 +3536,20 @@ expression: "common::explore(&display_name(&path), &data)"
               Key length: 0  [#27:0x152+0x2]
               Flags: 0x2 [LAST_ENTRY]  [#27:0x154+0x2]
               Reserved: 0  [#27:0x156+0x2]
-    ▾ $LogFile — 256 KiB, record 2  [#141:0x240+0x52]  (+91 nodes elided)
-    ▾ $MFT — 27 KiB, record 0  [#141:0x2a8+0x4a]  (+112 nodes elided)
-    ▾ $MFTMirr — 4 KiB, record 1  [#141:0x308+0x52]  (+526 nodes elided)
-    ▾ $Secure — 0 bytes, record 9  [#141:0x370+0x50]  (+413 nodes elided)
-    ▾ $UpCase — 128 KiB, record 10  [#141:0x3d0+0x50]  (+137 nodes elided)
+    ▾ $LogFile — 256 KiB, record 2  [#141:0x240+0x52]  (+92 nodes elided)
+    ▾ $MFT — 27 KiB, record 0  [#141:0x2a8+0x4a]  (+114 nodes elided)
+    ▾ $MFTMirr — 4 KiB, record 1  [#141:0x308+0x52]  (+531 nodes elided)
+    ▾ $Secure — 0 bytes, record 9  [#141:0x370+0x50]  (+414 nodes elided)
+    ▾ $UpCase — 128 KiB, record 10  [#141:0x3d0+0x50]  (+138 nodes elided)
     ▾ $Volume — 0 bytes, record 3  [#141:0x430+0x50]  (+154 nodes elided)
       . — directory, record 5  [#141:0x490+0x44]
         ! note: refers back to an enclosing directory; not followed
     ▾ A file with a long name.txt — 18 bytes, record 46  [#141:0x4e8+0x78]  (+141 nodes elided)
     ▾ dir — directory, record 27  [#141:0x570+0x48]  (+487 nodes elided)
     ▾ hello.txt — 18 bytes, record 43  [#141:0x5c8+0x54]  (+141 nodes elided)
-    ▾ many — directory, record 30  [#141:0x630+0x4a]  (+2128 nodes elided)
-    ▾ numbers.txt — 13.6 KiB, record 44  [#141:0x690+0x58]  (+148 nodes elided)
-    ▾ pattern.bin — 20 KiB, record 45  [#141:0x6f8+0x58]  (+144 nodes elided)
+    ▾ many — directory, record 30  [#141:0x630+0x4a]  (+2129 nodes elided)
+    ▾ numbers.txt — 13.6 KiB, record 44  [#141:0x690+0x58]  (+149 nodes elided)
+    ▾ pattern.bin — 20 KiB, record 45  [#141:0x6f8+0x58]  (+145 nodes elided)
   ▾ Free clusters — from $Bitmap
       Clusters 3–3 — free, 4 KiB  [0x3000+0x1000]
       Clusters 205–238 — free, 136 KiB  [0xcd000+0x22000]

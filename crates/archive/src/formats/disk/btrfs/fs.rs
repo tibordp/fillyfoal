@@ -1,6 +1,8 @@
 //! Btrfs filesystem trees: directories (DIR_INDEX items), inodes and file
 //! content (EXTENT_DATA items, inline or in extents, possibly compressed).
 
+use std::sync::Arc;
+
 use crate::bytes::{u16_le, u32_le, u64_le};
 use crate::codec::{Codec, decode_span};
 use crate::cx::Cx;
@@ -8,6 +10,8 @@ use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::struct_node;
 use crate::formats::disk::{PieceList, content_node, size, unix_mode};
+use crate::formats::util::arcutil::push_nodes;
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{Radix, Value, lookup};
@@ -159,12 +163,17 @@ async fn inode_view(cx: Cx, (fs, tree, ino): (FsRef, u64, u64)) -> Result<()> {
         return Ok(());
     }
     let extents = items(&cx, &fs, tree, ino, EXTENT_DATA).await?;
-    for (off, span) in &extents {
-        cx.emit(item_node(
-            key_text(ino, EXTENT_DATA, *off),
-            *span,
-            EXTENT_DATA,
-        ));
+    if !extents.is_empty() {
+        // Grouped, so a fragmented file's content isn't buried below them.
+        let nodes: Vec<Node> = extents
+            .iter()
+            .map(|&(off, span)| item_node(key_text(ino, EXTENT_DATA, off), span, EXTENT_DATA))
+            .collect();
+        cx.emit(
+            Node::new("Extents")
+                .summary(plural(nodes.len(), "item"))
+                .lazy(push_nodes, Arc::new(nodes)),
+        );
     }
     let data = content(&cx, &fs, ispan, &extents, size).await?;
     if mode == 0o120_000 {

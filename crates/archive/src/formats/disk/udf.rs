@@ -51,6 +51,7 @@ use crate::formats::Input;
 use crate::formats::disk::{
     assemble, civil_to_unix, coalesce_stepped, content_node, fragments_node,
 };
+use crate::formats::util::arcutil::push_nodes;
 use crate::formats::util::fmt;
 use crate::formats::util::fmt::capitalize;
 use crate::formats::util::fmt::count;
@@ -2005,14 +2006,26 @@ async fn describe(cx: &Cx, e: &Entry, icb: &Icb, aeds: &[Span]) {
     }
     cx.emit(fe_node(icb));
     let ad_type = icb.flags & 7;
-    for (i, span) in aeds.iter().enumerate() {
-        cx.emit(struct_node(
-            format!("Allocation extent descriptor {i}"),
-            *span,
-            LE,
-            ad_type,
-            aed_layout,
-        ));
+    if !aeds.is_empty() {
+        // Grouped, so a fragmented file's content isn't buried below them.
+        let nodes: Vec<Node> = aeds
+            .iter()
+            .enumerate()
+            .map(|(i, span)| {
+                struct_node(
+                    format!("Allocation extent descriptor {i}"),
+                    *span,
+                    LE,
+                    ad_type,
+                    aed_layout,
+                )
+            })
+            .collect();
+        cx.emit(
+            Node::new("Allocation extent descriptors")
+                .summary(fmt::plural(nodes.len(), "descriptor"))
+                .lazy(push_nodes, Arc::new(nodes)),
+        );
     }
     if let Some(s) = icb.stream {
         let state = Entry {

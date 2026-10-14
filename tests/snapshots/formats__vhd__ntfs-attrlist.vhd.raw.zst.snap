@@ -125,7 +125,8 @@ expression: "common::explore(&display_name(&path), &data)"
                   Allocated size: 262144  [#1:0x128+0x8]
                   Data size: 262144 — 256 KiB  [#1:0x130+0x8]
                   Initialized size: 262144  [#1:0x138+0x8]
-                Run 0 — VCN 0: 64 clusters at LCN 1274  [#1:0x140+0x4] → 0x50a000+0x40000
+              ▾ Runs — 1 run  [#1:0x140+0x8]
+                  Run 0 — VCN 0: 64 clusters at LCN 1274  [#1:0x140+0x4] → 0x50a000+0x40000
             ▾ $BITMAP — non-resident, 4.0 KiB  [#1:0x148+0x50]
               ▾ Header  [#1:0x148+0x40]
                   Type: $BITMAP (0xb0)  [#1:0x148+0x4]
@@ -143,8 +144,9 @@ expression: "common::explore(&display_name(&path), &data)"
                   Allocated size: 8192  [#1:0x170+0x8]
                   Data size: 4104 — 4.0 KiB  [#1:0x178+0x8]
                   Initialized size: 4104  [#1:0x180+0x8]
-                Run 0 — VCN 0: 1 cluster at LCN 1273  [#1:0x188+0x4] → 0x509000+0x1000
-                Run 1 — VCN 1: 1 cluster at LCN 37  [#1:0x18c+0x4] → 0x35000+0x1000
+              ▾ Runs — 2 runs  [#1:0x188+0x10]
+                  Run 0 — VCN 0: 1 cluster at LCN 1273  [#1:0x188+0x4] → 0x509000+0x1000
+                  Run 1 — VCN 1: 1 cluster at LCN 37  [#1:0x18c+0x4] → 0x35000+0x1000
                 Slack — allocated past the end of the data  [0x35008+0xff8]
               ▾ Content — bitmap of 256 entries  [#64:0x0+0x1008]
                   Bits set: 63 — of 256  [#64:0x0+0x20]
@@ -239,7 +241,8 @@ expression: "common::explore(&display_name(&path), &data)"
                   Allocated size: 4096  [#3:0x130+0x8]
                   Data size: 4096 — 4 KiB  [#3:0x138+0x8]
                   Initialized size: 4096  [#3:0x140+0x8]
-                Run 0 — VCN 0: 1 cluster at LCN 2  [#3:0x148+0x3] → 0x12000+0x1000
+              ▾ Runs — 1 run  [#3:0x148+0x8]
+                  Run 0 — VCN 0: 1 cluster at LCN 2  [#3:0x148+0x3] → 0x12000+0x1000
             ▾ Clusters — contiguous, 4 KiB
                 Fragment 0 — file offset 0x0, 4 KiB  [0x12000+0x1000]
             ▾ Content — NTFS MFT, 4 records of 1024 bytes, 4 in use (0 directories)  [0x12000+0x1000]
@@ -330,7 +333,8 @@ expression: "common::explore(&display_name(&path), &data)"
                       Allocated size: 262144  [#65:0x128+0x8]
                       Data size: 262144 — 256 KiB  [#65:0x130+0x8]
                       Initialized size: 262144  [#65:0x138+0x8]
-                    Run 0 — VCN 0: 64 clusters at LCN 1274  [#65:0x140+0x4]
+                  ▾ Runs — 1 run  [#65:0x140+0x8]
+                      Run 0 — VCN 0: 64 clusters at LCN 1274  [#65:0x140+0x4]
                 ▾ $BITMAP — non-resident, 4.0 KiB  [#65:0x148+0x50]
                   ▾ Header  [#65:0x148+0x40]
                       Type: $BITMAP (0xb0)  [#65:0x148+0x4]
@@ -348,8 +352,9 @@ expression: "common::explore(&display_name(&path), &data)"
                       Allocated size: 8192  [#65:0x170+0x8]
                       Data size: 4104 — 4.0 KiB  [#65:0x178+0x8]
                       Initialized size: 4104  [#65:0x180+0x8]
-                    Run 0 — VCN 0: 1 cluster at LCN 1273  [#65:0x188+0x4]
-                    Run 1 — VCN 1: 1 cluster at LCN 37  [#65:0x18c+0x4]
+                  ▾ Runs — 2 runs  [#65:0x188+0x10]
+                      Run 0 — VCN 0: 1 cluster at LCN 1273  [#65:0x188+0x4]
+                      Run 1 — VCN 1: 1 cluster at LCN 37  [#65:0x18c+0x4]
               ▾ Record 1: 2026-10-12 14:09:12 UTC — $MFTMirr — file  [0x12400+0x400]
                 ▾ Header  [#66:0x0+0x38]
                     Magic: "FILE"  [#66:0x0+0x4]
@@ -437,7 +442,8 @@ expression: "common::explore(&display_name(&path), &data)"
                       Allocated size: 4096  [#66:0x130+0x8]
                       Data size: 4096 — 4 KiB  [#66:0x138+0x8]
                       Initialized size: 4096  [#66:0x140+0x8]
-                    Run 0 — VCN 0: 1 cluster at LCN 2  [#66:0x148+0x3]
+                  ▾ Runs — 1 run  [#66:0x148+0x8]
+                      Run 0 — VCN 0: 1 cluster at LCN 2  [#66:0x148+0x3]
               ▾ Record 2: 2026-10-12 14:09:12 UTC — $LogFile — file  [0x12800+0x400]
                 ▾ Header  [#67:0x0+0x38]
                     Magic: "FILE"  [#67:0x0+0x4]
@@ -525,7 +531,8 @@ expression: "common::explore(&display_name(&path), &data)"
                       Allocated size: 2097152  [#67:0x130+0x8]
                       Data size: 2097152 — 2 MiB  [#67:0x138+0x8]
                       Initialized size: 2097152  [#67:0x140+0x8]
-                    Run 0 — VCN 0: 512 clusters at LCN 760  [#67:0x148+0x5]
+                  ▾ Runs — 1 run  [#67:0x148+0x8]
+                      Run 0 — VCN 0: 512 clusters at LCN 760  [#67:0x148+0x5]
               ▾ Record 3: 2026-10-12 14:09:12 UTC — $Volume — file  [0x12c00+0x400]
                 ▾ Header  [#68:0x0+0x38]
                     Magic: "FILE"  [#68:0x0+0x4]
@@ -730,7 +737,8 @@ expression: "common::explore(&display_name(&path), &data)"
                   Allocated size: 2097152  [#4:0x130+0x8]
                   Data size: 2097152 — 2 MiB  [#4:0x138+0x8]
                   Initialized size: 2097152  [#4:0x140+0x8]
-                Run 0 — VCN 0: 512 clusters at LCN 760  [#4:0x148+0x5] → 0x308000+0x200000
+              ▾ Runs — 1 run  [#4:0x148+0x8]
+                  Run 0 — VCN 0: 512 clusters at LCN 760  [#4:0x148+0x5] → 0x308000+0x200000
             ▾ Clusters — contiguous, 2 MiB
                 Fragment 0 — file offset 0x0, 2 MiB  [0x308000+0x200000]
             ▾ Content — NTFS $LogFile, 2 restart and 88 record pages (422 unused), current LSN 1101475  [0x308000+0x200000]
@@ -1853,13 +1861,13 @@ expression: "common::explore(&display_name(&path), &data)"
                   Last end LSN: 1101475  [#158:0x20+0x8]
                   Log records  [0x36f040+0x578]
           ▾ Record 3 — $Volume  [0x50ac00+0x400]  (+117 nodes elided)
-          ▾ Record 4 — $AttrDef  [0x50b000+0x400]  (+212 nodes elided)
-          ▾ Record 5 — .  [0x50b400+0x400]  (+548 nodes elided)
-          ▾ Record 6 — $Bitmap  [0x50b800+0x400]  (+93 nodes elided)
-          ▾ Record 7 — $Boot  [0x50bc00+0x400]  (+127 nodes elided)
-          ▾ Record 8 — $BadClus  [0x50c000+0x400]  (+108 nodes elided)
-          ▾ Record 9 — $Secure  [0x50c400+0x400]  (+1149 nodes elided)
-          ▾ Record 10 — $UpCase  [0x50c800+0x400]  (+135 nodes elided)
+          ▾ Record 4 — $AttrDef  [0x50b000+0x400]  (+213 nodes elided)
+          ▾ Record 5 — .  [0x50b400+0x400]  (+549 nodes elided)
+          ▾ Record 6 — $Bitmap  [0x50b800+0x400]  (+94 nodes elided)
+          ▾ Record 7 — $Boot  [0x50bc00+0x400]  (+128 nodes elided)
+          ▾ Record 8 — $BadClus  [0x50c000+0x400]  (+109 nodes elided)
+          ▾ Record 9 — $Secure  [0x50c400+0x400]  (+1152 nodes elided)
+          ▾ Record 10 — $UpCase  [0x50c800+0x400]  (+136 nodes elided)
           ▾ Record 11 — $Extend  [0x50cc00+0x400]  (+190 nodes elided)
           ▾ Record 12 — no file name  [0x50d000+0x400]  (+96 nodes elided)
           ▾ Record 13 — no file name  [0x50d400+0x400]  (+96 nodes elided)
@@ -1877,19 +1885,19 @@ expression: "common::explore(&display_name(&path), &data)"
           ▾ Record 25 — $ObjId  [0x510400+0x400]  (+102 nodes elided)
           ▾ Record 26 — $Reparse  [0x510800+0x400]  (+102 nodes elided)
           ▾ Record 27 — $RmMetadata  [0x510c00+0x400]  (+154 nodes elided)
-          ▾ Record 28 — $Repair  [0x511000+0x400]  (+105 nodes elided)
-          ▾ Record 29 — $Deleted  [0x511400+0x400]  (+137 nodes elided)
+          ▾ Record 28 — $Repair  [0x511000+0x400]  (+106 nodes elided)
+          ▾ Record 29 — $Deleted  [0x511400+0x400]  (+138 nodes elided)
           ▾ Record 30 — $TxfLog  [0x511800+0x400]  (+172 nodes elided)
           ▾ Record 31 — $Txf  [0x511c00+0x400]  (+115 nodes elided)
-          ▾ Record 32 — $Tops  [0x512000+0x400]  (+108 nodes elided)
-          ▾ Record 33 — $TxfLog.blf  [0x512400+0x400]  (+91 nodes elided)
-          ▾ Record 34 — $TxfLogContainer00000000000000000001  [0x512800+0x400]  (+91 nodes elided)
-          ▾ Record 35 — $TxfLogContainer00000000000000000002  [0x512c00+0x400]  (+91 nodes elided)
+          ▾ Record 32 — $Tops  [0x512000+0x400]  (+109 nodes elided)
+          ▾ Record 33 — $TxfLog.blf  [0x512400+0x400]  (+92 nodes elided)
+          ▾ Record 34 — $TxfLogContainer00000000000000000001  [0x512800+0x400]  (+92 nodes elided)
+          ▾ Record 35 — $TxfLogContainer00000000000000000002  [0x512c00+0x400]  (+92 nodes elided)
           ▾ Record 36 — System Volume Information  [0x513000+0x400]  (+118 nodes elided)
           ▾ Record 37 — WPSettings.dat  [0x513400+0x400]  (+85 nodes elided)
-          ▾ Record 38 — attrlist-resident.txt  [0x513800+0x400]  (+302 nodes elided)
+          ▾ Record 38 — attrlist-resident.txt  [0x513800+0x400]  (+303 nodes elided)
           ▾ Record 39 — extension of record 38  [0x513c00+0x400]  (+93 nodes elided)
-          ▾ Record 40 — attrlist-nonresident.txt  [0x514000+0x400]  (+1820 nodes elided)
+          ▾ Record 40 — attrlist-nonresident.txt  [0x514000+0x400]  (+1822 nodes elided)
           ▾ Record 41 — extension of record 40  [0x514400+0x400]  (+112 nodes elided)
           ▾ Record 42 — extension of record 40  [0x514800+0x400]  (+93 nodes elided)
           ▾ Record 43 — extension of record 40  [0x514c00+0x400]  (+93 nodes elided)
@@ -1904,15 +1912,15 @@ expression: "common::explore(&display_name(&path), &data)"
           ▾ Record 52 — extension of record 40  [0x517000+0x400]  (+93 nodes elided)
           ▾ Record 53 — extension of record 40  [0x517400+0x400]  (+93 nodes elided)
           ▾ Record 54 — extension of record 40  [0x517800+0x400]  (+93 nodes elided)
-          ▾ Record 55 — attrlist-resident-hardlinks  [0x517c00+0x400]  (+280 nodes elided)
+          ▾ Record 55 — attrlist-resident-hardlinks  [0x517c00+0x400]  (+281 nodes elided)
           ▾ Record 56 — hardlink-06-fillyfoal-test-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt  [0x518000+0x400]  (+330 nodes elided)
           ▾ Record 57 — hardlink-02-fillyfoal-test-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt (extension of record 56)  [0x518400+0x400]  (+62 nodes elided)
           ▾ Record 58 — hardlink-01-fillyfoal-test-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt (extension of record 56)  [0x518800+0x400]  (+69 nodes elided)
           ▾ Record 59 — hardlink-03-fillyfoal-test-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt (extension of record 56)  [0x518c00+0x400]  (+43 nodes elided)
           ▾ Record 60 — hardlink-04-fillyfoal-test-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt (extension of record 56)  [0x519000+0x400]  (+43 nodes elided)
           ▾ Record 61 — hardlink-05-fillyfoal-test-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt (extension of record 56)  [0x519400+0x400]  (+43 nodes elided)
-          ▾ Record 62 — attrlist-nonresident-hardlinks  [0x519800+0x400]  (+352 nodes elided)
-          ▾ Record 63 — hardlink-07-fillyfoal-test-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt  [0x519c00+0x400]  (+472 nodes elided)
+          ▾ Record 62 — attrlist-nonresident-hardlinks  [0x519800+0x400]  (+353 nodes elided)
+          ▾ Record 63 — hardlink-07-fillyfoal-test-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt  [0x519c00+0x400]  (+473 nodes elided)
           ▾ Record 64 — hardlink-01-fillyfoal-test-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt (extension of record 63)  [0x51a000+0x400]  (+114 nodes elided)
           ▾ Record 65 — hardlink-03-fillyfoal-test-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt (extension of record 63)  [0x51a400+0x400]  (+43 nodes elided)
           ▾ Record 66 — hardlink-04-fillyfoal-test-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt (extension of record 63)  [0x51a800+0x400]  (+43 nodes elided)
@@ -2300,7 +2308,8 @@ expression: "common::explore(&display_name(&path), &data)"
                   Data size: 4096 — 4 KiB  [#6:0x268+0x8]
                   Initialized size: 4096  [#6:0x270+0x8]
                   Name: "$I30"  [#6:0x278+0x8]
-                Run 0 — VCN 0: 1 cluster at LCN 36  [#6:0x280+0x3] → 0x34000+0x1000
+              ▾ Runs — 1 run  [#6:0x280+0x8]
+                  Run 0 — VCN 0: 1 cluster at LCN 36  [#6:0x280+0x3] → 0x34000+0x1000
               ▾ Index records — NTFS index, 1 buffer, 18 entries  [0x34000+0x1000]
                 ▾ Buffer 0 (VCN 0) — 18 entries  [0x34000+0x1000]
                   ▾ Header  [#159:0x0+0x28]
@@ -2743,7 +2752,8 @@ expression: "common::explore(&display_name(&path), &data)"
                   Allocated size: 4096  [#5:0x130+0x8]
                   Data size: 2560 — 2.5 KiB  [#5:0x138+0x8]
                   Initialized size: 2560  [#5:0x140+0x8]
-                Run 0 — VCN 0: 1 cluster at LCN 35  [#5:0x148+0x3] → 0x33000+0x1000
+              ▾ Runs — 1 run  [#5:0x148+0x8]
+                  Run 0 — VCN 0: 1 cluster at LCN 35  [#5:0x148+0x3] → 0x33000+0x1000
                 Slack — allocated past the end of the data  [0x33a00+0x600]
             ▾ Clusters — contiguous, 2.5 KiB
                 Fragment 0 — file offset 0x0, 2.5 KiB  [0x33000+0xa00]
@@ -2971,7 +2981,8 @@ expression: "common::explore(&display_name(&path), &data)"
                   Data size: 15659008 — 14.9 MiB  [#9:0x150+0x8]
                   Initialized size: 0  [#9:0x158+0x8]
                   Name: "$Bad"  [#9:0x160+0x8]
-                Run 0 — VCN 0: 3823 sparse clusters  [#9:0x168+0x3]
+              ▾ Runs — 1 run  [#9:0x168+0x8]
+                  Run 0 — VCN 0: 3823 sparse clusters  [#9:0x168+0x3]
               ▾ Clusters — contiguous, 14.9 MiB
                   Fragment 0 — file offset 0x0, 14.9 MiB  [#4294967295:0x0+0xeef000]
               ▾ Content — 14.9 MiB  [#4294967295:0x0+0xeef000]
@@ -3065,7 +3076,8 @@ expression: "common::explore(&display_name(&path), &data)"
                   Allocated size: 4096  [#7:0x128+0x8]
                   Data size: 480 — 480 bytes  [#7:0x130+0x8]
                   Initialized size: 480  [#7:0x138+0x8]
-                Run 0 — VCN 0: 1 cluster at LCN 1272  [#7:0x140+0x4] → 0x508000+0x1000
+              ▾ Runs — 1 run  [#7:0x140+0x8]
+                  Run 0 — VCN 0: 1 cluster at LCN 1272  [#7:0x140+0x4] → 0x508000+0x1000
                 Slack — allocated past the end of the data  [0x5081e0+0xe20]
             ▾ Clusters — contiguous, 480 bytes
                 Fragment 0 — file offset 0x0, 480 bytes  [0x508000+0x1e0]
@@ -3196,23 +3208,24 @@ expression: "common::explore(&display_name(&path), &data)"
                   Allocated size: 8192  [#8:0x190+0x8]
                   Data size: 8192 — 8 KiB  [#8:0x198+0x8]
                   Initialized size: 8192  [#8:0x1a0+0x8]
-                Run 0 — VCN 0: 2 clusters at LCN 0  [#8:0x1a8+0x3] → 0x10000+0x2000
+              ▾ Runs — 1 run  [#8:0x1a8+0x8]
+                  Run 0 — VCN 0: 2 clusters at LCN 0  [#8:0x1a8+0x3] → 0x10000+0x2000
             ▾ Clusters — contiguous, 8 KiB
                 Fragment 0 — file offset 0x0, 8 KiB  [0x10000+0x2000]
               Content — the volume's boot sector and loader (shown at the top level)  [0x10000+0x2000]
-          ▾ $Extend — directory, record 11  [#159:0x1f8+0x50]  (+1640 nodes elided)
-          ▾ $LogFile — 0 bytes, record 2  [#159:0x258+0x52]  (+1208 nodes elided)
-          ▾ $MFT — 16 KiB, record 0  [#159:0x2c0+0x4a]  (+113 nodes elided)
-          ▾ $MFTMirr — 0 bytes, record 1  [#159:0x320+0x52]  (+490 nodes elided)
-          ▾ $Secure — 0 bytes, record 9  [#159:0x388+0x50]  (+1149 nodes elided)
-          ▾ $UpCase — 0 bytes, record 10  [#159:0x3e8+0x50]  (+135 nodes elided)
+          ▾ $Extend — directory, record 11  [#159:0x1f8+0x50]  (+1646 nodes elided)
+          ▾ $LogFile — 0 bytes, record 2  [#159:0x258+0x52]  (+1209 nodes elided)
+          ▾ $MFT — 16 KiB, record 0  [#159:0x2c0+0x4a]  (+115 nodes elided)
+          ▾ $MFTMirr — 0 bytes, record 1  [#159:0x320+0x52]  (+495 nodes elided)
+          ▾ $Secure — 0 bytes, record 9  [#159:0x388+0x50]  (+1152 nodes elided)
+          ▾ $UpCase — 0 bytes, record 10  [#159:0x3e8+0x50]  (+136 nodes elided)
           ▾ $Volume — 0 bytes, record 3  [#159:0x448+0x50]  (+117 nodes elided)
             . — directory, record 5  [#159:0x4a8+0x44]
               ! note: refers back to an enclosing directory; not followed
-          ▾ attrlist-nonresident-hardlinks — directory, record 62  [#159:0x500+0x7e]  (+5556 nodes elided)
-          ▾ attrlist-nonresident.txt — 16 bytes, record 40  [#159:0x590+0x72]  (+1820 nodes elided)
-          ▾ attrlist-resident-hardlinks — directory, record 55  [#159:0x618+0x78]  (+2598 nodes elided)
-          ▾ attrlist-resident.txt — 16 bytes, record 38  [#159:0x6a0+0x6c]  (+302 nodes elided)
+          ▾ attrlist-nonresident-hardlinks — directory, record 62  [#159:0x500+0x7e]  (+5568 nodes elided)
+          ▾ attrlist-nonresident.txt — 16 bytes, record 40  [#159:0x590+0x72]  (+1822 nodes elided)
+          ▾ attrlist-resident-hardlinks — directory, record 55  [#159:0x618+0x78]  (+2599 nodes elided)
+          ▾ attrlist-resident.txt — 16 bytes, record 38  [#159:0x6a0+0x6c]  (+303 nodes elided)
           ▾ System Volume Information — directory, record 36  [#159:0x720+0x74]  (+205 nodes elided)
         ▾ Free clusters — from $Bitmap
             Clusters 655–759 — free, 420 KiB  [0x29f000+0x69000]

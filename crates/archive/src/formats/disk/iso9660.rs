@@ -1223,6 +1223,7 @@ async fn entry(cx: Cx, e: Entry) -> Result<()> {
 async fn multi_extent(cx: &Cx, e: &Entry, first: Span) -> Result<()> {
     let file = e.input.span;
     let mut pieces = vec![first];
+    let mut records = Vec::with_capacity(e.sections.len());
     for (i, &record) in e.sections.iter().enumerate() {
         let bytes = cx.read(record).await?;
         let ctx = RecCtx {
@@ -1230,7 +1231,7 @@ async fn multi_extent(cx: &Cx, e: &Entry, first: Span) -> Result<()> {
             file,
             block: e.block_size,
         };
-        cx.emit(struct_node(
+        records.push(struct_node(
             format!("Directory record (section {})", i.saturating_add(2)),
             record,
             LE,
@@ -1245,6 +1246,12 @@ async fn multi_extent(cx: &Cx, e: &Entry, first: Span) -> Result<()> {
         }
         pieces.push(span);
     }
+    // Grouped, so crafted tiny sections can't bury the content.
+    cx.emit(
+        Node::new("Further sections")
+            .summary(plural(records.len(), "directory record"))
+            .lazy(emit_nodes, Arc::new(records)),
+    );
     let total = pieces.iter().map(|p| p.len).fold(0u64, u64::saturating_add);
     let content = crate::formats::disk::assemble(cx, e.record, "iso9660-sections", &pieces).await?;
     cx.emit(

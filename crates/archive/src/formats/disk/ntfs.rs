@@ -21,6 +21,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::disk::{PieceList, content_node, fragments_node, size};
+use crate::formats::util::arcutil::push_nodes;
 use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{name_or, text, uint};
 use crate::formats::util::winsec;
@@ -1177,6 +1178,7 @@ async fn attribute_fields(cx: Cx, (store, a, record): (Store, Arc<Attr>, u64)) -
     }
     let list: Vec<(u64, Option<u64>)> = located.iter().map(|r| (r.count, r.lcn)).collect();
     let mut vcn = a.lowest_vcn;
+    let mut nodes = Vec::with_capacity(located.len());
     for (i, run) in located.iter().enumerate() {
         let (count, lcn) = (run.count, run.lcn);
         let node = Node::new(format!("Run {i}")).span(runs.sub(run.at, run.len));
@@ -1193,9 +1195,16 @@ async fn attribute_fields(cx: Cx, (store, a, record): (Store, Arc<Attr>, u64)) -
             }
             None => node.summary(format!("VCN {vcn}: {count} sparse clusters")),
         };
-        cx.push(node).await;
+        nodes.push(node);
         vcn = vcn.saturating_add(count);
     }
+    // Grouped, so a fragmented attribute's content isn't buried below them.
+    cx.emit(
+        Node::new("Runs")
+            .span(runs)
+            .summary(plural(nodes.len(), "run"))
+            .lazy(push_nodes, Arc::new(nodes)),
+    );
     if a.continuation() {
         cx.emit(Node::new("Content").summary(format!(
             "the part from VCN {} of a split attribute: shown with its first part",
