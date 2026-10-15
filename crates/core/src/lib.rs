@@ -37,8 +37,8 @@ pub use fields::{Endian, Field, Fields};
 pub use node::{Count, Node};
 pub use secret::{Secret, SecretKind, SecretRequest};
 pub use session::{
-    Address, ByteRequest, ChildState, Children, Interpretation, Limits, NodeId, Progress,
-    ReadProgress, Session, Wait,
+    Activity, Address, ByteRequest, ChildState, Children, DecodeProgress, Interpretation, Limits,
+    NodeId, Progress, ReadPosition, ReadProgress, Session, Wait,
 };
 pub use span::{Origin, SourceId, Span};
 pub use value::{Guid, Radix, Value};

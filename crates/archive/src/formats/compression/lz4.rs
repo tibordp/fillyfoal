@@ -141,6 +141,9 @@ struct FrameInfo {
     content_size: Option<u64>,
 }
 
+/// Blocks between progress reports while walking a frame (a power of two).
+const PROGRESS_BLOCKS: u64 = 4096;
+
 async fn walk_frame(cx: &Cx, cur: &mut Cursor<'_>) -> Result<FrameInfo> {
     let start = cur.pos();
     cur.skip(4);
@@ -161,6 +164,11 @@ async fn walk_frame(cx: &Cx, cur: &mut Cursor<'_>) -> Result<FrameInfo> {
         blocks = blocks.saturating_add(1);
         if cur.at_end() {
             return Err(Diagnostic::malformed("frame has no end mark").at(cur.since(start)));
+        }
+        // One frame can be most of a large file: report the walk's
+        // position as it goes, not only at frames.
+        if blocks & (PROGRESS_BLOCKS - 1) == 0 {
+            cx.progress_in(cur.region(), cur.span(0).offset);
         }
         cx.checkpoint().await;
     }

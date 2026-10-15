@@ -7,7 +7,7 @@ use std::task::{Context, Poll, Waker};
 
 use crate::bytes::{to_u64, to_usize};
 use crate::cache::ByteCache;
-use crate::cx::{Cx, Key, Output, Pending, Shared, Stop, lock};
+use crate::cx::{Cx, Key, Output, Pending, Reported, Shared, Stop, lock};
 use crate::error::Diagnostic;
 use crate::formats::{self, Catalog, Registry};
 use crate::node::{Count, Expansion, Node};
@@ -132,6 +132,115 @@ pub enum ReadProgress {
     Yielded,
 }
 
+/// What a running expansion is doing, for a host's progress display (see
+/// [`Session::activity`]). [`Activity::estimate`] picks the best single
+/// measure; the parts are there for a host that shows more.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Activity {
+    /// What the dissector reported ([`crate::Cx::progress`],
+    /// [`crate::Cx::progress_in`]), or else children produced out of an
+    /// exact announced count, as `(done, total)` in the dissector's unit.
+    pub reported: Option<(u64, u64)>,
+    /// The lazily decoded streams the expansion's current read is waiting
+    /// on, outermost (nearest the file) first: a read into a stream inside
+    /// a decoded stream lists both. Empty unless the expansion is suspended
+    /// inside a read that decodes.
+    pub decoding: Vec<DecodeProgress>,
+    /// Where the expansion's last completed read ended.
+    pub reading: Option<ReadPosition>,
+    /// What the expansion is suspended on, while it runs.
+    pub wait: Option<Wait>,
+}
+
+impl Activity {
+    /// The best single measure of how far the expansion has got, as
+    /// `(done, total)` (in whatever unit; a host turns it into a bar), in
+    /// this order:
+    ///
+    /// 1. what the dissector reported, or children out of an exact count:
+    ///    a dissector that reports knows its work best (a tar walker over a
+    ///    `.tar.zst` reports the encoded bytes consumed, which keep moving
+    ///    while it decodes past a large member);
+    /// 2. else the innermost stream in [`Activity::decoding`] that has a
+    ///    measure: a dissector suspended inside a far read cannot report,
+    ///    and the decoding is the work it waits on;
+    /// 3. else [`Activity::reading`], the position of the last read in the
+    ///    node's span (or its source), for walkers that never report.
+    pub fn estimate(&self) -> Option<(u64, u64)> {
+        self.reported
+            .or_else(|| {
+                self.decoding
+                    .iter()
+                    .rev()
+                    .find_map(DecodeProgress::estimate)
+            })
+            .or_else(|| self.reading.as_ref().and_then(ReadPosition::estimate))
+    }
+}
+
+/// A lazily decoded stream a read is waiting on (see [`Activity::decoding`]).
+/// Positions are read live from the decoder.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DecodeProgress {
+    /// The decoded source.
+    pub source: SourceId,
+    /// Its codec ("zstd", "deflate", ...).
+    pub codec: &'static str,
+    /// Encoded bytes the decoder has consumed.
+    pub consumed: u64,
+    /// The encoded stream's length (the span it is decoded from).
+    pub encoded_len: u64,
+    /// Whether `encoded_len` is the real length: it is an upper bound when
+    /// the encoded stream lies in a decoded source of unknown length.
+    pub encoded_len_known: bool,
+    /// Decoded bytes up to the decoder's position (its output so far; after
+    /// a read behind the decoder's window it restarts from a checkpoint, so
+    /// this is where that decoding has got to).
+    pub front: u64,
+    /// The decoded position the read wants.
+    pub target: u64,
+    /// The decoded length, if known (see [`Session::source_len_known`]).
+    pub len: Option<u64>,
+}
+
+impl DecodeProgress {
+    /// `(done, total)`: decoded front out of the target when the decoded
+    /// length is known (an unsized stream's target may be its provisional
+    /// upper bound, which says nothing); else encoded bytes consumed out
+    /// of the encoded length, when that is known; else `None`.
+    pub fn estimate(&self) -> Option<(u64, u64)> {
+        if self.len.is_some() && self.target > 0 {
+            Some((self.front.min(self.target), self.target))
+        } else if self.encoded_len_known && self.encoded_len > 0 {
+            Some((self.consumed.min(self.encoded_len), self.encoded_len))
+        } else {
+            None
+        }
+    }
+}
+
+/// Where an expansion last read (see [`Activity::reading`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ReadPosition {
+    pub source: SourceId,
+    /// The offset in `source` where the read ended.
+    pub end: u64,
+    /// What `end` is measured against: the node's span when it holds the
+    /// position, else the whole source when its length is known.
+    pub extent: Option<Span>,
+}
+
+impl ReadPosition {
+    /// `(done, total)`: the position within [`ReadPosition::extent`].
+    pub fn estimate(&self) -> Option<(u64, u64)> {
+        let extent = self.extent.filter(|e| e.len > 0)?;
+        Some((
+            self.end.saturating_sub(extent.offset).min(extent.len),
+            extent.len,
+        ))
+    }
+}
+
 /// Outcome of [`Session::poll`] and [`Session::poll_node`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Progress {
@@ -164,6 +273,9 @@ pub struct Session<C> {
     overrides: std::collections::HashMap<Address, &'static formats::Format>,
     /// Work units charged by every expansion so far.
     work_done: u64,
+    /// The streams the last [`Session::read_step`] that did not finish
+    /// was decoding (see [`Session::read_activity`]).
+    read_chain: Vec<(SourceId, u64)>,
 }
 
 struct Slot {
@@ -264,6 +376,7 @@ impl<C: Catalog> Session<C> {
             secret_wanted: None,
             limits,
             tick: 0,
+            decoding: Vec::new(),
         };
         Session {
             registry: C::REGISTRY,
@@ -276,6 +389,7 @@ impl<C: Catalog> Session<C> {
             clock: 0,
             overrides: std::collections::HashMap::new(),
             work_done: 0,
+            read_chain: Vec::new(),
         }
     }
 
@@ -451,12 +565,21 @@ impl<C: Catalog> Session<C> {
     /// continues where it stopped, so a far read into a large compressed
     /// stream can be spread over several calls, or abandoned. Expansions
     /// share the decoders, so their reads profit from the work too.
+    ///
+    /// A host showing progress for such a read asks
+    /// [`Session::read_activity`] after a call that did not finish.
     pub fn read_step(&mut self, span: Span, budget: u64) -> ReadProgress {
         let result = {
             let mut sh = lock(&self.shared);
             let saved = std::mem::replace(&mut sh.budget, budget.max(1));
+            sh.decoding.clear();
             let result = sh.read_range(span.source, span.offset, span.end(), 0);
             sh.budget = saved;
+            if result.is_err() {
+                self.read_chain = take(&mut sh.decoding);
+            } else {
+                self.read_chain.clear();
+            }
             result
         };
         match result {
@@ -464,6 +587,19 @@ impl<C: Catalog> Session<C> {
             Err(Pending::Budget) => ReadProgress::Yielded,
             Err(Pending::Bytes(missing)) => ReadProgress::NeedBytes(self.requests(missing)),
         }
+    }
+
+    /// The lazily decoded streams the last [`Session::read_step`] was
+    /// decoding when it yielded or needed bytes, outermost first, with how
+    /// far each has got (as in [`Activity::decoding`]; the innermost one
+    /// with an [`DecodeProgress::estimate`] is the best measure). Empty
+    /// after a read that finished.
+    pub fn read_activity(&self) -> Vec<DecodeProgress> {
+        let sh = lock(&self.shared);
+        self.read_chain
+            .iter()
+            .filter_map(|&(source, end)| sh.decode_progress(source, end))
+            .collect()
     }
 
     /// The bytes of a derived source held in memory, if they are (see
@@ -930,16 +1066,70 @@ impl<C: Catalog> Session<C> {
     }
 
     /// How far the running expansion of `id` has got, as `(done, total)`:
-    /// what the dissector reported (see [`crate::Cx::progress`]), or else
-    /// children produced out of an exact announced count. `None` if the
-    /// node is not being expanded or there is nothing to go by.
+    /// [`Activity::estimate`] of [`Session::activity`]. That is what the
+    /// dissector reported (see [`crate::Cx::progress`]) or children out of
+    /// an exact announced count; else, while it waits inside a read that
+    /// decodes a stream, how far that decoding has got; else where it last
+    /// read. `None` if the node is not being expanded or there is nothing
+    /// to go by.
     pub fn progress(&self, id: NodeId) -> Option<(u64, u64)> {
+        self.activity(id)?.estimate()
+    }
+
+    /// What the running expansion of `id` is doing, in detail (see
+    /// [`Activity`]); `None` if the node is not being expanded. Computed
+    /// when asked, from the session's decoders; cheap enough to call after
+    /// every poll.
+    pub fn activity(&self, id: NodeId) -> Option<Activity> {
         let entry = self.entry(id)?;
         let run = entry.run.as_ref()?;
-        let out = lock(&run.out);
-        out.progress.or(match entry.count {
-            Count::Exact(n) if n > 0 => Some((out.emitted.min(n), n)),
+        let (reported, emitted, chain, last_read) = {
+            let out = lock(&run.out);
+            (
+                out.progress,
+                out.emitted,
+                out.decoding.clone(),
+                out.last_read,
+            )
+        };
+        let sh = lock(&self.shared);
+        let reported = match reported {
+            Some(Reported::Fixed(done, total)) => Some((done, total)),
+            Some(Reported::Consumed(source)) => sh.consumed_progress(source),
+            None => None,
+        }
+        .or(match entry.count {
+            Count::Exact(n) if n > 0 => Some((emitted.min(n), n)),
             _ => None,
+        });
+        let decoding = chain
+            .iter()
+            .filter_map(|&(source, end)| sh.decode_progress(source, end))
+            .collect();
+        let reading = last_read.map(|(source, end)| {
+            let own = entry
+                .node
+                .span
+                .filter(|s| s.source == source && s.offset <= end && end <= s.end());
+            let whole = sh
+                .source(source)
+                .filter(|s| s.len_known)
+                .map(|s| Span::new(source, 0, s.len));
+            ReadPosition {
+                source,
+                end,
+                extent: own.or(whole),
+            }
+        });
+        let wait = match entry.state {
+            ChildState::Running(wait) => Some(wait),
+            _ => None,
+        };
+        Some(Activity {
+            reported,
+            decoding,
+            reading,
+            wait,
         })
     }
 

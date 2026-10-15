@@ -29,6 +29,8 @@ const SEEK_TABLE_FRAME: u32 = 0x184d_2a5e;
 /// Blocks are at most 128 KiB; a frame with more blocks than this is listed
 /// lazily anyway, but walking it to find its end is capped.
 const MAX_BLOCK_WALK: u64 = 1 << 24;
+/// Blocks between progress reports while walking a frame (a power of two).
+const PROGRESS_BLOCKS: u64 = 4096;
 
 pub static FORMAT: Format = Format {
     name: "zstd",
@@ -200,6 +202,11 @@ async fn walk_frame(cx: &Cx, cur: &mut Cursor<'_>) -> Result<FrameInfo> {
                 cur.since(start),
                 cur.since(start).len,
             ));
+        }
+        // A single frame can be most of a large file (`zstd` writes one per
+        // input): report the walk's position as it goes, not only at frames.
+        if blocks & (PROGRESS_BLOCKS - 1) == 0 {
+            cx.progress_in(cur.region(), cur.span(0).offset);
         }
         cx.checkpoint().await;
     }
