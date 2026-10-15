@@ -22,6 +22,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::disk::{PieceList, content_node, fragments_node, size};
 use crate::formats::util::arcutil::push_nodes;
+use crate::formats::util::far;
 use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{name_or, text, uint};
 use crate::formats::util::winsec;
@@ -874,9 +875,30 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         );
     }
     let backup = vol.sub(end, sector);
-    if backup.len == sector && cx.read_avail(backup.sub(3, 8)).await? == b"NTFS    " {
-        cx.emit(BootSector::node("Backup boot sector", backup, LE));
+    if backup.len == sector {
+        if far::is_far(&cx, backup) {
+            // At the end of a volume decoded on demand: a copy, read when
+            // asked for.
+            cx.emit(far::deferred(
+                "Backup boot sector",
+                backup,
+                "in the last sector of the volume",
+                backup_boot_sector,
+                backup,
+            ));
+        } else if cx.read_avail(backup.sub(3, 8)).await? == b"NTFS    " {
+            cx.emit(BootSector::node("Backup boot sector", backup, LE));
+        }
     }
+    Ok(())
+}
+
+/// The backup boot sector, read on request (see [`far::deferred`]).
+async fn backup_boot_sector(cx: Cx, backup: Span) -> Result<()> {
+    if cx.read_avail(backup.sub(3, 8)).await? != b"NTFS    " {
+        return Err(Diagnostic::warning("no backup boot sector here").at(backup));
+    }
+    crate::dsl::emit_record::<BootSector>(&cx, backup, LE).await?;
     Ok(())
 }
 

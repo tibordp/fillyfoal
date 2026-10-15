@@ -491,6 +491,10 @@ impl super::Stepped for Argon2 {
         self.done
     }
 
+    fn units(&self) -> u64 {
+        self.params.cost()
+    }
+
     fn advance(&mut self, units: u32) -> u32 {
         if self.done {
             return 0;

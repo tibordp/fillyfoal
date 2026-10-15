@@ -291,6 +291,10 @@ impl super::Stepped for BcryptPbkdf {
         BcryptPbkdf::done(self)
     }
 
+    fn units(&self) -> u64 {
+        self.cost().saturating_mul(UNITS_PER_HASH.into())
+    }
+
     /// Runs one step per [`UNITS_PER_STEP`] units (at least one).
     fn advance(&mut self, units: u32) -> u32 {
         let mut used = 0u32;

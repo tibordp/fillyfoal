@@ -173,7 +173,7 @@ fn a_large_ewf2_sector_table_is_read_only_for_the_media() {
     host.run();
     let work = host.session.work_done() - before;
     // One read of the table and a pass over it; well under the limit.
-    assert!(work < Limits::default().max_work / 4, "{work} units");
+    assert!(work < 25_000_000, "{work} units");
     let first = host.session.children(media_node).unwrap();
     assert!(!first.ids.is_empty(), "{}", host.render());
 }

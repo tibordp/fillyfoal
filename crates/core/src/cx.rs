@@ -224,6 +224,17 @@ pub(crate) struct LazyDecode {
     spread: u64,
     /// This run of the decoder started from a seeded checkpoint.
     run_seeded: bool,
+    /// The declared length comes from the stream itself (its first frame's
+    /// header, see [`Cx::decode_lazy_checked`]), not from a container that
+    /// bounds it: a read that reaches it decodes on until the stream ends
+    /// or overruns it, so that more content is reported, not dropped.
+    check_end: bool,
+    /// That check has been made.
+    end_checked: bool,
+    /// Output positions of the seeds the container recorded, as registered
+    /// (for [`Shared::decode_cost`], which must not depend on what decoding
+    /// has found since).
+    seeds: Vec<u64>,
 }
 
 impl LazyDecode {
@@ -245,6 +256,9 @@ impl LazyDecode {
             checkpoint_bytes: 0,
             spread: 1,
             run_seeded: false,
+            check_end: false,
+            end_checked: false,
+            seeds: Vec::new(),
         })
     }
 
@@ -713,6 +727,7 @@ impl Shared {
         depth: u32,
     ) -> std::result::Result<Vec<u8>, Pending> {
         let index = crate::bytes::to_usize(source.0.into());
+        let declared = self.sources.get(index).map_or(u64::MAX, |e| e.len);
         let Some(mut st) = self.sources.get_mut(index).and_then(|e| e.lazy.take()) else {
             return Ok(Vec::new());
         };
@@ -759,7 +774,16 @@ impl Shared {
         );
         let mut failure = None;
         let result = loop {
-            if st.out_base.saturating_add(to_u64(st.out.len())) >= end || st.done {
+            let front = st.out_base.saturating_add(to_u64(st.out.len()));
+            // A read reaching a length the stream declared for itself
+            // decodes on until the stream ends there, or shows it does not.
+            let verifying = st.check_end && !st.end_checked && end >= declared;
+            if verifying && front > declared {
+                st.end_checked = true;
+                failure = Some(overrun(declared));
+                continue;
+            }
+            if (front >= end && !verifying) || st.done {
                 let from =
                     crate::bytes::to_usize(start.saturating_sub(st.out_base)).min(st.out.len());
                 let to = crate::bytes::to_usize(end.saturating_sub(st.out_base)).min(st.out.len());
@@ -865,6 +889,12 @@ impl Shared {
         let finished_len = st
             .done
             .then(|| st.out_base.saturating_add(to_u64(st.out.len())));
+        if st.check_end && !st.end_checked && st.done {
+            st.end_checked = true;
+            if finished_len.is_some_and(|l| l > declared) && failure.is_none() {
+                failure = Some(overrun(declared));
+            }
+        }
         if st.done && failure.is_none() {
             failure = st.decoder.warning(&st.out);
         }
@@ -1074,6 +1104,51 @@ impl Shared {
             index = index.saturating_add(1);
         }
     }
+}
+
+impl Shared {
+    /// Decoded bytes a read of `span` costs in the worst case: for each
+    /// source decoded on demand that the read reaches (through pieces
+    /// too), from the nearest point its container recorded (a seed) or
+    /// the start, to the end of the read. Deliberately blind to what has
+    /// been decoded so far, so that a dissector deciding on it builds the
+    /// same nodes whenever it runs. Host sources and sources decoded up
+    /// front cost nothing; the encoded side is not counted (a stream
+    /// inside another decoded stream costs more than this says).
+    pub(crate) fn decode_cost(&self, span: Span) -> u64 {
+        let mut spans = Vec::new();
+        self.resolve(span, 0, &mut spans);
+        spans.iter().fold(0u64, |total, s| {
+            let Some(lazy) = self
+                .source(s.source)
+                .filter(|e| e.on_demand)
+                .and_then(|e| e.lazy.as_ref())
+            else {
+                return total;
+            };
+            let at = lazy.seeds.partition_point(|&p| p <= s.offset);
+            let start = at
+                .checked_sub(1)
+                .and_then(|i| lazy.seeds.get(i))
+                .copied()
+                .unwrap_or(0);
+            total.saturating_add(s.end().saturating_sub(start))
+        })
+    }
+}
+
+/// Decoding a read may need and still count as cheap (see
+/// [`Cx::read_is_cheap`]): what a lazily decoded source keeps behind its
+/// front anyway.
+pub const CHEAP_DECODE: u64 = 16 * 1024 * 1024;
+
+/// What a stream that declared its own length (see
+/// [`Cx::decode_lazy_checked`]) and decodes past it is reported with.
+fn overrun(declared: u64) -> Diagnostic {
+    Diagnostic::malformed(format!(
+        "the stream continues past the {declared:#x} bytes its first frame declares \
+         (more frames follow); what follows is not shown"
+    ))
 }
 
 /// Lazily decoded sources one suspended read records, at most (see
@@ -1308,7 +1383,24 @@ impl Cx {
                         .flatten()
                         .filter(|e| e.on_demand)
                         .and_then(|e| e.error.clone());
+                    // A whole read that reaches the end of a stream whose
+                    // length it declared itself (see
+                    // `Cx::decode_lazy_checked`) reports what the check at
+                    // the end found, on the node being expanded.
+                    let at_end = (failed.is_none() && span.len > 0)
+                        .then(|| sh.source(span.source))
+                        .flatten()
+                        .filter(|e| {
+                            e.lazy.as_ref().is_some_and(|l| l.check_end) && span.end() >= e.len
+                        })
+                        .and_then(|e| e.error.clone());
                     drop(sh);
+                    if let Some(e) = at_end {
+                        let mut out = lock(&self.out);
+                        if !out.diagnostics.iter().any(|d| d.message == e.message) {
+                            out.diagnostics.push(e);
+                        }
+                    }
                     // Where the expansion got to, for hosts' progress
                     // display (see `Session::activity`).
                     let mut out = lock(&self.out);
@@ -1477,6 +1569,27 @@ impl Cx {
         lock(&self.shared)
             .source(source)
             .is_some_and(|s| s.on_demand)
+    }
+
+    /// Whether reading `span` is cheap: it needs at most [`CHEAP_DECODE`]
+    /// bytes decoded (see [`Cx::decode_cost`]). A dissector deciding
+    /// whether to read something optional far away (a backup header at the
+    /// end of a disk image, an end-of-volume anchor) asks this, and when it
+    /// is not, offers it as a node expanded on request instead
+    /// ([`crate::formats::util::far::deferred`]). The answer depends only
+    /// on how the sources were registered, not on what has been decoded,
+    /// so the nodes built on it are the same every time.
+    pub fn read_is_cheap(&self, span: Span) -> bool {
+        self.decode_cost(span) <= CHEAP_DECODE
+    }
+
+    /// Decoded bytes a read of `span` may have to produce, in the worst
+    /// case: zero for host sources and content decoded up front; for
+    /// content decoded on demand, from the nearest restart point its
+    /// container recorded (or the start) to the end of the read, whatever
+    /// has been decoded already. Only the decoding nearest the read counts.
+    pub fn decode_cost(&self, span: Span) -> u64 {
+        lock(&self.shared).decode_cost(span)
     }
 
     /// Whether reading the end of `source` is cheap: it is not decoded on
@@ -1749,6 +1862,26 @@ impl Cx {
         self.register_lazy_seeded(span, codec, len, true, seeds)
     }
 
+    /// [`Cx::decode_lazy`] for a stream that declares its decoded size in
+    /// its own first header, while more may follow it (a zstd frame's
+    /// content size, where further frames may come after the first): the
+    /// length is taken as declared, so dissection starts at once, but a
+    /// read that reaches it decodes on to check that the stream ends there.
+    /// If it does not (or fails there), the read reports it on the node
+    /// being expanded: the content is never cut short silently.
+    pub fn decode_lazy_checked(&self, span: Span, codec: &Codec, len: u64) -> Result<Span> {
+        let decoded = self.register_lazy(span, codec, len, true)?;
+        let mut sh = lock(&self.shared);
+        if let Some(lazy) = sh
+            .sources
+            .get_mut(crate::bytes::to_usize(decoded.source.0.into()))
+            .and_then(|e| e.lazy.as_mut())
+        {
+            lazy.check_end = true;
+        }
+        Ok(decoded)
+    }
+
     fn register_lazy(&self, span: Span, codec: &Codec, len: u64, len_known: bool) -> Result<Span> {
         self.register_lazy_seeded(span, codec, len, len_known, Vec::new())
     }
@@ -1776,6 +1909,7 @@ impl Cx {
                 continue;
             }
             last = seed.out_pos;
+            fresh.seeds.push(seed.out_pos);
             let cost = to_u64(seed.decoder.state_size());
             fresh.checkpoints.push(Checkpoint {
                 out_pos: seed.out_pos,
@@ -1953,6 +2087,18 @@ impl Cx {
         } else {
             self.progress(pos.saturating_sub(span.offset), span.len);
         }
+    }
+
+    /// Takes back what the dissector reported so far (a helper that reports
+    /// its own progress for a while, like `codec::crypto::run`, then puts it
+    /// back with [`Cx::restore_progress`]).
+    pub(crate) fn take_progress(&self) -> Option<Reported> {
+        lock(&self.out).progress.take()
+    }
+
+    /// Restores what [`Cx::take_progress`] took.
+    pub(crate) fn restore_progress(&self, progress: Option<Reported>) {
+        lock(&self.out).progress = progress;
     }
 
     /// Announces how many children this expansion will produce.

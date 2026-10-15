@@ -215,7 +215,7 @@ fn pathological_inputs_settle() {
             data,
             fillyfoal::Limits {
                 chunk_size: 4096,
-                max_work: 5_000_000,
+                max_work: Some(5_000_000),
                 ..fillyfoal::Limits::default()
             },
         );

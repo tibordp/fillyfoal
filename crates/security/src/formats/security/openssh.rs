@@ -594,7 +594,9 @@ async fn decrypt(cx: Cx, e: Encrypted) -> Result<()> {
     let cost = u64::from(rounds)
         .saturating_mul(crate::bytes::to_u64(key_len.div_ceil(32)))
         .saturating_mul(bcrypt::UNITS_PER_HASH.into());
-    if cost > cx.limits().max_work / 2 {
+    // Refused up front only when the host set a work limit it could not
+    // finish within; otherwise it runs, reporting progress.
+    if cx.limits().max_work.is_some_and(|max| cost > max / 2) {
         cx.emit(
             Node::new("Encrypted data")
                 .span(section.data)

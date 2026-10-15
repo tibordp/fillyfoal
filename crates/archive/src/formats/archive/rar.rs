@@ -1635,6 +1635,11 @@ impl crate::codec::crypto::Stepped for Kdf5 {
         !self.check.is_empty()
     }
 
+    fn units(&self) -> u64 {
+        // The key, then 16 more rounds each for the hash key and the check.
+        u64::from(self.count).saturating_add(32)
+    }
+
     fn advance(&mut self, units: u32) -> u32 {
         let mut used = 0u32;
         while used < units.max(1) && !self.done() {

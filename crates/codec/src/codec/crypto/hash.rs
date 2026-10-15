@@ -759,6 +759,13 @@ impl<H: Hash> Stepped for Pbkdf2<H> {
         self.out.len() >= self.len
     }
 
+    fn units(&self) -> u64 {
+        let blocks = self.len.div_ceil(H::OUT.max(1));
+        u64::try_from(blocks)
+            .unwrap_or(u64::MAX)
+            .saturating_mul(self.iterations.into())
+    }
+
     fn advance(&mut self, units: u32) -> u32 {
         let mut used = 0u32;
         while used < units.max(1) && !self.done() {

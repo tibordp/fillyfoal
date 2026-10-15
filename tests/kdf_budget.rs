@@ -1,6 +1,6 @@
 //! Key derivations whose cost the file controls run in budgeted steps: a
 //! hostile iteration count makes the expansion yield again and again (and
-//! `Limits::max_work` stops it), instead of stalling one poll.
+//! a host's `Limits::max_work`, if set, stops it), instead of stalling one poll.
 
 #![allow(
     clippy::unwrap_used,
@@ -36,6 +36,10 @@ impl<K: Stepped> Stepped for Counted<K> {
 
     fn done(&self) -> bool {
         self.kdf.done()
+    }
+
+    fn units(&self) -> u64 {
+        self.kdf.units()
     }
 }
 
@@ -73,6 +77,15 @@ fn huge_pbkdf2_yields_in_bounded_steps() {
     }
     let children = host.session.children(root).unwrap();
     assert!(children.ids.is_empty());
+    // The derivation reports its progress while it runs: the iterations
+    // done out of all it takes (one block of 20 bytes, `u32::MAX` rounds).
+    let (reported, total) = host.session.progress(root).unwrap();
+    assert_eq!(total, u64::from(u32::MAX));
+    let done = done.load(Ordering::Relaxed);
+    assert!(
+        reported > 0 && reported <= done && done - reported <= u64::from(crypto::CHUNK),
+        "{reported} reported, {done} done"
+    );
     assert!(
         matches!(children.state, ChildState::Running(_)),
         "{:?}",
@@ -83,7 +96,7 @@ fn huge_pbkdf2_yields_in_bounded_steps() {
 #[test]
 fn huge_pbkdf2_stops_at_the_work_limit() {
     let limits = Limits {
-        max_work: 200_000,
+        max_work: Some(200_000),
         ..Limits::default()
     };
     let mut host = Host::new(Vec::new(), limits);

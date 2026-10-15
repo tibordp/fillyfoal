@@ -28,9 +28,16 @@ pub struct Limits {
     pub max_derived: u64,
     /// Work units one expansion may consume before it is stopped with a
     /// `Limit` diagnostic, counted from its start or from the last page of
-    /// children it filled. A safety net against dissectors that loop without
-    /// making progress on malformed input.
-    pub max_work: u64,
+    /// children it filled; `None` (the default) sets no limit.
+    ///
+    /// An interactive host needs none: every expansion runs in budgeted
+    /// polls, so the user cancels whatever takes too long, and a limit
+    /// would only fail legitimate long work (decoding far into a large
+    /// stream, an expensive key derivation the user asked for). A host
+    /// that polls to completion unattended (batch runs, CI, thumbnailers)
+    /// should set one, so a dissector that loops without making progress
+    /// on malformed input ends with a diagnostic instead of running on.
+    pub max_work: Option<u64>,
 }
 
 impl Default for Limits {
@@ -41,7 +48,7 @@ impl Default for Limits {
             max_read: 16 * 1024 * 1024,
             max_nesting: 16,
             max_derived: 256 * 1024 * 1024,
-            max_work: 100_000_000,
+            max_work: None,
         }
     }
 }
@@ -1267,7 +1274,10 @@ impl<C: Catalog> Session<C> {
         }
         entry.node.diagnostics.extend(diagnostics);
         entry.work = entry.work.saturating_add(used);
-        if result.is_pending() && entry.work > max_work {
+        if let Some(max_work) = max_work
+            && result.is_pending()
+            && entry.work > max_work
+        {
             entry.state = ChildState::Failed;
             entry.error = Some(Diagnostic::limit(format!(
                 "expansion stopped after {max_work} units of work"

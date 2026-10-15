@@ -144,7 +144,10 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
   by its path of child indices, stable across collapses and sessions over
   the same bytes.
   `work_done()` totals the units every expansion charged, however polls
-  split them; tests bound work with it instead of a clock.
+  split them; tests bound work with it instead of a clock. There is no
+  overall cap by default: `Limits::max_work` (units per expansion, or
+  per page of children) is for hosts that poll to completion unattended
+  (batch runs, CI, thumbnailers); an interactive host cancels instead.
 - **Progress.** `activity(id)` describes a running expansion, and
   `progress(id)` gives its best single estimate as `(done, total)`, in
   this order: what the dissector reported (`Cx::progress`, or
@@ -192,7 +195,13 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
   nothing records is decoded lazily with `Cx::decode_lazy_unsized`: its
   length is an upper bound (`Cx::len_known` is false) until it has been
   decoded to its end, and only `formats::STREAMING` formats see it before
-  then.
+  then. A stream whose first header records a size that more may follow
+  (a zstd file's first frame) is decoded with that length
+  (`Cx::decode_lazy_checked`), checked when decoding reaches it: a
+  stream that goes on is reported on the node whose read found it, never
+  cut short silently. Optional reads far into such content (a backup
+  header at the end of a disk) are offered as nodes read on request
+  (`Cx::read_is_cheap`, `formats::util::far`).
 - **Holes.** A host may declare the holes of a sparse source
   (`Session::set_holes`, from `SEEK_HOLE`/`SEEK_DATA` or `FIEMAP`). Reads
   wholly inside them are answered as zeros without asking the host, and
@@ -353,7 +362,9 @@ go next is in `ROADMAP.md`.
   pointing at its own image), and probe overreach. Two framework guards came
   out of it: embedded regions in the same source must be strictly smaller than
   their container, and `Limits::max_work` stops any runaway expansion with a
-  local `Limit` diagnostic.
+  local `Limit` diagnostic. (*Since* opt-in: an interactive host relies on
+  interrupting budgeted polls instead, and a limit failed legitimate long
+  decodes; batch hosts and the robustness tests set one.)
 - **Piecewise sources** (`Cx::add_pieces`) cover fragmented data without
   copying: CBM sector chains, MSF (PDB) streams and their directory,
   filesystem extents, NTFS update-sequence fixups (sector bodies plus 2-byte
