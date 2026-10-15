@@ -1,8 +1,10 @@
-//! Large compressed disk images: a single-frame zstd stream that records
-//! its content size is decoded on demand with that size (no walk over the
-//! stream first, no decode to its end), a GPT inside it shows its primary
-//! structures at once, and the backup header at the end of the disk is a
-//! node read on request. Also: no work limit unless the host sets one.
+//! Large compressed disk images: a zstd stream whose frames record their
+//! content sizes is decoded on demand with their exact total (found by
+//! walking the frames' block headers, without decoding), a GPT inside it
+//! shows its primary structures at once, and the backup header at the end
+//! of the disk is a node read on request. A stream cut short is decoded
+//! with its size found at the end, never given its first frame's size.
+//! Also: no work limit unless the host sets one.
 
 #![allow(
     clippy::unwrap_used,
@@ -246,30 +248,32 @@ fn a_damaged_backup_is_reported_when_read() {
 }
 
 #[test]
-fn a_stream_with_more_frames_than_the_first_is_not_cut_short_silently() {
-    // The disk in one frame, then a second frame: the content's length is
-    // the first frame's, and reading up to it finds that more follows.
+fn a_stream_of_several_frames_gets_its_whole_size() {
+    // The disk in one frame, then a second frame: walking the frames finds
+    // both, so the content is the sum of their sizes, not the first's.
     let disk = gpt_disk();
+    let more = b"more content after the first frame";
     let mut data = zstd_frame(&disk);
-    data.extend(zstd_frame(b"more content after the first frame"));
+    data.extend(zstd_frame(more));
     let mut host = Host::named("disk.img.zst", data, Limits::default());
     let (content, work) = open_content(&mut host);
     assert!(work < FULL_DECODE / 8, "{work} units of {FULL_DECODE}");
-    let summary = host.session.node(content).unwrap().summary.clone().unwrap();
-    assert!(summary.contains("GPT disk"), "{summary}");
-    let backup = child(&host, content, "Backup GPT header");
-    host.session.expand(backup, 100);
-    poll_until(&mut host, backup, |_| false);
-    let node = host.session.node(backup).unwrap();
+    let node = host.session.node(content).unwrap();
+    let mbr = child(&host, content, "Protective MBR");
+    let decoded = host.session.node(mbr).unwrap().span.unwrap().source;
+    assert!(host.session.source_len_known(decoded));
+    assert_eq!(
+        host.session.source_len(decoded),
+        (disk.len() + more.len()) as u64
+    );
     assert!(
-        node.diagnostics
-            .iter()
-            .any(|d| d.message.contains("continues past")),
-        "{:?}\n{}",
-        node.diagnostics,
+        node.summary
+            .as_deref()
+            .is_some_and(|s| s.contains("GPT disk")),
+        "{}",
         host.render()
     );
-    // The listing of frames, polled to its end, shows the second frame.
+    // The listing of frames, polled to its end, shows both.
     let root = host.root;
     host.session.expand(root, 100);
     poll_until(&mut host, root, |_| false);
@@ -282,6 +286,36 @@ fn a_stream_with_more_frames_than_the_first_is_not_cut_short_silently() {
         .map(|&c| name(&host, c))
         .collect();
     assert_eq!(names, ["Decompressed", "Frame 0", "Frame 1"]);
+}
+
+#[test]
+fn a_stream_cut_short_is_not_given_its_first_frames_size() {
+    // A small first frame that records its size, then a second frame cut
+    // short (a seekable file still being written, before its seek table):
+    // the content is not taken to be the first frame alone; its size is
+    // found by decoding.
+    let first = vec![7u8; 300 * 1024];
+    let mut data = zstd_frame(&first);
+    let varied: Vec<u8> = (0..300 * 1024).map(|i| (i % 251) as u8).collect();
+    let second = zstd_frame(&varied);
+    data.extend_from_slice(&second[..second.len() / 2]);
+    let mut host = Host::named("part.img.zst", data, Limits::default());
+    let (content, _) = open_content(&mut host);
+    // The content's size is not claimed: what dissects it reads a source
+    // whose length is unknown until decoding reaches the cut (and reports
+    // it there), not one cut to the first frame.
+    let ids = host.session.children(content).unwrap().ids.to_vec();
+    let decoded = ids
+        .iter()
+        .find_map(|&c| host.session.node(c).unwrap().span)
+        .map(|s| s.source)
+        .expect("a child over the decoded content");
+    assert!(!host.session.source_len_known(decoded), "{}", host.render());
+    assert!(
+        host.session.source_len(decoded) > first.len() as u64,
+        "{}",
+        host.render()
+    );
 }
 
 /// Charges `units` of work in steps of a million.

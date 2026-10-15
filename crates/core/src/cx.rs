@@ -224,13 +224,6 @@ pub(crate) struct LazyDecode {
     spread: u64,
     /// This run of the decoder started from a seeded checkpoint.
     run_seeded: bool,
-    /// The declared length comes from the stream itself (its first frame's
-    /// header, see [`Cx::decode_lazy_checked`]), not from a container that
-    /// bounds it: a read that reaches it decodes on until the stream ends
-    /// or overruns it, so that more content is reported, not dropped.
-    check_end: bool,
-    /// That check has been made.
-    end_checked: bool,
     /// Output positions of the seeds the container recorded, as registered
     /// (for [`Shared::decode_cost`], which must not depend on what decoding
     /// has found since).
@@ -256,8 +249,6 @@ impl LazyDecode {
             checkpoint_bytes: 0,
             spread: 1,
             run_seeded: false,
-            check_end: false,
-            end_checked: false,
             seeds: Vec::new(),
         })
     }
@@ -727,7 +718,6 @@ impl Shared {
         depth: u32,
     ) -> std::result::Result<Vec<u8>, Pending> {
         let index = crate::bytes::to_usize(source.0.into());
-        let declared = self.sources.get(index).map_or(u64::MAX, |e| e.len);
         let Some(mut st) = self.sources.get_mut(index).and_then(|e| e.lazy.take()) else {
             return Ok(Vec::new());
         };
@@ -775,15 +765,7 @@ impl Shared {
         let mut failure = None;
         let result = loop {
             let front = st.out_base.saturating_add(to_u64(st.out.len()));
-            // A read reaching a length the stream declared for itself
-            // decodes on until the stream ends there, or shows it does not.
-            let verifying = st.check_end && !st.end_checked && end >= declared;
-            if verifying && front > declared {
-                st.end_checked = true;
-                failure = Some(overrun(declared));
-                continue;
-            }
-            if (front >= end && !verifying) || st.done {
+            if front >= end || st.done {
                 let from =
                     crate::bytes::to_usize(start.saturating_sub(st.out_base)).min(st.out.len());
                 let to = crate::bytes::to_usize(end.saturating_sub(st.out_base)).min(st.out.len());
@@ -889,12 +871,6 @@ impl Shared {
         let finished_len = st
             .done
             .then(|| st.out_base.saturating_add(to_u64(st.out.len())));
-        if st.check_end && !st.end_checked && st.done {
-            st.end_checked = true;
-            if finished_len.is_some_and(|l| l > declared) && failure.is_none() {
-                failure = Some(overrun(declared));
-            }
-        }
         if st.done && failure.is_none() {
             failure = st.decoder.warning(&st.out);
         }
@@ -1142,15 +1118,6 @@ impl Shared {
 /// front anyway.
 pub const CHEAP_DECODE: u64 = 16 * 1024 * 1024;
 
-/// What a stream that declared its own length (see
-/// [`Cx::decode_lazy_checked`]) and decodes past it is reported with.
-fn overrun(declared: u64) -> Diagnostic {
-    Diagnostic::malformed(format!(
-        "the stream continues past the {declared:#x} bytes its first frame declares \
-         (more frames follow); what follows is not shown"
-    ))
-}
-
 /// Lazily decoded sources one suspended read records, at most (see
 /// [`Shared::decoding`]).
 const MAX_CHAIN: usize = 16;
@@ -1383,24 +1350,7 @@ impl Cx {
                         .flatten()
                         .filter(|e| e.on_demand)
                         .and_then(|e| e.error.clone());
-                    // A whole read that reaches the end of a stream whose
-                    // length it declared itself (see
-                    // `Cx::decode_lazy_checked`) reports what the check at
-                    // the end found, on the node being expanded.
-                    let at_end = (failed.is_none() && span.len > 0)
-                        .then(|| sh.source(span.source))
-                        .flatten()
-                        .filter(|e| {
-                            e.lazy.as_ref().is_some_and(|l| l.check_end) && span.end() >= e.len
-                        })
-                        .and_then(|e| e.error.clone());
                     drop(sh);
-                    if let Some(e) = at_end {
-                        let mut out = lock(&self.out);
-                        if !out.diagnostics.iter().any(|d| d.message == e.message) {
-                            out.diagnostics.push(e);
-                        }
-                    }
                     // Where the expansion got to, for hosts' progress
                     // display (see `Session::activity`).
                     let mut out = lock(&self.out);
@@ -1860,26 +1810,6 @@ impl Cx {
         seeds: Vec<Seed>,
     ) -> Result<Span> {
         self.register_lazy_seeded(span, codec, len, true, seeds)
-    }
-
-    /// [`Cx::decode_lazy`] for a stream that declares its decoded size in
-    /// its own first header, while more may follow it (a zstd frame's
-    /// content size, where further frames may come after the first): the
-    /// length is taken as declared, so dissection starts at once, but a
-    /// read that reaches it decodes on to check that the stream ends there.
-    /// If it does not (or fails there), the read reports it on the node
-    /// being expanded: the content is never cut short silently.
-    pub fn decode_lazy_checked(&self, span: Span, codec: &Codec, len: u64) -> Result<Span> {
-        let decoded = self.register_lazy(span, codec, len, true)?;
-        let mut sh = lock(&self.shared);
-        if let Some(lazy) = sh
-            .sources
-            .get_mut(crate::bytes::to_usize(decoded.source.0.into()))
-            .and_then(|e| e.lazy.as_mut())
-        {
-            lazy.check_end = true;
-        }
-        Ok(decoded)
     }
 
     fn register_lazy(&self, span: Span, codec: &Codec, len: u64, len_known: bool) -> Result<Span> {

@@ -26,9 +26,6 @@ const LE: Endian = Endian::Little;
 const FRAME_MAGIC: u32 = 0xfd2f_b528;
 const SEEKABLE_MAGIC: u32 = 0x8f92_eab1;
 const SEEK_TABLE_FRAME: u32 = 0x184d_2a5e;
-/// Blocks are at most 128 KiB; a frame with more blocks than this is listed
-/// lazily anyway, but walking it to find its end is capped.
-const MAX_BLOCK_WALK: u64 = 1 << 24;
 /// Blocks between progress reports while walking a frame (a power of two).
 const PROGRESS_BLOCKS: u64 = 4096;
 
@@ -194,9 +191,6 @@ async fn walk_frame(cx: &Cx, cur: &mut Cursor<'_>) -> Result<FrameInfo> {
         if h & 1 != 0 {
             break;
         }
-        if blocks >= MAX_BLOCK_WALK {
-            return Err(Diagnostic::limit("too many blocks").at(cur.since(start)));
-        }
         if cur.at_end() {
             return Err(Diagnostic::truncated(
                 cur.since(start),
@@ -313,20 +307,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-/// The decompressed content. When every frame records its content size,
-/// the total is known up front. Adding it up means walking every block of
-/// every frame (frames do not record their encoded size), which for a large
-/// file is a read of all of it before the first decoded byte; so it is only
-/// done for small files. A large file uses a seek table if it has one (the
-/// seekable format records the frames, and frames are independent, so a
-/// read decodes from the frame before it). Otherwise the first frame's
-/// header decides: `zstd` writes a whole file as one frame recording its
-/// size, which is then taken as the length, checked when decoding reaches
-/// it (more frames after the first are reported there, see
-/// [`Cx::decode_lazy_checked`]). Failing all that, the stream decodes
-/// lazily with its size found at the end.
+/// The decompressed content. A seek table (the seekable format) records
+/// every frame, so the decoded size and where each frame starts are known
+/// at once. Otherwise frames record their content size but not their
+/// encoded size, so the only way to know them all is to walk every block
+/// header of every frame: a read through the encoded file (no decoding),
+/// in budgeted steps with progress. Then, if every frame records its size,
+/// the total is exact and each frame start is a point decoding can resume
+/// from. A stream whose frames don't all record a size, or that ends
+/// inside a frame (a file still being written), is decoded with its size
+/// found at the end, never guessed from the first frame.
 async fn decompressed(cx: Cx, input: Input) -> Result<()> {
-    const WALK_LIMIT: u64 = 1024 * 1024;
     let file = input.span;
     let codec = crate::codec::Codec::Zstd;
     if let Some((total, frames)) = seek_table_frames(&cx, file).await
@@ -335,18 +326,8 @@ async fn decompressed(cx: Cx, input: Input) -> Result<()> {
         let seeds = frame_seeds(&codec, &frames, total);
         return crate::formats::expand_content_seeded(cx, (input, file, codec, total), seeds).await;
     }
-    if file.len > WALK_LIMIT
-        && let Some(size) = first_frame_size(&cx, file).await
-        && crate::formats::decodes_lazily(file, &codec, size)
-    {
-        let decoded = cx.decode_lazy_checked(file, &codec, size)?;
-        cx.annotate(format!(
-            "{size:#x} bytes (the first frame's content size), decoded on demand"
-        ));
-        return crate::formats::dissect_or_data(cx, input.nested(decoded)).await;
-    }
     let mut cur = Cursor::new(&cx, file, LE);
-    let mut total = (file.len <= WALK_LIMIT).then_some(0u64);
+    let mut total = Some(0u64);
     // Where each frame starts, in the file and in the content.
     let mut frames = Vec::new();
     while !cur.at_end() && total.is_some() {
@@ -355,11 +336,20 @@ async fn decompressed(cx: Cx, input: Input) -> Result<()> {
             break;
         };
         if magic == FRAME_MAGIC {
+            // A frame that doesn't record its content size leaves nothing
+            // to add up: no need to walk it (or anything after it).
+            let fhd = cur.peek(5).await?.get(4).copied().unwrap_or(0);
+            if fhd >> 6 == 0 && fhd & 0x20 == 0 {
+                total = None;
+                break;
+            }
             frames.push((start, total.unwrap_or(0)));
             total = match walk_frame(&cx, &mut cur).await {
                 Ok(info) => total
                     .zip(info.header.content_size)
                     .map(|(t, s)| t.saturating_add(s)),
+                // Cut short or damaged: decoding finds the size, and
+                // reports the problem where it reaches it.
                 Err(_) => None,
             };
         } else if magic & 0xffff_fff0 == 0x184d_2a50 {
@@ -380,34 +370,6 @@ async fn decompressed(cx: Cx, input: Input) -> Result<()> {
         return crate::formats::expand_content_seeded(cx, (input, file, codec, total), seeds).await;
     }
     crate::formats::expand_content(cx, (input, file, codec, total)).await
-}
-
-/// Skippable frames passed over looking for the first zstd frame.
-const MAX_LEADING_SKIPPABLE: u32 = 16;
-
-/// The content size the first zstd frame's header records (after any
-/// skippable frames), if it records one; reads only headers.
-async fn first_frame_size(cx: &Cx, file: Span) -> Option<u64> {
-    let mut at = 0u64;
-    for _ in 0..MAX_LEADING_SKIPPABLE {
-        let head = cx.read(file.sub(at, 8)).await.ok()?;
-        let magic = u32_le(&head, 0)?;
-        if magic == FRAME_MAGIC {
-            let hlen = header_len(*head.get(4)?);
-            let span = file.sub(at.saturating_add(4), hlen);
-            let header = crate::fields::parse(cx, span, LE, &(), frame_header)
-                .await
-                .ok()?;
-            return header.content_size;
-        }
-        if magic & 0xffff_fff0 != 0x184d_2a50 {
-            return None;
-        }
-        at = at
-            .saturating_add(8)
-            .saturating_add(u32_le(&head, 4)?.into());
-    }
-    None
 }
 
 /// Frames seeded at most: each costs a few dozen bytes.
