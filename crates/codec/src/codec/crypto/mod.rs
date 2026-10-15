@@ -1,5 +1,6 @@
 //! Cryptographic primitives for reading encrypted files the user has the
-//! password for: hashes, HMAC, PBKDF2, the PKCS#12 key derivation, and the
+//! password for: hashes, HMAC, PBKDF2, the PKCS#12 and 7-Zip key
+//! derivations, and the
 //! ciphers those formats use. In-house and dependency-free like the other
 //! codecs; correct, but not hardened against side channels (they decrypt
 //! local files for display, not secrets in transit).
@@ -14,6 +15,7 @@ pub mod hash;
 pub mod mpq;
 pub mod office;
 pub mod poly1305;
+pub mod sevenzip;
 pub mod stream;
 pub mod twofish;
 
@@ -32,7 +34,7 @@ pub use stream::{Key, ZipCryptoKeys, aes_cbc_iv_prefixed};
 ///
 /// A unit of work is roughly half a microsecond: one HMAC for PBKDF2, one
 /// hash for the PKCS#12 derivation, one block for Argon2, 1/77 of a
-/// bcrypt hash piece (see each type).
+/// bcrypt hash piece, a round per 64 bytes for 7-Zip's (see each type).
 pub trait Stepped {
     /// Runs about `units` units of work (at least one indivisible piece,
     /// which may cost more); returns the units used, 0 once complete.
