@@ -71,22 +71,34 @@ impl<'a> Backward<'a> {
         Ok(Backward { data, pos })
     }
 
-    /// The `n` bits below the current position (zeros past the start).
+    /// The `n` bits below the current position (zeros past the start), as
+    /// one 8-byte window shifted into place. Callers read at most 31 bits;
+    /// `n` is capped at 57, what a window holds from any bit offset.
     fn peek(&self, n: u32) -> u64 {
-        if n == 0 {
+        let n = n.min(57);
+        let start = self.pos.saturating_sub(i64::from(n));
+        // Bits below position 0 read as zeros: take those from 0 up, then
+        // shift them to where they belong.
+        let missing = if start < 0 {
+            u32::try_from(start.unsigned_abs()).unwrap_or(u32::MAX)
+        } else {
+            0
+        };
+        if missing >= n {
             return 0;
         }
-        let start = self.pos.saturating_sub(i64::from(n));
-        let mut v = 0u64;
-        for i in 0..i64::from(n) {
-            let p = start.saturating_add(i);
-            if p >= 0 {
-                let p = usize::try_from(p).unwrap_or(usize::MAX);
-                let byte = self.data.get(p / 8).copied().unwrap_or(0);
-                v |= u64::from(byte >> (p % 8) & 1) << i;
-            }
-        }
-        v
+        let avail = n.saturating_sub(missing);
+        let from = usize::try_from(start.max(0)).unwrap_or(usize::MAX);
+        let byte = from / 8;
+        let window = match self
+            .data
+            .get(byte..byte.saturating_add(8))
+            .and_then(|w| <[u8; 8]>::try_from(w).ok())
+        {
+            Some(w) => u64::from_le_bytes(w),
+            None => le(self.data.get(byte..).unwrap_or_default()),
+        };
+        ((window >> (from % 8)) & (1u64 << avail).wrapping_sub(1)) << missing
     }
 
     fn read(&mut self, n: u32) -> u64 {
@@ -464,12 +476,27 @@ impl Huffman {
     }
 
     fn decode_stream(&self, data: &[u8], count: usize, out: &mut Vec<u8>) -> Result<()> {
+        // One window of the 57 bits below the position serves several
+        // symbols (codes are at most 11 bits): each symbol's prefix is the
+        // window's top `max_bits` bits below those already used, exactly
+        // what peeking at the moved position would return.
+        const WINDOW: u32 = 57;
         let mut r = Backward::new(data)?;
-        for _ in 0..count {
-            let idx = usize::try_from(r.peek(self.max_bits)).unwrap_or(0);
-            let &(symbol, bits) = self.table.get(idx).ok_or_else(|| bad("Huffman index"))?;
-            out.push(symbol);
-            r.pos = r.pos.saturating_sub(i64::from(bits));
+        let mask = (1u64 << self.max_bits).wrapping_sub(1);
+        out.reserve(count);
+        let mut left = count;
+        while left > 0 {
+            let window = r.peek(WINDOW);
+            let mut used = 0u32;
+            while left > 0 && used.saturating_add(self.max_bits) <= WINDOW {
+                let shift = WINDOW.saturating_sub(used).saturating_sub(self.max_bits);
+                let idx = usize::try_from((window >> shift) & mask).unwrap_or(0);
+                let &(symbol, bits) = self.table.get(idx).ok_or_else(|| bad("Huffman index"))?;
+                out.push(symbol);
+                used = used.saturating_add(u32::from(bits));
+                left = left.saturating_sub(1);
+            }
+            r.pos = r.pos.saturating_sub(i64::from(used));
         }
         if r.pos != 0 {
             return Err(bad("Huffman stream not fully consumed"));
@@ -921,10 +948,18 @@ fn compressed_block(
             dict.get(start..start.saturating_add(from_dict))
                 .unwrap_or_default(),
         );
+        // The rest repeats the output from `offset` back. Copying what is
+        // there, doubling as it grows, gives the same bytes as copying one
+        // at a time (an overlapping match is periodic with that offset).
         let from = out.len().saturating_sub(offset);
-        for k in 0..match_len.saturating_sub(from_dict) {
-            let b = out.get(from.saturating_add(k)).copied().unwrap_or(0);
-            out.push(b);
+        let mut left = match_len.saturating_sub(from_dict);
+        while left > 0 {
+            let n = left.min(out.len().saturating_sub(from));
+            if n == 0 {
+                return Err(bad("match offset beyond the output"));
+            }
+            out.extend_from_within(from..from.saturating_add(n));
+            left = left.saturating_sub(n);
         }
     }
     out.extend_from_slice(lits.get(lit_pos..).unwrap_or_default());
@@ -1666,6 +1701,34 @@ mod tests {
         let at = dict(ZDICT).0.layout.unwrap().reps_at;
         bad_reps[at..at + 4].copy_from_slice(&0u32.to_le_bytes());
         assert!(Dictionary::parse(&bad_reps).is_err());
+    }
+
+    /// The bit-at-a-time reading `Backward::peek` replaced: bit `i` of
+    /// the result is bit `pos - n + i` of the data, zero below bit 0.
+    fn peek_bitwise(data: &[u8], pos: i64, n: u32) -> u64 {
+        let mut v = 0u64;
+        for i in 0..i64::from(n) {
+            let p = pos - i64::from(n) + i;
+            if p >= 0 {
+                let byte = data.get((p / 8) as usize).copied().unwrap_or(0);
+                v |= u64::from(byte >> (p % 8) & 1) << i;
+            }
+        }
+        v
+    }
+
+    #[test]
+    fn windowed_peek_matches_bitwise_reading() {
+        let data: Vec<u8> = (0u32..37)
+            .map(|i| (i.wrapping_mul(0x9d) ^ 0x5a) as u8)
+            .collect();
+        let end = (data.len() * 8) as i64;
+        for pos in -70..=end {
+            for n in 0..=57 {
+                let r = Backward { data: &data, pos };
+                assert_eq!(r.peek(n), peek_bitwise(&data, pos, n), "pos {pos}, n {n}");
+            }
+        }
     }
 
     #[test]
