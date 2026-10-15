@@ -1,0 +1,46 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ aes-bcj-lzma2.7z — 7-Zip archive, 1 file, AES-256 + LZMA2 + BCJ x86  [0x0+0x14ca]
+  ▾ Signature header — version 0.4  [0x0+0x20]
+      Signature: 37 7a bc af 27 1c  |7z..'.|  [0x0+0x6]
+      Major version: 0  [0x6+0x1]
+      Minor version: 4  [0x7+0x1]
+      Start header CRC: 0x89ba2f0a  [0x8+0x4]
+      Next header offset: 0x1430  [0xc+0x8]
+      Next header size: 122 — 122 bytes  [0x14+0x8]
+      Next header CRC: 0xa831c572  [0x1c+0x4]
+  ▾ Files — 1 file  [0x1450+0x7a]
+    ▾ code.bin — 8 KiB  [0x20+0x1430]
+        Modification time: 2024-01-02 03:04:00 UTC
+        Attributes: 0x81a48020 — -rw-r--r--
+        Size: 8192 — 8 KiB
+        Folder: 0
+      ▾ Content — 0x2000 bytes decrypted and decompressed  [0x20+0x1430]
+          CRC32: 0x308f5345 — valid
+          Data  [#1:0x0+0x2000]
+  ▾ Folders — 1 folder  [0x20+0x1430]
+    ▾ Folder 0 — AES-256 + LZMA2 + BCJ x86, 5.0 KiB → 8 KiB, 1 stream  [0x20+0x1430]
+        Coder 0: "AES-256" — 1 in, 1 out
+        Coder 1: "LZMA2" — 1 in, 1 out
+        Coder 2: "BCJ x86" — 1 in, 1 out
+        Unpacked size: 8192 — 8 KiB
+        Streams: 1
+      ▾ Data — 0x2000 bytes decrypted and decompressed  [0x20+0x1430]
+          Data  [#1:0x0+0x2000]
+  ▾ Next header — kHeader  [0x1450+0x7a]
+    ▾ kMainStreamsInfo  [0x1451+0x43]
+      ▾ kPackInfo — 1 packed stream, at 0x0  [0x1452+0x7]
+          kSize — 1 size  [0x1455+0x3]
+      ▾ kUnPackInfo — 1 folder  [0x1459+0x32]
+          Folder 0 — AES-256 + LZMA2 + BCJ x86  [0x145d+0x26]
+          kCodersUnPackSize  [0x1483+0x7]
+      ▾ kSubStreamsInfo — 1 stream  [0x148b+0x8]
+          kCRC — 1 CRC  [0x148c+0x6]
+    ▾ kFilesInfo — 1 file  [0x1494+0x35]
+        kDummy — 5 bytes  [0x1496+0x7]
+        kName — 19 bytes  [0x149d+0x15]
+        kDummy — 0 bytes  [0x14b2+0x2]
+        kMTime — 10 bytes  [0x14b4+0xc]
+        kWinAttributes — 6 bytes  [0x14c0+0x8]

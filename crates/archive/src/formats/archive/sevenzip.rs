@@ -11,13 +11,25 @@
 //! Zstandard or LZ4, then optionally BCJ (x86, ARM, ARM64, ARM Thumb,
 //! PowerPC, SPARC, IA-64, RISC-V) or Delta filters) are decoded, and so are
 //! BCJ2 folders (four packed streams, see `codec::bcj2`); solid folders are
-//! split into their files by the substream sizes. Encryption is an
-//! unsupported leaf.
+//! split into their files by the substream sizes.
+//!
+//! Encrypted folders (an AES-256 coder, 7zAES, in front of the chain) ask
+//! for the archive's password when their content is expanded: one realm
+//! per archive, so an encrypted header and the files share one prompt.
+//! The key derivation (2^19 SHA-256 rounds by default) runs in budgeted
+//! steps, and the data is decrypted lazily with the rest of the chain.
+//! 7z keeps no password check value, so a password is checked by decoding
+//! the start of the folder (and its CRC where it covers that start): a
+//! wrong one fails there and the next attempt is asked for. An encrypted
+//! header (`-mhe=on`) is decrypted only when the files, folders or header
+//! outline are expanded. The password is hashed as UTF-16LE. Not
+//! supported: AES inside BCJ2 folders (an AES coder per packed stream).
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u32_le, u64_le};
+use crate::codec::crypto::{Key, sevenzip};
 use crate::codec::lzma::Post;
 use crate::codec::{crc32, decode_span, read_all};
 use crate::cx::Cx;
@@ -857,12 +869,15 @@ struct Plan {
     /// range coder packed streams, relative to the folder's packed data.
     /// The codec reads them interleaved (see `codec::bcj2::Schedule`).
     pieces: Vec<(u64, u64)>,
+    /// For an encrypted folder: its AES coder, which decrypts the packed
+    /// stream before `codec` sees it.
+    aes: Option<Arc<Lock>>,
 }
 
 /// The decoding plan of `f`, or why it cannot be decoded: a chain of
 /// one-input, one-output coders (the packed stream feeds a decompressor,
 /// whose output runs through filters), or a BCJ2 folder.
-fn plan(f: &Folder) -> std::result::Result<Plan, String> {
+fn plan(f: &Folder, unlock: Unlock) -> std::result::Result<Plan, String> {
     let n = f.coders.len();
     let simple = f.packed == 1
         && n > 0
@@ -891,11 +906,30 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
         return Err(f.methods());
     }
     let coder = |i: u64| f.coders.get(to_usize(i));
+    // An AES coder decrypts the packed stream for the next coder (or is
+    // the only one: encrypted, not compressed).
+    let mut aes = None;
+    let mut first = first;
+    let mut rest = order.get(1..).unwrap_or_default();
+    if let Some(c) = coder(first).filter(|c| c.id == AES_ID) {
+        aes = Some(Arc::new(Lock {
+            props: AesProps::parse(&c.props),
+            unlock,
+        }));
+        if let Some((&next, more)) = rest.split_first() {
+            first = next;
+            rest = more;
+        }
+    }
     let last = coder(first).ok_or_else(|| f.methods())?;
     let size = f.unpack_sizes.get(to_usize(first)).copied().unwrap_or(0);
-    let codec = decompressor(last, size)?;
+    let codec = if last.id == AES_ID {
+        Codec::Stored
+    } else {
+        decompressor(last, size)?
+    };
     let mut post = Vec::new();
-    for &i in order.get(1..).unwrap_or_default() {
+    for &i in rest {
         let c = coder(i).ok_or_else(|| f.methods())?;
         let id = c.id.as_slice();
         // Branch converters, with an optional 4-byte start offset (7-Zip
@@ -937,6 +971,7 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
         size,
         post,
         pieces: Vec::new(),
+        aes,
     })
 }
 
@@ -1046,6 +1081,7 @@ fn bcj2_plan(f: &Folder) -> std::result::Result<Plan, String> {
         size,
         post: Vec::new(),
         pieces,
+        aes: None,
     })
 }
 
@@ -1065,29 +1101,302 @@ fn branch(id: &[u8]) -> Option<Post> {
     })
 }
 
+// ---------------------------------------------------------------------------
+// Encryption (7zAES)
+
+/// The AES-256 coder's method ID.
+const AES_ID: [u8; 4] = [0x06, 0xf1, 0x07, 0x01];
+
+/// The most key derivation rounds (as a power of two) 7-Zip accepts; it
+/// reports more as an unsupported method (checked with 7-Zip 26.03).
+const MAX_CYCLES: u8 = 24;
+
+/// Bytes of a folder's output decoded to check a password: the folder
+/// itself or its first file if no larger and it has a CRC, else this
+/// much (a wrong key turns the stream to garbage, which LZMA, LZMA2 and
+/// the other decompressors reject within a few hundred bytes).
+const VERIFY_LEN: u64 = 64 * 1024;
+
+/// The AES coder's properties: the key derivation's rounds (a power of
+/// two, or `sevenzip::RAW_KEY`), its salt and the CBC IV. The first byte
+/// holds the power in bits 0-5 and, in bits 7 and 6, one more byte each
+/// of salt and IV; if either is set, a second byte holds as many again in
+/// its high and low nibbles; then the salt and the IV (zero-padded to a
+/// block). Checked against archives from 7-Zip 25.01 (no salt, a 16-byte
+/// IV: `53 0f` and the IV).
+#[derive(Clone, Debug)]
+struct AesProps {
+    cycles: u8,
+    salt: Vec<u8>,
+    iv: [u8; 16],
+}
+
+impl AesProps {
+    fn parse(p: &[u8]) -> std::result::Result<AesProps, String> {
+        let invalid = || "AES-256 with invalid properties".to_owned();
+        let &first = p.first().ok_or_else(invalid)?;
+        let cycles = first & 0x3f;
+        let (salt, iv) = if first & 0xc0 == 0 {
+            if p.len() != 1 {
+                return Err(invalid());
+            }
+            (&[][..], &[][..])
+        } else {
+            let &second = p.get(1).ok_or_else(invalid)?;
+            let salt_len = usize::from(first >> 7).saturating_add(usize::from(second >> 4));
+            let iv_len = usize::from((first >> 6) & 1).saturating_add(usize::from(second & 0x0f));
+            let salt_end = salt_len.saturating_add(2);
+            if p.len() != salt_end.saturating_add(iv_len) {
+                return Err(invalid());
+            }
+            (
+                p.get(2..salt_end).unwrap_or_default(),
+                p.get(salt_end..).unwrap_or_default(),
+            )
+        };
+        if cycles > MAX_CYCLES && cycles != sevenzip::RAW_KEY {
+            return Err(format!(
+                "AES-256 with 2^{cycles} key derivation rounds (7-Zip allows at most 2^{MAX_CYCLES})"
+            ));
+        }
+        let mut block = [0u8; 16];
+        for (b, v) in block.iter_mut().zip(iv) {
+            *b = *v;
+        }
+        Ok(AesProps {
+            cycles,
+            salt: salt.to_vec(),
+            iv: block,
+        })
+    }
+}
+
+/// What unlocks an encrypted folder: the realm of its password (the
+/// archive: one password serves the header and every folder) and a CRC
+/// of the start of its output to check a password against.
+#[derive(Clone, Copy, Debug)]
+struct Unlock {
+    realm: Span,
+    /// The length and CRC-32 of the folder's first bytes, if known and
+    /// small enough to decode just to check.
+    check: Option<(u64, u32)>,
+}
+
+impl Unlock {
+    /// For folder `f` of the archive at `realm`, whose first stream has
+    /// `first` (size, CRC).
+    fn new(realm: Span, f: &Folder, first: Option<(u64, Option<u32>)>) -> Self {
+        let check = match (f.crc, first) {
+            (Some(crc), _) if f.unpack_size() <= VERIFY_LEN => Some((f.unpack_size(), crc)),
+            (_, Some((size, Some(crc)))) if size <= VERIFY_LEN => Some((size, crc)),
+            _ => None,
+        };
+        Unlock { realm, check }
+    }
+}
+
+/// An encrypted folder's AES coder.
+#[derive(Clone, Debug)]
+struct Lock {
+    /// Its properties, or why they are unusable (reported when the folder
+    /// is decoded).
+    props: std::result::Result<AesProps, String>,
+    unlock: Unlock,
+}
+
+/// Keys derived for an archive: (rounds, salt, attempt or `None` once
+/// verified, key). Keyed by the attempt (answers are fixed per attempt),
+/// so a folder after the first neither asks again nor derives again.
+type KeyCache = std::sync::Mutex<Vec<(u8, Vec<u8>, Option<u32>, [u8; 32])>>;
+
+/// The AES key of an encrypted folder: asks for the archive's password
+/// and derives the key (in budgeted steps) until one decodes the start of
+/// the folder (and matches its CRC where known); 7z has no password check
+/// value, so a wrong password shows as a decoding error or a CRC mismatch.
+async fn folder_key(cx: &Cx, span: Span, plan: &Plan, lock: &Lock) -> Result<[u8; 32]> {
+    use crate::secret::{MAX_ATTEMPTS, SecretRequest};
+    const PROMPT: &str = "Password for the encrypted 7z archive";
+    let props = lock
+        .props
+        .as_ref()
+        .map_err(|why| Diagnostic::unsupported(why.clone()).at(span))?;
+    let realm = lock.unlock.realm;
+    let cache = match cx.cached::<KeyCache>(realm, "7z keys") {
+        Some(cache) => cache,
+        None => {
+            let cache = Arc::new(KeyCache::default());
+            cx.cache(realm, "7z keys", cache.clone());
+            cache
+        }
+    };
+    let find = |attempt: Option<u32>| {
+        cache.lock().ok().and_then(|found| {
+            found
+                .iter()
+                .find(|(c, s, a, _)| *c == props.cycles && *s == props.salt && *a == attempt)
+                .map(|e| e.3)
+        })
+    };
+    if let Some(key) = find(None) {
+        return Ok(key);
+    }
+    // Refused up front only for what the host's work limit could not
+    // finish (see `docs/DISSECTORS.md`); without one, it runs.
+    if props.cycles != sevenzip::RAW_KEY
+        && let Some(max) = cx.limits().max_work
+        && (1u64 << props.cycles) > max.saturating_mul(2) / 5
+    {
+        return Err(Diagnostic::limit(format!(
+            "key derivation too expensive (2^{} SHA-256 rounds) for the work limit",
+            props.cycles
+        ))
+        .at(span));
+    }
+    for attempt in 0..MAX_ATTEMPTS {
+        let Some(secret) = cx
+            .secret(SecretRequest::password(realm, PROMPT, attempt))
+            .await
+        else {
+            let why = if attempt == 0 {
+                "encrypted (no password)"
+            } else {
+                "encrypted (wrong password)"
+            };
+            return Err(Diagnostic::unsupported(why).at(span));
+        };
+        let key = match find(Some(attempt)) {
+            Some(key) => key,
+            None => {
+                let password = sevenzip::utf16le(secret.expose());
+                let mut kdf = sevenzip::SevenZipKdf::new(&password, &props.salt, props.cycles);
+                crate::codec::crypto::run(cx, &mut kdf).await;
+                let key = kdf.key();
+                if let Ok(mut found) = cache.lock() {
+                    found.push((props.cycles, props.salt.clone(), Some(attempt), key));
+                }
+                key
+            }
+        };
+        if trial(cx, span, plan, &key, lock.unlock.check).await? {
+            if let Ok(mut found) = cache.lock() {
+                found.push((props.cycles, props.salt.clone(), None, key));
+            }
+            return Ok(key);
+        }
+    }
+    Err(Diagnostic::unsupported("encrypted (wrong password)").at(span))
+}
+
+/// Whether the folder at `span` decodes with `key`: its first bytes (up to
+/// [`VERIFY_LEN`], or as many as `check` covers, whose CRC must then
+/// match). Decoded in memory: a derived source would be memoized whatever
+/// the key.
+async fn trial(
+    cx: &Cx,
+    span: Span,
+    plan: &Plan,
+    key: &[u8; 32],
+    check: Option<(u64, u32)>,
+) -> Result<bool> {
+    use crate::codec::pipeline::Status;
+    let codec = plan.codec(Some(key));
+    let Some(mut decoder) = codec.decoder() else {
+        return Ok(true);
+    };
+    let want = to_usize(check.map_or(plan.size.min(VERIFY_LEN), |c| c.0));
+    // A good stream gives `want` bytes from about as much input; garbage
+    // makes the decoder ask for more until the input ends, so stop at a
+    // generous multiple (block-based codecs need a whole block).
+    let cap = span
+        .len
+        .min(to_u64(want).saturating_mul(2).saturating_add(4 << 20));
+    let limit = to_usize(cx.limits().max_derived);
+    let mut input = Vec::new();
+    let mut out = Vec::new();
+    let mut piece = 64 * 1024u64;
+    let mut eof = span.len == 0;
+    loop {
+        match decoder.decode(&input, eof, &mut out, 16 * 1024, limit) {
+            Ok(Status::Done) => break,
+            Ok(Status::More) if out.len() >= want => break,
+            Ok(Status::More) => cx.checkpoint().await,
+            Ok(Status::NeedInput) if out.len() >= want => break,
+            Ok(Status::NeedInput) => {
+                let fed = to_u64(input.len());
+                if eof || fed >= cap {
+                    return Ok(false);
+                }
+                let n = piece.min(cap.saturating_sub(fed));
+                let data = cx.read(span.sub(fed, n)).await?;
+                eof = to_u64(data.len()) < n || fed.saturating_add(n) >= span.len;
+                input.extend_from_slice(&data);
+                piece = piece.saturating_mul(2);
+            }
+            Err(_) => return Ok(false),
+        }
+    }
+    if out.len() < want {
+        return Ok(false);
+    }
+    Ok(match check {
+        Some((len, crc)) => out.get(..to_usize(len)).is_some_and(|b| crc32(b) == crc),
+        None => true,
+    })
+}
+
 /// Folders larger than this are decoded on demand.
 const LAZY_THRESHOLD: u64 = 1024 * 1024;
 
 impl Plan {
-    /// The whole folder as one codec: the decompressor, then the filters
-    /// (each a streaming stage of a chain).
-    fn codec(&self) -> Codec {
-        if self.post.is_empty() {
-            return self.codec.clone();
+    /// The whole folder as one codec: the decryption with `key` (for an
+    /// encrypted folder), the decompressor, then the filters (each a
+    /// streaming stage of a chain).
+    fn codec(&self, key: Option<&[u8; 32]>) -> Codec {
+        let mut stages = Vec::new();
+        if let (Some(lock), Some(key)) = (&self.aes, key)
+            && let Ok(props) = &lock.props
+        {
+            stages.push(Codec::AesCbcRaw(Key::new(
+                [&key[..], &props.iv[..]].concat(),
+            )));
         }
-        let mut stages = vec![self.codec.clone()];
+        if self.codec != Codec::Stored || stages.is_empty() {
+            stages.push(self.codec.clone());
+        }
         stages.extend(self.post.iter().map(|&(post, start)| match start {
             0 => Codec::PostFilter(post),
             start => Codec::PostFilterAt { post, start },
         }));
-        Codec::chain("7z coders", "7z coders (lazy)", stages)
+        match <[Codec; 1]>::try_from(stages) {
+            Ok([one]) => one,
+            Err(stages) => Codec::chain("7z coders", "7z coders (lazy)", stages),
+        }
+    }
+
+    /// Whether the folder's packed stream is its output.
+    fn is_stored(&self) -> bool {
+        self.codec == Codec::Stored && self.post.is_empty() && self.aes.is_none()
+    }
+
+    /// What decoding the folder does, for its annotation.
+    fn verb(&self) -> &'static str {
+        match (&self.aes, &self.codec) {
+            (None, codec) => codec.verb(),
+            (Some(_), Codec::Stored) => "decrypted",
+            (Some(_), _) => "decrypted and decompressed",
+        }
     }
 }
 
 /// The decoded output of the folder packed at `span`: lazily decoded when
-/// large, else decoded in full.
+/// large, else decoded in full. An encrypted folder asks for the archive's
+/// password first.
 async fn folder_output(cx: &Cx, span: Span, plan: &Plan) -> Result<(Span, Option<Diagnostic>)> {
-    let codec = plan.codec();
+    let key = match &plan.aes {
+        Some(lock) => Some(folder_key(cx, span, plan, lock).await?),
+        None => None,
+    };
+    let codec = plan.codec(key.as_ref());
     if codec == Codec::Stored {
         return Ok((span, None));
     }
@@ -1125,7 +1434,10 @@ async fn folder_output(cx: &Cx, span: Span, plan: &Plan) -> Result<(Span, Option
         let decoded = cx.decode_lazy(span, &codec, plan.size)?;
         return Ok((decoded, None));
     }
-    let decoded = decode_span(cx, span, &codec, Some(plan.size)).await?;
+    // Decrypted but not decompressed: the cipher's output is padded to a
+    // whole block.
+    let expected = (plan.aes.is_none() || plan.codec != Codec::Stored).then_some(plan.size);
+    let decoded = decode_span(cx, span, &codec, expected).await?;
     Ok((decoded.span, decoded.error))
 }
 
@@ -1139,7 +1451,7 @@ async fn folder_part(
     if let Some(e) = error {
         cx.diag(e);
     }
-    cx.annotate(format!("{:#x} bytes {}", len, plan.codec.verb()));
+    cx.annotate(format!("{:#x} bytes {}", len, plan.verb()));
     let part = out.sub(offset, len);
     check_crc(&cx, part, len, crc).await?;
     dissect_or_data(cx, input.nested(part)).await
@@ -1257,6 +1569,45 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .first()
             .map_or(0, Folder::unpack_size);
         let summary = format!("{methods}, {} → {}", fmt::size(packed), fmt::size(size));
+        let encrypted = archive
+            .streams
+            .folders
+            .first()
+            .is_some_and(|f| f.coders.iter().any(|c| c.id == AES_ID));
+        if encrypted {
+            // Decrypted when a node needs the files or folders, so the
+            // password is asked for only then.
+            cx.emit(
+                Node::new("Encoded header")
+                    .span(header_span)
+                    .summary(summary)
+                    .lazy(emit_items, (outline, next)),
+            );
+            let header = Arc::new(Header::Encrypted {
+                outer: archive,
+                pack_base,
+            });
+            cx.emit(
+                Node::new("Files")
+                    .span(header_span)
+                    .summary("in the encrypted header")
+                    .lazy(list_files, (input, header.clone())),
+            );
+            cx.emit(
+                Node::new("Folders")
+                    .span(file.sub(SIGNATURE_HEADER, data_end))
+                    .summary("in the encrypted header")
+                    .lazy(list_folders, (input, header.clone())),
+            );
+            cx.emit(
+                Node::new("Decoded header")
+                    .span(header_span)
+                    .summary("kHeader, encrypted")
+                    .lazy(decoded_outline, (input, header)),
+            );
+            cx.annotate(format!("7-Zip archive, encrypted header ({methods})"));
+            return Ok(());
+        }
         match decode_header(&cx, &archive, file, pack_base).await {
             Ok((span, mut inner)) => {
                 cx.emit(
@@ -1301,6 +1652,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
 
     let files = archive.files.count;
+    let plain = Arc::new(Header::Plain {
+        archive: archive.clone(),
+        pack_base,
+    });
     let mut methods: Vec<String> = Vec::new();
     for f in &archive.streams.folders {
         cx.checkpoint().await;
@@ -1313,7 +1668,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Node::new("Files")
             .span(header)
             .summary(count(files, "file", "files"))
-            .lazy(list_files, (input, archive.clone(), pack_base)),
+            .lazy(list_files, (input, plain.clone())),
     );
     cx.emit(
         Node::new("Folders")
@@ -1323,7 +1678,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 "folder",
                 "folders",
             ))
-            .lazy(list_folders, (input, archive.clone(), pack_base)),
+            .lazy(list_folders, (input, plain)),
     );
     cx.emit(
         next_node
@@ -1356,7 +1711,7 @@ async fn decode_header(
         .first()
         .copied()
         .ok_or_else(|| Diagnostic::malformed("encoded header without a packed stream"))?;
-    let p = plan(folder)
+    let p = plan(folder, Unlock::new(file, folder, None))
         .map_err(|why| Diagnostic::unsupported(format!("{why} compression")).at(span))?;
     let (out, error) = folder_output(cx, span, &p).await?;
     if let Some(e) = error {
@@ -1375,6 +1730,40 @@ async fn decode_header(
         Ok(_) => Err(Diagnostic::malformed("encoded header inside an encoded header").at(out)),
         Err(e) => Err(Diagnostic::malformed(e).at(out)),
     }
+}
+
+/// Where the files and folders of an archive are described.
+enum Header {
+    /// In the header read when the archive was opened.
+    Plain {
+        archive: Arc<Archive>,
+        pack_base: u64,
+    },
+    /// In an encrypted header, decrypted (asking for the password) when a
+    /// node needs it.
+    Encrypted { outer: Arc<Archive>, pack_base: u64 },
+}
+
+impl Header {
+    /// The archive and where its packed streams start (relative to the
+    /// file), and the decoded header's span for an encrypted one.
+    async fn open(&self, cx: &Cx, file: Span) -> Result<(Arc<Archive>, u64, Option<Span>)> {
+        match self {
+            Header::Plain { archive, pack_base } => Ok((archive.clone(), *pack_base, None)),
+            Header::Encrypted { outer, pack_base } => {
+                let (span, inner) = decode_header(cx, outer, file, *pack_base).await?;
+                let base = SIGNATURE_HEADER.saturating_add(inner.streams.pack_pos);
+                Ok((Arc::new(inner), base, Some(span)))
+            }
+        }
+    }
+}
+
+/// Expander: the outline of an encrypted header, once decrypted.
+async fn decoded_outline(cx: Cx, (input, header): (Input, Arc<Header>)) -> Result<()> {
+    let (archive, _, span) = header.open(&cx, input.span).await?;
+    let span = span.unwrap_or(input.span);
+    emit_items(cx, (Arc::new(archive.outline.clone()), span)).await
 }
 
 /// Spans of each folder's first packed stream.
@@ -1404,13 +1793,15 @@ async fn folder_spans(cx: &Cx, archive: &Archive, file: Span, pack_base: u64) ->
     out
 }
 
-async fn list_folders(
-    cx: Cx,
-    (input, archive, pack_base): (Input, Arc<Archive>, u64),
-) -> Result<()> {
+async fn list_folders(cx: Cx, (input, header): (Input, Arc<Header>)) -> Result<()> {
+    let (archive, pack_base, _) = header.open(&cx, input.span).await?;
     let spans = folder_spans(&cx, &archive, input.span, pack_base).await;
     cx.set_count(Count::Exact(to_u64(archive.streams.folders.len())));
+    let mut first_stream = 0usize;
     for (i, (f, span)) in archive.streams.folders.iter().zip(spans).enumerate() {
+        let first = first_stream;
+        first_stream = first_stream.saturating_add(to_usize(f.streams));
+        let unlock = Unlock::new(input.span, f, first_of(&archive, first));
         let methods = f.methods();
         let mut children: Vec<Node> = f
             .coders
@@ -1428,10 +1819,8 @@ async fn list_folders(
                 .summary(fmt::size(f.unpack_size())),
         );
         children.push(Node::new("Streams").value(uint(f.streams, 64)));
-        children.push(match plan(f) {
-            Ok(p) if p.codec == Codec::Stored && p.post.is_empty() => {
-                embedded("Data", input.nested(span))
-            }
+        children.push(match plan(f, unlock) {
+            Ok(p) if p.is_stored() => embedded("Data", input.nested(span)),
             Ok(p) => {
                 let size = f.unpack_size();
                 Node::new("Data")
@@ -1456,8 +1845,15 @@ async fn list_folders(
     Ok(())
 }
 
-async fn list_files(cx: Cx, (input, archive, pack_base): (Input, Arc<Archive>, u64)) -> Result<()> {
+/// The (size, CRC) of stream `i`.
+fn first_of(archive: &Archive, i: usize) -> Option<(u64, Option<u32>)> {
+    let size = archive.streams.sizes.get(i).copied()?;
+    Some((size, archive.streams.crcs.get(i).copied().flatten()))
+}
+
+async fn list_files(cx: Cx, (input, header): (Input, Arc<Header>)) -> Result<()> {
     let file = input.span;
+    let (archive, pack_base, _) = header.open(&cx, file).await?;
     cx.set_count(Count::Exact(archive.files.count));
     let spans = folder_spans(&cx, &archive, file, pack_base).await;
     // Walk files and substreams together.
@@ -1505,8 +1901,9 @@ async fn list_files(cx: Cx, (input, archive, pack_base): (Input, Arc<Archive>, u
             );
             children.push(Node::new("Folder").value(uint(to_u64(folder), 64)));
             let methods = fo.map(Folder::methods).unwrap_or_default();
-            let content_node = match fo.map(plan) {
-                Some(Ok(p)) if p.codec == Codec::Stored && p.post.is_empty() => {
+            let first = first_of(&archive, stream.saturating_sub(to_usize(in_folder)));
+            let content_node = match fo.map(|fo| plan(fo, Unlock::new(file, fo, first))) {
+                Some(Ok(p)) if p.is_stored() => {
                     let s = span.sub(offset_in_folder, size);
                     node = node.span(s);
                     embedded("Content", input.nested(s))

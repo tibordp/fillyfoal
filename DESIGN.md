@@ -85,7 +85,8 @@ exploration pays for additional work only as needed.
     the PDF/PostScript filters and predictors, TempleOS `.Z` LZW (TOSZ as
     oracle);
   - ciphers and KDFs that unlock content: ZipCrypto, AES (CBC, CTR, GCM), RC4,
-    ChaCha20/Poly1305, Twofish, Type 1 eexec, MPQ; Argon2, BLAKE2b, bcrypt_pbkdf.
+    ChaCha20/Poly1305, Twofish, Type 1 eexec, MPQ; Argon2, BLAKE2b, bcrypt_pbkdf,
+    7-Zip's SHA-256 key derivation.
 
   Each is checked byte-exact against a real encoder where one was available
   (CLI tools, Python packages via `uv`, `hdiutil`, `compression_tool`,

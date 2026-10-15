@@ -1,0 +1,167 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ aes-header-lzma2.7z — 7-Zip archive, encrypted header (AES-256 + LZMA)  [0x0+0x1df]
+  ▾ Signature header — version 0.4  [0x0+0x20]
+      Signature: 37 7a bc af 27 1c  |7z..'.|  [0x0+0x6]
+      Major version: 0  [0x6+0x1]
+      Minor version: 4  [0x7+0x1]
+      Start header CRC: 0x93c8c8aa  [0x8+0x4]
+      Next header offset: 0x180  [0xc+0x8]
+      Next header size: 63 — 63 bytes  [0x14+0x8]
+      Next header CRC: 0xd3c5b906  [0x1c+0x4]
+  ▾ Encoded header — AES-256 + LZMA, 160 bytes → 230 bytes  [0x100+0xa0]
+    ▾ kEncodedHeader  [0x1a0+0x3f]
+      ▾ kPackInfo — 1 packed stream, at 0xe0  [0x1a1+0x8]
+          kSize — 1 size  [0x1a5+0x3]
+      ▾ kUnPackInfo — 1 folder  [0x1a9+0x35]
+          Folder 0 — AES-256 + LZMA  [0x1ad+0x25]
+          kCodersUnPackSize  [0x1d2+0x5]
+          kCRC — 1 CRC  [0x1d7+0x6]
+  ▾ Files — in the encrypted header  [0x100+0xa0]
+    ▾ notes — directory
+        Modification time: 2024-01-02 03:04:00 UTC
+        Attributes: 0x41ed8010 — drwxr-xr-x
+    ▾ fox.txt — 45 bytes  [0x20+0xe0]
+        Modification time: 2024-01-02 03:04:00 UTC
+        Attributes: 0x81a48020 — -rw-r--r--
+        Size: 45 — 45 bytes
+        Folder: 0
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [0x20+0xe0]
+          CRC32: 0xeb50cc6a — valid
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#2:0x0+0x2d]
+            Line 1: "The quick brown fox jumps over the lazy dog."  [#2:0x0+0x2c]
+    ▾ notes/list.txt — 14 bytes  [0x20+0xe0]
+        Modification time: 2024-01-02 03:04:00 UTC
+        Attributes: 0x81a48020 — -rw-r--r--
+        Size: 14 — 14 bytes
+        Folder: 0
+      ▾ Content — UTF-8 text, LF line endings, 3 lines  [0x20+0xe0]
+          CRC32: 0x25e6d5b6 — valid
+          Encoding: "UTF-8"
+          Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
+        ▾ Lines — 3 lines  [#2:0x2d+0xe]
+            Line 1: "one"  [#2:0x2d+0x3]
+            Line 2: "two"  [#2:0x31+0x3]
+            Line 3: "three"  [#2:0x35+0x5]
+    ▾ notes/lorem.txt — 2.6 KiB  [0x20+0xe0]
+        Modification time: 2024-01-02 03:04:00 UTC
+        Attributes: 0x81a48020 — -rw-r--r--
+        Size: 2630 — 2.6 KiB
+        Folder: 0
+      ▾ Content — YAML document  [0x20+0xe0]
+          CRC32: 0xfecb6a91 — valid
+          Line 0: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x43+0x38]
+          Line 1: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x84+0x38]
+          Line 2: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0xc5+0x38]
+          Line 3: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x106+0x38]
+          Line 4: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x147+0x38]
+          Line 5: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x188+0x38]
+          Line 6: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x1c9+0x38]
+          Line 7: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x20a+0x38]
+          Line 8: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x24b+0x38]
+          Line 9: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x28c+0x38]
+          Line 10: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x2ce+0x38]
+          Line 11: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x310+0x38]
+          Line 12: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x352+0x38]
+          Line 13: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x394+0x38]
+          Line 14: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x3d6+0x38]
+          Line 15: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x418+0x38]
+          Line 16: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x45a+0x38]
+          Line 17: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x49c+0x38]
+          Line 18: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x4de+0x38]
+          Line 19: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x520+0x38]
+          Line 20: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x562+0x38]
+          Line 21: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x5a4+0x38]
+          Line 22: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x5e6+0x38]
+          Line 23: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x628+0x38]
+          Line 24: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x66a+0x38]
+          Line 25: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x6ac+0x38]
+          Line 26: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x6ee+0x38]
+          Line 27: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x730+0x38]
+          Line 28: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x772+0x38]
+          Line 29: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x7b4+0x38]
+          Line 30: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x7f6+0x38]
+          Line 31: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x838+0x38]
+          Line 32: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x87a+0x38]
+          Line 33: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x8bc+0x38]
+          Line 34: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x8fe+0x38]
+          Line 35: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x940+0x38]
+          Line 36: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x982+0x38]
+          Line 37: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x9c4+0x38]
+          Line 38: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0xa06+0x38]
+          Line 39: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0xa48+0x38]
+  ▾ Folders — in the encrypted header  [0x20+0x180]
+    ▾ Folder 0 — AES-256 + LZMA2, 224 bytes → 2.6 KiB, 3 streams  [0x20+0xe0]
+        Coder 0: "AES-256" — 1 in, 1 out
+        Coder 1: "LZMA2" — 1 in, 1 out
+        Unpacked size: 2689 — 2.6 KiB
+        Streams: 3
+      ▾ Data — UTF-8 text, LF line endings, 44 lines  [0x20+0xe0]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 44 LF, 0 CRLF, 0 CR
+        ▾ Lines — 44 lines  [#2:0x0+0xa81]
+            Line 1: "The quick brown fox jumps over the lazy dog."  [#2:0x0+0x2c]
+            Line 2: "one"  [#2:0x2d+0x3]
+            Line 3: "two"  [#2:0x31+0x3]
+            Line 4: "three"  [#2:0x35+0x5]
+            Line 5: "Line 0: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x3b+0x40]
+            Line 6: "Line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x7c+0x40]
+            Line 7: "Line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0xbd+0x40]
+            Line 8: "Line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0xfe+0x40]
+            Line 9: "Line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x13f+0x40]
+            Line 10: "Line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x180+0x40]
+            Line 11: "Line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x1c1+0x40]
+            Line 12: "Line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x202+0x40]
+            Line 13: "Line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x243+0x40]
+            Line 14: "Line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x284+0x40]
+            Line 15: "Line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x2c5+0x41]
+            Line 16: "Line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x307+0x41]
+            Line 17: "Line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x349+0x41]
+            Line 18: "Line 13: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x38b+0x41]
+            Line 19: "Line 14: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x3cd+0x41]
+            Line 20: "Line 15: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x40f+0x41]
+            Line 21: "Line 16: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x451+0x41]
+            Line 22: "Line 17: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x493+0x41]
+            Line 23: "Line 18: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x4d5+0x41]
+            Line 24: "Line 19: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x517+0x41]
+            Line 25: "Line 20: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x559+0x41]
+            Line 26: "Line 21: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x59b+0x41]
+            Line 27: "Line 22: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x5dd+0x41]
+            Line 28: "Line 23: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x61f+0x41]
+            Line 29: "Line 24: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x661+0x41]
+            Line 30: "Line 25: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x6a3+0x41]
+            Line 31: "Line 26: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x6e5+0x41]
+            Line 32: "Line 27: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x727+0x41]
+            Line 33: "Line 28: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x769+0x41]
+            Line 34: "Line 29: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x7ab+0x41]
+            Line 35: "Line 30: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x7ed+0x41]
+            Line 36: "Line 31: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x82f+0x41]
+            Line 37: "Line 32: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x871+0x41]
+            Line 38: "Line 33: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x8b3+0x41]
+            Line 39: "Line 34: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x8f5+0x41]
+            Line 40: "Line 35: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x937+0x41]
+            Line 41: "Line 36: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x979+0x41]
+            Line 42: "Line 37: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x9bb+0x41]
+            Line 43: "Line 38: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x9fd+0x41]
+            Line 44: "Line 39: lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0xa3f+0x41]
+  ▾ Decoded header — kHeader, encrypted  [0x100+0xa0]
+    ▾ kMainStreamsInfo  [#1:0x1+0x47]
+      ▾ kPackInfo — 1 packed stream, at 0x0  [#1:0x2+0x7]
+          kSize — 1 size  [#1:0x5+0x3]
+      ▾ kUnPackInfo — 1 folder  [#1:0x9+0x29]
+          Folder 0 — AES-256 + LZMA2  [#1:0xd+0x1f]
+          kCodersUnPackSize  [#1:0x2c+0x5]
+      ▾ kSubStreamsInfo — 3 streams  [#1:0x32+0x15]
+          kNumUnPackStream  [#1:0x33+0x2]
+          kSize  [#1:0x35+0x3]
+          kCRC — 3 CRCs  [#1:0x38+0xe]
+    ▾ kFilesInfo — 4 files  [#1:0x48+0x9d]
+        kEmptyStream — 1 empty stream  [#1:0x4a+0x3]
+        kName — 91 bytes  [#1:0x4d+0x5d]
+        kDummy — 0 bytes  [#1:0xaa+0x2]
+        kMTime — 34 bytes  [#1:0xac+0x24]
+        kWinAttributes — 18 bytes  [#1:0xd0+0x14]
