@@ -317,10 +317,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 /// the total is known up front. Adding it up means walking every block of
 /// every frame (frames do not record their encoded size), which for a large
 /// file is a read of all of it before the first decoded byte; so it is only
-/// done for small files, and a large stream decodes lazily with its size
-/// found at the end, unless a seek table (the seekable format) records the
-/// frames. Frames are independent, so a large stream with its frames known
-/// decodes from the frame before a read.
+/// done for small files. A large file uses a seek table if it has one (the
+/// seekable format records the frames, and frames are independent, so a
+/// read decodes from the frame before it). Otherwise the first frame's
+/// header decides: `zstd` writes a whole file as one frame recording its
+/// size, which is then taken as the length, checked when decoding reaches
+/// it (more frames after the first are reported there, see
+/// [`Cx::decode_lazy_checked`]). Failing all that, the stream decodes
+/// lazily with its size found at the end.
 async fn decompressed(cx: Cx, input: Input) -> Result<()> {
     const WALK_LIMIT: u64 = 1024 * 1024;
     let file = input.span;
@@ -330,6 +334,16 @@ async fn decompressed(cx: Cx, input: Input) -> Result<()> {
     {
         let seeds = frame_seeds(&codec, &frames, total);
         return crate::formats::expand_content_seeded(cx, (input, file, codec, total), seeds).await;
+    }
+    if file.len > WALK_LIMIT
+        && let Some(size) = first_frame_size(&cx, file).await
+        && crate::formats::decodes_lazily(file, &codec, size)
+    {
+        let decoded = cx.decode_lazy_checked(file, &codec, size)?;
+        cx.annotate(format!(
+            "{size:#x} bytes (the first frame's content size), decoded on demand"
+        ));
+        return crate::formats::dissect_or_data(cx, input.nested(decoded)).await;
     }
     let mut cur = Cursor::new(&cx, file, LE);
     let mut total = (file.len <= WALK_LIMIT).then_some(0u64);
@@ -366,6 +380,34 @@ async fn decompressed(cx: Cx, input: Input) -> Result<()> {
         return crate::formats::expand_content_seeded(cx, (input, file, codec, total), seeds).await;
     }
     crate::formats::expand_content(cx, (input, file, codec, total)).await
+}
+
+/// Skippable frames passed over looking for the first zstd frame.
+const MAX_LEADING_SKIPPABLE: u32 = 16;
+
+/// The content size the first zstd frame's header records (after any
+/// skippable frames), if it records one; reads only headers.
+async fn first_frame_size(cx: &Cx, file: Span) -> Option<u64> {
+    let mut at = 0u64;
+    for _ in 0..MAX_LEADING_SKIPPABLE {
+        let head = cx.read(file.sub(at, 8)).await.ok()?;
+        let magic = u32_le(&head, 0)?;
+        if magic == FRAME_MAGIC {
+            let hlen = header_len(*head.get(4)?);
+            let span = file.sub(at.saturating_add(4), hlen);
+            let header = crate::fields::parse(cx, span, LE, &(), frame_header)
+                .await
+                .ok()?;
+            return header.content_size;
+        }
+        if magic & 0xffff_fff0 != 0x184d_2a50 {
+            return None;
+        }
+        at = at
+            .saturating_add(8)
+            .saturating_add(u32_le(&head, 4)?.into());
+    }
+    None
 }
 
 /// Frames seeded at most: each costs a few dozen bytes.

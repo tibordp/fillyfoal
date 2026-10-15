@@ -26,7 +26,9 @@ pub use stream::{Key, ZipCryptoKeys, aes_cbc_iv_prefixed};
 
 /// A key derivation that runs in resumable steps, so that a file asking for
 /// billions of iterations cannot stall one poll: `run` drives it between
-/// budget checkpoints, and `Limits::max_work` stops it.
+/// budget checkpoints, reporting how far it has got (so a host can show a
+/// long derivation running and the user cancel it knowingly), and a host's
+/// `Limits::max_work`, if it set one, stops it.
 ///
 /// A unit of work is roughly half a microsecond: one HMAC for PBKDF2, one
 /// hash for the PKCS#12 derivation, one block for Argon2, 1/77 of a
@@ -38,6 +40,10 @@ pub trait Stepped {
 
     /// Whether the derivation is complete.
     fn done(&self) -> bool;
+
+    /// The units of work the whole derivation takes (an estimate where a
+    /// step's cost varies), for reporting progress.
+    fn units(&self) -> u64;
 }
 
 /// Units of work `run` does between checkpoints (about a tenth of a
@@ -131,6 +137,13 @@ impl<H: Hash> Pkcs12Kdf<H> {
 impl<H: Hash> Stepped for Pkcs12Kdf<H> {
     fn done(&self) -> bool {
         self.out.len() >= self.len
+    }
+
+    fn units(&self) -> u64 {
+        let blocks = self.len.div_ceil(H::OUT.max(1));
+        u64::try_from(blocks)
+            .unwrap_or(u64::MAX)
+            .saturating_mul(self.iterations.into())
     }
 
     fn advance(&mut self, units: u32) -> u32 {

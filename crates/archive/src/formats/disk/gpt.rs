@@ -3,7 +3,9 @@
 //! LBA 0 holds a protective (or hybrid) MBR, LBA 1 the header, followed by
 //! the partition entry array; a backup header sits in the last LBA, with a
 //! backup copy of the array before it. Both headers' CRCs and both arrays'
-//! CRCs are verified. A disk layout node accounts for the space between
+//! CRCs are verified; on a disk decoded on demand, where the backup lies at
+//! the end of a long decode, the backup is read (and checked) only when its
+//! node is expanded. A disk layout node accounts for the space between
 //! partitions.
 
 use crate::bytes::{to_u64, to_usize};
@@ -14,6 +16,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::disk::ptypes::gpt_type;
 use crate::formats::disk::{mbr, size, volume};
+use crate::formats::util::far;
 use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
@@ -246,63 +249,48 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     );
 
     let alternate = header.alternate_lba;
-    let mut backup_info = None;
+    let mut backup_info = (None, None);
     if alternate != 0 && alternate != header.my_lba {
         let backup_sector = disk.sub(alternate.saturating_mul(sector), sector);
-        let backup = disk.sub(alternate.saturating_mul(sector), Header::SIZE);
-        match parse(&cx, backup, LE, &(), Header::layout).await {
-            Ok(b) if b.signature.as_bytes() == SIGNATURE => {
-                let mut node =
-                    struct_node("Backup GPT header", backup_sector, LE, (), header_layout).summary(
-                        format!("at LBA {alternate}, entries at LBA {}", b.entries_lba),
-                    );
-                if let Some(d) = header_crc(&cx, backup, &b).await? {
-                    node = node.diag(d);
-                }
-                if b.alternate_lba != header.my_lba || b.disk_guid != header.disk_guid {
-                    node = node.diag(Diagnostic::warning(
-                        "does not mirror the primary header (alternate LBA or disk GUID)",
-                    ));
-                }
-                let barray = disk.sub(
-                    b.entries_lba.saturating_mul(sector),
-                    u64::from(b.entries).saturating_mul(b.entry_size.into()),
-                );
-                let (bdata, bproblem) = read_array(&cx, barray, b.entries_crc).await?;
-                let mut anode = Node::new("Backup partition entries").span(barray);
-                anode = match (&bdata, &data) {
-                    (Some(x), Some(y)) if x == y => anode.summary("identical to the primary array"),
-                    (Some(_), Some(_)) => {
-                        anode.diag(Diagnostic::warning("differs from the primary array"))
+        let primary = Primary {
+            my_lba: header.my_lba,
+            disk_guid: header.disk_guid,
+            entries_crc: header.entries_crc,
+        };
+        if far::is_far(&cx, backup_sector) {
+            // On a disk decoded on demand the backup lies at the end of a
+            // long decode; it only confirms the primary, so it waits until
+            // asked for.
+            cx.emit(far::deferred(
+                "Backup GPT header",
+                backup_sector,
+                &format!("at LBA {alternate}, the end of the disk"),
+                deferred_backup,
+                (gpt, primary, alternate),
+            ));
+            backup_info.1 = Some(backup_sector);
+        } else {
+            match read_backup(&cx, &gpt, primary, data.as_deref(), alternate).await? {
+                Backup::Found(found) => {
+                    let mut node =
+                        struct_node("Backup GPT header", backup_sector, LE, (), header_layout)
+                            .summary(format!(
+                                "at LBA {alternate}, entries at LBA {}",
+                                found.entries_lba
+                            ));
+                    for d in found.problems {
+                        node = node.diag(d);
                     }
-                    _ => anode,
-                };
-                if let Some(d) = bproblem {
-                    anode = anode.diag(d);
+                    backup_info = (Some(found.array_span), Some(backup_sector));
+                    cx.emit(found.array);
+                    cx.emit(node);
                 }
-                if bdata
-                    .as_ref()
-                    .zip(data.as_ref())
-                    .is_none_or(|(x, y)| x != y)
-                {
-                    anode = anode.lazy(
-                        partitions,
-                        Gpt {
-                            array: barray,
-                            entries: b.entries.into(),
-                            entry_size: b.entry_size.into(),
-                            ..gpt
-                        },
-                    );
-                }
-                cx.emit(anode);
-                cx.emit(node);
-                backup_info = Some((barray, backup_sector));
+                Backup::Missing(d) | Backup::Unreadable(d) => cx.emit(
+                    Node::new("Backup GPT header")
+                        .span(disk.sub(alternate.saturating_mul(sector), Header::SIZE))
+                        .diag(d),
+                ),
             }
-            Ok(_) => cx.emit(Node::new("Backup GPT header").span(backup).diag(
-                Diagnostic::warning(format!("no backup header at LBA {alternate}")),
-            )),
-            Err(e) => cx.emit(Node::new("Backup GPT header").span(backup).diag(e)),
         }
     }
     cx.emit(
@@ -321,6 +309,120 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             ),
     );
     Ok(())
+}
+
+/// What the backup header is checked against.
+#[derive(Clone, Copy)]
+struct Primary {
+    my_lba: u64,
+    disk_guid: Guid,
+    entries_crc: u32,
+}
+
+/// A backup header that was found: where its array is, its array's node,
+/// and what disagrees with the primary.
+struct Found {
+    entries_lba: u64,
+    array: Node,
+    array_span: Span,
+    problems: Vec<Diagnostic>,
+}
+
+enum Backup {
+    Found(Box<Found>),
+    /// No header signature at the alternate LBA.
+    Missing(Diagnostic),
+    /// The header could not be read.
+    Unreadable(Diagnostic),
+}
+
+/// Reads the backup header at LBA `alternate` and its partition array, and
+/// checks them against the primary header and array (`primary_data`).
+async fn read_backup(
+    cx: &Cx,
+    gpt: &Gpt,
+    primary: Primary,
+    primary_data: Option<&[u8]>,
+    alternate: u64,
+) -> Result<Backup> {
+    let disk = gpt.input.span;
+    let sector = gpt.sector;
+    let backup = disk.sub(alternate.saturating_mul(sector), Header::SIZE);
+    let b = match parse(cx, backup, LE, &(), Header::layout).await {
+        Ok(b) if b.signature.as_bytes() == SIGNATURE => b,
+        Ok(_) => {
+            return Ok(Backup::Missing(Diagnostic::warning(format!(
+                "no backup header at LBA {alternate}"
+            ))));
+        }
+        Err(e) => return Ok(Backup::Unreadable(e)),
+    };
+    let mut problems = Vec::new();
+    if let Some(d) = header_crc(cx, backup, &b).await? {
+        problems.push(d);
+    }
+    if b.alternate_lba != primary.my_lba || b.disk_guid != primary.disk_guid {
+        problems.push(Diagnostic::warning(
+            "does not mirror the primary header (alternate LBA or disk GUID)",
+        ));
+    }
+    let barray = disk.sub(
+        b.entries_lba.saturating_mul(sector),
+        u64::from(b.entries).saturating_mul(b.entry_size.into()),
+    );
+    let (bdata, bproblem) = read_array(cx, barray, b.entries_crc).await?;
+    let mut anode = Node::new("Backup partition entries").span(barray);
+    anode = match (bdata.as_deref(), primary_data) {
+        (Some(x), Some(y)) if x == y => anode.summary("identical to the primary array"),
+        (Some(_), Some(_)) => anode.diag(Diagnostic::warning("differs from the primary array")),
+        _ => anode,
+    };
+    if let Some(d) = bproblem {
+        anode = anode.diag(d);
+    }
+    if bdata
+        .as_deref()
+        .zip(primary_data)
+        .is_none_or(|(x, y)| x != y)
+    {
+        anode = anode.lazy(
+            partitions,
+            Gpt {
+                array: barray,
+                entries: b.entries.into(),
+                entry_size: b.entry_size.into(),
+                ..*gpt
+            },
+        );
+    }
+    Ok(Backup::Found(Box::new(Found {
+        entries_lba: b.entries_lba,
+        array: anode,
+        array_span: barray,
+        problems,
+    })))
+}
+
+/// The backup header, read on request (see [`far::deferred`]): its fields
+/// and its array, with what disagrees with the primary as diagnostics.
+async fn deferred_backup(cx: Cx, (gpt, primary, alternate): (Gpt, Primary, u64)) -> Result<()> {
+    let (data, _) = read_array(&cx, gpt.array, primary.entries_crc).await?;
+    match read_backup(&cx, &gpt, primary, data.as_deref(), alternate).await? {
+        Backup::Found(found) => {
+            let sector = gpt
+                .input
+                .span
+                .sub(alternate.saturating_mul(gpt.sector), gpt.sector);
+            let block = cx.block(sector).await?;
+            header_layout(&mut Fields::emitting(&cx, &block, LE), &())?;
+            cx.emit(found.array);
+            for d in found.problems {
+                cx.diag(d);
+            }
+            Ok(())
+        }
+        Backup::Missing(d) | Backup::Unreadable(d) => Err(d),
+    }
 }
 
 async fn partitions(cx: Cx, gpt: Gpt) -> Result<()> {
@@ -449,7 +551,9 @@ async fn push_gaps(cx: &Cx, gpt: &Gpt, (mut a, b): (u64, u64), usable: (u64, u64
     Ok(())
 }
 
-type LayoutState = (Gpt, Span, u64, u64, Option<(Span, Span)>);
+/// The primary header's sector, the usable LBAs, and the backup array and
+/// header where known.
+type LayoutState = (Gpt, Span, u64, u64, (Option<Span>, Option<Span>));
 
 /// The disk in LBA order: MBR, headers, arrays, partitions and the gaps.
 async fn layout(
@@ -474,12 +578,15 @@ async fn layout(
             "Partition entries".to_owned(),
         ),
     ];
-    if let Some((array, h)) = backup {
+    let (backup_array, backup_header) = backup;
+    if let Some(array) = backup_array {
         areas.push((
             lba(array),
             lba_end(array),
             "Backup partition entries".to_owned(),
         ));
+    }
+    if let Some(h) = backup_header {
         areas.push((lba(h), lba_end(h), "Backup GPT header".to_owned()));
     }
     let (data, _) = read_array(&cx, gpt.array, 0).await?;

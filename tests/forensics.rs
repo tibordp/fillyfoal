@@ -70,7 +70,7 @@ fn a_sparse_lastlog_is_read_in_windows() {
 /// a host that declares the holes of the sparse file
 /// (`Session::set_holes`): the walk jumps over them, so it reads two
 /// windows and costs a handful of units, where reading through the holes
-/// stopped at `max_work`.
+/// stopped at a work limit.
 #[test]
 fn a_sparse_lastlog_skips_declared_holes() {
     let n: u64 = 4_294_967_295;

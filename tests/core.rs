@@ -2272,10 +2272,49 @@ fn keepass_refuses_runaway_key_derivations() {
     ))
     .unwrap();
     data[0x6f..0x77].copy_from_slice(&(1u64 << 40).to_le_bytes());
-    let mut host = Host::named("x.kdbx", data, Limits::default());
+    let limits = Limits {
+        max_work: Some(100_000_000),
+        ..Limits::default()
+    };
+    let mut host = Host::named("x.kdbx", data.clone(), limits);
     host.explore_all();
     let text = host.render();
     assert!(text.contains("key derivation too expensive"), "{text}");
+
+    // Without a work limit (the default) nothing is refused: the derivation
+    // runs in budgeted polls, reporting how far it has got, until the host
+    // stops polling.
+    let mut host = Host::named("x.kdbx", data, Limits::default());
+    host.session.expand(host.root, 100);
+    host.run();
+    let payload = host.child(host.root, "Payload").unwrap();
+    host.session.expand(payload, 100);
+    let mut last = 0;
+    for _ in 0..20 {
+        use fillyfoal::Progress;
+        match host.session.poll_node(payload, 10_000) {
+            Progress::NeedSecret(requests) => {
+                for r in requests {
+                    host.session
+                        .answer_secret(&r, Some(fillyfoal::Secret::password("fillyfoal")));
+                }
+            }
+            Progress::NeedBytes(requests) => host.supply(requests),
+            Progress::Yielded => {
+                // AES-KDF rounds, eight to a unit of work.
+                if let Some((done, total)) = host.session.progress(payload)
+                    && total == (1u64 << 40) / 8
+                {
+                    assert!(done >= last, "{done} after {last}");
+                    last = done;
+                }
+            }
+            Progress::Idle => panic!("the derivation finished or was refused"),
+        }
+    }
+    assert!(last > 0, "no progress reported");
+    let children = host.session.children(payload).unwrap();
+    assert!(matches!(children.state, fillyfoal::ChildState::Running(_)));
 }
 
 /// `text(n, seed)` of `tests/data/lzh/make.py`.

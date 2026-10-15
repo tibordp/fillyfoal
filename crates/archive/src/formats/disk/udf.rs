@@ -1402,27 +1402,33 @@ async fn read_sequence(
 }
 
 /// Finds the anchor: block 256 at the usual block sizes, else the last
-/// block or 256 before it.
+/// block or 256 before it. Block 256 is tried at every size before the
+/// end is: on an image decoded on demand, reading the end means decoding
+/// all of it.
 async fn find_anchor(cx: &Cx, file: Span) -> Result<Option<(u64, Span)>> {
-    for bs in [2048u64, 512, 1024, 4096] {
-        let mut spots = vec![256u64];
+    const SIZES: [u64; 4] = [2048, 512, 1024, 4096];
+    let near = SIZES.iter().map(|&bs| (bs, 256u64));
+    let far = SIZES.iter().flat_map(|&bs| {
         let blocks = file.len.checked_div(bs).unwrap_or(0);
-        if blocks > 257 {
-            spots.push(blocks.saturating_sub(1));
-            spots.push(blocks.saturating_sub(257));
+        let spots = if blocks > 257 {
+            vec![blocks.saturating_sub(1), blocks.saturating_sub(257)]
+        } else {
+            Vec::new()
+        };
+        spots.into_iter().map(move |at| (bs, at))
+    });
+    let spots: Vec<(u64, u64)> = near.chain(far).collect();
+    for (bs, at) in spots {
+        let span = file.sub(at.saturating_mul(bs), 512.min(bs));
+        if span.len < 32 {
+            continue;
         }
-        for at in spots {
-            let span = file.sub(at.saturating_mul(bs), 512.min(bs));
-            if span.len < 32 {
-                continue;
-            }
-            let head = cx.read_avail(span).await?;
-            if u16_le(&head, 0) == Some(2)
-                && tag_ok(&head)
-                && u32_le(&head, 12).map(u64::from) == Some(at)
-            {
-                return Ok(Some((bs, file.sub(at.saturating_mul(bs), bs))));
-            }
+        let head = cx.read_avail(span).await?;
+        if u16_le(&head, 0) == Some(2)
+            && tag_ok(&head)
+            && u32_le(&head, 12).map(u64::from) == Some(at)
+        {
+            return Ok(Some((bs, file.sub(at.saturating_mul(bs), bs))));
         }
     }
     Ok(None)

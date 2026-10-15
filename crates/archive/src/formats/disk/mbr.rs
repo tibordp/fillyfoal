@@ -466,7 +466,8 @@ pub(super) async fn gap_node(
         return Ok(None);
     }
     let mut summary = format!("{}, {what}", size(span.len));
-    if span.len <= MAX_GAP_CHECK {
+    // Not where it would decode far into a disk decoded on demand.
+    if span.len <= MAX_GAP_CHECK && cx.read_is_cheap(span) {
         let data = cx.read_avail(span).await?;
         cx.checkpoint().await;
         summary.push_str(if data.iter().all(|&b| b == 0) {

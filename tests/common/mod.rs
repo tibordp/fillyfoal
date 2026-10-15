@@ -746,7 +746,7 @@ pub fn robustness_as(
             variant,
             Limits {
                 chunk_size: 256,
-                max_work: 5_000_000,
+                max_work: Some(5_000_000),
                 ..Limits::default()
             },
             format,

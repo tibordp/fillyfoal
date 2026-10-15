@@ -4,8 +4,11 @@
 //! cargo run --example inspect -- FILE [--depth N] [--page N] [--path 3.0.1] [--chunk BYTES] [--as FORMAT] [--progress]
 //! ```
 //!
-//! `--path` selects a node by child indices (expanding along the way);
+//! `--path` selects a node by child indices (expanding along the way, and
+//! moving on as soon as the child it names exists: the rest of a listing
+//! is left parked, as a viewer would leave it running in the background);
 //! `--depth` and `--page` control how much of its subtree is expanded.
+//! Only the expansion being waited for is polled.
 //! `--as` dissects the file as the named format ("inspect as") instead of
 //! identifying it.
 //! `--progress` prints how far the expansion being driven has got to
@@ -140,7 +143,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut focus = root;
     for &index in &options.path {
         session.expand(focus, index.saturating_add(1) as u64);
-        host.run(&mut session, focus)?;
+        host.run_until(&mut session, focus, |s| {
+            s.children(focus).is_some_and(|c| c.ids.len() > index)
+        })?;
         let children = session.children(focus).ok_or("node vanished")?;
         focus = *children
             .ids
@@ -170,10 +175,20 @@ struct Host {
 }
 
 impl Host {
-    /// Polls until idle; `id` is the node whose expansion is being waited
-    /// for.
+    /// Polls the expansion of `id` until it has nothing to do.
     fn run(&mut self, session: &mut Session, id: NodeId) -> io::Result<()> {
-        while !self.driver.step(session)? {
+        self.run_until(session, id, |_| false)
+    }
+
+    /// Polls the expansion of `id` (only that one: others stay parked)
+    /// until it has nothing to do or `done` holds.
+    fn run_until(
+        &mut self,
+        session: &mut Session,
+        id: NodeId,
+        done: impl Fn(&Session) -> bool,
+    ) -> io::Result<()> {
+        while !done(session) && !self.driver.step_node(session, id)? {
             if let Some(meter) = &mut self.meter {
                 meter.show(session, id);
             }

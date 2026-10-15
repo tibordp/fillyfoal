@@ -7,7 +7,7 @@ use std::io::{self, Read, Seek, SeekFrom};
 
 use crate::bytes::{to_u64, to_usize};
 use crate::secret::{Secret, SecretRequest};
-use crate::session::{Progress, Session};
+use crate::session::{NodeId, Progress, Session};
 use crate::span::SourceId;
 
 /// Answers secret requests (prompts the user, reads a keychain...); `None`
@@ -59,7 +59,33 @@ impl<R: Read + Seek> Driver<R> {
         &mut self,
         session: &mut Session<C>,
     ) -> io::Result<bool> {
-        match session.poll(self.budget) {
+        let progress = session.poll(self.budget);
+        self.answer(session, progress)
+    }
+
+    /// Like [`Driver::step`], but runs only the expansion of `id`
+    /// ([`Session::poll_node`]): the others stay parked. Returns whether
+    /// `id` has nothing to do (complete, failed, page full, or not
+    /// expanded). A host that waits for one child of a node still being
+    /// listed (a stream's content, emitted before the walk over its
+    /// frames) polls the node this way only until the child appears, and
+    /// then expands the child without finishing the listing.
+    pub fn step_node<C: crate::formats::Catalog>(
+        &mut self,
+        session: &mut Session<C>,
+        id: NodeId,
+    ) -> io::Result<bool> {
+        let progress = session.poll_node(id, self.budget);
+        self.answer(session, progress)
+    }
+
+    /// Answers what a poll asked for; whether it was idle.
+    fn answer<C: crate::formats::Catalog>(
+        &mut self,
+        session: &mut Session<C>,
+        progress: Progress,
+    ) -> io::Result<bool> {
+        match progress {
             Progress::Idle => return Ok(true),
             Progress::Yielded => {}
             Progress::NeedSecret(requests) => {

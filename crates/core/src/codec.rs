@@ -117,13 +117,21 @@ pub mod crypto {
 
     /// Runs `kdf` to completion in chunks of [`CHUNK`] units, charging the work
     /// budget one unit per unit of work (a checkpoint charges one), so the poll
-    /// yields between chunks once its budget is spent.
+    /// yields between chunks once its budget is spent. While it runs, the
+    /// expansion reports the derivation's progress (`Cx::progress`); what
+    /// the dissector reported before is restored afterwards.
     pub async fn run(cx: &Cx, kdf: &mut impl Stepped) {
+        let total = kdf.units();
+        let before = cx.take_progress();
+        let mut done = 0u64;
         while !kdf.done() {
+            cx.progress(done, total.max(done));
             let used = kdf.advance(CHUNK);
+            done = done.saturating_add(used.into());
             for _ in 0..used {
                 cx.checkpoint().await;
             }
         }
+        cx.restore_progress(before);
     }
 }

@@ -53,9 +53,10 @@ declare_format!(pub KDB = "kdb", "KeePass 1 database", ["kdb"], "application/x-k
 // ---------------------------------------------------------------------------
 // Key derivation
 
-/// Work units charged per AES-KDF round batch and per Argon2 block: the
-/// session's work limit doubles as a cap on how long a KDF may run, so a
-/// corrupt round count is refused up front instead of spinning.
+/// Work units charged per AES-KDF round batch and per Argon2 block: a
+/// session's work limit, when the host set one, doubles as a cap on how
+/// long a KDF may run, so a corrupt round count is refused up front
+/// instead of spinning.
 const AES_ROUNDS_PER_UNIT: u64 = 8;
 
 #[derive(Clone, Debug)]
@@ -98,10 +99,47 @@ impl Kdf {
     }
 }
 
-/// Runs the KDF on `key` in budgeted steps; the 32-byte transformed key.
+/// AES-KDF: `rounds` AES encryptions of each half of the key, one unit per
+/// [`AES_ROUNDS_PER_UNIT`] rounds.
+struct AesKdf {
+    aes: Aes,
+    a: [u8; 16],
+    b: [u8; 16],
+    rounds: u64,
+    left: u64,
+}
+
+impl crypto::Stepped for AesKdf {
+    fn advance(&mut self, units: u32) -> u32 {
+        let mut used = 0u32;
+        while used < units.max(1) && self.left > 0 {
+            let n = self.left.min(AES_ROUNDS_PER_UNIT);
+            for _ in 0..n {
+                self.aes.encrypt_block(&mut self.a);
+                self.aes.encrypt_block(&mut self.b);
+            }
+            self.left = self.left.saturating_sub(n);
+            used = used.saturating_add(1);
+        }
+        used
+    }
+
+    fn done(&self) -> bool {
+        self.left == 0
+    }
+
+    fn units(&self) -> u64 {
+        self.rounds.div_ceil(AES_ROUNDS_PER_UNIT)
+    }
+}
+
+/// Runs the KDF on `key` in budgeted steps, reporting its progress; the
+/// 32-byte transformed key. A host that set a work limit gets derivations
+/// that could not finish within it refused up front; without one, the
+/// user sees the derivation run and may cancel it.
 async fn derive(cx: &Cx, kdf: &Kdf, key: &[u8], at: Span) -> Result<Vec<u8>> {
-    let limit = cx.limits().max_work.saturating_mul(2) / 5;
-    if kdf.units() > limit {
+    let limit = cx.limits().max_work.map(|max| max.saturating_mul(2) / 5);
+    if limit.is_some_and(|limit| kdf.units() > limit) {
         return Err(Diagnostic::limit(format!(
             "key derivation too expensive ({}) for the work limit",
             kdf.describe()
@@ -113,23 +151,19 @@ async fn derive(cx: &Cx, kdf: &Kdf, key: &[u8], at: Span) -> Result<Vec<u8>> {
             let aes = Aes::new(seed)
                 .filter(|_| seed.len() == 32)
                 .ok_or_else(|| Diagnostic::malformed("AES-KDF seed is not 32 bytes").at(at))?;
-            let mut a = [0u8; 16];
-            let mut b = [0u8; 16];
-            a.copy_from_slice(key.get(..16).unwrap_or(&[0; 16]));
-            b.copy_from_slice(key.get(16..32).unwrap_or(&[0; 16]));
-            let mut left = *rounds;
-            while left > 0 {
-                let n = left.min(AES_ROUNDS_PER_UNIT);
-                for _ in 0..n {
-                    aes.encrypt_block(&mut a);
-                    aes.encrypt_block(&mut b);
-                }
-                left = left.saturating_sub(n);
-                cx.checkpoint().await;
-            }
+            let mut state = AesKdf {
+                aes,
+                a: [0; 16],
+                b: [0; 16],
+                rounds: *rounds,
+                left: *rounds,
+            };
+            state.a.copy_from_slice(key.get(..16).unwrap_or(&[0; 16]));
+            state.b.copy_from_slice(key.get(16..32).unwrap_or(&[0; 16]));
+            crypto::run(cx, &mut state).await;
             let mut h = Sha256::new();
-            h.update(&a);
-            h.update(&b);
+            h.update(&state.a);
+            h.update(&state.b);
             Ok(h.finish())
         }
         Kdf::Argon2 {

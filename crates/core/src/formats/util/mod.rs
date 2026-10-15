@@ -6,8 +6,9 @@
 //! descriptors shared by registry hives, event logs and NTFS (`winsec`), pacing for synchronous work over
 //! in-memory buffers (`pace`), line-oriented reading for text formats
 //! (`lines`), a small JSON reader for headers embedded in binary formats
-//! (`json`), and readers for schema-driven binary encodings (`wire`:
-//! protobuf, FlatBuffers, Thrift, Cap'n Proto).
+//! (`json`), readers for schema-driven binary encodings (`wire`:
+//! protobuf, FlatBuffers, Thrift, Cap'n Proto), and optional reads far
+//! into content decoded on demand, offered as nodes instead (`far`).
 //!
 //! The family modules hold what is specific to a family: archive and
 //! compression (`arcutil`), executables and bytecode (`binutil`), data,
@@ -20,6 +21,7 @@ pub mod arcutil;
 pub mod binutil;
 pub mod civil;
 pub mod datakit;
+pub mod far;
 pub mod finder;
 pub mod floats;
 pub mod fmt;

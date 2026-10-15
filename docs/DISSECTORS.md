@@ -315,9 +315,17 @@ the only signal, so work that is not charged is invisible.
   terminator then never stops. Bound such loops by the region
   (`while pos < region.len`) or use `sub_exact`.
 
-As a safety net the session stops any expansion after `Limits::max_work`
-units, and the robustness tests fail if that ever happens on a fixture. The
-net only catches work that is charged; uncharged work is caught by review.
+Interruption is what keeps a host responsive: every expansion runs in
+budgeted polls, so an interactive host lets the user cancel whatever takes
+too long, and sets no work limit (`Limits::max_work` is `None` by
+default), since a limit would only fail legitimate long work: decoding far
+into a large stream, a key derivation the user asked for. A host that
+polls to completion unattended (batch runs, CI, thumbnailers) sets one,
+and the session then stops an expansion after that many units with a
+`Limit` diagnostic. The robustness tests set their own limit and fail if
+any fixture or variant reaches it, so a hang in CI is a failure, not a
+timeout. The limit only catches work that is charged; uncharged work is
+caught by review.
 Small fixtures hide all of this, so when writing a loop, ask what it does on
 an input a thousand times larger than the fixture.
 
@@ -397,7 +405,17 @@ work and output stay bounded (see `tests/data_bounds.rs`).
 - `crate::codec::decode_span(&cx, span, &codec, expected)` if you need the
   decoded bytes yourself (e.g. a compressed text chunk); `cx.decode_lazy`
   for a lazily decoded source. Never read the *end* of a large lazily
-  decoded member unless the user asked for it.
+  decoded member unless the user asked for it. Where a dissector reads
+  something optional far away (a backup header in the last sector of a
+  disk, a backup boot sector, an end-of-volume anchor), it asks
+  `cx.read_is_cheap(span)` first and, when the read would decode far into
+  content decoded on demand, emits `formats::util::far::deferred` in its
+  place: a node that reads it, and runs the checks that depend on it,
+  when expanded (see `gpt.rs`, `ntfs.rs`). The answer depends only on how
+  the content is decoded (from the start, or from the container's seeds),
+  not on what has been decoded so far, so the tree is the same each
+  time. Structures a format cannot do without (a ZIP central directory, a
+  VHD footer) are read wherever they are.
 - Where the decoded size is not recorded (bzip2, zstd or LZ4 written to a
   pipe, Brotli), `expand_content(.., None)` decodes small streams eagerly
   and large ones with `cx.decode_lazy_unsized`: the source's length is then
@@ -405,7 +423,12 @@ work and output stay bounded (see `tests/data_bounds.rs`).
   (`Cx::len_known` / `Session::source_len_known`). Do not compute a total
   by walking the whole encoded stream first (e.g. summing per-frame sizes
   over every zstd block): that reads the entire file before the first
-  decoded byte, which is exactly what lazy decoding avoids.
+  decoded byte, which is exactly what lazy decoding avoids. Where the
+  stream's own first header records a size but more may follow it (a zstd
+  frame's content size, with possibly more frames after it), use
+  `cx.decode_lazy_checked`: the size is taken as the length, and a read
+  that reaches it decodes on to check the stream ends there, reporting it
+  on the node being expanded if it does not.
 - Content of unknown length reaches only the formats in `formats::STREAMING`
   (tar, cpio, plain text) with its length unknown; every other format gets
   the stream decoded to its end first and sees the real length, so ordinary
@@ -463,8 +486,13 @@ let key = match derive_key(b"") {
 - Derive sources from the plaintext only *after* verification: derived
   sources are memoized by `Origin`, which does not include the secret.
 - Expensive key derivations (high-iteration PBKDF2, scrypt, Argon2) must
-  run in budgeted steps: loop over `cx.secret(...)` yourself and call
-  `cx.checkpoint().await` between rounds.
+  run in budgeted steps: loop over `cx.secret(...)` yourself and run the
+  derivation as a `codec::crypto::Stepped` through `codec::crypto::run`,
+  which charges its work and reports its progress, so a host shows a long
+  derivation running and the user can cancel it knowing what it is. Refuse
+  a derivation up front only for what no host could afford (memory beyond
+  `max_derived`), or for its cost when the host set a `max_work` it could
+  not finish within; without one, it runs.
 - Never put secrets or derived keys in node values or diagnostics.
 - Test fixtures use the password `fillyfoal`; the test host answers with it.
 
