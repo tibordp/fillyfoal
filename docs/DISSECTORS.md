@@ -239,9 +239,23 @@ without asking the host.
 A walker that does not know its count up front (tar, a scan over records)
 should report progress for the host's display: `cx.progress(done, total)`,
 or `cx.progress_in(input.span, pos)` with its position in its input (over a
-lazily decoded source that reports encoded bytes consumed, since the
-decoded length may not be known yet). With an exact count from
-`cx.set_count`, the session reports children produced instead.
+lazily decoded source that reports encoded bytes consumed, read when the
+host asks, since the decoded length may not be known yet). With an exact
+count from `cx.set_count`, the session reports children produced instead.
+
+The session also measures what it can without help, used when nothing
+was reported (`Session::activity`): while an expansion is suspended
+inside a read that decodes a stream (a far read into a decompressed
+member), how far that decoding has got; otherwise where its last read
+ended within the node's span. So a dissector need not report from inside
+a read, and a plain sequential walk gets progress for free. Report it
+yourself when your position says more than your reads do: a walk that
+jumps around (reads a directory at the end first), one over a lazily
+decoded source (where only you know your position is in the encoded
+stream), or one with a known count. Once you report, your report wins,
+so report from inner loops too, not only per outer element: a walker
+that reports at each frame but then walks a single frame of a million
+blocks shows no movement (zstd and LZ4 report every 4096 blocks).
 
 ### Accounting for work
 

@@ -140,12 +140,28 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
   state until polled. Expansions never wait on each other (lazily decoded
   sources belong to the session and are advanced by whichever read reaches
   them), so polling one node is always enough to finish it. A host cancels
-  by not polling; `collapse` discards the work. `progress(id)` reports how
-  far a running expansion has got (from `Cx::progress`, or children out of
-  an exact count). `address(id)` names a node by its path of child indices,
-  stable across collapses and sessions over the same bytes.
+  by not polling; `collapse` discards the work. `address(id)` names a node
+  by its path of child indices, stable across collapses and sessions over
+  the same bytes.
   `work_done()` totals the units every expansion charged, however polls
   split them; tests bound work with it instead of a clock.
+- **Progress.** `activity(id)` describes a running expansion, and
+  `progress(id)` gives its best single estimate as `(done, total)`, in
+  this order: what the dissector reported (`Cx::progress`, or
+  `Cx::progress_in`, which over a lazily decoded source is the encoded
+  bytes consumed, read live) or children out of an exact count; else, while
+  it is suspended inside a read that decodes, the innermost stream of that
+  read's chain with a measure (decoded front out of the wanted position
+  when the stream's length is known, else encoded bytes consumed out of
+  the encoded length); else where its last read ended, within the node's
+  span (or the whole source, if its length is known). A dissector that
+  reports knows its work best, but one stuck in a far read cannot report,
+  and a walker that never reports still reads. The chain is recorded only
+  when a read suspends: `Shared::read_lazy` notes each lazy source it was
+  decoding as an unfinished read unwinds (outermost first), and
+  `Cx::read_avail` moves that list into the expansion's output;
+  `read_activity()` gives the same for a host's own `read_step`. All of
+  this is reporting only: it changes nothing that is decoded or charged.
 - **Dissectors are ordinary `async fn`s.** The session polls their futures
   with a no-op waker. A future suspends only through the context (`Cx`):
   - `cx.read(span).await` suspends while bytes are missing (**waiting for

@@ -48,39 +48,47 @@ impl<R: Read + Seek> Driver<R> {
 
     /// Polls until the session is idle, reading whatever it asks for.
     pub fn run<C: crate::formats::Catalog>(&mut self, session: &mut Session<C>) -> io::Result<()> {
-        loop {
-            match session.poll(self.budget) {
-                Progress::Idle => return Ok(()),
-                Progress::Yielded => {}
-                Progress::NeedSecret(requests) => {
-                    for req in requests {
-                        let answer = self.secrets.as_mut().and_then(|f| f(&req));
-                        session.answer_secret(&req, answer);
-                    }
+        while !self.step(session)? {}
+        Ok(())
+    }
+
+    /// Polls once and answers what the session asked for; returns whether
+    /// it is idle. A host that shows progress between polls
+    /// ([`Session::progress`]) loops over this instead of [`Driver::run`].
+    pub fn step<C: crate::formats::Catalog>(
+        &mut self,
+        session: &mut Session<C>,
+    ) -> io::Result<bool> {
+        match session.poll(self.budget) {
+            Progress::Idle => return Ok(true),
+            Progress::Yielded => {}
+            Progress::NeedSecret(requests) => {
+                for req in requests {
+                    let answer = self.secrets.as_mut().and_then(|f| f(&req));
+                    session.answer_secret(&req, answer);
                 }
-                Progress::NeedBytes(requests) => {
-                    for req in requests {
-                        let Some((_, reader)) =
-                            self.sources.iter_mut().find(|(s, _)| *s == req.source)
-                        else {
-                            return Err(io::Error::new(
-                                io::ErrorKind::NotFound,
-                                format!("no reader for source {}", req.source.index()),
-                            ));
-                        };
-                        reader.seek(SeekFrom::Start(req.offset))?;
-                        let mut buf = vec![0; to_usize(req.len)];
-                        let n = read_full(reader, &mut buf)?;
-                        buf.truncate(n);
-                        session.supply(req.source, req.offset, &buf);
-                        if to_u64(n) < req.len {
-                            session
-                                .set_source_len(req.source, req.offset.saturating_add(to_u64(n)));
-                        }
+            }
+            Progress::NeedBytes(requests) => {
+                for req in requests {
+                    let Some((_, reader)) = self.sources.iter_mut().find(|(s, _)| *s == req.source)
+                    else {
+                        return Err(io::Error::new(
+                            io::ErrorKind::NotFound,
+                            format!("no reader for source {}", req.source.index()),
+                        ));
+                    };
+                    reader.seek(SeekFrom::Start(req.offset))?;
+                    let mut buf = vec![0; to_usize(req.len)];
+                    let n = read_full(reader, &mut buf)?;
+                    buf.truncate(n);
+                    session.supply(req.source, req.offset, &buf);
+                    if to_u64(n) < req.len {
+                        session.set_source_len(req.source, req.offset.saturating_add(to_u64(n)));
                     }
                 }
             }
         }
+        Ok(false)
     }
 }
 

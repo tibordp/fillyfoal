@@ -21,7 +21,7 @@ use crate::error::{Diagnostic, Result};
 use crate::formats::{Format, Registry};
 use crate::node::{Count, Node};
 use crate::secret::{MAX_ATTEMPTS, Secret, SecretRequest};
-use crate::session::{Interpretation, Limits};
+use crate::session::{DecodeProgress, Interpretation, Limits};
 use crate::span::{Origin, SourceId, Span};
 
 /// Why the most recently polled expansion suspended.
@@ -472,6 +472,13 @@ pub(crate) struct Shared {
     pub limits: Limits,
     /// Logical clock for least-recently-used eviction of derived sources.
     pub tick: u64,
+    /// The lazily decoded sources a read that could not complete was
+    /// decoding, outermost (nearest the host) first, each with the position
+    /// the read wanted from it. Filled by [`Shared::read_lazy`] as an
+    /// unfinished read unwinds; [`Cx::read_avail`] and
+    /// [`crate::Session::read_step`] clear it before a read and take it
+    /// when the read suspends (see [`crate::Session::activity`]).
+    pub decoding: Vec<(SourceId, u64)>,
 }
 
 impl Shared {
@@ -866,6 +873,9 @@ impl Shared {
             .derived_bytes
             .saturating_add(after)
             .saturating_sub(before);
+        if result.is_err() {
+            self.note_decoding(source, end);
+        }
         if let Some(entry) = self.sources.get_mut(index) {
             let declared = entry.len;
             entry.consumed = st.in_base.saturating_add(to_u64(st.decoder.consumed()));
@@ -892,6 +902,44 @@ impl Shared {
             }
         }
         result
+    }
+
+    /// Records that a read wanted `source` decoded as far as `end` and could
+    /// not finish (see [`Shared::decoding`]). Reads nest from the outermost
+    /// source in, and each records itself as it returns, so the list comes
+    /// out outermost first. Bounded: a read over many pieces records each
+    /// source once, and at most [`MAX_CHAIN`] of them.
+    fn note_decoding(&mut self, source: SourceId, end: u64) {
+        if let Some(entry) = self.decoding.iter_mut().find(|(s, _)| *s == source) {
+            entry.1 = entry.1.max(end);
+        } else if self.decoding.len() < MAX_CHAIN {
+            self.decoding.push((source, end));
+        }
+    }
+
+    /// How a lazily decoded source is getting on, for a read that wants it
+    /// decoded as far as `target` (see [`crate::Session::activity`]).
+    pub fn decode_progress(&self, source: SourceId, target: u64) -> Option<DecodeProgress> {
+        let entry = self.source(source)?;
+        let lazy = entry.lazy.as_ref()?;
+        Some(DecodeProgress {
+            source,
+            codec: lazy.recipe.name(),
+            consumed: entry.consumed,
+            encoded_len: lazy.parent.len,
+            encoded_len_known: self.source(lazy.parent.source).is_none_or(|p| p.len_known),
+            front: lazy.out_base.saturating_add(to_u64(lazy.out.len())),
+            target,
+            len: entry.len_known.then_some(entry.len),
+        })
+    }
+
+    /// Encoded bytes consumed out of the encoded length, for a lazily
+    /// decoded source (see [`Cx::progress_in`]); `None` for others.
+    pub fn consumed_progress(&self, source: SourceId) -> Option<(u64, u64)> {
+        let entry = self.source(source).filter(|e| e.on_demand)?;
+        let total = entry.lazy.as_ref()?.parent.len;
+        Some((entry.consumed.min(total), total))
     }
 
     /// How many cache chunks of host sources a read of `span` touches
@@ -1028,6 +1076,10 @@ impl Shared {
     }
 }
 
+/// Lazily decoded sources one suspended read records, at most (see
+/// [`Shared::decoding`]).
+const MAX_CHAIN: usize = 16;
+
 /// Pieces or holes [`Shared::next_data`] looks at before answering where it
 /// got to.
 pub(crate) const NEXT_DATA_STEPS: usize = 4096;
@@ -1075,10 +1127,27 @@ pub(crate) struct Output {
     pub detected: Option<Span>,
     /// What the node's own detection step settled on.
     pub interpretation: Option<Interpretation>,
-    /// Progress the dissector reported: (done, total).
-    pub progress: Option<(u64, u64)>,
+    /// Progress the dissector reported (see [`Cx::progress`]).
+    pub progress: Option<Reported>,
+    /// While a read is suspended: the lazily decoded sources it is waiting
+    /// on, outermost first, with the position it wants from each (see
+    /// [`Shared::decoding`]). Empty once the read completes.
+    pub decoding: Vec<(SourceId, u64)>,
+    /// Where the last completed read ended: (source, offset).
+    pub last_read: Option<(SourceId, u64)>,
     /// The name of the node being expanded (see [`Cx::node_name`]).
     pub name: std::borrow::Cow<'static, str>,
+}
+
+/// Progress a dissector reported.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Reported {
+    /// `(done, total)`, as reported.
+    Fixed(u64, u64),
+    /// A position in a lazily decoded source ([`Cx::progress_in`]): its
+    /// encoded bytes consumed out of the encoded length, read live, so it
+    /// keeps moving while a later read decodes further.
+    Consumed(SourceId),
 }
 
 impl Output {
@@ -1217,7 +1286,17 @@ impl Cx {
                 sh.stop = Some(Stop::Budget);
                 return Poll::Pending;
             }
-            match sh.read_range(span.source, span.offset, span.end(), 0) {
+            sh.decoding.clear();
+            let result = sh.read_range(span.source, span.offset, span.end(), 0);
+            if result.is_err() {
+                // Suspending (or failing, below) mid-decode: record what the
+                // read is waiting on, for the host's progress display.
+                let chain = std::mem::take(&mut sh.decoding);
+                drop(sh);
+                lock(&self.out).decoding = chain;
+                sh = lock(&self.shared);
+            }
+            match result {
                 Ok(data) => {
                     sh.charge(1u64.saturating_add(to_u64(data.len()) >> 12));
                     // A short read of a lazily decoded source that stopped
@@ -1229,6 +1308,14 @@ impl Cx {
                         .flatten()
                         .filter(|e| e.on_demand)
                         .and_then(|e| e.error.clone());
+                    drop(sh);
+                    // Where the expansion got to, for hosts' progress
+                    // display (see `Session::activity`).
+                    let mut out = lock(&self.out);
+                    out.decoding.clear();
+                    out.last_read =
+                        Some((span.source, span.offset.saturating_add(to_u64(data.len()))));
+                    drop(out);
                     Poll::Ready(match failed {
                         Some(e) => Err(Diagnostic::new(
                             e.kind,
@@ -1250,6 +1337,8 @@ impl Cx {
                     let touched = sh.chunks_touched(span).max(to_u64(missing.len()));
                     let needed = touched.saturating_mul(sh.cache.chunk_size());
                     if needed > to_u64(sh.limits.cache_bytes) {
+                        drop(sh);
+                        lock(&self.out).decoding.clear();
                         return Poll::Ready(Err(Diagnostic::limit(
                             "read spans too many scattered chunks",
                         )
@@ -1845,23 +1934,24 @@ impl Cx {
     /// up front call this as they go; with an exact count announced
     /// ([`Cx::set_count`]) the session reports children produced instead.
     pub fn progress(&self, done: u64, total: u64) {
-        lock(&self.out).progress = Some((done.min(total), total));
+        lock(&self.out).progress = Some(Reported::Fixed(done.min(total), total));
     }
 
     /// Reports progress as a position `pos` within `span` (a walker over
     /// the records of its input). For a lazily decoded source, whose length
     /// may not be known until it has been decoded, this reports the encoded
     /// bytes consumed out of the encoded stream instead.
+    ///
+    /// The encoded consumption is read when the host asks
+    /// ([`crate::Session::progress`]), not when this is called, so it keeps
+    /// moving while a later read decodes far ahead (a tar walker skipping
+    /// a large member).
     pub fn progress_in(&self, span: Span, pos: u64) {
-        let lazy = {
-            let sh = lock(&self.shared);
-            sh.source(span.source)
-                .filter(|e| e.on_demand)
-                .and_then(|e| Some((e.consumed, e.lazy.as_ref()?.parent.len)))
-        };
-        match lazy {
-            Some((consumed, total)) => self.progress(consumed, total),
-            None => self.progress(pos.saturating_sub(span.offset), span.len),
+        let lazy = lock(&self.shared).consumed_progress(span.source).is_some();
+        if lazy {
+            lock(&self.out).progress = Some(Reported::Consumed(span.source));
+        } else {
+            self.progress(pos.saturating_sub(span.offset), span.len);
         }
     }
 
