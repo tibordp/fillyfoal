@@ -254,6 +254,17 @@ fn probe(h: &Head<'_>) -> bool {
         return false;
     }
     let whole = h.len_known && u64::try_from(h.data.len()).is_ok_and(|n| n == h.len);
+    // A leaf value (a string, a bignum) cut by the window says where it
+    // ends: that must be the end of the file, or three bytes and a large
+    // length would do.
+    if let Some(it) = h.data.get(2..).and_then(decode)
+        && it.nested == 0
+        && it.then == Then::Nothing
+        && h.len_known
+        && !whole
+    {
+        return 2u64.checked_add(it.head) == Some(h.len) && skip(h.data, 2, 0) == Err(true);
+    }
     match skip(h.data, 2, 0) {
         Ok(end) => whole && end == h.data.len(),
         Err(true) => !whole && h.data.len() >= 1024,
@@ -751,7 +762,7 @@ async fn value_node(
                 t => t.parse::<f64>().ok(),
             };
             match v {
-                Some(f) => node.value(Value::Float(f)),
+                Some(f) => node.value(Value::Float(f)).summary("float"),
                 None => node
                     .value(Value::Text(text))
                     .diag(Diagnostic::malformed("float text does not parse")),
@@ -1240,10 +1251,13 @@ fn regexp_options(o: u8) -> String {
     s
 }
 
-/// A key's short text: symbols, strings and integers.
-async fn key_name(r: &mut ByteReader<'_>, at: u64, index: u64) -> Result<String> {
+/// A key's short text: symbols, strings and integers. `ivar` for the
+/// names of instance variables and struct members, shown as Ruby shows
+/// them (`@name`, `x`) rather than as symbols.
+async fn key_name(r: &mut ByteReader<'_>, at: u64, index: u64, ivar: bool) -> Result<String> {
     if let Some(s) = symbol_at(r, at).await? {
-        return Ok(vt::key_name(&format!(":{s}"), index));
+        let s = if ivar { s } else { format!(":{s}") };
+        return Ok(vt::key_name(&s, index));
     }
     let it = head(r, at).await?;
     let p = if it.tag == b'I' {
@@ -1356,7 +1370,7 @@ async fn walk_members(cx: Cx, input: Input, start: u64, path: Path, top: bool) -
         let node = if pairs {
             let key_end = end_of(&mut r, pos).await?;
             let value_end = end_of(&mut r, key_end).await?;
-            let name = key_name(&mut r, pos, index).await?;
+            let name = key_name(&mut r, pos, index, matches!(it.tag, b'o' | b'S')).await?;
             let node = value_node(&mut r, input, key_end, value_end, name, &path)
                 .await?
                 .span(r.span(pos, value_end.saturating_sub(pos)));
@@ -1398,11 +1412,11 @@ async fn ivars(cx: Cx, (input, start, inner_end, path): (Input, u64, u64, Path))
     for i in 0..k {
         let key_end = end_of(&mut r, pos).await?;
         let value_end = end_of(&mut r, key_end).await?;
-        let name = key_name(&mut r, pos, i).await?;
+        let name = key_name(&mut r, pos, i, true).await?;
         let mut node = value_node(&mut r, input, key_end, value_end, name.clone(), &path)
             .await?
             .span(r.span(pos, value_end.saturating_sub(pos)));
-        if name == ":E" {
+        if name == "E" {
             node = node.desc("true: UTF-8, false: US-ASCII");
         }
         cx.push(node).await;
@@ -1424,6 +1438,21 @@ mod tests {
             len: data.len() as u64,
             len_known: true,
         }
+    }
+
+    #[test]
+    fn a_cut_leaf_must_end_at_the_end_of_the_file() {
+        // A binary or string of 65,536 bytes, cut by a 2 KiB window.
+        let mut data = b"\x04\x08\"\x03\x00\x00\x01".to_vec();
+        data.resize(2048, b'x');
+        let at = |len: u64| Head {
+            data: &data,
+            tail: &data,
+            len,
+            len_known: true,
+        };
+        assert!(probe(&at(2 + 5 + 65_536)));
+        assert!(!probe(&at(200_000)));
     }
 
     #[test]

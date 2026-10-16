@@ -7,7 +7,7 @@ expression: "common::explore(&display_name(&path), &data)"
     [0]: "alpha" — atom  [0x6+0x8]
     [1]: "beta gamma" — atom  [0xe+0xd]
   ▾ [2] — tuple, 2 elements  [0x1b+0x10]
-      [0]: 1.5  [0x1d+0x9]
+      [0]: 1.5 — float  [0x1d+0x9]
       [1]: -2  [0x26+0x5]
     [3]: "text" — string, 4 bytes  [0x2b+0x7]
     [4]: "bin" — binary, 3 bytes  [0x32+0x8]

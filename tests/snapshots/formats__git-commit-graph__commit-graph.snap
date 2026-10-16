@@ -289,7 +289,7 @@ expression: "common::explore(&display_name(&path), &data)"
       [9]: "ead24e3e5087d2c77b49954126eaa032f42753de"  [0x528+0x14]
       [10]: "f304ea608d6584737d6adf8f5c2e4d3bb615956b"  [0x53c+0x14]
   ▾ CDAT (Commit data) — 11 commits  [0x550+0x18c]
-    ▾ 09dbc1e16b7add61982353eada1ecc3a332c7eae — #0, level 8, 1970-01-01 00:00:01 UTC, 1 parent  [0x550+0x24]
+    ▾ 09dbc1e16b7add61982353eada1ecc3a332c7eae — #0, level 8, 1970-01-01 00:00:01 UTC, parent a90fcaf  [0x550+0x24]
         Commit: "09dbc1e16b7add61982353eada1ecc3a332c7eae"  [0x474+0x14]
         Root tree: "4bdcec2698bddb42ac91b0d9d2713438f005bfc5"  [0x550+0x14]
         Parent 1: 0x5 — a90fcaffa41320b94f59fbe6fe13698007228ff5  [0x564+0x4]
@@ -297,7 +297,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Topological level: 8  [0x56c+0x4]
         Commit time: 1970-01-01 00:00:01 UTC  [0x56c+0x8]
         Corrected commit date: 2100-01-01 00:00:01 UTC — commit time + 4102444800 s (GDA2)
-    ▾ 1d598dafbc75bcd6ee2c40b00cabbcd847b9a9fc — #1, level 5, 2026-01-08 00:00:00 UTC, 1 parent  [0x574+0x24]
+    ▾ 1d598dafbc75bcd6ee2c40b00cabbcd847b9a9fc — #1, level 5, 2026-01-08 00:00:00 UTC, parent ca971ea  [0x574+0x24]
         Commit: "1d598dafbc75bcd6ee2c40b00cabbcd847b9a9fc"  [0x488+0x14]
         Root tree: "ddddbd84e0a9f36dd22fd9d12b7930e807023b50"  [0x574+0x14]
         Parent 1: 0x7 — ca971ea621f9d1a006bf6fbbf747c1460683c699  [0x588+0x4]
@@ -305,7 +305,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Topological level: 5  [0x590+0x4]
         Commit time: 2026-01-08 00:00:00 UTC  [0x590+0x8]
         Corrected commit date: 2026-01-08 00:00:00 UTC — commit time + 0 s (GDA2)
-    ▾ 3b1e06a9d97a8d73b9f2b1e1be513d565d28d28d — #2, level 5, 2026-01-07 00:00:00 UTC, 1 parent  [0x598+0x24]
+    ▾ 3b1e06a9d97a8d73b9f2b1e1be513d565d28d28d — #2, level 5, 2026-01-07 00:00:00 UTC, parent ca971ea  [0x598+0x24]
         Commit: "3b1e06a9d97a8d73b9f2b1e1be513d565d28d28d"  [0x49c+0x14]
         Root tree: "55e1af23323fe833dd5d79fde0ae489a21e3c1d1"  [0x598+0x14]
         Parent 1: 0x7 — ca971ea621f9d1a006bf6fbbf747c1460683c699  [0x5ac+0x4]
@@ -313,7 +313,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Topological level: 5  [0x5b4+0x4]
         Commit time: 2026-01-07 00:00:00 UTC  [0x5b4+0x8]
         Corrected commit date: 2026-01-07 00:00:00 UTC — commit time + 0 s (GDA2)
-    ▾ 48470c72a731863f0f111756f0bc59882caa4f25 — #3, level 6, 2026-01-10 00:00:00 UTC, octopus merge  [0x5bc+0x24]
+    ▾ 48470c72a731863f0f111756f0bc59882caa4f25 — #3, level 6, 2026-01-10 00:00:00 UTC, octopus merge, parents ca971ea, …  [0x5bc+0x24]
         Commit: "48470c72a731863f0f111756f0bc59882caa4f25"  [0x4b0+0x14]
         Root tree: "2fc63e02b1db19cc97b33dacc266335cc9f87542"  [0x5bc+0x14]
         Parent 1: 0x7 — ca971ea621f9d1a006bf6fbbf747c1460683c699  [0x5d0+0x4]
@@ -324,7 +324,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Topological level: 6  [0x5d8+0x4]
         Commit time: 2026-01-10 00:00:00 UTC  [0x5d8+0x8]
         Corrected commit date: 2026-01-10 00:00:00 UTC — commit time + 0 s (GDA2)
-    ▾ 591930034a2bd4d531cb63d4c7e0bf7b4f676115 — #4, level 3, 2026-01-04 00:00:00 UTC, 1 parent  [0x5e0+0x24]
+    ▾ 591930034a2bd4d531cb63d4c7e0bf7b4f676115 — #4, level 3, 2026-01-04 00:00:00 UTC, parent d1ddd75  [0x5e0+0x24]
         Commit: "591930034a2bd4d531cb63d4c7e0bf7b4f676115"  [0x4c4+0x14]
         Root tree: "85a18167a4dd8a8a08672f04e89963ff3092c9f8"  [0x5e0+0x14]
         Parent 1: 0x8 — d1ddd7536bd1b6d4e5ebede12444664e8897b4ba  [0x5f4+0x4]
@@ -332,7 +332,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Topological level: 3  [0x5fc+0x4]
         Commit time: 2026-01-04 00:00:00 UTC  [0x5fc+0x8]
         Corrected commit date: 2026-01-04 00:00:00 UTC — commit time + 0 s (GDA2)
-    ▾ a90fcaffa41320b94f59fbe6fe13698007228ff5 — #5, level 7, 2100-01-01 00:00:00 UTC, 1 parent  [0x604+0x24]
+    ▾ a90fcaffa41320b94f59fbe6fe13698007228ff5 — #5, level 7, 2100-01-01 00:00:00 UTC, parent 48470c7  [0x604+0x24]
         Commit: "a90fcaffa41320b94f59fbe6fe13698007228ff5"  [0x4d8+0x14]
         Root tree: "d6c638aef14eccf91989d1d156bb379e1779b62e"  [0x604+0x14]
         Parent 1: 0x3 — 48470c72a731863f0f111756f0bc59882caa4f25  [0x618+0x4]
@@ -348,7 +348,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Topological level: 1  [0x644+0x4]
         Commit time: 2026-01-02 00:00:00 UTC  [0x644+0x8]
         Corrected commit date: 2026-01-02 00:00:00 UTC — commit time + 0 s (GDA2)
-    ▾ ca971ea621f9d1a006bf6fbbf747c1460683c699 — #7, level 4, 2026-01-06 00:00:00 UTC, 2 parents  [0x64c+0x24]
+    ▾ ca971ea621f9d1a006bf6fbbf747c1460683c699 — #7, level 4, 2026-01-06 00:00:00 UTC, parents f304ea6, 5919300  [0x64c+0x24]
         Commit: "ca971ea621f9d1a006bf6fbbf747c1460683c699"  [0x500+0x14]
         Root tree: "7b130d6fb931f29521a1c4d34f04b13fd11740be"  [0x64c+0x14]
         Parent 1: 0xa — f304ea608d6584737d6adf8f5c2e4d3bb615956b  [0x660+0x4]
@@ -356,7 +356,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Topological level: 4  [0x668+0x4]
         Commit time: 2026-01-06 00:00:00 UTC  [0x668+0x8]
         Corrected commit date: 2026-01-06 00:00:00 UTC — commit time + 0 s (GDA2)
-    ▾ d1ddd7536bd1b6d4e5ebede12444664e8897b4ba — #8, level 2, 2026-01-03 00:00:00 UTC, 1 parent  [0x670+0x24]
+    ▾ d1ddd7536bd1b6d4e5ebede12444664e8897b4ba — #8, level 2, 2026-01-03 00:00:00 UTC, parent c30fa09  [0x670+0x24]
         Commit: "d1ddd7536bd1b6d4e5ebede12444664e8897b4ba"  [0x514+0x14]
         Root tree: "0a29bd774869e749dd283ed50471e5b68aea344e"  [0x670+0x14]
         Parent 1: 0x6 — c30fa09a114ca9e85617f3d4afa0ea0f8208ec36  [0x684+0x4]
@@ -364,7 +364,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Topological level: 2  [0x68c+0x4]
         Commit time: 2026-01-03 00:00:00 UTC  [0x68c+0x8]
         Corrected commit date: 2026-01-03 00:00:00 UTC — commit time + 0 s (GDA2)
-    ▾ ead24e3e5087d2c77b49954126eaa032f42753de — #9, level 5, 2026-01-09 00:00:00 UTC, 1 parent  [0x694+0x24]
+    ▾ ead24e3e5087d2c77b49954126eaa032f42753de — #9, level 5, 2026-01-09 00:00:00 UTC, parent ca971ea  [0x694+0x24]
         Commit: "ead24e3e5087d2c77b49954126eaa032f42753de"  [0x528+0x14]
         Root tree: "32dece1fd1b5842971989b8857fa913e5944b2c3"  [0x694+0x14]
         Parent 1: 0x7 — ca971ea621f9d1a006bf6fbbf747c1460683c699  [0x6a8+0x4]
@@ -372,7 +372,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Topological level: 5  [0x6b0+0x4]
         Commit time: 2026-01-09 00:00:00 UTC  [0x6b0+0x8]
         Corrected commit date: 2026-01-09 00:00:00 UTC — commit time + 0 s (GDA2)
-    ▾ f304ea608d6584737d6adf8f5c2e4d3bb615956b — #10, level 3, 2026-01-05 00:00:00 UTC, 1 parent  [0x6b8+0x24]
+    ▾ f304ea608d6584737d6adf8f5c2e4d3bb615956b — #10, level 3, 2026-01-05 00:00:00 UTC, parent d1ddd75  [0x6b8+0x24]
         Commit: "f304ea608d6584737d6adf8f5c2e4d3bb615956b"  [0x53c+0x14]
         Root tree: "5ef17367ef59acf593f21bf4b01eabbdc7b51710"  [0x6b8+0x14]
         Parent 1: 0x8 — d1ddd7536bd1b6d4e5ebede12444664e8897b4ba  [0x6cc+0x4]

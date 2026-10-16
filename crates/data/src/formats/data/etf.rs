@@ -223,6 +223,21 @@ fn probe(h: &Head<'_>) -> bool {
             && (u16::from(cmf) << 8 | u16::from(flg)).is_multiple_of(31);
     }
     let whole = h.len_known && u64::try_from(h.data.len()).is_ok_and(|n| n == h.len);
+    // A leaf term (a binary, a string, a bignum) cut by the window says
+    // where it ends: that must be the end of the file, or two bytes and a
+    // large length would do.
+    if let Some(it) = h.data.get(1..).and_then(decode)
+        && it.nested == 0
+        && h.len_known
+        && !whole
+    {
+        return 1u64
+            .checked_add(it.head)
+            .and_then(|n| n.checked_add(it.payload))
+            .and_then(|n| n.checked_add(it.trailer))
+            == Some(h.len)
+            && skip(h.data, 1, 0) == Err(true);
+    }
     match skip(h.data, 1, 0) {
         Ok(end) => whole && end == h.data.len(),
         // Cut by the window of a larger file: valid as far as it goes.
@@ -510,9 +525,11 @@ async fn item_node(
             node.value(Value::Text(text))
                 .summary(format!("big integer, {} bytes", it.payload))
         }
-        70 => node.value(Value::Float(f64::from_bits(
-            r.be(start.saturating_add(1), 8).await?,
-        ))),
+        70 => node
+            .value(Value::Float(f64::from_bits(
+                r.be(start.saturating_add(1), 8).await?,
+            )))
+            .summary("float"),
         99 => {
             let b = r.bytes(start.saturating_add(1), 31).await?;
             let text = String::from_utf8_lossy(b.split(|&c| c == 0).next().unwrap_or_default())
@@ -833,6 +850,21 @@ mod tests {
             len: data.len() as u64,
             len_known: true,
         }
+    }
+
+    #[test]
+    fn a_cut_leaf_must_end_at_the_end_of_the_file() {
+        // A binary or string of 65,536 bytes, cut by a 2 KiB window.
+        let mut data = b"\x83m\x00\x01\x00\x00".to_vec();
+        data.resize(2048, b'x');
+        let at = |len: u64| Head {
+            data: &data,
+            tail: &data,
+            len,
+            len_known: true,
+        };
+        assert!(probe(&at(1 + 5 + 65_536)));
+        assert!(!probe(&at(200_000)));
     }
 
     #[test]

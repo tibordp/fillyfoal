@@ -471,11 +471,31 @@ async fn commits(cx: Cx, g: Graph) -> Result<()> {
             break;
         };
         let name = g.oid(&cx, i).await.unwrap_or_else(|| format!("[{i}]"));
+        // The parents' short IDs, when this file names them (no base
+        // graphs: positions are indexes into this file's OIDL).
+        let short = |oid: Option<String>| oid.map(|s| s.chars().take(7).collect::<String>());
+        let (p1, p2) = if g.bases == 0 {
+            (
+                short(g.oid(&cx, c.parent1.into()).await),
+                short(g.oid(&cx, c.parent2.into()).await),
+            )
+        } else {
+            (None, None)
+        };
         let parents = match (c.parent1, c.parent2) {
             (PARENT_NONE, _) => "root".to_owned(),
-            (_, PARENT_NONE) => "1 parent".to_owned(),
-            (_, p) if p & OCTOPUS != 0 => "octopus merge".to_owned(),
-            _ => "2 parents".to_owned(),
+            (_, PARENT_NONE) => match p1 {
+                Some(a) => format!("parent {a}"),
+                None => "1 parent".to_owned(),
+            },
+            (_, p) if p & OCTOPUS != 0 => match p1 {
+                Some(a) => format!("octopus merge, parents {a}, …"),
+                None => "octopus merge".to_owned(),
+            },
+            _ => match (p1, p2) {
+                (Some(a), Some(b)) => format!("parents {a}, {b}"),
+                _ => "2 parents".to_owned(),
+            },
         };
         let date = crate::render::value(&timestamp(c.date));
         cx.push(
