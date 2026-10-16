@@ -25,7 +25,7 @@ use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::Value;
+use crate::value::Check;
 
 const LE: Endian = Endian::Little;
 const EMPTY: u32 = 0xffff_ffff;
@@ -178,7 +178,7 @@ async fn list(cx: Cx, t: Table) -> Result<()> {
             cx.push(
                 Node::new(format!("{}…", id.get(..16).unwrap_or(&id)))
                     .span(span)
-                    .value(Value::Text(id))
+                    .checksum(Check::new(CHUNK_ID, k.to_vec()))
                     .summary(describe(v))
                     .lazy(fields, (span, t.key, to_u64(v.len()))),
             )
@@ -201,15 +201,16 @@ async fn list(cx: Cx, t: Table) -> Result<()> {
     Ok(())
 }
 
+/// The index's keys: chunk IDs (a SHA-256 or keyed MAC of each chunk's
+/// plaintext), not checked here.
+const CHUNK_ID: &str = "chunk ID";
+
 async fn fields(cx: Cx, (span, key, value): (Span, u64, u64)) -> Result<()> {
     let raw = cx.read(span).await?;
-    cx.emit(
-        Node::new("Key")
-            .span(span.sub(0, key))
-            .value(Value::Text(hex_lower(
-                raw.get(..to_usize(key)).unwrap_or_default(),
-            ))),
-    );
+    cx.emit(Node::new("Key").span(span.sub(0, key)).checksum(Check::new(
+        CHUNK_ID,
+        raw.get(..to_usize(key)).unwrap_or_default().to_vec(),
+    )));
     let names: &[&'static str] = match value {
         8 => &["Segment", "Offset"],
         12 => &["Reference count", "Size", "Compressed size"],

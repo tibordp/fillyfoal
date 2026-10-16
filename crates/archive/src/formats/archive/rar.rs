@@ -51,7 +51,7 @@ use crate::formats::util::val::{hex, text};
 use crate::formats::{Codec, Format, Input, Probe, dissect_or_data};
 use crate::node::Node;
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, Value, field, flag};
+use crate::value::{Check, EnumTable, FlagTable, Value, field, flag};
 
 const LE: Endian = Endian::Little;
 const SIG5: &[u8] = b"Rar!\x1a\x07\x01\x00";
@@ -152,7 +152,7 @@ struct Block4 {
     flags: u16,
     name: Option<String>,
     unpacked: u64,
-    crc_ok: bool,
+    crc_ok: Check,
     part: Option<Part>,
 }
 
@@ -346,10 +346,8 @@ async fn next_block4(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Block4> {
             part = part4(&header, block, flags, add, unpacked);
         }
     }
-    let crc_ok = header
-        .get(2..)
-        .zip(u16_le(&header, 0))
-        .is_some_and(|(covered, stored)| (crc32(covered) & 0xffff) as u16 == stored);
+    let crc_ok = Check::new(RAR4_HEADER_CRC, u16_le(&header, 0).unwrap_or(0))
+        .verify_opt(header.get(2..).map(crc16_of));
     cur.skip(u64::from(size).saturating_add(add));
     Ok(Block4 {
         span: cur.since(start),
@@ -404,9 +402,7 @@ async fn dissect4(cx: &Cx, input: Input) -> Result<()> {
         if !summary.is_empty() {
             node = node.summary(summary);
         }
-        if !b.crc_ok {
-            node = node.diag(Diagnostic::warning("header CRC mismatch"));
-        }
+        node = node.check_diag(&b.crc_ok);
         cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.push(node).await;
         if b.kind == 0x7b || encrypted {
@@ -436,17 +432,8 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let mut r = ByteReader::new(&header, header_span);
     let bad = || Diagnostic::malformed("truncated block header").at(header_span);
     let stored_crc = r.u16("Header CRC", LE).ok_or_else(bad)?;
-    let computed = (crc32(header.get(2..).unwrap_or_default()) & 0xffff) as u16;
-    r.with(|n| {
-        let n = n.value(hex(stored_crc, 64));
-        if computed == stored_crc {
-            n.summary("valid")
-        } else {
-            n.diag(Diagnostic::warning(format!(
-                "CRC mismatch: computed {computed:#06x}"
-            )))
-        }
-    });
+    let computed = crc16_of(header.get(2..).unwrap_or_default());
+    r.with(|n| n.checksum(Check::new(RAR4_HEADER_CRC, stored_crc).verify(computed)));
     let kind = r.u8("Header type").ok_or_else(bad)?;
     r.with(|n| {
         n.value(Value::Enum {
@@ -494,7 +481,7 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
                 })
             });
             let crc = r.u32("File CRC", LE).ok_or_else(bad)?;
-            r.with(|n| n.value(hex(crc, 64)));
+            r.with(|n| n.checksum(Check::new("CRC-32", crc).on_decode()));
             let time = r.u32("Modification time (DOS)", LE).ok_or_else(bad)?;
             r.with(|n| n.value(crate::formats::util::val::dos_stamp(time)));
             let ver = r.u8("Version needed").ok_or_else(bad)?;
@@ -642,7 +629,7 @@ struct Block5 {
     name: Option<String>,
     unpacked: u64,
     directory: bool,
-    crc_ok: bool,
+    crc_ok: Check,
     /// For file headers (type 2) only.
     part: Option<Part>,
     /// The header's bytes (in the file, or decrypted).
@@ -836,7 +823,7 @@ fn file_fields(r: &mut ByteReader<'_>) -> Option<FileFields> {
     let mut crc = None;
     if flags & 0x04 != 0 {
         let c = r.u32("Data CRC32", LE)?;
-        r.with(|n| n.value(hex(c, 64)));
+        r.with(|n| n.checksum(Check::new("CRC-32", c).on_decode()));
         crc = Some(c);
     }
     let info = r.vint("Compression information")?;
@@ -925,10 +912,8 @@ async fn next_block5(cx: &Cx, cur: &mut Cursor<'_>, key: Option<&Keys5>) -> Resu
         file_len,
     } = raw_header5(cx, cur, key).await?;
     let header_len = to_u64(header.len());
-    let crc_ok = header
-        .get(4..)
-        .zip(u32_le(&header, 0))
-        .is_some_and(|(covered, stored)| crc32(covered) == stored);
+    let crc_ok = Check::new("CRC-32", u32_le(&header, 0).unwrap_or(0))
+        .verify_opt(header.get(4..).map(crc32));
     let mut r = ByteReader::new(&header, header_span);
     r.at = 4usize.saturating_add(vlen);
     let c = common5(&mut r).ok_or_else(|| Diagnostic::malformed("bad header").at(header_span))?;
@@ -1019,9 +1004,7 @@ async fn list5(cx: &Cx, input: Input, pos: u64, key: Option<Arc<Keys5>>) -> Resu
         if !summary.is_empty() {
             node = node.summary(summary);
         }
-        if !b.crc_ok {
-            node = node.diag(Diagnostic::warning("header CRC mismatch"));
-        }
+        node = node.check_diag(&b.crc_ok);
         cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.push(node).await;
         if b.kind == 4 && key.is_none() {
@@ -1078,16 +1061,7 @@ async fn block5(
     let bad = || Diagnostic::malformed("truncated header").at(header_span);
     let stored = r.u32("Header CRC32", LE).ok_or_else(bad)?;
     let computed = crc32(header.get(4..).unwrap_or_default());
-    r.with(|n| {
-        let n = n.value(hex(stored, 64));
-        if computed == stored {
-            n.summary("valid")
-        } else {
-            n.diag(Diagnostic::warning(format!(
-                "CRC mismatch: computed {computed:#010x}"
-            )))
-        }
-    });
+    r.with(|n| n.checksum(Check::new("CRC-32", stored).verify(computed)));
     r.vint("Header size").ok_or_else(bad)?;
     let c = common5(&mut r).ok_or_else(bad)?;
     let mut fields = None;
@@ -1219,8 +1193,17 @@ fn extra_records(data: &[u8], span: Span, main: bool) -> Vec<(u64, Node)> {
         if !main && kind == 3 {
             time_record(&mut r);
         } else if !main && kind == 2 {
-            r.vint("Hash type");
-            r.bytes("BLAKE2sp hash", 32);
+            let kind = r.vint("Hash type");
+            if let Some(hash) = r.bytes("BLAKE2sp hash", 32) {
+                let check = Check::new("BLAKE2sp", hash.to_vec());
+                r.with(|n| {
+                    n.checksum(if kind == Some(0) {
+                        check.on_decode()
+                    } else {
+                        check
+                    })
+                });
+            }
         } else if !main && kind == 1 {
             crypt_record(&mut r);
         } else if r.remaining() > 0 {
@@ -1296,6 +1279,13 @@ fn time_record(r: &mut ByteReader<'_>) -> Option<()> {
 /// Files whose CRC32 is checked when their content is expanded (larger ones
 /// would be read in full just for that).
 pub(crate) const CRC_LIMIT: u64 = 32 << 20;
+
+/// RAR 4's header CRC: the low 16 bits of a CRC-32.
+const RAR4_HEADER_CRC: &str = "CRC-32 (low 16 bits)";
+
+fn crc16_of(data: &[u8]) -> u16 {
+    u16::try_from(crc32(data) & 0xffff).unwrap_or(0)
+}
 
 /// A node for a file's content, decoded and checked when expanded.
 fn content_node(name: &'static str, input: Input, part: Part) -> Node {
@@ -1547,18 +1537,21 @@ async fn content(cx: Cx, (input, part): (Input, Part)) -> Result<()> {
             Some(k) => tweak_crc5(k, got),
             None => got,
         };
-        let node = Node::new("CRC32").value(hex(got, 64));
+        let check = Check::new(
+            if hash_key.is_some() {
+                "CRC-32 (HMAC-tweaked)"
+            } else {
+                "CRC-32"
+            },
+            want,
+        );
+        let node = Node::new("CRC32");
         cx.emit(if len < part.unpacked {
-            node.diag(Diagnostic::malformed(format!(
-                "decoded {len:#x} of {:#x} bytes",
-                part.unpacked
-            )))
-        } else if got != want {
-            node.diag(Diagnostic::warning(format!(
-                "CRC32 mismatch: stored {want:#010x}"
-            )))
+            let short = format!("decoded {len:#x} of {:#x} bytes", part.unpacked);
+            node.checksum(check.skipped(short.clone()))
+                .diag(Diagnostic::malformed(short))
         } else {
-            node.summary("valid")
+            node.checksum(check.verify(got))
         });
     }
     dissect_or_data(cx, input.nested(span)).await

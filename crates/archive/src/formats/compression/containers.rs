@@ -371,14 +371,13 @@ async fn lzop(cx: Cx, input: Input) -> Result<()> {
     };
     let ok = parsed.checksum_ok;
     f.u32("Header checksum")
-        .hex()
-        .summary(kind)
-        .check(|_| (!ok).then(|| Diagnostic::warning("header checksum mismatch")))
+        .checksum(kind)
+        .with_check(|c| c.verified(ok))
         .emit()?;
     if flags & lzo::F_H_EXTRA_FIELD != 0 {
         let len = f.u32("Extra field length").emit()?;
         f.bytes("Extra field", len.into()).emit()?;
-        f.u32("Extra field checksum").hex().emit()?;
+        f.u32("Extra field checksum").checksum(kind).emit()?;
     }
     let early = matches!(parsed.method, 1..=3)
         && flags & lzo::F_H_FILTER == 0

@@ -31,7 +31,7 @@ use crate::formats::util::val::hex;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, Value, flag};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag};
 
 const LE: Endian = Endian::Little;
 const MAX_ENTRIES: u64 = 1 << 20;
@@ -127,6 +127,11 @@ const ACE_FLAG_PASSWORD: u16 = 0x4000;
 const ACE_FLAG_SOLID: u16 = 0x8000;
 const ACE_FLAG_V20: u16 = 0x0100;
 
+/// ACE's CRC-32: without the final inversion.
+const ACE_CRC32: &str = "CRC-32 (not inverted)";
+/// ACE's header CRC: its CRC-32's low 16 bits.
+const ACE_CRC16: &str = "CRC-32 (not inverted, low 16 bits)";
+
 /// ACE's header CRC: CRC-32 without the final inversion, low 16 bits.
 fn ace_crc(data: &[u8]) -> u16 {
     u16::try_from(!crc32(data) & 0xffff).unwrap_or(0)
@@ -141,7 +146,7 @@ struct AceBlock {
     original: u64,
     header_span: Span,
     span: Span,
-    crc_ok: bool,
+    crc: Check,
 }
 
 async fn ace_block_at(cx: &Cx, file: Span, at: u64) -> Result<AceBlock> {
@@ -151,9 +156,8 @@ async fn ace_block_at(cx: &Cx, file: Span, at: u64) -> Result<AceBlock> {
     let header = cx.read(header_span).await?;
     let kind = header.get(4).copied().unwrap_or(0);
     let flags = u16_le(&header, 5).unwrap_or(0);
-    let crc_ok = header
-        .get(4..)
-        .is_some_and(|b| Some(ace_crc(b)) == u16_le(&header, 0));
+    let crc = Check::new(ACE_CRC16, u16_le(&header, 0).unwrap_or(0))
+        .verify_opt(header.get(4..).map(ace_crc));
     let wide = flags & 0x0004 != 0 || kind == 3 || kind == 4 || kind == 5;
     let (packed, original) = if flags & 0x0001 != 0 {
         if wide {
@@ -179,7 +183,7 @@ async fn ace_block_at(cx: &Cx, file: Span, at: u64) -> Result<AceBlock> {
         original,
         header_span,
         span: file.sub(at, header_span.len.saturating_add(packed)),
-        crc_ok,
+        crc,
     })
 }
 
@@ -244,9 +248,7 @@ pub async fn dissect_ace(cx: Cx, input: Input) -> Result<()> {
         if !summary.is_empty() {
             node = node.summary(summary);
         }
-        if !block.crc_ok {
-            node = node.diag(Diagnostic::warning("header CRC mismatch"));
-        }
+        node = node.check_diag(&block.crc);
         cx.progress_in(file, block.span.end());
         cx.push(node).await;
         if block.header_span.len <= 4 {
@@ -390,8 +392,11 @@ async fn ace_content(
                 Diagnostic::malformed(format!("decoded {len:#x} of {:#x} bytes", member.size))
                     .at(data),
             );
-        } else if crc != member.crc {
-            cx.diag(Diagnostic::warning("ACE CRC-32 mismatch").at(data));
+        } else if let Some(message) = Check::new(ACE_CRC32, member.crc)
+            .verify(crc)
+            .mismatch_text()
+        {
+            cx.diag(Diagnostic::warning(message).at(data));
         }
     } else {
         cx.annotate(format!("{:#x} bytes, decoded on demand", member.size));
@@ -408,16 +413,7 @@ async fn ace_block(
     let bad = || Diagnostic::truncated(header_span, 0);
     let stored = r.u16("Header CRC", LE).ok_or_else(bad)?;
     let computed = ace_crc(header.get(4..).unwrap_or_default());
-    r.with(|n| {
-        let n = n.value(hex(stored, 64));
-        if stored == computed {
-            n.summary("valid")
-        } else {
-            n.diag(Diagnostic::warning(format!(
-                "CRC mismatch: computed {computed:#06x}"
-            )))
-        }
-    });
+    r.with(|n| n.checksum(Check::new(ACE_CRC16, stored).verify(computed)));
     r.u16("Header size", LE).ok_or_else(bad)?;
     let kind = r.u8("Header type").ok_or_else(bad)?;
     r.with(|n| {
@@ -491,7 +487,7 @@ async fn ace_block(
                 })
             });
             let crc = r.u32("CRC-32", LE).ok_or_else(bad)?;
-            r.with(|n| n.value(hex(crc, 64)).desc("ACE CRC-32 (not inverted)"));
+            r.with(|n| n.checksum(Check::new(ACE_CRC32, crc)));
             let comp = r.u8("Compression type").ok_or_else(bad)?;
             r.with(|n| {
                 n.value(Value::Enum {
@@ -577,7 +573,7 @@ async fn ace_block(
                 r.u32("Clusters", LE).ok_or_else(bad)?;
                 r.u32("Cluster size", LE).ok_or_else(bad)?;
                 let c = r.u16("Recovery CRC", LE).ok_or_else(bad)?;
-                r.with(|n| n.value(hex(c, 64)));
+                r.with(|n| n.checksum(Check::new(ACE_CRC16, c)));
             }
             extra.push(Node::new("Recovery data").span(data.sub(0, size)));
         }
@@ -732,7 +728,7 @@ async fn arc_entry(cx: Cx, (input, span, header_len): (Input, Span, u64)) -> Res
     let time = r.u16("Time", LE).ok_or_else(bad)?;
     r.with(|n| n.summary(crate::text::dos_datetime(date, time)));
     let crc = r.u16("CRC-16", LE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(crc, 64)));
+    r.with(|n| n.checksum(Check::new("CRC-16/ARC", crc)));
     if method != 1 {
         r.u32("Original size", LE).ok_or_else(bad)?;
     }

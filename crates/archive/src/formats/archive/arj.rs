@@ -22,7 +22,7 @@ use crate::formats::util::val::hex;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag};
 
 const LE: Endian = Endian::Little;
 const MAX_BASIC: u16 = 2600;
@@ -267,7 +267,7 @@ fn basic_header(r: &mut ByteReader<'_>, main: bool) -> Option<(u8, u32, usize)> 
         LE,
     )?;
     if !main {
-        r.with(|n| n.value(hex(crc, 64)));
+        r.with(|n| n.checksum(Check::new("CRC-32", crc).on_decode()));
     }
     r.u16("Entry name position", LE)?;
     let mode = r.u16("File access mode", LE)?;
@@ -308,16 +308,7 @@ async fn entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     r.at = names_end;
     let stored = r.u32("Header CRC-32", LE).ok_or_else(bad)?;
     let computed = crc32(header.get(4..names_end).unwrap_or_default());
-    r.with(|n| {
-        let n = n.value(hex(stored, 64));
-        if computed == stored {
-            n.summary("valid")
-        } else {
-            n.diag(Diagnostic::warning(format!(
-                "CRC mismatch: computed {computed:#010x}"
-            )))
-        }
-    });
+    r.with(|n| n.checksum(Check::new("CRC-32", stored).verify(computed)));
     let nodes = r.into_nodes();
     cx.emit(
         Node::new(if main { "Main header" } else { "Local header" })

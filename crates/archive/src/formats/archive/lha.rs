@@ -21,7 +21,7 @@ use crate::formats::util::val::{hex, text};
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Value};
+use crate::value::{Check, EnumTable, Value};
 
 const LE: Endian = Endian::Little;
 /// Extended headers per member before giving up.
@@ -81,6 +81,19 @@ const EXT_TYPES: EnumTable = &[
     (0x53, "Unix user name"),
     (0x54, "Unix modification time"),
 ];
+
+/// LHA's CRC-16 (the ARC polynomial).
+const LHA_CRC: &str = "CRC-16/ARC";
+
+/// A member's data CRC: checked by the decoder for a compressed member.
+fn data_check(method: &str, crc: u16) -> Check {
+    let check = Check::new(LHA_CRC, crc);
+    if codec_method(method).is_some() {
+        check.on_decode()
+    } else {
+        check
+    }
+}
 
 fn stored(method: &str) -> bool {
     matches!(method, "-lh0-" | "-lz4-" | "-pm0-")
@@ -351,7 +364,7 @@ fn ext_node(kind: u8, body: &[u8], span: Span) -> Node {
     match kind {
         0x00 => {
             if let Some(crc) = r.u16("Header CRC-16", LE) {
-                r.with(|n| n.value(hex(crc, 64)));
+                r.with(|n| n.checksum(Check::new(LHA_CRC, crc)));
             }
         }
         0x01 | 0x3f | 0x52 | 0x53 => {
@@ -419,8 +432,8 @@ async fn member(cx: Cx, (input, span, level): (Input, Span, u8)) -> Result<()> {
     let (method, compressed) = if level == 2 {
         r.u16("Header size", LE).ok_or_else(bad)?;
         let (method, compressed) = common_fields(&mut r, level).ok_or_else(bad)?;
-        r.u16("CRC-16", LE).ok_or_else(bad)?;
-        r.with(|n| n.value(hex(u16_le(&header, 21).unwrap_or(0), 64)));
+        let crc = r.u16("CRC-16", LE).ok_or_else(bad)?;
+        r.with(|n| n.checksum(data_check(&method, crc)));
         os_id(&mut r).ok_or_else(bad)?;
         r.u16("Next header size", LE).ok_or_else(bad)?;
         let mut pos = r.at;
@@ -442,21 +455,12 @@ async fn member(cx: Cx, (input, span, level): (Input, Span, u8)) -> Result<()> {
             .unwrap_or_default()
             .iter()
             .fold(0u8, |a, &b| a.wrapping_add(b));
-        r.with(|n| {
-            let n = n.value(hex(sum, 64));
-            if computed == sum {
-                n.summary("valid")
-            } else {
-                n.diag(Diagnostic::warning(format!(
-                    "checksum mismatch: computed {computed:#04x}"
-                )))
-            }
-        });
+        r.with(|n| n.checksum(Check::new("8-bit sum", sum).verify(computed)));
         let (method, compressed) = common_fields(&mut r, level).ok_or_else(bad)?;
         let name_len = r.u8("Name length").ok_or_else(bad)?;
         r.text("Name", name_len.into()).ok_or_else(bad)?;
         let crc = r.u16("CRC-16", LE).ok_or_else(bad)?;
-        r.with(|n| n.value(hex(crc, 64)));
+        r.with(|n| n.checksum(data_check(&method, crc)));
         if level == 1 {
             os_id(&mut r).ok_or_else(bad)?;
             r.u16("Next header size", LE).ok_or_else(bad)?;

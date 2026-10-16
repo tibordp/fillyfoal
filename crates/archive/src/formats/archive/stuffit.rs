@@ -39,7 +39,7 @@ use crate::formats::{Format, Head, Input, Probe, content, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, Value};
+use crate::value::{Check, EnumTable, Value};
 
 const BE: Endian = Endian::Big;
 const ENTRY: u64 = 112;
@@ -175,8 +175,12 @@ struct Classic {
     data_packed: u32,
     rsrc_crc: u16,
     data_crc: u16,
-    crc_ok: bool,
+    /// The header CRC, checked.
+    crc: Check,
 }
+
+/// StuffIt's CRC-16 (the ARC polynomial).
+const SIT_CRC: &str = "CRC-16/ARC";
 
 fn classic(b: &[u8]) -> Option<Classic> {
     let name_len = usize::from(*b.get(2)?).min(63);
@@ -191,7 +195,7 @@ fn classic(b: &[u8]) -> Option<Classic> {
         data_packed: u32_be(b, 96)?,
         rsrc_crc: u16_be(b, 100)?,
         data_crc: u16_be(b, 102)?,
-        crc_ok: crc16_arc(b.get(..110)?) == stored,
+        crc: Check::new(SIT_CRC, stored).verify(crc16_arc(b.get(..110)?)),
     })
 }
 
@@ -263,9 +267,7 @@ pub async fn dissect_classic(cx: Cx, input: Input) -> Result<()> {
         if !summary.is_empty() {
             node = node.summary(summary);
         }
-        if !e.crc_ok {
-            node = node.diag(Diagnostic::warning("header CRC mismatch"));
-        }
+        node = node.check_diag(&e.crc);
         cx.progress_in(file, span.end());
         cx.push(node).await;
         at = at.saturating_add(span.len);
@@ -323,19 +325,12 @@ async fn classic_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     r.u32("Data fork compressed length", BE).ok_or_else(bad)?;
     for name in ["Resource fork CRC-16", "Data fork CRC-16"] {
         let c = r.u16(name, BE).ok_or_else(bad)?;
-        r.with(|n| n.value(hex(c, 64)));
+        r.with(|n| n.checksum(Check::new(SIT_CRC, c).on_decode()));
     }
     r.bytes("Reserved", 6).ok_or_else(bad)?;
-    let stored = r.u16("Header CRC", BE).ok_or_else(bad)?;
-    let ok = e.crc_ok;
-    r.with(|n| {
-        let n = n.value(hex(stored, 64));
-        if ok {
-            n.summary("valid")
-        } else {
-            n.diag(Diagnostic::warning("header CRC mismatch"))
-        }
-    });
+    r.u16("Header CRC", BE).ok_or_else(bad)?;
+    let check = e.crc.clone();
+    r.with(|n| n.checksum(check));
     cx.emit(
         Node::new("Entry header")
             .span(header_span)
@@ -632,15 +627,17 @@ async fn sit5_entry(cx: Cx, (input, e): (Input, Arc<Sit5Entry>)) -> Result<()> {
     if let Some(f) = zeroed.get_mut(32..34) {
         f.fill(0);
     }
-    let matches = crc16_arc(&zeroed) == crc;
-    r.with(|n| {
-        let n = n.value(hex(crc, 64));
-        if matches { n.summary("valid") } else { n }
-    });
+    let check = Check::new(SIT_CRC, crc);
+    let check = if crc16_arc(&zeroed) == crc {
+        check.verified(true)
+    } else {
+        check
+    };
+    r.with(|n| n.checksum(check));
     r.u32("Data length", BE).ok_or_else(bad)?;
     r.u32("Data compressed length", BE).ok_or_else(bad)?;
     let dcrc = r.u16("Data CRC-16", BE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(dcrc, 64)));
+    r.with(|n| n.checksum(Check::new(SIT_CRC, dcrc).on_decode()));
     r.u16("Unknown", BE).ok_or_else(bad)?;
     if e.directory() {
         r.u16("Number of entries", BE).ok_or_else(bad)?;
@@ -682,7 +679,7 @@ async fn sit5_entry(cx: Cx, (input, e): (Input, Arc<Sit5Entry>)) -> Result<()> {
         r.u32("Resource fork compressed length", BE)
             .ok_or_else(bad)?;
         let c = r.u16("Resource fork CRC-16", BE).ok_or_else(bad)?;
-        r.with(|n| n.value(hex(c, 64)));
+        r.with(|n| n.checksum(Check::new(SIT_CRC, c).on_decode()));
         r.u16("Unknown", BE).ok_or_else(bad)?;
         let m = r.u8("Resource fork method").ok_or_else(bad)?;
         r.with(|n| n.summary(method_name(m)));

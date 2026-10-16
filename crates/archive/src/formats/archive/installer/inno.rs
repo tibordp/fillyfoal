@@ -59,7 +59,7 @@ use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Input, Probe, dissect_or_data};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag, lookup};
 
 use super::filetime;
 use crate::formats::util::fmt::size;
@@ -192,12 +192,12 @@ async fn block(cx: &Cx, data: Span, at: u64, ver: Version) -> Result<BlockInfo> 
     let compressed = head.get(flag_at).copied().unwrap_or(0) != 0;
     let region = data.sub(at.saturating_add(hl), stored);
     let span = data.sub(at, stored.saturating_add(hl));
-    let mut problem = None;
-    if crc32(head.get(4..crate::bytes::to_usize(hl)).unwrap_or_default())
-        != u32_le(&head, 0).unwrap_or(0)
-    {
-        problem = Some(Diagnostic::warning("block header CRC mismatch"));
-    }
+    let mut problem = Check::new("CRC-32", u32_le(&head, 0).unwrap_or(0))
+        .verify(crc32(
+            head.get(4..crate::bytes::to_usize(hl)).unwrap_or_default(),
+        ))
+        .mismatch_text()
+        .map(Diagnostic::warning);
     // The payload without the chunk CRCs.
     let mut pieces = Vec::new();
     let mut pos = 0u64;
@@ -1386,12 +1386,8 @@ fn table_fields(f: &mut Fields<'_>, kind: &TableKind) -> Result<()> {
             .emit()?;
     }
     f.u32("Table CRC-32")
-        .hex()
-        .with(|_, n| match crc_ok {
-            Some(true) => n.summary("valid"),
-            Some(false) => n.diag(Diagnostic::warning("CRC mismatch")),
-            None => n,
-        })
+        .checksum("CRC-32")
+        .with_check(|c| verdict(c, crc_ok))
         .emit()?;
     Ok(())
 }
@@ -1593,13 +1589,9 @@ async fn encryption_header(cx: Cx, span: Span) -> Result<()> {
         .map(|b| crc32(b) == u32_le(&data, 0).unwrap_or(0));
     cx.emit(struct_node("Fields", span, LE, ok, |f, ok| {
         f.u32("CRC-32")
-            .hex()
+            .checksum("CRC-32")
+            .with_check(|c| verdict(c, *ok))
             .desc("Of the next 49 bytes")
-            .with(|_, n| match ok {
-                Some(true) => n.summary("valid"),
-                Some(false) => n.diag(Diagnostic::warning("CRC mismatch")),
-                None => n,
-            })
             .emit()?;
         f.u8("EncryptionUse")
             .enumeration(&[(0, "none"), (1, "files"), (2, "full")])
@@ -1664,6 +1656,14 @@ async fn raw_data(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
+/// A check's verdict from a comparison made beforehand (`None`: not made).
+fn verdict(check: Check, ok: Option<bool>) -> Check {
+    match ok {
+        Some(ok) => check.verified(ok),
+        None => check,
+    }
+}
+
 /// The 4 KiB chunks of a compressed block, with their CRCs checked.
 async fn block_chunks(cx: Cx, region: Span) -> Result<()> {
     let mut pos = cx.resume::<u64>().unwrap_or(0);
@@ -1674,14 +1674,10 @@ async fn block_chunks(cx: Cx, region: Span) -> Result<()> {
         let body = region.sub(pos.saturating_add(4), CHUNK);
         let bytes = cx.read_avail(body).await?;
         let stored = u32_le(&crc, 0).unwrap_or(0);
-        let mut node = Node::new(format!("Chunk at {pos:#x}"))
+        let node = Node::new(format!("Chunk at {pos:#x}"))
             .span(region.sub(pos, body.len.saturating_add(4)))
-            .value(hex(stored, 64));
-        node = if crc32(&bytes) == stored {
-            node.summary(format!("{}, CRC valid", size(body.len)))
-        } else {
-            node.diag(Diagnostic::warning("chunk CRC mismatch"))
-        };
+            .checksum(Check::new("CRC-32", stored).verify(crc32(&bytes)))
+            .summary(size(body.len));
         cx.push(node).await;
         pos = pos.saturating_add(4).saturating_add(CHUNK);
     }
@@ -2256,15 +2252,11 @@ async fn chunk_part(
                     .to_vec(),
             )
         };
-        if computed == hash {
-            cx.emit(
-                Node::new(format!("{name} check"))
-                    .span(file)
-                    .summary("valid"),
-            );
-        } else {
-            cx.diag(Diagnostic::warning(format!("{name} mismatch")));
-        }
+        cx.emit(
+            Node::new(format!("{name} check"))
+                .span(file)
+                .checksum(Check::new(name, hash).verify(computed)),
+        );
     }
     dissect_or_data(cx, input.nested(file)).await
 }

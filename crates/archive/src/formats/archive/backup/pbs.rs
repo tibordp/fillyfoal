@@ -24,12 +24,12 @@ use crate::bytes::{to_u64, u32_le};
 use crate::codec::crc::crc32_update;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::util::fmt::{hex_lower, size};
-use crate::formats::util::val::{hex, text};
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::text;
 use crate::formats::{Codec, Format, Input, Probe, content, embedded};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::Value;
+use crate::value::{Check, Value};
 
 const UNCOMPRESSED: [u8; 8] = [66, 171, 56, 7, 190, 131, 112, 161];
 const COMPRESSED: [u8; 8] = [49, 185, 88, 66, 111, 182, 163, 127];
@@ -70,16 +70,6 @@ async fn crc_of(cx: &Cx, span: Span) -> Result<u32> {
     Ok(!crc)
 }
 
-fn check(node: Node, stored: u32, computed: u32) -> Node {
-    if stored == computed {
-        node.summary("valid")
-    } else {
-        node.diag(Diagnostic::malformed(format!(
-            "CRC mismatch: computed {computed:#010x}"
-        )))
-    }
-}
-
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 12)).await?;
@@ -105,12 +95,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let crc_span = file.sub(8, 4);
     let crc = Node::new("CRC32")
         .span(crc_span)
-        .value(hex(stored, 32))
         .desc("CRC-32 of everything after the header");
+    let check = Check::new("CRC-32", stored);
     cx.emit(if data.len <= EAGER_CRC {
-        check(crc, stored, crc_of(&cx, data).await?)
+        crc.checksum(check.verify(crc_of(&cx, data).await?))
     } else {
-        crc.lazy(crc_expand, (data, stored))
+        crc.checksum(check.skipped("large: checked when expanded"))
+            .lazy(crc_expand, (data, stored))
     });
     if data.len > MAX_BLOB {
         cx.diag(Diagnostic::warning(format!(
@@ -124,16 +115,21 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     ));
     if encrypted {
         let iv_tag = cx.read(file.sub(12, 32)).await?;
-        let hex16 = |at: usize| {
-            Value::Text(hex_lower(
-                iv_tag.get(at..at.saturating_add(16)).unwrap_or_default(),
-            ))
+        let part = |at: usize| {
+            iv_tag
+                .get(at..at.saturating_add(16))
+                .unwrap_or_default()
+                .to_vec()
         };
-        cx.emit(Node::new("IV").span(file.sub(12, 16)).value(hex16(0)));
+        cx.emit(
+            Node::new("IV")
+                .span(file.sub(12, 16))
+                .value(Value::Bytes(part(0))),
+        );
         cx.emit(
             Node::new("Tag")
                 .span(file.sub(28, 16))
-                .value(hex16(16))
+                .checksum(Check::new("AES-256-GCM tag", part(16)).skipped("needs the key"))
                 .desc("AES-256-GCM authentication tag"),
         );
         cx.emit(
@@ -154,10 +150,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
 async fn crc_expand(cx: Cx, (data, stored): (Span, u32)) -> Result<()> {
     let computed = crc_of(&cx, data).await?;
-    cx.emit(check(
-        Node::new("Computed").span(data).value(hex(computed, 32)),
-        stored,
-        computed,
-    ));
+    cx.emit(
+        Node::new("Checked")
+            .span(data)
+            .checksum(Check::new("CRC-32", stored).verify(computed)),
+    );
     Ok(())
 }

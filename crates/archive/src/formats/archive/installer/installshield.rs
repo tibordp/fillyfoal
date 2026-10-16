@@ -39,7 +39,7 @@ use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Input, Probe, dissect_or_data};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::value::{FlagTable, Value, flag};
+use crate::value::{Check, FlagTable, flag};
 
 use crate::formats::util::fmt::size;
 
@@ -666,7 +666,7 @@ fn descriptor_fields(cab: &Cab, f: &IsFile) -> Vec<Node> {
                 .value(hex(f.data, 64)),
             Node::new("MD5")
                 .span(s.sub(0x2a, 16))
-                .value(Value::Bytes(f.md5.clone())),
+                .checksum(Check::new("MD5", f.md5.clone()).on_decode()),
         ]
     } else {
         vec![
@@ -680,7 +680,7 @@ fn descriptor_fields(cab: &Cab, f: &IsFile) -> Vec<Node> {
                 .value(hex(f.data, 64)),
             Node::new("MD5")
                 .span(s.sub(26, 16))
-                .value(Value::Bytes(f.md5.clone())),
+                .checksum(Check::new("MD5", f.md5.clone()).on_decode()),
             Node::new("Unknown").span(s.sub(42, 16)),
             Node::new("Name offset")
                 .span(s.sub(58, 4))
@@ -814,11 +814,12 @@ async fn file_content(
     if out.len <= 16 << 20 && md5.iter().any(|&b| b != 0) {
         use crate::codec::crypto::hash::Md5;
         let bytes = read_all(&cx, out).await?;
-        if crate::formats::util::datakit::digest_paced::<Md5>(&cx, &bytes).await == md5 {
-            cx.emit(Node::new("MD5 check").span(out).summary("valid"));
-        } else {
-            cx.diag(Diagnostic::warning("MD5 mismatch"));
-        }
+        let computed = crate::formats::util::datakit::digest_paced::<Md5>(&cx, &bytes).await;
+        cx.emit(
+            Node::new("MD5 check")
+                .span(out)
+                .checksum(Check::new("MD5", md5).verify(computed)),
+        );
     }
     dissect_or_data(cx, input.nested(out)).await
 }

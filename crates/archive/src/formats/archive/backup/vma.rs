@@ -48,6 +48,7 @@ use crate::formats::{Format, Head, Input, Probe, content, dissect_or_data};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
+use crate::value::Check;
 
 const BE: Endian = Endian::Big;
 const CLUSTER: u64 = 65536;
@@ -77,7 +78,7 @@ record! {
         version: u32 "Version",
         uuid: bytes[16] "UUID" .with(crate::formats::disk::uuid_value),
         ctime: u64 "Backup time" .timestamp(),
-        md5: bytes[16] "MD5",
+        md5: bytes[16] "MD5" .checksum("MD5"),
         blob_offset: u32 "Blob buffer offset" .hex(),
         blob_size: u32 "Blob buffer size",
         header_size: u32 "Header size",
@@ -90,7 +91,7 @@ record! {
         _reserved: u16 "Reserved",
         blocks: u16 "Block count" .desc("Number of 4 KiB blocks following the header"),
         uuid: bytes[16] "UUID" .with(crate::formats::disk::uuid_value),
-        md5: bytes[16] "MD5",
+        md5: bytes[16] "MD5" .checksum("MD5"),
     }
 }
 
@@ -130,21 +131,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         );
     }
     let header = file.sub_exact(0, header_size.max(FIXED))?;
-    let mut hnode = Header::node("Header", hspan, BE);
-    if h.version != 1 {
-        hnode = hnode.diag(Diagnostic::unsupported(format!("version {}", h.version)));
-    }
     // The MD5 covers the whole header with its own field zeroed.
     let mut raw = cx.read(header).await?;
     if let Some(field) = raw.get_mut(32..48) {
         field.fill(0);
     }
-    let md5 = digest_paced::<Md5>(&cx, &raw).await;
-    hnode = if md5 == h.md5 {
-        hnode.summary("MD5 valid")
-    } else {
-        hnode.diag(Diagnostic::malformed("header MD5 mismatch"))
-    };
+    let check = Check::new("MD5", h.md5.clone()).verify(digest_paced::<Md5>(&cx, &raw).await);
+    let mut hnode = Header::checked_node("Header", hspan, BE, check.at(32)).check_diag(&check);
+    if h.version != 1 {
+        hnode = hnode.diag(Diagnostic::unsupported(format!("version {}", h.version)));
+    }
     cx.emit(hnode);
     let archive = Arc::new(Archive {
         input,
@@ -575,14 +571,11 @@ async fn extent(cx: Cx, (_input, span): (Input, Span)) -> Result<()> {
     if let Some(field) = raw.get_mut(24..40) {
         field.fill(0);
     }
-    let md5 = digest_paced::<Md5>(&cx, &raw).await;
-    let mut node = ExtentHeader::node("Header", span.sub(0, ExtentHeader::SIZE), BE);
-    node = if md5 == h.md5 {
-        node.summary("MD5 valid")
-    } else {
-        node.diag(Diagnostic::malformed("extent header MD5 mismatch"))
-    };
-    cx.emit(node);
+    let check = Check::new("MD5", h.md5.clone()).verify(digest_paced::<Md5>(&cx, &raw).await);
+    cx.emit(
+        ExtentHeader::checked_node("Header", span.sub(0, ExtentHeader::SIZE), BE, check.at(24))
+            .check_diag(&check),
+    );
     cx.set_count(Count::AtLeast(1));
     let mut data = span.offset.saturating_add(EXTENT_HEADER);
     for k in 0..BLOCK_INFOS {
