@@ -1604,6 +1604,7 @@ equal to the faked creation time.
 | `fsarchiver/split.fsa.raw.zst` | fsarchiver 0.8.8 | `sh tests/data/fsarchiver/make-more.sh` (privileged, `inner-more.sh`): `fsarchiver savedir -z 1 -s 1 split.fsa tree` under `faketime -f '2024-01-01 00:00:00'`, a 1.1 MB file (a 49,153-byte perl `srand(1)` run repeated, which LZO cannot shorten) whose blocks straddle the two 1 MiB volumes, and a 10-byte file: the first volume, stored with `zstd -19` |
 | `fsarchiver/split.f01.raw.zst` | fsarchiver 0.8.8 | the second, last volume of the same archive, stored with `zstd -19` |
 | `fsarchiver/two.fsa` | fsarchiver 0.8.8 | `make-more.sh` as above: `fsarchiver savefs -Z 3 two.fsa /dev/loopA /dev/loopB` of an empty 16 MiB ext4 (`mkfs.ext4 -b 4096 -I 256`) and an empty 8 MiB ext2 (`mkfs.ext2 -b 1024 -I 128`), e2fsprogs 1.47.2-3+b12, fixed UUIDs |
+| `fsarchiver/specials.fsa` | fsarchiver 0.8.8, e2fsprogs 1.47.2-3+b12, attr 2.5.2-3, acl 2.3.2-2+b1 | `sh tests/data/fsarchiver/make-specials.sh` (privileged, `inner-specials.sh`): `fsarchiver savefs -Z 3 specials.fsa /dev/loopN` of a 16 MiB ext4 (`mkfs.ext4 -b 1024 -N 64 -I 256`, fixed UUID) holding a file with two `user.` extended attributes (`setfattr`), one with a POSIX ACL (`setfacl -m u:1000:r,g:100:rw`), a hard link, a character device (1:3), a block device (7:0), a FIFO and a socket; under `faketime -f '2024-01-01 00:00:00'`. Not byte-for-byte reproducible (archive id, mount point name from the real clock) |
 
 ## zlib streams (zlib)
 

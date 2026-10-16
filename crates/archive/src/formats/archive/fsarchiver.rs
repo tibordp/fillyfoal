@@ -35,17 +35,31 @@
 //! supported (its blocks are listed, not decoded), nor is the MD5 of file
 //! contents checked.
 //!
+//! The listing groups the data by section: one node per filesystem
+//! (its `FsIn`, then `FsYs` … `DaEn`), or one for the directories of a
+//! `savedir` archive (`DiRs`, then the objects … `DaEn`), between the
+//! volume and archive headers and the volume footer (found at the end).
+//! Nothing records where a section starts, so the top level does not walk
+//! the data: a section after the first finds its start by walking the
+//! headers of the ones before it (skipping block data), once. Extended
+//! attributes (section 1 items, a name under an even key and its value
+//! under the next) are shown in pairs, POSIX ACLs as `getfacl` text.
+//!
 //! A split archive (`-s`) is several files, `.fsa`, `.f01`, ..., each
 //! starting with a volume header and ending with a volume footer that says
 //! whether it is the last. A large file's blocks may go on into the next
 //! volume: its node says so, and the blocks and footer at the start of the
 //! next volume are labelled as the continuation. Volumes are dissected one
-//! at a time; nothing joins them.
+//! at a time; nothing joins them. A volume after the first (which has no
+//! archive header saying what its sections are) is walked to list its
+//! sections.
 //!
 //! Written from archives made by fsarchiver 0.8.8 (`savedir` with every
 //! compression algorithm and with encryption, and `savefs` of an ext2
-//! filesystem, a split archive, and `savefs` of an ext4 and an ext2
-//! filesystem whose descriptions were checked against `dumpe2fs`;
+//! filesystem, a split archive, `savefs` of an ext4 and an ext2
+//! filesystem whose descriptions were checked against `dumpe2fs`, and
+//! `savefs` of an ext4 holding extended attributes, an ACL, a hard link,
+//! devices, a FIFO and a socket;
 //! fixtures in `tests/fixtures/external/fsarchiver/`): the
 //! header magics, the dictionary encoding and the Fletcher-32 checksums
 //! were worked out from those archives, the meaning of the keys from what
@@ -95,7 +109,8 @@ const MAGICS: &[(&[u8; 4], &str)] = &[
     (b"DaEn", "Data end"),
 ];
 
-const ARCHIVE_TYPES: EnumTable = &[(1, "savefs (filesystems)"), (2, "savedir (directories)")];
+/// What wrote the archive: `savefs` (filesystems) or `savedir` (directories).
+const ARCHIVE_TYPES: EnumTable = &[(1, "savefs"), (2, "savedir")];
 const COMPRESSION: EnumTable = &[
     (1, "none"),
     (2, "lzo"),
@@ -128,6 +143,8 @@ enum Show {
     Size,
     /// fsarchiver's packed version: four 16-bit parts, major first.
     Version,
+    /// A `dev_t` as glibc encodes it.
+    Device,
     Enum(EnumTable),
     Flags(FlagTable),
 }
@@ -156,6 +173,9 @@ fn key_name(magic: &[u8; 4], key: u16) -> Option<(&'static str, Show)> {
         (b"ArCh", 13) => ("fsarchiver level (-z / -Z)", Plain),
         (b"ArCh", 14) => ("Minimum fsarchiver version", Version),
         (b"ArCh", 15) => ("Has directories info", Plain),
+        // Content bytes plus 16 KiB per object (checked on the savedir
+        // fixtures): what fsarchiver shows progress against.
+        (b"DiRs", 1) => ("Total cost", Plain),
         (b"FsIn", 1) => ("Filesystem", Plain),
         (b"FsIn", 2) => ("Mount point", Plain),
         (b"FsIn", 3) => ("Total bytes", Size),
@@ -176,7 +196,7 @@ fn key_name(magic: &[u8; 4], key: u16) -> Option<(&'static str, Show)> {
         (b"ObJt", 3) => ("Object type", Enum(OBJECT_TYPES)),
         (b"ObJt", 4) => ("Link target", Plain),
         (b"ObJt", 5) => ("Hard link target", Plain),
-        (b"ObJt", 6) => ("Device number", Hex),
+        (b"ObJt", 6) => ("Device number", Device),
         (b"ObJt", 7) => ("Mode", Mode),
         (b"ObJt", 8) => ("Size", Size),
         (b"ObJt", 9) => ("User id", Plain),
@@ -503,8 +523,7 @@ async fn find_shared(cx: &Cx, region: Span, mut pos: u64) -> Lookahead {
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let region = input.span;
     // The volume and archive headers, for the summary.
-    if cx.resume::<(u64, u64, bool)>().is_none()
-        && let Some(volume) = read_header(&cx, region, 0).await?
+    if let Some(volume) = read_header(&cx, region, 0).await?
         && volume.magic == *b"FsA0"
     {
         match read_header(&cx, region, volume.span.len).await? {
@@ -537,37 +556,299 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             )),
         }
     }
-    // Position, index, and whether blocks and a footer here continue a
-    // file from the previous volume (before the first object of a volume
-    // after the first).
-    let (mut pos, mut index, mut continued) =
-        cx.resume::<(u64, u64, bool)>().unwrap_or((0, 0, false));
-    let mut shared: Option<Lookahead> = None;
+    // The headers before the data: volume and archive headers (listed
+    // here), filesystem and directories descriptions (listed first in the
+    // sections they describe).
+    let mut pos = 0u64;
+    let mut infos = Vec::new();
+    let mut dirs = None;
+    let mut continued = false;
+    loop {
+        let header = match read_header(&cx, region, pos).await {
+            Ok(Some(h)) => h,
+            Ok(None) => break,
+            Err(e) => {
+                cx.push(unparsed(region.tail(pos), e)).await;
+                return Ok(());
+            }
+        };
+        let end = header.span.end().saturating_sub(region.offset);
+        match &header.magic {
+            b"FsA0" => {
+                continued = header.uint(0).is_some_and(|v| v > 0);
+                cx.push(header_node(header)).await;
+            }
+            b"ArCh" => cx.push(header_node(header)).await,
+            b"FsIn" => infos.push(header),
+            b"DiRs" => dirs = Some(header),
+            _ => break,
+        }
+        pos = end;
+    }
+    let footer = if continued || (infos.is_empty() && dirs.is_none()) {
+        None
+    } else {
+        find_footer(&cx, region, pos).await
+    };
+    let Some(footer) = footer else {
+        // A volume that continues the previous one, or one that does not
+        // end with its footer: its sections are found by walking it.
+        for info in infos.into_iter().chain(dirs) {
+            cx.push(header_node(info)).await;
+        }
+        return walk_sections(&cx, input, pos, continued).await;
+    };
+    let archive = Arc::new(Archive {
+        input,
+        first: pos,
+        end: footer.span.offset.saturating_sub(region.offset),
+    });
+    if infos.is_empty() {
+        cx.push(Node::new("Directories").lazy(section, Section::planned(&archive, 0, dirs)))
+            .await;
+    } else {
+        for (i, info) in infos.into_iter().enumerate() {
+            let i = crate::bytes::to_u64(i);
+            cx.push(
+                Node::new(format!("Filesystem {i}"))
+                    .summary(fs_summary(&info))
+                    .lazy(section, Section::planned(&archive, i, Some(info))),
+            )
+            .await;
+        }
+    }
+    cx.push(header_node(footer)).await;
+    Ok(())
+}
+
+/// A filesystem's description, short.
+fn fs_summary(info: &Header) -> String {
+    let mut s = info.string(1).unwrap_or_else(|| "filesystem".into());
+    if let Some(label) = info.string(5).filter(|l| !l.is_empty() && l != "<none>") {
+        s.push_str(&format!(", label {label:?}"));
+    }
+    if let (Some(used), Some(total)) = (info.uint(4), info.uint(3)) {
+        s.push_str(&format!(", {} used of {}", size(used), size(total)));
+    }
+    s
+}
+
+fn unparsed(span: Span, e: Diagnostic) -> Node {
+    Node::new("Unparsed data")
+        .span(span)
+        .summary(size(span.len))
+        .diag(e)
+}
+
+/// The volume footer, which ends a well-formed volume: looked for in the
+/// last bytes (its dictionary's size varies), and taken only if it ends
+/// exactly at the end and its checksum holds. `None` if it is not there,
+/// or if reading the end would decode far into content.
+async fn find_footer(cx: &Cx, region: Span, from: u64) -> Option<Header> {
+    const LOOK: u64 = 512;
+    let n = LOOK.min(region.len.saturating_sub(from));
+    let start = region.len.saturating_sub(n);
+    let tail = region.sub(start, n);
+    if !cx.read_is_cheap(tail) {
+        return None;
+    }
+    let raw = cx.read(tail).await.ok()?;
+    let hits: Vec<u64> = raw
+        .windows(4)
+        .enumerate()
+        .rev()
+        .filter(|(_, w)| *w == b"FsAE")
+        .map(|(i, _)| start.saturating_add(crate::bytes::to_u64(i)))
+        .collect();
+    for at in hits {
+        if let Ok(Some(h)) = read_header(cx, region, at).await
+            && h.span.end().saturating_sub(region.offset) == region.len
+            && h.computed == h.checksum
+        {
+            return Some(h);
+        }
+    }
+    None
+}
+
+/// What the sections of a volume share.
+#[derive(Debug)]
+struct Archive {
+    input: Input,
+    /// Where the first section starts (relative to the input).
+    first: u64,
+    /// Where the sections end (the volume footer).
+    end: u64,
+}
+
+/// One filesystem's data (`FsYs` … `DaEn`), or the directories' (a
+/// `savedir` archive's objects … `DaEn`).
+#[derive(Clone, Debug)]
+struct Section {
+    archive: Arc<Archive>,
+    /// Which section of the volume: its start is found by walking the
+    /// ones before it, once.
+    ordinal: u64,
+    /// The filesystem or directories description, listed first.
+    info: Option<Header>,
+    /// Whether it starts with the blocks and footer of a file from the
+    /// previous volume.
+    continued: bool,
+}
+
+impl Section {
+    fn planned(archive: &Arc<Archive>, ordinal: u64, info: Option<Header>) -> Self {
+        Section {
+            archive: archive.clone(),
+            ordinal,
+            info,
+            continued: false,
+        }
+    }
+}
+
+/// Where section `ordinal` starts: the end of the one before it, walked
+/// once and cached.
+async fn section_start(cx: &Cx, archive: &Archive, ordinal: u64) -> u64 {
+    const KIND: &str = "fsarchiver-section-end";
+    let region = archive.input.span;
+    let mut start = archive.first;
+    for _ in 0..ordinal {
+        let key = region.sub(start, 0);
+        start = match cx.cached::<u64>(key, KIND) {
+            Some(end) => *end,
+            None => {
+                let end = section_end(cx, region, start).await;
+                cx.cache(key, KIND, Arc::new(end));
+                end
+            }
+        };
+    }
+    start
+}
+
+/// Walks the headers of the section starting at `start` (skipping block
+/// data) to where it ends: after its `DaEn`, before a volume footer or the
+/// next filesystem's start, or where the headers stop making sense.
+async fn section_end(cx: &Cx, region: Span, start: u64) -> u64 {
+    let mut pos = start;
+    loop {
+        cx.progress_in(region, pos);
+        let h = match read_header(cx, region, pos).await {
+            Ok(Some(h)) => h,
+            Ok(None) | Err(_) => return pos,
+        };
+        let end = h.span.end().saturating_sub(region.offset);
+        match &h.magic {
+            b"FsAE" => return pos,
+            b"FsYs" if pos != start => return pos,
+            b"DaEn" => return end,
+            b"BlKh" => match block_at(region, h) {
+                Ok(b) => pos = b.data.end().saturating_sub(region.offset),
+                Err(_) => return pos,
+            },
+            _ => pos = end,
+        }
+    }
+}
+
+/// A volume whose sections are not known from its first headers (one
+/// continuing the previous volume): lists each section, found by walking
+/// it, and the headers between them.
+async fn walk_sections(cx: &Cx, input: Input, mut pos: u64, mut continued: bool) -> Result<()> {
+    let region = input.span;
     while pos < region.len {
+        let header = match read_header(cx, region, pos).await {
+            Ok(Some(h)) => h,
+            Ok(None) => break,
+            Err(e) => {
+                cx.push(unparsed(region.tail(pos), e)).await;
+                break;
+            }
+        };
+        let end = header.span.end().saturating_sub(region.offset);
+        if matches!(
+            &header.magic,
+            b"FsA0" | b"FsAE" | b"ArCh" | b"FsIn" | b"DiRs"
+        ) {
+            cx.push(header_node(header)).await;
+            pos = end;
+            continue;
+        }
+        let end = section_end(cx, region, pos).await.max(end);
+        let (name, summary) = match (&header.magic, header.fs) {
+            (b"FsYs", fs) => (format!("Filesystem {fs}"), None),
+            (_, 0xffff) => ("Data".to_string(), None),
+            (_, fs) if continued => (
+                "Continued data".to_string(),
+                Some(format!("filesystem index {fs}, from the previous volume")),
+            ),
+            (_, fs) => ("Data".to_string(), Some(format!("filesystem index {fs}"))),
+        };
+        let mut node = Node::new(name).span(region.sub(pos, end.saturating_sub(pos)));
+        if let Some(summary) = summary {
+            node = node.summary(summary);
+        }
+        let archive = Arc::new(Archive {
+            input,
+            first: pos,
+            end,
+        });
+        cx.push(node.lazy(
+            section,
+            Section {
+                archive,
+                ordinal: 0,
+                info: None,
+                continued,
+            },
+        ))
+        .await;
+        continued = false;
+        pos = end;
+    }
+    Ok(())
+}
+
+/// A section's headers: its description, then everything from its start
+/// to its end (paged, with resume marks).
+async fn section(cx: Cx, s: Section) -> Result<()> {
+    let input = s.archive.input;
+    let region = input.span;
+    let resumed = cx.resume::<(u64, u64, bool)>();
+    let (mut pos, mut index, mut continued) = match resumed {
+        Some(at) => at,
+        None => {
+            let start = section_start(&cx, &s.archive, s.ordinal).await;
+            if let Some(info) = &s.info {
+                cx.push(header_node(info.clone())).await;
+            }
+            (start, 0, s.continued)
+        }
+    };
+    let mut shared: Option<Lookahead> = None;
+    let end = s.archive.end.min(region.len);
+    while pos < end {
         let at = (pos, index, continued);
         cx.progress_in(region, pos);
         let header = match read_header(&cx, region, pos).await {
             Ok(Some(h)) => h,
             Ok(None) => break,
             Err(e) => {
-                let span = region.tail(pos);
                 cx.mark(move || at);
-                cx.push(
-                    Node::new("Unparsed data")
-                        .span(span)
-                        .summary(size(span.len))
-                        .diag(e),
-                )
-                .await;
+                cx.push(unparsed(region.sub(pos, end.saturating_sub(pos)), e))
+                    .await;
                 break;
             }
         };
         match &header.magic {
-            b"FsA0" => continued = header.uint(0).is_some_and(|v| v > 0),
+            b"FsAE" => break,
+            b"FsYs" if index > 0 => break,
             b"BlKh" | b"FiLf" => {}
             _ => continued = false,
         }
-        let (node, end) = match &header.magic {
+        let last = header.magic == *b"DaEn";
+        let (node, next) = match &header.magic {
             b"BlKh" => {
                 let block = match block_at(region, header.clone()) {
                     Ok(b) => b,
@@ -577,23 +858,23 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                         break;
                     }
                 };
-                let end = block.data.end().saturating_sub(region.offset);
+                let next = block.data.end().saturating_sub(region.offset);
                 let whose = if continued {
                     "of a file continued from the previous volume"
                 } else {
                     "shared by small files"
                 };
                 let node = Node::new("Block")
-                    .span(region.sub(pos, end.saturating_sub(pos)))
+                    .span(region.sub(pos, next.saturating_sub(pos)))
                     .summary(format!("{} ({whose})", block.summary()))
                     .lazy(block_node, (input, block));
-                (node, end)
+                (node, next)
             }
             b"FiLf" if continued => {
-                let end = header.span.end().saturating_sub(region.offset);
+                let next = header.span.end().saturating_sub(region.offset);
                 let node =
                     header_node(header).summary("of a file continued from the previous volume");
-                (node, end)
+                (node, next)
             }
             b"ObJt" if header.uint(3) == Some(8) => file_node(&cx, input, header).await?,
             b"ObJt" if header.uint(3) == Some(9) => {
@@ -601,22 +882,25 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     Some(l) if pos < l.until => l,
                     _ => find_shared(&cx, region, pos).await,
                 };
-                let end = header.span.end().saturating_sub(region.offset);
+                let next = header.span.end().saturating_sub(region.offset);
                 let node = small_file_node(input, header, look.block.clone());
                 shared = Some(look);
-                (node, end)
+                (node, next)
             }
             _ => {
-                let end = header.span.end().saturating_sub(region.offset);
-                (header_node(header), end)
+                let next = header.span.end().saturating_sub(region.offset);
+                (header_node(header), next)
             }
         };
         cx.mark(move || at);
         cx.push(node).await;
         index = index.saturating_add(1);
-        pos = end.max(pos.saturating_add(1));
+        pos = next.max(pos.saturating_add(1));
+        if last {
+            break;
+        }
     }
-    cx.progress_in(region, region.len);
+    cx.progress_in(region, end);
     Ok(())
 }
 
@@ -693,11 +977,25 @@ fn object_summary(h: &Header) -> String {
         s.push_str(", ");
         s.push_str(&size(h.uint(8).unwrap_or(0)));
     }
-    if let Some(target) = h.string(4) {
+    if matches!(h.uint(3), Some(4 | 5))
+        && let Some(dev) = h.uint(6)
+    {
+        let (major, minor) = dev_parts(dev);
+        s.push_str(&format!(", {major}:{minor}"));
+    }
+    if let Some(target) = h.string(4).or_else(|| h.string(5)) {
         s.push_str(" → ");
         s.push_str(&target);
     }
     s
+}
+
+/// Major and minor numbers of a `dev_t` in glibc's encoding (12 + 20
+/// bits, split around the old 8 + 8; checked on the fixtures' 1:3 and 7:0).
+fn dev_parts(dev: u64) -> (u64, u64) {
+    let major = ((dev >> 8) & 0xfff) | ((dev >> 32) & !0xfff);
+    let minor = (dev & 0xff) | ((dev >> 12) & !0xff);
+    (major, minor)
 }
 
 /// The fields of a header: the fixed part, the dictionary, the checksum.
@@ -726,8 +1024,22 @@ async fn fields(cx: Cx, h: Header) -> Result<()> {
             .span(dico)
             .value(uint(s.len.saturating_sub(FIXED).saturating_sub(4), 32)),
     );
-    for item in &h.items {
-        cx.push(item_node(&h.magic, item)).await;
+    let mut items = h.items.iter().peekable();
+    while let Some(item) = items.next() {
+        // An extended attribute is two items of section 1: its name under
+        // an even key, its value under the next.
+        let value = items.next_if(|v| {
+            v.section == 1
+                && item.section == 1
+                && item.kind == 6
+                && item.key % 2 == 0
+                && Some(v.key) == item.key.checked_add(1)
+        });
+        let node = match value {
+            Some(v) => xattr_node(item, v),
+            None => item_node(&h.magic, item),
+        };
+        cx.push(node).await;
     }
     let ck = s.sub(s.len.saturating_sub(4), 4);
     let mut node = Node::new("Checksum")
@@ -775,12 +1087,46 @@ fn item_node(magic: &[u8; 4], item: &Item) -> Node {
                 (v >> 16) & 0xffff,
                 v & 0xffff
             )),
+            Show::Device => {
+                let (major, minor) = dev_parts(v);
+                node.value(hex(v, bits)).summary(format!("{major}:{minor}"))
+            }
             Show::Plain => node.value(uint(v, bits)),
         },
         (6, None) => node.value(text(item.string())),
         _ => node.value(Value::Bytes(item.data.clone())),
     };
     node
+}
+
+/// An extended attribute from its name and value items.
+fn xattr_node(name: &Item, value: &Item) -> Node {
+    let n = name.string();
+    let span = Span::new(
+        name.span.source,
+        name.span.offset,
+        value.span.end().saturating_sub(name.span.offset),
+    );
+    let mut node = Node::new(n.clone()).span(span);
+    let data = value.data.strip_suffix(&[0]).unwrap_or(&value.data);
+    if crate::formats::disk::acl::is_acl_name(n.as_bytes())
+        && let Some(acl) = crate::formats::disk::acl::xattr_v2(&value.data)
+    {
+        node = node
+            .value(Value::Bytes(value.data.clone()))
+            .summary(format!("POSIX ACL: {acl}"));
+    } else if let Ok(t) = std::str::from_utf8(data)
+        && !t.is_empty()
+        && crate::text::looks_like_text(data)
+    {
+        node = node.value(text(t));
+    } else {
+        node = node.value(Value::Bytes(value.data.clone()));
+    }
+    node.desc(format!(
+        "Extended attribute (items {} and {})",
+        name.key, value.key
+    ))
 }
 
 /// A small file: what its object says, and a slice of its shared block.
