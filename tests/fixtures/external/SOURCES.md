@@ -1451,6 +1451,9 @@ neutral files owned by root.
 | `pbs-blob/uncompressed-chunk.blob` | the same | the smallest uncompressed chunk (a catalog) |
 | `pbs-blob/encrypted-chunk.blob` | the same, `--keyfile` (a fresh key, `--kdf none`) | the smallest encrypted, uncompressed chunk |
 | `pbs-blob/encrypted-compressed-chunk.blob` | the same, `--keyfile` | the smallest encrypted, compressed chunk |
+| `pxar-meta/backup-1.mpxar` | Proxmox Backup Server via `proxmox-backup-client backup x.pxar:… --change-detection-mode=metadata` | `tests/data/pxar/make-split.sh` (runs `split-inner.sh` with a throwaway server): a directory of 100 files of 100 KB, a text file in a subdirectory and a file with `setcap cap_net_raw+ep`; the metadata stream of the first backup, the decoded chunks of `x.mpxar.didx` concatenated. Not reproducible byte for byte. Unchanged |
+| `pxar-meta/backup-2.mpxar` | the same | the second backup of the same directory, one file changed and one added: metadata stream |
+| `pxar-payload/backup-2.ppxar.raw.zst` | the same | the second backup's payload stream (11 MB, stored with `zstd -19 --long=27`): reuses chunks of the first, the first's start and tail markers included |
 ## Git commit-graph files
 
 Reproduced byte for byte by `sh tests/data/git-commit-graph/make.sh`
