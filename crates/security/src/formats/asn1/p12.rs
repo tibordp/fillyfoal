@@ -347,7 +347,7 @@ async fn contents(cx: Cx, input: Input) -> Result<()> {
         .as_ref()
         .map(|(text, null)| Password { text, null: *null });
     if mac.is_some() && pw.is_some() {
-        cx.annotate("MAC verified");
+        cx.annotate("MAC valid");
     }
 
     for ci in safes() {

@@ -342,6 +342,7 @@ async fn private_key(cx: Cx, p: Private) -> Result<()> {
     };
     let mac = p.mac.as_ref().and_then(|(hex, _)| unhex(hex));
     let mac_span = p.mac.as_ref().map(|(_, s)| *s);
+    let stored_mac = mac.clone();
     let encrypted = p.encryption != "none";
     let (plain, mac_ok, what) = match (p.version, encrypted) {
         (3, true) if p.encryption == "aes256-cbc" => {
@@ -458,19 +459,24 @@ async fn private_key(cx: Cx, p: Private) -> Result<()> {
         }
         _ => (blob, None, "unverified"),
     };
-    let mut node = Node::new("MAC check").summary(match mac_ok {
-        Some(true) => format!("{what}, verified"),
-        Some(false) => format!("{what}, mismatch"),
-        None => what.to_owned(),
-    });
+    let mut node = Node::new("MAC check");
     if let Some(s) = mac_span {
         node = node.span(s);
     }
-    if mac_ok == Some(false) {
-        node = node.diag(Diagnostic::malformed(
-            "the MAC does not match (corrupt or edited key file)",
-        ));
-    }
+    node = match stored_mac {
+        Some(m) => {
+            let check = crate::value::Check::new(what, m);
+            let check = match mac_ok {
+                Some(ok) => check.verified(ok),
+                None => check,
+            };
+            if check.is_mismatch() {
+                node = node.summary("a corrupt or edited key file");
+            }
+            node.checksum(check)
+        }
+        None => node.summary(what),
+    };
     cx.emit(node);
     let span = if encrypted {
         cx.add_derived(

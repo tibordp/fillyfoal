@@ -637,10 +637,16 @@ async fn decrypt(cx: Cx, e: Encrypted) -> Result<()> {
         return Ok(());
     };
     if cipher.tag > 0 {
+        // Decryption succeeded, so the tag checked out.
+        let stored = cx.read(tag).await?;
+        let algo = match cipher.mode {
+            Mode::ChaChaPoly => "Poly1305 tag",
+            _ => "GCM tag",
+        };
         cx.emit(
             Node::new("Authentication tag")
                 .span(tag)
-                .summary("verified")
+                .checksum(crate::value::Check::new(algo, stored).verified(true))
                 .desc(cipher_desc(cipher.mode)),
         );
     }
