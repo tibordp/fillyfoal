@@ -1373,3 +1373,25 @@ llvm-objcopy 19 in Docker `debian:trixie`; checked against
 | `btf/kinds-bpfel.btf` | clang 19.1.7 `-g -O2 -target bpfel` | the object's `.BTF` section, `llvm-objcopy --dump-section .BTF=...`; unchanged |
 | `btf/kinds-bpfeb.btf` | clang 19.1.7 `-g -O2 -target bpfeb` | the same for the big-endian target; unchanged |
 | `elf/bpf-btf.o` | clang 19.1.7 `-g -O2 -target bpfel -ffile-prefix-map=/src=.` | the little-endian object itself (`.BTF`, `.BTF.ext`, DWARF); unchanged |
+
+## trace-cmd: ftrace recordings on the Docker VM's kernel
+
+Recorded by `tests/data/tracecmd-dat/make.sh` (which runs `inside.sh`) with
+trace-cmd 3.3.1 (Debian trixie `trace-cmd 3.3.1-1+b1`, libtracecmd with zstd
+1.5.7) in a privileged container on the Docker Desktop VM's kernel (Linux
+7.0.14, aarch64, 18 CPUs), host name `fillyfoal`. Events are filtered to the
+traced task (`comm == "ffls"`: `ls /` run as `/tmp/a/ffls` then
+`/tmp/b/ffls`): `sched_process_exec`, `sched_process_exit`,
+`raw_syscalls:sys_enter`, `sys_exit`. For privacy `/proc/kallsyms` was
+bind-mounted over with six kernel text symbols and tracefs's
+`saved_cmdlines` with the traced task's own line (its PID there is the
+container's, not the kernel's, so trace-cmd shows the events' comm as
+`<...>`). Not reproducible byte for byte (timestamps, PIDs, trace ID, ASLR
+addresses in the syscall arguments). Checked against `trace-cmd report -t`
+and `trace-cmd dump --all`. The `UNAME` option names the VM kernel's release
+(`7.0.14-orbstack-...`).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `tracecmd-dat/v6.dat` | `trace-cmd record --file-version 6` | 319 events on CPUs 12 and 13; uncompressed; unchanged |
+| `tracecmd-dat/v7-zstd.dat` | `trace-cmd record --file-version 7 --compression zstd` | the same command recorded again: sections, zstd-compressed metadata and chunked CPU data (CPUs 6 and 13); unchanged |

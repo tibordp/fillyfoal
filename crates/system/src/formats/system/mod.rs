@@ -6,7 +6,8 @@
 //! databases (`shim_sdb`), .NET resources and BinaryFormatter streams
 //! (`dotnet`), developer artifacts (`devtools`, Delphi form
 //! streams in `delphi`), Git storage, OSTree objects and flatpak bundles
-//! (`ostree`) and Outlook PST/OST mail stores (`pst`).
+//! (`ostree`), Outlook PST/OST mail stores (`pst`) and Linux tracing and
+//! monitoring data (`tracecmd`).
 
 pub mod artifacts;
 pub mod bom;
@@ -25,3 +26,4 @@ pub mod platform;
 pub mod pst;
 pub mod shim_sdb;
 pub mod terminfo;
+pub mod tracecmd;
