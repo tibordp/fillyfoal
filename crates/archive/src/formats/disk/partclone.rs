@@ -156,6 +156,8 @@ struct State {
     /// Blocks in use by the header.
     used: u64,
     check: Check,
+    /// Check values are big-endian (the writer's byte order).
+    big_endian: bool,
 }
 
 /// The bitmap, read and walked once.
@@ -400,6 +402,7 @@ async fn finish(
         blocks,
         used,
         check,
+        big_endian: endian == Endian::Big,
     });
     cx.emit(
         Node::new("Bitmap")
@@ -540,6 +543,7 @@ async fn load(cx: &Cx, state: &State) -> Result<Arc<Loaded>> {
             bitmap: Arc::from(bits),
             stored,
             check: state.check,
+            big_endian: state.big_endian,
         }),
         crc,
         seeds,
@@ -638,9 +642,13 @@ async fn listing(cx: Cx, state: Arc<State>) -> Result<()> {
             let span = stream.sub(check_at(stored), size_cv);
             let raw = cx.read_avail(span).await?;
             let mut node = Node::new("Check value").span(span);
-            let value = <[u8; 4]>::try_from(raw.as_slice())
-                .ok()
-                .map(u32::from_le_bytes);
+            let value = <[u8; 4]>::try_from(raw.as_slice()).ok().map(|b| {
+                if p.big_endian {
+                    u32::from_be_bytes(b)
+                } else {
+                    u32::from_le_bytes(b)
+                }
+            });
             if let Some(v) = value {
                 node = node.value(hex(v, 32));
             }

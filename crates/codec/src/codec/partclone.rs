@@ -94,6 +94,9 @@ pub struct Params {
     /// follows the last of them.
     pub stored: u64,
     pub check: Check,
+    /// Check values are in the byte order of the machine that wrote the
+    /// image (format 0002 records it); little-endian otherwise.
+    pub big_endian: bool,
 }
 
 impl Params {
@@ -220,7 +223,13 @@ impl Partclone {
         let stored = raw
             .get(..4)
             .and_then(|b| <[u8; 4]>::try_from(b).ok())
-            .map(u32::from_le_bytes);
+            .map(|b| {
+                if self.p.big_endian {
+                    u32::from_be_bytes(b)
+                } else {
+                    u32::from_le_bytes(b)
+                }
+            });
         let (compare, reseed) = match self.p.check {
             Check::Crc32 { reseed, .. } => (true, reseed),
             Check::V1 => (true, false),
@@ -450,6 +459,7 @@ mod tests {
             bitmap: bitmap(),
             stored: 5,
             check,
+            big_endian: false,
         })
     }
 
@@ -564,6 +574,33 @@ mod tests {
         }
     }
 
+    /// A big-endian writer stores its check values big-endian: they match
+    /// when the image says so, and only then.
+    #[test]
+    fn check_values_follow_the_writers_byte_order() {
+        let check = Check::Crc32 {
+            every: 2,
+            reseed: true,
+        };
+        let le = area(check);
+        let mut be = le.clone();
+        // The check values follow stored blocks 1, 3 and 4.
+        for n in [2u64, 4, 5] {
+            let at = (check.offset(BS, n) - if n % 2 == 0 { 4 } else { 0 }) as usize;
+            be[at..at + 4].reverse();
+        }
+        let mut p = (*params(check)).clone();
+        p.big_endian = true;
+        let p = Arc::new(p);
+        let mut d = Codec::Partclone(p.clone()).decoder().unwrap();
+        let out = decode_all(d.as_mut(), &be, 1 << 20).unwrap();
+        assert_eq!(out, expected());
+        assert_eq!(d.warning(&out), None);
+        let mut d = Codec::Partclone(p).decoder().unwrap();
+        let out = decode_all(d.as_mut(), &le, 1 << 20).unwrap();
+        assert!(d.warning(&out).is_some());
+    }
+
     /// A decoder started at a later block, from where its block is stored,
     /// produces the rest of the volume.
     #[test]
@@ -639,6 +676,7 @@ mod tests {
             bitmap: Arc::from(vec![0u8; 1 << 10]),
             stored: 0,
             check: Check::None,
+            big_endian: false,
         });
         let mut d = Codec::Partclone(p.clone()).decoder().unwrap();
         let mut out = Vec::new();
@@ -683,6 +721,7 @@ mod tests {
             bitmap: Arc::from(vec![0u8; 1 << 10]),
             stored: 0,
             check: Check::None,
+            big_endian: false,
         });
         let mut d = Codec::Partclone(p).decoder().unwrap();
         let mut out = Vec::new();
