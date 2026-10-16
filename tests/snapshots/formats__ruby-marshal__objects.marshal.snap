@@ -65,7 +65,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ :@tags — array, 2 elements  [0x1e1+0x1b]
         [0]: ":kitchen" — symbol  [0x1ea+0x9]
         [1]: ":ceramic" — symbol  [0x1f3+0x9]
-  ▾ :user_dump — _dump data, with instance variables  [0x1fc+0x20]
+  ▾ :user_dump — Colour, _dump data, with instance variables  [0x1fc+0x20]
       Value: "336699" — Colour, _dump data  [0x208+0x10]
       Instance variables: 1  [0x218+0x1]
       :E: true  [0x219+0x3]
