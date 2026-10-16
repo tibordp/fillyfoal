@@ -793,10 +793,13 @@ fn decode_header(
             h.meta = u32::try_from(r.uleb()?).ok()?;
             field(&r, "MetadataId", s, &mut at);
         }
+        // TraceEvent's `EventPipeEventHeader` (V4 to V6 alike): with a
+        // sequence delta, the number moves by the delta plus one; without,
+        // by one for an event (not for metadata, MetadataId 0).
         if flags & 2 != 0 {
             let s = r.pos();
             let delta = r.uleb()?;
-            h.seq = h.seq.wrapping_add(delta as u32);
+            h.seq = h.seq.wrapping_add(delta as u32).wrapping_add(1);
             field(&r, "SequenceNumber (delta)", s, &mut at);
             let s = r.pos();
             h.capture = r.uleb()?;
@@ -804,8 +807,7 @@ fn decode_header(
             let s = r.pos();
             h.processor = r.uleb()? as u32;
             field(&r, "ProcessorNumber", s, &mut at);
-        }
-        if ver == Ver::V6 || h.meta != 0 {
+        } else if h.meta != 0 {
             h.seq = h.seq.wrapping_add(1);
         }
         if flags & 4 != 0 {
