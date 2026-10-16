@@ -16,12 +16,13 @@ use crate::codec::Codec;
 use crate::codec::templeos::{CT_7_BIT, CT_8_BIT, CT_NONE, HEADER};
 use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
-use crate::error::Result;
+use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::fmt;
 use crate::formats::{Format, Head, Input, Probe, content, content_named};
 use crate::node::Node;
 use crate::record;
+use crate::span::Span;
 use crate::value::EnumTable;
 
 pub static FORMAT: Format = Format {
@@ -113,14 +114,27 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut cur = Cursor::new(&cx, file, Endian::Little);
     let (header, span) = cur.record::<ArcHeader>().await?;
     cx.emit(ArcHeader::node("Header", span, Endian::Little));
-    let body = file.tail(ArcHeader::SIZE);
+    // `CompressBuf` makes the file exactly `compressed_size` bytes (the
+    // probe insists on it; a file system or "inspect as" may not).
+    let size = header.compressed_size.min(file.len);
+    if header.compressed_size > file.len {
+        cx.diag(Diagnostic::truncated(
+            Span::new(file.source, file.offset, header.compressed_size),
+            file.len,
+        ));
+    } else if header.compressed_size < ArcHeader::SIZE {
+        cx.diag(Diagnostic::malformed(format!(
+            "compressed_size {} is less than the header",
+            header.compressed_size
+        )));
+    }
+    let body = file.sub(ArcHeader::SIZE, size.saturating_sub(ArcHeader::SIZE));
     let what = match header.compression_type {
         CT_NONE => "stored",
         CT_7_BIT => "LZW, 7-bit characters",
         CT_8_BIT => "LZW, 8-bit characters",
         _ => "unknown compression type",
     };
-    let size = header.compressed_size.min(file.len);
     // The file's name says what the expanded data is (`Foo.HC.Z`); a
     // file system passes it on with `Node::known_as`.
     let name = cx.node_name();
@@ -141,6 +155,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         })
         .span(body),
     );
+    if size >= ArcHeader::SIZE && size < file.len {
+        let rest = file.tail(size);
+        cx.emit(
+            Node::new("Data after the compressed data")
+                .span(rest)
+                .summary(fmt::size(rest.len))
+                .diag(Diagnostic::note(
+                    "compressed_size ends the file here; TempleOS writes nothing after it",
+                )),
+        );
+    }
     cx.annotate(format!(
         "TempleOS compressed file ({what}), {} → {}",
         fmt::size(file.len),

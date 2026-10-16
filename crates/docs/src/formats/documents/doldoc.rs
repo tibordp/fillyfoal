@@ -27,7 +27,11 @@
 //! TempleOS's character set is CP437 above 0x7f: text with such bytes is
 //! transcoded to UTF-8 (a derived source) before the text dissector sees
 //! it, as is text with shift-spaces (0x1f), which `Doc2TXT` makes spaces;
-//! other ASCII text keeps the file's own bytes.
+//! other ASCII text keeps the file's own bytes. Here the child departs from
+//! `Doc2TXT` on purpose: its `TXTPutS` writes six CP437 letters as words
+//! (π as "pi", θ, φ, ω, ∞ as "inf", µ as "u") and every other byte above
+//! 0x7E as ".", which loses what the text says; the child keeps them all as
+//! their CP437 characters.
 //!
 //! In map files (`Kernel.MAP`, `Compiler.MAP`) each line is a link to a
 //! function whose bin is a `CDbgInfo` (its source lines' code addresses)

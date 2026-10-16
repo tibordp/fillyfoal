@@ -20,7 +20,12 @@
 //! directory's), the second its parent. Every file is contiguous; files
 //! whose names end in `.Z` are TempleOS-compressed and are dissected as
 //! [`crate::formats::compression::templeos`]. Deleted entries keep their
-//! name, with the `DELETED` attribute.
+//! name, with the `DELETED` attribute; a deleted directory is listed while
+//! its first block still starts with its own entry.
+//!
+//! On a disk TempleOS installed itself on, `BootHDIns` puts its `BootHD`
+//! loader in the boot sector's code, with the kernel file's first block
+//! and length patched in; the `code` field shows them.
 //!
 //! On a hard disk TempleOS gives a RedSea partition the FAT32 type (0x0B)
 //! "to fool BIOS" (`RedSeaFmt`), and accepts type 0x88 as well; either way
@@ -158,7 +163,7 @@ fn cdate(v: &u64, node: Node) -> Node {
 record! {
     /// `CRedSeaBoot`.
     pub struct BootSector {
-        jump: bytes[3] "jump_and_nop",
+        jump: bytes[3] "jump_and_nop" .with(|b, n| n.summary(jump_summary(b))),
         signature: u8 "signature" .hex() .desc("MBR_PT_REDSEA (0x88): RedSea, not FAT32"),
         reserved: bytes[4] "reserved",
         drv_offset: i64 "drv_offset"
@@ -167,7 +172,7 @@ record! {
         root_clus: i64 "root_clus" .desc("First block of the root directory"),
         bitmap_sects: i64 "bitmap_sects" .desc("Blocks of allocation bitmap, after this one"),
         unique_id: u64 "unique_id" .hex(),
-        code: bytes[462] "code",
+        code: bytes[462] "code" .with(|b, n| boot_code(b, n)),
         signature2: u16 "signature2" .hex(),
     }
 }
@@ -181,6 +186,113 @@ record! {
         size: i64 "size" .with(|&v, n| n.summary(size(u64::try_from(v).unwrap_or(0)))),
         datetime: u64 "datetime (local time)" .with(cdate),
     }
+}
+
+/// Where `CRedSeaBoot.code` starts in the boot sector.
+const CODE_AT: u64 = 0x30;
+/// `BootHDIns` copies the `BootHD` loader to `CFAT32Boot.code` (sector
+/// offset 0x5A, after a `JMP SHORT` there), so that the same sector boots
+/// a FAT32 or a RedSea partition. Offsets below are into `CRedSeaBoot.code`
+/// and are those of V5.03's `Adam/Opt/Boot/BootHD.HC` as assembled (checked
+/// against a disk its installer wrote): the loader, its far `JMP` to
+/// `BHD_HISTART` (0xA2 from the sector's start), and the two fields
+/// `BootHDIns` patches, `BHD_BLK_CNT` (U16) and `BHD_DAP_BLK` (I64).
+const BHD_CODE: usize = 0x5a - 0x30;
+const BHD_JMP: usize = 0x8a - 0x30;
+const BHD_BLK_CNT: usize = 0x90 - 0x30;
+const BHD_DAP_BLK: usize = 0x9a - 0x30;
+
+fn jump_summary(b: &[u8]) -> String {
+    match *b {
+        [0, 0, 0] => "none".into(),
+        [0xeb, rel, 0x90] => format!("JMP SHORT to offset {:#x}, NOP", u16::from(rel) + 2),
+        _ => "not a short jump".into(),
+    }
+}
+
+/// The two fields `BootHDIns` patched, if `code` holds V5.03's `BootHD`.
+fn boot_hd(code: &[u8]) -> Option<(u16, u64)> {
+    (code.get(BHD_CODE) == Some(&0xfc)
+        && code.get(BHD_JMP..BHD_JMP.saturating_add(3)) == Some(&[0xea, 0xa2, 0x00]))
+    .then_some(())?;
+    Some((u16_le(code, BHD_BLK_CNT)?, u64_le(code, BHD_DAP_BLK)?))
+}
+
+/// Decorator for `CRedSeaBoot.code`: empty, `BootHD` (with what it loads),
+/// or other code.
+fn boot_code(b: &[u8], node: Node) -> Node {
+    if b.iter().all(|&c| c == 0) {
+        return node.summary("empty: no boot loader installed");
+    }
+    let Some((cnt, blk)) = boot_hd(b) else {
+        return node.summary("boot code (not TempleOS's BootHD)");
+    };
+    let node = node.summary(format!(
+        "BootHD stage-1 loader (BootHDIns): loads {} from block {blk}",
+        plural(cnt, "block")
+    ));
+    match node.span {
+        Some(span) => node.lazy(boot_hd_fields, span),
+        None => node,
+    }
+}
+
+/// The `BootHD` loader's parts; `BHD_DAP_BLK` points at what it loads
+/// (the kernel, `/Kernel.BIN.C`, when `BootHDIns` wrote it).
+async fn boot_hd_fields(cx: Cx, code: Span) -> Result<()> {
+    let b = cx.read(code).await?;
+    let Some((cnt, blk)) = boot_hd(&b) else {
+        return Ok(());
+    };
+    let end = b
+        .iter()
+        .rposition(|&c| c != 0)
+        .map_or(0, |i| i.saturating_add(1));
+    let at = |off: usize, len: u64| code.sub(to_u64(off), len);
+    cx.emit(
+        Node::new("Loader")
+            .span(at(BHD_CODE, to_u64(end.saturating_sub(BHD_CODE))))
+            .summary("real-mode code (Adam/Opt/Boot/BootHD.HC), not disassembled"),
+    );
+    cx.emit(
+        Node::new("BHD_BLK_CNT")
+            .span(at(BHD_BLK_CNT, 2))
+            .value(Value::UInt {
+                value: cnt.into(),
+                bits: 16,
+                radix: crate::value::Radix::Dec,
+            })
+            .summary(size(u64::from(cnt).saturating_mul(BLK)))
+            .desc("Blocks the loader reads (BootHDIns: the kernel file's size)"),
+    );
+    let mut dap = Node::new("BHD_DAP_BLK")
+        .span(at(BHD_DAP_BLK, 8))
+        .value(Value::UInt {
+            value: blk,
+            bits: 64,
+            radix: crate::value::Radix::Dec,
+        })
+        .desc("First block the loader reads, counted from the drive's start (BootHDIns: the kernel file's)");
+    // The boot sector says where the volume starts, so the block can be
+    // found in this volume.
+    if let Some(sector) = code.offset.checked_sub(CODE_AT) {
+        let raw = cx.read(Span::new(code.source, sector, BLK)).await?;
+        let drv_offset = i64_le(&raw, 8).and_then(|v| u64::try_from(v).ok());
+        if let Some(off) = drv_offset
+            .and_then(|d| blk.checked_sub(d))
+            .and_then(|rel| rel.checked_mul(BLK))
+            .and_then(|rel| rel.checked_add(sector))
+        {
+            let len = u64::from(cnt)
+                .saturating_mul(BLK)
+                .min(cx.source_len(code.source).saturating_sub(off));
+            if off < cx.source_len(code.source) {
+                dap = dap.target(Span::new(code.source, off, len));
+            }
+        }
+    }
+    cx.emit(dap);
+    Ok(())
 }
 
 fn until_nul(b: &[u8]) -> &[u8] {
@@ -459,18 +571,32 @@ fn entry_node(fs: &FsRef, e: &Entry, at: Span, ancestors: &Arc<Vec<u64>>) -> Nod
         format!(", {}", civil::date(templeos_cdate_raw(e.datetime)))
     };
     let node = Node::new(e.name.clone()).span(at);
-    if e.attr & ATTR_DELETED != 0 {
+    let deleted = e.attr & ATTR_DELETED != 0;
+    if deleted && e.attr & ATTR_DIR == 0 {
         return node
             .summary(format!("deleted, {}{when}", size(e.size)))
             .diag(Diagnostic::note("deleted; its blocks may have been reused"))
             .lazy(file, (fs.clone(), at));
     }
     if e.attr & ATTR_DIR != 0 {
-        let node = node.summary(format!("directory, {}{flags}{when}", size(e.size)));
+        let node = if deleted {
+            // Deleting frees a directory's blocks but leaves its entries
+            // there, so it is listed while its first block still holds it.
+            node.summary(format!("deleted directory, {}{when}", size(e.size)))
+                .diag(Diagnostic::note("deleted; its blocks may have been reused"))
+        } else {
+            node.summary(format!("directory, {}{flags}{when}", size(e.size)))
+        };
         if ancestors.contains(&e.clus) || ancestors.len() >= MAX_DEPTH {
             return node.diag(Diagnostic::malformed(
                 "directory contains itself (or nests too deep); not followed",
             ));
+        }
+        if deleted {
+            return node.lazy(
+                crate::expander!(self::deleted_directory: (FsRef, Span, Arc<Vec<u64>>)),
+                (fs.clone(), at, ancestors.clone()),
+            );
         }
         return node.lazy(
             crate::expander!(self::directory: (FsRef, u64, Arc<Vec<u64>>)),
@@ -479,6 +605,28 @@ fn entry_node(fs: &FsRef, e: &Entry, at: Span, ancestors: &Arc<Vec<u64>>) -> Nod
     }
     node.summary(format!("{}{flags}{when}", size(e.size)))
         .lazy(file, (fs.clone(), at))
+}
+
+/// A deleted directory: listed while its first block still starts with
+/// its own entry (a directory entry pointing at that block), otherwise
+/// shown as a deleted file.
+async fn deleted_directory(
+    cx: Cx,
+    (fs, at, ancestors): (FsRef, Span, Arc<Vec<u64>>),
+) -> Result<()> {
+    let e = entry(&cx.read(at).await?);
+    let first = match fs.at(e.clus, ENTRY) {
+        Some(span) if e.clus >= fs.boot.data_area() => Some(cx.read(span).await?),
+        _ => None,
+    };
+    let own = first.as_deref().map(entry);
+    if own.is_some_and(|o| o.attr & ATTR_DIR != 0 && o.clus == e.clus) {
+        return directory(cx, (fs, e.clus, ancestors)).await;
+    }
+    cx.diag(Diagnostic::note(
+        "its first block no longer holds this directory; shown as a file",
+    ));
+    file(cx, (fs, at)).await
 }
 
 /// A file: its directory entry and its content (TempleOS-compressed if
