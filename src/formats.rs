@@ -2211,6 +2211,10 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "system")]
     &system::atop::FORMAT,
     #[cfg(feature = "system")]
+    &system::ctf::PACKET,
+    #[cfg(feature = "system")]
+    &system::ctf::METADATA,
+    #[cfg(feature = "system")]
     &system::platform::LDSO_CACHE,
     #[cfg(feature = "system")]
     &system::platform::SELINUX,

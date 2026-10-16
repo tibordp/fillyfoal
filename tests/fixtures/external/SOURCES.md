@@ -1430,3 +1430,22 @@ directory). Not reproducible byte for byte. Checked against
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
 | `atop-raw/atop_20261016` | `atop -w ... 1 2` | two samples (the first since boot), three tasks, cgroup v2 statistics; written as `atop.raw` and renamed after atop's daily log names; otherwise unchanged |
+
+## Common Trace Format: LTTng-UST and babeltrace2
+
+Written by `tests/data/ctf-packet/make.sh` (which runs `inside.sh`) in a
+`debian:trixie` container, host name `fillyfoal`, `TZ=UTC`: an LTTng-UST
+2.13.9 / lttng-tools 2.13.15 user-space session (`hello.c`: 150
+`lttng_ust_tracef` messages, contexts `vpid` and `procname`, per-UID
+buffers, two 4 KiB sub-buffers), and babeltrace2 2.1.1 converting
+`dmesg.txt` (five neutral lines) with `src.text.dmesg` to `sink.ctf.fs`
+with `ctf-version` 1 and 2. Not reproducible byte for byte (UUIDs, times,
+PIDs). Checked by reading the traces back with `babeltrace2`.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `ctf-packet/lttng-ust-stream` | LTTng-UST 2.13.9 | the per-CPU stream file (`ust/uid/0/64-bit/ch_N`) holding the events: three 4 KiB packets; unchanged |
+| `ctf-metadata/lttng-ust-metadata` | LTTng-UST 2.13.9 | the trace's packetized metadata: one packet of TSDL; unchanged |
+| `ctf-packet/babeltrace-ctf18-stream` | babeltrace2 2.1.1 `sink.ctf.fs`, `ctf-version="1"` | the data stream (one packet); unchanged |
+| `ctf-metadata/babeltrace-ctf18-metadata` | as above | the TSDL metadata file; unchanged |
+| `ctf-metadata/babeltrace-ctf2-metadata` | babeltrace2 2.1.1 `sink.ctf.fs`, `ctf-version="2"` | the CTF 2 JSON text sequence metadata; unchanged |
