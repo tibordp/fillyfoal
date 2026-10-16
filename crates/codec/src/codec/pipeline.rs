@@ -42,6 +42,22 @@
 //! A codec opts in with [`Decode::heap_size`]: the heap bytes a clone of it
 //! copies, which must be honest (a decoder that keeps its window inside
 //! itself, rather than in the caller's `out`, must count it).
+//!
+//! # Zero runs
+//!
+//! Some streams describe long runs of zeros in a few bytes (the gaps of a
+//! disk image that stores only the clusters in use). Writing them out costs
+//! work in proportion to the decoded size, not the encoded one. A decoder
+//! with **no window** (nothing it produced is read again; it releases all
+//! of its output) can let the caller skip them instead: it declares itself
+//! with [`Decode::window_free`], reports the zeros it is about to produce
+//! with [`Decode::zero_run`] (a run it has parsed and not written yet), and
+//! advances past them on [`Decode::skip_zeros`] without writing them. To
+//! give the caller the chance, its step may stop early (with
+//! [`Step::More`], having produced less than asked) right after parsing a
+//! run. A caller that does not skip just calls again, and the decoder
+//! writes the zeros as usual, so the output is the same either way. A
+//! caller skips only for decoders that declare themselves window-free.
 
 use crate::error::{DiagKind, Diagnostic, Result};
 
@@ -135,6 +151,26 @@ pub trait Decode: Clone + Send + 'static {
     fn truncation_is_exact(&self) -> bool {
         false
     }
+
+    /// Whether this decoder has no window: nothing it produced is read
+    /// again, so the caller may skip the runs of zeros it reports instead
+    /// of having them written (see "Zero runs" in the module docs). The
+    /// default, `false`, makes callers ignore [`zero_run`](Self::zero_run).
+    fn window_free(&self) -> bool {
+        false
+    }
+
+    /// Zero bytes the decoder produces next, before it reads more input or
+    /// produces anything else: a run it has parsed and not written yet.
+    /// The default, 0, reports none.
+    fn zero_run(&self) -> u64 {
+        0
+    }
+
+    /// Advances past the first `n` (at most [`zero_run`](Self::zero_run))
+    /// zeros of the current run without writing them: the caller accounts
+    /// for them in its output positions.
+    fn skip_zeros(&mut self, _n: u64) {}
 }
 
 /// Status of a [`Decoder`] step.
@@ -201,6 +237,19 @@ pub trait Decoder: Send {
     fn boundary(&self) -> Option<usize> {
         None
     }
+
+    /// See [`Decode::window_free`].
+    fn window_free(&self) -> bool {
+        false
+    }
+
+    /// See [`Decode::zero_run`].
+    fn zero_run(&self) -> u64 {
+        0
+    }
+
+    /// See [`Decode::skip_zeros`].
+    fn skip_zeros(&mut self, _n: u64) {}
 }
 
 /// Whether a step's error may only mean that the input ran out: codecs
@@ -283,6 +332,18 @@ impl<D: Decode> Decoder for Streaming<D> {
 
     fn boundary(&self) -> Option<usize> {
         self.0.boundary()
+    }
+
+    fn window_free(&self) -> bool {
+        self.0.window_free()
+    }
+
+    fn zero_run(&self) -> u64 {
+        self.0.zero_run()
+    }
+
+    fn skip_zeros(&mut self, n: u64) {
+        self.0.skip_zeros(n);
     }
 }
 
@@ -554,6 +615,44 @@ pub fn decode_all(decoder: &mut dyn Decoder, input: &[u8], limit: usize) -> Resu
     loop {
         match decoder.decode(input, true, &mut out, usize::MAX, limit)? {
             Status::Done => return Ok(out),
+            Status::More => {}
+            Status::NeedInput => return Err(Diagnostic::malformed("stream ended early")),
+        }
+    }
+}
+
+/// Decodes a whole in-memory buffer the way a caller that skips zero runs
+/// does (see "Zero runs" in the module docs), for codec tests: runs the
+/// decoder reports are skipped and filled in here, so the output can be
+/// compared with [`decode_all`]'s. Returns it and how many bytes were
+/// skipped rather than produced (none for a decoder that is not
+/// window-free).
+#[doc(hidden)]
+pub fn decode_all_skipping(
+    decoder: &mut dyn Decoder,
+    input: &[u8],
+    limit: usize,
+) -> Result<(Vec<u8>, u64)> {
+    let mut out = Vec::new();
+    let mut skipped = 0u64;
+    loop {
+        let run = if decoder.window_free() {
+            decoder.zero_run()
+        } else {
+            0
+        };
+        if run > 0 {
+            let n = usize::try_from(run).unwrap_or(usize::MAX);
+            if out.len().saturating_add(n) > limit {
+                return Err(Diagnostic::limit("output exceeds the limit"));
+            }
+            decoder.skip_zeros(run);
+            out.resize(out.len().saturating_add(n), 0);
+            skipped = skipped.saturating_add(run);
+            continue;
+        }
+        match decoder.decode(input, true, &mut out, usize::MAX, limit)? {
+            Status::Done => return Ok((out, skipped)),
             Status::More => {}
             Status::NeedInput => return Err(Diagnostic::malformed("stream ended early")),
         }

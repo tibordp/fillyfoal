@@ -228,6 +228,17 @@ pub(crate) struct LazyDecode {
     /// (for [`Shared::decode_cost`], which must not depend on what decoding
     /// has found since).
     seeds: Vec<u64>,
+    /// Output ranges known to be zeros: runs of at least [`MIN_HOLE`]
+    /// bytes a window-free decoder reported (see "Zero runs" in
+    /// `codec::pipeline`), skipped or written. Sorted, disjoint, merged;
+    /// at most [`MAX_HOLES`]. What it records is only knowledge: reads in
+    /// a hole are answered without decoding, and [`Shared::next_data`]
+    /// reports them, but nothing depends on a hole being recorded (one
+    /// that is not decodes again), so the list can be thinned or dropped.
+    holes: Vec<(u64, u64)>,
+    /// A hole was recorded while decoding from a seed (see
+    /// [`LazyDecode::check_seeds`]).
+    holes_seeded: bool,
 }
 
 impl LazyDecode {
@@ -250,12 +261,114 @@ impl LazyDecode {
             spread: 1,
             run_seeded: false,
             seeds: Vec::new(),
+            holes: Vec::new(),
+            holes_seeded: false,
         })
     }
 
     fn held(&self) -> u64 {
         to_u64(self.out.len().saturating_add(self.input.len()))
             .saturating_add(self.checkpoint_bytes)
+            .saturating_add(self.hole_bytes())
+    }
+
+    /// Bytes the hole list holds.
+    fn hole_bytes(&self) -> u64 {
+        to_u64(
+            self.holes
+                .len()
+                .saturating_mul(std::mem::size_of::<(u64, u64)>()),
+        )
+    }
+
+    /// Output position of the decoding front.
+    fn front(&self) -> u64 {
+        self.out_base.saturating_add(to_u64(self.out.len()))
+    }
+
+    /// The end of the known hole `pos` lies in, if it does.
+    fn hole_end(&self, pos: u64) -> Option<u64> {
+        let index = self.holes.partition_point(|&(_, e)| e <= pos);
+        self.holes
+            .get(index)
+            .filter(|&&(s, _)| s <= pos)
+            .map(|&(_, e)| e)
+    }
+
+    /// Records that output `start..end` is zeros, merging it with the holes
+    /// it overlaps or touches. Past [`MAX_HOLES`], every other hole is
+    /// forgotten.
+    fn note_hole(&mut self, start: u64, end: u64) {
+        if start >= end || self.hole_end(start).is_some_and(|e| e >= end) {
+            return;
+        }
+        // Holes ending before `start` stay; so do those starting after
+        // `end`; the ones between are merged with it.
+        let from = self.holes.partition_point(|&(_, e)| e < start);
+        let to = self.holes.partition_point(|&(s, _)| s <= end).max(from);
+        let lo = self
+            .holes
+            .get(from)
+            .filter(|_| from < to)
+            .map_or(start, |h| h.0.min(start));
+        let hi = to
+            .checked_sub(1)
+            .filter(|&i| i >= from)
+            .and_then(|i| self.holes.get(i))
+            .map_or(end, |h| h.1.max(end));
+        self.holes.splice(from..to, [(lo, hi)]);
+        self.holes_seeded |= self.run_seeded;
+        if self.holes.len() > MAX_HOLES {
+            let mut keep = false;
+            self.holes.retain(|_| {
+                keep = !keep;
+                keep
+            });
+        }
+    }
+
+    /// Output `start..end` from what is known without decoding: holes, and
+    /// the output held. Returns the bytes from `start` as far as that
+    /// reaches without a break, and whether it reaches `end`.
+    fn assemble(&self, start: u64, end: u64) -> (Vec<u8>, bool) {
+        let front = self.front();
+        let mut data = Vec::new();
+        let mut pos = start;
+        while pos < end {
+            if let Some(hole_end) = self.hole_end(pos) {
+                let to = hole_end.min(end);
+                let n = crate::bytes::to_usize(to.saturating_sub(pos));
+                data.resize(data.len().saturating_add(n), 0);
+                pos = to;
+            } else if pos >= self.out_base && pos < front {
+                let to = front.min(end);
+                let from = crate::bytes::to_usize(pos.saturating_sub(self.out_base));
+                let until = crate::bytes::to_usize(to.saturating_sub(self.out_base));
+                data.extend_from_slice(self.out.get(from..until).unwrap_or_default());
+                pos = to;
+            } else {
+                break;
+            }
+        }
+        (data, pos >= end)
+    }
+
+    /// Moves the decoding front past the first `n` bytes of the decoder's
+    /// zero run without writing them, if the decoder lets all the output
+    /// held go (it is window-free); returns whether it did. The output held
+    /// is dropped (a read behind it decodes again, from a checkpoint) and
+    /// kept allocated for what follows.
+    fn skip_zeros(&mut self, n: u64) -> bool {
+        let len = self.out.len();
+        if self.decoder.releasable_output(len) < len {
+            return false;
+        }
+        let front = self.front();
+        self.decoder.release_output(len);
+        self.out.clear();
+        self.out_base = front.saturating_add(n);
+        self.decoder.skip_zeros(n);
+        true
     }
 
     /// Decodes again from the last checkpoint at or before output position
@@ -376,6 +489,10 @@ impl LazyDecode {
             .iter()
             .map(|c| c.cost)
             .fold(0, u64::saturating_add);
+        if self.holes_seeded {
+            self.holes.clear();
+            self.holes_seeded = false;
+        }
         (true, self.run_seeded)
     }
 
@@ -449,6 +566,15 @@ const CHECKPOINT_RATIO: u64 = 8;
 /// Output between checkpoints, at least (a stream of tiny frames would
 /// otherwise get one per frame).
 const MIN_CHECKPOINT_SPACING: u64 = 256 * 1024;
+/// Zero runs of a window-free decoder this long or longer are recorded as
+/// holes, and skipped where a read does not need them; shorter ones are
+/// written (skipping drops the output held, which reads near the front
+/// would otherwise find).
+const MIN_HOLE: u64 = 64 * 1024;
+/// Holes a lazily decoded source records, at most (a stream alternating
+/// data and gaps would otherwise grow the list with its length); past it,
+/// every other one is forgotten.
+const MAX_HOLES: usize = 1 << 14;
 /// Derived memory a lazy read may use even when the limit is reached:
 /// failing the stream instead would truncate it for good over a passing
 /// shortage (other sources may be evicted or collapsed later).
@@ -558,14 +684,17 @@ impl Shared {
             let freed = before.saturating_sub(entry.held());
             self.derived_bytes = self.derived_bytes.saturating_sub(freed);
         }
-        // Then checkpoints.
+        // Then checkpoints and known holes.
         while self.derived_bytes.saturating_add(need) > max {
             let victim = self
                 .sources
                 .iter()
                 .enumerate()
                 .filter(|(i, e)| {
-                    e.lazy.as_ref().is_some_and(|l| l.checkpoint_bytes > 0) && !protected(*i)
+                    e.lazy
+                        .as_ref()
+                        .is_some_and(|l| l.checkpoint_bytes > 0 || !l.holes.is_empty())
+                        && !protected(*i)
                 })
                 .min_by_key(|(_, e)| e.used)
                 .map(|(i, _)| i);
@@ -575,9 +704,11 @@ impl Shared {
             else {
                 return false;
             };
-            let freed = lazy.checkpoint_bytes;
+            let freed = lazy.checkpoint_bytes.saturating_add(lazy.hole_bytes());
             lazy.checkpoints.clear();
             lazy.checkpoint_bytes = 0;
+            lazy.holes = Vec::new();
+            lazy.holes_seeded = false;
             self.derived_bytes = self.derived_bytes.saturating_sub(freed);
         }
         true
@@ -710,6 +841,14 @@ impl Shared {
     /// stops with [`Pending::Budget`], keeping what was decoded, so that no
     /// single read decodes without bound. A read entered with budget left
     /// always makes progress.
+    ///
+    /// The zero runs a window-free decoder reports (see "Zero runs" in
+    /// `codec::pipeline`) are recorded as holes, and those before the read
+    /// are skipped rather than written: the front moves past them for a
+    /// unit of work each. What a read wants of a run is written (it is at
+    /// most the read). A read wholly in known holes and held output is
+    /// answered without decoding, and one starting in a known hole decodes
+    /// from its end.
     fn read_lazy(
         &mut self,
         source: SourceId,
@@ -721,18 +860,30 @@ impl Shared {
         let Some(mut st) = self.sources.get_mut(index).and_then(|e| e.lazy.take()) else {
             return Ok(Vec::new());
         };
+        if !st.holes.is_empty() {
+            let (data, whole) = st.assemble(start, end);
+            if whole {
+                if let Some(entry) = self.sources.get_mut(index) {
+                    entry.lazy = Some(st);
+                }
+                return Ok(data);
+            }
+        }
         let before = st.held();
+        // Where decoding must produce output from: past a known hole the
+        // read starts in (holes are merged, so there is at most one).
+        let want = st.hole_end(start).unwrap_or(start).min(end);
         // Released output is decoded again, from the nearest checkpoint (or
         // the start); a checkpoint between the front and the read skips
         // decoding up to it.
-        let front = st.out_base.saturating_add(to_u64(st.out.len()));
-        if start < st.out_base
+        let front = st.front();
+        if want < st.out_base
             || st
                 .checkpoints
                 .iter()
-                .any(|c| c.out_pos > front && c.out_pos <= start)
+                .any(|c| c.out_pos > front && c.out_pos <= want)
         {
-            st.rewind(start);
+            st.rewind(want);
         }
         let max_checkpoint_bytes = self.limits.max_derived / 8;
         // Room for the output still to come, and for the encoded input it
@@ -764,15 +915,30 @@ impl Shared {
         );
         let mut failure = None;
         let result = loop {
-            let front = st.out_base.saturating_add(to_u64(st.out.len()));
+            let front = st.front();
             if front >= end || st.done {
-                let from =
-                    crate::bytes::to_usize(start.saturating_sub(st.out_base)).min(st.out.len());
-                let to = crate::bytes::to_usize(end.saturating_sub(st.out_base)).min(st.out.len());
-                break Ok(st.out.get(from..to).unwrap_or_default().to_vec());
+                // Holes before `want`, output from there (the front never
+                // moves past `want` without writing, see below).
+                break Ok(st.assemble(start, end).0);
             }
             if self.budget == 0 {
                 break Err(Pending::Budget);
+            }
+            // A long zero run from a decoder that declares itself
+            // window-free: recorded, and skipped as far as `want`.
+            let run = if st.decoder.window_free() {
+                st.decoder.zero_run()
+            } else {
+                0
+            };
+            if run >= MIN_HOLE {
+                st.note_hole(front, front.saturating_add(run));
+                let skip = run.min(want.saturating_sub(front));
+                if skip >= MIN_HOLE && st.skip_zeros(skip) {
+                    self.charge(1);
+                    st.checkpoint(max_checkpoint_bytes);
+                    continue;
+                }
             }
             let pending = st.input.len().saturating_sub(st.decoder.consumed());
             if st.starved && !st.input_eof && pending >= max_pending {
@@ -847,7 +1013,7 @@ impl Shared {
                         ));
                     }
                     if restart {
-                        st.rewind(start);
+                        st.rewind(want);
                         continue;
                     }
                     st.checkpoint(max_checkpoint_bytes);
@@ -863,7 +1029,7 @@ impl Shared {
                     failure = Some(e);
                 }
             }
-            st.release(start, keep);
+            st.release(want, keep);
             self.charge((to_u64(produced) >> 12).max(1));
         };
         // Once the stream has ended, its real length is known, and so is any
@@ -968,12 +1134,13 @@ impl Shared {
             .fold(0u64, u64::saturating_add)
     }
 
-    /// Resolves a span of any source to spans of non-piecewise sources.
     /// The first offset in `start..end` of `source` that may hold data, or
     /// `None` if all of it is known to be holes: declared by the host for
-    /// a host source ([`crate::Session::set_holes`]), or zero pieces of a
-    /// piecewise source (followed into their parents). Bounded: after
-    /// [`NEXT_DATA_STEPS`] pieces or holes it answers where it got to.
+    /// a host source ([`crate::Session::set_holes`]), found by decoding so
+    /// far for a lazily decoded source (zero runs of a window-free codec),
+    /// or zero pieces of a piecewise source (followed into their parents).
+    /// Bounded: after [`NEXT_DATA_STEPS`] pieces or holes it answers where
+    /// it got to.
     pub fn next_data(&self, source: SourceId, start: u64, end: u64, depth: u32) -> Option<u64> {
         let mut steps = 0usize;
         self.next_data_in(source, start, end, depth, &mut steps)
@@ -995,17 +1162,11 @@ impl Shared {
             return Some(start);
         };
         if let Some(holes) = &entry.holes {
-            let mut pos = start;
-            let mut index = holes.partition_point(|&(_, e)| e <= pos);
-            while let Some(&(from, to)) = holes.get(index) {
-                if from > pos || *steps >= NEXT_DATA_STEPS {
-                    break;
-                }
-                *steps = steps.saturating_add(1);
-                pos = pos.max(to);
-                index = index.saturating_add(1);
-            }
-            return (pos < end).then_some(pos);
+            return past_holes(holes, start, end, steps);
+        }
+        if let Some(lazy) = &entry.lazy {
+            // The holes decoding has found so far.
+            return past_holes(&lazy.holes, start, end, steps);
         }
         let Some(pieces) = entry.pieces.as_ref().filter(|_| depth <= 32) else {
             return Some(start);
@@ -1046,6 +1207,7 @@ impl Shared {
         None
     }
 
+    /// Resolves a span of any source to spans of non-piecewise sources.
     pub fn resolve(&self, span: Span, depth: u32, out: &mut Vec<Span>) {
         if span.source == SourceId::ZEROS {
             return;
@@ -1088,7 +1250,10 @@ impl Shared {
     /// too), from the nearest point its container recorded (a seed) or
     /// the start, to the end of the read. Deliberately blind to what has
     /// been decoded so far, so that a dissector deciding on it builds the
-    /// same nodes whenever it runs. Host sources and sources decoded up
+    /// same nodes whenever it runs. Also blind to zero runs a decoder may
+    /// skip (see [`Shared::read_lazy`]): they are found only by decoding,
+    /// and a crafted stream of runs too short to skip is written out in
+    /// full, so the decoded size stays the worst case. Host sources and sources decoded up
     /// front cost nothing; the encoded side is not counted (a stream
     /// inside another decoded stream costs more than this says).
     pub(crate) fn decode_cost(&self, span: Span) -> u64 {
@@ -1125,6 +1290,23 @@ const MAX_CHAIN: usize = 16;
 /// Pieces or holes [`Shared::next_data`] looks at before answering where it
 /// got to.
 pub(crate) const NEXT_DATA_STEPS: usize = 4096;
+
+/// The first offset in `start..end` not inside `holes` (sorted and
+/// disjoint), or `None` if all of it is; bounded like
+/// [`Shared::next_data`].
+fn past_holes(holes: &[(u64, u64)], start: u64, end: u64, steps: &mut usize) -> Option<u64> {
+    let mut pos = start;
+    let mut index = holes.partition_point(|&(_, e)| e <= pos);
+    while let Some(&(from, to)) = holes.get(index) {
+        if from > pos || *steps >= NEXT_DATA_STEPS {
+            break;
+        }
+        *steps = steps.saturating_add(1);
+        pos = pos.max(to);
+        index = index.saturating_add(1);
+    }
+    (pos < end).then_some(pos)
+}
 
 /// Whether `from..to` lies wholly inside one of `holes` (sorted, disjoint,
 /// and merged, so a range inside holes is inside one).
@@ -1555,10 +1737,14 @@ impl Cx {
     /// Where data may resume in `span`, like `SEEK_DATA`: the offset
     /// (relative to `span`) of the first byte not known to lie in a hole,
     /// or `None` if all of `span` is known to be holes. Holes are what the
-    /// host declared for a sparse file ([`crate::Session::set_holes`]) and
+    /// host declared for a sparse file ([`crate::Session::set_holes`]),
     /// the zero pieces of a piecewise source (sparse files in a file
-    /// system image); without either the answer is `Some(0)`, so a walker
-    /// that skips with this behaves as before. Holes read as zeros; a
+    /// system image), and the gaps decoding has already passed in content
+    /// decoded on demand by a codec that skips them (the free clusters of
+    /// an ntfsclone or Partclone image; never decoded to find out, so the
+    /// answer depends on what has been read before: use it to skip work,
+    /// never to decide what to show); without any the answer is `Some(0)`,
+    /// so a walker that skips with this behaves as before. Holes read as zeros; a
     /// walker over a mostly sparse file (lastlog, indexed by UID) uses this
     /// to jump over them instead of reading them. The answer is
     /// conservative: data may still be zeros. Costs a unit of work.
@@ -2078,5 +2264,296 @@ impl Cx {
     /// Attaches a non-fatal diagnostic to the node being expanded.
     pub fn diag(&self, diagnostic: Diagnostic) {
         lock(&self.out).diagnostics.push(diagnostic);
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::panic
+)]
+mod hole_tests {
+    use super::*;
+    use crate::codec::ntfsclone::{CMD_GAP, CMD_NEXT, Image};
+    use crate::codec::pipeline::{Decode, Decoder, Step, Streaming};
+
+    fn shared() -> Shared {
+        let limits = Limits::default();
+        Shared {
+            sources: Vec::new(),
+            derived: HashMap::new(),
+            derived_bytes: 0,
+            memo: HashMap::new(),
+            cache: ByteCache::new(limits.chunk_size, limits.cache_bytes),
+            budget: u64::MAX,
+            stop: None,
+            wanted: Vec::new(),
+            secrets: HashMap::new(),
+            secret_wanted: None,
+            limits,
+            tick: 0,
+            decoding: Vec::new(),
+        }
+    }
+
+    /// An in-memory source of `input`, and a source of length `len` decoded
+    /// on demand from it with `codec` (its decoder replaced by `decoder`,
+    /// if given). Returns the decoded source.
+    fn add_lazy(
+        sh: &mut Shared,
+        input: Vec<u8>,
+        codec: &Codec,
+        len: u64,
+        decoder: Option<Box<dyn Decoder>>,
+    ) -> SourceId {
+        let parent = SourceId(sh.sources.len() as u32);
+        let n = input.len() as u64;
+        let mut entry = SourceEntry::host(n);
+        entry.data = Some(input.into());
+        sh.sources.push(entry);
+        let mut lazy = LazyDecode::new(Span::new(parent, 0, n), codec).unwrap();
+        if let Some(d) = decoder {
+            lazy.decoder = d;
+        }
+        let id = SourceId(sh.sources.len() as u32);
+        let mut entry = SourceEntry::host(len);
+        entry.lazy = Some(Box::new(lazy));
+        entry.on_demand = true;
+        entry.recipe = Some(codec.clone());
+        sh.sources.push(entry);
+        id
+    }
+
+    fn lazy(sh: &Shared, id: SourceId) -> &LazyDecode {
+        sh.source(id).unwrap().lazy.as_deref().unwrap()
+    }
+
+    /// Reads `start..end`, returning the bytes and the units it cost.
+    fn read(sh: &mut Shared, id: SourceId, start: u64, end: u64) -> (Vec<u8>, u64) {
+        sh.budget = u64::MAX;
+        let data = match sh.read_range(id, start, end, 0) {
+            Ok(data) => data,
+            Err(_) => panic!("the read did not complete"),
+        };
+        (data, u64::MAX - sh.budget)
+    }
+
+    /// The run of zeros in [`Toy`]'s output.
+    const RUN: u64 = 64 << 20;
+
+    /// "AB", [`RUN`] zeros, "CD", reporting the zeros as a run; window-free
+    /// only if it `declares` so.
+    #[derive(Clone)]
+    struct Toy {
+        stage: u8,
+        zeros: u64,
+        declares: bool,
+    }
+
+    impl Decode for Toy {
+        fn step(
+            &mut self,
+            _: &[u8],
+            _: bool,
+            out: &mut Vec<u8>,
+            step: usize,
+            _: usize,
+        ) -> Result<Step> {
+            match self.stage {
+                0 => {
+                    out.extend_from_slice(b"AB");
+                    self.stage = 1;
+                    self.zeros = RUN;
+                }
+                1 if self.zeros > 0 => {
+                    let n = (self.zeros as usize).min(step);
+                    out.resize(out.len() + n, 0);
+                    self.zeros -= n as u64;
+                }
+                1 => {
+                    out.extend_from_slice(b"CD");
+                    self.stage = 2;
+                }
+                _ => return Ok(Step::Done),
+            }
+            Ok(Step::More)
+        }
+
+        fn consumed(&self) -> usize {
+            0
+        }
+
+        fn releasable_output(&self, out_len: usize) -> usize {
+            out_len
+        }
+
+        fn heap_size(&self) -> Option<usize> {
+            Some(0)
+        }
+
+        fn window_free(&self) -> bool {
+            self.declares
+        }
+
+        fn zero_run(&self) -> u64 {
+            if self.stage == 1 { self.zeros } else { 0 }
+        }
+
+        fn skip_zeros(&mut self, n: u64) {
+            self.zeros -= n.min(self.zeros);
+        }
+    }
+
+    fn toy(sh: &mut Shared, declares: bool) -> SourceId {
+        let image = Image {
+            cluster_size: 512,
+            device_size: 1 << 40,
+            clusters: 1 << 30,
+        };
+        let decoder = Box::new(Streaming(Toy {
+            stage: 0,
+            zeros: 0,
+            declares,
+        }));
+        add_lazy(
+            sh,
+            Vec::new(),
+            &Codec::NtfsClone(image),
+            RUN + 4,
+            Some(decoder),
+        )
+    }
+
+    /// A decoder that does not declare itself window-free has its zero runs
+    /// written out, whatever it reports: no hole is recorded.
+    #[test]
+    fn only_window_free_decoders_skip() {
+        let mut sh = shared();
+        let id = toy(&mut sh, false);
+        let (data, work) = read(&mut sh, id, RUN + 1, RUN + 4);
+        assert_eq!(data, b"\0CD");
+        assert!(lazy(&sh, id).holes.is_empty());
+        assert!(work >= RUN >> 12, "{work} units");
+
+        let mut sh = shared();
+        let id = toy(&mut sh, true);
+        let (data, work) = read(&mut sh, id, RUN + 1, RUN + 4);
+        assert_eq!(data, b"\0CD");
+        assert_eq!(lazy(&sh, id).holes, [(2, RUN + 2)]);
+        assert!(work < 16, "{work} units");
+        // The skipped run was not allocated.
+        assert!(lazy(&sh, id).out.capacity() < 1 << 20);
+    }
+
+    /// Reads in a known hole are answered at once, also after eviction;
+    /// reads across it and data assemble both; `next_data` reports it.
+    #[test]
+    fn known_holes_answer_reads_and_queries() {
+        let mut sh = shared();
+        let id = toy(&mut sh, true);
+        assert_eq!(sh.next_data(id, 0, RUN + 4, 0), Some(0));
+        assert_eq!(sh.next_data(id, 100, RUN, 0), Some(100));
+        read(&mut sh, id, RUN + 2, RUN + 4);
+        let (data, work) = read(&mut sh, id, 1000, 2000);
+        assert_eq!(data, vec![0; 1000]);
+        assert_eq!(work, 0);
+        let (data, work) = read(&mut sh, id, RUN, RUN + 4);
+        assert_eq!(data, b"\0\0CD");
+        assert_eq!(work, 0);
+        assert_eq!(sh.next_data(id, 0, RUN + 4, 0), Some(0));
+        assert_eq!(sh.next_data(id, 100, RUN, 0), None);
+        assert_eq!(sh.next_data(id, 100, RUN + 4, 0), Some(RUN + 2));
+        assert_eq!(
+            sh.next_data(SourceId(id.0 - 1), 0, 10, 0),
+            None,
+            "an empty source"
+        );
+        // Eviction drops the buffers, not what is known to be zeros.
+        sh.sources[id.0 as usize].lazy.as_mut().unwrap().evict();
+        let (data, work) = read(&mut sh, id, 5000, 6000);
+        assert_eq!(data, vec![0; 1000]);
+        assert_eq!(work, 0);
+        // Memory pressure drops them, with the checkpoints.
+        let held = sh.source(id).unwrap().held();
+        sh.derived_bytes = held;
+        sh.limits.max_derived = 0;
+        sh.make_room(0, SourceId::ZEROS);
+        assert!(lazy(&sh, id).holes.is_empty());
+        assert_eq!(sh.next_data(id, 100, RUN, 0), Some(100));
+    }
+
+    /// An ntfsclone stream of `pairs` saved clusters of 16 bytes, each
+    /// followed by a gap of `gap` clusters (long enough to be a hole).
+    fn alternating(pairs: u64, gap: u64) -> (Image, Vec<u8>) {
+        let clusters = pairs * (gap + 1);
+        let image = Image {
+            cluster_size: 16,
+            device_size: clusters * 16,
+            clusters,
+        };
+        let mut s = Vec::new();
+        for i in 0..pairs {
+            s.push(CMD_NEXT);
+            s.extend_from_slice(&(i as u128).to_le_bytes());
+            s.push(CMD_GAP);
+            s.extend_from_slice(&(gap as i64).to_le_bytes());
+        }
+        (image, s)
+    }
+
+    /// A stream alternating data and long gaps records a hole per gap only
+    /// up to a bound; reads still return the right bytes everywhere.
+    #[test]
+    fn alternating_gaps_keep_memory_bounded() {
+        const PAIRS: u64 = 40_000;
+        const GAP: u64 = 4096;
+        let (image, stream) = alternating(PAIRS, GAP);
+        let len = image.volume_len(false);
+        let mut sh = shared();
+        let id = add_lazy(&mut sh, stream, &Codec::NtfsClone(image), len, None);
+        let stride = (GAP + 1) * 16;
+        let (data, work) = read(&mut sh, id, (PAIRS - 1) * stride, (PAIRS - 1) * stride + 16);
+        assert_eq!(data, (PAIRS as u128 - 1).to_le_bytes());
+        // A few units per command pair, against 16 per gap written out.
+        assert!(work < PAIRS * 4, "{work} units");
+        let holes = lazy(&sh, id).holes.len();
+        assert!((MAX_HOLES / 2..=MAX_HOLES).contains(&holes), "{holes}");
+        assert!(lazy(&sh, id).hole_bytes() <= 16 * MAX_HOLES as u64);
+        // With the input buffered and the checkpoints.
+        assert!(sh.derived_bytes < 4 << 20, "{}", sh.derived_bytes);
+        for i in [0, 1, 12_345, PAIRS / 2, PAIRS - 2] {
+            let (data, _) = read(&mut sh, id, i * stride, i * stride + 32);
+            assert_eq!(data[..16], (i as u128).to_le_bytes(), "{i}");
+            assert_eq!(data[16..], [0; 16], "{i}");
+        }
+    }
+
+    /// Holes merge with those they touch or overlap, and stay sorted.
+    #[test]
+    fn holes_merge() {
+        let image = Image {
+            cluster_size: 512,
+            device_size: 1 << 20,
+            clusters: 1,
+        };
+        let mut l =
+            LazyDecode::new(Span::new(SourceId(0), 0, 0), &Codec::NtfsClone(image)).unwrap();
+        l.note_hole(10, 20);
+        l.note_hole(30, 40);
+        l.note_hole(50, 60);
+        assert_eq!(l.holes, [(10, 20), (30, 40), (50, 60)]);
+        l.note_hole(20, 30);
+        assert_eq!(l.holes, [(10, 40), (50, 60)]);
+        l.note_hole(5, 55);
+        assert_eq!(l.holes, [(5, 60)]);
+        l.note_hole(70, 80);
+        l.note_hole(0, 1);
+        l.note_hole(6, 7);
+        assert_eq!(l.holes, [(0, 1), (5, 60), (70, 80)]);
+        assert_eq!(l.hole_end(5), Some(60));
+        assert_eq!(l.hole_end(60), None);
+        assert_eq!(l.hole_end(1), None);
     }
 }

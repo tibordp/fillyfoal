@@ -26,8 +26,10 @@
 //! was copied).
 //!
 //! The decoder's state is a handful of counters (no window, no history), so
-//! it checkpoints for almost nothing; gaps are produced as bulk zero fills,
-//! a bounded step at a time like every decoder.
+//! it checkpoints for almost nothing. Gaps are zero runs a caller can skip
+//! (see "Zero runs" in the pipeline docs); for one that does not, they are
+//! produced as bulk zero fills, a bounded step at a time like every
+//! decoder.
 
 use crate::codec::pipeline::{Decode, Step};
 use crate::error::{DiagKind, Diagnostic, Result};
@@ -220,6 +222,10 @@ impl Decode for NtfsClone {
         }
         let start = out.len();
         let goal = start.saturating_add(step.max(1));
+        // A gap command read in this step: stop before writing its zeros,
+        // so a caller that skips zero runs can (see "Zero runs" in the
+        // pipeline docs); one that does not calls again and gets them.
+        let mut parsed_gap = false;
         loop {
             if self.done {
                 return Ok(Step::Done);
@@ -235,6 +241,9 @@ impl Decode for NtfsClone {
                 Ok(())
             };
             if self.zeros > 0 {
+                if parsed_gap {
+                    return Ok(Step::More);
+                }
                 let n = crate::bytes::to_usize(self.zeros).min(room);
                 grow(out, n)?;
                 out.resize(out.len().saturating_add(n), 0);
@@ -260,7 +269,7 @@ impl Decode for NtfsClone {
                 continue;
             }
             match self.command(input, eof) {
-                Ok(true) => {}
+                Ok(true) => parsed_gap = self.zeros > 0,
                 Ok(false) => self.done = true,
                 // Output so far stands; the shortage recurs on the next call.
                 Err(e) if e.kind == DiagKind::Truncated && out.len() > start => {
@@ -297,6 +306,18 @@ impl Decode for NtfsClone {
     fn truncation_is_exact(&self) -> bool {
         true
     }
+
+    fn window_free(&self) -> bool {
+        true
+    }
+
+    fn zero_run(&self) -> u64 {
+        self.zeros
+    }
+
+    fn skip_zeros(&mut self, n: u64) {
+        self.zeros = self.zeros.saturating_sub(n);
+    }
 }
 
 #[cfg(test)]
@@ -308,7 +329,7 @@ impl Decode for NtfsClone {
 mod tests {
     use super::*;
     use crate::codec::Codec;
-    use crate::codec::pipeline::{Status, decode_all, verify_checkpoints};
+    use crate::codec::pipeline::{Status, decode_all, decode_all_skipping, verify_checkpoints};
 
     const CS: u32 = 512;
 
@@ -450,11 +471,57 @@ mod tests {
             );
             assert!(out.len() < 2 * 4096 && out.iter().all(|&b| b == 0));
         }
-        // An output limit is reported, not exceeded.
+        // An output limit is reported, not exceeded (the first step stops
+        // after the gap command, before its zeros).
         let mut d = Codec::NtfsClone(image).decoder().unwrap();
         let mut out = Vec::new();
+        assert_eq!(
+            d.decode(&s, true, &mut out, 1 << 20, 1000),
+            Ok(Status::More)
+        );
         let e = d.decode(&s, true, &mut out, 1 << 20, 1000).unwrap_err();
         assert_eq!(e.kind, DiagKind::Limit);
+        assert!(out.is_empty());
+    }
+
+    /// A caller that skips zero runs gets the same volume without the gaps
+    /// being written; a gap of a billion clusters is skipped at once.
+    #[test]
+    fn gaps_can_be_skipped() {
+        let (image, s) = sample();
+        let mut d = Codec::NtfsClone(image).decoder().unwrap();
+        assert!(d.window_free());
+        let (out, skipped) = decode_all_skipping(d.as_mut(), &s, 1 << 30).unwrap();
+        assert_eq!(out, decode(image, &s).unwrap());
+        assert_eq!(skipped, 8 * 512);
+
+        let clusters = (1u64 << 30) - 1;
+        let image = Image {
+            cluster_size: 4096,
+            device_size: 4096 << 30,
+            clusters,
+        };
+        let mut s = Vec::new();
+        gap(&mut s, clusters as i64);
+        let mut d = Codec::NtfsClone(image).decoder().unwrap();
+        let mut out = Vec::new();
+        assert_eq!(
+            d.decode(&s, true, &mut out, 4096, 1 << 20),
+            Ok(Status::More)
+        );
+        assert!(out.is_empty());
+        assert_eq!(d.zero_run(), clusters * 4096);
+        // Part of the run, then the rest.
+        d.skip_zeros(4096);
+        assert_eq!(d.zero_run(), (clusters - 1) * 4096);
+        d.skip_zeros(d.zero_run());
+        assert_eq!(d.zero_run(), 0);
+        // A version 10.0 image: the stream ends with the volume.
+        assert_eq!(
+            d.decode(&s, true, &mut out, 4096, 1 << 20),
+            Ok(Status::Done)
+        );
+        assert!(out.is_empty());
     }
 
     /// Input arriving a byte at a time decodes the same.

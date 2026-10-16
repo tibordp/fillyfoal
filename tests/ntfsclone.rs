@@ -105,10 +105,11 @@ fn read_in_steps(host: &mut Host, span: Span, budget: u64) -> (Vec<u8>, Vec<u64>
     }
 }
 
-/// Reading the last cluster of a 1 GiB mostly empty volume walks it: the
-/// work is in proportion to the clusters produced, every step is bounded by
-/// the host's budget, and progress rises step by step. A checkpoint then
-/// makes another far read cheap.
+/// Reading the last cluster of a 1 GiB mostly empty volume walks the
+/// command stream, not the volume: the gap is skipped at once (recorded as
+/// a hole) instead of being written out as zeros, each step is bounded by
+/// the host's budget, and progress rises. Reads behind the front decode
+/// again from the start or a checkpoint.
 #[test]
 fn far_reads_are_bounded_and_checkpointed() {
     let mut host = Host::named("big.img", big_image(), Limits::default());
@@ -120,26 +121,18 @@ fn far_reads_are_bounded_and_checkpointed() {
         "expanding the volume reads only its head"
     );
 
-    const BUDGET: u64 = 500;
+    const BUDGET: u64 = 2;
     let last = vol.sub((BIG - 1) * CS as u64, 16);
     let (bytes, fronts) = read_in_steps(&mut host, last, BUDGET);
     assert_eq!(&bytes[..12], b"last cluster");
-    // About a unit per 4 KiB cluster: BIG units in BUDGET-unit steps.
-    let steps = fronts.len() as u64;
-    assert!(
-        (BIG / BUDGET / 2..=2 * BIG / BUDGET + 2).contains(&steps),
-        "{steps} steps"
-    );
-    // Each step moves the front by a bounded amount, and it only rises.
-    let per_step = 2 * BUDGET * CS as u64;
-    let mut prev = 0;
-    for &f in &fronts {
-        assert!(f >= prev && f - prev <= per_step, "{prev} -> {f}");
-        prev = f;
-    }
+    // A unit per command or so, against a unit per cluster (BIG) when the
+    // gap was written out.
+    assert!(fronts.len() < 10, "{} steps", fronts.len());
+    assert!(fronts.windows(2).all(|w| w[0] <= w[1]), "{fronts:?}");
 
-    // Back to the start (released long ago: decoded again from the start),
-    // then far again: a checkpoint near the end spares the walk.
+    // Back to the start (released when the gap was skipped: decoded again
+    // from the start), then far again: a checkpoint near the end spares
+    // the walk.
     let first = vol.sub(0, 13);
     let (bytes, _) = read_in_steps(&mut host, first, BUDGET);
     assert_eq!(bytes, b"first cluster");
@@ -152,6 +145,109 @@ fn far_reads_are_bounded_and_checkpointed() {
     let tail = vol.sub(BIG * CS as u64, 18);
     let (bytes, _) = read_in_steps(&mut host, tail, BUDGET);
     assert_eq!(bytes, b"backup boot sector");
+}
+
+/// Clusters in the huge image: a 1 TiB volume.
+const HUGE: u64 = 1 << 28;
+
+/// A 1 TiB volume with data in a few clusters at its start, middle and
+/// end, and gaps of up to half the volume between them. About 25 KiB.
+fn huge_image() -> Vec<u8> {
+    let mid = HUGE / 2;
+    let mut img = header(HUGE, (HUGE + 1) * CS as u64, 5);
+    data(&mut img, 0x11, b"cluster 0");
+    data(&mut img, 0x12, b"cluster 1");
+    // A gap too short to skip (it is written out), then long ones.
+    gap(&mut img, 3);
+    data(&mut img, 0x13, b"cluster 5");
+    gap(&mut img, mid - 6);
+    data(&mut img, 0x21, b"middle cluster");
+    gap(&mut img, HUGE - 2 - mid);
+    data(&mut img, 0x22, b"last cluster");
+    data(&mut img, 0x33, b"backup boot sector");
+    img
+}
+
+/// A step's budget, in units: a read that yields has used all of it.
+const STEP: u64 = 4;
+
+/// Reads `span` in steps of [`STEP`] units; returns the bytes and how many
+/// steps yielded (the work is at most a step more than that).
+fn read_counted(host: &mut Host, span: Span) -> (Vec<u8>, u64) {
+    let (bytes, fronts) = read_in_steps(host, span, STEP);
+    (bytes, fronts.len() as u64)
+}
+
+/// Far reads into a 1 TiB mostly empty volume cost work in proportion to
+/// the command stream (a few dozen units), not to the volume (a quarter
+/// billion units to write its gaps out as zeros); reads in holes the
+/// decoding has passed cost nothing; reads across holes and data return
+/// the right bytes; checkpoints make another far read cheap; and reads
+/// behind the front decode again.
+#[test]
+fn holes_make_far_reads_cheap() {
+    let mid = HUGE / 2;
+    let mut host = Host::named("huge.img", huge_image(), Limits::default());
+    let volume = open(&mut host, &["Volume"]);
+    let vol = volume_span(&mut host, volume);
+    assert_eq!(vol.len, (HUGE + 1) * CS as u64);
+
+    // The last cluster: in steps of one unit, a few dozen at most, with
+    // progress that jumps over the gaps.
+    let last = vol.sub((HUGE - 1) * CS as u64, 12);
+    let (bytes, fronts) = read_in_steps(&mut host, last, 1);
+    assert_eq!(bytes, b"last cluster");
+    assert!(fronts.len() < 30, "{} units", fronts.len());
+    assert!(fronts.windows(2).all(|w| w[0] <= w[1]), "{fronts:?}");
+    assert!(fronts.iter().any(|&f| f > mid * CS as u64), "{fronts:?}");
+
+    // Inside gaps the decoding has passed: zeros at once (a budget of one
+    // unit is enough).
+    for at in [
+        7 * CS as u64,
+        (mid - 300) * CS as u64,
+        (mid + 7) * CS as u64,
+        (HUGE - 300) * CS as u64,
+    ] {
+        match host.session.read_step(vol.sub(at, 1 << 20), 1) {
+            ReadProgress::Done(bytes) => {
+                assert_eq!(bytes.len(), 1 << 20);
+                assert!(bytes.iter().all(|&b| b == 0), "{at:#x}");
+            }
+            _ => panic!("a read in a known hole at {at:#x} decodes"),
+        }
+    }
+
+    // Across a hole, data and a hole: the right bytes, cheaply.
+    let across = vol.sub((mid - 1) * CS as u64, 3 * CS as u64);
+    let (bytes, steps) = read_counted(&mut host, across);
+    assert_eq!(bytes.len(), 3 * CS);
+    assert!(bytes[..CS].iter().all(|&b| b == 0));
+    assert_eq!(&bytes[CS..CS + 14], b"middle cluster");
+    assert!(bytes[CS + 14..2 * CS].iter().all(|&b| b == 0x21));
+    assert!(bytes[2 * CS..].iter().all(|&b| b == 0));
+    assert!(steps < 10, "{steps} steps");
+
+    // Behind the front (its output dropped when the gaps were skipped):
+    // decoded again from the start, the short gap written out.
+    let head = vol.sub(0, 6 * CS as u64);
+    let (bytes, steps) = read_counted(&mut host, head);
+    assert_eq!(&bytes[..9], b"cluster 0");
+    assert_eq!(&bytes[CS..CS + 9], b"cluster 1");
+    assert!(bytes[CS + 9..2 * CS].iter().all(|&b| b == 0x12));
+    assert!(bytes[2 * CS..5 * CS].iter().all(|&b| b == 0));
+    assert_eq!(&bytes[5 * CS..5 * CS + 9], b"cluster 5");
+    assert!(steps < 10, "{steps} steps");
+
+    // Far again: from a checkpoint near the end.
+    let (bytes, steps) = read_counted(&mut host, vol.sub(HUGE * CS as u64, 18));
+    assert_eq!(bytes, b"backup boot sector");
+    assert!(steps <= 2, "{steps} steps");
+
+    // The listing agrees, and the whole tree stays clean.
+    let commands = open(&mut host, &["Commands"]);
+    assert_eq!(host.session.children(commands).unwrap().ids.len(), 7);
+    assert!(!host.render().contains("!"), "{}", host.render());
 }
 
 /// The command listing of the large image is a few nodes, and costs work

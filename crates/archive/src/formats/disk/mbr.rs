@@ -466,15 +466,21 @@ pub(super) async fn gap_node(
         return Ok(None);
     }
     let mut summary = format!("{}, {what}", size(span.len));
-    // Not where it would decode far into a disk decoded on demand.
+    // Not where it would decode far into a disk decoded on demand (that
+    // decision must not depend on what has been decoded, so a far gap is
+    // not checked even when it is known to be a hole).
     if span.len <= MAX_GAP_CHECK && cx.read_is_cheap(span) {
-        let data = cx.read_avail(span).await?;
-        cx.checkpoint().await;
-        summary.push_str(if data.iter().all(|&b| b == 0) {
-            ", all zeros"
-        } else {
-            ", not blank"
-        });
+        // Holes (declared by the host, or gaps that decoding the disk has
+        // passed) are zeros without reading them.
+        let blank = match cx.next_data(span).await {
+            None => true,
+            Some(_) => {
+                let data = cx.read_avail(span).await?;
+                cx.checkpoint().await;
+                data.iter().all(|&b| b == 0)
+            }
+        };
+        summary.push_str(if blank { ", all zeros" } else { ", not blank" });
     }
     let end = start.saturating_add(span.len.checked_div(sector).unwrap_or(0));
     Ok(Some(

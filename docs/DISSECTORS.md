@@ -232,9 +232,13 @@ sparse table) asks `cx.next_data(span).await` where data may resume, like
 hole, or `None` if the rest is holes. Holes are what the host declared
 with `Session::set_holes` (from `SEEK_HOLE`/`SEEK_DATA` or `FIEMAP`) and
 the zero pieces of piecewise sources (sparse files inside a file system
-image); a host that declares none gets `Some(0)`, so the walker behaves
-as before. Reads wholly inside declared holes are answered as zeros
-without asking the host.
+image), and the gaps decoding has already passed in content decoded on
+demand by a codec that skips them (an ntfsclone or Partclone volume); a
+host that declares none gets `Some(0)`, so the walker behaves as before.
+Reads wholly inside declared holes are answered as zeros without asking
+the host. What decoding has found depends on what was read before, so use
+the answer only to skip reading bytes you would find to be zeros, never to
+decide what nodes or summaries to build.
 
 A walker that does not know its count up front (tar, a scan over records)
 should report progress for the host's display: `cx.progress(done, total)`,
@@ -393,7 +397,14 @@ work and output stay bounded (see `tests/data_bounds.rs`).
   reports every shortage as `DiagKind::Truncated` (and nothing else as
   truncated) returns `true` from `Decode::truncation_is_exact`, and its
   other errors are reported at once. Block codecs get there by checking a
-  block is whole before decoding it (see `zstd.rs`).
+  block is whole before decoding it (see `zstd.rs`). A codec with no
+  window whose stream describes long runs of zeros cheaply (the gaps of a
+  disk image) opts in to skipping them: `Decode::window_free` returns
+  `true`, `Decode::zero_run` reports the zeros parsed and not yet written,
+  `Decode::skip_zeros` advances past them, and the step returns
+  `Step::More` right after parsing a run instead of writing it (see
+  `ntfsclone.rs`, `partclone.rs`, and "Zero runs" in `pipeline.rs`). Test
+  it with `pipeline::decode_all_skipping`.
 - Look at the `Codec` enum before writing a decoder: most compression
   schemes in the wild already have a variant (see the list in `DESIGN.md`).
   Container framings that wrap a codec (WIM chunk tables, CAB folders,
