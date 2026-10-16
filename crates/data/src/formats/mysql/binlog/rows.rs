@@ -357,7 +357,12 @@ pub fn describe(c: &Column) -> String {
         },
         247 => "ENUM".to_owned(),
         248 => "SET".to_owned(),
-        16 => format!("BIT({})", (c.meta >> 8) * 8 + (c.meta & 0xff)),
+        16 => format!(
+            "BIT({})",
+            u32::from(c.meta >> 8)
+                .saturating_mul(8)
+                .saturating_add(u32::from(c.meta & 0xff))
+        ),
         245 => "JSON".to_owned(),
         255 => "GEOMETRY".to_owned(),
         242 => "VECTOR".to_owned(),

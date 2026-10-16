@@ -1,7 +1,8 @@
 //! `mongodump --archive` files (MongoDB database tools): one stream that
 //! multiplexes every dumped collection.
 //!
-//! Layout, as mongo-tools writes it (`common/archive`, read for facts):
+//! Layout, as mongo-tools writes it (`common/archive`; written from memory
+//! and checked against mongodump 100.17.0's output):
 //! the magic number `0x8199e26d` (little-endian), the prelude (a header
 //! document with the archive format version, server and tool versions,
 //! then one document per collection: database, name, the collection's

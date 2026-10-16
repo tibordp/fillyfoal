@@ -183,13 +183,12 @@ fn skip(b: &[u8], pos: usize, depth: usize) -> std::result::Result<usize, bool> 
                 return Err(false);
             }
         }
-        110 | 111 => {
+        110 | 111
             if rest
                 .get(usize::try_from(it.head).unwrap_or(0).saturating_sub(1))
-                .is_some_and(|&s| s > 1)
-            {
-                return Err(false);
-            }
+                .is_some_and(|&s| s > 1) =>
+        {
+            return Err(false);
         }
         _ => {}
     }
@@ -449,7 +448,8 @@ async fn identity(r: &mut ByteReader<'_>, it: &Item, start: u64) -> Result<Strin
             let ids: Vec<String> = f
                 .get(skip..)
                 .unwrap_or_default()
-                .chunks_exact(4)
+                .chunks(4)
+                .filter(|w| w.len() == 4)
                 .rev()
                 .map(|w| be_uint(w).to_string())
                 .collect();
@@ -618,10 +618,9 @@ async fn item_node(
             crate::expander!(self::fun_fields: (Span, Path)),
             (span, path.clone()),
         ),
-        t => node.value(hex(t, 8)).diag(Diagnostic::unsupported(format!(
-            "{}",
-            lookup(TAGS, t.into()).unwrap_or("unknown tag")
-        ))),
+        t => node.value(hex(t, 8)).diag(Diagnostic::unsupported(
+            lookup(TAGS, t.into()).unwrap_or("unknown tag"),
+        )),
     })
 }
 
@@ -822,7 +821,9 @@ mod tests {
         let term = b"\x83l\x00\x00\x00\x02a\x01w\x03twoj";
         assert!(probe(&head(term)));
         // Cut short, or with bytes after it.
-        assert!(!probe(&head(&term[..term.len() - 1])));
+        assert!(!probe(&head(
+            term.get(..term.len().saturating_sub(1)).unwrap_or_default()
+        )));
         let mut longer = term.to_vec();
         longer.push(0);
         assert!(!probe(&head(&longer)));

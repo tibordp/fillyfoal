@@ -75,8 +75,8 @@ fn packed(b: &[u8]) -> Option<(i64, u64)> {
     let c = i8::from_le_bytes([*b.first()?]);
     match c {
         0 => Some((0, 1)),
-        5..=127 => Some((i64::from(c) - 5, 1)),
-        -128..=-5 => Some((i64::from(c) + 5, 1)),
+        5..=127 => Some((i64::from(c).saturating_sub(5), 1)),
+        -128..=-5 => Some((i64::from(c).saturating_add(5), 1)),
         1..=4 => {
             let n = usize::try_from(c).ok()?;
             let bytes = b.get(1..n.checked_add(1)?)?;
@@ -87,7 +87,7 @@ fn packed(b: &[u8]) -> Option<(i64, u64)> {
             Some((v, u64::try_from(n).ok()?.checked_add(1)?))
         }
         _ => {
-            let n = usize::try_from(-i64::from(c)).ok()?;
+            let n = usize::try_from(i64::from(c).saturating_neg()).ok()?;
             let bytes = b.get(1..n.checked_add(1)?)?;
             let mut v: i64 = -1;
             for (i, &x) in bytes.iter().enumerate() {
@@ -623,11 +623,9 @@ async fn encoding(r: &mut ByteReader<'_>, inner_end: u64) -> Result<Option<Strin
                     if t == b'T' { "UTF-8" } else { "US-ASCII" }.to_owned(),
                 ));
             }
-            Some("encoding") => {
-                if head(r, value_at).await?.tag == b'"' {
-                    let (b, _, _) = byte_string(r, value_at.saturating_add(1), 64).await?;
-                    return Ok(Some(String::from_utf8_lossy(&b).into_owned()));
-                }
+            Some("encoding") if head(r, value_at).await?.tag == b'"' => {
+                let (b, _, _) = byte_string(r, value_at.saturating_add(1), 64).await?;
+                return Ok(Some(String::from_utf8_lossy(&b).into_owned()));
             }
             _ => {}
         }
@@ -1070,7 +1068,11 @@ mod tests {
         // [1, :a]
         let value = b"\x04\x08[\x07i\x06:\x06a";
         assert!(probe(&head(value)));
-        assert!(!probe(&head(&value[..value.len() - 1])));
+        assert!(!probe(&head(
+            value
+                .get(..value.len().saturating_sub(1))
+                .unwrap_or_default()
+        )));
         let mut longer = value.to_vec();
         longer.push(0);
         assert!(!probe(&head(&longer)));
