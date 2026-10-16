@@ -8,6 +8,7 @@
 //! checked.
 
 use crate::bytes::{u16_le, u32_le};
+use crate::codec::checked::DataCrc;
 use crate::codec::{Codec, lzh};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
@@ -16,7 +17,7 @@ use crate::formats::util::arcutil::{ByteReader, emit_nodes, unsupported};
 use crate::formats::util::fmt;
 use crate::formats::util::fmt::count;
 use crate::formats::util::val::hex;
-use crate::formats::{Format, Input, Probe, embedded};
+use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{Check, EnumTable, Value};
@@ -182,7 +183,17 @@ async fn directory_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let time = r.u16("Time", LE).ok_or_else(bad)?;
     r.with(|n| n.summary(crate::text::dos_datetime(date, time)));
     let crc = r.u16("File CRC-16", LE).ok_or_else(bad)?;
-    r.with(|n| n.checksum(Check::new("CRC-16/ARC", crc).on_decode()));
+    let check = Check::new("CRC-16/ARC", crc);
+    let check = match method {
+        // Stored data is checked when expanded.
+        0 => {
+            let packed = u64::from(u32_le(&e, 24).unwrap_or(0));
+            crate::formats::decode_check(check, &Codec::Stored, packed)
+        }
+        1 | 2 => check.on_decode(),
+        _ => check,
+    };
+    r.with(|n| n.checksum(check));
     let original = r.u32("Original size", LE).ok_or_else(bad)?;
     r.with(|n| n.as_size());
     let packed = r.u32("Compressed size", LE).ok_or_else(bad)?;
@@ -226,7 +237,9 @@ async fn directory_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let file = input.span;
     let data = file.sub(offset.into(), packed.into());
     let node = if method == 0 {
-        embedded("Content", input.nested(data)).summary(fmt::size(packed.into()))
+        let codec = Codec::Stored.checked(DataCrc::Crc16Arc, crc.into());
+        crate::formats::content("Content", input, data, codec, Some(packed.into()))
+            .summary(fmt::size(packed.into()))
     } else if let 1 | 2 = method {
         let m = if method == 1 {
             lzh::Method::ZooLzw

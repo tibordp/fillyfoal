@@ -32,7 +32,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ STC sequence 0  [0xe8+0xe]
           PCR PID: 0x1001  [0xe8+0x2]
           SPN STC start: 0  [0xea+0x4]
-          Presentation start: 0:10:00 (27000000/45000 s)  [0xee+0x4]
+          Presentation start: 10 min (27000000/45000 s)  [0xee+0x4]
           Presentation end: 0:10:02.0436889 (27091966/45000 s)  [0xf2+0x4]
   ▾ ProgramInfo  [0xf8+0x56]
       Length: 82  [0xf8+0x4]

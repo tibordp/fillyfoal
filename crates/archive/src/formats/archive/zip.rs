@@ -8,6 +8,7 @@
 //! node is expanded.
 
 use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
+use crate::codec::checked::DataCrc;
 use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
@@ -17,7 +18,7 @@ use crate::formats::{Codec, Format, Head, Input, Probe, content};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag};
 
 const LE: Endian = Endian::Little;
 const LOCAL: &[u8] = b"PK\x03\x04";
@@ -1241,6 +1242,93 @@ fn decode_name(bytes: &[u8], flags: u16, extra: &[u8]) -> String {
     }
 }
 
+/// Where the CRC-32 is in a central and in a local header.
+const CENTRAL_CRC_AT: u64 = 16;
+const LOCAL_CRC_AT: u64 = 14;
+
+/// How an entry's CRC-32 is verified: the check its header fields show,
+/// and whether its content is decoded with the CRC checked (a mismatch is
+/// then a warning on the content once it has been decoded to its end).
+/// Listing an entry decodes nothing.
+#[derive(Clone, Debug)]
+struct CrcPlan {
+    crc: u32,
+    check: Check,
+    on_decode: bool,
+}
+
+impl CrcPlan {
+    fn new(crc: u32, method: u16, flags: u16, sizes: Sizes, extra: &[u8], is_dir: bool) -> Self {
+        let check = Check::new("CRC-32", crc);
+        let plan = |check, on_decode| CrcPlan {
+            crc,
+            check,
+            on_decode,
+        };
+        let decodable = |m: u16| matches!(m, 0 | 6 | 8 | 9 | 10 | 12 | 14 | 20 | 93 | 95 | 98);
+        if is_dir && sizes.uncompressed > 0 {
+            // A directory's content is not shown.
+            return plan(check, false);
+        }
+        if flags & 0x0001 != 0 {
+            if flags & 0x0040 != 0 {
+                return plan(check, false);
+            }
+            if method == 99 {
+                // WinZip AES: AE-1 keeps the CRC, AE-2 leaves it out.
+                let aes = extra_field(extra, 0x9901);
+                match aes.and_then(|f| u16_le(f, 0)) {
+                    Some(1) if aes.and_then(|f| u16_le(f, 5)).is_some_and(decodable) => {}
+                    Some(2) => return plan(check.skipped("not used by AE-2"), false),
+                    _ => return plan(check, false),
+                }
+            } else if !decodable(method) {
+                return plan(check, false);
+            }
+            return plan(check.on_decode(), true);
+        }
+        if !decodable(method) {
+            return plan(check, false);
+        }
+        if sizes.uncompressed == 0 {
+            // Nothing to decode: the CRC of no bytes is 0.
+            return plan(check.verify(0u32), false);
+        }
+        let stored = method == 0;
+        let codec = if stored {
+            Codec::Stored
+        } else {
+            Codec::Deflate
+        };
+        plan(
+            crate::formats::decode_check(check, &codec, sizes.compressed),
+            !stored || sizes.compressed <= crate::formats::STORED_CHECK_LIMIT,
+        )
+    }
+
+    /// The check of a copy of the CRC-32 (the local header's): this plan's
+    /// when it holds the same value; skipped when the value is left to the
+    /// data descriptor.
+    fn for_copy(&self, crc: u32, flags: u16) -> Check {
+        if crc == self.crc {
+            self.check.clone()
+        } else if crc == 0 && flags & 0x0008 != 0 {
+            Check::new("CRC-32", crc).skipped("in the data descriptor")
+        } else {
+            Check::new("CRC-32", crc)
+        }
+    }
+
+    /// `codec` with the content's CRC-32 checked, when it is.
+    fn wrap(&self, codec: Codec) -> Codec {
+        if self.on_decode {
+            codec.checked(DataCrc::Crc32, self.crc.into())
+        } else {
+            codec
+        }
+    }
+}
+
 async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> {
     let file = input.span;
     let header = crate::fields::parse(
@@ -1251,21 +1339,28 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
         CentralHeader::layout,
     )
     .await?;
-    cx.emit(CentralHeader::node(
-        "Central Directory Header",
-        span.sub(0, CentralHeader::SIZE),
-        LE,
-    ));
     let name_span = span.sub(CentralHeader::SIZE, header.name_len.into());
     let extra = span.sub(
         CentralHeader::SIZE.saturating_add(header.name_len.into()),
         header.extra_len.into(),
     );
-    let name = decode_name(
-        &cx.read(name_span).await?,
+    let extra_bytes = cx.read_avail(extra).await?;
+    let sizes = zip64_sizes(&cx, extra, &header).await;
+    let plan = CrcPlan::new(
+        header.crc,
+        header.method,
         header.flags,
-        &cx.read_avail(extra).await?,
+        sizes,
+        &extra_bytes,
+        name_is_dir(&cx, name_span).await,
     );
+    cx.emit(CentralHeader::checked_node(
+        "Central Directory Header",
+        span.sub(0, CentralHeader::SIZE),
+        LE,
+        plan.check.at(CENTRAL_CRC_AT),
+    ));
+    let name = decode_name(&cx.read(name_span).await?, header.flags, &extra_bytes);
     cx.emit(
         Node::new("File name")
             .span(name_span)
@@ -1293,11 +1388,15 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
         );
     }
 
-    let sizes = zip64_sizes(&cx, extra, &header).await;
     let local_offset = sizes.offset.saturating_add(prefix);
     let local_span = file.sub(local_offset, LocalHeader::SIZE);
     let local = crate::fields::parse(&cx, local_span, LE, &(), LocalHeader::layout).await?;
-    let mut local_node = LocalHeader::node("Local File Header", local_span, LE);
+    let mut local_node = LocalHeader::checked_node(
+        "Local File Header",
+        local_span,
+        LE,
+        plan.for_copy(local.crc, local.flags).at(LOCAL_CRC_AT),
+    );
     if !local.signature.starts_with(LOCAL) {
         local_node = local_node.diag(Diagnostic::malformed("bad local header signature"));
         cx.emit(local_node);
@@ -1334,13 +1433,13 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
             data.len,
         ));
     }
-    entry_content(&cx, input, name_span, data, extra, &header, sizes).await?;
+    entry_content(&cx, input, name_span, data, extra, &header, sizes, &plan).await?;
     if header.flags & 0x0008 != 0 {
         let wide = extra_field(&local_extra_bytes, 0x0001).is_some()
             || header.compressed == u32::MAX
             || header.uncompressed == u32::MAX;
         let at = data_offset.saturating_add(sizes.compressed);
-        if let Some(node) = data_descriptor(&cx, file.tail(at), wide, &header, sizes).await {
+        if let Some(node) = data_descriptor(&cx, file.tail(at), wide, &header, sizes, &plan).await {
             cx.emit(node);
         }
     }
@@ -1373,13 +1472,15 @@ async fn emit_local_name_extra(
     Ok(())
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct DescriptorCtx {
     signature: bool,
     wide: bool,
     crc: u32,
     compressed: u64,
     uncompressed: u64,
+    /// The entry's check of its CRC-32 (see [`CrcPlan`]).
+    check: Check,
 }
 
 /// The data descriptor that follows an entry written with flag bit 3: an
@@ -1391,6 +1492,7 @@ async fn data_descriptor(
     wide: bool,
     header: &CentralHeader,
     sizes: Sizes,
+    plan: &CrcPlan,
 ) -> Option<Node> {
     let head = cx.read_avail(rest.sub(0, 4)).await.ok()?;
     // Some writers (pyaff4) set bit 3 with the sizes in the local header
@@ -1416,6 +1518,7 @@ async fn data_descriptor(
         crc: header.crc,
         compressed: sizes.compressed,
         uncompressed: sizes.uncompressed,
+        check: plan.check.clone(),
     };
     let parsed = crate::fields::parse(cx, span, LE, &ctx, descriptor_layout).await;
     let mut node = crate::fields::struct_node("Data Descriptor", span, LE, ctx, descriptor_layout);
@@ -1436,7 +1539,19 @@ fn descriptor_layout(f: &mut Fields<'_>, ctx: &DescriptorCtx) -> Result<bool> {
     if ctx.signature {
         f.bytes("Signature", 4).emit()?;
     }
-    let crc = f.u32("CRC-32").checksum("CRC-32").emit()?;
+    let crc = f
+        .u32("CRC-32")
+        .checksum("CRC-32")
+        // The entry's verdict, when this is the CRC its content is
+        // checked against.
+        .with_check(|c| {
+            if c.stored == ctx.check.stored {
+                ctx.check.clone()
+            } else {
+                c
+            }
+        })
+        .emit()?;
     let (compressed, uncompressed) = if ctx.wide {
         (
             f.u64("Compressed size").size().emit()?,
@@ -1452,6 +1567,7 @@ fn descriptor_layout(f: &mut Fields<'_>, ctx: &DescriptorCtx) -> Result<bool> {
 }
 
 /// An entry's content (or why it cannot be shown).
+#[allow(clippy::too_many_arguments)]
 async fn entry_content(
     cx: &Cx,
     input: Input,
@@ -1460,12 +1576,22 @@ async fn entry_content(
     extra: Span,
     header: &CentralHeader,
     sizes: Sizes,
+    plan: &CrcPlan,
 ) -> Result<()> {
     let file = input.span;
     if header.flags & 0x0001 != 0 {
         let is_dir = name_is_dir(cx, name_span).await;
-        let nodes =
-            encrypted_content(cx, input, file, data, extra, header, sizes.uncompressed).await?;
+        let nodes = encrypted_content(
+            cx,
+            input,
+            file,
+            data,
+            extra,
+            header,
+            sizes.uncompressed,
+            plan,
+        )
+        .await?;
         if !is_dir {
             for node in nodes {
                 cx.emit(node);
@@ -1492,6 +1618,7 @@ async fn entry_content(
                     &codec,
                 ));
             }
+            let codec = plan.wrap(codec);
             // A Terraform saved plan's `tfplan` is a bare protobuf message,
             // known only by its name.
             let node = if cx.read(name_span).await.is_ok_and(|n| n == b"tfplan") {
@@ -1632,6 +1759,7 @@ fn lzma_header(span: Span, codec: &Codec) -> Node {
 
 /// The content of an encrypted entry: asks for the archive's password,
 /// verifies it, and decrypts then decompresses on expansion.
+#[allow(clippy::too_many_arguments)]
 async fn encrypted_content(
     cx: &Cx,
     input: Input,
@@ -1640,8 +1768,10 @@ async fn encrypted_content(
     extra: Span,
     header: &CentralHeader,
     uncompressed: u64,
+    plan: &CrcPlan,
 ) -> Result<Vec<Node>> {
-    let payload = encrypted_payload(cx, input, archive, data, extra, header, uncompressed).await?;
+    let payload =
+        encrypted_payload(cx, input, archive, data, extra, header, uncompressed, plan).await?;
     if header.method != 99 || header.flags & 0x0040 != 0 {
         return Ok(vec![payload]);
     }
@@ -1675,6 +1805,7 @@ async fn encrypted_content(
 }
 
 /// The decrypted (and decompressed) content of an encrypted entry.
+#[allow(clippy::too_many_arguments)]
 async fn encrypted_payload(
     cx: &Cx,
     input: Input,
@@ -1683,6 +1814,7 @@ async fn encrypted_payload(
     extra: Span,
     header: &CentralHeader,
     uncompressed: u64,
+    plan: &CrcPlan,
 ) -> Result<Node> {
     use crate::codec::crypto::{Key, Sha1, ZipCryptoKeys, pbkdf2};
     const PROMPT: &str = "Password for the encrypted ZIP entries";
@@ -1830,7 +1962,14 @@ async fn encrypted_payload(
                 .summary(format!("encrypted, {uncompressed:#x} bytes"))
                 .lazy(
                     encrypted_lzma,
-                    (input, payload, decrypt, header.flags, uncompressed),
+                    (
+                        input,
+                        payload,
+                        decrypt,
+                        header.flags,
+                        uncompressed,
+                        plan.clone(),
+                    ),
                 ));
         }
         _ => {
@@ -1842,17 +1981,21 @@ async fn encrypted_payload(
                 ))));
         }
     };
-    Ok(
-        content("Content", input, payload, codec, Some(uncompressed))
-            .summary(format!("encrypted, {uncompressed:#x} bytes")),
+    Ok(content(
+        "Content",
+        input,
+        payload,
+        plan.wrap(codec),
+        Some(uncompressed),
     )
+    .summary(format!("encrypted, {uncompressed:#x} bytes")))
 }
 
 /// An encrypted LZMA entry: decrypts it, then decompresses the LZMA stream
 /// after its properties header.
 async fn encrypted_lzma(
     cx: Cx,
-    (input, payload, decrypt, flags, uncompressed): (Input, Span, Codec, u16, u64),
+    (input, payload, decrypt, flags, uncompressed, plan): (Input, Span, Codec, u16, u64, CrcPlan),
 ) -> Result<()> {
     let plain = crate::codec::decode_span(&cx, payload, &decrypt, None).await?;
     if let Some(e) = plain.error {
@@ -1870,7 +2013,7 @@ async fn encrypted_lzma(
         "Decompressed",
         input,
         stream,
-        codec,
+        plan.wrap(codec),
         Some(uncompressed),
     ));
     Ok(())
@@ -2216,6 +2359,19 @@ async fn local_entries(cx: &Cx, input: Input) -> Result<()> {
                 continue;
             }
         };
+        let sizes = Sizes {
+            compressed: header.compressed.into(),
+            uncompressed: header.uncompressed.into(),
+            offset: start,
+        };
+        let plan = CrcPlan::new(
+            header.crc,
+            header.method,
+            header.flags,
+            sizes,
+            &extra,
+            name_bytes.ends_with(b"/"),
+        );
         cx.push(node.summary(format!("{} bytes", header.uncompressed)).lazy(
             local_entry,
             (
@@ -2224,6 +2380,7 @@ async fn local_entries(cx: &Cx, input: Input) -> Result<()> {
                 data,
                 codec,
                 u64::from(header.uncompressed),
+                plan,
             ),
         ))
         .await;
@@ -2240,9 +2397,14 @@ async fn local_entries(cx: &Cx, input: Input) -> Result<()> {
 
 async fn local_entry(
     cx: Cx,
-    (input, header, data, codec, size): (Input, Span, Span, Codec, u64),
+    (input, header, data, codec, size, plan): (Input, Span, Span, Codec, u64, CrcPlan),
 ) -> Result<()> {
-    cx.emit(LocalHeader::node("Local File Header", header, LE));
+    cx.emit(LocalHeader::checked_node(
+        "Local File Header",
+        header,
+        LE,
+        plan.check.at(LOCAL_CRC_AT),
+    ));
     let local = crate::fields::parse(&cx, header, LE, &(), LocalHeader::layout).await?;
     let name = Span::new(
         header.source,
@@ -2256,7 +2418,13 @@ async fn local_entry(
     );
     let extra_bytes = cx.read_avail(extra).await?;
     emit_local_name_extra(&cx, name, extra, &local, &extra_bytes).await?;
-    cx.emit(content("Content", input, data, codec, Some(size)));
+    cx.emit(content(
+        "Content",
+        input,
+        data,
+        plan.wrap(codec),
+        Some(size),
+    ));
     Ok(())
 }
 

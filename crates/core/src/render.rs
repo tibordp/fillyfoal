@@ -171,8 +171,12 @@ fn power_of_ten(per_sec: u64) -> Option<u32> {
 /// - under a second, in the largest of ms, µs and ns that is at least 1:
 ///   `250 ms`, `26.667 µs`;
 /// - under a minute, in seconds: `1.48 s`, `5 s`;
-/// - from a minute, as `h:mm:ss`: `0:01:05.500`, `1:02:03`, and from a day
-///   `2 days, 3:04:05`.
+/// - from a minute, a whole number of seconds in at most two units, largest
+///   first: `5 min`, `2 h`, `730 days`, `1 h 30 min`, `2 days 3 h`, `1 min
+///   5 s`;
+/// - otherwise (a fraction of a second, or three units or more) as
+///   `h:mm:ss`: `0:01:05.500`, `1:02:03`, and from a day `2 days,
+///   3:04:05`.
 ///
 /// Fractions are exact when a tick is a power-of-ten fraction of a second
 /// (seconds, ms, µs, 100 ns, ns) and leave out trailing zeros (keeping
@@ -215,7 +219,12 @@ fn duration_text(ticks: i64, per_sec: u64, short: bool) -> String {
     }
     let whole = scaled.checked_div(scale).unwrap_or(0);
     let frac = scaled.checked_rem(scale).unwrap_or(0);
-    if whole >= 60 {
+    if whole >= 60
+        && frac == 0
+        && let Some(units) = whole_units(whole)
+    {
+        out.push_str(&units);
+    } else if whole >= 60 {
         let (days, rem) = (whole / 86_400, whole % 86_400);
         if days > 0 {
             let _ = write!(out, "{days} {}, ", if days == 1 { "day" } else { "days" });
@@ -261,6 +270,25 @@ fn duration_text(ticks: i64, per_sec: u64, short: bool) -> String {
         let _ = write!(out, " ({ticks}/{per} s)");
     }
     out
+}
+
+/// Whole seconds (at least a minute) in at most two units, largest first,
+/// when that is exact: `5 min`, `2 h`, `730 days`, `1 h 30 min`, `2 days
+/// 3 h`, `1 min 5 s`; `None` when it takes three or four.
+fn whole_units(secs: u128) -> Option<String> {
+    let days = secs / 86_400;
+    let parts = [
+        (days, if days == 1 { "day" } else { "days" }),
+        (secs % 86_400 / 3600, "h"),
+        (secs % 3600 / 60, "min"),
+        (secs % 60, "s"),
+    ];
+    let shown: Vec<String> = parts
+        .iter()
+        .filter(|&&(n, _)| n != 0)
+        .map(|(n, unit)| format!("{n} {unit}"))
+        .collect();
+    (shown.len() <= 2).then(|| shown.join(" "))
 }
 
 /// `frac` as `digits` decimal digits, trailing zeros left out.
@@ -519,7 +547,18 @@ mod tests {
         assert_eq!(d(77_070_685, 100), "8 days, 22:05:06.850");
         assert_eq!(d(65_500, 1000), "0:01:05.500");
         assert_eq!(d(3723, 1), "1:02:03");
-        assert_eq!(d(86_400, 1), "1 day, 0:00:00");
+        assert_eq!(d(86_400, 1), "1 day");
+        // Whole units, at most two of them.
+        assert_eq!(d(300, 1), "5 min");
+        assert_eq!(d(7200, 1), "2 h");
+        assert_eq!(d(730 * 86_400, 1), "730 days");
+        assert_eq!(d(5400, 1), "1 h 30 min");
+        assert_eq!(d(2 * 86_400 + 3 * 3600, 1), "2 days 3 h");
+        assert_eq!(d(65, 1), "1 min 5 s");
+        assert_eq!(d(45, 1), "45 s");
+        assert_eq!(d(-300_000, 1000), "-5 min");
+        assert_eq!(d(90_061, 1), "1 day, 1:01:01");
+        assert_eq!(d(5_400_000, 90_000), "1 min (5400000/90000 s)");
         assert_eq!(d(1_234_567, 10_000_000), "123.4567 ms");
         assert_eq!(d(1_161_209_263, 10_000_000), "0:01:56.1209263");
         // Ticks that are not decimal fractions of a second keep the ticks.

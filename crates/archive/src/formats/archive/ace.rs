@@ -19,6 +19,7 @@
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
+use crate::codec::checked::DataCrc;
 use crate::codec::{Codec, crc32};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
@@ -347,6 +348,26 @@ async fn ace_solid(cx: &Cx, file: Span) -> Result<Arc<AceSolid>> {
     Ok(solid)
 }
 
+/// The verdict on a file's CRC-32, given its flags, compression type
+/// `comp`, whether the archive is solid, and its packed and original
+/// sizes: verified when the content is decoded (stored content when it is
+/// expanded; in a solid archive, files up to [`SOLID_CHECK_LIMIT`]).
+fn member_check(check: Check, flags: u16, comp: u8, solid: bool, sizes: (u64, u64)) -> Check {
+    let (packed, original) = sizes;
+    if flags & (ACE_FLAG_PASSWORD | ACE_FLAG_SPLIT) != 0 || comp > 2 {
+        check
+    } else if original == 0 && packed == 0 {
+        // Nothing to decode: ACE's CRC of no bytes.
+        check.verify(0xffff_ffffu32)
+    } else if comp == 0 && !solid {
+        crate::formats::decode_check(check, &Codec::Stored, packed)
+    } else if solid && original > SOLID_CHECK_LIMIT {
+        check
+    } else {
+        check.on_decode()
+    }
+}
+
 /// The ACE CRC-32 of `span` (read in pieces) and how much of it was read.
 async fn ace_crc_of(cx: &Cx, span: Span) -> Result<(u32, u64)> {
     let mut crc = 0xffff_ffffu32;
@@ -471,7 +492,14 @@ async fn ace_block(
             let attr = r.u32("Attributes", LE).ok_or_else(bad)?;
             r.with(|n| n.value(Value::flags(attr.into(), 32, FILE_ATTRIBUTES)));
             let crc = r.u32("CRC-32", LE).ok_or_else(bad)?;
-            r.with(|n| n.checksum(Check::new(ACE_CRC32, crc)));
+            let check = member_check(
+                Check::new(ACE_CRC32, crc),
+                flags,
+                header.get(r.at).copied().unwrap_or(0xff),
+                solid,
+                (packed, original),
+            );
+            r.with(|n| n.checksum(check));
             let comp = r.u8("Compression type").ok_or_else(bad)?;
             r.with(|n| {
                 n.value(Value::Enum {
@@ -524,7 +552,9 @@ async fn ace_block(
             } else if original == 0 && packed == 0 {
                 Node::new("Content").span(d).summary("empty")
             } else if comp == 0 && !solid {
-                embedded("Content", input.nested(d)).summary(fmt::size(packed))
+                let codec = Codec::Stored.checked(DataCrc::Crc32NotInverted, crc.into());
+                crate::formats::content("Content", input, d, codec, Some(packed))
+                    .summary(fmt::size(packed))
             } else if comp <= 2 {
                 Node::new("Content")
                     .span(d)

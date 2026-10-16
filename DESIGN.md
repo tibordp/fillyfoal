@@ -204,7 +204,8 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
   Blocks(block), bits }` (exact count first: `1536 bytes (1.5 KiB)`,
   `8 × 512 bytes (4 KiB)`), and a span of time a `Duration { ticks,
   per_sec }`: exact, rendered with integers in one style (`250 ms`,
-  `1.48 s`, `0:01:05.500`), with the ticks shown when a tick is not a
+  `1.48 s`, whole units such as `5 min` or `1 h 30 min`, otherwise
+  `0:01:05.500`), with the ticks shown when a tick is not a
   power-of-ten fraction of a second (`1.48 s (133200/90000 s)`).
   Summaries use the same style (`fmt::duration`). A bit set is
   `Flags { raw, bits, table }`: the table travels with the value, so a
