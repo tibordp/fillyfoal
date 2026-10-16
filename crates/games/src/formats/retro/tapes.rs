@@ -6,15 +6,15 @@ use crate::bytes::{to_u64, u16_be, u16_le, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
-use crate::error::{Diagnostic, Result};
+use crate::error::Result;
 use crate::fields::{Endian, Fields};
 use crate::formats::util::fmt::{plural, size};
-use crate::formats::util::val::{hex, text, uint};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -86,10 +86,8 @@ async fn zx_tap(cx: Cx, input: Input) -> Result<()> {
                 .summary(format!("flag {flag:#04x}, {} bytes", len.saturating_sub(2)))
         };
         node = node.span(cur.since(start));
-        if len > 0 && to_u64(raw.len()) == len && xor != stored {
-            node = node.diag(Diagnostic::warning(format!(
-                "checksum mismatch: computed {xor:#04x}"
-            )));
+        if len > 0 && to_u64(raw.len()) == len {
+            node = node.check_diag(&Check::new("8-bit XOR", stored).verify(xor));
         }
         cx.push(node).await;
     }
@@ -456,14 +454,11 @@ async fn scl(cx: Cx, input: Input) -> Result<()> {
     {
         let all = cx.read(file.sub(0, at)).await?;
         let sum = all.iter().fold(0u32, |s, &b| s.wrapping_add(b.into()));
-        let node = Node::new("Checksum").span(sum_span).value(hex(stored, 32));
-        cx.emit(if sum == stored {
-            node.summary("valid")
-        } else {
-            node.diag(Diagnostic::warning(format!(
-                "checksum mismatch: computed {sum:#010x}"
-            )))
-        });
+        cx.emit(
+            Node::new("Checksum")
+                .span(sum_span)
+                .checksum(Check::new("32-bit byte sum", stored).verify(sum)),
+        );
     }
     cx.annotate(format!(
         "SCL archive, {count} file(s): {}",
@@ -697,7 +692,7 @@ record! {
     pub struct CarHeader {
         magic: ascii[4] "Signature",
         kind: u32 "Cartridge type" .enumeration(CAR_TYPES),
-        checksum: u32 "Checksum" .hex(),
+        checksum: u32 "Checksum" .checksum("32-bit byte sum"),
         _unused: u32 "Unused",
     }
 }
@@ -707,21 +702,21 @@ async fn atari_car(cx: Cx, input: Input) -> Result<()> {
     let span = file.sub(0, CarHeader::SIZE);
     let h: CarHeader = read_record(&cx, span, BE).await?;
     let data = file.tail(CarHeader::SIZE);
-    let mut node = CarHeader::node("Header", span, BE);
-    let mut status = "";
+    let mut check = Check::new("32-bit byte sum", h.checksum);
+    let mut status = String::new();
     if data.len <= cx.limits().max_read {
         let raw = cx.read(data).await?;
-        let sum = raw.iter().fold(0u32, |s, &b| s.wrapping_add(b.into()));
-        if sum == h.checksum {
-            status = ", checksum valid";
-        } else {
-            status = ", checksum mismatch";
-            node = node.diag(Diagnostic::warning(format!(
-                "checksum mismatch: computed {sum:#010x}"
-            )));
-        }
+        check = check.verify(raw.iter().fold(0u32, |s, &b| s.wrapping_add(b.into())));
+        status = format!(
+            ", checksum {}",
+            if check.is_valid() {
+                "valid"
+            } else {
+                "mismatch"
+            }
+        );
     }
-    cx.emit(node);
+    cx.emit(CarHeader::checked_node("Header", span, BE, check.at(8)).check_diag(&check));
     cx.emit(Node::new("ROM").span(data).summary(size(data.len)));
     cx.annotate(format!(
         "Atari cartridge, {}{status}",

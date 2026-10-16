@@ -1978,10 +1978,11 @@ async fn daa(cx: Cx, input: Input) -> Result<()> {
     );
     cx.emit(Node::new("Compressed data").span(file.tail(h.data_offset.into())));
     let computed = crate::codec::crc32(&cx.read(file.sub(0, 0x48)).await?);
-    if computed != h.crc {
-        cx.diag(Diagnostic::warning(format!(
-            "header CRC mismatch: computed {computed:#010x}"
-        )));
+    if let Some(m) = crate::value::Check::new("CRC-32", h.crc)
+        .verify(computed)
+        .mismatch_text()
+    {
+        cx.diag(Diagnostic::warning(m));
     }
     cx.annotate(format!(
         "{} v{}.{}, {} ISO in {chunks_chunk} of {}",

@@ -15,7 +15,7 @@ use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -192,7 +192,7 @@ record! {
         cell: u8 "Bit cell width" .desc("0 means 16 bits"),
         heads: u8 "Heads" .enumeration(&[(0, "both"), (1, "side 0"), (2, "side 1")]),
         resolution: u8 "Resolution" .with(|&v, n| n.summary(format!("{} ns", u32::from(v).saturating_add(1).saturating_mul(25)))),
-        checksum: u32 "Checksum" .hex(),
+        checksum: u32 "Checksum" .checksum("32-bit byte sum"),
     }
 }
 
@@ -200,21 +200,18 @@ async fn scp(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let span = file.sub(0, ScpHeader::SIZE);
     let h: ScpHeader = read_record(&cx, span, LE).await?;
-    let mut node = ScpHeader::node("Header", span, LE);
+    let mut check = Check::new("32-bit byte sum", h.checksum);
     let mut status = "";
     if h.flags & 0x10 == 0 && file.len <= cx.limits().max_read {
         let all = cx.read(file.tail(0x10)).await?;
-        let sum = all.iter().fold(0u32, |s, &b| s.wrapping_add(b.into()));
-        if sum == h.checksum {
-            status = ", checksum valid";
+        check = check.verify(all.iter().fold(0u32, |s, &b| s.wrapping_add(b.into())));
+        status = if check.is_valid() {
+            ", checksum valid"
         } else {
-            status = ", checksum mismatch";
-            node = node.diag(Diagnostic::warning(format!(
-                "checksum mismatch: computed {sum:#010x}"
-            )));
-        }
+            ", checksum mismatch"
+        };
     }
-    cx.emit(node);
+    cx.emit(ScpHeader::checked_node("Header", span, LE, check.at(0x0c)).check_diag(&check));
     let table = file.sub(0x10, 168 * 4);
     let raw = cx.read_avail(table).await?;
     let present = raw
@@ -405,11 +402,9 @@ async fn ipf(cx: Cx, input: Input) -> Result<()> {
         };
         if computed != stored {
             bad = bad.saturating_add(1);
-            node = node.diag(Diagnostic::warning(format!(
-                "record CRC mismatch: computed {computed:#010x}"
-            )));
         }
-        cx.push(node.value(hex(stored, 32))).await;
+        cx.push(node.checksum(Check::new("CRC-32", stored).verify(computed)))
+            .await;
     }
     let what = info.map_or_else(String::new, |i| {
         format!(
@@ -820,8 +815,13 @@ async fn dc42(cx: Cx, input: Input) -> Result<()> {
         .emit()?;
     let data_len = f.u32("Data size").emit()?;
     let tag_len = f.u32("Tag size").emit()?;
-    let data_sum = f.u32("Data checksum").hex().emit()?;
-    f.u32("Tag checksum").hex().emit()?;
+    // Checked with the data below.
+    let data_sum = f
+        .u32("Data checksum")
+        .checksum(DC42_SUM)
+        .with_check(|c| c.skipped("checked with the disk data"))
+        .emit()?;
+    f.u32("Tag checksum").checksum(DC42_SUM).emit()?;
     let format = f.u8("Disk format").enumeration(DC42_FORMATS).emit()?;
     f.u8("Format byte").hex().emit()?;
     f.u16("Private (0x0100)").hex().emit()?;
@@ -829,15 +829,13 @@ async fn dc42(cx: Cx, input: Input) -> Result<()> {
     let mut node = embedded("Disk data", input.nested(data));
     let mut status = "";
     if data.len <= cx.limits().max_read {
-        let sum = dc42_sum(&cx.read(data).await?);
-        if sum == data_sum {
-            status = ", checksum valid";
+        let check = Check::new(DC42_SUM, data_sum).verify(dc42_sum(&cx.read(data).await?));
+        status = if check.is_valid() {
+            ", checksum valid"
         } else {
-            status = ", checksum mismatch";
-            node = node.diag(Diagnostic::warning(format!(
-                "data checksum mismatch: computed {sum:#010x}"
-            )));
-        }
+            ", checksum mismatch"
+        };
+        node = node.check_diag(&check);
     }
     cx.emit(node);
     if tag_len > 0 {
@@ -1150,15 +1148,20 @@ record! {
     }
 }
 
+/// Amiga RDB blocks: their summed longs total zero.
+const AMIGA_SUM: &str = "Amiga block sum";
+/// DiskCopy 4.2's checksum: 16-bit words added and rotated right.
+const DC42_SUM: &str = "DiskCopy 4.2 sum";
+
 async fn amiga_rdb(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let span = file.sub(0, RdskBlock::SIZE);
     let h: RdskBlock = read_record(&cx, span, BE).await?;
     let raw = cx.read_avail(file.sub(0, 512)).await?;
     let mut node = RdskBlock::node("Rigid disk block", file.sub(0, 512), BE);
-    if !amiga_sum(&raw, h.summed) {
-        node = node.diag(Diagnostic::warning("checksum mismatch"));
-    }
+    node = node.check_diag(
+        &Check::new(AMIGA_SUM, u32_be(&raw, 8).unwrap_or(0)).verified(amiga_sum(&raw, h.summed)),
+    );
     cx.emit(node);
     let bs = u64::from(h.block_bytes.clamp(256, 32768));
     let mut next = h.partitions;
@@ -1207,9 +1210,9 @@ async fn amiga_rdb(cx: Cx, input: Input) -> Result<()> {
                 crate::bytes::i32_be(&p, 188).unwrap_or(0)
             ))
             .target(block);
-        if !amiga_sum(&p, summed) {
-            part = part.diag(Diagnostic::warning("PART block checksum mismatch"));
-        }
+        part = part.check_diag(
+            &Check::new(AMIGA_SUM, u32_be(&p, 8).unwrap_or(0)).verified(amiga_sum(&p, summed)),
+        );
         cx.push(part).await;
         next = u32_be(&p, 16).unwrap_or(u32::MAX);
     }

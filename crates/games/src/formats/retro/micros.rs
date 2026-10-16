@@ -984,12 +984,19 @@ async fn macbinary(cx: Cx, input: Input) -> Result<()> {
         .enumeration(&[(129, "MacBinary II"), (130, "MacBinary III")])
         .emit()?;
     f.u8("Minimum version").emit()?;
-    let crc = f.u16("Header CRC").hex().emit()?;
     let computed = crc16_xmodem(head.data.get(..124).unwrap_or_default());
-    if version >= 129 && computed != crc {
-        cx.diag(Diagnostic::warning(format!(
-            "header CRC mismatch: computed {computed:#06x}"
-        )));
+    // MacBinary I has no header CRC.
+    let crc = f
+        .u16("Header CRC")
+        .checksum_if(version >= 129, "CRC-16/XMODEM")
+        .verify(Some(computed))
+        .emit()?;
+    if version >= 129
+        && let Some(m) = crate::value::Check::new("CRC-16/XMODEM", crc)
+            .verify(computed)
+            .mismatch_text()
+    {
+        cx.diag(Diagnostic::warning(m));
     }
     let mut at = 128u64.saturating_add(u64::from(secondary).next_multiple_of(128));
     if data_len > 0 {

@@ -109,16 +109,11 @@ pub async fn crc32_of(cx: &Cx, span: Span) -> Option<u32> {
 
 /// A node for a stored CRC-32, marked valid or mismatched against `computed`.
 pub fn crc_node(name: &'static str, span: Span, stored: u32, computed: Option<u32>) -> Node {
-    let node = Node::new(name).span(span).value(hex(stored, 32));
-    match computed {
-        Some(c) if c == stored => node.summary("valid"),
-        Some(c) => node.diag(Diagnostic::warning(format!(
-            "CRC mismatch: computed {c:#010x}"
-        ))),
-        None => node.diag(Diagnostic::note(
-            "not verified (region too large to read at once)",
-        )),
-    }
+    let check = crate::value::Check::new("CRC-32", stored);
+    Node::new(name).span(span).checksum(match computed {
+        Some(c) => check.verify(c),
+        None => check.skipped("region too large to read at once"),
+    })
 }
 
 /// Lines of a text region: `(line, span)` pairs without line terminators.

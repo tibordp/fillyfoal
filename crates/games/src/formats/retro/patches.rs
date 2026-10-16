@@ -15,7 +15,7 @@ use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -144,28 +144,34 @@ declare_format!(pub UPS = "ups", "Universal Patching System patch", ["ups"],
     "application/x-ups-patch", Probe::Magic(&[(0, b"UPS1")]), ups);
 
 /// Emits the three CRC-32s that end UPS and BPS patches, verifying the last.
-async fn beat_footer(cx: &Cx, file: Span) -> Result<bool> {
+async fn beat_footer(cx: &Cx, file: Span) -> Result<Check> {
     let at = file.len.saturating_sub(12);
     let footer = cx.read(file.sub(at, 12)).await?;
     let computed = crc32_of(cx, file.sub(0, file.len.saturating_sub(4))).await;
     let stored = u32_le(&footer, 8).unwrap_or(0);
+    // The source and target files are not in the patch.
     cx.emit(
         Node::new("Source CRC-32")
             .span(file.sub(at, 4))
-            .value(hex(u32_le(&footer, 0).unwrap_or(0), 32)),
+            .checksum(Check::new("CRC-32", u32_le(&footer, 0).unwrap_or(0))),
     );
     cx.emit(
         Node::new("Target CRC-32")
             .span(file.sub(at.saturating_add(4), 4))
-            .value(hex(u32_le(&footer, 4).unwrap_or(0), 32)),
+            .checksum(Check::new("CRC-32", u32_le(&footer, 4).unwrap_or(0))),
     );
-    cx.emit(crc_node(
+    let node = crc_node(
         "Patch CRC-32",
         file.sub(at.saturating_add(8), 4),
         stored,
         computed,
-    ));
-    Ok(computed == Some(stored))
+    );
+    let check = match &node.value {
+        Some(crate::value::Value::Checksum(c)) => (**c).clone(),
+        _ => Check::new("CRC-32", stored),
+    };
+    cx.emit(node);
+    Ok(check)
 }
 
 async fn ups(cx: Cx, input: Input) -> Result<()> {
@@ -179,7 +185,7 @@ async fn ups(cx: Cx, input: Input) -> Result<()> {
     cur.skip(4);
     let source = varint_field(&cx, &mut cur, Varint::Beat, "Source size").await?;
     let target = varint_field(&cx, &mut cur, Varint::Beat, "Target size").await?;
-    let crc_ok = beat_footer(&cx, file).await?;
+    let crc = beat_footer(&cx, file).await?;
     let body = file.sub(0, body_end);
     let (mut hunks, mut offset, mut changed) = (0u64, 0u64, 0u64);
     while cur.pos() < body_end {
@@ -218,7 +224,7 @@ async fn ups(cx: Cx, input: Input) -> Result<()> {
         "UPS patch, {} → {}, {hunks} hunks changing {changed} bytes, patch CRC {}",
         size(source),
         size(target),
-        if crc_ok { "valid" } else { "not verified" }
+        crc.verdict_text()
     ));
     Ok(())
 }
@@ -260,7 +266,7 @@ async fn bps(cx: Cx, input: Input) -> Result<()> {
         cx.emit(node);
         cur.skip(meta_len);
     }
-    let crc_ok = beat_footer(&cx, file).await?;
+    let crc = beat_footer(&cx, file).await?;
     let (mut actions, mut out, mut source_rel, mut target_rel) = (0u64, 0u64, 0i128, 0i128);
     let mut counts = [0u64; 4];
     while cur.pos() < body_end {
@@ -321,7 +327,7 @@ async fn bps(cx: Cx, input: Input) -> Result<()> {
         "BPS patch, {} → {}, {actions} actions ({sr} SourceRead, {tr} TargetRead, {sc} SourceCopy, {tc} TargetCopy), patch CRC {}",
         size(source),
         size(target),
-        if crc_ok { "valid" } else { "not verified" }
+        crc.verdict_text()
     ));
     Ok(())
 }

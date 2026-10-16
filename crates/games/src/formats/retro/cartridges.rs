@@ -15,7 +15,7 @@ use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::Node;
 use crate::record;
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -119,12 +119,8 @@ async fn sms(cx: Cx, input: Input) -> Result<()> {
     f.ascii("Signature", 8).emit()?;
     f.bytes("Reserved", 2).emit()?;
     f.u16("Checksum")
-        .hex()
-        .check(|&v| {
-            computed
-                .filter(|&c| c != v)
-                .map(|c| Diagnostic::warning(format!("checksum mismatch: computed {c:#06x}")))
-        })
+        .checksum("16-bit byte sum")
+        .verify(computed)
         .emit()?;
     f.node(
         Node::new("Product code")
@@ -861,7 +857,7 @@ record! {
         save: u8 "Save type" .enumeration(WS_SAVE),
         flags: u8 "Flags" .flags(WS_FLAGS),
         mapper: u8 "Mapper / RTC" .enumeration(&[(0, "none"), (1, "RTC")]),
-        checksum: u16 "Checksum" .hex(),
+        checksum: u16 "Checksum" .checksum("16-bit byte sum"),
     }
 }
 
@@ -872,21 +868,18 @@ async fn wonderswan(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Reset code (JMP FAR)").span(file.sub(file.len.saturating_sub(16), 6)));
     let span = file.sub(at, WsFooter::SIZE);
     let h: WsFooter = read_record(&cx, span, LE).await?;
-    let mut node = WsFooter::node("Footer", span, LE);
+    let mut check = Check::new("16-bit byte sum", h.checksum);
     let mut verified = "";
     if at <= cx.limits().max_read {
         let data = cx.read(file.sub(0, at.saturating_add(8))).await?;
-        let sum = data.iter().fold(0u16, |s, &b| s.wrapping_add(b.into()));
-        if sum == h.checksum {
-            verified = ", checksum valid";
+        check = check.verify(data.iter().fold(0u16, |s, &b| s.wrapping_add(b.into())));
+        verified = if check.is_valid() {
+            ", checksum valid"
         } else {
-            node = node.diag(Diagnostic::warning(format!(
-                "checksum mismatch: computed {sum:#06x}"
-            )));
-            verified = ", checksum mismatch";
-        }
+            ", checksum mismatch"
+        };
     }
-    cx.emit(node);
+    cx.emit(WsFooter::checked_node("Footer", span, LE, check.at(8)).check_diag(&check));
     cx.annotate(format!(
         "{} game {:02x}-{:02x} v{}, {}, save {}{verified}",
         if h.color == 1 {

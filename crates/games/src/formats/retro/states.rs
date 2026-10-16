@@ -894,11 +894,7 @@ async fn psx_memcard(cx: Cx, input: Input) -> Result<()> {
         let xor = raw.iter().take(127).fold(0u8, |x, &b| x ^ b);
         let block = file.sub(slot.saturating_mul(0x2000), 0x2000);
         let mut node = PsxDirFrame::node(format!("Slot {slot}"), span, LE).target(block);
-        if xor != d.checksum {
-            node = node.diag(Diagnostic::warning(format!(
-                "checksum mismatch: computed {xor:#04x}"
-            )));
-        }
+        node = node.check_diag(&crate::value::Check::new("8-bit XOR", d.checksum).verify(xor));
         if matches!(d.state, 0x51..=0x53) {
             used = used.saturating_add(1);
         }
