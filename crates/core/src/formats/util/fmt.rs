@@ -89,6 +89,19 @@ pub fn size(n: u64) -> String {
     }
 }
 
+/// A span of `ticks` of `1/per_sec` second, for summaries, in the style
+/// of a [`Value::Duration`](crate::value::Value::Duration): `250 ms`,
+/// `1.48 s`, `0:03:25`, `1.48 s (133200/90000 s)`. A field holding the
+/// ticks is better a duration value (`.duration(per_sec)`).
+pub fn duration(ticks: i64, per_sec: u64) -> String {
+    crate::render::duration(ticks, per_sec)
+}
+
+/// [`duration`] of an unsigned count (a sample count, a 90 kHz clock).
+pub fn duration_of(count: u64, per_sec: u64) -> String {
+    duration(i64::try_from(count).unwrap_or(i64::MAX), per_sec)
+}
+
 /// Text shortened to `max` characters, with an ellipsis if cut.
 pub fn clip(s: &str, max: usize) -> String {
     if s.chars().count() <= max {

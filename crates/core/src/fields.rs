@@ -542,6 +542,41 @@ impl<T: Prim> Field<'_, T> {
         self
     }
 
+    /// The number is a size in bytes (`698 bytes`, `1536 bytes (1.5
+    /// KiB)`). A negative signed number (often "unknown") stays a number.
+    pub fn size(self) -> Self {
+        self.size_in(1)
+    }
+
+    /// The number counts blocks (sectors, clusters, pages) of `block`
+    /// bytes: `8 × 512 bytes (4 KiB)`.
+    pub fn size_in(mut self, block: u32) -> Self {
+        let n = match &self.node.value {
+            Some(Value::UInt { value, bits, .. }) => Some((*value, *bits)),
+            Some(Value::Int { value, bits }) => u64::try_from(*value).ok().map(|v| (v, *bits)),
+            _ => None,
+        };
+        if let Some((n, bits)) = n {
+            self.node.value = Some(Value::blocks(n, block).bits(bits));
+        }
+        self
+    }
+
+    /// The number is a span of time in ticks of `1/per_sec` second (1 for
+    /// seconds, 1000 for milliseconds, 90000 for MPEG clocks); signed
+    /// fields may be negative.
+    pub fn duration(mut self, per_sec: u64) -> Self {
+        let ticks = match &self.node.value {
+            Some(Value::Int { value, .. }) => Some(*value),
+            Some(Value::UInt { value, .. }) => Some(i64::try_from(*value).unwrap_or(i64::MAX)),
+            _ => None,
+        };
+        if let Some(ticks) = ticks {
+            self.node.value = Some(Value::duration(ticks, per_sec));
+        }
+        self
+    }
+
     /// Windows FILETIME (100 ns ticks since 1601, UTC), to the tick; 0 is
     /// "not set" (no value).
     pub fn filetime(mut self) -> Self {

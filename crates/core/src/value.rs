@@ -69,6 +69,47 @@ pub enum Value {
     /// on a node with [`Node::checksum`](crate::Node::checksum), which also
     /// reports a mismatch as a diagnostic.
     Checksum(Box<Check>),
+    /// A quantity of bytes: `n` bytes, or `n` blocks of a fixed size.
+    /// `bits` is the width the file stores `n` in. Text shows the exact
+    /// count first, then the approximation: `698 bytes`,
+    /// `1536 bytes (1.5 KiB)`, `8 × 512 bytes (4 KiB)`. Construct with
+    /// [`Value::size`] and [`Value::blocks`] (fields: `.size()`,
+    /// `.size_in(block)`). Counts of other things stay `UInt`.
+    Size {
+        n: u64,
+        unit: SizeUnit,
+        bits: u8,
+    },
+    /// A span of time, exactly: `ticks` of `1/per_sec` second (`per_sec`
+    /// is 1 for seconds, 1000 for milliseconds, 90000 for MPEG ticks, a
+    /// track's timescale or a sample rate). Text is computed with integers
+    /// only, in one style: `250 ms`, `1.48 s`, `0:01:05.500`, `2 days,
+    /// 3:04:05`, with the ticks added when a tick is not a power-of-ten
+    /// fraction of a second (`1.48 s (133200/90000 s)`). Construct with
+    /// [`Value::duration`] (fields: `.duration(per_sec)`).
+    Duration {
+        ticks: i64,
+        per_sec: u64,
+    },
+}
+
+/// What a [`Value::Size`] counts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum SizeUnit {
+    Bytes,
+    /// Blocks (sectors, clusters, pages) of this many bytes.
+    Blocks(u32),
+}
+
+impl SizeUnit {
+    /// Bytes per unit.
+    pub fn bytes(self) -> u64 {
+        match self {
+            SizeUnit::Bytes => 1,
+            SizeUnit::Blocks(b) => u64::from(b),
+        }
+    }
 }
 
 impl Value {
@@ -103,6 +144,72 @@ impl Value {
     /// A Windows FILETIME (100 ns ticks since 1601, UTC), to the tick.
     pub fn filetime(ticks: u64) -> Value {
         Value::Timestamp(Time::filetime(ticks))
+    }
+
+    /// A size of `n` bytes.
+    pub const fn size(n: u64) -> Value {
+        Value::Size {
+            n,
+            unit: SizeUnit::Bytes,
+            bits: 64,
+        }
+    }
+
+    /// A size of `n` blocks of `block` bytes (a block of 1 byte is a size
+    /// in bytes).
+    pub const fn blocks(n: u64, block: u32) -> Value {
+        Value::Size {
+            n,
+            unit: if block == 1 {
+                SizeUnit::Bytes
+            } else {
+                SizeUnit::Blocks(block)
+            },
+            bits: 64,
+        }
+    }
+
+    /// The same size, stored `bits` wide (the default is 64).
+    pub fn bits(mut self, width: u8) -> Value {
+        if let Value::Size { bits, .. } = &mut self {
+            *bits = width;
+        }
+        self
+    }
+
+    /// A span of `ticks` of `1/per_sec` second (`per_sec` 0 is taken as 1).
+    pub const fn duration(ticks: i64, per_sec: u64) -> Value {
+        Value::Duration {
+            ticks,
+            per_sec: if per_sec == 0 { 1 } else { per_sec },
+        }
+    }
+
+    /// A span of whole seconds.
+    pub const fn secs(secs: i64) -> Value {
+        Value::duration(secs, 1)
+    }
+
+    /// The size in bytes (blocks times their size; `None` on overflow) of
+    /// a [`Value::Size`].
+    pub fn size_bytes(&self) -> Option<u64> {
+        match self {
+            Value::Size { n, unit, .. } => n.checked_mul(unit.bytes()),
+            _ => None,
+        }
+    }
+
+    /// The number underneath an unsigned value: a number, an enum, flags,
+    /// or a size's count.
+    pub fn as_u64(&self) -> Option<u64> {
+        match self {
+            Value::UInt { value, .. } => Some(*value),
+            Value::Enum { raw, .. } | Value::Flags { raw, .. } => Some(*raw),
+            Value::Size { n, .. } => Some(*n),
+            Value::Int { value, .. } => u64::try_from(*value).ok(),
+            Value::Duration { ticks, .. } => u64::try_from(*ticks).ok(),
+            _ => None,
+        }
     }
 
     /// An enum value with a computed name (one no static table holds).
