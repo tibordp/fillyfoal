@@ -46,7 +46,7 @@ pub mod vehicle;
 pub(crate) use crate::formats::util::val::{enumv, hex, int, text, uint};
 
 pub(crate) fn time(unix_seconds: i64) -> Value {
-    Value::Timestamp { unix_seconds }
+    Value::utc(unix_seconds)
 }
 
 pub(crate) use crate::formats::util::arcutil::emit_nodes;

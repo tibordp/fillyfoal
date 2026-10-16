@@ -452,9 +452,7 @@ async fn lzop(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(format!(
         "lzop, originally {name:?} ({}), {blocks} block(s), {total} bytes uncompressed",
-        crate::render::value(&Value::Timestamp {
-            unix_seconds: mtime.into()
-        })
+        crate::render::value(&Value::utc(mtime.into()))
     ));
     Ok(())
 }

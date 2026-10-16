@@ -982,7 +982,7 @@ fn escape(s: &str, quotes: bool) -> String {
 pub fn filetime_text(ticks: u64) -> String {
     let unix = crate::text::filetime_to_unix(ticks);
     let frac = ticks.checked_rem(10_000_000).unwrap_or(0);
-    let base = crate::render::value(&Value::Timestamp { unix_seconds: unix });
+    let base = crate::render::value(&Value::utc(unix));
     let stem = base.strip_suffix(" UTC").unwrap_or(&base).replace(' ', "T");
     format!("{stem}.{frac:07}Z")
 }
@@ -997,7 +997,7 @@ fn systemtime_text(b: &[u8]) -> String {
             "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z"
         );
     };
-    let base = crate::render::value(&Value::Timestamp { unix_seconds: unix });
+    let base = crate::render::value(&Value::utc(unix));
     let stem = base.strip_suffix(" UTC").unwrap_or(&base).replace(' ', "T");
     format!("{stem}.{millis:03}Z")
 }
@@ -1129,9 +1129,7 @@ fn typed_value(kind: u8, b: &[u8]) -> Value {
         0x0d if sized(4) => Value::Bool(u32_le(b, 0).unwrap_or(0) != 0),
         0x0e => Value::Bytes(b.to_vec()),
         0x0f if sized(16) => Value::Guid(guid_le(b)),
-        0x11 if sized(8) => Value::Timestamp {
-            unix_seconds: crate::text::filetime_to_unix(u64_le(b, 0).unwrap_or(0)),
-        },
+        0x11 if sized(8) => Value::utc(crate::text::filetime_to_unix(u64_le(b, 0).unwrap_or(0))),
         0x13 => match parse_sid(b) {
             Some((s, _)) => Value::Text(match sid_name(&s) {
                 Some(n) => format!("{s} ({n})"),

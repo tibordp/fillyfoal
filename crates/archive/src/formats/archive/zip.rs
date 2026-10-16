@@ -2052,11 +2052,7 @@ fn extra_layout(f: &mut Fields<'_>, &(id, zip64): &(u16, Zip64Wants)) -> Result<
     let len = f.u16("Data size").emit()?;
     let end = f.pos().saturating_add(len.into());
     let left = |f: &Fields<'_>| end.saturating_sub(f.pos());
-    let unix = |&t: &i32, n: Node| {
-        n.value(Value::Timestamp {
-            unix_seconds: t.into(),
-        })
-    };
+    let unix = |&t: &i32, n: Node| n.value(Value::utc(t.into()));
     match id {
         0x0001 => {
             for (name, width) in zip64.layout(len.into()) {

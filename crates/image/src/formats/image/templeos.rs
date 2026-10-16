@@ -717,9 +717,7 @@ fn dc_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
         f.node(
             Node::new("Timestamp (local time)")
                 .span(f.peek_span(0))
-                .value(Value::Timestamp {
-                    unix_seconds: civil::templeos_cdate(time, date),
-                })
+                .value(Value::utc(civil::templeos_cdate(time, date)))
                 .desc("TempleOS local time"),
         );
     }

@@ -2284,9 +2284,9 @@ async fn list_files(cx: Cx, (input, header): (Input, Arc<Header>)) -> Result<()>
         let mut node = Node::new(f.name.clone());
         let mut children = Vec::new();
         if let Some(t) = f.mtime {
-            children.push(Node::new("Modification time").value(Value::Timestamp {
-                unix_seconds: crate::text::filetime_to_unix(t),
-            }));
+            children.push(
+                Node::new("Modification time").value(Value::utc(crate::text::filetime_to_unix(t))),
+            );
         }
         if let Some(a) = f.attributes {
             let mut attr = Node::new("Attributes").value(hex(a, 64));

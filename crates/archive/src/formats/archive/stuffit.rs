@@ -314,11 +314,7 @@ async fn classic_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     r.with(|n| n.value(finder_flags(flags)));
     for name in ["Creation time", "Modification time"] {
         let t = r.u32(name, BE).ok_or_else(bad)?;
-        r.with(|n| {
-            n.value(Value::Timestamp {
-                unix_seconds: crate::text::mac_to_unix(t.into()),
-            })
-        });
+        r.with(|n| n.value(Value::utc(crate::text::mac_to_unix(t.into()))));
     }
     r.u32("Resource fork length", BE).ok_or_else(bad)?;
     r.u32("Data fork length", BE).ok_or_else(bad)?;
@@ -619,11 +615,7 @@ async fn sit5_entry(cx: Cx, (input, e): (Input, Arc<Sit5Entry>)) -> Result<()> {
     });
     for name in ["Creation time", "Modification time"] {
         let t = r.u32(name, BE).ok_or_else(bad)?;
-        r.with(|n| {
-            n.value(Value::Timestamp {
-                unix_seconds: crate::text::mac_to_unix(t.into()),
-            })
-        });
+        r.with(|n| n.value(Value::utc(crate::text::mac_to_unix(t.into()))));
     }
     for name in ["Previous entry", "Next entry", "Parent directory"] {
         let o = r.u32(name, BE).ok_or_else(bad)?;

@@ -1064,7 +1064,7 @@ fn amf_node(name: String, d: &[u8], pos: usize, span: Span, depth: u32) -> Node 
             let ms = crate::bytes::array::<8>(d, body).map_or(0.0, f64::from_be_bytes);
             #[allow(clippy::cast_possible_truncation)]
             let secs = (ms / 1000.0) as i64;
-            node.value(Value::Timestamp { unix_seconds: secs })
+            node.value(Value::utc(secs))
         }
         7 => node.value(Value::UInt {
             value: u16_be(d, body).unwrap_or(0).into(),
@@ -1220,7 +1220,7 @@ impl<'a> Amf3<'a> {
                 let ms = f64::from_be_bytes(b.try_into().ok()?);
                 #[allow(clippy::cast_possible_truncation)]
                 let secs = (ms / 1000.0) as i64;
-                (Some(Value::Timestamp { unix_seconds: secs }), Vec::new())
+                (Some(Value::utc(secs)), Vec::new())
             }
             9 => {
                 let h = self.u29()?;

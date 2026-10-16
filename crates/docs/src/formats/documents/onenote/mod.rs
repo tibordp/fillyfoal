@@ -888,12 +888,10 @@ fn prop_node(
             let bits = width.saturating_mul(8);
             match kind {
                 Kind::Float if *width == 4 => node.value(Value::f32(f32::from_bits(*v as u32))),
-                Kind::Time32 => node.value(Value::Timestamp {
-                    unix_seconds: i64::try_from(*v).unwrap_or(0).saturating_add(TIME32_EPOCH),
-                }),
-                Kind::FileTime => node.value(Value::Timestamp {
-                    unix_seconds: crate::text::filetime_to_unix(*v),
-                }),
+                Kind::Time32 => node.value(Value::utc(
+                    i64::try_from(*v).unwrap_or(0).saturating_add(TIME32_EPOCH),
+                )),
+                Kind::FileTime => node.value(Value::utc(crate::text::filetime_to_unix(*v))),
                 Kind::Color => {
                     let summary = if *v == 0xFFFF_FFFF {
                         "automatic".to_owned()

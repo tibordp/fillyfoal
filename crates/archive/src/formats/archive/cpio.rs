@@ -174,11 +174,11 @@ fn header_layout(f: &mut Fields<'_>, variant: &Variant) -> Result<Header> {
             f.u16("Links").emit()?;
             f.u16("Special device").emit()?;
             let mtime = pair(f, "Modification time")?;
-            f.node(Node::new("Modification time").span(span_back(f, 4)).value(
-                crate::value::Value::Timestamp {
-                    unix_seconds: i64::try_from(mtime).unwrap_or(0),
-                },
-            ));
+            f.node(
+                Node::new("Modification time")
+                    .span(span_back(f, 4))
+                    .value(crate::value::Value::utc(i64::try_from(mtime).unwrap_or(0))),
+            );
             let namesize = f.u16("Name size").emit()?;
             let filesize = pair(f, "File size")?;
             f.node(

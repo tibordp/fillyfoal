@@ -23,9 +23,7 @@ const BE: Endian = Endian::Big;
 
 /// Chromium's internal time: microseconds since 1601-01-01.
 fn chrome_time(us: u64) -> Value {
-    Value::Timestamp {
-        unix_seconds: crate::text::filetime_to_unix(us.saturating_mul(10)),
-    }
+    Value::utc(crate::text::filetime_to_unix(us.saturating_mul(10)))
 }
 
 /// A FAT date/time pair stored as one little-endian u32 (date in the high
@@ -276,9 +274,7 @@ async fn ie_records(cx: Cx, (file, first): (Span, u32)) -> Result<()> {
                 let url = ie_url_layout(&mut Fields::new(&block, LE), &()).unwrap_or_default();
                 let accessed = u64_le(&block.data, 0x10).unwrap_or(0);
                 struct_node(kind, span, LE, (), ie_url_layout)
-                    .value(Value::Timestamp {
-                        unix_seconds: crate::text::filetime_to_unix(accessed),
-                    })
+                    .value(Value::utc(crate::text::filetime_to_unix(accessed)))
                     .summary(url)
             }
             "REDR" => {
@@ -1495,9 +1491,7 @@ fn cache2_header(f: &mut Fields<'_>, _: &()) -> Result<(u32, u32)> {
             if v == u32::MAX {
                 n.summary("never")
             } else {
-                n.value(Value::Timestamp {
-                    unix_seconds: v.into(),
-                })
+                n.value(Value::utc(v.into()))
             }
         })
         .emit()?;
@@ -1685,9 +1679,7 @@ async fn simple_index_entries(cx: Cx, (list, version): (Span, u32)) -> Result<()
             let t = u32_le(&e, 8).unwrap_or(0);
             let s = u32_le(&e, 12).unwrap_or(0);
             (
-                Value::Timestamp {
-                    unix_seconds: t.into(),
-                },
+                Value::utc(t.into()),
                 u64::from(s & 0x00ff_ffff).saturating_mul(256),
             )
         } else {

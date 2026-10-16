@@ -349,7 +349,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let time = |v: f64, name: &'static str, at: u64| {
         let node = Node::new(name).span(file.sub(at, 8));
         match date_cell(v, 1.0, SAS_EPOCH, true) {
-            Cell::Date { unix_seconds, .. } => node.value(Value::Timestamp { unix_seconds }),
+            Cell::Date { unix_seconds, .. } => node.value(Value::utc(unix_seconds)),
             _ => node.value(Value::f64(v)),
         }
     };

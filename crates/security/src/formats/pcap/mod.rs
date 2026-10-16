@@ -126,9 +126,7 @@ struct Capture {
 
 /// `seconds.fraction` formatted like a timestamp.
 pub fn time_text(seconds: i64, fraction: u64, digits: usize) -> String {
-    let base = crate::render::value(&crate::value::Value::Timestamp {
-        unix_seconds: seconds,
-    });
+    let base = crate::render::value(&crate::value::Value::utc(seconds));
     let date = base.trim_end_matches(" UTC");
     format!("{date}.{fraction:0digits$} UTC")
 }

@@ -238,7 +238,7 @@ record! {
         flags: u64 "Flags" .flags(ENTRY_FLAGS),
         uid: u32 "UID",
         gid: u32 "GID",
-        secs: i64 "Modification time" .with(|&v, n| n.value(Value::Timestamp { unix_seconds: v })),
+        secs: i64 "Modification time" .with(|&v, n| n.value(Value::utc(v))),
         nanos: u32 "Nanoseconds",
         _pad: u32 "Padding",
     }
@@ -252,7 +252,7 @@ record! {
         uid: u32 "UID",
         gid: u32 "GID",
         mtime: u64 "Modification time" .with(|&v, n| n
-            .value(Value::Timestamp { unix_seconds: i64::try_from(v / 1_000_000_000).unwrap_or(i64::MAX) })
+            .value(Value::utc(i64::try_from(v / 1_000_000_000).unwrap_or(i64::MAX)))
             .summary(format!("{v} ns"))),
     }
 }

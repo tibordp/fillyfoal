@@ -571,9 +571,7 @@ pub fn value(c: &Column, b: &[u8]) -> (Value, String) {
         7 => {
             let secs = le(b);
             (
-                Value::Timestamp {
-                    unix_seconds: i64::try_from(secs).unwrap_or(0),
-                },
+                Value::utc(i64::try_from(secs).unwrap_or(0)),
                 secs.to_string(),
             )
         }
@@ -602,9 +600,7 @@ pub fn value(c: &Column, b: &[u8]) -> (Value, String) {
         17 => {
             let secs = be(b.get(..4).unwrap_or_default());
             let frac = fraction(b.get(4..).unwrap_or_default(), c.meta);
-            let ts = Value::Timestamp {
-                unix_seconds: i64::try_from(secs).unwrap_or(0),
-            };
+            let ts = Value::utc(i64::try_from(secs).unwrap_or(0));
             let s = format!("{}{frac}", crate::render::value(&ts));
             (ts, s)
         }

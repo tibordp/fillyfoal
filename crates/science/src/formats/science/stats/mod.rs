@@ -79,9 +79,7 @@ impl Cell {
                 bits: 64,
             },
             Cell::Text(s) => Value::Text(s.clone()),
-            Cell::Date { unix_seconds, .. } => Value::Timestamp {
-                unix_seconds: *unix_seconds,
-            },
+            Cell::Date { unix_seconds, .. } => Value::utc(*unix_seconds),
             Cell::Missing { raw: Some(v), .. } => Value::f64(*v),
             Cell::Missing { name, raw: None } => Value::Text(name.clone()),
         }

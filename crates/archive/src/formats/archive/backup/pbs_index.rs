@@ -71,7 +71,7 @@ pub static FIDX: Format = Format {
 };
 
 fn time_value(&v: &i64, node: Node) -> Node {
-    node.value(Value::Timestamp { unix_seconds: v })
+    node.value(Value::utc(v))
 }
 
 #[allow(clippy::ptr_arg)] // used as a `Field::with` decorator

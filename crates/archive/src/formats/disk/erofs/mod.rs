@@ -682,10 +682,9 @@ fn inode_layout(f: &mut Fields<'_>, ctx: &InoCtx) -> Result<()> {
             Some(base) => {
                 f.u32("Modification time")
                     .with(|&v, n| {
-                        n.value(Value::Timestamp {
-                            unix_seconds: i64::try_from(base.saturating_add(v.into()))
-                                .unwrap_or(i64::MAX),
-                        })
+                        n.value(Value::utc(
+                            i64::try_from(base.saturating_add(v.into())).unwrap_or(i64::MAX),
+                        ))
                     })
                     .desc("Seconds after the filesystem's build time")
                     .emit()?;

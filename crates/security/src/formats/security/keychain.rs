@@ -927,7 +927,7 @@ fn value_node(a: &Attribute, v: AttrValue) -> Node {
         5 => {
             let text = crate::text::until_nul(&v.raw);
             match crate::formats::asn1::der::time(24, text.as_bytes()) {
-                Some(t) => node.value(Value::Timestamp { unix_seconds: t }),
+                Some(t) => node.value(Value::utc(t)),
                 None => node.value(Value::Bytes(v.raw)),
             }
         }

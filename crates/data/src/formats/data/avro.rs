@@ -668,9 +668,7 @@ fn scalar(o: &Objects, pos: usize, ty: usize) -> Result<Option<(Value, Option<St
             };
             match (div, per_sec) {
                 (_, Some(_)) => (
-                    Value::Timestamp {
-                        unix_seconds: v.saturating_mul(86_400),
-                    },
+                    Value::utc(v.saturating_mul(86_400)),
                     Some(format!("{v} days")),
                 ),
                 (Some(d), _) => {
@@ -681,7 +679,7 @@ fn scalar(o: &Objects, pos: usize, ty: usize) -> Result<Option<(Value, Option<St
                     )
                     .unwrap_or(0);
                     (
-                        Value::Timestamp { unix_seconds: secs },
+                        Value::utc(secs),
                         (nanos != 0).then(|| super::valuetree::datetime(secs, nanos)),
                     )
                 }

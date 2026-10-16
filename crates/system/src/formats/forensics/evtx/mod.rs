@@ -311,9 +311,7 @@ async fn chunk(cx: Cx, span: Span) -> Result<()> {
         pace.add(parser.steps).await;
         let mut node = Node::new(format!("Record {id}"))
             .span(rspan)
-            .value(Value::Timestamp {
-                unix_seconds: crate::text::filetime_to_unix(written),
-            })
+            .value(Value::utc(crate::text::filetime_to_unix(written)))
             .summary(summary.unwrap_or_else(|| format!("{size} bytes")))
             .lazy(record, (span, pos, size));
         if let Err(e) = items {

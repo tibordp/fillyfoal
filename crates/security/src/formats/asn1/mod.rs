@@ -1171,7 +1171,7 @@ async fn primitive(
             }
         }
         der::UTC_TIME | der::GENERALIZED_TIME => match der::time(tlv.tag, &data) {
-            Some(t) => (node.value(Value::Timestamp { unix_seconds: t }), None),
+            Some(t) => (node.value(Value::utc(t)), None),
             None => (
                 node.value(Value::Text(String::from_utf8_lossy(&data).into_owned())),
                 None,

@@ -102,7 +102,7 @@ async fn push_header_values(
             .find(|(key, _)| *key == k)
             .map_or_else(|| k.clone(), |(_, n)| (*n).to_owned());
         let value = match (k.as_str(), v.parse::<i64>()) {
-            (key, Ok(t)) if dates.contains(&key) => Value::Timestamp { unix_seconds: t },
+            (key, Ok(t)) if dates.contains(&key) => Value::utc(t),
             _ => text(v),
         };
         cx.push(Node::new(name).value(value)).await;

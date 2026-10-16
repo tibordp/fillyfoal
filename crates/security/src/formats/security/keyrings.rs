@@ -399,9 +399,11 @@ async fn gk_secret_item(cx: Cx, span: Span) -> Result<()> {
     for name in ["Created", "Modified"] {
         let at = cur.pos();
         let t = cur.u64().await?;
-        cx.emit(Node::new(name).span(cur.since(at)).value(Value::Timestamp {
-            unix_seconds: i64::try_from(t).unwrap_or(0),
-        }));
+        cx.emit(
+            Node::new(name)
+                .span(cur.since(at))
+                .value(Value::utc(i64::try_from(t).unwrap_or(0))),
+        );
     }
     let (reserved, s) = kr_string(&mut cur).await?;
     cx.emit(string_node("Reserved string", reserved, s));

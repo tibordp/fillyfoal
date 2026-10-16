@@ -753,7 +753,7 @@ pub fn scalar(bs: &mut Bs<'_>, ty: &Ty, p: Phys) -> Result<(String, Option<Value
                     if ty.id == 15 {
                         shown.truncate(10);
                     }
-                    (shown, Some(Value::Timestamp { unix_seconds: secs }))
+                    (shown, Some(Value::utc(secs)))
                 }
                 (None, Info::Decimal(_, scale)) => (
                     decimal(i128::from(v), *scale),

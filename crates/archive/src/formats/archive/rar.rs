@@ -836,11 +836,7 @@ fn file_fields(r: &mut ByteReader<'_>) -> Option<FileFields> {
     r.with(|n| n.value(hex(attr, 64)));
     if flags & 0x02 != 0 {
         let t = r.u32("Modification time", LE)?;
-        r.with(|n| {
-            n.value(Value::Timestamp {
-                unix_seconds: t.into(),
-            })
-        });
+        r.with(|n| n.value(Value::utc(t.into())));
     }
     let mut crc = None;
     if flags & 0x04 != 0 {
@@ -1290,18 +1286,10 @@ fn time_record(r: &mut ByteReader<'_>) -> Option<()> {
         }
         if unix {
             let t = r.u32(name, LE)?;
-            r.with(|n| {
-                n.value(Value::Timestamp {
-                    unix_seconds: t.into(),
-                })
-            });
+            r.with(|n| n.value(Value::utc(t.into())));
         } else {
             let t = r.u64(name, LE)?;
-            r.with(|n| {
-                n.value(Value::Timestamp {
-                    unix_seconds: crate::text::filetime_to_unix(t),
-                })
-            });
+            r.with(|n| n.value(Value::utc(crate::text::filetime_to_unix(t))));
         }
     }
     Some(())

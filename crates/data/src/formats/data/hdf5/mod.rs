@@ -690,9 +690,7 @@ fn prefix_fields(rd: &mut Rd<'_>, h: &message::Header) -> Option<()> {
             "Change time",
             "Birth time",
         ] {
-            rd.val(name, 4, |v| Value::Timestamp {
-                unix_seconds: i64::try_from(v).unwrap_or(0),
-            })?;
+            rd.val(name, 4, |v| Value::utc(i64::try_from(v).unwrap_or(0)))?;
         }
     }
     if flags & 0x10 != 0 {

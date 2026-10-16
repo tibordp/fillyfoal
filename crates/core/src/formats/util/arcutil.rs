@@ -160,9 +160,7 @@ pub fn present(node: Node, v: u64, show: Num) -> Node {
             let full = if v & 0o170_000 == 0 { v | kind } else { v };
             node.value(super::val::oct(v, 64)).summary(unix_mode(full))
         }
-        Num::Time => node.value(Value::Timestamp {
-            unix_seconds: i64::try_from(v).unwrap_or(i64::MAX),
-        }),
+        Num::Time => node.value(Value::utc(i64::try_from(v).unwrap_or(i64::MAX))),
     }
 }
 

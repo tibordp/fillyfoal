@@ -1095,9 +1095,7 @@ impl Reader<'_> {
             })
             .summary("not set")
         } else {
-            node.value(Value::Timestamp {
-                unix_seconds: julian(day, ms),
-            })
+            node.value(Value::utc(julian(day, ms)))
         })
     }
 

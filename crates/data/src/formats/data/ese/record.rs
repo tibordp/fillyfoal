@@ -321,9 +321,7 @@ pub fn value(def: &ColDef, b: &[u8]) -> Value {
         7 => le(8).map(|v| Value::f64(f64::from_bits(v))),
         8 => le(8).map(|v| {
             let days = f64::from_bits(v);
-            ole_date(days).map_or(Value::f64(days), |unix_seconds| Value::Timestamp {
-                unix_seconds,
-            })
+            ole_date(days).map_or(Value::f64(days), |unix_seconds| Value::utc(unix_seconds))
         }),
         10 | 12 => Some(Value::Text(text(def.codepage, b))),
         14 => unsigned(4),

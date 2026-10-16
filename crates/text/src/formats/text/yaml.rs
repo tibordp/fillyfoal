@@ -110,7 +110,7 @@ fn plain_value(text: &str) -> Option<Value> {
         }
         let b = text.as_bytes();
         if b.len() >= 10 && b.get(4) == Some(&b'-') && b.get(7) == Some(&b'-') {
-            return parse_datetime(text).map(|t| Value::Timestamp { unix_seconds: t });
+            return parse_datetime(text).map(|t| Value::utc(t));
         }
     }
     Some(Value::Text(text.to_owned()))

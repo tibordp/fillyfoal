@@ -317,9 +317,7 @@ async fn contents(cx: Cx, (pst, table, path): (Pst, NodeRef, Path)) -> Result<()
             (pst, Msg::Top(nid), path.clone()),
         );
         if let Some(d) = date.filter(|&d| d != 0) {
-            node = node.value(Value::Timestamp {
-                unix_seconds: crate::text::filetime_to_unix(d),
-            });
+            node = node.value(Value::utc(crate::text::filetime_to_unix(d)));
         }
         if let Some(s) = sender {
             node = node.summary(format!("from {s}"));
@@ -396,9 +394,11 @@ async fn message(cx: Cx, (pst, msg, path): (Pst, Msg, Path)) -> Result<()> {
         if let Some((t, span)) = int_prop(&cx, &pst, &pc, id).await
             && t != 0
         {
-            cx.emit(Node::new(label).span(span).value(Value::Timestamp {
-                unix_seconds: crate::text::filetime_to_unix(t),
-            }));
+            cx.emit(
+                Node::new(label)
+                    .span(span)
+                    .value(Value::utc(crate::text::filetime_to_unix(t))),
+            );
         }
     }
     if let Some((size, span)) = int_prop(&cx, &pst, &pc, 0x0e08).await {

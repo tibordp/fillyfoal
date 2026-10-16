@@ -25,9 +25,7 @@ pub fn cf_time(seconds: f64) -> Value {
     } else {
         0
     };
-    Value::Timestamp {
-        unix_seconds: whole.saturating_add(CF_EPOCH),
-    }
+    Value::utc(whole.saturating_add(CF_EPOCH))
 }
 
 /// Length helper: `usize` to `u64`.

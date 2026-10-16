@@ -119,7 +119,7 @@ fn palm_date(&raw: &u32, node: Node) -> Node {
     } else {
         raw.into()
     };
-    node.value(Value::Timestamp { unix_seconds })
+    node.value(Value::utc(unix_seconds))
 }
 
 const PALMDOC_COMPRESSION: EnumTable = &[(1, "none"), (2, "PalmDOC (LZ77)"), (17480, "HUFF/CDIC")];

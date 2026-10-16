@@ -923,9 +923,7 @@ async fn fc_lcb(cx: Cx, doc: Doc) -> Result<()> {
             cx.push(if t == 0 {
                 node.value(uint(0u64, 64)).summary("not set")
             } else {
-                node.value(Value::Timestamp {
-                    unix_seconds: crate::text::filetime_to_unix(t),
-                })
+                node.value(Value::utc(crate::text::filetime_to_unix(t)))
             })
             .await;
             continue;

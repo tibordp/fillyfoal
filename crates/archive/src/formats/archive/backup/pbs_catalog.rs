@@ -230,9 +230,7 @@ async fn directory(cx: Cx, t: Table) -> Result<()> {
                 "its table offset is not before this table",
             )),
             (_, _, Some((size_, mtime))) => node
-                .value(Value::Timestamp {
-                    unix_seconds: mtime,
-                })
+                .value(Value::utc(mtime))
                 .summary(format!("{kind}, {}", size(size_)))
                 .lazy(fields, (span, e.name_span)),
             _ => node.summary(kind).lazy(fields, (span, e.name_span)),
@@ -284,9 +282,7 @@ async fn fields(cx: Cx, (span, name_span): (Span, Span)) -> Result<()> {
         cx.emit(
             Node::new("Modification time")
                 .span(cur.since(start))
-                .value(Value::Timestamp {
-                    unix_seconds: mtime,
-                }),
+                .value(Value::utc(mtime)),
         );
     }
     Ok(())

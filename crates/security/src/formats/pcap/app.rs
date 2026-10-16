@@ -755,8 +755,7 @@ fn ntp_time(b: &mut Dec, p: Ix, name: &'static str, at: usize) {
     let unix = i64::try_from(unix).unwrap_or(0);
     let text = super::time_text(unix, nanos, 9);
     b.add(p, name, at, 8, |n| {
-        n.value(crate::value::Value::Timestamp { unix_seconds: unix })
-            .summary(text)
+        n.value(crate::value::Value::utc(unix)).summary(text)
     });
 }
 

@@ -278,9 +278,9 @@ fn describe(kind: Kind, index: u64, content: &[u8]) -> (String, Option<String>, 
                     0xbeef_f00d => crate::formats::util::val::enumv(v, 32, SCHEMES),
                     _ => crate::formats::util::val::uint(v, 32),
                 }),
-                0xe43c_5946 => u64_le(rest, 0).map(|t| Value::Timestamp {
-                    unix_seconds: i64::try_from(t).unwrap_or(i64::MAX),
-                }),
+                0xe43c_5946 => {
+                    u64_le(rest, 0).map(|t| Value::utc(i64::try_from(t).unwrap_or(i64::MAX)))
+                }
                 _ => None,
             };
             (name_or(ATTRIBUTES, id.into(), "Attribute"), None, value)

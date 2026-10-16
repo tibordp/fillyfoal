@@ -319,9 +319,7 @@ fn common_fields(r: &mut ByteReader<'_>, level: u8) -> Option<(String, u32)> {
     )?;
     r.with(|n| {
         if level == 2 {
-            n.value(Value::Timestamp {
-                unix_seconds: time.into(),
-            })
+            n.value(Value::utc(time.into()))
         } else {
             n.value(hex(time, 64)).summary(crate::text::dos_datetime(
                 u16::try_from(time >> 16).unwrap_or(0),
@@ -378,11 +376,7 @@ fn ext_node(kind: u8, body: &[u8], span: Span) -> Node {
         0x41 => {
             for name in ["Creation time", "Modification time", "Access time"] {
                 if let Some(t) = r.u64(name, LE) {
-                    r.with(|n| {
-                        n.value(Value::Timestamp {
-                            unix_seconds: crate::text::filetime_to_unix(t),
-                        })
-                    });
+                    r.with(|n| n.value(Value::utc(crate::text::filetime_to_unix(t))));
                 }
             }
         }
@@ -401,11 +395,7 @@ fn ext_node(kind: u8, body: &[u8], span: Span) -> Node {
         }
         0x54 => {
             if let Some(t) = r.u32("Modification time", LE) {
-                r.with(|n| {
-                    n.value(Value::Timestamp {
-                        unix_seconds: t.into(),
-                    })
-                });
+                r.with(|n| n.value(Value::utc(t.into())));
             }
         }
         _ => {}

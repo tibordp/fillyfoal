@@ -611,9 +611,7 @@ fn value_node(name: String, val: Val, span: Span) -> Node {
             Some(t)
                 if text.contains(['Z', 'z', '+']) || text.rfind('-').is_some_and(|i| i > 10) =>
             {
-                Node::new(name)
-                    .span(span)
-                    .value(Value::Timestamp { unix_seconds: t })
+                Node::new(name).span(span).value(Value::utc(t))
             }
             _ => text_node(name, span, &text).summary("local date/time"),
         },

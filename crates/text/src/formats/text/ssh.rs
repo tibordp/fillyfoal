@@ -415,9 +415,7 @@ async fn certificate(cx: &Cx, cur: &mut Cursor<'_>, input: Input) -> Result<Stri
         cx.emit(if t == u64::MAX {
             node.summary("forever")
         } else {
-            node.value(Value::Timestamp {
-                unix_seconds: i64::try_from(t).unwrap_or(i64::MAX),
-            })
+            node.value(Value::utc(i64::try_from(t).unwrap_or(i64::MAX)))
         });
     }
     for name in ["Critical options", "Extensions"] {

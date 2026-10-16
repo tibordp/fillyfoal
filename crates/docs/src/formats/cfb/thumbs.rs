@@ -67,9 +67,7 @@ pub async fn catalog(cx: &Cx, span: Span) -> Result<()> {
         cx.push(
             Node::new(name.clone())
                 .span(entry)
-                .value(Value::Timestamp {
-                    unix_seconds: crate::text::filetime_to_unix(time),
-                })
+                .value(Value::utc(crate::text::filetime_to_unix(time)))
                 .summary(format!("thumbnail {index} (stream \"{stream}\")"))
                 .lazy(catalog_entry, entry),
         )

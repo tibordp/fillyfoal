@@ -378,7 +378,7 @@ fn logtime(b: &[u8]) -> Option<(Value, String)> {
         sec.into(),
     );
     Some((
-        Value::Timestamp { unix_seconds: unix },
+        Value::utc(unix),
         format!("{ms} ms{}", if utc { "" } else { ", local time" }),
     ))
 }
@@ -456,7 +456,7 @@ async fn header_fields(cx: Cx, (span, page_size): (Span, u64)) -> Result<()> {
                     .value(hex(u32_le(raw, 0).unwrap_or(0), 32))
                     .desc("Random number, creation time and computer name");
                 let mut parts = Vec::new();
-                if let Some((v @ Value::Timestamp { .. }, _)) = &created {
+                if let Some((v @ Value::Timestamp(_), _)) = &created {
                     parts.push(format!("created {}", crate::render::value(v)));
                 }
                 if !name.is_empty() {

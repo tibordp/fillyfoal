@@ -1113,7 +1113,7 @@ record! {
         _unused: u8 "Unused" .hex(),
         banner: u8 "Banner format" .hex(),
         name: ascii[32] "File name",
-        modified: u32 "Modified" .with(|&v, n| n.value(Value::Timestamp { unix_seconds: 946_684_800i64.saturating_add(v.into()) })),
+        modified: u32 "Modified" .with(|&v, n| n.value(Value::utc(946_684_800i64.saturating_add(v.into())))),
         image: u32 "Image data offset" .hex(),
         icon_format: u16 "Icon formats" .hex(),
         anim_speed: u16 "Animation speed" .hex(),

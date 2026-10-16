@@ -275,7 +275,7 @@ fn timestamp(b: &[u8]) -> Option<(i64, Option<i16>)> {
 }
 
 fn time_text(t: i64) -> String {
-    crate::render::value(&Value::Timestamp { unix_seconds: t })
+    crate::render::value(&Value::utc(t))
 }
 
 /// Problems with a descriptor tag: checksum, CRC, recorded location.
@@ -465,7 +465,7 @@ fn time_field(f: &mut Fields<'_>, name: &'static str) -> Result<Option<i64>> {
     f.bytes(name, 12)
         .with(|b, n| match timestamp(b) {
             Some((t, tz)) => {
-                let n = n.value(Value::Timestamp { unix_seconds: t });
+                let n = n.value(Value::utc(t));
                 match tz {
                     Some(m) => n.summary(format!(
                         "recorded as local time, UTC{}{:02}:{:02}",

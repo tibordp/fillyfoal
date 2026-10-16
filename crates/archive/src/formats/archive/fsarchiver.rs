@@ -1073,9 +1073,7 @@ fn item_node(magic: &[u8; 4], item: &Item) -> Node {
     node = match (item.kind, item.uint()) {
         (_, Some(v)) => match show {
             Show::Hex => node.value(hex(v, bits)),
-            Show::Time => node.value(Value::Timestamp {
-                unix_seconds: i64::try_from(v).unwrap_or(i64::MAX),
-            }),
+            Show::Time => node.value(Value::utc(i64::try_from(v).unwrap_or(i64::MAX))),
             Show::Mode => node
                 .value(crate::formats::util::val::oct(v, 64))
                 .summary(unix_mode(v)),

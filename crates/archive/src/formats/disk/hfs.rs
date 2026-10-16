@@ -89,9 +89,7 @@ fn hfs_time(v: &u32, node: Node) -> Node {
     if *v == 0 {
         return node.summary("not set");
     }
-    node.value(Value::Timestamp {
-        unix_seconds: crate::text::mac_to_unix((*v).into()),
-    })
+    node.value(Value::utc(crate::text::mac_to_unix((*v).into())))
 }
 
 record! {

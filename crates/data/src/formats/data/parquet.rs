@@ -158,7 +158,7 @@ fn typed(phys: i64, bytes: &[u8]) -> Value {
             value: i64::from_le_bytes(b),
             bits: 64,
         }),
-        (3, 12) => int96(bytes).map(|(unix_seconds, _)| Value::Timestamp { unix_seconds }),
+        (3, 12) => int96(bytes).map(|(unix_seconds, _)| Value::utc(unix_seconds)),
         (4, 4) => le(4).map(|b| Value::f32(f32::from_le_bytes([b[0], b[1], b[2], b[3]]))),
         (5, 8) => le(8).map(|b| Value::f64(f64::from_le_bytes(b))),
         (6, _) => std::str::from_utf8(bytes)

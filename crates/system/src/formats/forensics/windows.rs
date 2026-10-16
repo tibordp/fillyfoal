@@ -24,9 +24,7 @@ use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 const LE: Endian = Endian::Little;
 
 fn filetime(ticks: u64) -> Value {
-    Value::Timestamp {
-        unix_seconds: crate::text::filetime_to_unix(ticks),
-    }
+    Value::utc(crate::text::filetime_to_unix(ticks))
 }
 
 // ---------------------------------------------------------------------------
@@ -521,9 +519,7 @@ async fn usn_journal(cx: Cx, input: Input) -> Result<()> {
         count = count.saturating_add(1);
         cx.push(
             struct_node(name, span, LE, (), usn_layout)
-                .value(Value::Timestamp {
-                    unix_seconds: crate::text::filetime_to_unix(time),
-                })
+                .value(Value::utc(crate::text::filetime_to_unix(time)))
                 .summary(reason_text(reason)),
         )
         .await;
@@ -1003,7 +999,7 @@ fn systemtime_text(raw: &[u8]) -> String {
     }
     match crate::formats::util::civil::systemtime(w) {
         Some(unix_seconds) => {
-            let shown = crate::render::value(&Value::Timestamp { unix_seconds });
+            let shown = crate::render::value(&Value::utc(unix_seconds));
             shown.strip_suffix(" UTC").unwrap_or(&shown).to_owned()
         }
         None => format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}"),
@@ -2324,9 +2320,7 @@ async fn odl(cx: Cx, input: Input) -> Result<()> {
             Node::new(format!("{code_file} {function}").trim().to_owned())
                 .span(cur.since(start))
                 .target(data)
-                .value(Value::Timestamp {
-                    unix_seconds: i64::try_from(ms / 1000).unwrap_or(0),
-                })
+                .value(Value::utc(i64::try_from(ms / 1000).unwrap_or(0)))
                 .summary(size(len)),
         )
         .await;

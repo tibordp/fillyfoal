@@ -169,9 +169,9 @@ fn ns_time(v: &u64, n: Node) -> Node {
     if *v == 0 {
         return n.summary("not set");
     }
-    n.value(Value::Timestamp {
-        unix_seconds: i64::try_from(*v / 1_000_000_000).unwrap_or(i64::MAX),
-    })
+    n.value(Value::utc(
+        i64::try_from(*v / 1_000_000_000).unwrap_or(i64::MAX),
+    ))
 }
 
 record! {

@@ -1125,9 +1125,7 @@ async fn record_list(cx: Cx, (sa, records): (Sa, Span)) -> Result<()> {
         let kind = lookup(RECORD_TYPES, rtype.into()).unwrap_or("R_EXTRA");
         let mut node = Node::new(format!("[{index}] {hh:02}:{mm:02}:{ss:02} {kind}"))
             .span(span)
-            .value(Value::Timestamp {
-                unix_seconds: i64::try_from(time).unwrap_or(0),
-            })
+            .value(Value::utc(i64::try_from(time).unwrap_or(0)))
             .summary(if blocks.is_empty() {
                 detail
             } else {

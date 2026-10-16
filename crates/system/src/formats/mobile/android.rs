@@ -1175,9 +1175,7 @@ async fn hprof_header(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Hprof> {
     cx.emit(
         Node::new("Timestamp")
             .span(cur.since(at))
-            .value(Value::Timestamp {
-                unix_seconds: i64::try_from(millis / 1000).unwrap_or(0),
-            }),
+            .value(Value::utc(i64::try_from(millis / 1000).unwrap_or(0))),
     );
     Ok(Hprof {
         pos: cur.pos(),

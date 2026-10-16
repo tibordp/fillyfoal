@@ -345,9 +345,7 @@ pub fn dos_stamp(v: &u32, node: Node) -> Node {
     if *v == 0 {
         return node.summary("not set");
     }
-    node.value(Value::Timestamp {
-        unix_seconds: dos_to_unix(*v),
-    })
+    node.value(Value::utc(dos_to_unix(*v)))
 }
 
 /// Decorator for a DOS date-only `u16` field.
@@ -355,9 +353,7 @@ pub fn dos_date(v: &u16, node: Node) -> Node {
     if *v == 0 {
         return node.summary("not set");
     }
-    node.value(Value::Timestamp {
-        unix_seconds: dos_to_unix(u32::from(*v) << 16),
-    })
+    node.value(Value::utc(dos_to_unix(u32::from(*v) << 16)))
 }
 
 /// Decorator for a Unix-seconds field, keeping 0 as "not set".
@@ -366,9 +362,7 @@ pub fn unix_time<T: Copy + Into<u64>>(v: &T, node: Node) -> Node {
     if v == 0 {
         return node.summary("not set");
     }
-    node.value(Value::Timestamp {
-        unix_seconds: i64::try_from(v).unwrap_or(i64::MAX),
-    })
+    node.value(Value::utc(i64::try_from(v).unwrap_or(i64::MAX)))
 }
 
 /// APFS's Fletcher-64 checksum of a block whose first 8 bytes hold the

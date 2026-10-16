@@ -297,9 +297,7 @@ async fn samples(cx: Cx, (input, log, records): (Input, Log, Span)) -> Result<()
         let span = records.sub(pos, len);
         let mut node = Node::new(format!("Sample {index}"))
             .span(span)
-            .value(Value::Timestamp {
-                unix_seconds: r.time,
-            })
+            .value(Value::utc(r.time))
             .summary(format!(
                 "{}, {}{}",
                 plural(r.interval, "second"),
@@ -385,7 +383,7 @@ async fn record_header(cx: Cx, (span, endian): (Span, Endian)) -> Result<()> {
     let block = cx.block(span).await?;
     let mut f = Fields::emitting(&cx, &block, endian);
     f.int::<i64>("curtime")
-        .with(|&v, n| n.value(Value::Timestamp { unix_seconds: v }))
+        .with(|&v, n| n.value(Value::utc(v)))
         .emit()?;
     f.u16("flags").flags(RECORD_FLAGS).emit()?;
     f.u16("ncgroups").emit()?;
@@ -546,7 +544,7 @@ async fn task(cx: Cx, (log, span): (Log, Span)) -> Result<()> {
     f.skip(2);
     f.int::<i32>("gen.excode").emit()?;
     f.int::<i64>("gen.btime")
-        .with(|&v, n| n.value(Value::Timestamp { unix_seconds: v }))
+        .with(|&v, n| n.value(Value::utc(v)))
         .emit()?;
     f.int::<i64>("gen.elaps").desc("Clock ticks").emit()?;
     let b = f.bytes("gen.cmdline", 256);

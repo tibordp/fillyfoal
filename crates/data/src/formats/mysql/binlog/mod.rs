@@ -1038,15 +1038,7 @@ async fn header(cx: Cx, (span, _ts): (Span, u32)) -> Result<()> {
         span,
         data: b.as_slice(),
     };
-    out.emit(
-        &cx,
-        "Timestamp",
-        0,
-        4,
-        Value::Timestamp {
-            unix_seconds: i64::from(out.u32(0)),
-        },
-    );
+    out.emit(&cx, "Timestamp", 0, 4, Value::utc(i64::from(out.u32(0))));
     out.emit(&cx, "Type", 4, 1, enumv(out.byte(4), 8, EVENT_TYPES));
     out.emit(&cx, "Server ID", 5, 4, uint(out.u32(5), 32));
     out.emit(&cx, "Event size", 9, 4, uint(out.u32(9), 32));
@@ -1119,15 +1111,7 @@ fn fde(cx: &Cx, e: &Event, out: &Body<'_>) {
         .trim_end_matches('\0')
         .to_owned();
     cx.emit(out.node("Server version", 2, 50).value(Value::Text(server)));
-    out.emit(
-        cx,
-        "Created",
-        52,
-        4,
-        Value::Timestamp {
-            unix_seconds: i64::from(out.u32(52)),
-        },
-    );
+    out.emit(cx, "Created", 52, 4, Value::utc(i64::from(out.u32(52))));
     out.emit(cx, "Header length", 56, 1, uint(out.byte(56), 8));
     let fmt = &e.stream.fmt;
     let array = to_u64(fmt.post.len());
@@ -2034,9 +2018,7 @@ fn gtid(cx: &Cx, out: &Body<'_>) {
     let micros = immediate & !(1 << 55);
     cx.emit(
         out.node("Immediate commit timestamp", p, 7)
-            .value(Value::Timestamp {
-                unix_seconds: i64::try_from(micros / 1_000_000).unwrap_or(0),
-            })
+            .value(Value::utc(i64::try_from(micros / 1_000_000).unwrap_or(0)))
             .summary(format!("{micros} µs")),
     );
     p = p.saturating_add(7);
@@ -2044,9 +2026,7 @@ fn gtid(cx: &Cx, out: &Body<'_>) {
         let original = ts(p);
         cx.emit(
             out.node("Original commit timestamp", p, 7)
-                .value(Value::Timestamp {
-                    unix_seconds: i64::try_from(original / 1_000_000).unwrap_or(0),
-                })
+                .value(Value::utc(i64::try_from(original / 1_000_000).unwrap_or(0)))
                 .summary(format!("{original} µs")),
         );
         p = p.saturating_add(7);

@@ -465,9 +465,7 @@ async fn section(cx: Cx, s: Section) -> Result<()> {
         if name == "CreationDate"
             && let Some(t) = super::parse_datetime(value.text().trim_matches(['(', ')']))
         {
-            node = Node::new(name)
-                .span(value.span())
-                .value(Value::Timestamp { unix_seconds: t });
+            node = Node::new(name).span(value.span()).value(Value::utc(t));
         }
         cx.push(node).await;
     }

@@ -823,9 +823,7 @@ fn time_of_day(nanos: u64) -> String {
 }
 
 fn timestamp(nanos: u64) -> Value {
-    Value::Timestamp {
-        unix_seconds: i64::try_from(nanos / 1_000_000_000).unwrap_or(0),
-    }
+    Value::utc(i64::try_from(nanos / 1_000_000_000).unwrap_or(0))
 }
 
 fn duration(nanos: u64) -> String {

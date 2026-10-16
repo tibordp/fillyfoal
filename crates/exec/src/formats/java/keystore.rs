@@ -99,11 +99,7 @@ async fn entry(cx: &Cx, f: &mut Fields<'_>, c: &Ctx) -> Result<EntryInfo> {
     let tag = f.u32("tag").enumeration(TAG).emit()?;
     let alias = utf(f, "alias")?;
     f.u64("timestamp")
-        .with(|&v, n| {
-            n.value(Value::Timestamp {
-                unix_seconds: i64::try_from(v / 1000).unwrap_or(i64::MAX),
-            })
-        })
+        .with(|&v, n| n.value(Value::utc(i64::try_from(v / 1000).unwrap_or(i64::MAX))))
         .desc("Creation time (milliseconds since 1970)")
         .emit()?;
     let mut certificates = 0;

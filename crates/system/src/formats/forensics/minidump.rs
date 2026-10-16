@@ -484,9 +484,7 @@ fn emit_field(f: &mut Fields<'_>, field: F) -> Result<()> {
                     if v == 0 {
                         node.summary("not set")
                     } else {
-                        node.value(Value::Timestamp {
-                            unix_seconds: crate::text::filetime_to_unix(v),
-                        })
+                        node.value(Value::utc(crate::text::filetime_to_unix(v)))
                     }
                 })
                 .emit()?;

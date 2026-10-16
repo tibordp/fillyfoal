@@ -265,9 +265,9 @@ async fn item_node(r: &mut ByteReader<'_>, start: u64, end: u64, name: String) -
             if h.arg == 1 {
                 let inner = head(r, body).await?;
                 if inner.major == 0 {
-                    node = node.summary(crate::render::value(&Value::Timestamp {
-                        unix_seconds: i64::try_from(inner.arg).unwrap_or(i64::MAX),
-                    }));
+                    node = node.summary(crate::render::value(&Value::utc(
+                        i64::try_from(inner.arg).unwrap_or(i64::MAX),
+                    )));
                 }
             }
             node.lazy(crate::expander!(self::members: (Span, u64)), walk)

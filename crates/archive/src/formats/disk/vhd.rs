@@ -89,9 +89,7 @@ const PLATFORMS: EnumTable = &[
 ];
 
 fn vhd_time(v: &u32, n: Node) -> Node {
-    n.value(Value::Timestamp {
-        unix_seconds: i64::from(*v).saturating_add(EPOCH_2000),
-    })
+    n.value(Value::utc(i64::from(*v).saturating_add(EPOCH_2000)))
 }
 
 #[allow(clippy::ptr_arg)] // used as a `Field::with` decorator

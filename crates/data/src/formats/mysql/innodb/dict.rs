@@ -1005,12 +1005,7 @@ pub fn value(f: &Field, b: &[u8]) -> (Value, String) {
         Ty::Timestamp { fsp } => {
             let secs = be(b.get(..4).unwrap_or_default());
             let s = format!("{secs}{}", frac(b.get(4..).unwrap_or_default(), *fsp));
-            (
-                Value::Timestamp {
-                    unix_seconds: i64::try_from(secs).unwrap_or(0),
-                },
-                s,
-            )
+            (Value::utc(i64::try_from(secs).unwrap_or(0)), s)
         }
         Ty::Time { fsp } => {
             let raw = be(b.get(..3).unwrap_or_default());

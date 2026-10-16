@@ -176,7 +176,7 @@ pub fn decimal_string(negative: bool, digits: &str, exponent: i64) -> String {
 /// A UTC date and time with a fraction of a second (`nanos` < 10^9),
 /// trimmed to milliseconds or microseconds when the rest is zero.
 pub fn datetime(unix_seconds: i64, nanos: u32) -> String {
-    let base = crate::render::value(&Value::Timestamp { unix_seconds });
+    let base = crate::render::value(&Value::utc(unix_seconds));
     if nanos == 0 {
         return base;
     }

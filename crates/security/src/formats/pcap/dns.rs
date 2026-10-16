@@ -813,9 +813,7 @@ fn rdata(b: &mut Dec, r: Ix, mo: usize, msg: &[u8], rtype: u16, rd: usize, rend:
                 let at = rd.saturating_add(8).saturating_add(i.saturating_mul(4));
                 let t = crate::bytes::u32_be(msg, at).unwrap_or(0);
                 b.add(r, label, abs(at), 4, |n| {
-                    n.value(crate::value::Value::Timestamp {
-                        unix_seconds: i64::from(t),
-                    })
+                    n.value(crate::value::Value::utc(i64::from(t)))
                 });
             }
             b.num(r, "Key tag", abs(rd.saturating_add(16)), 2);

@@ -787,9 +787,7 @@ async fn sct(cx: Cx, span: Span) -> Result<()> {
         let ms = u64::from_be_bytes(b);
         cx.emit(
             field("timestamp", 35, 8)
-                .value(Value::Timestamp {
-                    unix_seconds: i64::try_from(ms / 1000).unwrap_or(0),
-                })
+                .value(Value::utc(i64::try_from(ms / 1000).unwrap_or(0)))
                 .summary(format!("{ms} ms since 1970")),
         );
     }

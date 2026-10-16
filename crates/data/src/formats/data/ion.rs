@@ -545,9 +545,7 @@ async fn timestamp(r: &mut ByteReader<'_>, body: u64, end: u64) -> Result<(Strin
         .unwrap_or(0),
     );
     // Fields are UTC; the text form shows local time and the offset.
-    let local = crate::render::value(&Value::Timestamp {
-        unix_seconds: utc.saturating_add(offset.saturating_mul(60)),
-    });
+    let local = crate::render::value(&Value::utc(utc.saturating_add(offset.saturating_mul(60))));
     let date = local.get(..10).unwrap_or_default();
     let time = local.get(11..19).unwrap_or_default();
     let off = if unknown_offset {
@@ -690,10 +688,7 @@ async fn plain_value(
         6 => {
             let (text, utc) = timestamp(r, body, end).await?;
             match utc {
-                Some(s) => (
-                    node.value(Value::Timestamp { unix_seconds: s }),
-                    Some(format!("timestamp {text}")),
-                ),
+                Some(s) => (node.value(Value::utc(s)), Some(format!("timestamp {text}"))),
                 None => (
                     node.diag(Diagnostic::malformed(text)),
                     Some("timestamp".to_owned()),

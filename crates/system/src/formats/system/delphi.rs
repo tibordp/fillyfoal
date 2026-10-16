@@ -749,7 +749,7 @@ async fn value_node(
             .summary("vaCurrency"),
         Parsed::Date(days) => match ole_date(days) {
             Some(unix_seconds) => node
-                .value(Value::Timestamp { unix_seconds })
+                .value(Value::utc(unix_seconds))
                 .summary(format!("vaDate {days}")),
             None => node.value(float(days)).summary("vaDate"),
         },

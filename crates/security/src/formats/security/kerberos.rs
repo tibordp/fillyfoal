@@ -16,9 +16,7 @@ const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
 
 fn time(secs: u32) -> Value {
-    Value::Timestamp {
-        unix_seconds: secs.into(),
-    }
+    Value::utc(secs.into())
 }
 
 /// Kerberos encryption types (RFC 3961 and successors).

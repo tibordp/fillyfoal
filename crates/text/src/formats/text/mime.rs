@@ -680,7 +680,7 @@ async fn header_nodes(cx: Cx, span: Span) -> Result<()> {
         {
             node = Node::new(f.name)
                 .span(f.span)
-                .value(Value::Timestamp { unix_seconds: t })
+                .value(Value::utc(t))
                 .summary(f.value);
         }
         cx.push(node).await;
@@ -830,7 +830,7 @@ pub async fn dissect_mbox(cx: Cx, input: Input) -> Result<()> {
                     },
                 );
             if let Some(t) = get(&fields, "Date").and_then(|f| mail_date(&f.value)) {
-                node = node.value(Value::Timestamp { unix_seconds: t });
+                node = node.value(Value::utc(t));
             }
             lines.progress();
             cx.push(node).await;

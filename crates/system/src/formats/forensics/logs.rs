@@ -540,9 +540,7 @@ fn audit_event(file: Span, (serial, seconds, types, list): AuditEvent) -> Node {
     });
     let mut node = Node::new(format!("Event {serial}"))
         .span(file.sub(start, end.saturating_sub(start)))
-        .value(Value::Timestamp {
-            unix_seconds: seconds,
-        })
+        .value(Value::utc(seconds))
         .lazy(audit_records, (file, Arc::new(list)));
     let mut summary = types.join(", ");
     if let Some(c) = comm {
@@ -714,9 +712,7 @@ async fn acct(cx: Cx, input: Input) -> Result<()> {
         commands.insert(comm.clone());
         cx.push(
             struct_node(comm, span, LE, (), acct_layout)
-                .value(Value::Timestamp {
-                    unix_seconds: start.into(),
-                })
+                .value(Value::utc(start.into()))
                 .summary(format!(
                     "uid {uid}, exit {exit}{}",
                     if tty == 0 {

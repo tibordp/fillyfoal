@@ -196,9 +196,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Record {}", rec.number))
                 .span(span)
-                .value(Value::Timestamp {
-                    unix_seconds: rec.generated.into(),
-                })
+                .value(Value::utc(rec.generated.into()))
                 .summary(format!(
                     "{}, event {}, {kind}",
                     clip(&source, 60),

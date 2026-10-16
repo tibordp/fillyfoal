@@ -548,11 +548,11 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
                 f.u32("Reference track ID").emit()?;
                 f.u64("NTP timestamp")
                     .with(|&t, n| {
-                        n.value(Value::Timestamp {
-                            unix_seconds: i64::try_from(t >> 32)
+                        n.value(Value::utc(
+                            i64::try_from(t >> 32)
                                 .unwrap_or(0)
                                 .saturating_sub(2_208_988_800),
-                        })
+                        ))
                     })
                     .desc("Wall-clock time (NTP: seconds since 1900 in the high 32 bits)")
                     .emit()?;

@@ -298,7 +298,7 @@ fn property_node(p: &Property, line: &[u8], span: Span, input: Input) -> Node {
         match parse_datetime(&p.value).filter(|_| utc) {
             Some(t) => Node::new(p.name.clone())
                 .span(value_span)
-                .value(Value::Timestamp { unix_seconds: t }),
+                .value(Value::utc(t)),
             None => {
                 let mut n = text_node(p.name.clone(), value_span, &text);
                 if let Some(tz) = p.param("TZID") {
@@ -370,7 +370,7 @@ impl Summary {
             "ACTION" if self.title.is_none() => self.title = Some(text()),
             "DTSTART" => {
                 self.when = Some(match parse_datetime(&p.value) {
-                    Some(t) => crate::render::value(&Value::Timestamp { unix_seconds: t }),
+                    Some(t) => crate::render::value(&Value::utc(t)),
                     None => preview(&p.value, 60),
                 });
             }

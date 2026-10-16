@@ -720,7 +720,7 @@ fn record_fields(f: &mut Fields<'_>, joliet: bool, ctx: Option<RecCtx>) -> Resul
         .emit()?;
     f.bytes("Recording time", 7)
         .with(|b, n| match record_time(b) {
-            Some(t) => n.value(Value::Timestamp { unix_seconds: t }),
+            Some(t) => n.value(Value::utc(t)),
             None => n.summary("not set"),
         })
         .emit()?;
@@ -997,7 +997,7 @@ fn susp_fields(entry: &[u8], span: Span) -> (Arc<Vec<Node>>, Option<Value>, Stri
                     let Some(b) = r.bytes(name, 7) else { break };
                     let t = record_time(b);
                     r.with(|n| match t {
-                        Some(t) => n.value(Value::Timestamp { unix_seconds: t }),
+                        Some(t) => n.value(Value::utc(t)),
                         None => n.summary("not set"),
                     });
                 }

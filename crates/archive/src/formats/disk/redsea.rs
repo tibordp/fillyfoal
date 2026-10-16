@@ -154,10 +154,9 @@ fn cdate(v: &u64, node: Node) -> Node {
     if *v == 0 {
         return node.summary("not set");
     }
-    node.value(Value::Timestamp {
-        unix_seconds: templeos_cdate_raw(*v),
-    })
-    .desc("CDate: days since year 0 (high half), time of day in 2^-32 days (low half); local time")
+    node.value(Value::utc(templeos_cdate_raw(*v))).desc(
+        "CDate: days since year 0 (high half), time of day in 2^-32 days (low half); local time",
+    )
 }
 
 record! {

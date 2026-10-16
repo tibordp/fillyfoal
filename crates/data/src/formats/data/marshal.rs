@@ -889,11 +889,8 @@ async fn value_node(
                     };
                     match time {
                         Some((t, extra)) => {
-                            lazy_members(node, format!("Time, {}", t.text(Some(&extra)))).value(
-                                Value::Timestamp {
-                                    unix_seconds: t.unix_seconds(),
-                                },
-                            )
+                            lazy_members(node, format!("Time, {}", t.text(Some(&extra))))
+                                .value(Value::utc(t.unix_seconds()))
                         }
                         None => lazy_members(
                             node,
@@ -940,9 +937,7 @@ async fn value_node(
                     {
                         // Time#_dump: the time in UTC, packed into 8 bytes.
                         return Ok(node
-                            .value(Value::Timestamp {
-                                unix_seconds: t.unix_seconds(),
-                            })
+                            .value(Value::utc(t.unix_seconds()))
                             .summary(if t.utc || t.old {
                                 format!("Time, {}", t.text(None))
                             } else {
@@ -1008,9 +1003,7 @@ async fn user_dump(cx: Cx, (input, start, sym_end, data_at, len): Dump) -> Resul
                 cx.emit(
                     Node::new("Seconds")
                         .span(p)
-                        .value(Value::Timestamp {
-                            unix_seconds: t.unix_seconds(),
-                        })
+                        .value(Value::utc(t.unix_seconds()))
                         .desc("Old format: seconds since 1970, then microseconds"),
                 );
             } else {

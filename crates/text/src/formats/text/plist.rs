@@ -124,9 +124,7 @@ async fn value_node(lex: &mut Lexer<'_>, c: &Child, name: String, input: Input) 
         b"date" => {
             let text = text_of(lex, c).await?;
             match parse_datetime(&text) {
-                Some(t) => Node::new(name)
-                    .span(span)
-                    .value(Value::Timestamp { unix_seconds: t }),
+                Some(t) => Node::new(name).span(span).value(Value::utc(t)),
                 None => text_node(name, span, &text).diag(Diagnostic::malformed("invalid date")),
             }
         }
