@@ -1061,15 +1061,14 @@ fn optional_header(f: &mut Fields<'_>, ctx: &OptCtx) -> Result<OptionalHeader> {
     let size_of_headers = f.u32("SizeOfHeaders").hex().emit()?;
     let computed = ctx.checksum;
     f.u32("CheckSum")
-        .hex()
+        .checksum("PE image checksum")
         .desc("Image checksum (CheckSumMappedFile); required for drivers, 0 if not set")
-        .with(|&v, n| match computed {
-            Some(c) if v == 0 => n.summary(format!("not set (computed {c:#x})")),
-            Some(c) if c == v => n.summary("valid"),
-            Some(c) => n.diag(Diagnostic::warning(format!(
-                "checksum mismatch: computed {c:#x}"
-            ))),
-            None => n,
+        .with_check(|c| match computed {
+            Some(sum) if c.stored.to_bytes().iter().all(|&b| b == 0) => {
+                c.skipped(format!("zero: none recorded; the image gives {sum:#x}"))
+            }
+            Some(sum) => c.verify(sum),
+            None => c,
         })
         .emit()?;
     let subsystem = f.u16("Subsystem").enumeration(SUBSYSTEM).emit()?;

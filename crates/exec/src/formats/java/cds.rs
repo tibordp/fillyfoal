@@ -251,18 +251,9 @@ struct Generic {
 fn generic(f: &mut Fields<'_>, check: &Option<u32>) -> Result<Generic> {
     let magic = f.u32("_magic").hex().enumeration(MAGIC).emit()?;
     f.u32("_crc")
-        .hex()
+        .checksum("CRC-32")
+        .verify(*check)
         .desc("CRC-32 of the header")
-        .check(|&v| match check {
-            Some(c) if *c != v => Some(Diagnostic::malformed(format!(
-                "header CRC mismatch: computed {c:#010x}"
-            ))),
-            _ => None,
-        })
-        .with(|&v, n| match check {
-            Some(c) if *c == v => n.summary("matches"),
-            _ => n,
-        })
         .emit()?;
     let version = f
         .u32("_version")
@@ -795,19 +786,11 @@ async fn verify(cx: Cx, (data, used, crc): (Span, u64, u32)) -> Result<()> {
         pos = pos.saturating_add(to_u64(chunk.len()));
     }
     let computed = !reg;
-    let mut node = Node::new("CRC-32").value(Value::UInt {
-        value: crc.into(),
-        bits: 32,
-        radix: crate::value::Radix::Hex,
-    });
-    node = if computed == crc {
-        node.summary("matches the region's contents")
-    } else {
-        node.diag(Diagnostic::malformed(format!(
-            "region CRC mismatch: computed {computed:#010x}"
-        )))
-    };
-    cx.emit(node);
+    cx.emit(
+        Node::new("CRC-32")
+            .checksum(crate::value::Check::new("CRC-32", crc).verify(computed))
+            .desc("The region's CRC-32, checked against its contents"),
+    );
     cx.emit(
         Node::new("Contents")
             .span(data)

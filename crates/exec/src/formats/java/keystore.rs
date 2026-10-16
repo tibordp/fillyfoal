@@ -304,7 +304,7 @@ async fn verify_digest(cx: Cx, (input, offset): (Input, u64)) -> Result<()> {
     let data = cx.read(file.sub(0, offset)).await?;
     let expected = cx.read(file.sub(offset, 20)).await?;
     let mut verified =
-        (store_digest(&cx, b"", &data).await == expected).then_some("verified (empty password)");
+        (store_digest(&cx, b"", &data).await == expected).then_some("with the empty password");
     let mut attempt = 0;
     while verified.is_none() && attempt < crate::secret::MAX_ATTEMPTS {
         let request = crate::secret::SecretRequest::password(
@@ -316,15 +316,17 @@ async fn verify_digest(cx: Cx, (input, offset): (Input, u64)) -> Result<()> {
             break;
         };
         if store_digest(&cx, secret.expose(), &data).await == expected {
-            verified = Some("verified with the store password");
+            verified = Some("with the store password");
         }
         attempt = attempt.saturating_add(1);
     }
+    // SHA-1 over the password (as UTF-16), a fixed phrase and the store.
+    let check = crate::value::Check::new("keyed SHA-1", expected);
     cx.emit(match verified {
-        Some(how) => node.summary(how),
-        None => node.diag(Diagnostic::note(
-            "not checked (no password, or a wrong one)",
-        )),
+        Some(how) => node.checksum(check.verified(true)).summary(how),
+        None => {
+            node.checksum(check.skipped("needs the store password (none given, or a wrong one)"))
+        }
     });
     Ok(())
 }
