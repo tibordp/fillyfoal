@@ -1460,6 +1460,9 @@ neutral files owned by root.
 | `pxar-meta/backup-1.mpxar` | Proxmox Backup Server via `proxmox-backup-client backup x.pxar:… --change-detection-mode=metadata` | `tests/data/pxar/make-split.sh` (runs `split-inner.sh` with a throwaway server): a directory of 100 files of 100 KB, a text file in a subdirectory and a file with `setcap cap_net_raw+ep`; the metadata stream of the first backup, the decoded chunks of `x.mpxar.didx` concatenated. Not reproducible byte for byte. Unchanged |
 | `pxar-meta/backup-2.mpxar` | the same | the second backup of the same directory, one file changed and one added: metadata stream |
 | `pxar-payload/backup-2.ppxar.raw.zst` | the same | the second backup's payload stream (11 MB, stored with `zstd -19 --long=27`): reuses chunks of the first, the first's start and tail markers included |
+| `pbs-didx/files.pxar.didx` | Proxmox Backup Server via `proxmox-backup-client backup files.pxar:… disk.img:…` | `tests/data/pbs-index/make-external.sh` (runs `inner.sh` with a throwaway server): a directory with a subdirectory tree, symlink, hard link, FIFO, block and character devices, a socket, a file dated 1965 and 12 MiB of random data; the snapshot's dynamic index of `files.pxar` (6 chunks), copied from the datastore. Its checksum matches the snapshot manifest's `csum`. Not reproducible byte for byte. Unchanged |
+| `pbs-fidx/disk.img.fidx` | the same | the fixed index of a sparse 9 MiB image (8 MiB of zeros, 1 MiB random): 3 chunks of 4 MiB, the first two the all-zero chunk |
+| `pbs-catalog/catalog.pcat1` | the same | the snapshot's catalog: the decoded chunks of `catalog.pcat1.didx` (`proxmox-backup-debug inspect chunk --decode`) concatenated; agrees with `proxmox-backup-client catalog dump` (negative mtime included) |
 ## Git commit-graph files
 
 Reproduced byte for byte by `sh tests/data/git-commit-graph/make.sh`

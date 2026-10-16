@@ -198,3 +198,34 @@ fn borg_truncated_entry_shows_declared_size() {
         "no declared size {len} in:\n{tree}"
     );
 }
+
+/// A PBS fixed index of 65,536 chunks (a 256 GiB image): opening it reads
+/// the header and defers the 2 MiB checksum, and a page of the chunk list
+/// costs work for that page, not for the whole list.
+#[test]
+fn pbs_index_large_is_bounded() {
+    let mut data = std::fs::read("tests/fixtures/external/pbs-fidx/disk.img.fidx").unwrap();
+    let chunks: u64 = 65_536;
+    data[64..72].copy_from_slice(&(chunks * 4 * 1024 * 1024).to_le_bytes());
+    data.truncate(4096);
+    for i in 0..chunks {
+        let mut digest = [0u8; 32];
+        digest[..8].copy_from_slice(&i.to_le_bytes());
+        data.extend_from_slice(&digest);
+    }
+    let mut host = Host::named("big.fidx", data, Limits::default());
+    let root = host.root;
+    expand(&mut host, root);
+    let opened = host.session.work_done();
+    assert!(opened < 1_500, "opening took {opened} units");
+    let list = host.child(host.root, "Chunks").unwrap();
+    host.session.expand_more(list, 100);
+    host.run();
+    let page = host.session.work_done() - opened;
+    assert!(page < 1_000, "a page of the list took {page} units");
+    let shown = host.session.children(list).unwrap().ids.len();
+    assert!((100..=512).contains(&shown), "{shown} children");
+    let csum = host.child(host.root, "Checksum").unwrap();
+    expand(&mut host, csum);
+    assert!(host.render().contains("index checksum mismatch"));
+}

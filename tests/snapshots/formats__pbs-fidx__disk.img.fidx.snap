@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ disk.img.fidx — Proxmox Backup fixed index, 9 MiB, 3 chunks of 4 MiB  [0x0+0x1060]
+  ▾ Header  [0x0+0x50]
+      Magic: 2f 7f 41 ed 91 fd 0f cd  |/.A.....|  [0x0+0x8]
+      UUID: "121dbeb1-4eb7-4744-b12b-3c55d7d066d7"  [0x8+0x10]
+      Creation time: 2026-10-16 11:10:05 UTC  [0x18+0x8]
+      Index checksum: "1e4c7ffafa920eed37a358f027fe059b0fe886698c9a0dde383010bca0d05117"  [0x20+0x20]
+      Size: 9437184 — 9 MiB  [0x40+0x8]
+      Chunk size: 4194304 — 4 MiB  [0x48+0x8]
+    Reserved — 3.9 KiB  [0x50+0xfb0]
+    Checksum: "1e4c7ffafa920eed37a358f027fe059b0fe886698c9a0dde383010bca0d05117" — valid  [0x1000+0x60]
+  ▾ Chunks — 3 chunks  [0x1000+0x60]
+      Chunk 0: "bb9f8df61474d25e71fa00722318cd387396ca1736605e1248821cc0de3d3af8" — 4 MiB at 0x0, zeros  [0x1000+0x20]
+      Chunk 1: "bb9f8df61474d25e71fa00722318cd387396ca1736605e1248821cc0de3d3af8" — 4 MiB at 0x400000, zeros  [0x1020+0x20]
+      Chunk 2: "9bf55289abe8f991d0e723f0c2c5c620361ac9e558c2ed114342c848c44a5f63" — 1 MiB at 0x800000  [0x1040+0x20]

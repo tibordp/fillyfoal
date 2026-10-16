@@ -1067,6 +1067,12 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "archive")]
     &archive::backup::pbs::FORMAT,
     #[cfg(feature = "archive")]
+    &archive::backup::pbs_index::DIDX,
+    #[cfg(feature = "archive")]
+    &archive::backup::pbs_index::FIDX,
+    #[cfg(feature = "archive")]
+    &archive::backup::pbs_catalog::FORMAT,
+    #[cfg(feature = "archive")]
     &archive::fsarchiver::FORMAT,
     #[cfg(feature = "archive")]
     &archive::xfsdump::FORMAT,
