@@ -1,0 +1,68 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ aes-bcj2.7z — 7-Zip archive, 1 file, AES-256 + AES-256 + AES-256 + AES-256 + LZMA + LZMA + LZMA2 + BCJ2  [0x0+0x154a]
+  ▾ Signature header — version 0.4  [0x0+0x20]
+      Signature: 37 7a bc af 27 1c  |7z..'.|  [0x0+0x6]
+      Major version: 0  [0x6+0x1]
+      Minor version: 4  [0x7+0x1]
+      Start header CRC: 0x7ebb203f  [0x8+0x4]
+      Next header offset: 0x1440  [0xc+0x8]
+      Next header size: 234 — 234 bytes  [0x14+0x8]
+      Next header CRC: 0x8c7c6af1  [0x1c+0x4]
+  ▾ Files — 1 file  [0x1460+0xea]
+    ▾ code.bin — 8 KiB  [0x20+0x1440]
+        Modification time: 2024-01-02 03:04:00 UTC
+        Attributes: 0x81a48020 — -rw-r--r--
+        Size: 8192 — 8 KiB
+        Folder: 0
+      ▾ Content — 0x2000 bytes decrypted and decompressed  [0x20+0x1440]
+          CRC32: 0x308f5345 — valid
+          Data  [#2:0x0+0x2000]
+  ▾ Folders — 1 folder  [0x20+0x1440]
+    ▾ Folder 0 — AES-256 + AES-256 + AES-256 + AES-256 + LZMA + LZMA + LZMA2 + BCJ2, 5.1 KiB → 8 KiB, 1 stream  [0x20+0x1440]
+      ▾ Coder 0: "AES-256" — 1 in, 1 out
+          Key derivation: 19 — 2^19 SHA-256 rounds
+          Salt — (none)
+          IV: 33 a3 dc 4b 95 72 be b9 f6 4a 37 e1 3e c9 76 76  |3..K.r...J7.>.vv|
+      ▾ Coder 1: "AES-256" — 1 in, 1 out
+          Key derivation: 19 — 2^19 SHA-256 rounds
+          Salt — (none)
+          IV: ad e8 8a a0 df 81 81 8b b0 5f b8 be 71 c3 cd 70  |........._..q..p|
+      ▾ Coder 2: "AES-256" — 1 in, 1 out
+          Key derivation: 19 — 2^19 SHA-256 rounds
+          Salt — (none)
+          IV: 6b 5c a2 b7 d6 4a 91 8c 0f f6 1a 47 96 9a a2 d0  |k\...J.....G....|
+      ▾ Coder 3: "AES-256" — 1 in, 1 out
+          Key derivation: 19 — 2^19 SHA-256 rounds
+          Salt — (none)
+          IV: cd c5 0b d6 b1 13 fb 23 4b f0 d6 a0 7a fe 92 f5  |.......#K...z...|
+      ▾ Coder 4: "LZMA" — 1 in, 1 out
+          lc/lp/pb: "0/2/2" — literal context, literal position and position bits
+          Dictionary size: 8192 — 8 KiB
+      ▾ Coder 5: "LZMA" — 1 in, 1 out
+          lc/lp/pb: "0/2/2" — literal context, literal position and position bits
+          Dictionary size: 8192 — 8 KiB
+      ▾ Coder 6: "LZMA2" — 1 in, 1 out
+          Dictionary size: 8192 — 8 KiB
+        Coder 7: "BCJ2" — 4 in, 1 out
+        Unpacked size: 8192 — 8 KiB
+        Streams: 1
+      ▾ Data — 0x2000 bytes decrypted and decompressed  [0x20+0x1440]
+          Data  [#2:0x0+0x2000]
+  ▾ Next header — kHeader  [0x1460+0xea]
+    ▾ kMainStreamsInfo  [0x1461+0xb7]
+      ▾ kPackInfo — 4 packed streams, at 0x0  [0x1462+0xa]
+          kSize — 4 sizes  [0x1465+0x6]
+      ▾ kUnPackInfo — 1 folder  [0x146c+0xa3]
+          Folder 0 — AES-256 + AES-256 + AES-256 + AES-256 + LZMA + LZMA + LZMA2 + BCJ2  [0x1470+0x92]
+          kCodersUnPackSize  [0x1502+0xc]
+      ▾ kSubStreamsInfo — 1 stream  [0x150f+0x8]
+          kCRC — 1 CRC  [0x1510+0x6]
+    ▾ kFilesInfo — 1 file  [0x1518+0x31]
+        kDummy — 1 byte  [0x151a+0x3]
+        kName — 19 bytes  [0x151d+0x15]
+        kDummy — 0 bytes  [0x1532+0x2]
+        kMTime — 10 bytes  [0x1534+0xc]
+        kWinAttributes — 6 bytes  [0x1540+0x8]
