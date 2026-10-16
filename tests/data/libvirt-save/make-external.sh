@@ -7,6 +7,9 @@
 #   fillyfoal-zstd.sav         zstd-compressed migration stream
 #   fillyfoal-raw.sav.raw.zst  the uncompressed (default, "raw") save, stored
 #                              with `zstd -19` (the harness decompresses it)
+#   fillyfoal-sparse.sav.raw.zst  "sparse": a QEMU mapped-ram stream, each RAM
+#                              block's pages at a 1 MiB-aligned offset (a
+#                              sparse 10 MB file), stored with `zstd -19`
 #
 #   sh tests/data/libvirt-save/make-external.sh [scratch dir]
 #
@@ -18,11 +21,13 @@ repo=$(cd "$here/../../.." && pwd)
 work=${1:-/tmp/fixtures/libvirt-save}
 mkdir -p "$work/out"
 docker build -q -t fillyfoal-vmstate-tools "$repo/tests/data/qemu-vmstate"
-for fmt in xz zstd raw; do
+for fmt in xz zstd raw sparse; do
   docker run --rm --privileged --hostname fillyfoal -v "$work/out:/out" -v "$here:/scripts:ro" \
     fillyfoal-vmstate-tools sh /scripts/inner.sh "fillyfoal-$fmt.sav" "$fmt"
 done
 dst="$repo/tests/fixtures/external/libvirt-save"
 mkdir -p "$dst"
 cp "$work/out/fillyfoal-xz.sav" "$work/out/fillyfoal-zstd.sav" "$dst/"
-zstd -19 -q -f "$work/out/fillyfoal-raw.sav" -o "$dst/fillyfoal-raw.sav.raw.zst"
+for fmt in raw sparse; do
+  zstd -19 -q -f "$work/out/fillyfoal-$fmt.sav" -o "$dst/fillyfoal-$fmt.sav.raw.zst"
+done

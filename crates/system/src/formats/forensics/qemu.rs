@@ -36,9 +36,12 @@
 //! and postcopy). The target page size is in the configuration only for
 //! targets whose page size varies (Arm); otherwise it is taken from the VM
 //! description when that is cheap to read, or from the machine type for
-//! the 8 KiB targets (SPARC64, Alpha), else assumed to be 4 KiB. Not
-//! handled: `mapped-ram` streams (fixed page offsets) and
-//! RDMA hooks (unsupported diagnostics); with both `postcopy-ram` and
+//! the 8 KiB targets (SPARC64, Alpha), else assumed to be 4 KiB. In a
+//! `mapped-ram` stream (libvirt's "sparse" saves) each RAM block's header
+//! is followed by a header giving the file offsets of its page bitmap and
+//! pages, and the stream resumes after the pages; the blocks are shown
+//! with their bitmap and pages. Not handled: RDMA hooks (unsupported
+//! diagnostic); with both `postcopy-ram` and
 //! `x-ignore-shared`, a RAM block's optional page size is guessed.
 //!
 //! libvirt save images (`virsh save`, `managedsave`): a 92-byte header
@@ -186,6 +189,7 @@ impl Stream {
             page: self.page,
             postcopy: self.cap("postcopy-ram"),
             ignore_shared: self.cap("x-ignore-shared"),
+            mapped: self.cap("mapped-ram"),
         }
     }
 }
@@ -441,12 +445,6 @@ async fn config_section(cx: &Cx, w: &Walk, cur: &mut Cursor<'_>, st: &mut Stream
         st.page = page;
     }
     st.caps = config.caps;
-    if st.cap("mapped-ram") {
-        cx.diag(
-            Diagnostic::unsupported("mapped-ram streams (pages at fixed file offsets)")
-                .at(region.sub(start, len)),
-        );
-    }
     cur.seek(start.saturating_add(len));
     let mut summary = config.machine.clone();
     if !st.caps.is_empty() {
@@ -864,7 +862,13 @@ async fn expand_section(cx: Cx, sec: Section) -> Result<()> {
         section_header_layout,
     ));
     let payload = sec.span(sec.payload, sec.payload_end);
-    if sec.idstr == "ram" && sec.ty == T_START {
+    if sec.idstr == "ram" && sec.ty == T_START && sec.ram.mapped {
+        cx.emit(
+            Node::new("RAM blocks")
+                .span(payload)
+                .lazy(mapped_blocks, sec.clone()),
+        );
+    } else if sec.idstr == "ram" && sec.ty == T_START {
         cx.emit(struct_node(
             "RAM blocks",
             payload,
@@ -909,6 +913,8 @@ struct RamCtx {
     page: u64,
     postcopy: bool,
     ignore_shared: bool,
+    /// `mapped-ram`: each block's pages at a fixed place in the file.
+    mapped: bool,
 }
 
 struct RamSetup {
@@ -1003,6 +1009,9 @@ fn ram_block(f: &mut Fields<'_>, ctx: &RamCtx) -> Result<(String, u64)> {
 }
 
 async fn ram_setup(cx: &Cx, cur: &mut Cursor<'_>, ctx: &RamCtx) -> Result<RamSetup> {
+    if ctx.mapped {
+        return mapped_walk(cx, cur, ctx, false).await;
+    }
     let at = cur.pos();
     let span = cur.region().sub(at, SETUP_MAX);
     let block = Block {
@@ -1014,6 +1023,177 @@ async fn ram_setup(cx: &Cx, cur: &mut Cursor<'_>, ctx: &RamCtx) -> Result<RamSet
     cx.charge(f.pos() / 64).await;
     cur.seek(at.saturating_add(f.pos()));
     Ok(setup)
+}
+
+// --- mapped-ram ---------------------------------------------------------------
+
+/// The `MappedRamHeader` after each block of a `mapped-ram` RAM setup
+/// (QEMU `migration/ram.c`, `docs/devel/migration/mapped-ram.rst`): its
+/// version, the target page size, and where in the file the block's page
+/// bitmap and pages are. The stream goes on after the block's pages, at
+/// the pages' offset plus the block's used length.
+fn mapped_header(f: &mut Fields<'_>, _: &()) -> Result<(u64, u64, u64)> {
+    f.u32("Version").emit()?;
+    let page = f.u64("Page size").emit()?;
+    let bitmap = f.u64("Bitmap offset").hex().emit()?;
+    let pages = f.u64("Pages offset").hex().emit()?;
+    Ok((page, bitmap, pages))
+}
+
+const MAPPED_HEADER: u64 = 28;
+
+/// Walks a `mapped-ram` RAM setup, whose blocks are spread over the file,
+/// leaving the cursor after its end flags; with `emit`, pushes a node per
+/// field and block. The headers give file offsets: the first header's
+/// bitmap offset, which is where that header ends, places the stream in
+/// its file.
+async fn mapped_walk(cx: &Cx, cur: &mut Cursor<'_>, ctx: &RamCtx, emit: bool) -> Result<RamSetup> {
+    let region = cur.region();
+    let mask = ctx.page.saturating_sub(1);
+    let at = cur.pos();
+    let first = cur.u64().await?;
+    if first & mask != F_MEM_SIZE {
+        return Err(Diagnostic::malformed(format!(
+            "RAM setup does not start with MEM_SIZE (flags {:#x})",
+            first & mask
+        ))
+        .at(region.sub(at, 8)));
+    }
+    let total = first & !mask;
+    if emit {
+        cx.push(
+            Node::new("Total RAM")
+                .span(region.sub(at, 8))
+                .value(Value::UInt {
+                    value: total,
+                    bits: 64,
+                    radix: Radix::Hex,
+                })
+                .summary(size(total)),
+        )
+        .await;
+    }
+    let mut seen = 0u64;
+    let mut blocks = 0usize;
+    // File offset minus region offset, from the first header.
+    let mut base: Option<u64> = None;
+    while seen < total {
+        let start = cur.pos();
+        let n = cur.u8().await?;
+        let name = crate::text::latin1(&cur.bytes(n.into()).await?);
+        let used = cur.u64().await?;
+        if ctx.ignore_shared {
+            cur.skip(8);
+        }
+        let hstart = cur.pos();
+        let hspan = region.sub_exact(hstart, MAPPED_HEADER)?;
+        let block = Block {
+            span: hspan,
+            data: cx.read(hspan).await?,
+        };
+        let (_, bitmap, pages) = mapped_header(&mut Fields::new(&block, BE), &())?;
+        let hend = hstart.saturating_add(MAPPED_HEADER);
+        let delta = *base.get_or_insert(bitmap.saturating_sub(hend));
+        let rel = |off: u64| {
+            off.checked_sub(delta)
+                .filter(|&r| r >= hend)
+                .ok_or_else(|| {
+                    Diagnostic::malformed(format!("mapped-ram offset {off:#x} before its header"))
+                        .at(hspan)
+                })
+        };
+        let (bitmap, pages) = (rel(bitmap)?, rel(pages)?);
+        let npages = used.checked_div(ctx.page).unwrap_or(0);
+        let bitmap_len = npages.div_ceil(64).saturating_mul(8);
+        let end = pages.saturating_add(used);
+        if end > region.len {
+            return Err(Diagnostic::truncated(
+                Span::new(region.source, region.offset.saturating_add(pages), used),
+                region.len.saturating_sub(pages),
+            ));
+        }
+        if emit {
+            let state = (
+                region.sub(start, hstart.saturating_sub(start)),
+                hspan,
+                region.sub(bitmap, bitmap_len),
+                region.sub(pages, used),
+                ctx.clone(),
+            );
+            cx.push(
+                Node::new(name)
+                    .span(region.sub(start, end.saturating_sub(start)))
+                    .summary(size(used))
+                    .lazy(mapped_block, state),
+            )
+            .await;
+        }
+        cur.seek(end);
+        seen = seen.saturating_add(used);
+        blocks = blocks.saturating_add(1);
+        if used == 0 && blocks > 4096 {
+            return Err(Diagnostic::limit("too many empty RAM blocks").at(region.sub(start, 0)));
+        }
+    }
+    loop {
+        let at = cur.pos();
+        let v = cur.u64().await?;
+        if emit {
+            cx.push(
+                Node::new("Flags")
+                    .span(region.sub(at, 8))
+                    .value(Value::UInt {
+                        value: v,
+                        bits: 64,
+                        radix: Radix::Hex,
+                    }),
+            )
+            .await;
+        }
+        if v & mask == F_EOS {
+            break;
+        }
+        if v & mask != F_FLUSH {
+            return Err(Diagnostic::malformed(format!(
+                "unexpected flags {:#x} after the RAM block list",
+                v & mask
+            ))
+            .at(region.sub(at, 8)));
+        }
+    }
+    Ok(RamSetup { total, blocks })
+}
+
+/// The blocks of a `mapped-ram` RAM setup.
+async fn mapped_blocks(cx: Cx, sec: Section) -> Result<()> {
+    let mut cur = Cursor::new(&cx, sec.walk.region, BE);
+    cur.seek(sec.payload);
+    mapped_walk(&cx, &mut cur, &sec.ram, true).await?;
+    Ok(())
+}
+
+/// One block of a `mapped-ram` RAM setup: its ID and length, its header,
+/// its page bitmap and its pages (the block's memory; pages never written
+/// read as zeros).
+async fn mapped_block(
+    cx: Cx,
+    (fields, header, bitmap, pages, ctx): (Span, Span, Span, Span, RamCtx),
+) -> Result<()> {
+    cx.emit(struct_node("Block", fields, BE, ctx, ram_block));
+    cx.emit(struct_node(
+        "Mapped-ram header",
+        header,
+        BE,
+        (),
+        mapped_header,
+    ));
+    cx.emit(
+        Node::new("Page bitmap")
+            .span(bitmap)
+            .summary(format!("{}, a bit per page", plural(bitmap.len, "byte"))),
+    );
+    cx.emit(Node::new("Pages").span(pages).summary(size(pages.len)));
+    Ok(())
 }
 
 /// Page counts of a RAM part, by kind.
@@ -1851,7 +2031,8 @@ async fn libvirt(cx: Cx, input: Input) -> Result<()> {
     let stream = file.tail(LIBVIRT_HEADER.saturating_add(data_len.into()));
     let fmt = crate::formats::util::val::name_or(SAVE_FORMATS, format.into(), "format");
     let codec = match format {
-        0 => Some(Codec::Stored),
+        // sparse: an uncompressed `mapped-ram` stream (pages at fixed offsets).
+        0 | 6 => Some(Codec::Stored),
         1 => Some(Codec::Gzip),
         2 => Some(Codec::Bzip2),
         3 => Some(Codec::Xz),
