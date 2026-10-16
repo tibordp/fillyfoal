@@ -398,10 +398,11 @@ fn header(f: &mut Fields<'_>, ctx: &HeaderCtx) -> Result<Header> {
     let id = f
         .bytes("Profile ID", 16)
         .desc("MD5 of the profile with the flags, rendering intent and profile ID zeroed")
-        .with(|_, n| match id_ok {
-            Some(true) => n.summary("MD5 verified"),
-            Some(false) => n.diag(Diagnostic::warning("does not match the profile's MD5")),
-            None => n,
+        .checksum("MD5")
+        .with_check(|c| match id_ok {
+            Some(ok) => c.verified(ok),
+            None if c.stored.to_bytes().iter().all(|&b| b == 0) => c.skipped("zero: none recorded"),
+            None => c,
         })
         .emit()?;
     f.bytes("Reserved", 28).emit()?;

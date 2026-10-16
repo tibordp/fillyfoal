@@ -195,6 +195,9 @@ pub fn checksum(data: &[u8], head: bool) -> u32 {
     sum
 }
 
+/// The sfnt table checksum: the sum of the table's 32-bit words.
+pub const SFNT_SUM: &str = "sfnt word sum";
+
 /// [`checksum`] over a whole table, in budgeted pieces (a table can be as
 /// large as a read).
 pub async fn table_checksum(cx: &Cx, data: &[u8], head: bool) -> u32 {

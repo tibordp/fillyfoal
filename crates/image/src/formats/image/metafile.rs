@@ -412,7 +412,7 @@ record! {
         bottom: i16 "Bottom",
         inch: u16 "Units per inch" .desc("Logical units per inch (1440 = twips)"),
         reserved: u32 "Reserved",
-        checksum: u16 "Checksum" .hex() .check(|&c| {
+        checksum: u16 "Checksum" .checksum("16-bit XOR") .with_check(|c| {
             let words = [
                 (key & 0xffff) as u16,
                 (key >> 16) as u16,
@@ -425,8 +425,7 @@ record! {
                 (reserved & 0xffff) as u16,
                 (reserved >> 16) as u16,
             ];
-            let sum = words.iter().fold(0u16, |a, &w| a ^ w);
-            (sum != c).then(|| Diagnostic::warning(format!("checksum mismatch (computed {sum:#06x})")))
+            c.verify(words.iter().fold(0u16, |a, &w| a ^ w))
         }),
     }
 }

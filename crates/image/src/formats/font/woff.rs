@@ -20,7 +20,7 @@ use crate::formats::{Codec, Format, Input, Probe, content};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::Value;
+use crate::value::{Check, Value};
 
 const BE: Endian = Endian::Big;
 
@@ -202,7 +202,10 @@ async fn woff_table(
             f.u32("Offset").hex().emit()?;
             f.u32("Compressed length").emit()?;
             f.u32("Original length").emit()?;
-            f.u32("Original checksum").hex().emit()?;
+            f.u32("Original checksum")
+                .checksum(tables::SFNT_SUM)
+                .with_check(|c| c.skipped("checked under the table"))
+                .emit()?;
             Ok(())
         },
     ));
@@ -218,14 +221,9 @@ async fn woff_table(
     if table.len <= cx.limits().max_read {
         let data = cx.read_avail(table).await?;
         let computed = tables::table_checksum(&cx, &data, tag == "head").await;
-        let node = Node::new("Checksum").value(crate::formats::util::val::hex(checksum, 32));
-        cx.emit(if computed == checksum {
-            node.summary("valid")
-        } else {
-            node.diag(Diagnostic::warning(format!(
-                "mismatch: computed {computed:#010x}"
-            )))
-        });
+        cx.emit(
+            Node::new("Checksum").checksum(Check::new(tables::SFNT_SUM, checksum).verify(computed)),
+        );
     }
     tables::decode(&cx, input, &tag, table, &ctx).await
 }

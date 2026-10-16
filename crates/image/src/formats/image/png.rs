@@ -23,7 +23,7 @@ use crate::formats::{Format, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::text::latin1;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::{Check, EnumTable, Value, lookup};
 
 use super::{ColorOrder, dims, palette, playing_time};
 
@@ -973,11 +973,7 @@ async fn chunk(cx: Cx, st: ChunkState) -> Result<()> {
     let stored = u32_be(&stored, 0).unwrap_or(0);
     let mut node = Node::new("CRC")
         .span(crc_span)
-        .value(Value::UInt {
-            value: stored.into(),
-            bits: 32,
-            radix: crate::value::Radix::Hex,
-        })
+        .checksum(Check::new("CRC-32", stored))
         .desc("CRC-32 of the type and data");
     let covered = span.sub(4, declared.saturating_add(4));
     if covered.len <= cx.limits().max_read {
@@ -990,14 +986,7 @@ async fn chunk(cx: Cx, st: ChunkState) -> Result<()> {
             }
             register = crc32_update(register, piece);
         }
-        let computed = !register;
-        node = if computed == stored {
-            node.summary("valid")
-        } else {
-            node.diag(Diagnostic::warning(format!(
-                "CRC mismatch: computed {computed:#010x}"
-            )))
-        };
+        node = node.with_check(|c| c.verify(!register));
     }
     cx.emit(node);
     Ok(())

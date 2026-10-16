@@ -12,7 +12,7 @@ use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
 use crate::text::until_nul;
-use crate::value::{FlagTable, Radix, Value, flag};
+use crate::value::{FlagTable, Value, flag};
 
 const LE: Endian = Endian::Little;
 
@@ -231,11 +231,11 @@ async fn tex_pk(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Checksum")
             .span(file.sub(7u64.saturating_add(k), 4))
-            .value(Value::UInt {
-                value: u32_be(&rest, 4).unwrap_or(0).into(),
-                bits: 32,
-                radix: Radix::Hex,
-            }),
+            .checksum(crate::value::Check::new(
+                "TeX font checksum",
+                u32_be(&rest, 4).unwrap_or(0),
+            ))
+            .desc("Copied from the TFM file, which it must match"),
     );
     cx.emit(Node::new("Character packets").span(file.tail(k.saturating_add(19))));
     cx.annotate(format!(
