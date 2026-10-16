@@ -638,6 +638,8 @@ pub static FORMATS: &[&Format] = &[
     &pcap::FORMAT,
     #[cfg(feature = "security")]
     &pcap::ng::FORMAT,
+    #[cfg(feature = "security")]
+    &pcap::nfdump::FORMAT,
     #[cfg(feature = "system")]
     &forensics::lnk::FORMAT,
     #[cfg(feature = "system")]

@@ -847,3 +847,5 @@ closely enough to credit:
   dictionary (`crates/docs/src/formats/documents/doldoc.rs`, `templeos_ac.rs`), sprites and GR
   (`crates/image/src/formats/image/templeos.rs`). Test fixtures come from its distribution ISO
   (public domain).
+- nfdump file layouts (`crates/security/src/formats/pcap/nfdump.rs`): the structure
+  definitions in Peter Haag's nfdump headers, 1.6.22 to 1.7.5 (BSD-3-Clause).
