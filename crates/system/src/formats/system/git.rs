@@ -86,8 +86,8 @@ fn hash_name(len: u64) -> &'static str {
 /// A file's trailing checksum: its length (the object format's hash
 /// size) and whether it matched (`None`: too large to check).
 #[derive(Clone, Copy, Debug)]
-struct Trailer {
-    len: u64,
+pub(super) struct Trailer {
+    pub(super) len: u64,
     valid: Option<bool>,
 }
 
@@ -95,7 +95,7 @@ struct Trailer {
 /// last 20 bytes and as a SHA-256 over all but the last 32, in one pass,
 /// and settles the hash size by the one that matches; if neither does (or
 /// the file is too large to hash), `guess` is taken.
-async fn trailer(cx: &Cx, file: Span, guess: u64) -> Result<Trailer> {
+pub(super) async fn trailer(cx: &Cx, file: Span, guess: u64) -> Result<Trailer> {
     let short = file.len.saturating_sub(SHA1_LEN);
     let long = file.len.saturating_sub(SHA256_LEN);
     if short > cx.limits().max_read || file.len < SHA256_LEN {
@@ -138,7 +138,12 @@ async fn trailer(cx: &Cx, file: Span, guess: u64) -> Result<Trailer> {
 }
 
 /// The node for a file's trailing checksum.
-async fn checksum_node(cx: &Cx, file: Span, name: &'static str, t: Trailer) -> Result<Node> {
+pub(super) async fn checksum_node(
+    cx: &Cx,
+    file: Span,
+    name: &'static str,
+    t: Trailer,
+) -> Result<Node> {
     let span = file.sub(file.len.saturating_sub(t.len), t.len);
     let stored = cx.read(span).await?;
     let node = Node::new(name)

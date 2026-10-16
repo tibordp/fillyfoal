@@ -1380,3 +1380,21 @@ the same way locally (`TEMPLEOS_Z_DIRS`).
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
 | `templeos-iso/templeos-redseaiso.iso.gz` | TempleOS V5.03 (the distribution ISO above, booted as a live CD in QEMU 10.0.13 `qemu-system-x86_64 -accel tcg`, Debian 13 aarch64, in Docker, `-rtc base=2026-01-01T00:00:00`) | `tests/data/redsea/qemu_redseaiso.py` (its docstring has the `docker run` line) types, over QMP, `DirMk`/`Copy` of `/Demo/DateTime.HC.Z` and `/Doc/FileLowLevel.DD.Z` from the CD into `B:/Src` on the RAM drive, then `RedSeaISO("B:/Out","B:/Src");`, saves the guest's memory and carves `B:/Out.ISO.C` (contiguous) out of the RAM drive. Not reproducible byte for byte (the volume's `unique_id` mixes in the TSC, and creation times vary by seconds; two runs differed in 20 bytes). Apart from the slack after each file's last block (TempleOS writes from an uninitialised buffer, so it holds stale heap bytes), it is byte for byte what `tests/data/redsea/make_image.py` builds for the same tree, times and ID. Stored with `gzip -9 -n`. Public domain (TempleOS) |
+
+## Git commit-graph files
+
+Reproduced byte for byte by `sh tests/data/git-commit-graph/make.sh`
+(Docker `debian:trixie`, host name `fillyfoal`, running
+`tests/data/git-commit-graph/inside.sh`): git 2.47.3. Eleven commits by
+`fillyfoal <fillyfoal@example.invalid>` with fixed dates: a merge, an
+octopus merge of three branches, a commit dated 2100-01-01 and its child
+dated 1970-01-01 00:00:01 (a corrected commit date offset above 2^31).
+`git commit-graph verify` accepts every file, and the snapshots' trees,
+parents and dates agree with `git log --format='%H %T %P %ct'`.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `git-commit-graph/commit-graph` | git 2.47.3 | `git commit-graph write --reachable --changed-paths`: OIDF, OIDL, CDAT, GDA2, GDO2, EDGE, BIDX, BDAT |
+| `git-commit-graph/split-base.graph` | git 2.47.3 | `git commit-graph write --reachable --split=no-merge` after the first five commits: the base layer of a chain |
+| `git-commit-graph/split-top.graph` | git 2.47.3 | the same command with `--changed-paths` after the other six: the top layer, with a BASE chunk naming the base layer |
+| `git-commit-graph/sha256.graph` | git 2.47.3 | the same history in a `--object-format=sha256` repository, `git commit-graph write --reachable` |

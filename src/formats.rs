@@ -709,6 +709,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "system")]
     &system::git::INDEX,
     #[cfg(feature = "system")]
+    &system::commit_graph::FORMAT,
+    #[cfg(feature = "system")]
     &system::ostree::FLATPAK,
     #[cfg(feature = "system")]
     &system::ostree::DELTA,
