@@ -1266,10 +1266,18 @@ fn item_label(
                 format!("cpu{}", i.saturating_sub(1))
             }
         }
-        3 => match string_field("irq_name") {
-            Some(n) => format!("[{major}] {n}"),
-            None => format!("[{major}.{minor}]"),
-        },
+        // One row per CPU, "all" first, of one item per interrupt.
+        3 => {
+            let cpu = if major == 0 {
+                "all".to_string()
+            } else {
+                format!("cpu{}", major.saturating_sub(1))
+            };
+            match string_field("irq_name") {
+                Some(n) => format!("[{cpu}] {n}"),
+                None => format!("[{cpu}] #{minor}"),
+            }
+        }
         12 | 13 => string_field("interface").unwrap_or_else(|| format!("[{i}]")),
         37 => string_field("mountp").unwrap_or_else(|| format!("[{i}]")),
         31..=33 => string_field("device").unwrap_or_else(|| format!("[{i}]")),
@@ -1295,6 +1303,23 @@ fn item_label(
     }
 }
 
+/// Fields sysstat keeps multiplied by 100: the load averages (`sar -q`
+/// prints `ldavg-1` as `load_avg_1 / 100`) and the CPU clock (`cpufreq`,
+/// MHz × 100), shown as the value they stand for.
+fn hundredths(name: &str, data: &[u8], o: usize, e: Endian) -> Option<String> {
+    let v = match name {
+        "load_avg_1" | "load_avg_5" | "load_avg_15" => u64::from(get::<u32>(data, o, e)?),
+        "cpufreq" => get::<u64>(data, o, e)?,
+        _ => return None,
+    };
+    let s = format!("{}.{:02}", v / 100, v % 100);
+    Some(if name == "cpufreq" {
+        format!("{s} MHz")
+    } else {
+        s
+    })
+}
+
 async fn item_fields(cx: Cx, (sa, act, span): (Sa, Activity, Span)) -> Result<()> {
     let data = cx.read(span).await?;
     let e = sa.endian;
@@ -1312,7 +1337,11 @@ async fn item_fields(cx: Cx, (sa, act, span): (Sa, Activity, Span)) -> Result<()
                 C => data.get(o).map(|&b| int(i64::from(b as i8), 8)),
             };
             if let Some(v) = value {
-                cx.emit(Node::new(name).span(span.sub(off, size)).value(v));
+                let mut node = Node::new(name).span(span.sub(off, size)).value(v);
+                if let Some(s) = hundredths(name, &data, o, e) {
+                    node = node.summary(s);
+                }
+                cx.emit(node);
             }
         }
         return Ok(());
@@ -1349,6 +1378,43 @@ async fn item_fields(cx: Cx, (sa, act, span): (Sa, Activity, Span)) -> Result<()
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
     use super::*;
+
+    /// A_IRQ rows are CPUs, "all" first; only that row names interrupts.
+    #[test]
+    fn irq_items_name_their_cpu() {
+        let act = Activity {
+            id: 3,
+            nr: 19,
+            nr2: 28,
+            has_nr: true,
+            size: 12,
+            types: [0, 0, 1],
+        };
+        let named = named_layout(&act, 8);
+        assert!(named.is_some());
+        let mut sum = vec![0u8; 12];
+        sum[4..7].copy_from_slice(b"sum");
+        let label = |i: u64, data: &[u8]| item_label(&act, i, 28, named.as_ref(), data);
+        assert_eq!(label(0, &sum), "[all] sum");
+        assert_eq!(label(29, &[0u8; 12]), "[cpu0] #1");
+        assert_eq!(label(28 * 18 + 3, &sum), "[cpu17] sum");
+    }
+
+    /// sysstat keeps load averages and the CPU clock multiplied by 100.
+    #[test]
+    fn hundredths_read_as_sar_prints_them() {
+        let load = 20u32.to_le_bytes();
+        assert_eq!(
+            hundredths("load_avg_1", &load, 0, Endian::Little).as_deref(),
+            Some("0.20")
+        );
+        let freq = 240_050u64.to_le_bytes();
+        assert_eq!(
+            hundredths("cpufreq", &freq, 0, Endian::Little).as_deref(),
+            Some("2400.50 MHz")
+        );
+        assert_eq!(hundredths("nr_running", &freq, 0, Endian::Little), None);
+    }
 
     /// The layouts agree with sysstat's own composition constants.
     #[test]
