@@ -960,7 +960,7 @@ record! {
         bsd_flags: u32 "BSD flags" .hex(),
         owner: u32 "Owner id",
         group: u32 "Group id",
-        mode: u16 "Mode" .with(|&m, n| n.summary(crate::formats::disk::unix_mode(m.into()))),
+        mode: u16 "Mode" .oct().with(|&m, n| n.summary(crate::formats::disk::unix_mode(m.into()))),
         _pad: u16 "Padding",
         uncompressed_size: u64 "Uncompressed size",
     }

@@ -710,7 +710,7 @@ async fn payload_modes(cx: Cx, list: List) -> Result<()> {
         cx.push(
             Node::new(format!("[{i}]"))
                 .span(r.span(item.start, item.len()))
-                .value(Value::Text(format!("0{mode:o}")))
+                .value(val::oct(mode, 32))
                 .summary(format!("{} {}:{}", unix_mode(mode), field(0), field(4))),
         )
         .await;
@@ -953,7 +953,7 @@ async fn owner_fields(
     cx.emit(
         Node::new("Mode")
             .span(r.span(mode.start, 4))
-            .value(Value::Text(format!("0{m:o}")))
+            .value(val::oct(m, 32))
             .summary(unix_mode(m)),
     );
     Ok((u, g, m))

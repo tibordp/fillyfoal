@@ -240,7 +240,7 @@ fn core_layout(f: &mut Fields<'_>, ctx: &CoreCtx) -> Result<()> {
     let v3 = ctx.version >= 3;
     f.ascii("Magic", 2).emit()?;
     f.u16("Mode")
-        .hex()
+        .oct()
         .with(|&m, n| n.summary(unix_mode(m.into())))
         .emit()?;
     f.u8("Version").emit()?;

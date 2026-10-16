@@ -690,6 +690,7 @@ async fn mbdb_record(cx: Cx, span: Span) -> Result<()> {
     let block = cx.block(span.sub(fixed_at, 40)).await?;
     let mut f = Fields::emitting(&cx, &block, BE);
     f.u16("Mode")
+        .oct()
         .with(|&m, n| n.summary(unix_mode(u64::from(m))))
         .emit()?;
     f.u64("Inode").emit()?;

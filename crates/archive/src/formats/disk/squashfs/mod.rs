@@ -720,7 +720,7 @@ struct InodeCtx {
 fn inode_layout(f: &mut Fields<'_>, ctx: &InodeCtx) -> Result<()> {
     f.u16("Type").enumeration(INODE_TYPES).emit()?;
     f.u16("Mode")
-        .hex()
+        .oct()
         .with(|&m, n| n.summary(unix_mode(u64::from(m) | type_bits(ctx.kind))))
         .emit()?;
     f.u16("Owner (ID index)").emit()?;

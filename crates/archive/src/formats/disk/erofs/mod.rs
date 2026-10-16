@@ -667,7 +667,7 @@ fn inode_layout(f: &mut Fields<'_>, ctx: &InoCtx) -> Result<()> {
         .desc("The inline xattr area is 12 bytes plus 4 × (count − 1); 0 for none")
         .emit()?;
     f.u16("Mode")
-        .hex()
+        .oct()
         .with(|&m, n| n.summary(unix_mode(m.into())))
         .emit()?;
     if ctx.ext {

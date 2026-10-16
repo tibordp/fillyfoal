@@ -188,7 +188,7 @@ const INODEFMT_44: u32 = 2;
 record! {
     /// `struct ufs1_dinode` (128 bytes).
     pub struct Inode1 {
-        mode: u16 "Mode" .hex() .with(|&m, n| n.summary(unix_mode(m.into()))),
+        mode: u16 "Mode" .oct().with(|&m, n| n.summary(unix_mode(m.into()))),
         nlink: u16 "Links",
         _old_ids: u32 "Unused (old owner and group)",
         size: u64 "Size" .with(|&v, n| n.summary(size(v))),
@@ -215,7 +215,7 @@ fn ts64(v: &i64, node: Node) -> Node {
 record! {
     /// `struct ufs2_dinode` (256 bytes), up to the block pointers.
     pub struct Inode2 {
-        mode: u16 "Mode" .hex() .with(|&m, n| n.summary(unix_mode(m.into()))),
+        mode: u16 "Mode" .oct().with(|&m, n| n.summary(unix_mode(m.into()))),
         nlink: u16 "Links",
         uid: u32 "Owner",
         gid: u32 "Group",

@@ -234,7 +234,7 @@ fn probe_payload(h: &Head<'_>) -> bool {
 record! {
     /// `Stat`: an `ENTRY`'s content.
     pub struct Stat {
-        mode: u64 "Mode" .with(|&v, n| n.summary(format!("0o{v:o} {}", unix_mode(v)))),
+        mode: u64 "Mode" .oct().with(|&v, n| n.summary(unix_mode(v))),
         flags: u64 "Flags" .flags(ENTRY_FLAGS),
         uid: u32 "UID",
         gid: u32 "GID",
@@ -247,7 +247,7 @@ record! {
 record! {
     /// `Stat_V1`: an `ENTRY` of the first version (mtime in nanoseconds).
     pub struct StatV1 {
-        mode: u64 "Mode" .with(|&v, n| n.summary(format!("0o{v:o} {}", unix_mode(v)))),
+        mode: u64 "Mode" .oct().with(|&v, n| n.summary(unix_mode(v))),
         flags: u64 "Flags" .flags(ENTRY_FLAGS),
         uid: u32 "UID",
         gid: u32 "GID",

@@ -87,7 +87,8 @@ fn cram_inode(b: &[u8]) -> Option<CramInode> {
 
 fn inode_fields(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u16("Mode")
-        .with(|&m, n| n.summary(format!("0o{m:o} {}", unix_mode(m.into()))))
+        .oct()
+        .with(|&m, n| n.summary(unix_mode(m.into())))
         .emit()?;
     f.u16("UID").emit()?;
     let sg = f.u32("Size and GID").hex().get()?;

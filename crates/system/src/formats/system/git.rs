@@ -1226,7 +1226,7 @@ async fn entry_fields(cx: Cx, (span, version, hash_len): (Span, u32, u64)) -> Re
     f.u32("mtime (nanoseconds)").emit()?;
     f.u32("Device").emit()?;
     f.u32("Inode").emit()?;
-    f.u32("Mode").with(|&m, n| n.summary(mode_text(m))).emit()?;
+    f.u32("Mode").oct().emit()?;
     f.u32("UID").emit()?;
     f.u32("GID").emit()?;
     f.u32("File size").emit()?;

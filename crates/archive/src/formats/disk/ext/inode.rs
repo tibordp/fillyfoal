@@ -598,7 +598,7 @@ async fn extent_block(cx: Cx, st: ExtCtx2) -> Result<()> {
 /// in-inode extended attributes.
 fn inode_layout(f: &mut Fields<'_>, ctx: &InodeCtx) -> Result<()> {
     f.u16("Mode")
-        .hex()
+        .oct()
         .with(|&m, n| n.summary(unix_mode(m.into())))
         .emit()?;
     f.u16("Owner (low)").emit()?;

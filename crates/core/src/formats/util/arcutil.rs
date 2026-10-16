@@ -154,14 +154,11 @@ pub fn present(node: Node, v: u64, show: Num) -> Node {
     match show {
         Num::Dec => node.value(uint(v)),
         Num::Hex => node.value(hex(v)),
-        Num::Oct => node.value(uint(v)).summary(format!("0o{v:o}")),
-        Num::Mode => node
-            .value(uint(v))
-            .summary(format!("0o{v:o} {}", unix_mode(v))),
+        Num::Oct => node.value(super::val::oct(v, 64)),
+        Num::Mode => node.value(super::val::oct(v, 64)).summary(unix_mode(v)),
         Num::ModeOf(kind) => {
             let full = if v & 0o170_000 == 0 { v | kind } else { v };
-            node.value(uint(v))
-                .summary(format!("0o{v:o} {}", unix_mode(full)))
+            node.value(super::val::oct(v, 64)).summary(unix_mode(full))
         }
         Num::Time => node.value(Value::Timestamp {
             unix_seconds: i64::try_from(v).unwrap_or(i64::MAX),
