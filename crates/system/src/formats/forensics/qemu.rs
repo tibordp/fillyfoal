@@ -32,7 +32,12 @@
 //! Layout from QEMU's `docs/devel/migration/` and the stream as written by
 //! QEMU 10.0 (`migration/savevm.c`, `migration/ram.c`, GPL-2.0-or-later,
 //! read for the facts); checked against streams QEMU wrote (external
-//! fixtures). Not handled: `mapped-ram` streams (fixed page offsets) and
+//! fixtures: x86 microvm and q35, aarch64 virt, SPARC64 sun4u, footer-less
+//! and postcopy). The target page size is in the configuration only for
+//! targets whose page size varies (Arm); otherwise it is taken from the VM
+//! description when that is cheap to read, or from the machine type for
+//! the 8 KiB targets (SPARC64, Alpha), else assumed to be 4 KiB. Not
+//! handled: `mapped-ram` streams (fixed page offsets) and
 //! RDMA hooks (unsupported diagnostics); with both `postcopy-ram` and
 //! `x-ignore-shared`, a RAM block's optional page size is guessed.
 //!
@@ -268,7 +273,7 @@ async fn walk(cx: Cx, w: Walk) -> Result<()> {
         cx.progress_in(region, region.offset.saturating_add(start));
         let ty = cur.u8().await?;
         let step = match ty {
-            T_CONFIG => config_section(&cx, &mut cur, &mut st).await,
+            T_CONFIG => config_section(&cx, &w, &mut cur, &mut st).await,
             T_START | T_FULL => start_section(&cx, &w, &mut cur, &mut st, ty).await,
             T_PART | T_END => part_section(&cx, &w, &mut cur, &mut st, ty).await,
             T_COMMAND => command(&w, &mut cur, &st).await,
@@ -396,7 +401,29 @@ fn config_subsection(f: &mut Fields<'_>, _: &()) -> Result<(String, ConfigSub)> 
 /// field (the configuration, the RAM block list).
 const SETUP_MAX: u64 = 256 * 1024;
 
-async fn config_section(cx: &Cx, cur: &mut Cursor<'_>, st: &mut Stream) -> Result<Node> {
+/// Machine types of targets whose pages are fixed at 8 KiB
+/// (`TARGET_PAGE_BITS` 13: SPARC64 and Alpha).
+const PAGES_8K: &[&str] = &["sun4u", "sun4v", "niagara", "clipper"];
+
+/// The page size of a stream with no `target-page-bits` subsection, which
+/// QEMU sends only for targets whose page size varies (Arm): from the VM
+/// description when reading it is cheap (it is at the end of the stream),
+/// else from the machine type for the 8 KiB targets, else unknown (4 KiB:
+/// x86 and most others).
+async fn fixed_page(cx: &Cx, w: &Walk, machine: &str) -> Result<Option<u64>> {
+    if cx.read_is_cheap(w.stream.tail(w.stream.len.saturating_sub(1)))
+        && let Some(page) = vmdesc(cx, w.stream)
+            .await?
+            .and_then(|d| d.page_size)
+            .filter(|p| p.is_power_of_two() && (512..=1 << 20).contains(p))
+    {
+        return Ok(Some(page));
+    }
+    let base = machine.split('-').next().unwrap_or_default();
+    Ok(PAGES_8K.contains(&base).then_some(8192))
+}
+
+async fn config_section(cx: &Cx, w: &Walk, cur: &mut Cursor<'_>, st: &mut Stream) -> Result<Node> {
     let start = cur.pos().saturating_sub(1);
     let region = cur.region();
     let span = region.sub(start, SETUP_MAX);
@@ -410,6 +437,8 @@ async fn config_section(cx: &Cx, cur: &mut Cursor<'_>, st: &mut Stream) -> Resul
     cx.charge(len / 64).await;
     if let Some(bits) = config.page_bits {
         st.page = 1u64.checked_shl(bits).unwrap_or(4096);
+    } else if let Some(page) = fixed_page(cx, w, &config.machine).await? {
+        st.page = page;
     }
     st.caps = config.caps;
     if st.cap("mapped-ram") {
@@ -1338,6 +1367,8 @@ struct Dev {
 #[derive(Debug)]
 struct VmDesc {
     devices: Vec<Dev>,
+    /// The target page size (`page_size`).
+    page_size: Option<u64>,
 }
 
 impl VmDesc {
@@ -1434,7 +1465,11 @@ fn build_vmdesc(j: &Json, nodes: &mut u64) -> Option<VmDesc> {
             total,
         });
     }
-    Some(VmDesc { devices: out })
+    let page_size = j.get("page_size").and_then(Json::as_u64);
+    Some(VmDesc {
+        devices: out,
+        page_size,
+    })
 }
 
 fn build_struct(j: &Json, nodes: &mut u64, depth: u32) -> SDesc {

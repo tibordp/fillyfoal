@@ -15,6 +15,8 @@
 #                               `-global migration.send-section-footer=off`
 #   microvm-postcopy.vmstate    `microvm` migrated with postcopy-ram: the
 #                               device state in a MIG_CMD_PACKAGED blob
+#   sparc64-sun4u.vmstate       16 MiB SPARC64 `sun4u` (8 KiB pages, which
+#                               the stream gives only in its VM description)
 #
 #   sh tests/data/qemu-vmstate/make-external.sh [scratch dir]
 #
@@ -39,8 +41,9 @@ run /scripts/inner-ext.sh qemu-system-aarch64 virt-aarch64.vmstate -machine virt
 run /scripts/inner-ext.sh qemu-system-x86_64 microvm-nofooter.vmstate -machine microvm -m 2 \
   -global migration.send-section-footer=off
 run /scripts/inner-postcopy.sh microvm-postcopy.vmstate
+run /scripts/inner-ext.sh qemu-system-sparc64 sparc64-sun4u.vmstate -machine sun4u -m 16
 dst="$repo/tests/fixtures/external/qemu-vmstate"
 mkdir -p "$dst"
-for f in microvm q35-virtio virt-aarch64 microvm-nofooter microvm-postcopy; do
+for f in microvm q35-virtio virt-aarch64 microvm-nofooter microvm-postcopy sparc64-sun4u; do
   zstd -19 -q -f "$work/out/$f.vmstate" -o "$dst/$f.vmstate.raw.zst"
 done
