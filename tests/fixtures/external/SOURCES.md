@@ -1932,3 +1932,18 @@ against `trace-cmd report -t` and `trace-cmd dump --all`.
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
 | `tracecmd-dat/v6-instance.dat` | `trace-cmd record --file-version 6 ... -B ffinst ...` | 3 events, CPU 2 of each buffer; unchanged |
+
+## sysstat: interrupts
+
+`sysstat-sa/sa-irq.sa` is written by the second run of
+`tests/data/sysstat-sa/make.sh` (sysstat 12.7.5, `debian:trixie`, host name
+`fillyfoal`, `TZ=UTC`), `sadc -S INT 1 1` in a privileged container (a plain
+one masks `/proc/interrupts`, and A_IRQ is then empty). It holds sadc's
+default activities and A_IRQ: 19 rows (all CPUs, then CPU 0 to 17) of 28
+interrupts, named only in the first row by the VM's generic IRQ names
+(`sum`, numbers, `IPI0` to `IPI7`). Not reproducible byte for byte. Checked
+against `sar -I ALL` on a two-sample run of the same command.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `sysstat-sa/sa-irq.sa` | `sadc -S INT 1 1` (privileged) | one sample; unchanged |

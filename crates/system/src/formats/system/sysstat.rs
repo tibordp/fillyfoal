@@ -1219,12 +1219,20 @@ async fn items(cx: Cx, (sa, records, b): (Sa, Span, Block)) -> Result<()> {
     let named = named_layout(&act, sa.long);
     let size = u64::from(act.size);
     let per = u64::try_from(act.nr2.max(1)).unwrap_or(1);
+    // A_IRQ names its interrupts in the first row only; sar reads the
+    // other rows' names from it.
+    let row0 = if act.id == 3 && per > 1 {
+        let n = per.min(b.count).saturating_mul(size);
+        cx.read(records.sub(b.items, n)).await.unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     let i0 = cx.resume::<u64>().unwrap_or(0);
     for i in i0..b.count {
         cx.mark(move || i);
         let span = records.sub(b.items.saturating_add(i.saturating_mul(size)), size);
         let data = cx.read(span).await?;
-        let label = item_label(&act, i, per, named.as_ref(), &data);
+        let label = item_label(&act, i, per, named.as_ref(), &data, &row0);
         cx.push(
             Node::new(label)
                 .span(span)
@@ -1242,12 +1250,13 @@ fn item_label(
     per: u64,
     named: Option<&(Layout, Vec<u64>)>,
     data: &[u8],
+    row0: &[u8],
 ) -> String {
     let (major, minor) = (
         i.checked_div(per).unwrap_or(0),
         i.checked_rem(per).unwrap_or(0),
     );
-    let string_field = |field: &str| {
+    let string_in = |data: &[u8], field: &str| {
         let (l, offs) = named?;
         let (idx, &(k, _)) = l.iter().enumerate().find(|(_, (_, n))| *n == field)?;
         let off = to_usize(*offs.get(idx)?);
@@ -1273,16 +1282,19 @@ fn item_label(
             } else {
                 format!("cpu{}", major.saturating_sub(1))
             };
-            match string_field("irq_name") {
+            let first = row0
+                .get(to_usize(minor.saturating_mul(u64::from(act.size)))..)
+                .unwrap_or_default();
+            match string_in(data, "irq_name").or_else(|| string_in(first, "irq_name")) {
                 Some(n) => format!("[{cpu}] {n}"),
                 None => format!("[{cpu}] #{minor}"),
             }
         }
-        12 | 13 => string_field("interface").unwrap_or_else(|| format!("[{i}]")),
-        37 => string_field("mountp").unwrap_or_else(|| format!("[{i}]")),
-        31..=33 => string_field("device").unwrap_or_else(|| format!("[{i}]")),
-        36 => string_field("product").unwrap_or_else(|| format!("[{i}]")),
-        38 => string_field("fchost_name").unwrap_or_else(|| format!("[{i}]")),
+        12 | 13 => string_in(data, "interface").unwrap_or_else(|| format!("[{i}]")),
+        37 => string_in(data, "mountp").unwrap_or_else(|| format!("[{i}]")),
+        31..=33 => string_in(data, "device").unwrap_or_else(|| format!("[{i}]")),
+        36 => string_in(data, "product").unwrap_or_else(|| format!("[{i}]")),
+        38 => string_in(data, "fchost_name").unwrap_or_else(|| format!("[{i}]")),
         11 => match named {
             Some((l, offs)) => {
                 let at = |name: &str| {
@@ -1394,9 +1406,17 @@ mod tests {
         assert!(named.is_some());
         let mut sum = vec![0u8; 12];
         sum[4..7].copy_from_slice(b"sum");
-        let label = |i: u64, data: &[u8]| item_label(&act, i, 28, named.as_ref(), data);
+        // The first row: "sum", then "11".
+        let mut row0 = sum.clone();
+        let mut eleven = vec![0u8; 12];
+        eleven[4..6].copy_from_slice(b"11");
+        row0.extend_from_slice(&eleven);
+        let label = |i: u64, data: &[u8]| item_label(&act, i, 28, named.as_ref(), data, &row0);
         assert_eq!(label(0, &sum), "[all] sum");
-        assert_eq!(label(29, &[0u8; 12]), "[cpu0] #1");
+        // Other rows' names are empty: the first row's at the same place.
+        assert_eq!(label(29, &[0u8; 12]), "[cpu0] 11");
+        assert_eq!(label(28, &[0u8; 12]), "[cpu0] sum");
+        assert_eq!(label(30, &[0u8; 12]), "[cpu0] #2");
         assert_eq!(label(28 * 18 + 3, &sum), "[cpu17] sum");
     }
 
