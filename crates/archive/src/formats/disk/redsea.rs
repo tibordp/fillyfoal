@@ -29,14 +29,16 @@
 use std::sync::Arc;
 
 use crate::bytes::{i64_le, to_u64, to_usize, u16_le, u64_le};
+use crate::codec::Codec;
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::compression::templeos;
 use crate::formats::disk::{content_node, size, trailing_node};
 use crate::formats::util::civil::{self, templeos_cdate_raw};
 use crate::formats::util::fmt::plural;
-use crate::formats::{Format, Head, Input, Probe, embedded_as};
+use crate::formats::{Format, Head, Input, Probe, content_named, embedded_as};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -177,7 +179,7 @@ record! {
         name: bytes[38] "name" .with(|b, n| n.value(Value::Text(crate::text::latin1(until_nul(b))))),
         clus: i64 "clus" .desc("First block (absolute)"),
         size: i64 "size" .with(|&v, n| n.summary(size(u64::try_from(v).unwrap_or(0)))),
-        datetime: u64 "datetime" .with(cdate),
+        datetime: u64 "datetime (local time)" .with(cdate),
     }
 }
 
@@ -262,7 +264,22 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         node = node.summary(format!("{} described", plural(total, "block")));
     }
     cx.emit(node.lazy(free_runs, fs.clone()));
-    let root = Node::new("Root directory").summary(format!("block {}", boot.root_clus));
+    let mut root = Node::new("Root directory");
+    let mut root_summary = format!("block {}", boot.root_clus);
+    // The size is in the directory's own "." entry, as for any directory.
+    if let Some(first) = fs.at(boot.root_clus, ENTRY)
+        && let Ok(raw) = cx.read(first).await
+        && raw.len() >= 64
+    {
+        let own = entry(&raw);
+        if own.size >= ENTRY.saturating_mul(2) && own.size != u64::MAX {
+            if let Some(span) = fs.at(boot.root_clus, own.size.min(MAX_DIR_BYTES)) {
+                root = root.span(span);
+            }
+            root_summary.push_str(&format!(", {}", size(own.size)));
+        }
+    }
+    let root = root.summary(root_summary);
     cx.emit(root.lazy(
         crate::expander!(self::directory: (FsRef, u64, Arc<Vec<u64>>)),
         (fs.clone(), boot.root_clus, Arc::new(Vec::new())),
@@ -489,16 +506,17 @@ async fn file(cx: Cx, (fs, at): (FsRef, Span)) -> Result<()> {
         ))
         .at(at));
     };
+    // TempleOS goes by the name: `.HC` is HolyC and `.DD` DolDoc whatever
+    // the text looks like, and `.Z` (or the compressed flag) is compressed.
     let mut node = if e.name.ends_with(".Z") || e.attr & ATTR_COMPRESSED != 0 {
-        embedded_as(
-            "Content",
-            fs.input.nested(span),
-            &crate::formats::compression::templeos::FORMAT,
-        )
-        .summary(size(span.len))
+        embedded_as("Content", fs.input.nested(span), &templeos::FORMAT).summary(size(span.len))
+    } else if let Some(format) = templeos::format_by_name(&e.name) {
+        content_named("Content", fs.input, span, Codec::Stored, None, format)
+            .summary(size(span.len))
     } else {
         content_node(&fs.input, span)
-    };
+    }
+    .known_as(e.name.clone());
     if span.len < e.size {
         node = node.diag(Diagnostic::truncated(
             Span::new(span.source, span.offset, e.size),

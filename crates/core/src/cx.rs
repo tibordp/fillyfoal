@@ -1468,7 +1468,9 @@ impl Cx {
 
     /// The name of the node being expanded: for a root, the name the host
     /// opened it under (normally the file name); for an archive member or a
-    /// file in a file system, usually its name or path there. Names are
+    /// file in a file system, usually its name or path there (or the name
+    /// it was given with [`Node::known_as`](crate::node::Node::known_as)
+    /// when the node is named otherwise). Names are
     /// whatever the parent dissector chose, so treat this as a hint only
     /// (see `formats::Deep::name`).
     pub fn node_name(&self) -> std::borrow::Cow<'static, str> {

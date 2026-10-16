@@ -1,0 +1,29 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ shift-space.DD — DolDoc document, 5 commands  [0x0+0x66]
+    Text — 102 bytes, 5 commands  [0x0+0x66]
+  ▾ Commands — 4 FG, 1 WW  [0x0+0x66]
+    ▾ FG — Foreground color: 4  [0x0+0x66]
+      ▾ [0]: "FG,5"  [0x6+0x6]
+          Code: "FG" — Foreground color  [0x7+0x2]
+          Value: "5"  [0xa+0x1]
+      ▾ [1]: "FG"  [0x18+0x4]
+          Code: "FG" — Foreground color  [0x19+0x2]
+      ▾ [2]: "FG,2"  [0x2d+0x6]
+          Code: "FG" — Foreground color  [0x2e+0x2]
+          Value: "2"  [0x31+0x1]
+      ▾ [3]: "FG"  [0x40+0x4]
+          Code: "FG" — Foreground color  [0x41+0x2]
+    ▾ WW — Word wrap: 1  [0x0+0x66]
+      ▾ [0]: "WW,1"  [0x0+0x6]
+          Code: "WW" — Word wrap  [0x1+0x2]
+          Value: "1"  [0x4+0x1]
+  ▾ Plain text — UTF-8 text, LF line endings, 3 lines  [0x0+0x66]
+      Encoding: "UTF-8"
+      Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
+    ▾ Lines — 3 lines  [#2:0x0+0x4c]
+        Line 1: "Shift-spaces"  [#2:0x0+0xc]
+        Line 2: ""  [#2:0xd+0x0]
+        Line 3: "Words joined by shift-spaces stay on one line: one two three."  [#2:0xe+0x3d]

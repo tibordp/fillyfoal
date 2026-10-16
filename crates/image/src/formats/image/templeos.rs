@@ -266,7 +266,7 @@ async fn read_element(cx: &Cx, data: Span, pos: u64) -> Result<Element> {
         ))
         .at(data.sub(pos, 1)));
     };
-    let hdr = cx.read(data.sub_exact(pos, base)?).await?;
+    let mut hdr = cx.read(data.sub_exact(pos, base)?).await?;
     let mut text = String::new();
     let len = if shape == Shape::Text {
         let (bytes, len) = cstring(cx, data.tail(pos.saturating_add(base))).await?;
@@ -278,6 +278,13 @@ async fn read_element(cx: &Cx, data: Span, pos: u64) -> Result<Element> {
         })?
     };
     let span = data.sub_exact(pos, base.saturating_add(len))?;
+    if shape == Shape::Points2 && len >= 8 {
+        // The summary shows the first point, which `SpriteElem2Summary`
+        // reads just past the count (`&npu.x`): keep it with the fixed part.
+        hdr = cx
+            .read(data.sub_exact(pos, base.saturating_add(8))?)
+            .await?;
+    }
     Ok(Element { span, t, hdr, text })
 }
 
@@ -692,7 +699,7 @@ fn gr_probe(h: &Head<'_>) -> bool {
     xsize == pixels
         && (1..=3).contains(&kind)
         && csize >= ARC_HEADER
-        && body.saturating_add(csize) <= h.len
+        && h.within(body.saturating_add(csize))
 }
 
 fn dc_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
@@ -708,7 +715,7 @@ fn dc_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     // `DCSave` leaves a zero date when nothing set it.
     if time != 0 || date != 0 {
         f.node(
-            Node::new("Timestamp")
+            Node::new("Timestamp (local time)")
                 .span(f.peek_span(0))
                 .value(Value::Timestamp {
                     unix_seconds: civil::templeos_cdate(time, date),
@@ -850,4 +857,31 @@ async fn arc_fields(cx: Cx, arc: Span) -> Result<()> {
     ));
     cx.emit(Node::new("Codes").span(arc.tail(ARC_HEADER)));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gr_probe_needs_a_known_length_or_the_head() {
+        // An 8x8 compressed device context whose 1000-byte block runs past
+        // the 61 bytes there are.
+        let mut data = vec![0u8; 16];
+        for v in [8u32, 8, 8, DCF_COMPRESSED] {
+            data.extend_from_slice(&v.to_le_bytes());
+        }
+        data.extend_from_slice(&1000u64.to_le_bytes());
+        data.extend_from_slice(&64u64.to_le_bytes());
+        data.extend_from_slice(&[2, 0, 0, 0, 0]);
+        let head = |len, len_known| Head {
+            data: &data,
+            tail: &data,
+            len,
+            len_known,
+        };
+        assert!(!gr_probe(&head(61, true)));
+        assert!(!gr_probe(&head(1 << 20, false)));
+        assert!(gr_probe(&head(1049, true)));
+    }
 }

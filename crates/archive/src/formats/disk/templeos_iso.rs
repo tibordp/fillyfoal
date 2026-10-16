@@ -21,7 +21,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::disk::iso9660::{
-    DESCRIPTOR_TYPE, DESCRIPTORS_AT, SECTOR, boot_catalog, boot_images, boot_layout, both16,
+    DESCRIPTOR_TYPE, DESCRIPTORS_AT, SECTOR, boot_catalog_with, boot_images, boot_layout, both16,
     both32, plain_layout, unused,
 };
 use crate::formats::disk::qcow::Regions;
@@ -231,7 +231,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Boot catalog")
                 .span(span)
-                .lazy(boot_catalog, (input, span, SECTOR)),
+                .lazy(boot_catalog_with, (input, span, SECTOR, boot_image)),
         );
     }
     cx.emit(
@@ -261,5 +261,33 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Node::new("Data after the volume").span(file.tail(size)));
     }
     cx.annotate(summary);
+    Ok(())
+}
+
+/// The no-emulation boot image: `RedSeaISO9660Stage1` copies the stage-1
+/// DVD loader (`BDVD_START`..`BDVD_END`, `Adam/Opt/Boot/BootDVD.HC`) there
+/// with the place of its stage 2 (the kernel) patched in, but only if it
+/// finds that stage-2 file; otherwise the sector stays zero.
+fn boot_image(input: Input) -> Node {
+    Node::new("Boot image")
+        .span(input.span)
+        .summary(fmt::size(input.span.len))
+        .lazy(boot_image_content, input)
+}
+
+async fn boot_image_content(cx: Cx, input: Input) -> Result<()> {
+    let span = input.span.sub(0, SECTOR);
+    let data = cx.read(span).await?;
+    if data.iter().all(|&b| b == 0) {
+        cx.annotate(
+            "empty (zeros): RedSeaISO writes the stage-1 loader only if it finds the stage-2 file",
+        );
+        return Ok(());
+    }
+    cx.annotate(format!(
+        "BootDVD stage-1 loader, {} (real-mode code, not disassembled)",
+        fmt::size(input.span.len)
+    ));
+    cx.emit(Node::new("Code").span(input.span));
     Ok(())
 }

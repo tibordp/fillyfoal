@@ -12,7 +12,9 @@
 //! the file is padded with zeros to 16 bytes. An import names its symbol
 //! in its first entry and follows it with unnamed entries for the other
 //! places the same symbol is patched into; those runs are shown as one node
-//! per symbol.
+//! per symbol. The table is shown as groups of heap globals, exports and
+//! imports (counted in one pass over the table, for its summary), then the
+//! other entries in table order.
 //!
 //! The kernel is a module too: its code starts with the rest of `CKernel`
 //! (`KStart16.HC`), a 16-bit near jump past the boot loader's variables and
@@ -188,7 +190,7 @@ record! {
         signature: ascii[4] "bin_signature",
         org: u64 "org" .hex() .with(|&v, n| if v == INVALID_PTR { n.summary("INVALID_PTR: relocatable") } else { n.summary("fixed load address") }),
         table: u64 "patch_table_offset" .hex(),
-        size: u64 "file_size",
+        size: u64 "file_size" .with(|&v, n| n.summary(crate::formats::util::fmt::size(v))),
     }
 }
 
@@ -200,7 +202,7 @@ record! {
         boot_blk: u32 "boot_blk" .desc("Set at boot"),
         patch_base: u32 "boot_patch_table_base" .hex() .desc("Set at boot"),
         run_level: u32 "sys_run_level" .flags(RUN_LEVEL) .desc("Set at boot"),
-        compile_time: u64 "compile_time" .hex() .desc("CDate of the build, local time; boot loaders match it to find their kernel") .with(|&v, n| n.value(Value::Timestamp { unix_seconds: civil::templeos_cdate_raw(v) })),
+        compile_time: u64 "compile_time (local time)" .hex() .desc("CDate of the build, local time; boot loaders match it to find their kernel") .with(|&v, n| n.value(Value::Timestamp { unix_seconds: civil::templeos_cdate_raw(v) })),
     }
 }
 
@@ -237,7 +239,7 @@ async fn dissect_as(cx: Cx, input: Input, kernel: bool) -> Result<()> {
     );
     if kernel {
         let kspan = code.sub(0, KernelHeader::SIZE);
-        let mut node = KernelHeader::node("Kernel Header", kspan, LE);
+        let mut node = KernelHeader::node("Kernel header", kspan, LE);
         match crate::fields::parse(&cx, kspan, LE, &(), KernelHeader::layout).await {
             Ok(k) => {
                 let built = civil::date(civil::templeos_cdate_raw(k.compile_time));
@@ -261,7 +263,7 @@ async fn dissect_as(cx: Cx, input: Input, kernel: bool) -> Result<()> {
 
     let table = file.sub(table_at, size.saturating_sub(table_at));
     cx.emit(
-        Node::new("Patch Table")
+        Node::new("Patch table")
             .span(table)
             .lazy(patch_table, (code, table)),
     );
@@ -272,7 +274,7 @@ async fn dissect_as(cx: Cx, input: Input, kernel: bool) -> Result<()> {
         )));
     }
     if h.size < file.len {
-        cx.emit(Node::new("Trailing Data").span(file.tail(h.size)));
+        cx.emit(Node::new("Trailing data").span(file.tail(h.size)));
     }
     Ok(())
 }
@@ -318,47 +320,124 @@ async fn read_entry(cur: &mut Cursor<'_>) -> Result<Entry> {
     Ok(Entry { kind, value, name })
 }
 
-/// What the patch table walk carries between entries.
-#[derive(Clone)]
-struct Walk {
-    pos: u64,
-    exports: u64,
-    imports: u64,
+/// Which group of the patch table an entry is shown in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Class {
+    HeapGlobal,
+    Export,
+    Import,
+    /// Shown in the table itself: `IET_ABS_ADDR`, `IET_MAIN`, `IET_END`
+    /// and unknown types.
+    Other,
 }
 
+fn class(kind: u8) -> Class {
+    if is_import(kind) {
+        Class::Import
+    } else if is_export(kind) {
+        Class::Export
+    } else if (IET_CODE_HEAP..=IET_ZEROED_DATA_HEAP).contains(&kind) {
+        Class::HeapGlobal
+    } else {
+        Class::Other
+    }
+}
+
+/// Steps past the unnamed import entries after an import, which patch the
+/// same symbol (`LoadOneImport`); returns how many entries the run has.
+async fn import_run(cur: &mut Cursor<'_>) -> u64 {
+    let mut refs = 1u64;
+    while !cur.at_end() {
+        let at = cur.pos();
+        match read_entry(cur).await {
+            Ok(next) if is_import(next.kind) && next.name.is_empty() => {
+                refs = refs.saturating_add(1);
+            }
+            // The next entry (or its error) is the walk's.
+            _ => {
+                cur.seek(at);
+                break;
+            }
+        }
+    }
+    refs
+}
+
+/// The patch table: groups of heap globals, exports and imports (counted
+/// in one pass over the table), then the other entries in table order.
 async fn patch_table(cx: Cx, (code, table): (Span, Span)) -> Result<()> {
-    let mut walk = cx.resume::<Walk>().unwrap_or(Walk {
-        pos: 0,
-        exports: 0,
-        imports: 0,
-    });
+    let (mut heap, mut exports, mut imports, mut refs) = (0u64, 0u64, 0u64, 0u64);
     let mut cur = Cursor::new(&cx, table, LE);
-    cur.seek(walk.pos);
+    while !cur.at_end() {
+        // A damaged entry ends the count; the walk below reports it.
+        let Ok(e) = read_entry(&mut cur).await else {
+            break;
+        };
+        match class(e.kind) {
+            Class::HeapGlobal => heap = heap.saturating_add(1),
+            Class::Export => exports = exports.saturating_add(1),
+            Class::Import => {
+                imports = imports.saturating_add(1);
+                refs = refs.saturating_add(import_run(&mut cur).await);
+            }
+            Class::Other if e.kind == IET_END => break,
+            Class::Other => {}
+        }
+    }
+    let mut summary = vec![plural(exports, "export")];
+    summary.push(format!(
+        "{} ({})",
+        grouped_count(imports, "imported symbol", "imported symbols"),
+        plural(refs, "reference")
+    ));
+    if heap > 0 {
+        summary.push(plural(heap, "heap global"));
+    }
+    cx.annotate(summary.join(", "));
+    let groups = [
+        (
+            Class::HeapGlobal,
+            "Heap globals",
+            heap,
+            plural(heap, "global"),
+        ),
+        (Class::Export, "Exports", exports, plural(exports, "export")),
+        (
+            Class::Import,
+            "Imports",
+            imports,
+            format!(
+                "{}, {}",
+                plural(imports, "symbol"),
+                plural(refs, "reference")
+            ),
+        ),
+    ];
+    for (which, name, n, summary) in groups {
+        if n > 0 {
+            cx.emit(
+                Node::new(name)
+                    .summary(summary)
+                    .lazy(group, (code, table, which)),
+            );
+        }
+    }
+
+    let mut cur = Cursor::new(&cx, table, LE);
     loop {
         if cur.at_end() {
             cx.diag(Diagnostic::malformed("patch table not ended by IET_END").at(table));
             break;
         }
         let start = cur.pos();
-        walk.pos = start;
-        cx.mark(|| walk.clone());
         let e = read_entry(&mut cur).await?;
         if e.kind == IET_END {
             let span = cur.since(start);
-            cx.push(
-                Node::new("End")
-                    .span(span)
-                    .value(Value::Enum {
-                        raw: 0,
-                        bits: 8,
-                        name: Some("IET_END"),
-                    })
-                    .summary(format!(
-                        "{}, {}",
-                        plural(walk.exports, "export"),
-                        grouped_count(walk.imports, "imported symbol", "imported symbols")
-                    )),
-            )
+            cx.push(Node::new("End").span(span).value(Value::Enum {
+                raw: 0,
+                bits: 8,
+                name: Some("IET_END"),
+            }))
             .await;
             let pad = table.tail(cur.pos());
             if pad.len > 0 {
@@ -366,40 +445,46 @@ async fn patch_table(cx: Cx, (code, table): (Span, Span)) -> Result<()> {
             }
             break;
         }
-        let node = if is_import(e.kind) {
-            // The run of unnamed entries patching the same symbol.
-            let mut refs = 1u64;
-            while !cur.at_end() {
-                let at = cur.pos();
-                match read_entry(&mut cur).await {
-                    Ok(next) if is_import(next.kind) && next.name.is_empty() => {
-                        refs = refs.saturating_add(1);
-                    }
-                    // The next entry (or its error) is the walk's.
-                    _ => {
-                        cur.seek(at);
-                        break;
-                    }
-                }
-            }
-            walk.imports = walk.imports.saturating_add(1);
-            let span = cur.since(start);
-            Node::new(if e.name.is_empty() {
-                "(no symbol)".to_string()
-            } else {
-                e.name.clone()
-            })
-            .span(span)
-            .summary(format!("import, {}", plural(refs, "reference")))
-            .lazy(import_refs, (code, span))
-        } else {
-            let span = cur.since(start);
-            entry_node(&e, code, span)
-        };
-        if is_export(e.kind) {
-            walk.exports = walk.exports.saturating_add(1);
+        if class(e.kind) == Class::Other {
+            cx.push(entry_node(&e, code, cur.since(start))).await;
         }
-        cx.push(node).await;
+        cx.progress_in(table, table.offset.saturating_add(cur.pos()));
+    }
+    Ok(())
+}
+
+/// The entries of one group of the patch table, in table order.
+async fn group(cx: Cx, (code, table, which): (Span, Span, Class)) -> Result<()> {
+    let mut cur = Cursor::new(&cx, table, LE);
+    cur.seek(cx.resume::<u64>().unwrap_or(0));
+    while !cur.at_end() {
+        let start = cur.pos();
+        let e = read_entry(&mut cur).await?;
+        if e.kind == IET_END {
+            break;
+        }
+        let kind = class(e.kind);
+        if kind == Class::Import {
+            let refs = import_run(&mut cur).await;
+            if which == Class::Import {
+                let span = cur.since(start);
+                cx.mark(move || start);
+                cx.push(
+                    Node::new(if e.name.is_empty() {
+                        "(no symbol)".to_string()
+                    } else {
+                        e.name.clone()
+                    })
+                    .span(span)
+                    .summary(format!("import, {}", plural(refs, "reference")))
+                    .lazy(import_refs, (code, span)),
+                )
+                .await;
+            }
+        } else if kind == which {
+            cx.mark(move || start);
+            cx.push(entry_node(&e, code, cur.since(start))).await;
+        }
         cx.progress_in(table, table.offset.saturating_add(cur.pos()));
     }
     Ok(())
@@ -420,7 +505,7 @@ fn entry_node(e: &Entry, code: Span, span: Span) -> Node {
             .summary(format!("export, offset {value:#x}"))
             .target(code.sub(value, 1)),
         17 | 19 => Node::new(named("(no name)")).summary(format!("export, value {value:#x}")),
-        IET_ABS_ADDR => Node::new("Absolute Addresses").summary(grouped_count(
+        IET_ABS_ADDR => Node::new("Absolute addresses").summary(grouped_count(
             value,
             "location gets the load address",
             "locations get the load address",

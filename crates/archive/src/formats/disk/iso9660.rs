@@ -1694,6 +1694,20 @@ pub(crate) async fn boot_catalog(
     cx: Cx,
     (input, span, block_size): (Input, Span, u64),
 ) -> Result<()> {
+    boot_catalog_with(cx, (input, span, block_size, default_boot_image)).await
+}
+
+/// The node of a boot image: its content, identified.
+fn default_boot_image(input: Input) -> Node {
+    embedded("Boot image", input).summary(fmt::size(input.span.len))
+}
+
+/// [`boot_catalog`], with the boot images' nodes made by `image` (for a
+/// variant that knows what its boot image is).
+pub(crate) async fn boot_catalog_with(
+    cx: Cx,
+    (input, span, block_size, image_node): (Input, Span, u64, fn(Input) -> Node),
+) -> Result<()> {
     let data = cx.read(span.sub(0, SECTOR)).await?;
     // Validation entry.
     let v = span.sub(0, 32);
@@ -1739,7 +1753,7 @@ pub(crate) async fn boot_catalog(
                 };
                 let fields = vec![
                     struct_node("Fields", espan, LE, (), boot_entry_layout),
-                    embedded("Boot image", input.nested(image)).summary(fmt::size(image.len)),
+                    image_node(input.nested(image)),
                 ];
                 cx.emit(
                     Node::new(name)

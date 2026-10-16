@@ -26,7 +26,8 @@
 //! provenance; tags are taken as written, with backslash escapes dropped.
 //! TempleOS's character set is CP437 above 0x7f: text with such bytes is
 //! transcoded to UTF-8 (a derived source) before the text dissector sees
-//! it; pure ASCII text keeps the file's own bytes.
+//! it, as is text with shift-spaces (0x1f), which `Doc2TXT` makes spaces;
+//! other ASCII text keeps the file's own bytes.
 //!
 //! In map files (`Kernel.MAP`, `Compiler.MAP`) each line is a link to a
 //! function whose bin is a `CDbgInfo` (its source lines' code addresses)
@@ -570,7 +571,7 @@ fn bin_follows(h: &Head<'_>, text_len: usize) -> bool {
     let Some(size) = u32_le(h.data, at.saturating_add(8)) else {
         return false;
     };
-    to_u64(at).saturating_add(16).saturating_add(size.into()) <= h.len
+    h.within(to_u64(at).saturating_add(16).saturating_add(size.into()))
 }
 
 /// DolDoc commands in text (two or more, or one and a bin after the
@@ -1124,6 +1125,9 @@ async fn references(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
+/// `CH_SHIFT_SPACE`: a space the editor will not break a line at.
+const CH_SHIFT_SPACE: u8 = 0x1f;
+
 async fn plain_text(cx: Cx, input: Input) -> Result<()> {
     let doc = scan(&cx, input.span).await?;
     if doc.pieces.is_empty() {
@@ -1144,8 +1148,9 @@ async fn plain_text(cx: Cx, input: Input) -> Result<()> {
     dissect_named(cx, (input.nested(span), "text")).await
 }
 
-/// `span` transcoded from CP437 to UTF-8 as a derived source, or `span`
-/// itself if it is ASCII (or too large to transcode).
+/// `span` transcoded from CP437 to UTF-8 as a derived source, with
+/// `CH_SHIFT_SPACE` (0x1f) as the space `Doc2TXT` makes of it; or `span`
+/// itself if it is ASCII without those (or too large to transcode).
 async fn cp437_to_utf8(cx: &Cx, span: Span) -> Result<Span> {
     const CHUNK: usize = 64 * 1024;
     let origin = Origin {
@@ -1159,12 +1164,16 @@ async fn cp437_to_utf8(cx: &Cx, span: Span) -> Result<Span> {
         return Ok(span);
     }
     let data = crate::codec::read_all(cx, span).await?;
-    if data.is_ascii() {
+    if data.is_ascii() && find_byte(&data, CH_SHIFT_SPACE).is_none() {
         return Ok(span);
     }
     let mut text = String::with_capacity(data.len());
     for chunk in data.chunks(CHUNK) {
-        text.push_str(&Charset::Cp437.decode(chunk));
+        let chunk: Vec<u8> = chunk
+            .iter()
+            .map(|&b| if b == CH_SHIFT_SPACE { b' ' } else { b })
+            .collect();
+        text.push_str(&Charset::Cp437.decode(&chunk));
         cx.checkpoint().await;
     }
     Ok(cx
@@ -1348,6 +1357,22 @@ mod tests {
         let mut sprite = b"$SP,\"\",BI=1$\n\0".to_vec();
         sprite.extend_from_slice(&[1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0]);
         assert_eq!(kind(&sprite), Some(Kind::DolDoc));
+    }
+
+    #[test]
+    fn bin_needs_a_known_length_or_the_head() {
+        // One command and a bin whose size runs past the data: with the
+        // length only an upper bound, that it "fits" proves nothing.
+        let mut data = b"$FG$hello world\0".to_vec();
+        data.extend_from_slice(&[1, 0, 0, 0, 0, 0, 0, 0, 0xa0, 0x86, 1, 0, 0, 0, 0, 0]);
+        let head = |len_known| Head {
+            data: &data,
+            tail: &data,
+            len: 1 << 20,
+            len_known,
+        };
+        assert_eq!(classify(&head(false)), None);
+        assert_eq!(classify(&head(true)), Some(Kind::DolDoc));
     }
 
     #[test]
