@@ -270,6 +270,7 @@ fn decoded_volumes_match_partclone_restore() {
         ("fat16-v1.img.raw.zst", 4_194_304, 0xbec0_8f4d),
         ("ext2-k8-noreseed.img.raw.zst", 1_048_576, 0x0159_bc1d),
         ("ext2-nocrc.img.raw.zst", 1_048_576, 0x0159_bc1d),
+        ("ext4-far.img.raw.zst", 33_554_432, 0x6dc9_deb4),
     ] {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/external/partclone")
@@ -280,6 +281,42 @@ fn decoded_volumes_match_partclone_restore() {
         assert_eq!(bytes.len() as u64, len, "{file}");
         assert_eq!(fillyfoal::codec::crc32(&bytes), crc, "{file}");
     }
+}
+
+/// On a real image whose data runs 13 MiB in (`tests/data/partclone/
+/// inner-far.sh`), a read of the last file's data (block 12362, printed by
+/// debugfs) starts from the nearest resume point: a fraction of the work
+/// (budgeted read steps) of decoding the volume up to it.
+#[test]
+fn far_reads_on_a_real_image() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/external/partclone/ext4-far.img.raw.zst");
+    let data = common::fixture_bytes(&path);
+    let far = 12_362 * 1024;
+    let want = b"fillyfoal far file, after 12 MiB of data\n";
+    let work = |seeded: bool| {
+        // The image in one chunk, so that the steps count decoding only
+        // (a step also ends where the host must supply more bytes).
+        let limits = Limits {
+            chunk_size: 32 << 20,
+            ..Limits::default()
+        };
+        let mut host = Host::named("ext4-far.img", data.clone(), limits);
+        let vol = volume_span(&mut host, 32 << 20);
+        let mut steps = 0;
+        if !seeded {
+            // Everything before it, then it: what a walk from the start costs.
+            steps += read_in_steps(&mut host, vol.sub(0, far), 100).1;
+        }
+        let (bytes, n) = read_in_steps(&mut host, vol.sub(far, want.len() as u64), 100);
+        assert_eq!(bytes, want);
+        steps + n
+    };
+    let (seeded, walked) = (work(true), work(false));
+    assert!(
+        seeded * 4 < walked,
+        "far read in {seeded} steps, from the start {walked}"
+    );
 }
 
 /// A damaged block is reported by its check value, when the user expands

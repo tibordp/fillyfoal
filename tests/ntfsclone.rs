@@ -347,6 +347,34 @@ fn decoded_volume_matches_ntfsclone_restore() {
     assert_eq!(fillyfoal::codec::crc32(&bytes), 0x890e_b059);
 }
 
+/// A real image of a 32 MiB volume whose metadata and data are megabytes
+/// apart (`tests/data/ntfsclone/inner-far.sh`): a read of the far file's
+/// data (at 0x469000, found by the script) skips the gaps before it, and
+/// the whole volume is what `ntfsclone --restore-image` writes.
+#[test]
+fn real_image_with_gaps() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/external/ntfsclone/ntfs-far.img.raw.zst");
+    let mut host = Host::named(
+        "ntfs-far.img",
+        common::fixture_bytes(&path),
+        Limits::default(),
+    );
+    let volume = open(&mut host, &["Volume"]);
+    let vol = volume_span(&mut host, volume);
+    assert_eq!(vol.len, 32 << 20);
+    let want = b"fillyfoal far line 00000, after 12 MiB of data\n";
+    let (bytes, _) = read_in_steps(&mut host, vol.sub(0x46_9000, want.len() as u64), 50);
+    assert_eq!(bytes, want);
+    let bytes = loop {
+        match host.session.read(vol) {
+            Ok(bytes) => break bytes,
+            Err(requests) => host.supply(requests),
+        }
+    };
+    assert_eq!(fillyfoal::codec::crc32(&bytes), 0xe7b9_c479);
+}
+
 /// A cut image: the listing says where it ends, reads past the cut fail
 /// with the reason, and what was saved before it is still there.
 #[test]

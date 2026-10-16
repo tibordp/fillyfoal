@@ -186,6 +186,7 @@ checks the decoded volume against.
 | --- | --- | --- |
 | `ntfsclone/ntfsclone.img.raw.zst` | ntfsclone 2022.10.3 | `ntfsclone --save-image -o ntfsclone.img vol.img` (image version 10.1), stored with `zstd -19` |
 | `gzip/ntfsclone.img.gz` | ntfsclone 2022.10.3, gzip 1.13 | `ntfsclone --save-image -o - vol.img \| gzip -9 -n`: the same image (identical bytes) written to standard output |
+| `ntfsclone/ntfs-far.img.raw.zst` | ntfsclone 2022.10.3 | `sh tests/data/ntfsclone/make-far.sh` (`inner-far.sh`, same container and packages): a 32 MiB volume (same `mkntfs` options, MFT mirror and log in the middle), a 12 MiB file of four bytes repeated and a 4.6 KiB text file copied in by `ntfscp` under `faketime`, `ntfsclone --save-image`; data megabytes apart with gaps between. Restored and compared as above; `tests/ntfsclone.rs` checks the decoded volume's CRC-32 and the far file's offset the script prints. Stored with `zstd -19` |
 
 ## Disk images (Linux tools)
 
@@ -1576,6 +1577,7 @@ FAT12 bitmap leaves out clusters in use, so its FAT12 images do not restore.)
 | `partclone/fat16-v1.img.raw.zst` | partclone 0.2.73 | `partclone.fat16 -c -s fat.img -o fat16-v1.img` (image format 0001), stored with `zstd -19` |
 | `gzip/partclone-ext2.img.gz` | partclone 0.3.36, gzip 1.13 | `partclone.extfs -c -k 16 -s ext.img -o - \| gzip -9 -n` |
 | `zstd/partclone-fat16.img.zst` | partclone 0.3.36, zstd 1.5.7 | `partclone.fat16 -c -s fat.img -o - \| zstd -19` |
+| `partclone/ext4-far.img.raw.zst` | partclone 0.3.36, e2fsprogs 1.47.2-3+b12 | `sh tests/data/partclone/make-far.sh` (`inner-far.sh`, Docker `debian:trixie-slim`): `partclone.extfs -c` of a 32 MiB ext4 (`mkfs.ext4 -b 1024 -N 64 -I 256 -O ^resize_inode`, fixed UUID and hash seed, filled with `-d` under `faketime`: a 12 MiB file of four bytes repeated, then a text file at block 12362), so the data runs past several 4 MiB resume points with free blocks after it. Restored with `partclone.restore` and compared; `tests/partclone.rs` checks the decoded volume's CRC-32 and a far read of the text file. Stored with `zstd -19` |
 
 ## FSArchiver archives (fsarchiver)
 
