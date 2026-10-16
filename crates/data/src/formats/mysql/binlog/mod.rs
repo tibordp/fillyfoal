@@ -17,12 +17,14 @@
 //! MariaDB's annotate-rows, binlog checkpoint, GTID, GTID list and start
 //! encryption events, and MariaDB's compressed query and rows events
 //! (`log_bin_compress`, zlib). Other events are shown with their header
-//! and raw body.
+//! and raw body. After MariaDB's start encryption event
+//! (`encrypt_binlog`), every event is encrypted but for its size (at the
+//! usual offset 9): those are listed as encrypted events, unchecked.
 //!
 //! Layouts written from memory of MySQL's binary log documentation
 //! (`libbinlogevents`, the internals manual) and MariaDB's knowledge base
 //! (no source was consulted while writing this); checked against files
-//! written by MySQL 9.7.1 and MariaDB 10.5.29, the decoded rows against
+//! written by MySQL 9.7.1, MariaDB 10.5.29 and 11.4.13, the decoded rows against
 //! the statements that wrote them and, for MariaDB, against
 //! `mariadb-binlog -vv` (MariaDB 11.4).
 
@@ -158,9 +160,99 @@ const MARIADB_GTID_FLAGS: FlagTable = &[
 const QUERY_FLAGS2: FlagTable = &[
     flag(0x4000, "AUTO_IS_NULL"),
     flag(0x80000, "NOT_AUTOCOMMIT"),
-    flag(0x4000000, "NO_FOREIGN_KEY_CHECKS"),
-    flag(0x8000000, "RELAXED_UNIQUE_CHECKS"),
+    // MariaDB (10.10+ writes it by default): checked against
+    // explicit_defaults_for_timestamp=OFF and ON on MariaDB 11.4.
+    flag(0x100_0000, "EXPLICIT_DEFAULTS_FOR_TIMESTAMP"),
+    flag(0x400_0000, "NO_FOREIGN_KEY_CHECKS"),
+    flag(0x800_0000, "RELAXED_UNIQUE_CHECKS"),
 ];
+
+/// `sql_mode` bits: the low 32 are common to MySQL and MariaDB (bit 4
+/// apart), the higher ones differ. From memory; MySQL 9.7's and MariaDB
+/// 10.5's and 11.4's defaults decode to their documented lists.
+macro_rules! sql_modes {
+    ($($extra:expr),* $(,)?) => {
+        &[
+            flag(0x1, "REAL_AS_FLOAT"),
+            flag(0x2, "PIPES_AS_CONCAT"),
+            flag(0x4, "ANSI_QUOTES"),
+            flag(0x8, "IGNORE_SPACE"),
+            flag(0x20, "ONLY_FULL_GROUP_BY"),
+            flag(0x40, "NO_UNSIGNED_SUBTRACTION"),
+            flag(0x80, "NO_DIR_IN_CREATE"),
+            flag(0x100, "POSTGRESQL"),
+            flag(0x200, "ORACLE"),
+            flag(0x400, "MSSQL"),
+            flag(0x800, "DB2"),
+            flag(0x1000, "MAXDB"),
+            flag(0x2000, "NO_KEY_OPTIONS"),
+            flag(0x4000, "NO_TABLE_OPTIONS"),
+            flag(0x8000, "NO_FIELD_OPTIONS"),
+            flag(0x1_0000, "MYSQL323"),
+            flag(0x2_0000, "MYSQL40"),
+            flag(0x4_0000, "ANSI"),
+            flag(0x8_0000, "NO_AUTO_VALUE_ON_ZERO"),
+            flag(0x10_0000, "NO_BACKSLASH_ESCAPES"),
+            flag(0x20_0000, "STRICT_TRANS_TABLES"),
+            flag(0x40_0000, "STRICT_ALL_TABLES"),
+            flag(0x80_0000, "NO_ZERO_IN_DATE"),
+            flag(0x100_0000, "NO_ZERO_DATE"),
+            flag(0x200_0000, "ALLOW_INVALID_DATES"),
+            flag(0x400_0000, "ERROR_FOR_DIVISION_BY_ZERO"),
+            flag(0x800_0000, "TRADITIONAL"),
+            flag(0x1000_0000, "NO_AUTO_CREATE_USER"),
+            flag(0x2000_0000, "HIGH_NOT_PRECEDENCE"),
+            flag(0x4000_0000, "NO_ENGINE_SUBSTITUTION"),
+            flag(0x8000_0000, "PAD_CHAR_TO_FULL_LENGTH"),
+            $($extra),*
+        ]
+    };
+}
+
+const SQL_MODES_MYSQL: FlagTable = sql_modes![flag(0x1_0000_0000, "TIME_TRUNCATE_FRACTIONAL")];
+const SQL_MODES_MARIADB: FlagTable = sql_modes![
+    flag(0x10, "IGNORE_BAD_TABLE_OPTIONS"),
+    flag(0x1_0000_0000, "EMPTY_STRING_IS_NULL"),
+    flag(0x2_0000_0000, "SIMULTANEOUS_ASSIGNMENT"),
+    flag(0x4_0000_0000, "TIME_ROUND_FRACTIONAL"),
+];
+
+/// Collation IDs: the common ones (MySQL and MariaDB share the low IDs;
+/// 2304 is MariaDB's). From memory, the defaults the fixtures' servers
+/// write checked against what `mariadb-binlog` prints for them.
+const COLLATIONS: EnumTable = &[
+    (1, "big5_chinese_ci"),
+    (8, "latin1_swedish_ci"),
+    (11, "ascii_general_ci"),
+    (28, "gbk_chinese_ci"),
+    (33, "utf8mb3_general_ci"),
+    (45, "utf8mb4_general_ci"),
+    (46, "utf8mb4_bin"),
+    (47, "latin1_bin"),
+    (48, "latin1_general_ci"),
+    (63, "binary"),
+    (65, "ascii_bin"),
+    (83, "utf8mb3_bin"),
+    (192, "utf8mb3_unicode_ci"),
+    (224, "utf8mb4_unicode_ci"),
+    (246, "utf8mb4_unicode_520_ci"),
+    (255, "utf8mb4_0900_ai_ci"),
+    (309, "utf8mb4_0900_bin"),
+    (2304, "utf8mb4_uca1400_ai_ci"),
+];
+
+/// A collation ID with its name, if known.
+fn collation(id: u64) -> String {
+    lookup(COLLATIONS, id).map_or_else(|| id.to_string(), |n| format!("{n} ({id})"))
+}
+
+/// The character set a collation ID stands for (by its name's prefix).
+fn charset(id: u64) -> String {
+    lookup(COLLATIONS, id).map_or_else(
+        || id.to_string(),
+        |n| format!("{} ({id})", n.split('_').next().unwrap_or(n)),
+    )
+}
 
 const PAYLOAD_COMPRESSION: EnumTable = &[(0, "zstd"), (255, "none")];
 
@@ -343,18 +435,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     walk(&cx, &s, 4, resumed, true).await
 }
 
-/// Walk state: position, event index, and the table maps of the current
-/// statement (table ID, event span, name).
-type Walk = (u64, u64, Vec<(u64, Span, String)>);
+/// Walk state: position, event index, the table maps of the current
+/// statement (table ID, event span, name), and whether a start encryption
+/// event has been passed.
+type Walk = (u64, u64, Vec<(u64, Span, String)>, bool);
 
 /// Lists the events of `s` from `start`; `top` for the file's own events
 /// (checksummed and positioned), not a transaction payload's.
 async fn walk(cx: &Cx, s: &Stream, start: u64, resumed: Option<Walk>, top: bool) -> Result<()> {
     let region = s.region;
-    let (mut pos, mut index, mut tables) = resumed.unwrap_or((start, 0, Vec::new()));
+    let (mut pos, mut index, mut tables, mut encrypted) =
+        resumed.unwrap_or((start, 0, Vec::new(), false));
     let h = s.fmt.header_len;
     while pos < region.len {
-        let mark: Walk = (pos, index, tables.clone());
+        let mark: Walk = (pos, index, tables.clone(), encrypted);
         cx.mark(move || mark);
         let head = cx.read(region.sub(pos, h)).await?;
         if to_u64(head.len()) < h {
@@ -369,6 +463,32 @@ async fn walk(cx: &Cx, s: &Stream, start: u64, resumed: Option<Walk>, top: bool)
         let log_pos = u32_le(&head, 13).map_or(0, u64::from);
         let flags = u16_le(&head, 17).unwrap_or(0);
         let crc = if s.fmt.checksum { 4 } else { 0 };
+        if encrypted {
+            // MariaDB encrypts each event after the start encryption
+            // event, all but its size.
+            if size < h || size > region.len.saturating_sub(pos) {
+                cx.push(Node::new("Encrypted event").span(region.tail(pos)).diag(
+                    Diagnostic::malformed(format!(
+                        "event size {size} does not fit (at most {} bytes left)",
+                        region.len.saturating_sub(pos)
+                    )),
+                ))
+                .await;
+                break;
+            }
+            let span = region.sub(pos, size);
+            cx.progress_in(region, pos.saturating_add(size));
+            cx.push(
+                Node::new("Encrypted event")
+                    .span(span)
+                    .summary(plural(size, "byte"))
+                    .lazy(encrypted_event, span),
+            )
+            .await;
+            pos = pos.saturating_add(size);
+            index = index.saturating_add(1);
+            continue;
+        }
         let name = lookup(EVENT_TYPES, ty.into())
             .map_or_else(|| format!("Event type {ty}"), str::to_owned);
         if size < h.saturating_add(crc) || size > region.len.saturating_sub(pos) {
@@ -439,6 +559,7 @@ async fn walk(cx: &Cx, s: &Stream, start: u64, resumed: Option<Walk>, top: bool)
                 .lazy(crate::expander!(self::event: Event), event),
         )
         .await;
+        encrypted |= top && ty == 164;
         pos = pos.saturating_add(size);
         index = index.saturating_add(1);
     }
@@ -554,7 +675,7 @@ async fn summarize(cx: &Cx, e: &Event, table: Option<&str>) -> String {
                     )
                     .into_owned();
                     let text = if e.ty == 165 {
-                        "(compressed)".to_owned()
+                        compressed_line(cx, e, query).await
                     } else {
                         query_line(b.get(query..).unwrap_or_default())
                     };
@@ -664,6 +785,11 @@ async fn summarize(cx: &Cx, e: &Event, table: Option<&str>) -> String {
             ),
             None => String::new(),
         },
+        164 => format!(
+            "scheme {}, key version {}; the events after it are encrypted",
+            b.first().copied().unwrap_or(0),
+            u32_le(&b, 1).unwrap_or(0)
+        ),
         14 => {
             let n = u32_le(&b, 0).map_or(0, |n| to_usize(n.into()));
             format!(
@@ -672,6 +798,19 @@ async fn summarize(cx: &Cx, e: &Event, table: Option<&str>) -> String {
             )
         }
         _ => String::new(),
+    }
+}
+
+/// The first line of a compressed query event's query (at `query` in the
+/// body), decoding only its start.
+async fn compressed_line(cx: &Cx, e: &Event, query: usize) -> String {
+    let span = e.body().tail(to_u64(query));
+    match decompress_lazy(cx, span).await {
+        Ok(decoded) => match cx.read(decoded.sub(0, 512)).await {
+            Ok(text) => query_line(&text),
+            Err(_) => "(compressed)".to_owned(),
+        },
+        Err(_) => "(compressed)".to_owned(),
     }
 }
 
@@ -782,7 +921,7 @@ async fn event(cx: Cx, e: Event) -> Result<()> {
             out.raw(&cx, "Nonce", 5, 12);
             cx.emit(
                 Node::new("Following events")
-                    .desc("Encrypted with the binary log's key: not decoded"),
+                    .desc("Encrypted with the binary log's key: shown as encrypted events"),
             );
         }
         _ => {
@@ -805,6 +944,28 @@ async fn event(cx: Cx, e: Event) -> Result<()> {
             }
         });
     }
+    Ok(())
+}
+
+/// An event after a start encryption event: only its size is in clear.
+/// Its CRC-32, if any, is over the encrypted bytes and is not checked.
+async fn encrypted_event(cx: Cx, span: Span) -> Result<()> {
+    let size = cx.read(span.sub(9, 4)).await?;
+    cx.emit(
+        Node::new("Encrypted")
+            .span(span.sub(0, 9))
+            .desc("Timestamp, type and server ID, encrypted"),
+    );
+    cx.emit(
+        Node::new("Event size")
+            .span(span.sub(9, 4))
+            .value(uint(u32_le(&size, 0).unwrap_or(0), 32)),
+    );
+    cx.emit(
+        Node::new("Encrypted")
+            .span(span.tail(13))
+            .desc("The rest of the event, encrypted with the binary log's key"),
+    );
     Ok(())
 }
 
@@ -957,7 +1118,7 @@ async fn query(cx: &Cx, e: &Event, out: &Body<'_>) -> Result<()> {
     let status = out.at(post, status_len);
     cx.emit(
         out.node("Status variables", post, status_len)
-            .lazy(status_vars, status),
+            .lazy(status_vars, (status, e.stream.fmt.mariadb())),
     );
     let db_at = post.saturating_add(status_len);
     out.text(cx, "Database", db_at, db_len);
@@ -977,6 +1138,17 @@ async fn query(cx: &Cx, e: &Event, out: &Body<'_>) -> Result<()> {
 /// (0x80 | the size of the length), the uncompressed length big-endian,
 /// then a zlib stream. Returns the decoded span.
 async fn decompress(cx: &Cx, span: Span) -> Result<(Span, u64, u64)> {
+    let (data, len, lenlen) = compressed_header(cx, span).await?;
+    let decoded = crate::codec::decode_span(cx, data, &Codec::Zlib, Some(len)).await?;
+    if let Some(err) = decoded.error {
+        return Err(err);
+    }
+    Ok((decoded.span, len, lenlen))
+}
+
+/// The zlib stream of MariaDB's compressed data, its decoded length and
+/// the size of that length.
+async fn compressed_header(cx: &Cx, span: Span) -> Result<(Span, u64, u64)> {
     let head = cx.read(span.sub(0, 5)).await?;
     let first = head.first().copied().unwrap_or(0);
     let lenlen = u64::from(first & 0x07);
@@ -991,12 +1163,14 @@ async fn decompress(cx: &Cx, span: Span) -> Result<(Span, u64, u64)> {
         .unwrap_or_default()
         .iter()
         .fold(0u64, |a, &x| a.wrapping_shl(8) | u64::from(x));
-    let data = span.tail(lenlen.saturating_add(1));
-    let decoded = crate::codec::decode_span(cx, data, &Codec::Zlib, Some(len)).await?;
-    if let Some(err) = decoded.error {
-        return Err(err);
-    }
-    Ok((decoded.span, len, lenlen))
+    Ok((span.tail(lenlen.saturating_add(1)), len, lenlen))
+}
+
+/// MariaDB's compressed data (see `decompress`) as a source decoded on
+/// demand.
+async fn decompress_lazy(cx: &Cx, span: Span) -> Result<Span> {
+    let (data, len, _) = compressed_header(cx, span).await?;
+    cx.decode_lazy(data, &Codec::Zlib, len)
 }
 
 async fn compressed(cx: &Cx, span: Span, what: &'static str) -> Node {
@@ -1017,7 +1191,7 @@ async fn compressed(cx: &Cx, span: Span, what: &'static str) -> Node {
 
 /// Query event status variables: a code, then a value whose size the code
 /// determines. An unknown code ends what can be decoded.
-async fn status_vars(cx: Cx, span: Span) -> Result<()> {
+async fn status_vars(cx: Cx, (span, mariadb): (Span, bool)) -> Result<()> {
     let b = cx.read(span).await?;
     let out = Body {
         span,
@@ -1068,6 +1242,13 @@ async fn status_vars(cx: Cx, span: Span) -> Result<()> {
             128 => ("Q_HRNOW", 3),
             129 => ("Q_XID", 8),
             130 => ("Q_GTID_FLAGS3", 1),
+            // MariaDB 11.2+: a count, then (character set, collation)
+            // pairs of 16-bit IDs (checked against `mariadb-binlog`'s
+            // `character_set_collations` on MariaDB 11.4).
+            131 => (
+                "Q_CHARACTER_SET_COLLATIONS",
+                u64::from(out.byte(v)).saturating_mul(4).saturating_add(1),
+            ),
             _ => {
                 cx.emit(
                     out.node(format!("Code {code}"), p, out.len().saturating_sub(p))
@@ -1081,7 +1262,16 @@ async fn status_vars(cx: Cx, span: Span) -> Result<()> {
         };
         let value = match code {
             0 => flagsv(out.u32(v), 32, QUERY_FLAGS2),
-            1 | 9 | 17 | 129 => hex(out.u64(v), 64),
+            1 => flagsv(
+                out.u64(v),
+                64,
+                if mariadb {
+                    SQL_MODES_MARIADB
+                } else {
+                    SQL_MODES_MYSQL
+                },
+            ),
+            9 | 17 | 129 => hex(out.u64(v), 64),
             3 => Value::Text(format!(
                 "increment {}, offset {}",
                 out.u16(v),
@@ -1089,10 +1279,24 @@ async fn status_vars(cx: Cx, span: Span) -> Result<()> {
             )),
             4 => Value::Text(format!(
                 "client {}, connection {}, server {}",
-                out.u16(v),
-                out.u16(v.saturating_add(2)),
-                out.u16(v.saturating_add(4))
+                collation(out.u16(v).into()),
+                collation(out.u16(v.saturating_add(2)).into()),
+                collation(out.u16(v.saturating_add(4)).into())
             )),
+            131 => {
+                let pairs: Vec<String> = (0..u64::from(out.byte(v)))
+                    .map(|i| {
+                        let at = v.saturating_add(1).saturating_add(i.saturating_mul(4));
+                        format!(
+                            "{} → {}",
+                            charset(out.u16(at).into()),
+                            collation(out.u16(at.saturating_add(2)).into())
+                        )
+                    })
+                    .collect();
+                Value::Text(pairs.join(", "))
+            }
+            8 | 18 => Value::Text(collation(out.u16(v).into())),
             2 | 5 | 6 => Value::Text(
                 String::from_utf8_lossy(out.slice(v.saturating_add(1), u64::from(out.byte(v))))
                     .into_owned(),
@@ -1119,7 +1323,7 @@ async fn status_vars(cx: Cx, span: Span) -> Result<()> {
                 u64::from(out.u16(v)) | (u64::from(out.byte(v.saturating_add(2))) << 16),
                 24,
             ),
-            7 | 8 | 18 => uint(out.u16(v), 16),
+            7 => uint(out.u16(v), 16),
             10 => uint(out.u32(v), 32),
             _ => uint(out.byte(v), 8),
         };
@@ -1279,20 +1483,80 @@ async fn optional_metadata(cx: Cx, span: Span) -> Result<()> {
         node = match t {
             4 => node.value(Value::Text(rows::lenenc_strings(v).join(", "))),
             8 => {
-                let mut cols = Vec::new();
-                let mut p = 0usize;
-                while let Some((c, n)) = v.get(p..).and_then(lenenc) {
-                    cols.push(c.saturating_add(1).to_string());
-                    p = p.saturating_add(n);
-                }
+                let cols: Vec<String> = lenenc_ints(v)
+                    .iter()
+                    .map(|c| c.saturating_add(1).to_string())
+                    .collect();
                 node.value(Value::Text(cols.join(", ")))
                     .summary("primary key columns (from 1)")
             }
+            // The default collation, then (column, collation) pairs for
+            // the columns that differ; columns count only the character
+            // (or for 10, ENUM and SET) columns, from 0.
+            2 | 10 => {
+                let ids = lenenc_ints(v);
+                let mut parts = Vec::new();
+                if let Some(&default) = ids.first() {
+                    parts.push(format!("default {}", collation(default)));
+                }
+                for pair in ids.get(1..).unwrap_or_default().chunks(2) {
+                    if let [col, id] = pair {
+                        parts.push(format!("column {col}: {}", collation(*id)));
+                    }
+                }
+                node.value(Value::Text(parts.join(", ")))
+            }
+            // One collation per character (or ENUM and SET) column.
+            3 | 11 => {
+                let ids: Vec<String> = lenenc_ints(v).into_iter().map(collation).collect();
+                node.value(Value::Text(ids.join(", ")))
+            }
+            // Per ENUM or SET column: a count, then that many strings.
+            5 | 6 => node.value(Value::Text(member_lists(v).join("; "))),
             _ => node.value(Value::Bytes(v.iter().take(256).copied().collect())),
         };
         cx.push(node).await;
     }
     Ok(())
+}
+
+/// Length-encoded integers filling `b`.
+fn lenenc_ints(b: &[u8]) -> Vec<u64> {
+    let mut out = Vec::new();
+    let mut p = 0usize;
+    while let Some((c, n)) = b.get(p..).and_then(lenenc) {
+        out.push(c);
+        p = p.saturating_add(n);
+    }
+    out
+}
+
+/// The member lists of SET_STR_VALUE and ENUM_STR_VALUE: per column, a
+/// length-encoded count, then that many length-encoded strings.
+fn member_lists(b: &[u8]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut p = 0usize;
+    while let Some((count, n)) = b.get(p..).and_then(lenenc) {
+        p = p.saturating_add(n);
+        let mut members = Vec::new();
+        for _ in 0..count {
+            let Some((len, n)) = b.get(p..).and_then(lenenc) else {
+                break;
+            };
+            let start = p.saturating_add(n);
+            let end = start.saturating_add(to_usize(len));
+            let Some(s) = b.get(start..end) else {
+                break;
+            };
+            members.push(String::from_utf8_lossy(s).into_owned());
+            p = end;
+        }
+        out.push(members.join(", "));
+        if p >= b.len() {
+            break;
+        }
+    }
+    out
 }
 
 /// What a rows event's listing needs.

@@ -1508,6 +1508,8 @@ the MariaDB files, with `mariadb-binlog -vv --base64-output=decode-rows`
 | `mysql-binlog/mysql-nochecksum.bin` | MySQL 9.7.1 | `binlog_checksum=NONE`; unchanged |
 | `mysql-binlog/mariadb-rows.bin` | MariaDB 10.5.29 | the workload: MariaDB GTIDs, GTID list, binlog checkpoints, annotate-rows, rows v1; CRC32 checksums; unchanged |
 | `mysql-binlog/mariadb-compressed.bin` | MariaDB 10.5.29 | `log_bin_compress=ON`, `log_bin_compress_min_len=10`: a zlib-compressed rows event and query event; unchanged |
+| `mysql-binlog/mariadb-encrypted.bin` | MariaDB 10.5.29 | `sh tests/data/mysql-binlog/make_mariadb.sh`: `encrypt_binlog=ON` with `file_key_management` and the script's fixed test key; a start encryption event, then encrypted events (a database, a table, a row); unchanged |
+| `mysql-binlog/mariadb114-rows.bin` | MariaDB 11.4.13 | `make_mariadb.sh`: the workload, a `CREATE TABLE ... DEFAULT CHARSET=utf8mb4` (status variable 131, `character_set_collations`), an XA transaction; checked against `mariadb-binlog -vv --base64-output=decode-rows`; unchanged |
 
 ## Erlang external term format
 
