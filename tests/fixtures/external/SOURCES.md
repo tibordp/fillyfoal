@@ -1636,8 +1636,11 @@ segments were copied after a clean `kafka-server-stop.sh`, so the indexes
 are trimmed. Checked against `kafka-dump-log.sh --deep-iteration` (offsets,
 timestamps, keys, values, headers, CRCs, index entries). Timestamps are the
 Docker VM's clock at the time; not reproducible byte for byte. The legacy
-file is the client library's encoder, not a broker's (Kafka 3.x no longer
-writes magic 0/1).
+file is from the same image run as a ZooKeeper-mode broker with
+`inter.broker.protocol.version=2.8`, which still down-converts to magic 0
+and 1 (`tests/data/kafka-log/make_legacy.sh`); the cluster metadata log
+is a KRaft broker's own `__cluster_metadata` segment
+(`tests/data/kafka-log/make_metadata.sh`).
 
 | Fixture | Producer | Evidence |
 | --- | --- | --- |
@@ -1651,7 +1654,8 @@ writes magic 0/1).
 | `kafka-index/txn.index` | Kafka 3.9.1 broker | the offset index of `demo-txn-0` (one entry) |
 | `kafka-timeindex/zstd.timeindex` | Kafka 3.9.1 broker | `make_kafka.sh`, the time index of `demo-zstd-0` (one entry) |
 | `kafka-timeindex/txn.timeindex` | Kafka 3.9.1 broker | the time index of `demo-txn-0` (one entry) |
-| `kafka-log/legacy.log` | kafka-python 3.0.11 `LegacyRecordBatchBuilder` | `uv run --with kafka-python==3.0.11 python -I tests/data/kafka-log/make_legacy.py <dir>`: v0 and v1 message sets and a gzip-compressed v1 wrapper, concatenated; the gzip header's mtime varies |
+| `kafka-log/legacy.log` | Kafka 3.9.1 broker, ZooKeeper mode | `make_legacy.sh`, segment `00000000000000000000.log` of `legacy-0`: topic format 0.9.0 (magic 0, an uncompressed set and a gzip wrapper), then switched to 0.10.2 (magic 1, the same); checked against `kafka-dump-log.sh --deep-iteration` |
+| `kafka-log/cluster-metadata.log` | Kafka 3.9.1 broker, KRaft | `make_metadata.sh`, segment `00000000000000000000.log` of `__cluster_metadata-0`: a LEADER_CHANGE control batch, then metadata records; checked against `kafka-dump-log.sh --cluster-metadata-decoder` |
 
 ## nfdump 1.7.5 and 1.6.22: NetFlow capture files
 

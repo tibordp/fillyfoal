@@ -12,10 +12,16 @@
 //!   compressed together when the codec says so. Each record is a run of
 //!   zigzag varints: its length, attributes, timestamp and offset deltas,
 //!   key and value (length -1 for null) and headers. Control batches hold
-//!   transaction markers (COMMIT or ABORT).
+//!   transaction markers (COMMIT or ABORT) or, in KRaft's
+//!   `__cluster_metadata` log and snapshots, LEADER_CHANGE, snapshot
+//!   header and footer, KRaft version and voters records (only the
+//!   leader of a LEADER_CHANGE is decoded; type numbers from Kafka's
+//!   `ControlRecordType`, written from memory, LEADER_CHANGE checked).
 //! - **legacy messages** (magic 0 and 1): offset, size, CRC-32, magic,
 //!   attributes, (v1) a timestamp, key and value. A compressed message's
-//!   value is a whole inner message set.
+//!   value is a whole inner message set, whose offsets are absolute in v0
+//!   and relative in v1 (the wrapper holding the last inner message's
+//!   absolute offset).
 //!
 //! Codecs: gzip, Snappy (snappy-java's "xerial" framing, as the Java
 //! client writes it, or raw), LZ4 frames and Zstandard. Legacy v0 LZ4
@@ -35,8 +41,8 @@
 //!
 //! Layout from the Kafka protocol documentation ("Record Batch",
 //! "Message Sets") and checked against segments a 3.9.1 broker wrote and
-//! its `kafka-dump-log.sh` listing; the legacy fixture comes from
-//! kafka-python's encoder.
+//! its `kafka-dump-log.sh` listing, legacy ones included (the same broker
+//! in ZooKeeper mode with an old message format).
 
 use crate::bytes::{i16_be, i32_be, i64_be, to_u64, u16_be, u32_be};
 use crate::codec::Codec;
@@ -110,7 +116,17 @@ const MESSAGE_ATTRIBUTES: FlagTable = &[
     flag(0x8, "LOG_APPEND_TIME"),
 ];
 
-const CONTROL_TYPES: EnumTable = &[(0, "ABORT"), (1, "COMMIT")];
+/// `ControlRecordType`: transaction markers, and the KRaft ones that
+/// `__cluster_metadata` and its snapshots hold.
+const CONTROL_TYPES: EnumTable = &[
+    (0, "ABORT"),
+    (1, "COMMIT"),
+    (2, "LEADER_CHANGE"),
+    (3, "SNAPSHOT_HEADER"),
+    (4, "SNAPSHOT_FOOTER"),
+    (5, "KRAFT_VERSION"),
+    (6, "KRAFT_VOTERS"),
+];
 
 // ---------------------------------------------------------------------------
 // Probe
@@ -433,7 +449,10 @@ async fn crc_node(cx: &Cx, at: Span, stored: u32, covered: Span, castagnoli: boo
 #[derive(Clone, Default)]
 struct Stats {
     batches: u64,
+    /// Uncompressed legacy messages at the top level.
     messages: u64,
+    /// Compressed legacy messages (wrappers of an inner message set).
+    wrappers: u64,
     records: u64,
     /// Bit `n` set: codec `n` seen.
     codecs: u8,
@@ -459,6 +478,9 @@ impl Stats {
         }
         if self.messages > 0 {
             parts.push(plural(self.messages, "legacy message"));
+        }
+        if self.wrappers > 0 {
+            parts.push(plural(self.wrappers, "compressed wrapper"));
         }
         if parts.is_empty() {
             parts.push("empty".to_owned());
@@ -487,11 +509,12 @@ impl Stats {
 
 async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.annotate("Kafka log segment");
-    walk(cx, (input, input.span, 0)).await
+    walk(cx, (input, input.span, 0, 0)).await
 }
 
-/// Lists the entries of a segment, or of a legacy inner message set.
-async fn walk(cx: Cx, (input, region, depth): (Input, Span, u8)) -> Result<()> {
+/// Lists the entries of a segment, or of a legacy inner message set
+/// (whose offsets count from `base`: see [`inner_base`]).
+async fn walk(cx: Cx, (input, region, depth, base): (Input, Span, u8, i64)) -> Result<()> {
     let top = depth == 0;
     let (mut pos, mut stats) = cx.resume::<(u64, Stats)>().unwrap_or_default();
     loop {
@@ -558,20 +581,37 @@ async fn walk(cx: Cx, (input, region, depth): (Input, Span, u8)) -> Result<()> {
                 .lazy(batch, (input, span))
         } else if magic <= 1 && length >= 14 {
             let codec_id = head.get(17).copied().unwrap_or(0) & 7;
-            stats.messages = stats.messages.saturating_add(1);
             stats.codec(codec_id);
-            stats.first = Some(stats.first.map_or(offset, |f| f.min(offset)));
+            // A wrapper's offset is its last inner message's.
+            let first = if codec_id == 0 {
+                stats.messages = stats.messages.saturating_add(1);
+                offset
+            } else {
+                stats.wrappers = stats.wrappers.saturating_add(1);
+                if top && stats.first.is_none() {
+                    first_inner(&cx, span, offset, magic, codec_id)
+                        .await
+                        .unwrap_or(offset)
+                } else {
+                    offset
+                }
+            };
+            stats.first = Some(stats.first.map_or(first, |f| f.min(first)));
             stats.last = Some(stats.last.map_or(offset, |l| l.max(offset)));
+            let absolute = offset.saturating_add(base);
             let mut summary = format!("v{magic}, {}", plural(length, "byte"));
             if codec_id != 0 {
                 summary.push_str(&format!(", {} wrapper", codec_name(codec_id)));
             }
-            Node::new(format!("Message {offset}"))
+            if base != 0 {
+                summary.push_str(&format!(", relative offset {offset}"));
+            }
+            Node::new(format!("Message {absolute}"))
                 .span(span)
                 .summary(summary)
                 .lazy(
-                    crate::expander!(self::message: (Input, Span, u8)),
-                    (input, span, depth),
+                    crate::expander!(self::message: (Input, Span, u8, i64)),
+                    (input, span, depth, base),
                 )
         } else {
             cx.push(Node::new("Unrecognised data").span(region.tail(pos)).diag(
@@ -847,10 +887,11 @@ async fn record(cx: Cx, (b, span): (Batch, Span)) -> Result<()> {
     p = p.saturating_add(len_of(value_len));
     if b.control {
         let key = span.sub(key_at, len_of(key_len));
-        cx.emit(control(&cx, "Key", key, true).await?);
+        let (node, kind) = control_key(&cx, key).await?;
+        cx.emit(node);
         cx.emit(value_len_node);
         let value = span.sub(value_at, len_of(value_len));
-        cx.emit(control(&cx, "Value", value, false).await?);
+        cx.emit(control_value(&cx, value, kind).await?);
     } else {
         cx.emit(blob(&cx, b.input, "Key", span, key_at, key_len).await?);
         cx.emit(value_len_node);
@@ -886,31 +927,66 @@ record! {
     }
 }
 
-/// A control record's key (version and type) or value (a transaction
-/// marker), shown by its layout.
-async fn control(cx: &Cx, name: &'static str, span: Span, key: bool) -> Result<Node> {
-    let need = if key {
-        ControlKey::SIZE
-    } else {
-        EndTxnMarker::SIZE
-    };
-    if span.len < need {
-        return Ok(Node::new(name)
-            .span(span)
-            .diag(Diagnostic::malformed(format!(
-                "control record field shorter than {need} bytes"
-            ))));
+record! {
+    /// The start of a LEADER_CHANGE control record's value
+    /// (`LeaderChangeMessage`; the voter lists follow).
+    struct LeaderChange {
+        version: i16 "Version",
+        leader: i32 "Leader ID",
     }
-    Ok(if key {
-        let k: ControlKey = read_record(cx, span.sub(0, need), BE).await?;
-        ControlKey::node(name, span, BE).summary(val::name_or(CONTROL_TYPES, k.kind.into(), "type"))
-    } else {
-        let v: EndTxnMarker = read_record(cx, span.sub(0, need), BE).await?;
-        EndTxnMarker::node(name, span, BE).summary(format!(
-            "transaction marker, coordinator epoch {}",
-            v.coordinator_epoch
-        ))
-    })
+}
+
+fn too_short(name: &'static str, span: Span, need: u64) -> Node {
+    Node::new(name)
+        .span(span)
+        .diag(Diagnostic::malformed(format!(
+            "control record field shorter than {need} bytes"
+        )))
+}
+
+/// A control record's key (version and type), and the type.
+async fn control_key(cx: &Cx, span: Span) -> Result<(Node, Option<u16>)> {
+    if span.len < ControlKey::SIZE {
+        return Ok((too_short("Key", span, ControlKey::SIZE), None));
+    }
+    let k: ControlKey = read_record(cx, span.sub(0, ControlKey::SIZE), BE).await?;
+    let node = ControlKey::node("Key", span, BE).summary(val::name_or(
+        CONTROL_TYPES,
+        k.kind.into(),
+        "type",
+    ));
+    Ok((node, Some(k.kind)))
+}
+
+/// A control record's value, by its key's type: a transaction marker for
+/// ABORT and COMMIT, the leader for LEADER_CHANGE; the other KRaft types
+/// (a version, then the message) are shown raw.
+async fn control_value(cx: &Cx, span: Span, kind: Option<u16>) -> Result<Node> {
+    const NAME: &str = "Value";
+    match kind {
+        Some(0 | 1) => {
+            if span.len < EndTxnMarker::SIZE {
+                return Ok(too_short(NAME, span, EndTxnMarker::SIZE));
+            }
+            let v: EndTxnMarker = read_record(cx, span.sub(0, EndTxnMarker::SIZE), BE).await?;
+            Ok(EndTxnMarker::node(NAME, span, BE).summary(format!(
+                "transaction marker, coordinator epoch {}",
+                v.coordinator_epoch
+            )))
+        }
+        Some(2) if span.len >= LeaderChange::SIZE => {
+            let v: LeaderChange = read_record(cx, span.sub(0, LeaderChange::SIZE), BE).await?;
+            Ok(LeaderChange::node(NAME, span, BE).summary(format!("leader {}", v.leader)))
+        }
+        _ => {
+            let bytes = cx.read(span.sub(0, MAX_SHOWN)).await?;
+            let mut node = Node::new(NAME).span(span).value(Value::Bytes(bytes));
+            if let Some(kind) = kind {
+                node = node.summary(val::name_or(CONTROL_TYPES, kind.into(), "type"));
+            }
+            Ok(node)
+        }
+    }
 }
 
 /// Lists a record's headers.
@@ -981,15 +1057,20 @@ async fn header(cx: Cx, span: Span) -> Result<()> {
 // ---------------------------------------------------------------------------
 // Legacy messages (magic 0 and 1)
 
-async fn message(cx: Cx, (input, span, depth): (Input, Span, u8)) -> Result<()> {
+async fn message(cx: Cx, (input, span, depth, base): (Input, Span, u8, i64)) -> Result<()> {
     let mut r = ByteReader::new(&cx, span);
     let head = cx.read_avail(span.sub(0, 26)).await?;
     let n = |at: u64, len: u64| span.sub(at, len);
-    cx.emit(
-        Node::new("Offset")
-            .span(n(0, 8))
-            .value(val::int(i64_be(&head, 0).unwrap_or(0), 64)),
-    );
+    let offset = i64_be(&head, 0).unwrap_or(0);
+    let mut offset_node = Node::new("Offset")
+        .span(n(0, 8))
+        .value(val::int(offset, 64));
+    if base != 0 {
+        offset_node = offset_node
+            .summary(format!("offset {}", offset.saturating_add(base)))
+            .desc("Relative to the wrapper's last inner message");
+    }
+    cx.emit(offset_node);
     cx.emit(
         Node::new("Message size")
             .span(n(8, 4))
@@ -1055,15 +1136,68 @@ async fn message(cx: Cx, (input, span, depth): (Input, Span, u8)) -> Result<()> 
             Node::new("Messages")
                 .span(value)
                 .summary(format!("{}-compressed message set", codec_name(codec_id)))
-                .lazy(inner, (input, value, codec_id, depth)),
+                .lazy(inner, (input, value, codec_id, depth, (offset, magic))),
         );
     }
     Ok(())
 }
 
-async fn inner(cx: Cx, (input, value, codec_id, depth): (Input, Span, u8, u8)) -> Result<()> {
+/// The wrapper's offset and magic, for the inner offsets.
+type Wrapper = (i64, u8);
+
+async fn inner(
+    cx: Cx,
+    (input, value, codec_id, depth, (offset, magic)): (Input, Span, u8, u8, Wrapper),
+) -> Result<()> {
     let region = decoded(&cx, value, codec_id).await?;
-    walk(cx, (input, region, depth.saturating_add(1))).await
+    let (base, _) = inner_base(&cx, region, offset, magic).await?;
+    walk(cx, (input, region, depth.saturating_add(1), base)).await
+}
+
+/// What a legacy inner message set's offsets count from, and its first
+/// message's offset as stored. Inner v0 messages carry absolute offsets;
+/// inner v1 messages (KIP-31) relative ones from 0, the wrapper carrying
+/// the last inner message's absolute offset, so an inner offset `r` is
+/// `wrapper - last + r` (as Kafka's `AbstractLegacyRecordBatch` reads it).
+/// Walks the inner entries' headers.
+async fn inner_base(cx: &Cx, region: Span, wrapper: i64, magic: u8) -> Result<(i64, i64)> {
+    let mut pos = 0u64;
+    let (mut first, mut last) = (None, 0i64);
+    loop {
+        let head = cx.read_avail(region.sub(pos, LOG_OVERHEAD)).await?;
+        let (Some(offset), Some(length)) = (i64_be(&head, 0), i32_be(&head, 8)) else {
+            break;
+        };
+        if length <= 0 {
+            break;
+        }
+        first.get_or_insert(offset);
+        last = offset;
+        pos = pos
+            .saturating_add(LOG_OVERHEAD)
+            .saturating_add(u64::from(length.unsigned_abs()));
+    }
+    let base = if magic == 0 {
+        0
+    } else {
+        wrapper.saturating_sub(last)
+    };
+    Ok((base, first.unwrap_or(0)))
+}
+
+/// The absolute offset of the first message inside the legacy wrapper
+/// `span` (for the segment's offset range when it starts with one).
+async fn first_inner(cx: &Cx, span: Span, wrapper: i64, magic: u8, codec_id: u8) -> Option<i64> {
+    let key_at: u64 = if magic == 1 { 26 } else { 18 };
+    let key = cx.read(span.sub_exact(key_at, 4).ok()?).await.ok()?;
+    let key_len = len_of(i32_be(&key, 0)?.into());
+    let value_at = key_at.saturating_add(4).saturating_add(key_len);
+    let len = cx.read(span.sub_exact(value_at, 4).ok()?).await.ok()?;
+    let len = u64::try_from(i32_be(&len, 0)?).ok()?;
+    let value = span.sub_exact(value_at.saturating_add(4), len).ok()?;
+    let region = decoded(cx, value, codec_id).await.ok()?;
+    let (base, first) = inner_base(cx, region, wrapper, magic).await.ok()?;
+    Some(first.saturating_add(base))
 }
 
 // ---------------------------------------------------------------------------
