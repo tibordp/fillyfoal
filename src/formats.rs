@@ -124,6 +124,8 @@ pub static DEEP: &[&DeepProbe] = &[
     &system::ostree::SUMMARY_DEEP,
     #[cfg(feature = "system")]
     &system::ostree::DELTA_DEEP,
+    #[cfg(feature = "archive")]
+    &archive::terraform::TFPLAN_DEEP,
 ];
 
 /// Every format.
@@ -1079,6 +1081,10 @@ pub static FORMATS: &[&Format] = &[
     &archive::zip::BUGREPORT,
     #[cfg(feature = "archive")]
     &archive::zip::IPSW,
+    #[cfg(feature = "archive")]
+    &archive::zip::TERRAFORM_PLAN,
+    #[cfg(feature = "archive")]
+    &archive::terraform::TFPLAN,
     // (end ml)
     #[cfg(feature = "archive")]
     &archive::zip::AAR,

@@ -550,6 +550,20 @@ zip_variant!(
     "application/x-ipsw",
     |h| has_entry(h, b"BuildManifest.plist") || has_entry(h, b"Restore.plist")
 );
+// `terraform plan -out` writes `tfplan` first, then the state snapshots
+// and the configuration (see `terraform.rs`).
+zip_variant!(
+    TERRAFORM_PLAN,
+    "terraform-plan",
+    "Terraform saved plan",
+    ["tfplan"],
+    "application/zip",
+    |h| first_entry(h, b"tfplan")
+        && entry_names(h).next() == Some(b"tfplan".as_slice())
+        && (has_entry(h, b"tfstate")
+            || has_entry(h, b"tfstate-prev")
+            || entry_names(h).any(|n| n.starts_with(b"tfconfig/")))
+);
 
 pub static FORMAT: Format = Format {
     name: "zip",
@@ -1454,10 +1468,21 @@ async fn entry_content(
                     &codec,
                 ));
             }
-            cx.emit(
+            // A Terraform saved plan's `tfplan` is a bare protobuf message,
+            // known only by its name.
+            let node = if cx.read(name_span).await.is_ok_and(|n| n == b"tfplan") {
+                crate::formats::content_named(
+                    "Content",
+                    input,
+                    stream,
+                    codec,
+                    Some(sizes.uncompressed),
+                    "terraform-tfplan",
+                )
+            } else {
                 content("Content", input, stream, codec, Some(sizes.uncompressed))
-                    .summary(format!("{:#x} bytes", sizes.uncompressed)),
-            );
+            };
+            cx.emit(node.summary(format!("{:#x} bytes", sizes.uncompressed)));
         }
         Some(_) => {}
         None => {

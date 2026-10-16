@@ -614,6 +614,41 @@ pub async fn expand_content(
     cx: Cx,
     (input, span, codec, expected): (Input, Span, Codec, Option<u64>),
 ) -> Result<()> {
+    expand_content_inner(cx, input, span, codec, expected, None).await
+}
+
+/// A node like [`content`] for content its container says is of the
+/// format registered as `format` (a member that a file name identifies,
+/// with no signature of its own): decoded the same way, then dissected as
+/// that format (a host's "inspect as" still overrides it).
+pub fn content_named(
+    name: impl Into<Cow<'static, str>>,
+    input: Input,
+    span: Span,
+    codec: Codec,
+    expected: Option<u64>,
+    format: &'static str,
+) -> Node {
+    Node::new(name)
+        .span(span)
+        .lazy(expand_content_named, (input, span, codec, expected, format))
+}
+
+async fn expand_content_named(
+    cx: Cx,
+    (input, span, codec, expected, format): (Input, Span, Codec, Option<u64>, &'static str),
+) -> Result<()> {
+    expand_content_inner(cx, input, span, codec, expected, Some(format)).await
+}
+
+async fn expand_content_inner(
+    cx: Cx,
+    input: Input,
+    span: Span,
+    codec: Codec,
+    expected: Option<u64>,
+    format: Option<&'static str>,
+) -> Result<()> {
     let inner = match codec {
         Codec::Stored => input.nested(span),
         // Large members are decoded lazily: listing the first entries of a
@@ -630,7 +665,7 @@ pub async fn expand_content(
         // stream before its first bytes can be dissected, decode on demand
         // with a provisional length (see `Cx::decode_lazy_unsized`). Small
         // streams are decoded eagerly, which reports their exact size.
-        codec if expected.is_none() && span.len > UNSIZED_LAZY_THRESHOLD => {
+        codec if expected.is_none() && format.is_none() && span.len > UNSIZED_LAZY_THRESHOLD => {
             let decoded = cx.decode_lazy_unsized(span, &codec)?;
             cx.annotate("size unknown, decoded on demand");
             return dissect_unsized(cx, input.nested(decoded)).await;
@@ -649,7 +684,10 @@ pub async fn expand_content(
             input.nested(decoded.span)
         }
     };
-    dissect_or_data(cx, inner).await
+    match format {
+        Some(name) => dissect_named(cx, (inner, name)).await,
+        None => dissect_or_data(cx, inner).await,
+    }
 }
 
 async fn dissect_as(cx: Cx, (input, given): (Input, &'static Format)) -> Result<()> {

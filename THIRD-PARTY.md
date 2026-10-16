@@ -847,3 +847,6 @@ closely enough to credit:
   dictionary (`crates/docs/src/formats/documents/doldoc.rs`, `templeos_ac.rs`), sprites and GR
   (`crates/image/src/formats/image/templeos.rs`). Test fixtures come from its distribution ISO
   (public domain).
+- Terraform saved plans (`crates/archive/src/formats/archive/terraform.rs`): message and field
+  names, numbers and enum values from Terraform's `internal/plans/planproto/planfile.proto`
+  (MPL-2.0; facts only, no code copied).
