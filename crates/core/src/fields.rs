@@ -465,9 +465,7 @@ impl<T: Prim> Field<'_, T> {
     /// Windows FILETIME (100 ns ticks since 1601).
     pub fn filetime(mut self) -> Self {
         if let Some((raw, _)) = self.raw {
-            self.node.value = Some(Value::Timestamp {
-                unix_seconds: crate::text::filetime_to_unix(raw),
-            });
+            self.node.value = Some(Value::utc(crate::text::filetime_to_unix(raw)));
         }
         self
     }
@@ -475,9 +473,7 @@ impl<T: Prim> Field<'_, T> {
     /// Seconds since 1904 (HFS, QuickTime, AIFF).
     pub fn mac_time(mut self) -> Self {
         if let Some((raw, _)) = self.raw {
-            self.node.value = Some(Value::Timestamp {
-                unix_seconds: crate::text::mac_to_unix(raw),
-            });
+            self.node.value = Some(Value::utc(crate::text::mac_to_unix(raw)));
         }
         self
     }
@@ -485,9 +481,7 @@ impl<T: Prim> Field<'_, T> {
     /// Seconds since the Unix epoch.
     pub fn timestamp(mut self) -> Self {
         if let Some((raw, _)) = self.raw {
-            self.node.value = Some(Value::Timestamp {
-                unix_seconds: i64::try_from(raw).unwrap_or(i64::MAX),
-            });
+            self.node.value = Some(Value::utc(i64::try_from(raw).unwrap_or(i64::MAX)));
         }
         self
     }
