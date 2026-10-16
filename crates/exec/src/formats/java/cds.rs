@@ -16,8 +16,14 @@
 //! `cds/dynamicArchive.hpp` and `cds/metaspaceShared.hpp` of JDK 17, 21 and
 //! 25 (facts only), and checked field by field against archives those
 //! JDKs (Temurin 17.0.20.1, 21.0.12.1, 25.0.4.1) wrote: versions 11, 18 and
-//! 19. For other versions the generic header and the raw header are shown.
-//! The header CRC (from after `_crc` in version 11, after `_header_size`
+//! 19. Version 5 (JDK 11) is from JDK 11's `include/cds.h`,
+//! `memory/filemap.hpp` and `memory/metaspaceShared.hpp` (facts only),
+//! checked against the archive Temurin 11.0.32.1 ships: every offset, the
+//! header CRC (to `sizeof(FileMapHeader)`, 0x3a0, padding included) and
+//! the region CRCs agree. Its header has nine region slots, of which
+//! HotSpot uses eight; the ninth holds stale memory and is not shown.
+//! For other versions the generic header and the raw header are shown.
+//! The header CRC (from after `_crc` in versions 5 and 11, after `_header_size`
 //! since 13, to the end of the header) and each region's CRC are checked,
 //! the latter on request. Region contents are shown as raw data.
 
@@ -71,6 +77,9 @@ const MAGIC: EnumTable = &[
 /// The layouts known, by CDS archive version.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Layout {
+    /// Version 5 (JDK 11): no generic header, nine 56-byte region slots,
+    /// eight of them used.
+    V5,
     /// Version 11 (JDK 17): no generic header, seven 72-byte regions.
     V11,
     /// Version 18 (JDK 21): four 88-byte regions.
@@ -82,6 +91,7 @@ enum Layout {
 impl Layout {
     fn of(version: u32) -> Option<Self> {
         match version {
+            5 => Some(Layout::V5),
             11 => Some(Layout::V11),
             18 => Some(Layout::V18),
             19 => Some(Layout::V19),
@@ -91,6 +101,7 @@ impl Layout {
 
     fn jdk(self) -> &'static str {
         match self {
+            Layout::V5 => "JDK 11",
             Layout::V11 => "JDK 17",
             Layout::V18 => "JDK 21",
             Layout::V19 => "JDK 25",
@@ -100,13 +111,14 @@ impl Layout {
     /// Where the region table starts.
     fn regions_at(self) -> u64 {
         match self {
-            Layout::V11 => 16,
+            Layout::V5 | Layout::V11 => 16,
             Layout::V18 | Layout::V19 => 24,
         }
     }
 
     fn region_size(self) -> u64 {
         match self {
+            Layout::V5 => 56,
             Layout::V11 => 72,
             Layout::V18 => 88,
             Layout::V19 => 96,
@@ -115,6 +127,16 @@ impl Layout {
 
     fn names(self) -> &'static [(&'static str, &'static str)] {
         match self {
+            Layout::V5 => &[
+                ("mc", "miscellaneous code (method trampolines)"),
+                ("rw", "read-write metadata"),
+                ("ro", "read-only metadata"),
+                ("md", "miscellaneous data"),
+                ("st0", "archived strings region 0"),
+                ("st1", "archived strings region 1"),
+                ("oa0", "open archive heap region 0"),
+                ("oa1", "open archive heap region 1"),
+            ],
             Layout::V11 => &[
                 ("rw", "read-write metadata"),
                 ("ro", "read-only metadata"),
@@ -140,8 +162,19 @@ impl Layout {
         }
     }
 
-    fn regions_end(self) -> u64 {
+    /// Region slots in the header: one more than the regions for
+    /// version 5 (`NUM_CDS_REGIONS` is 9, HotSpot uses 8; the last slot
+    /// holds whatever was in memory).
+    fn slots(self) -> u64 {
         let n = to_u64(self.names().len());
+        match self {
+            Layout::V5 => n.saturating_add(1),
+            _ => n,
+        }
+    }
+
+    fn regions_end(self) -> u64 {
+        let n = self.slots();
         self.regions_at()
             .saturating_add(n.saturating_mul(self.region_size()))
     }
@@ -149,7 +182,7 @@ impl Layout {
     /// Where the header's CRC starts.
     fn crc_from(self) -> u64 {
         match self {
-            Layout::V11 => 8,
+            Layout::V5 | Layout::V11 => 8,
             Layout::V18 | Layout::V19 => 16,
         }
     }
@@ -158,6 +191,7 @@ impl Layout {
     /// start), and where `_jvm_ident` is.
     fn file_map_end(self) -> u64 {
         match self {
+            Layout::V5 => 0x3a0,
             Layout::V11 => 0x3b4,
             Layout::V18 => 0x310,
             Layout::V19 => 0x3d8,
@@ -166,6 +200,7 @@ impl Layout {
 
     fn ident_at(self) -> u64 {
         match self {
+            Layout::V5 => 0x278,
             Layout::V11 => 0x269,
             Layout::V18 => 0x1d8,
             Layout::V19 => 0x248,
@@ -276,6 +311,30 @@ fn region(f: &mut Fields<'_>, layout: &Layout) -> Result<Region> {
         .hex()
         .desc("CRC-32 of the region's used bytes")
         .emit()?;
+    if *layout == Layout::V5 {
+        pad_to(f, 8);
+        let file_offset = f.u64("_file_offset").hex().emit()?;
+        f.u64("_addr")
+            .hex()
+            .desc("Where the region is mapped (heap regions: as a narrow oop)")
+            .emit()?;
+        let used = f
+            .u64("_used")
+            .desc("Bytes in use (without alignment padding)")
+            .emit()?;
+        flag32(f, "_read_only")?;
+        flag32(f, "_allow_exec")?;
+        f.u64("_oopmap")
+            .hex()
+            .desc("Heap regions: the oop map's address at dump time")
+            .emit()?;
+        f.u64("_oopmap_size_in_bits").emit()?;
+        return Ok(Region {
+            crc,
+            file_offset,
+            used,
+        });
+    }
     flag32(f, "_read_only")?;
     flag32(f, "_allow_exec")?;
     flag32(f, "_is_heap_region")?;
@@ -315,6 +374,39 @@ fn file_map(f: &mut Fields<'_>, layout: &Layout) -> Result<()> {
     let base = layout.regions_end();
     let at = |off: u64| off.saturating_sub(base);
     match layout {
+        Layout::V5 => {
+            f.u64("_alignment").hex().emit()?;
+            f.u32("_obj_alignment").emit()?;
+            pad_to(f, at(0x218));
+            f.u64("_narrow_oop_base").hex().emit()?;
+            f.u32("_narrow_oop_shift").emit()?;
+            flag(f, "_compact_strings")?;
+            pad_to(f, at(0x228));
+            f.u64("_max_heap_size").hex().emit()?;
+            f.u32("_narrow_oop_mode")
+                .enumeration(NARROW_OOP_MODE)
+                .emit()?;
+            f.u32("_narrow_klass_shift").emit()?;
+            f.u64("_narrow_klass_base").hex().emit()?;
+            f.u64("_misc_data_patching_start").hex().emit()?;
+            f.u64("_read_only_tables_start").hex().emit()?;
+            f.u64("_cds_i2i_entry_code_buffers").hex().emit()?;
+            f.u64("_cds_i2i_entry_code_buffers_size").hex().emit()?;
+            f.u64("_core_spaces_size").hex().emit()?;
+            f.u64("_heap_reserved._start").hex().emit()?;
+            f.u64("_heap_reserved._word_size").hex().emit()?;
+            f.ascii("_jvm_ident", IDENT).emit()?;
+            f.u32("_paths_misc_info_size")
+                .desc("Size of the class path check data after the header")
+                .emit()?;
+            f.u32("_shared_path_table_size").emit()?;
+            f.u64("_shared_path_entry_size").emit()?;
+            f.u64("_shared_path_table").hex().emit()?;
+            f.u16("_app_class_paths_start_index").emit()?;
+            f.u16("_app_module_paths_start_index").emit()?;
+            f.u16("_max_used_path_index").emit()?;
+            verify_flags(f)?;
+        }
         Layout::V11 => {
             f.u64("_header_size").emit()?;
             f.u64("_core_region_alignment").hex().emit()?;
@@ -487,6 +579,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     // The header size: in the generic header since version 13, a field of
     // `FileMapHeader` before.
     let header_size = match layout {
+        // `sizeof(FileMapHeader)`, not recorded.
+        Some(Layout::V5) => Some(Layout::V5.file_map_end()),
         Some(Layout::V11) => {
             let b = cx.read(file.sub(0x208, 8)).await?;
             crate::bytes::u64_le(&b, 0)
@@ -527,7 +621,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         // size (version 13 on); before, the node has no span.
         let mut node = Node::new("Header data").diag(Diagnostic::unsupported(format!(
             "the header layout of CDS archive version {version} is not known \
-             (versions 11, 18 and 19 are)"
+             (versions 5, 11, 18 and 19 are)"
         )));
         if let Some(len) = header_size.filter(|&l| l > generic_len) {
             node = node.span(file.sub(generic_len, len.saturating_sub(generic_len)));
@@ -535,7 +629,6 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(node);
         let jdk = match version {
             2 => " (JDK 8)",
-            5 => " (JDK 11)",
             _ => "",
         };
         cx.annotate(format!("{kind} CDS archive, version {version}{jdk}"));
@@ -558,6 +651,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         layout.file_map_end().saturating_sub(layout.regions_end()),
     );
     cx.emit(struct_node("FileMapHeader", fm, LE, layout, file_map));
+    if layout == Layout::V5 {
+        // The class path check data follows the header (the module
+        // image's path, then the paths and sizes the JVM checks).
+        let b = cx.read(file.sub(0x378, 4)).await?;
+        let size = u32_le(&b, 0).unwrap_or(0);
+        if size > 0 {
+            cx.emit(
+                Node::new("Paths misc info")
+                    .span(file.sub(layout.file_map_end(), size.into()))
+                    .summary(format!("{size} bytes, class path checks")),
+            );
+        }
+    }
     if magic == DYNAMIC_MAGIC {
         let n = to_u64(names.len()).saturating_add(1).saturating_mul(4);
         cx.emit(struct_node(
@@ -572,6 +678,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     // The base archive's name: at the recorded offset since version 13,
     // right after the header before.
     let name_span = match layout {
+        // No dynamic archives before version 13 (JDK 13).
+        Layout::V5 => None,
         Layout::V11 => {
             let b = cx.read(file.sub(0x370, 8)).await?;
             let size = crate::bytes::u64_le(&b, 0).unwrap_or(0);

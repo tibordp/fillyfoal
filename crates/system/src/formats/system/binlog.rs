@@ -119,8 +119,17 @@ fn probe(h: &Head<'_>) -> bool {
                     return false;
                 }
             }
-            // The record runs past the probe window (or the file).
-            None => return to_u64(d.len()) < h.len || records > 1,
+            // The record runs past the probe window (or the file). With
+            // the length unknown, `h.len` is only an upper bound: a head
+            // shorter than the window is all there is.
+            None => {
+                let more = if h.len_known {
+                    to_u64(d.len()) < h.len
+                } else {
+                    to_u64(d.len()) >= crate::formats::HEAD_LEN
+                };
+                return more || records > 1;
+            }
         }
         records = records.saturating_add(1);
     }
@@ -445,8 +454,54 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Some(v) => format!("MSBuild {v}, "),
         None => String::new(),
     };
-    cx.annotate(format!("MSBuild binary log, {msbuild}format {version}"));
+    let result = match build_result(&cx, &ctx).await? {
+        Some(r) => format!("build {r}, "),
+        None => String::new(),
+    };
+    cx.annotate(format!(
+        "MSBuild binary log, {msbuild}{result}format {version}"
+    ));
     Ok(())
+}
+
+/// Logs whose records are walked for the build's result.
+const RESULT_SCAN: u64 = 64 << 20;
+
+/// Whether the build succeeded, from its BuildFinished record near the
+/// end: only for a log already decoded (or read from the host), so
+/// reaching the end does not decode the whole stream just for this.
+async fn build_result(cx: &Cx, ctx: &Ctx) -> Result<Option<&'static str>> {
+    let stream = ctx.input.span;
+    if stream.len > RESULT_SCAN || !cx.read_is_cheap(stream) {
+        return Ok(None);
+    }
+    let mut pos = 8u64;
+    let mut n = 0u32;
+    while pos < stream.len {
+        let Ok(rec) = read_record(cx, stream, pos).await else {
+            return Ok(None);
+        };
+        if rec.kind == 0 || rec.end <= pos {
+            return Ok(None);
+        }
+        if rec.kind == 2 {
+            let index = index_upto(cx, ctx, pos).await?;
+            let summary = event_summary(cx, ctx, &index, rec).await?;
+            return Ok(if summary.ends_with("(succeeded)") {
+                Some("succeeded")
+            } else if summary.ends_with("(failed)") {
+                Some("failed")
+            } else {
+                None
+            });
+        }
+        pos = rec.end;
+        n = n.wrapping_add(1);
+        if n.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+    }
+    Ok(None)
 }
 
 /// The MSBuild version the log names in its first records (the message
@@ -1298,5 +1353,27 @@ mod tests {
             "2026-10-16 08:25:10.482 (unspecified time zone)"
         );
         assert_eq!(timestamp(0, 1), "0001-01-01 00:00:00.000 UTC");
+    }
+
+    /// A first record that runs past the end of a short stream is no
+    /// evidence when the stream's length is only an upper bound.
+    #[test]
+    fn an_unknown_length_does_not_make_a_record_fit() {
+        // Version 21, minimum 18, the string "hi", then a record claiming
+        // 100 bytes of which 2 are there.
+        let mut d = vec![21, 0, 0, 0, 18, 0, 0, 0, 24, 2, b'h', b'i', 9, 100, 1, 2];
+        let head = |data: &[u8], len_known| {
+            probe(&Head {
+                data,
+                tail: data,
+                len: 1 << 20,
+                len_known,
+            })
+        };
+        assert!(head(&d, true));
+        assert!(!head(&d, false));
+        // A full window: the record may well go on.
+        d.resize(crate::formats::HEAD_LEN as usize, 0);
+        assert!(head(&d, false));
     }
 }

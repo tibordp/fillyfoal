@@ -23,7 +23,13 @@
 //!
 //! Events are named from the metadata (indexed once per file), or for the
 //! runtime's own events, whose metadata has no names, from the event IDs
-//! of `ClrEtwAll.man` (dotnet/runtime, MIT; facts only); payloads
+//! of `ClrEtwAll.man` (dotnet/runtime, MIT; facts only) for the runtime
+//! and rundown providers and of TraceEvent for the sample profiler. Their
+//! metadata describes no fields either, so the payloads of the common
+//! ones (GC, runtime information, rundown modules, assemblies and
+//! methods, thread samples) are decoded by the templates of the same
+//! manifest, by event ID and version; the .NET 8 traces' payloads fill
+//! them exactly. Payloads
 //! are decoded field by field while the field types are plain (integers,
 //! floats, GUIDs, strings), the rest shown raw. Stacks are lists of
 //! instruction pointers.
@@ -793,10 +799,13 @@ fn decode_header(
             h.meta = u32::try_from(r.uleb()?).ok()?;
             field(&r, "MetadataId", s, &mut at);
         }
+        // TraceEvent's `EventPipeEventHeader` (V4 to V6 alike): with a
+        // sequence delta, the number moves by the delta plus one; without,
+        // by one for an event (not for metadata, MetadataId 0).
         if flags & 2 != 0 {
             let s = r.pos();
             let delta = r.uleb()?;
-            h.seq = h.seq.wrapping_add(delta as u32);
+            h.seq = h.seq.wrapping_add(delta as u32).wrapping_add(1);
             field(&r, "SequenceNumber (delta)", s, &mut at);
             let s = r.pos();
             h.capture = r.uleb()?;
@@ -804,8 +813,7 @@ fn decode_header(
             let s = r.pos();
             h.processor = r.uleb()? as u32;
             field(&r, "ProcessorNumber", s, &mut at);
-        }
-        if ver == Ver::V6 || h.meta != 0 {
+        } else if h.meta != 0 {
             h.seq = h.seq.wrapping_add(1);
         }
         if flags & 4 != 0 {
@@ -973,9 +981,274 @@ impl Meta {
 /// metadata, by provider and event ID.
 fn known_name(provider: &str, id: u32) -> Option<&'static str> {
     match provider {
-        "Microsoft-Windows-DotNETRuntime" => crate::value::lookup(DOTNET_RUNTIME, id.into()),
+        RUNTIME => crate::value::lookup(DOTNET_RUNTIME, id.into()),
+        RUNDOWN => crate::value::lookup(DOTNET_RUNDOWN, id.into()),
+        SAMPLE_PROFILER => crate::value::lookup(SAMPLE_PROFILER_EVENTS, id.into()),
         _ => None,
     }
+}
+
+const RUNTIME: &str = "Microsoft-Windows-DotNETRuntime";
+const RUNDOWN: &str = "Microsoft-Windows-DotNETRuntimeRundown";
+const SAMPLE_PROFILER: &str = "Microsoft-DotNETCore-SampleProfiler";
+
+/// The events of Microsoft-Windows-DotNETRuntimeRundown, by ID (symbols
+/// of `ClrEtwAll.man`, without their `_V` suffixes).
+const DOTNET_RUNDOWN: EnumTable = &[
+    (0, "CLRStackWalkDCStart"),
+    (10, "GCSettingsRundown"),
+    (141, "MethodDCStart"),
+    (142, "MethodDCEnd"),
+    (143, "MethodDCStartVerbose"),
+    (144, "MethodDCEndVerbose"),
+    (145, "DCStartComplete"),
+    (146, "DCEndComplete"),
+    (147, "DCStartInit"),
+    (148, "DCEndInit"),
+    (149, "MethodDCStartILToNativeMap"),
+    (150, "MethodDCEndILToNativeMap"),
+    (151, "DomainModuleDCStart"),
+    (152, "DomainModuleDCEnd"),
+    (153, "ModuleDCStart"),
+    (154, "ModuleDCEnd"),
+    (155, "AssemblyDCStart"),
+    (156, "AssemblyDCEnd"),
+    (157, "AppDomainDCStart"),
+    (158, "AppDomainDCEnd"),
+    (159, "ThreadDC"),
+    (160, "ModuleRangeDCStart"),
+    (161, "ModuleRangeDCEnd"),
+    (187, "RuntimeInformationDCStart"),
+    (280, "TieredCompilationSettingsDCStart"),
+    (300, "ExecutionCheckpointDCEnd"),
+];
+
+/// The events of Microsoft-DotNETCore-SampleProfiler (TraceEvent's
+/// `SampleProfilerTraceEventParser`; the runtime registers event 0).
+const SAMPLE_PROFILER_EVENTS: EnumTable = &[(0, "ThreadSample"), (1, "ThreadStackWalk")];
+
+// EventPipe type codes of the fields below.
+const T_U8: u32 = 6;
+const T_U16: u32 = 8;
+const T_I32: u32 = 9;
+const T_U32: u32 = 10;
+const T_U64: u32 = 12;
+const T_GUID: u32 = 17;
+const T_STR: u32 = 18;
+
+type Layout = &'static [(&'static str, u32)];
+
+const GC_NO_USER_DATA: Layout = &[("ClrInstanceID", T_U16)];
+const RUNTIME_INFORMATION: Layout = &[
+    ("ClrInstanceID", T_U16),
+    ("Sku", T_U16),
+    ("BclMajorVersion", T_U16),
+    ("BclMinorVersion", T_U16),
+    ("BclBuildNumber", T_U16),
+    ("BclQfeNumber", T_U16),
+    ("VMMajorVersion", T_U16),
+    ("VMMinorVersion", T_U16),
+    ("VMBuildNumber", T_U16),
+    ("VMQfeNumber", T_U16),
+    ("StartupFlags", T_U32),
+    ("StartupMode", T_U8),
+    ("CommandLine", T_STR),
+    ("ComObjectGuid", T_GUID),
+    ("RuntimeDllPath", T_STR),
+];
+/// Version 1 is version 2 without `ReJITID` (as .NET 8's rundown writes
+/// it: the fields fill the payload).
+const METHOD_VERBOSE_V1: Layout = &[
+    ("MethodID", T_U64),
+    ("ModuleID", T_U64),
+    ("MethodStartAddress", T_U64),
+    ("MethodSize", T_U32),
+    ("MethodToken", T_U32),
+    ("MethodFlags", T_U32),
+    ("MethodNamespace", T_STR),
+    ("MethodName", T_STR),
+    ("MethodSignature", T_STR),
+    ("ClrInstanceID", T_U16),
+];
+const METHOD_VERBOSE_V2: Layout = &[
+    ("MethodID", T_U64),
+    ("ModuleID", T_U64),
+    ("MethodStartAddress", T_U64),
+    ("MethodSize", T_U32),
+    ("MethodToken", T_U32),
+    ("MethodFlags", T_U32),
+    ("MethodNamespace", T_STR),
+    ("MethodName", T_STR),
+    ("MethodSignature", T_STR),
+    ("ClrInstanceID", T_U16),
+    ("ReJITID", T_U64),
+];
+const MODULE_V2: Layout = &[
+    ("ModuleID", T_U64),
+    ("AssemblyID", T_U64),
+    ("ModuleFlags", T_U32),
+    ("Reserved1", T_U32),
+    ("ModuleILPath", T_STR),
+    ("ModuleNativePath", T_STR),
+    ("ClrInstanceID", T_U16),
+    ("ManagedPdbSignature", T_GUID),
+    ("ManagedPdbAge", T_U32),
+    ("ManagedPdbBuildPath", T_STR),
+    ("NativePdbSignature", T_GUID),
+    ("NativePdbAge", T_U32),
+    ("NativePdbBuildPath", T_STR),
+];
+const DOMAIN_MODULE_V1: Layout = &[
+    ("ModuleID", T_U64),
+    ("AssemblyID", T_U64),
+    ("AppDomainID", T_U64),
+    ("ModuleFlags", T_U32),
+    ("Reserved1", T_U32),
+    ("ModuleILPath", T_STR),
+    ("ModuleNativePath", T_STR),
+    ("ClrInstanceID", T_U16),
+];
+const ASSEMBLY_V1: Layout = &[
+    ("AssemblyID", T_U64),
+    ("AppDomainID", T_U64),
+    ("BindingID", T_U64),
+    ("AssemblyFlags", T_U32),
+    ("FullyQualifiedAssemblyName", T_STR),
+    ("ClrInstanceID", T_U16),
+];
+const APP_DOMAIN_V1: Layout = &[
+    ("AppDomainID", T_U64),
+    ("AppDomainFlags", T_U32),
+    ("AppDomainName", T_STR),
+    ("AppDomainIndex", T_U32),
+    ("ClrInstanceID", T_U16),
+];
+
+/// Payload fields of the runtime's events, whose metadata describes none:
+/// (provider, event ID, event version, fields), from the templates of
+/// `ClrEtwAll.man` (dotnet/runtime, MIT, facts only) and, for the sample
+/// profiler, TraceEvent.
+const KNOWN_FIELDS: &[(&str, u32, u32, Layout)] = &[
+    (
+        RUNTIME,
+        1,
+        2,
+        &[
+            ("Count", T_U32),
+            ("Depth", T_U32),
+            ("Reason", T_U32),
+            ("Type", T_U32),
+            ("ClrInstanceID", T_U16),
+            ("ClientSequenceNumber", T_U64),
+        ],
+    ),
+    (
+        RUNTIME,
+        2,
+        1,
+        &[("Count", T_U32), ("Depth", T_U32), ("ClrInstanceID", T_U16)],
+    ),
+    (RUNTIME, 3, 1, GC_NO_USER_DATA),
+    (
+        RUNTIME,
+        4,
+        2,
+        &[
+            ("GenerationSize0", T_U64),
+            ("TotalPromotedSize0", T_U64),
+            ("GenerationSize1", T_U64),
+            ("TotalPromotedSize1", T_U64),
+            ("GenerationSize2", T_U64),
+            ("TotalPromotedSize2", T_U64),
+            ("GenerationSize3", T_U64),
+            ("TotalPromotedSize3", T_U64),
+            ("FinalizationPromotedSize", T_U64),
+            ("FinalizationPromotedCount", T_U64),
+            ("PinnedObjectCount", T_U32),
+            ("SinkBlockCount", T_U32),
+            ("GCHandleCount", T_U32),
+            ("ClrInstanceID", T_U16),
+            ("GenerationSize4", T_U64),
+            ("TotalPromotedSize4", T_U64),
+        ],
+    ),
+    (
+        RUNTIME,
+        5,
+        1,
+        &[
+            ("Address", T_U64),
+            ("Size", T_U64),
+            ("Type", T_U32),
+            ("ClrInstanceID", T_U16),
+        ],
+    ),
+    (RUNTIME, 7, 1, GC_NO_USER_DATA),
+    (RUNTIME, 8, 1, GC_NO_USER_DATA),
+    (
+        RUNTIME,
+        9,
+        1,
+        &[
+            ("Reason", T_U32),
+            ("Count", T_U32),
+            ("ClrInstanceID", T_U16),
+        ],
+    ),
+    (
+        RUNTIME,
+        13,
+        1,
+        &[("Count", T_U32), ("ClrInstanceID", T_U16)],
+    ),
+    (RUNTIME, 14, 1, GC_NO_USER_DATA),
+    (
+        RUNTIME,
+        35,
+        0,
+        &[("Reason", T_U32), ("ClrInstanceID", T_U16)],
+    ),
+    (RUNTIME, 187, 0, RUNTIME_INFORMATION),
+    (
+        RUNTIME,
+        202,
+        0,
+        &[
+            ("HeapNum", T_U32),
+            ("ClrInstanceID", T_U16),
+            ("Type", T_U32),
+            ("Bytes", T_U64),
+        ],
+    ),
+    (RUNDOWN, 144, 1, METHOD_VERBOSE_V1),
+    (RUNDOWN, 144, 2, METHOD_VERBOSE_V2),
+    (RUNDOWN, 146, 1, GC_NO_USER_DATA),
+    (RUNDOWN, 148, 1, GC_NO_USER_DATA),
+    (RUNDOWN, 152, 1, DOMAIN_MODULE_V1),
+    (RUNDOWN, 154, 2, MODULE_V2),
+    (RUNDOWN, 156, 1, ASSEMBLY_V1),
+    (RUNDOWN, 158, 1, APP_DOMAIN_V1),
+    (RUNDOWN, 187, 0, RUNTIME_INFORMATION),
+    (SAMPLE_PROFILER, 0, 0, &[("Type", T_I32)]),
+];
+
+/// `m` with the fields of its known layout, if its metadata describes
+/// none.
+fn with_known_fields(mut m: Meta) -> Meta {
+    if m.fields.is_empty()
+        && let Some((_, _, _, fields)) = KNOWN_FIELDS
+            .iter()
+            .find(|(p, id, v, _)| *p == m.provider && *id == m.event_id && *v == m.version)
+    {
+        m.fields = fields
+            .iter()
+            .map(|&(name, ty)| FieldDesc {
+                name: name.to_owned(),
+                ty,
+            })
+            .collect();
+    }
+    m
 }
 
 /// The events of Microsoft-Windows-DotNETRuntime, by ID (the symbols of
@@ -1582,7 +1855,7 @@ async fn meta_index(cx: &Cx, ctx: &Ctx) -> Result<Arc<MetaIndex>> {
                             break;
                         };
                         if let Some((id, m)) = parse_meta_fs(payload, &mut Vec::new()) {
-                            index.map.insert((id, at), Arc::new(m));
+                            index.map.insert((id, at), Arc::new(with_known_fields(m)));
                         }
                         p = if compressed {
                             end
@@ -1604,7 +1877,7 @@ async fn meta_index(cx: &Cx, ctx: &Ctx) -> Result<Arc<MetaIndex>> {
                             break;
                         };
                         if let Some((id, m)) = parse_meta_v6(row, &mut Vec::new()) {
-                            index.map.insert((id, at), Arc::new(m));
+                            index.map.insert((id, at), Arc::new(with_known_fields(m)));
                         }
                         p = end;
                         cx.charge((to_u64(row.len()) / 16).saturating_add(1)).await;

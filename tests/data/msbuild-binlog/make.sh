@@ -68,3 +68,13 @@ cat > tiny.proj <<'X'
 X
 date -u
 $CLEAN TZ=Asia/Tokyo dotnet msbuild tiny.proj -nologo -p:Foo=bar -bl:/work/out/gp.binlog -v:m
+
+# A failed build (failed.binlog.gz): an Error task, so BuildFinished
+# records Succeeded = false. MSBuild exits non-zero.
+mkdir -p /tmp/f && cd /tmp/f
+cat > fail.proj <<'Y'
+<Project DefaultTargets="Build">
+  <Target Name="Build"><Error Text="a neutral error" Code="FF0002" /></Target>
+</Project>
+Y
+$CLEAN dotnet msbuild fail.proj -nologo -bl:/work/out/failed.binlog -v:m || true

@@ -558,12 +558,36 @@ zip_variant!(
     "Terraform saved plan",
     ["tfplan"],
     "application/zip",
-    |h| first_entry(h, b"tfplan")
-        && entry_names(h).next() == Some(b"tfplan".as_slice())
-        && (has_entry(h, b"tfstate")
-            || has_entry(h, b"tfstate-prev")
-            || entry_names(h).any(|n| n.starts_with(b"tfconfig/")))
+    |h| {
+        let ours =
+            |n: &[u8]| n == b"tfstate" || n == b"tfstate-prev" || n.starts_with(b"tfconfig/");
+        // A large plan pushes the other entries past the probe window;
+        // the central directory's last entries, in the tail, name them.
+        first_entry(h, b"tfplan")
+            && entry_names(h).next() == Some(b"tfplan".as_slice())
+            && (entry_names(h).any(ours) || tail_names(h).any(ours))
+    }
 );
+
+/// File names of the central directory headers in the probe's tail (the
+/// last entries the archive lists).
+fn tail_names<'a>(h: &'a Head<'_>) -> impl Iterator<Item = &'a [u8]> {
+    let tail = h.tail;
+    let mut from = 0usize;
+    std::iter::from_fn(move || {
+        loop {
+            let q = crate::bytes::find(tail, &CENTRAL.to_le_bytes(), from)?;
+            from = q.saturating_add(1);
+            let Some(len) = u16_le(tail, q.saturating_add(28)) else {
+                continue;
+            };
+            let start = q.saturating_add(46);
+            if let Some(name) = tail.get(start..start.saturating_add(usize::from(len))) {
+                return Some(name);
+            }
+        }
+    })
+}
 
 pub static FORMAT: Format = Format {
     name: "zip",

@@ -11,4 +11,4 @@ expression: "common::explore(&display_name(&path), &data)"
       _base_archive_name_offset: 0x0  [0x10+0x4]
       _base_archive_name_size: 0  [0x14+0x4]
     Header data  [0x18+0x2f8]
-      ! unsupported: the header layout of CDS archive version 15 is not known (versions 11, 18 and 19 are)
+      ! unsupported: the header layout of CDS archive version 15 is not known (versions 5, 11, 18 and 19 are)

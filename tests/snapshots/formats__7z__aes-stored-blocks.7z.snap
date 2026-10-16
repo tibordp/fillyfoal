@@ -1,0 +1,79 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ aes-stored-blocks.7z — 7-Zip archive, 2 files, AES-256 + Copy  [0x0+0x10e]
+  ▾ Signature header — version 0.4  [0x0+0x20]
+      Signature: 37 7a bc af 27 1c  |7z..'.|  [0x0+0x6]
+      Major version: 0  [0x6+0x1]
+      Minor version: 4  [0x7+0x1]
+      Start header CRC: 0x22188445  [0x8+0x4]
+      Next header offset: 0x30  [0xc+0x8]
+      Next header size: 190 — 190 bytes  [0x14+0x8]
+      Next header CRC: 0xf1ead13f  [0x1c+0x4]
+  ▾ Files — 2 files  [0x50+0xbe]
+    ▾ blocks.txt — 32 bytes  [0x20+0x20]
+        Modification time: 2024-01-02 03:04:00 UTC
+        Attributes: 0x81a48020 — -rw-r--r--
+        Size: 32 — 32 bytes
+        Folder: 0
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [0x20+0x20]
+          CRC32: 0x9cee60bc — valid
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#1:0x0+0x20]
+            Line 1: "thirty-two bytes of plain text."  [#1:0x0+0x1f]
+    ▾ small.txt — 6 bytes  [0x40+0x10]
+        Modification time: 2024-01-02 03:04:00 UTC
+        Attributes: 0x81a48020 — -rw-r--r--
+        Size: 6 — 6 bytes
+        Folder: 1
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [0x40+0x10]
+          CRC32: 0xb61c02a7 — valid
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#2:0x0+0x6]
+            Line 1: "small"  [#2:0x0+0x5]
+  ▾ Folders — 2 folders  [0x20+0x30]
+    ▾ Folder 0 — AES-256 + Copy, 32 bytes → 32 bytes, 1 stream  [0x20+0x20]
+      ▾ Coder 0: "AES-256" — 1 in, 1 out
+          Key derivation: 19 — 2^19 SHA-256 rounds
+          Salt — (none)
+          IV: 09 8a 82 43 3d f6 f1 8c c5 63 25 55 b7 ec e6 bc  |...C=....c%U....|
+        Coder 1: "Copy" — 1 in, 1 out
+        Unpacked size: 32 — 32 bytes
+        Streams: 1
+      ▾ Data — UTF-8 text, LF line endings, 1 line  [0x20+0x20]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#1:0x0+0x20]
+            Line 1: "thirty-two bytes of plain text."  [#1:0x0+0x1f]
+    ▾ Folder 1 — AES-256 + Copy, 16 bytes → 6 bytes, 1 stream  [0x40+0x10]
+      ▾ Coder 0: "AES-256" — 1 in, 1 out
+          Key derivation: 19 — 2^19 SHA-256 rounds
+          Salt — (none)
+          IV: 43 fe 2f 4e e1 17 e7 8d 83 08 89 4a ba 86 23 5c  |C./N.......J..#\|
+        Coder 1: "Copy" — 1 in, 1 out
+        Unpacked size: 6 — 6 bytes
+        Streams: 1
+      ▾ Data — UTF-8 text, LF line endings, 1 line  [0x40+0x10]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#2:0x0+0x6]
+            Line 1: "small"  [#2:0x0+0x5]
+  ▾ Next header — kHeader  [0x50+0xbe]
+    ▾ kMainStreamsInfo  [0x51+0x59]
+      ▾ kPackInfo — 2 packed streams, at 0x0  [0x52+0x7]
+          kSize — 2 sizes  [0x55+0x3]
+      ▾ kUnPackInfo — 2 folders  [0x59+0x44]
+          Folder 0 — AES-256 + Copy  [0x5d+0x1d]
+          Folder 1 — AES-256 + Copy  [0x7a+0x1d]
+          kCodersUnPackSize  [0x97+0x5]
+      ▾ kSubStreamsInfo — 2 streams  [0x9d+0xc]
+          kCRC — 2 CRCs  [0x9e+0xa]
+    ▾ kFilesInfo — 2 files  [0xaa+0x63]
+        kDummy — 15 bytes  [0xac+0x11]
+        kName — 43 bytes  [0xbd+0x2d]
+        kDummy — 0 bytes  [0xea+0x2]
+        kMTime — 18 bytes  [0xec+0x14]
+        kWinAttributes — 10 bytes  [0x100+0xc]

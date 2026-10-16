@@ -23,12 +23,15 @@
 //! wrong one fails there and the next attempt is asked for. A stored
 //! folder (AES and no decompressor, `-mx0`) has nothing to fail, so it is
 //! checked on the zeros 7-Zip pads its last block with and on the CRC of
-//! its first file (decrypted as far as 64 MiB); with neither, it stays
-//! encrypted rather than show what a wrong password would. Only a checked
-//! key serves the other folders. An encrypted
-//! header (`-mhe=on`) is decrypted only when the files, folders or header
-//! outline are expanded. The password is hashed as UTF-16LE. Not
-//! supported: AES inside BCJ2 folders (an AES coder per packed stream).
+//! its first file (decrypted as far as 64 MiB); with neither, the password
+//! is checked on another folder of the archive that can check it (7-Zip
+//! encrypts a whole archive with one password), and only an archive with
+//! no such folder leaves it encrypted rather than show what a wrong
+//! password would. Only a checked key serves the other folders. An
+//! encrypted BCJ2 folder has an AES coder in front of each packed stream
+//! (one key, an IV each). An encrypted header (`-mhe=on`) is decrypted
+//! only when the files, folders or header outline are expanded. The
+//! password is hashed as UTF-16LE.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -875,8 +878,12 @@ struct Plan {
     /// The codec reads them interleaved (see `codec::bcj2::Schedule`).
     pieces: Vec<(u64, u64)>,
     /// For an encrypted folder: its AES coder, which decrypts the packed
-    /// stream before `codec` sees it.
+    /// stream before `codec` sees it (for a BCJ2 folder, the first of its
+    /// AES coders, which all derive one key).
     aes: Option<Arc<Lock>>,
+    /// For an encrypted BCJ2 folder: the IV of the AES coder in front of
+    /// each of its four streams, if encrypted.
+    ivs: Vec<Option<[u8; 16]>>,
 }
 
 /// The decoding plan of `f`, or why it cannot be decoded: a chain of
@@ -889,7 +896,7 @@ fn plan(f: &Folder, unlock: Unlock) -> std::result::Result<Plan, String> {
         && f.coders.iter().all(|c| c.ins == 1 && c.outs == 1)
         && f.binds.len() == n.saturating_sub(1);
     if !simple {
-        return bcj2_plan(f);
+        return bcj2_plan(f, unlock);
     }
     // With one-in, one-out coders, input and output indices are coder
     // indices. The packed stream feeds the coder whose input is unbound;
@@ -977,6 +984,7 @@ fn plan(f: &Folder, unlock: Unlock) -> std::result::Result<Plan, String> {
         post,
         pieces: Vec::new(),
         aes,
+        ivs: Vec::new(),
     })
 }
 
@@ -1018,10 +1026,12 @@ fn decompressor(c: &Coder, size: u64) -> std::result::Result<Codec, String> {
 
 /// The plan of a BCJ2 folder: the BCJ2 coder's output is the folder's,
 /// and each of its four inputs (main, CALL, JMP, range coder) is a packed
-/// stream, either as is or through one decompressing coder. The decoder
-/// reads all four side by side, so its input interleaves them (see
-/// `folder_output`).
-fn bcj2_plan(f: &Folder) -> std::result::Result<Plan, String> {
+/// stream, either as is or through one decompressing coder, and either
+/// way maybe decrypted first by an AES coder of its own (`7z a -p` with
+/// BCJ2: "BCJ2 LZMA2 LZMA LZMA 7zAES ×4", each AES coder with its own IV
+/// and one key). The decoder reads all four side by side, so its input
+/// interleaves them (see `folder_output`).
+fn bcj2_plan(f: &Folder, unlock: Unlock) -> std::result::Result<Plan, String> {
     use crate::codec::bcj2;
     let fail = || f.methods();
     if f.coders.iter().any(|c| c.outs != 1) || f.binds.len() != f.coders.len().saturating_sub(1) {
@@ -1047,36 +1057,70 @@ fn bcj2_plan(f: &Folder) -> std::result::Result<Plan, String> {
         pack_offsets.push(at);
         at = at.saturating_add(len);
     }
-    // Each BCJ2 input: its packed stream, codec and decoded size. Every
-    // other coder must feed one of them straight from a packed stream.
+    // Each BCJ2 input: its packed stream, codec, decoded size and AES
+    // coder. Every other coder must feed one of them from a packed
+    // stream: a decompressor, an AES coder, or an AES coder feeding a
+    // decompressor.
     let mut inputs = Vec::new();
+    let mut aes: Option<AesProps> = None;
     for j in 0..4u64 {
-        let input = base(last).saturating_add(j);
-        let (pack_input, codec, size) = match f.binds.iter().find(|&&(inp, _)| inp == input) {
-            Some(&(_, out)) => {
-                let c = f.coders.get(to_usize(out)).ok_or_else(fail)?;
-                if c.ins != 1 || out == last {
+        let mut input = base(last).saturating_add(j);
+        let mut codec = None;
+        let mut iv = None;
+        let mut size = None;
+        while let Some(&(_, out)) = f.binds.iter().find(|&&(inp, _)| inp == input) {
+            let c = f.coders.get(to_usize(out)).ok_or_else(fail)?;
+            // At most a decompressor, then an AES coder before it.
+            if c.ins != 1 || out == last || iv.is_some() {
+                return Err(fail());
+            }
+            let out_size = f.unpack_sizes.get(to_usize(out)).copied().unwrap_or(0);
+            if c.id == AES_ID {
+                let props = AesProps::parse(&c.props)?;
+                iv = Some(props.iv);
+                match &aes {
+                    Some(first) if first.cycles != props.cycles || first.salt != props.salt => {
+                        return Err("AES-256 coders with different keys".to_owned());
+                    }
+                    Some(_) => {}
+                    None => aes = Some(props),
+                }
+            } else {
+                if codec.is_some() {
                     return Err(fail());
                 }
-                let size = f.unpack_sizes.get(to_usize(out)).copied().unwrap_or(0);
-                (base(out), decompressor(c, size)?, Some(size))
+                codec = Some(decompressor(c, out_size)?);
+                size = Some(out_size);
             }
-            None => (input, Codec::Stored, None),
-        };
+            input = base(out);
+        }
         let p = f
             .pack_inputs
             .iter()
-            .position(|&i| i == pack_input)
+            .position(|&i| i == input)
             .ok_or_else(fail)?;
         let offset = pack_offsets.get(p).copied().ok_or_else(fail)?;
         let len = f.pack_sizes.get(p).copied().ok_or_else(fail)?;
-        inputs.push((offset, len, codec, size.unwrap_or(len)));
+        // Decrypted only, the stream is as long as its packed bytes,
+        // padded to a whole block (BCJ2 reads no further than it needs).
+        // Decrypted and decompressed, the size bounds every stage's output
+        // (`bcj2::Stream`), the decryption's too, which may be longer (8
+        // bytes of CALL targets from a 16-byte block); the decompressor
+        // stops at its own size.
+        let size = match (size, iv) {
+            (Some(size), Some(_)) => size.max(len),
+            (Some(size), None) => size,
+            (None, _) => len,
+        };
+        inputs.push((offset, len, codec.unwrap_or(Codec::Stored), size, iv));
     }
     let mut pieces = Vec::new();
     let mut streams = Vec::new();
-    for (offset, len, codec, size) in inputs {
+    let mut ivs = Vec::new();
+    for (offset, len, codec, size, iv) in inputs {
         pieces.push((offset, len));
         streams.push(bcj2::Stream { len, codec, size });
+        ivs.push(iv);
     }
     let streams: [bcj2::Stream; 4] = streams.try_into().map_err(|_| fail())?;
     let size = f.unpack_sizes.get(to_usize(last)).copied().unwrap_or(0);
@@ -1086,7 +1130,13 @@ fn bcj2_plan(f: &Folder) -> std::result::Result<Plan, String> {
         size,
         post: Vec::new(),
         pieces,
-        aes: None,
+        aes: aes.map(|props| {
+            Arc::new(Lock {
+                props: Ok(props),
+                unlock,
+            })
+        }),
+        ivs,
     })
 }
 
@@ -1184,13 +1234,16 @@ const STORED_VERIFY_LEN: u64 = 64 << 20;
 /// What unlocks an encrypted folder: the realm of its password (the
 /// archive: one password serves the header and every folder) and the
 /// CRCs of the start of its output to check a password against.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct Unlock {
     realm: Span,
     /// The folder's output size and CRC-32, if recorded.
     folder: (u64, Option<u32>),
     /// The size and CRC-32 of the folder's first stream, if known.
     first: Option<(u64, Option<u32>)>,
+    /// Another folder of the archive that checks a password on its own,
+    /// for a folder that cannot (see [`verifier`]).
+    verifier: Option<Arc<Verifier>>,
 }
 
 impl Unlock {
@@ -1201,7 +1254,13 @@ impl Unlock {
             realm,
             folder: (f.unpack_size(), f.crc),
             first,
+            verifier: None,
         }
+    }
+
+    fn with_verifier(mut self, verifier: Option<Arc<Verifier>>) -> Self {
+        self.verifier = verifier;
+        self
     }
 
     /// The length and CRC-32 of the folder's first bytes, if recorded and
@@ -1261,15 +1320,122 @@ struct Lock {
     unlock: Unlock,
 }
 
+impl Lock {
+    /// What the folder of `plan`, packed in `packed` bytes, checks a
+    /// password against on its own: the CRC of its first bytes, or none
+    /// (a decompressor fails on a wrong key; a stored folder's padding is
+    /// long enough), or why it cannot (a stored folder with neither).
+    fn own_check(
+        &self,
+        plan: &Plan,
+        packed: u64,
+    ) -> std::result::Result<Option<(u64, u32)>, String> {
+        if plan.codec == Codec::Stored {
+            stored_check(&self.unlock, plan.size, packed)
+        } else {
+            Ok(self.unlock.check(VERIFY_LEN))
+        }
+    }
+}
+
+/// A folder that checks a password on its own, for the folders of the
+/// same archive that cannot (a stored folder with no CRC within
+/// [`STORED_VERIFY_LEN`] and too little padding): 7-Zip encrypts every
+/// folder of an archive with one password, so a password this folder
+/// accepts is the archive's.
+#[derive(Debug)]
+struct Verifier {
+    span: Span,
+    plan: Plan,
+}
+
+/// The verifier of the archive's folders packed at `spans`: the encrypted
+/// folder checked most cheaply on its own (fewest bytes decoded; the
+/// first of equals), if any can be. Only when some encrypted folder
+/// cannot check a password on its own.
+async fn verifier(cx: &Cx, archive: &Archive, file: Span, spans: &[Span]) -> Option<Arc<Verifier>> {
+    let mut best: Option<(u64, Span, Plan)> = None;
+    let mut needed = false;
+    let mut first_stream = 0usize;
+    for (f, &span) in archive.streams.folders.iter().zip(spans) {
+        cx.checkpoint().await;
+        let first = first_stream;
+        first_stream = first_stream.saturating_add(to_usize(f.streams));
+        let Ok(plan) = plan(f, Unlock::new(file, f, first_of(archive, first))) else {
+            continue;
+        };
+        let Some(lock) = plan.aes.clone() else {
+            continue;
+        };
+        if lock.props.is_err() {
+            continue;
+        }
+        let Ok(check) = lock.own_check(&plan, span.len) else {
+            needed = true;
+            continue;
+        };
+        // Bytes decoded to check it.
+        let cost = match (check, plan.codec == Codec::Stored) {
+            (Some((len, _)), _) => len,
+            (None, true) => 0,
+            (None, false) => plan.size.min(VERIFY_LEN),
+        };
+        if best.as_ref().is_none_or(|b| cost < b.0) {
+            best = Some((cost, span, plan));
+        }
+    }
+    if !needed {
+        return None;
+    }
+    best.map(|(_, span, plan)| Arc::new(Verifier { span, plan }))
+}
+
 /// Keys derived for an archive: (rounds, salt, attempt or `None` once
 /// verified, key). Keyed by the attempt (answers are fixed per attempt),
 /// so a folder after the first neither asks again nor derives again.
 type KeyCache = std::sync::Mutex<Vec<(u8, Vec<u8>, Option<u32>, [u8; 32])>>;
 
+fn cached_key(cache: &KeyCache, props: &AesProps, attempt: Option<u32>) -> Option<[u8; 32]> {
+    cache.lock().ok().and_then(|found| {
+        found
+            .iter()
+            .find(|(c, s, a, _)| *c == props.cycles && *s == props.salt && *a == attempt)
+            .map(|e| e.3)
+    })
+}
+
+fn cache_key(cache: &KeyCache, props: &AesProps, attempt: Option<u32>, key: [u8; 32]) {
+    if let Ok(mut found) = cache.lock() {
+        found.push((props.cycles, props.salt.clone(), attempt, key));
+    }
+}
+
+/// The key `props` derive from `secret`, the answer to `attempt`
+/// (derived in budgeted steps, once per attempt).
+async fn derive(
+    cx: &Cx,
+    cache: &KeyCache,
+    props: &AesProps,
+    attempt: u32,
+    secret: &crate::secret::Secret,
+) -> [u8; 32] {
+    if let Some(key) = cached_key(cache, props, Some(attempt)) {
+        return key;
+    }
+    let password = sevenzip::utf16le(secret.expose());
+    let mut kdf = sevenzip::SevenZipKdf::new(&password, &props.salt, props.cycles);
+    crate::codec::crypto::run(cx, &mut kdf).await;
+    let key = kdf.key();
+    cache_key(cache, props, Some(attempt), key);
+    key
+}
+
 /// The AES key of an encrypted folder: asks for the archive's password
 /// and derives the key (in budgeted steps) until one decodes the start of
 /// the folder (and matches its CRC where known); 7z has no password check
 /// value, so a wrong password shows as a decoding error or a CRC mismatch.
+/// A folder that cannot check a password on its own is checked on its
+/// archive's [`Verifier`].
 async fn folder_key(cx: &Cx, span: Span, plan: &Plan, lock: &Lock) -> Result<[u8; 32]> {
     use crate::secret::{MAX_ATTEMPTS, SecretRequest};
     const PROMPT: &str = "Password for the encrypted 7z archive";
@@ -1278,16 +1444,6 @@ async fn folder_key(cx: &Cx, span: Span, plan: &Plan, lock: &Lock) -> Result<[u8
         .as_ref()
         .map_err(|why| Diagnostic::unsupported(why.clone()).at(span))?;
     let realm = lock.unlock.realm;
-    // A stored folder is checked on its padding and its first CRC; with
-    // neither, a wrong password could only show as garbage. Decided from
-    // the archive alone, before asking.
-    let stored = plan.codec == Codec::Stored;
-    let check = if stored {
-        stored_check(&lock.unlock, plan.size, span.len)
-            .map_err(|why| Diagnostic::unsupported(why).at(span))?
-    } else {
-        lock.unlock.check(VERIFY_LEN)
-    };
     let cache = match cx.cached::<KeyCache>(realm, "7z keys") {
         Some(cache) => cache,
         None => {
@@ -1296,29 +1452,44 @@ async fn folder_key(cx: &Cx, span: Span, plan: &Plan, lock: &Lock) -> Result<[u8
             cache
         }
     };
-    let find = |attempt: Option<u32>| {
-        cache.lock().ok().and_then(|found| {
-            found
-                .iter()
-                .find(|(c, s, a, _)| *c == props.cycles && *s == props.salt && *a == attempt)
-                .map(|e| e.3)
-        })
-    };
-    if let Some(key) = find(None) {
+    if let Some(key) = cached_key(&cache, props, None) {
         return Ok(key);
     }
+    // The folder a password is checked on: this one, or, for a stored
+    // folder with neither a CRC nor padding (where a wrong password could
+    // only show as garbage), the archive's verifier. Decided from the
+    // archive alone, before asking.
+    let (on, plan_on, lock_on, check) = match lock.own_check(plan, span.len) {
+        Ok(check) => (span, plan, lock, check),
+        Err(why) => {
+            let refuse = || Diagnostic::unsupported(why.clone()).at(span);
+            let v = lock.unlock.verifier.as_ref().ok_or_else(refuse)?;
+            let lock_on = v.plan.aes.as_deref().ok_or_else(refuse)?;
+            let check = lock_on
+                .own_check(&v.plan, v.span.len)
+                .map_err(|_| refuse())?;
+            (v.span, &v.plan, lock_on, check)
+        }
+    };
+    let props_on = lock_on
+        .props
+        .as_ref()
+        .map_err(|why| Diagnostic::unsupported(why.clone()).at(span))?;
     // Refused up front only for what the host's work limit could not
     // finish (see `docs/DISSECTORS.md`); without one, it runs.
-    if props.cycles != sevenzip::RAW_KEY
-        && let Some(max) = cx.limits().max_work
-        && (1u64 << props.cycles) > max.saturating_mul(2) / 5
-    {
-        return Err(Diagnostic::limit(format!(
-            "key derivation too expensive (2^{} SHA-256 rounds) for the work limit",
-            props.cycles
-        ))
-        .at(span));
+    for p in [props, props_on] {
+        if p.cycles != sevenzip::RAW_KEY
+            && let Some(max) = cx.limits().max_work
+            && (1u64 << p.cycles) > max.saturating_mul(2) / 5
+        {
+            return Err(Diagnostic::limit(format!(
+                "key derivation too expensive (2^{} SHA-256 rounds) for the work limit",
+                p.cycles
+            ))
+            .at(span));
+        }
     }
+    let stored = plan_on.codec == Codec::Stored;
     for attempt in 0..MAX_ATTEMPTS {
         let Some(secret) = cx
             .secret(SecretRequest::password(realm, PROMPT, attempt))
@@ -1331,25 +1502,16 @@ async fn folder_key(cx: &Cx, span: Span, plan: &Plan, lock: &Lock) -> Result<[u8
             };
             return Err(Diagnostic::unsupported(why).at(span));
         };
-        let key = match find(Some(attempt)) {
-            Some(key) => key,
-            None => {
-                let password = sevenzip::utf16le(secret.expose());
-                let mut kdf = sevenzip::SevenZipKdf::new(&password, &props.salt, props.cycles);
-                crate::codec::crypto::run(cx, &mut kdf).await;
-                let key = kdf.key();
-                if let Ok(mut found) = cache.lock() {
-                    found.push((props.cycles, props.salt.clone(), Some(attempt), key));
-                }
-                key
-            }
-        };
-        let padded = !stored || padding_is_zero(cx, span, plan, props, &key).await?;
+        let key_on = derive(cx, &cache, props_on, attempt, &secret).await;
+        let padded = !stored || padding_is_zero(cx, on, plan_on, props_on, &key_on).await?;
         // Padding long enough to check on its own needs no CRC.
         let checked = stored && check.is_none();
-        if padded && (checked || trial(cx, span, plan, &key, check).await?) {
-            if let Ok(mut found) = cache.lock() {
-                found.push((props.cycles, props.salt.clone(), None, key));
+        if padded && (checked || trial(cx, on, plan_on, &key_on, check).await?) {
+            cache_key(&cache, props_on, None, key_on);
+            // The same password, with this folder's own rounds and salt.
+            let key = derive(cx, &cache, props, attempt, &secret).await;
+            if cached_key(&cache, props, None).is_none() {
+                cache_key(&cache, props, None, key);
             }
             return Ok(key);
         }
@@ -1402,6 +1564,7 @@ async fn trial(
     let Some(mut decoder) = codec.decoder() else {
         return Ok(false);
     };
+    let span = packed_input(cx, span, plan).await?;
     let want = check.map_or(plan.size.min(VERIFY_LEN), |c| c.0);
     // A good stream gives `want` bytes from about as much input; garbage
     // makes the decoder ask for more until the input ends, so stop at a
@@ -1478,6 +1641,24 @@ impl Plan {
     /// encrypted folder), the decompressor, then the filters (each a
     /// streaming stage of a chain).
     fn codec(&self, key: Option<&[u8; 32]>) -> Codec {
+        // An encrypted BCJ2 folder: each encrypted stream is decrypted
+        // with its own IV before its decompressor.
+        if let (Codec::Bcj2(params), Some(key)) = (&self.codec, key)
+            && self.ivs.iter().any(Option::is_some)
+        {
+            let mut params = (**params).clone();
+            for (s, iv) in params.streams.iter_mut().zip(&self.ivs) {
+                let Some(iv) = iv else { continue };
+                let aes = Codec::AesCbcRaw(Key::new([&key[..], &iv[..]].concat()));
+                s.codec = match &s.codec {
+                    Codec::Stored => aes,
+                    codec => {
+                        Codec::chain("7z coders", "7z coders (lazy)", vec![aes, codec.clone()])
+                    }
+                };
+            }
+            return Codec::Bcj2(Arc::new(params));
+        }
         let mut stages = Vec::new();
         if let (Some(lock), Some(key)) = (&self.aes, key)
             && let Ok(props) = &lock.props
@@ -1526,36 +1707,7 @@ async fn folder_output(cx: &Cx, span: Span, plan: &Plan) -> Result<(Span, Option
     if codec == Codec::Stored {
         return Ok((span, None));
     }
-    // Several packed streams (BCJ2), interleaved as the codec reads them,
-    // up to the first piece the folder's data does not hold whole (the
-    // codec then finds its input short). Each piece but the last of each
-    // stream is a full `bcj2::PIECE`, so the list is bounded by the data.
-    let span = if plan.pieces.is_empty() {
-        span
-    } else {
-        let lens: [u64; 4] = std::array::from_fn(|k| plan.pieces.get(k).map_or(0, |p| p.1));
-        let mut pieces = Vec::new();
-        for (k, at, len) in crate::codec::bcj2::Schedule::new(lens) {
-            let start = plan.pieces.get(k).map_or(0, |p| p.0).saturating_add(at);
-            match span.sub_exact(start, len) {
-                Ok(piece) => pieces.push(piece),
-                Err(_) => {
-                    pieces.push(span.sub(start, len));
-                    break;
-                }
-            }
-            if pieces.len().is_multiple_of(256) {
-                cx.checkpoint().await;
-            }
-        }
-        cx.add_pieces(
-            crate::span::Origin {
-                parent: span,
-                transform: "7z packed streams",
-            },
-            pieces,
-        )?
-    };
+    let span = packed_input(cx, span, plan).await?;
     if plan.size > LAZY_THRESHOLD && plan.size <= span.len.saturating_mul(codec.max_ratio()) {
         let decoded = cx.decode_lazy(span, &codec, plan.size)?;
         return Ok((decoded, None));
@@ -1565,6 +1717,39 @@ async fn folder_output(cx: &Cx, span: Span, plan: &Plan) -> Result<(Span, Option
     let expected = (plan.aes.is_none() || plan.codec != Codec::Stored).then_some(plan.size);
     let decoded = decode_span(cx, span, &codec, expected).await?;
     Ok((decoded.span.sub(0, plan.size), decoded.error))
+}
+
+/// The input of the folder packed at `span`'s codec: the packed data, or
+/// for a BCJ2 folder its packed streams, interleaved as the codec reads
+/// them, up to the first piece the folder's data does not hold whole (the
+/// codec then finds its input short). Each piece but the last of each
+/// stream is a full `bcj2::PIECE`, so the list is bounded by the data.
+async fn packed_input(cx: &Cx, span: Span, plan: &Plan) -> Result<Span> {
+    if plan.pieces.is_empty() {
+        return Ok(span);
+    }
+    let lens: [u64; 4] = std::array::from_fn(|k| plan.pieces.get(k).map_or(0, |p| p.1));
+    let mut pieces = Vec::new();
+    for (k, at, len) in crate::codec::bcj2::Schedule::new(lens) {
+        let start = plan.pieces.get(k).map_or(0, |p| p.0).saturating_add(at);
+        match span.sub_exact(start, len) {
+            Ok(piece) => pieces.push(piece),
+            Err(_) => {
+                pieces.push(span.sub(start, len));
+                break;
+            }
+        }
+        if pieces.len().is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+    }
+    cx.add_pieces(
+        crate::span::Origin {
+            parent: span,
+            transform: "7z packed streams",
+        },
+        pieces,
+    )
 }
 
 /// Expander: decodes a folder and dissects `len` bytes at `offset` of its
@@ -1920,14 +2105,24 @@ async fn folder_spans(cx: &Cx, archive: &Archive, file: Span, pack_base: u64) ->
 }
 
 async fn list_folders(cx: Cx, (input, header): (Input, Arc<Header>)) -> Result<()> {
-    let (archive, pack_base, _) = header.open(&cx, input.span).await?;
+    let (archive, pack_base, decrypted) = header.open(&cx, input.span).await?;
+    if decrypted.is_some() {
+        // Counted once the encrypted header is open.
+        cx.annotate(count(
+            to_u64(archive.streams.folders.len()),
+            "folder",
+            "folders",
+        ));
+    }
     let spans = folder_spans(&cx, &archive, input.span, pack_base).await;
+    let verifier = verifier(&cx, &archive, input.span, &spans).await;
     cx.set_count(Count::Exact(to_u64(archive.streams.folders.len())));
     let mut first_stream = 0usize;
     for (i, (f, span)) in archive.streams.folders.iter().zip(spans).enumerate() {
         let first = first_stream;
         first_stream = first_stream.saturating_add(to_usize(f.streams));
-        let unlock = Unlock::new(input.span, f, first_of(&archive, first));
+        let unlock =
+            Unlock::new(input.span, f, first_of(&archive, first)).with_verifier(verifier.clone());
         let methods = f.methods();
         let mut children: Vec<Node> = f
             .coders
@@ -2073,9 +2268,13 @@ fn first_of(archive: &Archive, i: usize) -> Option<(u64, Option<u32>)> {
 
 async fn list_files(cx: Cx, (input, header): (Input, Arc<Header>)) -> Result<()> {
     let file = input.span;
-    let (archive, pack_base, _) = header.open(&cx, file).await?;
+    let (archive, pack_base, decrypted) = header.open(&cx, file).await?;
+    if decrypted.is_some() {
+        cx.annotate(count(archive.files.count, "file", "files"));
+    }
     cx.set_count(Count::Exact(archive.files.count));
     let spans = folder_spans(&cx, &archive, file, pack_base).await;
+    let verifier = verifier(&cx, &archive, file, &spans).await;
     // Walk files and substreams together.
     let mut folder = 0usize;
     let mut in_folder = 0u64;
@@ -2122,7 +2321,8 @@ async fn list_files(cx: Cx, (input, header): (Input, Arc<Header>)) -> Result<()>
             children.push(Node::new("Folder").value(uint(to_u64(folder), 64)));
             let methods = fo.map(Folder::methods).unwrap_or_default();
             let first = first_of(&archive, stream.saturating_sub(to_usize(in_folder)));
-            let content_node = match fo.map(|fo| plan(fo, Unlock::new(file, fo, first))) {
+            let unlock = |fo| Unlock::new(file, fo, first).with_verifier(verifier.clone());
+            let content_node = match fo.map(|fo| plan(fo, unlock(fo))) {
                 Some(Ok(p)) if p.is_stored() => {
                     let s = span.sub(offset_in_folder, size);
                     node = node.span(s);
@@ -2183,6 +2383,7 @@ mod tests {
             realm: Span::new(crate::span::SourceId::default_host(), 0, 0),
             folder,
             first,
+            verifier: None,
         }
     }
 

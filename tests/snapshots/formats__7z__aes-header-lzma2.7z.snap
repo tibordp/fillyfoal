@@ -19,7 +19,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Folder 0 — AES-256 + LZMA  [0x1ad+0x25]
           kCodersUnPackSize  [0x1d2+0x5]
           kCRC — 1 CRC  [0x1d7+0x6]
-  ▾ Files — in the encrypted header  [0x100+0xa0]
+  ▾ Files — 4 files  [0x100+0xa0]
     ▾ notes — directory
         Modification time: 2024-01-02 03:04:00 UTC
         Attributes: 0x41ed8010 — drwxr-xr-x
@@ -94,7 +94,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Line 37: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0x9c4+0x38]
           Line 38: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0xa06+0x38]
           Line 39: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0xa48+0x38]
-  ▾ Folders — in the encrypted header  [0x20+0x180]
+  ▾ Folders — 1 folder  [0x20+0x180]
     ▾ Folder 0 — AES-256 + LZMA2, 224 bytes → 2.6 KiB, 3 streams  [0x20+0xe0]
       ▾ Coder 0: "AES-256" — 1 in, 1 out
           Key derivation: 19 — 2^19 SHA-256 rounds

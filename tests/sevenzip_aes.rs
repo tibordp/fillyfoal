@@ -279,3 +279,76 @@ fn without_a_limit_the_derivation_runs_in_budgeted_steps() {
     assert!(reported.iter().all(|&(_, total)| total == 1 << 24));
     assert!(reported.windows(2).all(|w| w[1].0 > w[0].0), "{reported:?}");
 }
+
+/// `aes-stored-blocks.7z` with the CRC of its first file (`blocks.txt`,
+/// 32 bytes: whole AES blocks, no padding) removed from the plain header,
+/// so its stored folder cannot check a password on its own; the second
+/// (`small.txt`, 10 bytes of zero padding) can.
+fn without_the_first_crc() -> Vec<u8> {
+    let data = fixture("aes-stored-blocks.7z");
+    let off = u64::from_le_bytes(data[12..20].try_into().unwrap()) as usize;
+    let size = u64::from_le_bytes(data[20..28].try_into().unwrap()) as usize;
+    let mut header = data[32 + off..32 + off + size].to_vec();
+    assert_eq!(header[0], 0x01, "a plain header");
+    // kSubStreamsInfo's kCRC: all defined, then the two CRCs. Now only
+    // the second is defined (bit vector 01......).
+    let at = header
+        .windows(3)
+        .position(|w| w == [0x08, 0x0a, 0x01])
+        .unwrap()
+        + 1;
+    header.splice(at..at + 6, [0x0a, 0x00, 0x40]);
+    let mut out = data[..32 + off].to_vec();
+    out.extend_from_slice(&header);
+    out[20..28].copy_from_slice(&(header.len() as u64).to_le_bytes());
+    let crc = fillyfoal::codec::crc32(&header);
+    out[28..32].copy_from_slice(&crc.to_le_bytes());
+    let crc = fillyfoal::codec::crc32(&out[12..32]);
+    out[8..12].copy_from_slice(&crc.to_le_bytes());
+    out
+}
+
+/// A stored folder that cannot check a password on its own is checked
+/// on another folder of the archive: a wrong password is asked again, and
+/// the right one shows both files.
+#[test]
+fn a_stored_folder_is_checked_on_another_folder() {
+    let mut host = Host::named("x.7z", without_the_first_crc(), Limits::default());
+    host.passwords = vec!["wrong".into(), "fillyfoal".into()];
+    host.explore_all();
+    assert_eq!(attempts(&host), [0, 1]);
+    assert!(messages(&host).is_empty(), "{:?}", messages(&host));
+    let render = host.render();
+    assert!(
+        render.contains("thirty-two bytes of plain text."),
+        "{render}"
+    );
+    assert!(render.contains("\"small\""), "{render}");
+    // Only small.txt has a CRC left.
+    assert_eq!(render.matches("— valid").count(), 1, "{render}");
+    // Wrong only: neither file is shown.
+    let mut host = Host::named("x.7z", without_the_first_crc(), Limits::default());
+    host.passwords = vec!["wrong".into()];
+    host.explore_all();
+    assert_eq!(attempts(&host), [0, 1]);
+    let render = host.render();
+    assert!(!render.contains("thirty-two"), "{render}");
+    assert!(
+        messages(&host)
+            .iter()
+            .all(|m| m == "encrypted (wrong password)"),
+        "{:?}",
+        messages(&host)
+    );
+}
+
+/// BCJ2 with encryption: an AES coder in front of each of the four packed
+/// streams, each with its own IV and one key.
+#[test]
+fn bcj2_streams_are_decrypted() {
+    let host = explored("aes-bcj2.7z", &["wrong", "fillyfoal"], Limits::default());
+    assert_eq!(attempts(&host), [0, 1]);
+    assert!(messages(&host).is_empty(), "{:?}", messages(&host));
+    let render = host.render();
+    assert!(render.contains("CRC32: 0x308f5345 — valid"), "{render}");
+}
