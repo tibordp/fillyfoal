@@ -322,6 +322,63 @@ fn zstd_unsized(data: &[u8]) -> Vec<u8> {
     out
 }
 
+/// [`zstd_unsized`], but the frame records its content size, as `zstd`
+/// writes it when it compresses a file.
+fn zstd_sized(data: &[u8]) -> Vec<u8> {
+    let mut out = vec![0x28, 0xb5, 0x2f, 0xfd, 0xc0, 0x58]; // 8-byte FCS; 8 MiB window
+    out.extend_from_slice(&(data.len() as u64).to_le_bytes());
+    out.extend_from_slice(&zstd_unsized(data)[6..]);
+    out
+}
+
+/// Expands Decompressed under the root of `file` until its first child
+/// exists; that child, and the bytes read for it.
+fn first_member(host: &mut Host) -> (NodeId, u64) {
+    host.session.expand(host.root, 1);
+    let root = host.root;
+    while host.child(root, "Decompressed").is_none() {
+        match host.session.poll_node(root, 10_000) {
+            Progress::NeedBytes(r) => supply(host, r),
+            Progress::Idle => break,
+            _ => {}
+        }
+    }
+    let content = host.child(root, "Decompressed").unwrap();
+    host.bytes_supplied = 0;
+    host.session.expand(content, 1);
+    loop {
+        if let Some(&first) = host.session.children(content).unwrap().ids.first() {
+            return (first, host.bytes_supplied);
+        }
+        match host.session.poll_node(content, 10_000) {
+            Progress::NeedBytes(r) => {
+                host.bytes_supplied += r.iter().map(|r| r.len).sum::<u64>();
+                supply(host, r);
+            }
+            Progress::Idle => panic!("no members"),
+            _ => {}
+        }
+    }
+}
+
+/// A stream that records its decoded size (`zstd file.tar`) but holds a
+/// format that needs no length, such as tar, lists its first member at
+/// once too: knowing the size exactly would take a walk through the whole
+/// encoded file, which nothing here needs.
+#[test]
+fn sized_streams_of_streaming_formats_list_at_once() {
+    let tar = ustar(6, 1 << 20);
+    let file = zstd_sized(&tar);
+    let mut host = Host::named("big.tar.zst", file.clone(), Limits::default());
+    let (first, read) = first_member(&mut host);
+    assert_eq!(host.session.node(first).unwrap().name, "member0.bin");
+    assert!(
+        read < file.len() as u64 / 3,
+        "read {read} of {} bytes before the first member",
+        file.len()
+    );
+}
+
 /// A large compressed stream whose decoded size nothing records is decoded
 /// on demand: its first member is listed after reading a small part of the
 /// file (not after decoding all of it), with a provisional length that

@@ -1856,7 +1856,40 @@ impl Cx {
             transform: codec.lazy_name(),
         };
         if let Some(found) = self.derived(origin) {
-            return Ok(found.span);
+            if !len_known {
+                return Ok(found.span);
+            }
+            // The stream was registered before knowing less (its length
+            // only bounded, to identify its content from its head): this
+            // registration's exact length and resume points now apply to
+            // it, and what it decoded so far is kept.
+            let mut sh = lock(&self.shared);
+            let mut added = 0u64;
+            let len = match sh
+                .sources
+                .get_mut(crate::bytes::to_usize(found.source.0.into()))
+            {
+                Some(entry) => {
+                    if !entry.len_known && len <= entry.len {
+                        entry.len = len;
+                        entry.len_known = true;
+                    }
+                    if let Some(lazy) = entry.lazy.as_mut()
+                        && lazy.seeds.is_empty()
+                        && !fresh.seeds.is_empty()
+                    {
+                        added = fresh.checkpoint_bytes;
+                        lazy.seeds = std::mem::take(&mut fresh.seeds);
+                        lazy.checkpoints.append(&mut fresh.checkpoints);
+                        lazy.checkpoints.sort_by_key(|c| c.out_pos);
+                        lazy.checkpoint_bytes = lazy.checkpoint_bytes.saturating_add(added);
+                    }
+                    entry.len
+                }
+                None => found.span.len,
+            };
+            sh.derived_bytes = sh.derived_bytes.saturating_add(added);
+            return Ok(Span::new(found.source, 0, len));
         }
         let mut sh = lock(&self.shared);
         let id = SourceId(u32::try_from(sh.sources.len()).unwrap_or(u32::MAX));

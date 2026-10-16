@@ -458,20 +458,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 /// its length; hosts check `Session::source_len_known`).
 pub async fn dissect_unsized(cx: Cx, input: Input) -> Result<()> {
     let span = input.span;
-    let format = match cx.forced_format() {
-        Some(format) => Some(format),
-        None if cx.len_known(span.source) => None,
-        None => {
-            let (data, tail) = head(&cx, span).await?;
-            let (format, units) = cx.registry().identify_costed(&Head {
-                data: &data,
-                tail: &tail,
-                len: span.len,
-                len_known: false,
-            });
-            cx.charge(units).await;
-            format
-        }
+    let format = if cx.len_known(span.source) && cx.forced_format().is_none() {
+        None
+    } else {
+        identify_unsized(&cx, span).await?
     };
     if format.is_some_and(|f| !cx.registry().streams(f)) && !cx.len_known(span.source) {
         // Decoding up to the provisional end finds the real one.
@@ -503,6 +493,31 @@ pub async fn dissect_unsized(cx: Cx, input: Input) -> Result<()> {
     dissect_or_data(cx, input).await
 }
 
+/// The format of content decoded on demand whose length is not known yet
+/// (see [`dissect_unsized`]): the one the host forced, else what its head
+/// identifies as, decoding only the head.
+pub async fn identify_unsized(cx: &Cx, span: Span) -> Result<Option<&'static Format>> {
+    if let Some(format) = cx.forced_format() {
+        return Ok(Some(format));
+    }
+    let (data, tail) = head(cx, span).await?;
+    let (format, units) = cx.registry().identify_costed(&Head {
+        data: &data,
+        tail: &tail,
+        len: span.len,
+        len_known: false,
+    });
+    cx.charge(units).await;
+    Ok(format)
+}
+
+/// Whether content of `format` (`None`: unrecognized) can be dissected
+/// before its length is known: streaming formats are walked from the
+/// start, and unrecognized content is a data leaf that needs no length.
+pub fn needs_no_length(cx: &Cx, format: Option<&'static Format>) -> bool {
+    format.is_none_or(|f| cx.registry().streams(f))
+}
+
 /// Dissects `input`, or, if its format is not recognised, shows it as a
 /// plain data leaf so its bytes stay reachable (e.g. decompressed content).
 pub async fn dissect_or_data(cx: Cx, input: Input) -> Result<()> {
@@ -520,7 +535,7 @@ const LAZY_THRESHOLD: u64 = 1024 * 1024;
 /// Encoded streams of unrecorded decoded size above this many bytes are
 /// decoded on demand (their output could be any size up to the codec's
 /// maximum ratio).
-const UNSIZED_LAZY_THRESHOLD: u64 = 64 * 1024;
+pub const UNSIZED_LAZY_THRESHOLD: u64 = 64 * 1024;
 
 pub use crate::codec::Codec;
 

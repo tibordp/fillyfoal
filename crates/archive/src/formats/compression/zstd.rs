@@ -326,6 +326,20 @@ async fn decompressed(cx: Cx, input: Input) -> Result<()> {
         let seeds = frame_seeds(&codec, &frames, total);
         return crate::formats::expand_content_seeded(cx, (input, file, codec, total), seeds).await;
     }
+    // The walk below reads through the whole encoded file. Content that
+    // can be dissected without its length (tar and other streaming
+    // formats) needn't wait for it: identified from its head, decoded on
+    // demand, it is dissected at once, its size found when decoding gets
+    // to the end. (Small files are decoded whole anyway, as for any
+    // stream whose size is unknown: walking them is cheap.)
+    if file.len > crate::formats::UNSIZED_LAZY_THRESHOLD {
+        let decoded = cx.decode_lazy_unsized(file, &codec)?;
+        let format = crate::formats::identify_unsized(&cx, decoded).await?;
+        if crate::formats::needs_no_length(&cx, format) {
+            cx.annotate("size unknown, decoded on demand");
+            return crate::formats::dissect_unsized(cx, input.nested(decoded)).await;
+        }
+    }
     let mut cur = Cursor::new(&cx, file, LE);
     let mut total = Some(0u64);
     // Where each frame starts, in the file and in the content.
