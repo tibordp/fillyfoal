@@ -51,7 +51,7 @@ expression: "common::explore(&display_name(&path), &data)"
         MinTimestamp: 769296430575805  [0x8c+0x8]
         MaxTimestamp: 769296447269322  [0x94+0x8]
     ▾ Metadata events  [0x9c+0x773]
-      ▾ Metadata 1: Microsoft-Windows-DotNETRuntime/187 — level 4, keywords 0x0  [0x9c+0x74]
+      ▾ Metadata 1: Microsoft-Windows-DotNETRuntime/RuntimeInformationStart — level 4, keywords 0x0  [0x9c+0x74]
         ▾ Header — thread 96, sequence 4294967295  [0x9c+0x16]
             Flags: 0xc6 [CaptureThreadAndSequence | ThreadId | Sorted | DataLength]  [0x9c+0x1]
             SequenceNumber (delta): -1  [0x9d+0x5]
@@ -74,7 +74,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Version: 0  [0x104+0x4]
             Level: Informational (0x4)  [0x108+0x4]
             FieldCount: 0  [0x10c+0x4]
-      ▾ Metadata 2: Microsoft-Windows-DotNETRuntime/5 — level 4, keywords 0x1  [0x110+0x62]
+      ▾ Metadata 2: Microsoft-Windows-DotNETRuntime/GCCreateSegment — level 4, keywords 0x1  [0x110+0x62]
         ▾ Header — thread 96, sequence 4294967295  [0x110+0x4]
             Flags: 0x40 [Sorted]  [0x110+0x1]
             TimeStamp (delta): 381920  [0x111+0x3]
@@ -116,7 +116,7 @@ expression: "common::explore(&display_name(&path), &data)"
             FieldCount: 2  [0x1ba+0x4]
             Field: "name: String"  [0x1be+0xe]
             Field: "count: Int32"  [0x1cc+0x10]
-      ▾ Metadata 4: Microsoft-Windows-DotNETRuntime/9 — level 4, keywords 0x1  [0x1dc+0x63]
+      ▾ Metadata 4: Microsoft-Windows-DotNETRuntime/GCSuspendEEBegin — level 4, keywords 0x1  [0x1dc+0x63]
         ▾ Header — thread 96, sequence 4294967295  [0x1dc+0x5]
             Flags: 0xc0 [Sorted | DataLength]  [0x1dc+0x1]
             TimeStamp (delta): 121460  [0x1dd+0x3]
@@ -136,7 +136,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Version: 1  [0x233+0x4]
             Level: Informational (0x4)  [0x237+0x4]
             FieldCount: 0  [0x23b+0x4]
-      ▾ Metadata 5: Microsoft-Windows-DotNETRuntime/8 — level 4, keywords 0x1  [0x23f+0x61]
+      ▾ Metadata 5: Microsoft-Windows-DotNETRuntime/GCSuspendEEEnd — level 4, keywords 0x1  [0x23f+0x61]
         ▾ Header — thread 96, sequence 4294967295  [0x23f+0x3]
             Flags: 0x40 [Sorted]  [0x23f+0x1]
             TimeStamp (delta): 3291  [0x240+0x2]
@@ -156,7 +156,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Version: 1  [0x294+0x4]
             Level: Informational (0x4)  [0x298+0x4]
             FieldCount: 0  [0x29c+0x4]
-      ▾ Metadata 6: Microsoft-Windows-DotNETRuntime/35 — level 4, keywords 0x1  [0x2a0+0x61]
+      ▾ Metadata 6: Microsoft-Windows-DotNETRuntime/GCTriggered — level 4, keywords 0x1  [0x2a0+0x61]
         ▾ Header — thread 96, sequence 4294967295  [0x2a0+0x3]
             Flags: 0x40 [Sorted]  [0x2a0+0x1]
             TimeStamp (delta): 2042  [0x2a1+0x2]
@@ -176,7 +176,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Version: 0  [0x2f5+0x4]
             Level: Informational (0x4)  [0x2f9+0x4]
             FieldCount: 0  [0x2fd+0x4]
-      ▾ Metadata 7: Microsoft-Windows-DotNETRuntime/1 — level 4, keywords 0x1  [0x301+0x62]
+      ▾ Metadata 7: Microsoft-Windows-DotNETRuntime/GCStart — level 4, keywords 0x1  [0x301+0x62]
         ▾ Header — thread 96, sequence 4294967295  [0x301+0x4]
             Flags: 0x40 [Sorted]  [0x301+0x1]
             TimeStamp (delta): 39584  [0x302+0x3]
@@ -196,7 +196,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Version: 2  [0x357+0x4]
             Level: Informational (0x4)  [0x35b+0x4]
             FieldCount: 0  [0x35f+0x4]
-      ▾ Metadata 8: Microsoft-Windows-DotNETRuntime/39 — level 4, keywords 0x3f00003  [0x363+0x61]
+      ▾ Metadata 8: Microsoft-Windows-DotNETRuntime/GCDynamicEvent — level 4, keywords 0x3f00003  [0x363+0x61]
         ▾ Header — thread 96, sequence 4294967295  [0x363+0x3]
             Flags: 0x40 [Sorted]  [0x363+0x1]
             TimeStamp (delta): 1833  [0x364+0x2]
@@ -216,7 +216,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Version: 0  [0x3b8+0x4]
             Level: Informational (0x4)  [0x3bc+0x4]
             FieldCount: 0  [0x3c0+0x4]
-      ▾ Metadata 9: Microsoft-Windows-DotNETRuntime/202 — level 4, keywords 0x1  [0x3c4+0x61]
+      ▾ Metadata 9: Microsoft-Windows-DotNETRuntime/GCMarkWithType — level 4, keywords 0x1  [0x3c4+0x61]
         ▾ Header — thread 96, sequence 4294967295  [0x3c4+0x3]
             Flags: 0x40 [Sorted]  [0x3c4+0x1]
             TimeStamp (delta): 10583  [0x3c5+0x2]
@@ -236,7 +236,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Version: 0  [0x419+0x4]
             Level: Informational (0x4)  [0x41d+0x4]
             FieldCount: 0  [0x421+0x4]
-      ▾ Metadata 10: Microsoft-Windows-DotNETRuntime/205 — level 4, keywords 0x1  [0x425+0x62]
+      ▾ Metadata 10: Microsoft-Windows-DotNETRuntime/GCGlobalHeapHistory — level 4, keywords 0x1  [0x425+0x62]
         ▾ Header — thread 96, sequence 4294967295  [0x425+0x4]
             Flags: 0x40 [Sorted]  [0x425+0x1]
             TimeStamp (delta): 276628  [0x426+0x3]
@@ -256,7 +256,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Version: 4  [0x47b+0x4]
             Level: Informational (0x4)  [0x47f+0x4]
             FieldCount: 0  [0x483+0x4]
-      ▾ Metadata 11: Microsoft-Windows-DotNETRuntime/204 — level 4, keywords 0x1  [0x487+0x61]
+      ▾ Metadata 11: Microsoft-Windows-DotNETRuntime/GCPerHeapHistory — level 4, keywords 0x1  [0x487+0x61]
         ▾ Header — thread 96, sequence 4294967295  [0x487+0x3]
             Flags: 0x40 [Sorted]  [0x487+0x1]
             TimeStamp (delta): 625  [0x488+0x2]
@@ -276,7 +276,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Version: 3  [0x4dc+0x4]
             Level: Informational (0x4)  [0x4e0+0x4]
             FieldCount: 0  [0x4e4+0x4]
-      ▾ Metadata 12: Microsoft-Windows-DotNETRuntime/2 — level 4, keywords 0x1  [0x4e8+0x61]
+      ▾ Metadata 12: Microsoft-Windows-DotNETRuntime/GCEnd — level 4, keywords 0x1  [0x4e8+0x61]
         ▾ Header — thread 96, sequence 4294967295  [0x4e8+0x3]
             Flags: 0x40 [Sorted]  [0x4e8+0x1]
             TimeStamp (delta): 4125  [0x4e9+0x2]
@@ -296,7 +296,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Version: 1  [0x53d+0x4]
             Level: Informational (0x4)  [0x541+0x4]
             FieldCount: 0  [0x545+0x4]
-      ▾ Metadata 13: Microsoft-Windows-DotNETRuntime/4 — level 4, keywords 0x1  [0x549+0x61]
+      ▾ Metadata 13: Microsoft-Windows-DotNETRuntime/GCHeapStats — level 4, keywords 0x1  [0x549+0x61]
         ▾ Header — thread 96, sequence 4294967295  [0x549+0x3]
             Flags: 0x40 [Sorted]  [0x549+0x1]
             TimeStamp (delta): 250  [0x54a+0x2]
@@ -316,7 +316,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Version: 2  [0x59e+0x4]
             Level: Informational (0x4)  [0x5a2+0x4]
             FieldCount: 0  [0x5a6+0x4]
-      ▾ Metadata 14: Microsoft-Windows-DotNETRuntime/7 — level 4, keywords 0x1  [0x5aa+0x61]
+      ▾ Metadata 14: Microsoft-Windows-DotNETRuntime/GCRestartEEBegin — level 4, keywords 0x1  [0x5aa+0x61]
         ▾ Header — thread 96, sequence 4294967295  [0x5aa+0x3]
             Flags: 0x40 [Sorted]  [0x5aa+0x1]
             TimeStamp (delta): 5375  [0x5ab+0x2]
@@ -336,7 +336,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Version: 1  [0x5ff+0x4]
             Level: Informational (0x4)  [0x603+0x4]
             FieldCount: 0  [0x607+0x4]
-      ▾ Metadata 15: Microsoft-Windows-DotNETRuntime/3 — level 4, keywords 0x1  [0x60b+0x61]
+      ▾ Metadata 15: Microsoft-Windows-DotNETRuntime/GCRestartEEEnd — level 4, keywords 0x1  [0x60b+0x61]
         ▾ Header — thread 96, sequence 4294967295  [0x60b+0x3]
             Flags: 0x40 [Sorted]  [0x60b+0x1]
             TimeStamp (delta): 1458  [0x60c+0x2]
@@ -379,7 +379,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Field: "CommandLine: String"  [0x6e4+0x1c]
             Field: "OSInformation: String"  [0x700+0x20]
             Field: "ArchInformation: String"  [0x720+0x24]
-      ▾ Metadata 17: Microsoft-Windows-DotNETRuntime/14 — level 4, keywords 0x1  [0x744+0x6a]
+      ▾ Metadata 17: Microsoft-Windows-DotNETRuntime/GCFinalizersBegin — level 4, keywords 0x1  [0x744+0x6a]
         ▾ Header — thread 96, sequence 4294967295  [0x744+0xc]
             Flags: 0xc0 [Sorted | DataLength]  [0x744+0x1]
             TimeStamp (delta): -232544  [0x745+0xa]
@@ -399,7 +399,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Version: 1  [0x7a2+0x4]
             Level: Informational (0x4)  [0x7a6+0x4]
             FieldCount: 0  [0x7aa+0x4]
-      ▾ Metadata 18: Microsoft-Windows-DotNETRuntime/13 — level 4, keywords 0x1  [0x7ae+0x61]
+      ▾ Metadata 18: Microsoft-Windows-DotNETRuntime/GCFinalizersEnd — level 4, keywords 0x1  [0x7ae+0x61]
         ▾ Header — thread 96, sequence 4294967295  [0x7ae+0x3]
             Flags: 0x40 [Sorted]  [0x7ae+0x1]
             TimeStamp (delta): 10375  [0x7af+0x2]
@@ -466,7 +466,7 @@ expression: "common::explore(&display_name(&path), &data)"
         MinTimestamp: 769296430575805  [0x8a8+0x8]
         MaxTimestamp: 769296447269322  [0x8b0+0x8]
     ▾ Events  [0x8b8+0x6b8]
-      ▾ Microsoft-Windows-DotNETRuntime/187 — 0.000139 s, thread 96, stack 1, 179 bytes  [0x8b8+0xc8]
+      ▾ Microsoft-Windows-DotNETRuntime/RuntimeInformationStart — 0.000139 s, thread 96, stack 1, 179 bytes  [0x8b8+0xc8]
         ▾ Header — thread 96, sequence 1  [0x8b8+0x15]
             Flags: 0xcf [MetadataId | CaptureThreadAndSequence | ThreadId | StackId | Sorted | DataLength]  [0x8b8+0x1]
             MetadataId: 1  [0x8b9+0x1]
@@ -482,7 +482,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: true
             Time: 0.000138542 — seconds from the trace's sync time
           Payload — 179 bytes  [0x8cd+0xb3]
-      ▾ Microsoft-Windows-DotNETRuntime/5 — 0.000520 s, thread 96, stack 1, 22 bytes  [0x980+0x1c]
+      ▾ Microsoft-Windows-DotNETRuntime/GCCreateSegment — 0.000520 s, thread 96, stack 1, 22 bytes  [0x980+0x1c]
         ▾ Header — thread 96, sequence 2  [0x980+0x6]
             Flags: 0x81 [MetadataId | DataLength]  [0x980+0x1]
             MetadataId: 2  [0x981+0x1]
@@ -495,7 +495,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.000520462 — seconds from the trace's sync time
           Payload — 22 bytes  [0x986+0x16]
-      ▾ Microsoft-Windows-DotNETRuntime/5 — 0.000521 s, thread 96, stack 1, 22 bytes  [0x99c+0x19]
+      ▾ Microsoft-Windows-DotNETRuntime/GCCreateSegment — 0.000521 s, thread 96, stack 1, 22 bytes  [0x99c+0x19]
         ▾ Header — thread 96, sequence 3  [0x99c+0x3]
             Flags: 0x0 []  [0x99c+0x1]
             TimeStamp (delta): 292  [0x99d+0x2]
@@ -507,7 +507,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.000520754 — seconds from the trace's sync time
           Payload — 22 bytes  [0x99f+0x16]
-      ▾ Microsoft-Windows-DotNETRuntime/5 — 0.000521 s, thread 96, stack 1, 22 bytes  [0x9b5+0x18]
+      ▾ Microsoft-Windows-DotNETRuntime/GCCreateSegment — 0.000521 s, thread 96, stack 1, 22 bytes  [0x9b5+0x18]
         ▾ Header — thread 96, sequence 4  [0x9b5+0x2]
             Flags: 0x0 []  [0x9b5+0x1]
             TimeStamp (delta): 83  [0x9b6+0x1]
@@ -519,7 +519,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.000520837 — seconds from the trace's sync time
           Payload — 22 bytes  [0x9b7+0x16]
-      ▾ Microsoft-Windows-DotNETRuntime/5 — 0.000521 s, thread 96, stack 1, 22 bytes  [0x9cd+0x18]
+      ▾ Microsoft-Windows-DotNETRuntime/GCCreateSegment — 0.000521 s, thread 96, stack 1, 22 bytes  [0x9cd+0x18]
         ▾ Header — thread 96, sequence 5  [0x9cd+0x2]
             Flags: 0x0 []  [0x9cd+0x1]
             TimeStamp (delta): 42  [0x9ce+0x1]
@@ -531,7 +531,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.000520879 — seconds from the trace's sync time
           Payload — 22 bytes  [0x9cf+0x16]
-      ▾ Microsoft-Windows-DotNETRuntime/5 — 0.000521 s, thread 96, stack 1, 22 bytes  [0x9e5+0x18]
+      ▾ Microsoft-Windows-DotNETRuntime/GCCreateSegment — 0.000521 s, thread 96, stack 1, 22 bytes  [0x9e5+0x18]
         ▾ Header — thread 96, sequence 6  [0x9e5+0x2]
             Flags: 0x0 []  [0x9e5+0x1]
             TimeStamp (delta): 83  [0x9e6+0x1]
@@ -543,7 +543,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.000520962 — seconds from the trace's sync time
           Payload — 22 bytes  [0x9e7+0x16]
-      ▾ Microsoft-Windows-DotNETRuntime/5 — 0.005550 s, thread 96, stack 1, 22 bytes  [0x9fd+0x1b]
+      ▾ Microsoft-Windows-DotNETRuntime/GCCreateSegment — 0.005550 s, thread 96, stack 1, 22 bytes  [0x9fd+0x1b]
         ▾ Header — thread 96, sequence 7  [0x9fd+0x5]
             Flags: 0x0 []  [0x9fd+0x1]
             TimeStamp (delta): 5029376  [0x9fe+0x4]
@@ -598,7 +598,7 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Payload — 2 fields  [0xa57+0x18]
             name: "fillyfoal"  [0xa57+0x14]
             count: 2  [0xa6b+0x4]
-      ▾ Microsoft-Windows-DotNETRuntime/9 — 0.015421 s, thread 96, stack 1, 10 bytes  [0xa6f+0x10]
+      ▾ Microsoft-Windows-DotNETRuntime/GCSuspendEEBegin — 0.015421 s, thread 96, stack 1, 10 bytes  [0xa6f+0x10]
         ▾ Header — thread 96, sequence 11  [0xa6f+0x6]
             Flags: 0x89 [MetadataId | StackId | DataLength]  [0xa6f+0x1]
             MetadataId: 4  [0xa70+0x1]
@@ -611,7 +611,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.015421214 — seconds from the trace's sync time
           Payload — 10 bytes  [0xa75+0xa]
-      ▾ Microsoft-Windows-DotNETRuntime/8 — 0.015425 s, thread 96, stack 1, 2 bytes  [0xa7f+0x7]
+      ▾ Microsoft-Windows-DotNETRuntime/GCSuspendEEEnd — 0.015425 s, thread 96, stack 1, 2 bytes  [0xa7f+0x7]
         ▾ Header — thread 96, sequence 12  [0xa7f+0x5]
             Flags: 0x81 [MetadataId | DataLength]  [0xa7f+0x1]
             MetadataId: 5  [0xa80+0x1]
@@ -624,7 +624,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.015424505 — seconds from the trace's sync time
           Payload — 2 bytes  [0xa84+0x2]
-      ▾ Microsoft-Windows-DotNETRuntime/35 — 0.015427 s, thread 96, stack 3, 6 bytes  [0xa86+0xc]
+      ▾ Microsoft-Windows-DotNETRuntime/GCTriggered — 0.015427 s, thread 96, stack 3, 6 bytes  [0xa86+0xc]
         ▾ Header — thread 96, sequence 13  [0xa86+0x6]
             Flags: 0x89 [MetadataId | StackId | DataLength]  [0xa86+0x1]
             MetadataId: 6  [0xa87+0x1]
@@ -637,7 +637,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.015426547 — seconds from the trace's sync time
           Payload — 6 bytes  [0xa8c+0x6]
-      ▾ Microsoft-Windows-DotNETRuntime/5 — 0.015436 s, thread 96, stack 1, 22 bytes  [0xa92+0x1c]
+      ▾ Microsoft-Windows-DotNETRuntime/GCCreateSegment — 0.015436 s, thread 96, stack 1, 22 bytes  [0xa92+0x1c]
         ▾ Header — thread 96, sequence 14  [0xa92+0x6]
             Flags: 0x89 [MetadataId | StackId | DataLength]  [0xa92+0x1]
             MetadataId: 2  [0xa93+0x1]
@@ -650,7 +650,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.015436339 — seconds from the trace's sync time
           Payload — 22 bytes  [0xa98+0x16]
-      ▾ Microsoft-Windows-DotNETRuntime/1 — 0.015466 s, thread 96, stack 1, 26 bytes  [0xaae+0x20]
+      ▾ Microsoft-Windows-DotNETRuntime/GCStart — 0.015466 s, thread 96, stack 1, 26 bytes  [0xaae+0x20]
         ▾ Header — thread 96, sequence 15  [0xaae+0x6]
             Flags: 0x81 [MetadataId | DataLength]  [0xaae+0x1]
             MetadataId: 7  [0xaaf+0x1]
@@ -663,7 +663,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.015466131 — seconds from the trace's sync time
           Payload — 26 bytes  [0xab4+0x1a]
-      ▾ Microsoft-Windows-DotNETRuntime/39 — 0.015468 s, thread 96, stack 3, 78 bytes  [0xace+0x54]
+      ▾ Microsoft-Windows-DotNETRuntime/GCDynamicEvent — 0.015468 s, thread 96, stack 3, 78 bytes  [0xace+0x54]
         ▾ Header — thread 96, sequence 16  [0xace+0x6]
             Flags: 0x89 [MetadataId | StackId | DataLength]  [0xace+0x1]
             MetadataId: 8  [0xacf+0x1]
@@ -676,7 +676,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.015467964 — seconds from the trace's sync time
           Payload — 78 bytes  [0xad4+0x4e]
-      ▾ Microsoft-Windows-DotNETRuntime/202 — 0.015479 s, thread 96, stack 1, 18 bytes  [0xb22+0x18]
+      ▾ Microsoft-Windows-DotNETRuntime/GCMarkWithType — 0.015479 s, thread 96, stack 1, 18 bytes  [0xb22+0x18]
         ▾ Header — thread 96, sequence 17  [0xb22+0x6]
             Flags: 0x89 [MetadataId | StackId | DataLength]  [0xb22+0x1]
             MetadataId: 9  [0xb23+0x1]
@@ -689,7 +689,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.015478547 — seconds from the trace's sync time
           Payload — 18 bytes  [0xb28+0x12]
-      ▾ Microsoft-Windows-DotNETRuntime/202 — 0.015479 s, thread 96, stack 1, 18 bytes  [0xb3a+0x15]
+      ▾ Microsoft-Windows-DotNETRuntime/GCMarkWithType — 0.015479 s, thread 96, stack 1, 18 bytes  [0xb3a+0x15]
         ▾ Header — thread 96, sequence 18  [0xb3a+0x3]
             Flags: 0x0 []  [0xb3a+0x1]
             TimeStamp (delta): 334  [0xb3b+0x2]
@@ -701,7 +701,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.015478881 — seconds from the trace's sync time
           Payload — 18 bytes  [0xb3d+0x12]
-      ▾ Microsoft-Windows-DotNETRuntime/202 — 0.015521 s, thread 96, stack 1, 18 bytes  [0xb4f+0x16]
+      ▾ Microsoft-Windows-DotNETRuntime/GCMarkWithType — 0.015521 s, thread 96, stack 1, 18 bytes  [0xb4f+0x16]
         ▾ Header — thread 96, sequence 19  [0xb4f+0x4]
             Flags: 0x0 []  [0xb4f+0x1]
             TimeStamp (delta): 41917  [0xb50+0x3]
@@ -713,7 +713,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.015520798 — seconds from the trace's sync time
           Payload — 18 bytes  [0xb53+0x12]
-      ▾ Microsoft-Windows-DotNETRuntime/202 — 0.015521 s, thread 96, stack 1, 18 bytes  [0xb65+0x15]
+      ▾ Microsoft-Windows-DotNETRuntime/GCMarkWithType — 0.015521 s, thread 96, stack 1, 18 bytes  [0xb65+0x15]
         ▾ Header — thread 96, sequence 20  [0xb65+0x3]
             Flags: 0x0 []  [0xb65+0x1]
             TimeStamp (delta): 625  [0xb66+0x2]
@@ -725,7 +725,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.015521423 — seconds from the trace's sync time
           Payload — 18 bytes  [0xb68+0x12]
-      ▾ Microsoft-Windows-DotNETRuntime/202 — 0.015533 s, thread 96, stack 1, 18 bytes  [0xb7a+0x15]
+      ▾ Microsoft-Windows-DotNETRuntime/GCMarkWithType — 0.015533 s, thread 96, stack 1, 18 bytes  [0xb7a+0x15]
         ▾ Header — thread 96, sequence 21  [0xb7a+0x3]
             Flags: 0x0 []  [0xb7a+0x1]
             TimeStamp (delta): 11833  [0xb7b+0x2]
@@ -737,7 +737,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.015533256 — seconds from the trace's sync time
           Payload — 18 bytes  [0xb7d+0x12]
-      ▾ Microsoft-Windows-DotNETRuntime/202 — 0.015534 s, thread 96, stack 1, 18 bytes  [0xb8f+0x15]
+      ▾ Microsoft-Windows-DotNETRuntime/GCMarkWithType — 0.015534 s, thread 96, stack 1, 18 bytes  [0xb8f+0x15]
         ▾ Header — thread 96, sequence 22  [0xb8f+0x3]
             Flags: 0x0 []  [0xb8f+0x1]
             TimeStamp (delta): 292  [0xb90+0x2]
@@ -749,7 +749,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.015533548 — seconds from the trace's sync time
           Payload — 18 bytes  [0xb92+0x12]
-      ▾ Microsoft-Windows-DotNETRuntime/205 — 0.015755 s, thread 96, stack 3, 82 bytes  [0xba4+0x59]
+      ▾ Microsoft-Windows-DotNETRuntime/GCGlobalHeapHistory — 0.015755 s, thread 96, stack 3, 82 bytes  [0xba4+0x59]
         ▾ Header — thread 96, sequence 23  [0xba4+0x7]
             Flags: 0x89 [MetadataId | StackId | DataLength]  [0xba4+0x1]
             MetadataId: 10  [0xba5+0x1]
@@ -762,7 +762,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.015755175 — seconds from the trace's sync time
           Payload — 82 bytes  [0xbab+0x52]
-      ▾ Microsoft-Windows-DotNETRuntime/204 — 0.015756 s, thread 96, stack 1, 486 bytes  [0xbfd+0x1ed]
+      ▾ Microsoft-Windows-DotNETRuntime/GCPerHeapHistory — 0.015756 s, thread 96, stack 1, 486 bytes  [0xbfd+0x1ed]
         ▾ Header — thread 96, sequence 24  [0xbfd+0x7]
             Flags: 0x89 [MetadataId | StackId | DataLength]  [0xbfd+0x1]
             MetadataId: 11  [0xbfe+0x1]
@@ -775,7 +775,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.0157558 — seconds from the trace's sync time
           Payload — 486 bytes  [0xc04+0x1e6]
-      ▾ Microsoft-Windows-DotNETRuntime/39 — 0.015759 s, thread 96, stack 3, 78 bytes  [0xdea+0x54]
+      ▾ Microsoft-Windows-DotNETRuntime/GCDynamicEvent — 0.015759 s, thread 96, stack 3, 78 bytes  [0xdea+0x54]
         ▾ Header — thread 96, sequence 25  [0xdea+0x6]
             Flags: 0x89 [MetadataId | StackId | DataLength]  [0xdea+0x1]
             MetadataId: 8  [0xdeb+0x1]
@@ -788,7 +788,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.01575905 — seconds from the trace's sync time
           Payload — 78 bytes  [0xdf0+0x4e]
-      ▾ Microsoft-Windows-DotNETRuntime/2 — 0.015760 s, thread 96, stack 1, 10 bytes  [0xe3e+0x10]
+      ▾ Microsoft-Windows-DotNETRuntime/GCEnd — 0.015760 s, thread 96, stack 1, 10 bytes  [0xe3e+0x10]
         ▾ Header — thread 96, sequence 26  [0xe3e+0x6]
             Flags: 0x89 [MetadataId | StackId | DataLength]  [0xe3e+0x1]
             MetadataId: 12  [0xe3f+0x1]
@@ -801,7 +801,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.015759925 — seconds from the trace's sync time
           Payload — 10 bytes  [0xe44+0xa]
-      ▾ Microsoft-Windows-DotNETRuntime/4 — 0.015760 s, thread 96, stack 1, 110 bytes  [0xe4e+0x73]
+      ▾ Microsoft-Windows-DotNETRuntime/GCHeapStats — 0.015760 s, thread 96, stack 1, 110 bytes  [0xe4e+0x73]
         ▾ Header — thread 96, sequence 27  [0xe4e+0x5]
             Flags: 0x81 [MetadataId | DataLength]  [0xe4e+0x1]
             MetadataId: 13  [0xe4f+0x1]
@@ -814,7 +814,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.015760175 — seconds from the trace's sync time
           Payload — 110 bytes  [0xe53+0x6e]
-      ▾ Microsoft-Windows-DotNETRuntime/7 — 0.015766 s, thread 96, stack 1, 2 bytes  [0xec1+0x7]
+      ▾ Microsoft-Windows-DotNETRuntime/GCRestartEEBegin — 0.015766 s, thread 96, stack 1, 2 bytes  [0xec1+0x7]
         ▾ Header — thread 96, sequence 28  [0xec1+0x5]
             Flags: 0x81 [MetadataId | DataLength]  [0xec1+0x1]
             MetadataId: 14  [0xec2+0x1]
@@ -827,7 +827,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: false
             Time: 0.01576555 — seconds from the trace's sync time
           Payload — 2 bytes  [0xec6+0x2]
-      ▾ Microsoft-Windows-DotNETRuntime/3 — 0.015767 s, thread 96, stack 1, 2 bytes  [0xec8+0x6]
+      ▾ Microsoft-Windows-DotNETRuntime/GCRestartEEEnd — 0.015767 s, thread 96, stack 1, 2 bytes  [0xec8+0x6]
         ▾ Header — thread 96, sequence 29  [0xec8+0x4]
             Flags: 0x1 [MetadataId]  [0xec8+0x1]
             MetadataId: 15  [0xec9+0x1]
@@ -856,7 +856,7 @@ expression: "common::explore(&display_name(&path), &data)"
             CommandLine: "/usr/share/dotnet/dotnet /work/app/bin/app.dll"  [0xed4+0x5e]
             OSInformation: "Linux"  [0xf32+0xc]
             ArchInformation: "arm64"  [0xf3e+0xc]
-      ▾ Microsoft-Windows-DotNETRuntime/14 — 0.016600 s, thread 101, stack 1, 2 bytes  [0xf4a+0x1b]
+      ▾ Microsoft-Windows-DotNETRuntime/GCFinalizersBegin — 0.016600 s, thread 101, stack 1, 2 bytes  [0xf4a+0x1b]
         ▾ Header — thread 101, sequence 1  [0xf4a+0x19]
             Flags: 0xc7 [MetadataId | CaptureThreadAndSequence | ThreadId | Sorted | DataLength]  [0xf4a+0x1]
             MetadataId: 17  [0xf4b+0x1]
@@ -872,7 +872,7 @@ expression: "common::explore(&display_name(&path), &data)"
             IsSorted: true
             Time: 0.016599515 — seconds from the trace's sync time
           Payload — 2 bytes  [0xf63+0x2]
-      ▾ Microsoft-Windows-DotNETRuntime/13 — 0.016610 s, thread 101, stack 1, 6 bytes  [0xf65+0xb]
+      ▾ Microsoft-Windows-DotNETRuntime/GCFinalizersEnd — 0.016610 s, thread 101, stack 1, 6 bytes  [0xf65+0xb]
         ▾ Header — thread 101, sequence 2  [0xf65+0x5]
             Flags: 0x81 [MetadataId | DataLength]  [0xf65+0x1]
             MetadataId: 18  [0xf66+0x1]
