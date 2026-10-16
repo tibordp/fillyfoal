@@ -1380,3 +1380,27 @@ the same way locally (`TEMPLEOS_Z_DIRS`).
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
 | `templeos-iso/templeos-redseaiso.iso.gz` | TempleOS V5.03 (the distribution ISO above, booted as a live CD in QEMU 10.0.13 `qemu-system-x86_64 -accel tcg`, Debian 13 aarch64, in Docker, `-rtc base=2026-01-01T00:00:00`) | `tests/data/redsea/qemu_redseaiso.py` (its docstring has the `docker run` line) types, over QMP, `DirMk`/`Copy` of `/Demo/DateTime.HC.Z` and `/Doc/FileLowLevel.DD.Z` from the CD into `B:/Src` on the RAM drive, then `RedSeaISO("B:/Out","B:/Src");`, saves the guest's memory and carves `B:/Out.ISO.C` (contiguous) out of the RAM drive. Not reproducible byte for byte (the volume's `unique_id` mixes in the TSC, and creation times vary by seconds; two runs differed in 20 bytes). Apart from the slack after each file's last block (TempleOS writes from an uninitialised buffer, so it holds stale heap bytes), it is byte for byte what `tests/data/redsea/make_image.py` builds for the same tree, times and ID. Stored with `gzip -9 -n`. Public domain (TempleOS) |
+
+## BorgBackup 1.2.4: repository segments
+
+Segment files (`<repo>/data/0/<n>`) copied unchanged out of repositories
+that `borg` 1.2.4 (Debian bookworm's `borgbackup` package, arm64) wrote in
+a `debian:bookworm-slim` container with host name `fillyfoal`:
+`tests/data/borg-segment/make-external.sh` runs `inner.sh`, which backs up
+three neutral text files (`borg init`, `borg create --compression <c>`,
+`borg delete`). Not reproducible byte for byte (IDs, nonces, timestamps and
+padding vary per run).
+
+| Fixture | Repository and step | Contents |
+| --- | --- | --- |
+| `borg-segment/lz4` | `--encryption=none`, `create --compression lz4` | 4 PUTs: a stored chunk (too small to compress), an LZ4 file chunk, item and archive metadata |
+| `borg-segment/zstd` | the same repository, one more file, `create --compression zstd,3` | 3 PUTs: file chunk, items, archive |
+| `borg-segment/zlib` | the same repository, one more file, `create --compression zlib,6` | 3 PUTs: file chunk, items, archive |
+| `borg-segment/lzma` | the same repository, one more file, `create --compression lzma,6` | 3 PUTs: file chunk, items, archive |
+| `borg-segment/none` | the same repository, one more file, `create --compression none` | 3 PUTs: file chunk, items, archive |
+| `borg-segment/obfuscate` | the same, `--compression obfuscate,1,lz4` | 3 PUTs with size obfuscation (wrapped LZ4, padding) |
+| `borg-segment/delete` | the same, `borg delete plain::lz4` | 2 DELETEs |
+| `borg-segment/manifest` | the same, the segment before the last | the manifest (all-zero ID) |
+| `borg-segment/commit` | the same, the last segment | a lone COMMIT |
+| `borg-segment/repokey` | `--encryption=repokey`, `create --compression zlib,6` | 4 encrypted PUTs (AES-CTR, HMAC-SHA256) |
+| `borg-segment/authenticated` | `--encryption=authenticated`, `create --compression lz4` | 4 PUTs, plaintext with key type 7 |

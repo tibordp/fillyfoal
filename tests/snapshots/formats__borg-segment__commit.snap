@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ commit — Borg segment, 1 entry: 0 PUT, 0 DELETE, 1 COMMIT  [0x0+0x11]
+    Magic: "BORG_SEG" — Borg segment  [0x0+0x8]
+  ▾ COMMIT 0  [0x8+0x9]
+      CRC32: 0x253cf440 — valid  [0x8+0x4]
+      Size: 9  [0xc+0x4]
+      Tag: COMMIT (0x2)  [0x10+0x1]

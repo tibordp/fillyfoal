@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ delete — Borg segment, 2 entries: 0 PUT, 2 DELETE, 0 COMMIT  [0x0+0x5a]
+    Magic: "BORG_SEG" — Borg segment  [0x0+0x8]
+  ▾ DELETE 9b50ecbc7ccf3db0…  [0x8+0x29]
+      CRC32: 0xbf36c970 — valid  [0x8+0x4]
+      Size: 41  [0xc+0x4]
+      Tag: DELETE (0x1)  [0x10+0x1]
+      Object ID: "9b50ecbc7ccf3db008ec9dec928275d748d90c44f359c45387eeaeaed7af1e7f"  [0x11+0x20]
+  ▾ DELETE 0a4d80059db4bd91…  [0x31+0x29]
+      CRC32: 0xa7d472ba — valid  [0x31+0x4]
+      Size: 41  [0x35+0x4]
+      Tag: DELETE (0x1)  [0x39+0x1]
+      Object ID: "0a4d80059db4bd91cb85d43c48924638dd9ed94fe5a65c66d62044faa49984fe"  [0x3a+0x20]

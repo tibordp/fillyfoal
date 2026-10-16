@@ -1027,6 +1027,9 @@ pub static FORMATS: &[&Format] = &[
     &archive::arj::FORMAT,
     #[cfg(feature = "archive")]
     &archive::xar::FORMAT,
+    // Backup tools' storage formats (strong magics).
+    #[cfg(feature = "archive")]
+    &archive::backup::borg::FORMAT,
     #[cfg(feature = "archive")]
     &disk::templeos_iso::FORMAT,
     #[cfg(feature = "archive")]

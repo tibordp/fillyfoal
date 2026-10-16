@@ -1,0 +1,46 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ repokey — Borg segment, 4 entries: 4 PUT, 0 DELETE, 0 COMMIT  [0x0+0x14bf]
+    Magic: "BORG_SEG" — Borg segment  [0x0+0x8]
+  ▾ PUT 87c38f097754217e… — 102 bytes, repokey, encrypted  [0x8+0x8f]
+      CRC32: 0x686c00e0 — valid  [0x8+0x4]
+      Size: 143  [0xc+0x4]
+      Tag: PUT (0x0)  [0x10+0x1]
+      Object ID: "87c38f097754217e47fceb9b21706bac35eee2e040322f4f601af205ef6818e2"  [0x11+0x20]
+      Key type: repokey (AES-CTR, HMAC-SHA256) (0x3)  [0x31+0x1]
+      MAC  [0x32+0x20]
+      Nonce: 0x1000001c  [0x52+0x8]
+      Ciphertext — 61 bytes  [0x5a+0x3d]
+        ! unsupported: encrypted with the repository's key (kept in its config or a key file, not in segments)
+  ▾ PUT e4fb9c29dc44e1fd… — 4.1 KiB, repokey, encrypted  [0x97+0x10c0]
+      CRC32: 0x22a28a81 — valid  [0x97+0x4]
+      Size: 4288  [0x9b+0x4]
+      Tag: PUT (0x0)  [0x9f+0x1]
+      Object ID: "e4fb9c29dc44e1fd82b54f191772f09e272cde95ce4ebf331b739c679f9840d8"  [0xa0+0x20]
+      Key type: repokey (AES-CTR, HMAC-SHA256) (0x3)  [0xc0+0x1]
+      MAC  [0xc1+0x20]
+      Nonce: 0x10000020  [0xe1+0x8]
+      Ciphertext — 4.1 KiB  [0xe9+0x106e]
+        ! unsupported: encrypted with the repository's key (kept in its config or a key file, not in segments)
+  ▾ PUT 2b38e8a66173a2bc… — 282 bytes, repokey, encrypted  [0x1157+0x143]
+      CRC32: 0x1687c7f9 — valid  [0x1157+0x4]
+      Size: 323  [0x115b+0x4]
+      Tag: PUT (0x0)  [0x115f+0x1]
+      Object ID: "2b38e8a66173a2bc28400e0ac4b3ce0e54deb45209be2d16585828fb5062c89e"  [0x1160+0x20]
+      Key type: repokey (AES-CTR, HMAC-SHA256) (0x3)  [0x1180+0x1]
+      MAC  [0x1181+0x20]
+      Nonce: 0x10000127  [0x11a1+0x8]
+      Ciphertext — 241 bytes  [0x11a9+0xf1]
+        ! unsupported: encrypted with the repository's key (kept in its config or a key file, not in segments)
+  ▾ PUT 44ca1874244dc25e… — 508 bytes, repokey, encrypted  [0x129a+0x225]
+      CRC32: 0xa0a11cc2 — valid  [0x129a+0x4]
+      Size: 549  [0x129e+0x4]
+      Tag: PUT (0x0)  [0x12a2+0x1]
+      Object ID: "44ca1874244dc25ec690ac217fe6814263c8e3bb01b6cb4b30f061e353a387a4"  [0x12a3+0x20]
+      Key type: repokey (AES-CTR, HMAC-SHA256) (0x3)  [0x12c3+0x1]
+      MAC  [0x12c4+0x20]
+      Nonce: 0x10000137  [0x12e4+0x8]
+      Ciphertext — 467 bytes  [0x12ec+0x1d3]
+        ! unsupported: encrypted with the repository's key (kept in its config or a key file, not in segments)
