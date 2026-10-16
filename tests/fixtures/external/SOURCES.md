@@ -1526,6 +1526,9 @@ the MariaDB files, with `mariadb-binlog -vv --base64-output=decode-rows`
 | `mysql-binlog/mariadb-compressed.bin` | MariaDB 10.5.29 | `log_bin_compress=ON`, `log_bin_compress_min_len=10`: a zlib-compressed rows event and query event; unchanged |
 | `mysql-binlog/mariadb-encrypted.bin` | MariaDB 10.5.29 | `sh tests/data/mysql-binlog/make_mariadb.sh`: `encrypt_binlog=ON` with `file_key_management` and the script's fixed test key; a start encryption event, then encrypted events (a database, a table, a row); unchanged |
 | `mysql-binlog/mariadb114-rows.bin` | MariaDB 11.4.13 | `make_mariadb.sh`: the workload, a `CREATE TABLE ... DEFAULT CHARSET=utf8mb4` (status variable 131, `character_set_collations`), an XA transaction; checked against `mariadb-binlog -vv --base64-output=decode-rows`; unchanged |
+| `mysql-binlog/mysql80-rows.bin` | MySQL 8.0.46 | `sh tests/data/mysql-binlog/make_mysql80.sh` (official `mysql:8.0` image, server defaults: `binlog_row_metadata=MINIMAL`, anonymous GTIDs): the workload, statement-based inserts with a user variable (User var event) and `RAND()` (Rand event), an XA transaction (XA prepare event) and a one-phase XA commit; the RAND() seeds also vary; unchanged |
+| `mysql-binlog/mysql80-partial.bin` | MySQL 8.0.46 | `make_mysql80.sh`: `binlog_row_value_options=PARTIAL_JSON`, `binlog_row_image=MINIMAL`, a `JSON_SET` and a `JSON_REMOVE` update (Partial update rows events: a REPLACE and a REMOVE diff, checked by hand against the statements); unchanged |
+| `mysql-binlog/mysql80-relay.bin` | MySQL 8.0.46 | `make_mysql80.sh`: the relay log of a replica (a second container on a private network) after replicating an insert and an update: the replica's format description and the source's rotate and format description, then the source's events with the source's positions; unchanged |
 
 ## Erlang external term format
 
@@ -1556,6 +1559,7 @@ name `fillyfoal`), running `tests/data/ruby-marshal/make.rb`.
 | `ruby-marshal/objects.marshal` | Ruby 3.4.11 | a hash of nil/true/false, fixnums, bignums, floats (NaN, -Infinity), symbols and a symbol link, strings in UTF-8, US-ASCII, ISO-8859-1 and binary, arrays, an object link, hashes (one with a default), a struct, an object, `_dump` and `marshal_dump` objects, a regexp, a class, a module, a range and an extended String subclass; unchanged |
 | `ruby-marshal/array.marshal` | Ruby 3.4.11 | 600 `[i, "item i"]` pairs; unchanged |
 | `ruby-marshal/regexps.marshal` | Ruby 3.4.11 | `[/é/, /a/n, /x/imx]`: option bytes 0x10 (`FIXEDENCODING`), 0x20 (`NOENCODING`) and 7; unchanged |
+| `ruby-marshal/dumps.marshal` | Ruby 3.4.11 (RubyGems 3.6.9) | `[Gem::Specification, [Time UTC, Time +01:00 with nanoseconds, Time -05:30]]`: `_dump` data that is a Marshal stream, and Times with `:offset`, `:zone`, `:nano_num`/`:nano_den` and `:submicro`; unchanged |
 ## Partclone images (partclone)
 
 Reproduced byte-for-byte by `sh tests/data/partclone/make-external.sh`
@@ -1679,6 +1683,8 @@ is a KRaft broker's own `__cluster_metadata` segment
 | `kafka-timeindex/txn.timeindex` | Kafka 3.9.1 broker | the time index of `demo-txn-0` (one entry) |
 | `kafka-log/legacy.log` | Kafka 3.9.1 broker, ZooKeeper mode | `make_legacy.sh`, segment `00000000000000000000.log` of `legacy-0`: topic format 0.9.0 (magic 0, an uncompressed set and a gzip wrapper), then switched to 0.10.2 (magic 1, the same); checked against `kafka-dump-log.sh --deep-iteration` |
 | `kafka-log/cluster-metadata.log` | Kafka 3.9.1 broker, KRaft | `make_metadata.sh`, segment `00000000000000000000.log` of `__cluster_metadata-0`: a LEADER_CHANGE control batch, then metadata records; checked against `kafka-dump-log.sh --cluster-metadata-decoder` |
+| `kafka-log/aborted.log` | Kafka 3.9.1 broker, KRaft | `tests/data/kafka-txnindex/make_txnindex.sh` (run as in its header): segment `00000000000000000000.log` of `demo-aborted-0`; two transactional producers killed with a transaction open, each aborted by the next one's `initTransactions` (ABORT control batches), then a committed transaction; checked against `kafka-dump-log.sh` |
+| `kafka-txnindex/aborted.txnindex` | Kafka 3.9.1 broker, KRaft | the same partition's `00000000000000000000.txnindex`: the two aborted transactions; checked against `kafka-dump-log.sh` |
 
 ## nfdump 1.7.5 and 1.6.22: NetFlow capture files
 

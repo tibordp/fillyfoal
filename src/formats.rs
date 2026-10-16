@@ -881,6 +881,8 @@ pub static FORMATS: &[&Format] = &[
     &data::kafka::INDEX,
     #[cfg(feature = "data")]
     &data::kafka::TIMEINDEX,
+    #[cfg(feature = "data")]
+    &data::kafka::TXNINDEX,
     // Schemaless wire encodings: by extension or "inspect as" only.
     #[cfg(feature = "data")]
     &data::wire::protobuf::FORMAT,

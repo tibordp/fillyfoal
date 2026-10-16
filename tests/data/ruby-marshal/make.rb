@@ -79,4 +79,21 @@ File.binwrite(File.join(dir, 'objects.marshal'), Marshal.dump(data))
 File.binwrite(File.join(dir, 'array.marshal'), Marshal.dump((1..600).map { |i| [i, "item #{i}"] }))
 # Regexp options: a fixed-encoding (UTF-8) one, a /n one and /imx.
 File.binwrite(File.join(dir, 'regexps.marshal'), Marshal.dump([/é/, /a/n, /x/imx]))
+# _dump data that is a Marshal stream (a gem specification, as in a
+# RubyGems specs index) and Times: UTC, local with nanoseconds, local.
+spec = Gem::Specification.new do |s|
+  s.name = 'teapot'
+  s.version = '1.2.3'
+  s.summary = 'A demo gem'
+  s.authors = ['Example Author']
+  s.date = '2026-01-01'
+  s.files = ['lib/teapot.rb']
+  s.license = 'MIT'
+end
+times = [
+  Time.at(1_700_000_000, 123_456, :usec).utc,
+  Time.at(1_700_000_000, 123_456_789, :nsec).localtime('+01:00'),
+  Time.at(1_700_000_000).localtime('-05:30')
+]
+File.binwrite(File.join(dir, 'dumps.marshal'), Marshal.dump([spec, times]))
 puts RUBY_VERSION

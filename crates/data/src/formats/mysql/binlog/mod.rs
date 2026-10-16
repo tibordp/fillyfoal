@@ -10,22 +10,27 @@
 //! rotate, intvar, rand, user variable, XID, stop, table map (with the
 //! optional metadata of `binlog_row_metadata=FULL`), rows events v1 and v2
 //! (write, update, delete: the rows and their column values for the
-//! common types, see `rows`), rows query, MySQL GTIDs (with logical
+//! common types, see `rows`), partial update rows
+//! (`binlog_row_value_options=PARTIAL_JSON`: the JSON diffs of the after
+//! image), XA prepare (with its XID), rows query, MySQL GTIDs (with logical
 //! clocks, commit timestamps and server versions), anonymous GTIDs and
 //! previous GTIDs, transaction payloads (zstd-compressed transactions,
 //! `binlog_transaction_compression`, whose events are walked in turn),
-//! MariaDB's annotate-rows, binlog checkpoint, GTID, GTID list and start
-//! encryption events, and MariaDB's compressed query and rows events
-//! (`log_bin_compress`, zlib). Other events are shown with their header
+//! MariaDB's annotate-rows, binlog checkpoint, GTID (with the XID of an
+//! XA transaction), GTID list and start encryption events, and
+//! MariaDB's compressed query and rows events (`log_bin_compress`, zlib). Other events are shown with their header
 //! and raw body. After MariaDB's start encryption event
 //! (`encrypt_binlog`), every event is encrypted but for its size (at the
-//! usual offset 9): those are listed as encrypted events, unchecked.
+//! usual offset 9): those are listed as encrypted events, unchecked. A
+//! replica's relay log (its first event flagged `RELAY_LOG`) has the
+//! same layout, but its events carry their positions in the source's
+//! binary log.
 //!
 //! Layouts written from memory of MySQL's binary log documentation
 //! (`libbinlogevents`, the internals manual) and MariaDB's knowledge base
 //! (no source was consulted while writing this); checked against files
-//! written by MySQL 9.7.1, MariaDB 10.5.29 and 11.4.13, the decoded rows against
-//! the statements that wrote them and, for MariaDB, against
+//! written by MySQL 8.0.46 and 9.7.1, MariaDB 10.5.29 and 11.4.13, the
+//! decoded rows against the statements that wrote them and, for MariaDB, against
 //! `mariadb-binlog -vv` (MariaDB 11.4).
 
 mod rows;
@@ -156,6 +161,17 @@ const MARIADB_GTID_FLAGS: FlagTable = &[
     flag(0x40, "PREPARED_XA"),
     flag(0x80, "COMPLETED_XA"),
 ];
+
+/// MariaDB GTID extra flags (from memory of MariaDB's `log_event.h`).
+const MARIADB_GTID_EXTRA: FlagTable = &[
+    flag(0x1, "MULTI_ENGINE"),
+    flag(0x2, "START_ALTER"),
+    flag(0x4, "COMMIT_ALTER"),
+    flag(0x8, "ROLLBACK_ALTER"),
+];
+
+/// A partial update's value options (`binlog_row_value_options`).
+const VALUE_OPTIONS: FlagTable = &[flag(0x1, "PARTIAL_JSON_UPDATES")];
 
 const QUERY_FLAGS2: FlagTable = &[
     flag(0x4000, "AUTO_IS_NULL"),
@@ -297,6 +313,9 @@ struct Stream {
     input: Input,
     region: Span,
     fmt: Fmt,
+    /// A replica's relay log (its first event has `RELAY_LOG`): event
+    /// positions are the source's.
+    relay: bool,
 }
 
 /// One event, for its expander.
@@ -417,9 +436,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             server: String::new(),
         }
     };
+    let relay = u16_le(&head, 17).is_some_and(|f| f & 0x40 != 0);
     cx.annotate(format!(
-        "{} binary log{}{}",
+        "{} {}{}{}",
         if fmt.mariadb() { "MariaDB" } else { "MySQL" },
+        if relay { "relay log" } else { "binary log" },
         if fmt.server.is_empty() {
             String::new()
         } else {
@@ -431,6 +452,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         input,
         region: file,
         fmt,
+        relay,
     };
     walk(&cx, &s, 4, resumed, true).await
 }
@@ -539,7 +561,12 @@ async fn walk(cx: &Cx, s: &Stream, start: u64, resumed: Option<Walk>, top: bool)
             }
         }
         if top {
-            if log_pos != 0 && log_pos != region.offset.saturating_add(pos).saturating_add(size) {
+            // A relay log's events carry their positions in the
+            // source's binary log.
+            if log_pos != 0
+                && !s.relay
+                && log_pos != region.offset.saturating_add(pos).saturating_add(size)
+            {
                 summary.push_str(&format!(" (next position {log_pos})"));
             }
             if s.fmt.checksum {
@@ -757,7 +784,12 @@ async fn summarize(cx: &Cx, e: &Event, table: Option<&str>) -> String {
             } else {
                 ""
             };
-            format!("{domain}-{server}-{seq}{kind}")
+            let xa = match mariadb_xid(&b, flags) {
+                Some(xid) if flags & 0x40 != 0 => format!(", XA START {xid}"),
+                Some(xid) => format!(", completes XA {xid}"),
+                None => String::new(),
+            };
+            format!("{domain}-{server}-{seq}{kind}{xa}")
         }
         163 => {
             let count = u32_le(&b, 0).unwrap_or(0) & 0x0fff_ffff;
@@ -790,13 +822,43 @@ async fn summarize(cx: &Cx, e: &Event, table: Option<&str>) -> String {
             b.first().copied().unwrap_or(0),
             u32_le(&b, 1).unwrap_or(0)
         ),
+        38 => match xa_prepare_xid(&b) {
+            Some((one_phase, xid)) if one_phase => format!("XA COMMIT {xid} ONE PHASE"),
+            Some((_, xid)) => format!("XA PREPARE {xid}"),
+            None => String::new(),
+        },
         14 => {
             let n = u32_le(&b, 0).map_or(0, |n| to_usize(n.into()));
-            format!(
-                "@{}",
+            let name =
                 String::from_utf8_lossy(b.get(4..4usize.saturating_add(n)).unwrap_or_default())
-            )
+                    .into_owned();
+            let rest = b.get(4usize.saturating_add(n)..).unwrap_or_default();
+            format!("@{name}{}", user_var_value(rest))
         }
+        13 => format!(
+            "seeds {}, {}",
+            u64_le(&b, 0).unwrap_or(0),
+            u64_le(&b, 8).unwrap_or(0)
+        ),
+        _ => String::new(),
+    }
+}
+
+/// ` = value` of a user variable event, from its null flag on (`b`).
+fn user_var_value(b: &[u8]) -> String {
+    if b.first().copied().unwrap_or(1) != 0 {
+        return " = NULL".to_owned();
+    }
+    let ty = b.get(1).copied().unwrap_or(0);
+    let len = u32_le(b, 6).map_or(0, |n| to_usize(n.into()));
+    let v = b.get(10..10usize.saturating_add(len)).unwrap_or_default();
+    match ty {
+        0 => format!(" = '{}'", clip(&String::from_utf8_lossy(v), 60)),
+        1 => format!(" = {}", f64::from_bits(u64_le(v, 0).unwrap_or(0))),
+        2 => format!(
+            " = {}",
+            i64::from_le_bytes(u64_le(v, 0).unwrap_or(0).to_le_bytes())
+        ),
         _ => String::new(),
     }
 }
@@ -913,6 +975,7 @@ async fn event(cx: Cx, e: Event) -> Result<()> {
             out.emit(&cx, "Name length", 0, 4, uint(n, 32));
             out.text(&cx, "File", 4, n);
         }
+        38 => xa_prepare(&cx, &out),
         162 => mariadb_gtid(&cx, &out),
         163 => gtid_list(&cx, &out),
         164 => {
@@ -1354,10 +1417,10 @@ fn user_var(cx: &Cx, out: &Body<'_>) {
     );
     out.emit(
         cx,
-        "Charset",
+        "Collation",
         at.saturating_add(2),
         4,
-        uint(out.u32(at.saturating_add(2)), 32),
+        enumv(out.u32(at.saturating_add(2)), 32, COLLATIONS),
     );
     let len = u64::from(out.u32(at.saturating_add(6)));
     out.emit(cx, "Value length", at.saturating_add(6), 4, uint(len, 32));
@@ -1690,7 +1753,7 @@ async fn rows_event(cx: &Cx, e: &Event, out: &Body<'_>) -> Result<()> {
         ));
     }
     if e.ty == 39 {
-        node = node.desc("Partial updates: after images hold JSON diffs, shown raw");
+        node = node.desc("Partial updates: JSON columns of after images may hold diffs");
     }
     cx.emit(node.lazy(
         crate::expander!(self::row_list: Rows),
@@ -1738,18 +1801,27 @@ async fn row_list(cx: Cx, r: Rows) -> Result<()> {
         let mut images = vec![(cells, start, end)];
         p = end;
         if let Some(after) = &r.present_after {
-            if r.kind == 3 {
-                // Partial JSON updates: the after image is not decodable
-                // value by value.
-                cx.push(
-                    Node::new(format!("Row {index}"))
-                        .span(r.data.tail(to_u64(start)))
-                        .diag(Diagnostic::unsupported("partial update rows")),
-                )
-                .await;
-                return Ok(());
-            }
-            match rows::image(&b, p, &t.columns, after) {
+            // Partial JSON updates: the after image starts with the
+            // value options and the partial columns.
+            let (image_at, partial) = if r.kind == 3 {
+                match rows::partial_header(&b, p, &t.columns) {
+                    Some((at, _, partial)) => (at, partial),
+                    None => {
+                        cx.push(
+                            Node::new(format!("Row {index}"))
+                                .span(r.data.tail(to_u64(start)))
+                                .diag(Diagnostic::malformed(
+                                    "the partial update header does not decode",
+                                )),
+                        )
+                        .await;
+                        return Ok(());
+                    }
+                }
+            } else {
+                (p, Vec::new())
+            };
+            match rows::image_with(&b, image_at, &t.columns, after, &partial) {
                 Ok((cells, end)) => {
                     images.push((cells, p, end));
                     p = end;
@@ -1810,7 +1882,12 @@ fn row_summary(columns: &[Column], b: &[u8], cells: &[rows::Cell]) -> String {
             None => "NULL".to_owned(),
             Some((at, n)) => match columns.get(c.column) {
                 Some(col) => {
-                    rows::value(col, b.get(at..at.saturating_add(n)).unwrap_or_default()).1
+                    let v = b.get(at..at.saturating_add(n)).unwrap_or_default();
+                    if c.partial {
+                        rows::partial_value(col, v).1
+                    } else {
+                        rows::value(col, v).1
+                    }
                 }
                 None => "?".to_owned(),
             },
@@ -1827,7 +1904,7 @@ async fn row(cx: Cx, (r, images): (Rows, Vec<(u64, u64)>)) -> Result<()> {
         return Ok(());
     };
     let names = match (r.kind, images.len()) {
-        (1, 2) => ["Before image", "After image"].as_slice(),
+        (1 | 3, 2) => ["Before image", "After image"].as_slice(),
         _ => [""].as_slice(),
     };
     for (k, &(start, end)) in images.iter().enumerate() {
@@ -1837,11 +1914,11 @@ async fn row(cx: Cx, (r, images): (Rows, Vec<(u64, u64)>)) -> Result<()> {
         } else {
             r.present_after.clone().unwrap_or_default()
         };
-        let state = (span, t.clone(), present);
+        let state = (span, t.clone(), present, r.kind == 3 && k == 1);
         match names.get(k) {
             Some(name) if !name.is_empty() => {
                 cx.emit(Node::new(*name).span(span).lazy(
-                    crate::expander!(self::cells: (Span, Arc<TableMap>, Vec<u8>)),
+                    crate::expander!(self::cells: (Span, Arc<TableMap>, Vec<u8>, bool)),
                     state,
                 ));
             }
@@ -1851,13 +1928,54 @@ async fn row(cx: Cx, (r, images): (Rows, Vec<(u64, u64)>)) -> Result<()> {
     Ok(())
 }
 
-async fn cells(cx: Cx, (span, t, present): (Span, Arc<TableMap>, Vec<u8>)) -> Result<()> {
+/// The cells of a row image; `partial` for a partial update's after
+/// image, which starts with its value options and partial columns.
+async fn cells(
+    cx: Cx,
+    (span, t, present, partial): (Span, Arc<TableMap>, Vec<u8>, bool),
+) -> Result<()> {
     let b = cx.read(span).await?;
-    let Ok((cells, _)) = rows::image(&b, 0, &t.columns, &present) else {
+    let (start, diffs) = if partial {
+        let Some((end, options, diffs)) = rows::partial_header(&b, 0, &t.columns) else {
+            return Err(Diagnostic::malformed("partial update header does not decode").at(span));
+        };
+        let n = lenenc(&b).map_or(1, |(_, n)| n);
+        cx.emit(
+            Node::new("Value options")
+                .span(span.sub(0, to_u64(n)))
+                .value(flagsv(options, 64, VALUE_OPTIONS)),
+        );
+        if end > n {
+            let names: Vec<String> = diffs
+                .iter()
+                .map(|&i| {
+                    t.columns
+                        .get(i)
+                        .and_then(|c| c.name.clone())
+                        .unwrap_or_else(|| format!("@{}", i.saturating_add(1)))
+                })
+                .collect();
+            cx.emit(
+                Node::new("Partial JSON columns")
+                    .span(span.sub(to_u64(n), to_u64(end.saturating_sub(n))))
+                    .value(Value::Bytes(b.get(n..end).unwrap_or_default().to_vec()))
+                    .summary(if names.is_empty() {
+                        "none".to_owned()
+                    } else {
+                        names.join(", ")
+                    })
+                    .desc("A bit for each JSON column of the table: set where it holds diffs"),
+            );
+        }
+        (end, diffs)
+    } else {
+        (0, Vec::new())
+    };
+    let Ok((cells, _)) = rows::image_with(&b, start, &t.columns, &present, &diffs) else {
         return Err(Diagnostic::malformed("row image does not decode").at(span));
     };
     let null_len = to_u64(cells.len().div_ceil(8));
-    cx.emit(Node::new("NULL bitmap").span(span.sub(0, null_len)));
+    cx.emit(Node::new("NULL bitmap").span(span.sub(to_u64(start), null_len)));
     for c in &cells {
         let col = t.columns.get(c.column).cloned().unwrap_or_default();
         let name = col
@@ -1866,17 +1984,34 @@ async fn cells(cx: Cx, (span, t, present): (Span, Arc<TableMap>, Vec<u8>)) -> Re
             .unwrap_or_else(|| format!("@{}", c.column.saturating_add(1)));
         let node = Node::new(name);
         cx.push(match c.at {
-            None => node.summary(format!("NULL, {}", rows::describe(&col))),
+            None => node.summary(format!("NULL, {}", cell_type(&col))),
             Some((at, n)) => {
-                let (v, _) = rows::value(&col, b.get(at..at.saturating_add(n)).unwrap_or_default());
-                node.span(span.sub(to_u64(at), to_u64(n)))
-                    .value(v)
-                    .summary(rows::describe(&col))
+                let data = b.get(at..at.saturating_add(n)).unwrap_or_default();
+                if c.partial {
+                    let (v, _) = rows::partial_value(&col, data);
+                    node.span(span.sub(to_u64(at), to_u64(n)))
+                        .value(v)
+                        .summary(format!("{}, JSON diffs", cell_type(&col)))
+                } else {
+                    let (v, _) = rows::value(&col, data);
+                    node.span(span.sub(to_u64(at), to_u64(n)))
+                        .value(v)
+                        .summary(cell_type(&col))
+                }
             }
         })
         .await;
     }
     Ok(())
+}
+
+/// A cell's column type, with its signedness.
+fn cell_type(c: &Column) -> String {
+    let mut s = rows::describe(c);
+    if c.unsigned {
+        s.push_str(" UNSIGNED");
+    }
+    s
 }
 
 fn gtid(cx: &Cx, out: &Body<'_>) {
@@ -1999,9 +2134,119 @@ fn mariadb_gtid(cx: &Cx, out: &Body<'_>) {
         out.emit(cx, "Commit ID", p, 8, uint(out.u64(p), 64));
         p = p.saturating_add(8);
     }
-    if p < out.len() {
-        out.raw(cx, "More", p, out.len().saturating_sub(p));
+    if flags & 0xc0 != 0 && p.saturating_add(6) <= out.len() {
+        // The XA transaction's XID.
+        let gtrid = u64::from(out.byte(p.saturating_add(4)));
+        let bqual = u64::from(out.byte(p.saturating_add(5)));
+        let len = 6u64.saturating_add(gtrid).saturating_add(bqual);
+        let text = mariadb_xid(out.data, flags).unwrap_or_default();
+        cx.emit(
+            out.node("XID", p, len)
+                .value(Value::Text(text))
+                .lazy(xid_fields, out.at(p, len)),
+        );
+        p = p.saturating_add(len);
     }
+    if out.byte(p) != 0 {
+        // Extra flags, written only when some are set (MariaDB 10.5 and
+        // later; layout from memory, the multi-engine count seen in files
+        // 11.4 writes).
+        let extra = out.byte(p);
+        out.emit(
+            cx,
+            "Extra flags",
+            p,
+            1,
+            flagsv(extra, 8, MARIADB_GTID_EXTRA),
+        );
+        p = p.saturating_add(1);
+        if extra & 0x1 != 0 && p < out.len() {
+            cx.emit(
+                out.node("Extra engines", p, 1)
+                    .value(uint(out.byte(p), 8))
+                    .desc("Storage engines in the transaction beyond the first"),
+            );
+            p = p.saturating_add(1);
+        }
+    }
+    if p < out.len() {
+        let rest = out.slice(p, out.len().saturating_sub(p));
+        if rest.iter().all(|&b| b == 0) {
+            cx.emit(
+                out.node("Padding", p, out.len().saturating_sub(p))
+                    .desc("Zeros to the event's 19-byte post-header"),
+            );
+        } else {
+            out.raw(cx, "More", p, out.len().saturating_sub(p));
+        }
+    }
+}
+
+/// The XID text of a MariaDB GTID event body `b` with XA flags.
+fn mariadb_xid(b: &[u8], flags: u8) -> Option<String> {
+    if flags & 0xc0 == 0 {
+        return None;
+    }
+    let p = if flags & 0x2 != 0 { 21usize } else { 13 };
+    let format_id = u32_le(b, p)?;
+    let gtrid = usize::from(*b.get(p.checked_add(4)?)?);
+    let bqual = usize::from(*b.get(p.checked_add(5)?)?);
+    let data = p.checked_add(6)?;
+    let mid = data.checked_add(gtrid)?;
+    let g = b.get(data..mid)?;
+    let q = b.get(mid..mid.checked_add(bqual)?)?;
+    Some(xid_text(format_id, g, q))
+}
+
+/// An XID as XA statements show it: `X'gtrid',X'bqual',formatID`.
+fn xid_text(format_id: u32, gtrid: &[u8], bqual: &[u8]) -> String {
+    let hex = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+    format!("X'{}',X'{}',{format_id}", hex(gtrid), hex(bqual))
+}
+
+/// The XID of an XA prepare event body: whether it is a one-phase
+/// commit, and the XID's text.
+fn xa_prepare_xid(b: &[u8]) -> Option<(bool, String)> {
+    let one_phase = *b.first()? != 0;
+    let format_id = u32_le(b, 1)?;
+    let gtrid = to_usize(u32_le(b, 5)?.into());
+    let bqual = to_usize(u32_le(b, 9)?.into());
+    let mid = 13usize.checked_add(gtrid)?;
+    let g = b.get(13..mid)?;
+    let q = b.get(mid..mid.checked_add(bqual)?)?;
+    Some((one_phase, xid_text(format_id, g, q)))
+}
+
+/// XA prepare (MySQL and MariaDB): whether it commits in one phase, then
+/// the XID (format ID, the lengths of its two parts as 32-bit numbers,
+/// then the parts).
+fn xa_prepare(cx: &Cx, out: &Body<'_>) {
+    out.emit(cx, "One phase", 0, 1, Value::Bool(out.byte(0) != 0));
+    out.emit(cx, "Format ID", 1, 4, uint(out.u32(1), 32));
+    let gtrid = u64::from(out.u32(5));
+    let bqual = u64::from(out.u32(9));
+    out.emit(cx, "Gtrid length", 5, 4, uint(gtrid, 32));
+    out.emit(cx, "Bqual length", 9, 4, uint(bqual, 32));
+    out.raw(cx, "Gtrid", 13, gtrid);
+    out.raw(cx, "Bqual", 13u64.saturating_add(gtrid), bqual);
+}
+
+/// The fields of a MariaDB GTID event's XID: format ID, the lengths of
+/// its two parts (one byte each), the parts.
+async fn xid_fields(cx: Cx, span: Span) -> Result<()> {
+    let b = cx.read(span).await?;
+    let out = Body {
+        span,
+        data: b.as_slice(),
+    };
+    out.emit(&cx, "Format ID", 0, 4, uint(out.u32(0), 32));
+    let gtrid = u64::from(out.byte(4));
+    let bqual = u64::from(out.byte(5));
+    out.emit(&cx, "Gtrid length", 4, 1, uint(gtrid, 8));
+    out.emit(&cx, "Bqual length", 5, 1, uint(bqual, 8));
+    out.raw(&cx, "Gtrid", 6, gtrid);
+    out.raw(&cx, "Bqual", 6u64.saturating_add(gtrid), bqual);
+    Ok(())
 }
 
 fn gtid_list(cx: &Cx, out: &Body<'_>) {
@@ -2076,6 +2321,7 @@ async fn payload(cx: &Cx, e: &Event, out: &Body<'_>) -> Result<()> {
     };
     let inner = Stream {
         input: e.stream.input,
+        relay: e.stream.relay,
         region: events,
         fmt: Fmt {
             checksum: false,

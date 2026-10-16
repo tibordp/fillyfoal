@@ -14,7 +14,12 @@
 //! default), objects with instance variables, structs, `_dump` (`u`) and
 //! `marshal_dump` (`U`) data, `_dump_data` (`d`), String/Array/Hash
 //! subclasses (`C`), extended objects (`e`), classes and modules, and
-//! object links (with the object they point to).
+//! object links (with the object they point to). `_dump` data that is
+//! itself a Marshal stream (`Gem::Specification`, as in RubyGems' specs
+//! indexes) is dissected as one, and a `Time`'s 8 packed bytes are
+//! decoded, with its UTC offset, zone and nanoseconds from its instance
+//! variables (`marshal_time` in Ruby's `time.c`, from memory; checked
+//! against Times dumped by Ruby 3.4: UTC, local, with nanoseconds).
 //!
 //! Layout written from memory of Ruby's `doc/marshal.rdoc` and
 //! `marshal.c` (including which values take an object index), checked
@@ -249,6 +254,17 @@ fn probe(h: &Head<'_>) -> bool {
         return false;
     }
     let whole = h.len_known && u64::try_from(h.data.len()).is_ok_and(|n| n == h.len);
+    // A leaf value (a string, a bignum) cut by the window says where it
+    // ends: that must be the end of the file, or three bytes and a large
+    // length would do.
+    if let Some(it) = h.data.get(2..).and_then(decode)
+        && it.nested == 0
+        && it.then == Then::Nothing
+        && h.len_known
+        && !whole
+    {
+        return 2u64.checked_add(it.head) == Some(h.len) && skip(h.data, 2, 0) == Err(true);
+    }
     match skip(h.data, 2, 0) {
         Ok(end) => whole && end == h.data.len(),
         Err(true) => !whole && h.data.len() >= 1024,
@@ -560,10 +576,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!("Ruby Marshal data, {}", describe(first.tag)));
     if matches!(first.tag, b'[' | b'{' | b'}' | b'o' | b'S') {
         // Listed as they are scanned; the trailing data check comes last.
-        return walk_members(cx, input.span, 2, Path::new(), true).await;
+        return walk_members(cx, input, 2, Path::new(), true).await;
     }
     let end = end_of(&mut r, 2).await?;
-    let node = value_node(&mut r, 2, end, "Value".to_owned(), &Path::new()).await?;
+    let node = value_node(&mut r, input, 2, end, "Value".to_owned(), &Path::new()).await?;
     cx.emit(node);
     if let Some(node) = trailing(input.span, end) {
         cx.emit(node);
@@ -676,16 +692,18 @@ fn string_node(node: Node, b: Vec<u8>, total: u64, enc: Option<&str>) -> Node {
 /// to (never another link).
 fn value_node_boxed<'a, 'b: 'a>(
     r: &'a mut ByteReader<'b>,
+    input: Input,
     start: u64,
     end: u64,
     path: &'a Path,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Node>> + Send + 'a>> {
-    Box::pin(value_node(r, start, end, String::new(), path))
+    Box::pin(value_node(r, input, start, end, String::new(), path))
 }
 
 /// A node for the value at `start..end`.
 async fn value_node(
     r: &mut ByteReader<'_>,
+    input: Input,
     start: u64,
     end: u64,
     name: String,
@@ -699,8 +717,8 @@ async fn value_node(
         let node = node.summary(summary);
         match vt::enter(path, span.offset) {
             Ok(p) => node.lazy(
-                crate::expander!(self::members: (Span, u64, Path)),
-                (region, start, p),
+                crate::expander!(self::members: (Input, u64, Path)),
+                (input, start, p),
             ),
             Err(d) => node.diag(d),
         }
@@ -744,7 +762,7 @@ async fn value_node(
                 t => t.parse::<f64>().ok(),
             };
             match v {
-                Some(f) => node.value(Value::Float(f)),
+                Some(f) => node.value(Value::Float(f)).summary("float"),
                 None => node
                     .value(Value::Text(text))
                     .diag(Diagnostic::malformed("float text does not parse")),
@@ -809,7 +827,7 @@ async fn value_node(
                     let t = head(r, at).await?.tag;
                     let target_end = end_of(r, at).await.unwrap_or(at);
                     let target = r.span(at, target_end.saturating_sub(at));
-                    let shown = value_node_boxed(r, at, target_end, path).await?;
+                    let shown = value_node_boxed(r, input, at, target_end, path).await?;
                     let what = shown
                         .summary
                         .clone()
@@ -855,9 +873,33 @@ async fn value_node(
                         .summary(format!("regexp, {}", enc.unwrap_or_default()))
                     };
                     node.lazy(
-                        crate::expander!(self::ivars: (Span, u64, u64, Path)),
-                        (region, start, inner_end, path.clone()),
+                        crate::expander!(self::ivars: (Input, u64, u64, Path)),
+                        (input, start, inner_end, path.clone()),
                     )
+                }
+                b'u' => {
+                    // `_dump` data with instance variables: a Time's
+                    // offset, zone and nanoseconds are among them.
+                    let class = symbol_at(r, inner_at.saturating_add(1))
+                        .await?
+                        .unwrap_or_default();
+                    let time = match class.as_str() {
+                        "Time" => time_of(r, inner_at, inner_end).await?,
+                        _ => None,
+                    };
+                    match time {
+                        Some((t, extra)) => {
+                            lazy_members(node, format!("Time, {}", t.text(Some(&extra)))).value(
+                                Value::Timestamp {
+                                    unix_seconds: t.unix_seconds(),
+                                },
+                            )
+                        }
+                        None => lazy_members(
+                            node,
+                            format!("{class}, _dump data, with instance variables"),
+                        ),
+                    }
                 }
                 _ => lazy_members(
                     node,
@@ -890,7 +932,31 @@ async fn value_node(
             match it.tag {
                 b'u' => {
                     let sym_end = end_of(r, start.saturating_add(1)).await?;
-                    let (b, len, _) = byte_string(r, sym_end, vt::MAX_TEXT).await?;
+                    let (b, len, n) = byte_string(r, sym_end, vt::MAX_TEXT).await?;
+                    let data_at = sym_end.saturating_add(n);
+                    let state = (input, start, sym_end, data_at, len);
+                    if class == "Time"
+                        && let Some(t) = PackedTime::decode(&b)
+                    {
+                        // Time#_dump: the time in UTC, packed into 8 bytes.
+                        return Ok(node
+                            .value(Value::Timestamp {
+                                unix_seconds: t.unix_seconds(),
+                            })
+                            .summary(if t.utc || t.old {
+                                format!("Time, {}", t.text(None))
+                            } else {
+                                format!("Time, {} (a local time, stored in UTC)", t.text(None))
+                            })
+                            .lazy(crate::expander!(self::user_dump: Dump), state));
+                    }
+                    if len > 2 && b.starts_with(&[4, 8]) {
+                        // _dump data that is itself a Marshal stream
+                        // (Gem::Specification, Gem::Version, ...).
+                        return Ok(node
+                            .summary(format!("{class}, {kind}, a Marshal stream of {len} bytes"))
+                            .lazy(crate::expander!(self::user_dump: Dump), state));
+                    }
                     let node = node.summary(format!("{class}, {kind}"));
                     if std::str::from_utf8(&b).is_ok_and(|s| !s.chars().any(char::is_control)) {
                         vt::text(node, &b, len).summary(format!("{class}, {kind}"))
@@ -905,6 +971,266 @@ async fn value_node(
         }
         _ => node.diag(Diagnostic::malformed(format!("type byte {:#04x}", it.tag))),
     })
+}
+
+/// `_dump` data (`u`): the value at `start`, its class symbol ending at
+/// the second offset, and its data (offset and length).
+type Dump = (Input, u64, u64, u64, u64);
+
+/// The class and the data of `_dump` data: a Time's packed fields, or a
+/// nested Marshal stream.
+async fn user_dump(cx: Cx, (input, start, sym_end, data_at, len): Dump) -> Result<()> {
+    let mut r = ByteReader::new(&cx, input.span);
+    let class_at = start.saturating_add(1);
+    let class = symbol_at(&mut r, class_at).await?.unwrap_or_default();
+    cx.emit(
+        Node::new("Class")
+            .span(r.span(class_at, sym_end.saturating_sub(class_at)))
+            .value(Value::Text(class.clone())),
+    );
+    cx.emit(
+        Node::new("Length")
+            .span(r.span(sym_end, data_at.saturating_sub(sym_end)))
+            .value(vt::uint(len, 32)),
+    );
+    let data = r.span(data_at, len);
+    let b = r.bytes(data_at, len.min(8)).await?;
+    match PackedTime::decode(&b).filter(|_| class == "Time" && len == 8) {
+        Some(t) => {
+            let p = r.span(data_at, 4);
+            let s = r.span(data_at.saturating_add(4), 4);
+            let field = |name: &str, span: Span, v: u64, bits: u8| {
+                Node::new(name.to_owned())
+                    .span(span)
+                    .value(vt::uint(v, bits))
+            };
+            if t.old {
+                cx.emit(
+                    Node::new("Seconds")
+                        .span(p)
+                        .value(Value::Timestamp {
+                            unix_seconds: t.unix_seconds(),
+                        })
+                        .desc("Old format: seconds since 1970, then microseconds"),
+                );
+            } else {
+                cx.emit(
+                    Node::new("UTC")
+                        .span(p)
+                        .value(Value::Bool(t.utc))
+                        .desc("Bit 30: a UTC time; otherwise local, offset in :offset"),
+                );
+                cx.emit(field("Year", p, t.year, 16).desc("Bits 14-29: year - 1900"));
+                cx.emit(field("Month", p, t.mon.saturating_add(1), 4));
+                cx.emit(field("Day", p, t.mday, 5));
+                cx.emit(field("Hour", p, t.hour, 5));
+                cx.emit(field("Minute", s, t.min, 6));
+                cx.emit(field("Second", s, t.sec, 6));
+            }
+            cx.emit(field("Microseconds", s, t.usec, 20));
+        }
+        None if b.starts_with(&[4, 8]) => cx.emit(crate::formats::embedded_as(
+            "Data",
+            input.nested(data),
+            &FORMAT,
+        )),
+        None => cx.emit(Node::new("Data").span(data)),
+    }
+    Ok(())
+}
+
+/// `Time#_dump`'s 8 bytes (`marshal_time` in Ruby's `time.c`, from
+/// memory): two little-endian words. The first holds bit 31 (set: this
+/// layout), bit 30 (UTC), the year - 1900 (16 bits), month - 1 (4), day
+/// (5) and hour (5); the second minute (6), second (6) and microseconds
+/// (20), all in UTC. With bit 31 clear (Ruby before 1.9) the words are
+/// seconds since 1970 and microseconds.
+#[derive(Clone, Copy, Debug)]
+struct PackedTime {
+    old: bool,
+    utc: bool,
+    year: u64,
+    mon: u64,
+    mday: u64,
+    hour: u64,
+    min: u64,
+    sec: u64,
+    usec: u64,
+    seconds: u64,
+}
+
+/// What a Time's instance variables add: the UTC offset of a local
+/// time, nanoseconds beyond the microseconds, the zone name and a year
+/// too large for 16 bits.
+#[derive(Clone, Debug, Default)]
+struct TimeExtra {
+    offset: Option<i64>,
+    nano: Option<(i64, i64)>,
+    submicro: Option<Vec<u8>>,
+    zone: Option<String>,
+    year: Option<i64>,
+}
+
+impl PackedTime {
+    fn decode(b: &[u8]) -> Option<Self> {
+        let p = u64::from(u32::from_le_bytes(b.get(..4)?.try_into().ok()?));
+        let s = u64::from(u32::from_le_bytes(b.get(4..8)?.try_into().ok()?));
+        let t = PackedTime {
+            old: p & 1 << 31 == 0,
+            utc: p & 1 << 30 != 0,
+            year: (p >> 14 & 0xffff).saturating_add(1900),
+            mon: p >> 10 & 0xf,
+            mday: p >> 5 & 0x1f,
+            hour: p & 0x1f,
+            min: s >> 26 & 0x3f,
+            sec: s >> 20 & 0x3f,
+            usec: s & 0xf_ffff,
+            seconds: p,
+        };
+        if t.old {
+            return (s < 1_000_000).then_some(PackedTime { usec: s, ..t });
+        }
+        (t.mon < 12 && (1..=31).contains(&t.mday) && t.hour < 24 && t.min < 60 && t.sec < 61)
+            .then_some(t)
+    }
+
+    fn unix_seconds(&self) -> i64 {
+        if self.old {
+            return i64::try_from(self.seconds).unwrap_or(0);
+        }
+        self.unix_with_year(i64::try_from(self.year).unwrap_or(0))
+    }
+
+    fn unix_with_year(&self, year: i64) -> i64 {
+        let n = |v: u64| u32::try_from(v).unwrap_or(0);
+        crate::formats::util::civil::civil_to_unix(
+            year,
+            n(self.mon.saturating_add(1)),
+            n(self.mday),
+            n(self.hour),
+            n(self.min),
+            n(self.sec),
+        )
+    }
+
+    /// The time as Ruby shows it: local with its offset, or UTC.
+    fn text(&self, extra: Option<&TimeExtra>) -> String {
+        let mut nanos = self.usec.saturating_mul(1000);
+        let mut unix = self.unix_seconds();
+        if let Some(x) = extra {
+            if let Some(year) = x.year.filter(|_| !self.old) {
+                unix = self.unix_with_year(year);
+            }
+            match (x.nano, &x.submicro) {
+                (Some((num, den)), _) if den > 0 && num >= 0 => {
+                    nanos = nanos.saturating_add(
+                        u64::try_from(num.checked_div(den).unwrap_or(0)).unwrap_or(0),
+                    );
+                }
+                (_, Some(bcd)) => {
+                    let digits = bcd.iter().flat_map(|&b| [b >> 4, b & 0xf]).take(3);
+                    let mut scale = 100u64;
+                    for d in digits {
+                        nanos = nanos.saturating_add(u64::from(d.min(9)).saturating_mul(scale));
+                        scale /= 10;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let nanos = u32::try_from(nanos.min(999_999_999)).unwrap_or(0);
+        let offset = extra
+            .and_then(|x| x.offset)
+            .filter(|_| !self.utc && !self.old);
+        let mut text = match offset {
+            Some(off) => {
+                let local = vt::datetime(unix.saturating_add(off), nanos);
+                let stem = local.strip_suffix(" UTC").unwrap_or(&local).to_owned();
+                let sign = if off < 0 { '-' } else { '+' };
+                let a = off.unsigned_abs();
+                let (h, m, s) = (a / 3600, a / 60 % 60, a % 60);
+                if s == 0 {
+                    format!("{stem} {sign}{h:02}:{m:02}")
+                } else {
+                    format!("{stem} {sign}{h:02}:{m:02}:{s:02}")
+                }
+            }
+            None => vt::datetime(unix, nanos),
+        };
+        if let Some(zone) = extra
+            .and_then(|x| x.zone.as_deref())
+            .filter(|z| !z.is_empty() && *z != "UTC")
+        {
+            text.push_str(&format!(" ({zone})"));
+        }
+        text
+    }
+}
+
+/// The fixnum at `at`, if it is one.
+async fn fixnum_at(r: &mut ByteReader<'_>, at: u64) -> Result<Option<i64>> {
+    let it = head(r, at).await?;
+    if it.tag != b'i' {
+        return Ok(None);
+    }
+    let b = r
+        .bytes(at.saturating_add(1), it.head.saturating_sub(1))
+        .await?;
+    Ok(packed(&b).map(|(v, _)| v))
+}
+
+/// The bytes of the string at `at` (bare or with an encoding), if it is one.
+async fn string_at(r: &mut ByteReader<'_>, at: u64) -> Result<Option<Vec<u8>>> {
+    let it = head(r, at).await?;
+    let p = if it.tag == b'I' {
+        at.saturating_add(1)
+    } else {
+        at
+    };
+    if head(r, p).await?.tag != b'"' {
+        return Ok(None);
+    }
+    Ok(Some(byte_string(r, p.saturating_add(1), 64).await?.0))
+}
+
+/// The Time of the `I` value whose inner `_dump` data is at `inner_at`
+/// (ending at `inner_end`): its packed fields and its instance variables.
+async fn time_of(
+    r: &mut ByteReader<'_>,
+    inner_at: u64,
+    inner_end: u64,
+) -> Result<Option<(PackedTime, TimeExtra)>> {
+    let sym_end = end_of(r, inner_at.saturating_add(1)).await?;
+    let (b, len, _) = byte_string(r, sym_end, 8).await?;
+    let Some(t) = PackedTime::decode(&b).filter(|_| len == 8) else {
+        return Ok(None);
+    };
+    let mut x = TimeExtra::default();
+    let (k, n) = count_at(r, inner_end).await?;
+    let mut p = inner_end.saturating_add(n);
+    let mut num = None;
+    let mut den = None;
+    for _ in 0..k.min(16) {
+        let name = symbol_at(r, p).await?;
+        let value_at = end_of(r, p).await?;
+        let value_end = end_of(r, value_at).await?;
+        match name.as_deref() {
+            Some("offset") => x.offset = fixnum_at(r, value_at).await?,
+            Some("nano_num") => num = fixnum_at(r, value_at).await?,
+            Some("nano_den") => den = fixnum_at(r, value_at).await?,
+            Some("year") => x.year = fixnum_at(r, value_at).await?,
+            Some("submicro") => x.submicro = string_at(r, value_at).await?,
+            Some("zone") => {
+                x.zone = string_at(r, value_at)
+                    .await?
+                    .map(|z| String::from_utf8_lossy(&z).into_owned());
+            }
+            _ => {}
+        }
+        p = value_end;
+    }
+    x.nano = num.zip(den);
+    Ok(Some((t, x)))
 }
 
 fn regexp_options(o: u8) -> String {
@@ -925,10 +1251,13 @@ fn regexp_options(o: u8) -> String {
     s
 }
 
-/// A key's short text: symbols, strings and integers.
-async fn key_name(r: &mut ByteReader<'_>, at: u64, index: u64) -> Result<String> {
+/// A key's short text: symbols, strings and integers. `ivar` for the
+/// names of instance variables and struct members, shown as Ruby shows
+/// them (`@name`, `x`) rather than as symbols.
+async fn key_name(r: &mut ByteReader<'_>, at: u64, index: u64, ivar: bool) -> Result<String> {
     if let Some(s) = symbol_at(r, at).await? {
-        return Ok(vt::key_name(&format!(":{s}"), index));
+        let s = if ivar { s } else { format!(":{s}") };
+        return Ok(vt::key_name(&s, index));
     }
     let it = head(r, at).await?;
     let p = if it.tag == b'I' {
@@ -956,13 +1285,14 @@ async fn key_name(r: &mut ByteReader<'_>, at: u64, index: u64) -> Result<String>
 /// The members of the container at `start`: array elements, hash entries
 /// (and the default), object and struct instance variables, the wrapped
 /// value of `U`/`d`/`C`/`e` and the instance variables of an `I` value.
-async fn members(cx: Cx, (region, start, path): (Span, u64, Path)) -> Result<()> {
-    walk_members(cx, region, start, path, false).await
+async fn members(cx: Cx, (input, start, path): (Input, u64, Path)) -> Result<()> {
+    walk_members(cx, input, start, path, false).await
 }
 
 /// [`members`]; `top` for the file's own value, which is followed by a
 /// check for trailing data once its end is reached.
-async fn walk_members(cx: Cx, region: Span, start: u64, path: Path, top: bool) -> Result<()> {
+async fn walk_members(cx: Cx, input: Input, start: u64, path: Path, top: bool) -> Result<()> {
+    let region = input.span;
     let mut r = ByteReader::new(&cx, region);
     let it = head(&mut r, start).await?;
     let (mut pos, mut index) = match cx.resume::<(u64, u64)>() {
@@ -973,10 +1303,10 @@ async fn walk_members(cx: Cx, region: Span, start: u64, path: Path, top: bool) -
                 b'I' => {
                     // The wrapped value's own members first.
                     let inner_end = end_of(&mut r, pos).await?;
-                    let node =
-                        value_node(&mut r, pos, inner_end, "Value".to_owned(), &path).await?;
+                    let node = value_node(&mut r, input, pos, inner_end, "Value".to_owned(), &path)
+                        .await?;
                     cx.emit(node);
-                    return ivars(cx, (region, start, inner_end, path)).await;
+                    return ivars(cx, (input, start, inner_end, path)).await;
                 }
                 b'o' | b'S' | b'U' | b'd' | b'C' | b'e' => {
                     let sym_end = end_of(&mut r, pos).await?;
@@ -995,7 +1325,8 @@ async fn walk_members(cx: Cx, region: Span, start: u64, path: Path, top: bool) -
                             b'd' => "Data",
                             _ => "Value",
                         };
-                        let node = value_node(&mut r, pos, end, name.to_owned(), &path).await?;
+                        let node =
+                            value_node(&mut r, input, pos, end, name.to_owned(), &path).await?;
                         cx.emit(node);
                         return Ok(());
                     }
@@ -1039,15 +1370,15 @@ async fn walk_members(cx: Cx, region: Span, start: u64, path: Path, top: bool) -
         let node = if pairs {
             let key_end = end_of(&mut r, pos).await?;
             let value_end = end_of(&mut r, key_end).await?;
-            let name = key_name(&mut r, pos, index).await?;
-            let node = value_node(&mut r, key_end, value_end, name, &path)
+            let name = key_name(&mut r, pos, index, matches!(it.tag, b'o' | b'S')).await?;
+            let node = value_node(&mut r, input, key_end, value_end, name, &path)
                 .await?
                 .span(r.span(pos, value_end.saturating_sub(pos)));
             pos = value_end;
             node
         } else {
             let end = end_of(&mut r, pos).await?;
-            let node = value_node(&mut r, pos, end, format!("[{index}]"), &path).await?;
+            let node = value_node(&mut r, input, pos, end, format!("[{index}]"), &path).await?;
             pos = end;
             node
         };
@@ -1056,7 +1387,7 @@ async fn walk_members(cx: Cx, region: Span, start: u64, path: Path, top: bool) -
     }
     if it.tag == b'}' && index == total {
         let end = end_of(&mut r, pos).await?;
-        let node = value_node(&mut r, pos, end, "(default)".to_owned(), &path).await?;
+        let node = value_node(&mut r, input, pos, end, "(default)".to_owned(), &path).await?;
         cx.push(node).await;
         pos = end;
     }
@@ -1068,9 +1399,9 @@ async fn walk_members(cx: Cx, region: Span, start: u64, path: Path, top: bool) -
 
 /// The instance variables of the `I` value at `start` (its inner value
 /// ends at `inner_end`).
-async fn ivars(cx: Cx, (region, start, inner_end, path): (Span, u64, u64, Path)) -> Result<()> {
+async fn ivars(cx: Cx, (input, start, inner_end, path): (Input, u64, u64, Path)) -> Result<()> {
     let _ = start;
-    let mut r = ByteReader::new(&cx, region);
+    let mut r = ByteReader::new(&cx, input.span);
     let (k, n) = count_at(&mut r, inner_end).await?;
     cx.emit(
         Node::new("Instance variables")
@@ -1081,11 +1412,11 @@ async fn ivars(cx: Cx, (region, start, inner_end, path): (Span, u64, u64, Path))
     for i in 0..k {
         let key_end = end_of(&mut r, pos).await?;
         let value_end = end_of(&mut r, key_end).await?;
-        let name = key_name(&mut r, pos, i).await?;
-        let mut node = value_node(&mut r, key_end, value_end, name.clone(), &path)
+        let name = key_name(&mut r, pos, i, true).await?;
+        let mut node = value_node(&mut r, input, key_end, value_end, name.clone(), &path)
             .await?
             .span(r.span(pos, value_end.saturating_sub(pos)));
-        if name == ":E" {
+        if name == "E" {
             node = node.desc("true: UTF-8, false: US-ASCII");
         }
         cx.push(node).await;
@@ -1107,6 +1438,21 @@ mod tests {
             len: data.len() as u64,
             len_known: true,
         }
+    }
+
+    #[test]
+    fn a_cut_leaf_must_end_at_the_end_of_the_file() {
+        // A binary or string of 65,536 bytes, cut by a 2 KiB window.
+        let mut data = b"\x04\x08\"\x03\x00\x00\x01".to_vec();
+        data.resize(2048, b'x');
+        let at = |len: u64| Head {
+            data: &data,
+            tail: &data,
+            len,
+            len_known: true,
+        };
+        assert!(probe(&at(2 + 5 + 65_536)));
+        assert!(!probe(&at(200_000)));
     }
 
     #[test]

@@ -815,6 +815,8 @@ pub struct Cell {
     pub column: usize,
     /// Offset and length of the encoded value (`None`: NULL).
     pub at: Option<(usize, usize)>,
+    /// A JSON column of a partial update's after image: diffs.
+    pub partial: bool,
 }
 
 /// Decodes one row image starting at `p` of `b`: the NULL bitmap over the
@@ -825,6 +827,96 @@ pub fn image(
     p: usize,
     columns: &[Column],
     present: &[u8],
+) -> Result<(Vec<Cell>, usize), usize> {
+    image_with(b, p, columns, present, &[])
+}
+
+/// The header of a partial update rows event's after image
+/// (`binlog_row_value_options=PARTIAL_JSON`): the value options (a
+/// packed integer, bit 0 `PARTIAL_JSON_UPDATES`) and, with that bit, a
+/// bitmap with a bit for each JSON column of the table, set where the
+/// column holds a list of JSON diffs instead of a whole document. Returns
+/// where the header ends, the options and the partial columns' indexes.
+/// From memory of MySQL's `Rows_log_event`; checked against files MySQL
+/// 8.0 writes.
+pub fn partial_header(b: &[u8], p: usize, columns: &[Column]) -> Option<(usize, u64, Vec<usize>)> {
+    let (options, n) = lenenc(b.get(p..)?)?;
+    let mut at = p.checked_add(n)?;
+    let mut partial = Vec::new();
+    if options & 1 != 0 {
+        let json: Vec<usize> = (0..columns.len())
+            .filter(|&i| columns.get(i).is_some_and(|c| c.ty == 245))
+            .collect();
+        let len = json.len().div_ceil(8);
+        let bits = b.get(at..at.checked_add(len)?)?;
+        for (k, &i) in json.iter().enumerate() {
+            if bits.get(k / 8).is_some_and(|&x| x & (1 << (k % 8)) != 0) {
+                partial.push(i);
+            }
+        }
+        at = at.checked_add(len)?;
+    }
+    Some((at, options, partial))
+}
+
+/// JSON diff operations (`enum_json_diff_operation`).
+const JSON_DIFF_OPS: [&str; 3] = ["REPLACE", "INSERT", "REMOVE"];
+
+/// A partial JSON value: its diffs (operation, path, then the binary
+/// JSON value unless the operation is REMOVE) as text, one per line.
+/// `None` if they do not decode.
+pub fn json_diffs(b: &[u8]) -> Option<String> {
+    let mut p = 0usize;
+    let mut lines = Vec::new();
+    while p < b.len() {
+        if lines.len() >= 256 {
+            lines.push("…".to_owned());
+            break;
+        }
+        let op = *b.get(p)?;
+        let name = JSON_DIFF_OPS.get(usize::from(op))?;
+        p = p.checked_add(1)?;
+        let (len, n) = lenenc(b.get(p..)?)?;
+        let start = p.checked_add(n)?;
+        let end = start.checked_add(to_usize(len))?;
+        let path = String::from_utf8_lossy(b.get(start..end)?).into_owned();
+        p = end;
+        if op == 2 {
+            lines.push(format!("{name} {path}"));
+            continue;
+        }
+        let (len, n) = lenenc(b.get(p..)?)?;
+        let start = p.checked_add(n)?;
+        let end = start.checked_add(to_usize(len))?;
+        let value = json(b.get(start..end)?).unwrap_or_else(|| "?".to_owned());
+        lines.push(format!("{name} {path} = {}", clip(&value, 200)));
+        p = end;
+    }
+    Some(lines.join("\n"))
+}
+
+/// A JSON column's value in a partial after image: its diffs.
+pub fn partial_value(c: &Column, b: &[u8]) -> (Value, String) {
+    let data = payload(b, usize::from(c.meta));
+    match json_diffs(data) {
+        Some(text) => {
+            let short = clip(&text.replace('\n', "; "), 60);
+            (Value::Text(text), short)
+        }
+        None => {
+            let (v, _) = bytes_value(data);
+            (v, format!("JSON diffs, {} bytes", data.len()))
+        }
+    }
+}
+
+/// [`image`], with the JSON columns in `partial` holding diffs.
+pub fn image_with(
+    b: &[u8],
+    p: usize,
+    columns: &[Column],
+    present: &[u8],
+    partial: &[usize],
 ) -> Result<(Vec<Cell>, usize), usize> {
     let used: Vec<usize> = (0..columns.len())
         .filter(|&i| present.get(i / 8).is_some_and(|&x| x & (1 << (i % 8)) != 0))
@@ -839,6 +931,7 @@ pub fn image(
             cells.push(Cell {
                 column: i,
                 at: None,
+                partial: false,
             });
             continue;
         }
@@ -850,6 +943,7 @@ pub fn image(
         cells.push(Cell {
             column: i,
             at: Some((at, n)),
+            partial: partial.contains(&i),
         });
         at = at.saturating_add(n);
     }

@@ -17,6 +17,15 @@
 //!   header and footer, KRaft version and voters records (only the
 //!   leader of a LEADER_CHANGE is decoded; type numbers from Kafka's
 //!   `ControlRecordType`, written from memory, LEADER_CHANGE checked).
+//!   The data records of `__cluster_metadata` are metadata records: a
+//!   frame version (1), the record type's API key and its version as
+//!   unsigned varints, then the message. A record with a null key whose
+//!   value starts so, with a type and version Kafka 3.9.1 knows, is shown
+//!   with its type's name (`TopicRecord`, `PartitionRecord`, ...;
+//!   checked against `kafka-dump-log.sh --cluster-metadata-decoder`); the
+//!   message itself is shown raw. The segment's file name, which would
+//!   settle it, is not known here, so a user topic's null-key value that
+//!   happens to start the same way is named too.
 //! - **legacy messages** (magic 0 and 1): offset, size, CRC-32, magic,
 //!   attributes, (v1) a timestamp, key and value. A compressed message's
 //!   value is a whole inner message set, whose offsets are absolute in v0
@@ -31,8 +40,12 @@
 //! The offset index holds 8-byte entries (offset relative to the segment's
 //! base offset, byte position in the `.log`), the time index 12-byte ones
 //! (timestamp in milliseconds, relative offset); both are preallocated
-//! with zeros while their segment is active. Neither has a signature, so
-//! they are offered by extension only.
+//! with zeros while their segment is active. The transaction index
+//! (`.txnindex`, beside them in a partition that saw an aborted
+//! transaction) holds a 34-byte `AbortedTxn` per aborted transaction:
+//! version, producer ID, first and last offset and the last stable
+//! offset (checked against `kafka-dump-log.sh`). None has a signature,
+//! so they are offered by extension only.
 //!
 //! The probe wants a non-negative offset, a known magic and sane fields;
 //! for a v2 batch inside the head its CRC-32C must match (a larger one
@@ -70,6 +83,8 @@ declare_format!(pub INDEX = "kafka-index", "Apache Kafka offset index", ["index"
     "application/x-kafka-index", Probe::Never, dissect_index);
 declare_format!(pub TIMEINDEX = "kafka-timeindex", "Apache Kafka time index", ["timeindex"],
     "application/x-kafka-timeindex", Probe::Never, dissect_timeindex);
+declare_format!(pub TXNINDEX = "kafka-txnindex", "Apache Kafka transaction index", ["txnindex"],
+    "application/x-kafka-txnindex", Probe::Never, dissect_txnindex);
 
 /// Bytes of a v2 batch header, and the least its length field can say.
 const BATCH_HEADER: u64 = 61;
@@ -127,6 +142,110 @@ const CONTROL_TYPES: EnumTable = &[
     (5, "KRAFT_VERSION"),
     (6, "KRAFT_VOTERS"),
 ];
+
+/// KRaft metadata record types (`MetadataRecordType`): the `apiKey` and
+/// `name` of each `type: metadata` message in Kafka 3.9.1's
+/// `common/metadata/*.json` (see [`metadata_max_version`]).
+const METADATA_NAMES: EnumTable = &[
+    (0, "RegisterBrokerRecord"),
+    (1, "UnregisterBrokerRecord"),
+    (2, "TopicRecord"),
+    (3, "PartitionRecord"),
+    (4, "ConfigRecord"),
+    (5, "PartitionChangeRecord"),
+    (7, "FenceBrokerRecord"),
+    (8, "UnfenceBrokerRecord"),
+    (9, "RemoveTopicRecord"),
+    (10, "DelegationTokenRecord"),
+    (11, "UserScramCredentialRecord"),
+    (12, "FeatureLevelRecord"),
+    (14, "ClientQuotaRecord"),
+    (15, "ProducerIdsRecord"),
+    (17, "BrokerRegistrationChangeRecord"),
+    (18, "AccessControlEntryRecord"),
+    (19, "RemoveAccessControlEntryRecord"),
+    (20, "NoOpRecord"),
+    (21, "ZkMigrationStateRecord"),
+    (22, "RemoveUserScramCredentialRecord"),
+    (23, "BeginTransactionRecord"),
+    (24, "EndTransactionRecord"),
+    (25, "AbortTransactionRecord"),
+    (26, "RemoveDelegationTokenRecord"),
+    (27, "RegisterControllerRecord"),
+];
+
+/// The highest version of a metadata record type (their `validVersions`
+/// in Kafka 3.9.1).
+fn metadata_max_version(key: u64) -> u64 {
+    match key {
+        0 => 3,
+        3 | 5 | 17 => 2,
+        _ => 0,
+    }
+}
+
+/// An unsigned varint (Kafka's `readUnsignedVarint`) at the start of `b`:
+/// value and length.
+fn uvarint(b: &[u8]) -> Option<(u64, u64)> {
+    let mut v = 0u64;
+    for i in 0..5u32 {
+        let x = *b.get(usize::try_from(i).ok()?)?;
+        v |= u64::from(x & 0x7f).checked_shl(i.checked_mul(7)?)?;
+        if x & 0x80 == 0 {
+            return Some((v, u64::from(i).checked_add(1)?));
+        }
+    }
+    None
+}
+
+/// The framing of a KRaft metadata record's value
+/// (`MetadataRecordSerde`): frame version 1, the record type's API key
+/// and its version, each an unsigned varint, then the message. Only a
+/// known type in a version Kafka writes counts.
+#[derive(Clone, Copy, Debug)]
+struct MetadataFrame {
+    key: u64,
+    version: u64,
+    /// Bytes of the three varints, and of each.
+    len: u64,
+    lens: [u64; 3],
+}
+
+fn metadata_frame(b: &[u8]) -> Option<MetadataFrame> {
+    let (frame, a) = uvarint(b)?;
+    let (key, k) = uvarint(b.get(usize::try_from(a).ok()?..)?)?;
+    let at = a.checked_add(k)?;
+    let (version, v) = uvarint(b.get(usize::try_from(at).ok()?..)?)?;
+    crate::value::lookup(METADATA_NAMES, key)?;
+    (frame == 1 && version <= metadata_max_version(key)).then_some(MetadataFrame {
+        key,
+        version,
+        len: at.checked_add(v)?,
+        lens: [a, k, v],
+    })
+}
+
+/// A compact string (unsigned varint length + 1, then the bytes) at the
+/// start of `b`.
+fn compact_string(b: &[u8]) -> Option<String> {
+    let (n, k) = uvarint(b)?;
+    let len = usize::try_from(n.checked_sub(1)?).ok()?;
+    let start = usize::try_from(k).ok()?;
+    let s = b.get(start..start.checked_add(len)?)?;
+    Some(String::from_utf8_lossy(s).into_owned())
+}
+
+/// What a metadata record's summary says: its type, version and, for the
+/// types that start with one (topics, feature levels), its name.
+fn metadata_summary(f: &MetadataFrame, b: &[u8]) -> String {
+    let name = val::name_or(METADATA_NAMES, f.key, "metadata record");
+    let body = b.get(usize::try_from(f.len).unwrap_or(usize::MAX)..);
+    let detail = match f.key {
+        2 | 12 => body.and_then(compact_string).map(|s| format!(" \"{s}\"")),
+        _ => None,
+    };
+    format!("{name} v{}{}", f.version, detail.unwrap_or_default())
+}
 
 // ---------------------------------------------------------------------------
 // Probe
@@ -810,8 +929,18 @@ async fn records(cx: Cx, b: Batch) -> Result<()> {
         } else if b.control {
             "control record".to_owned()
         } else {
-            let value = peek(&mut r, p, value_len).await?;
-            format!("key {key}, value {value}")
+            let head = if key_len < 0 && value_len >= 3 {
+                r.bytes(p, len_of(value_len).min(PREVIEW)).await?
+            } else {
+                Vec::new()
+            };
+            match metadata_frame(&head) {
+                Some(f) => metadata_summary(&f, &head),
+                None => {
+                    let value = peek(&mut r, p, value_len).await?;
+                    format!("key {key}, value {value}")
+                }
+            }
         };
         let offset = b.base.saturating_add(off_delta);
         let ts = b.first_ts.saturating_add(ts_delta);
@@ -895,7 +1024,23 @@ async fn record(cx: Cx, (b, span): (Batch, Span)) -> Result<()> {
     } else {
         cx.emit(blob(&cx, b.input, "Key", span, key_at, key_len).await?);
         cx.emit(value_len_node);
-        cx.emit(blob(&cx, b.input, "Value", span, value_at, value_len).await?);
+        let head = if key_len < 0 && value_len >= 3 {
+            r.bytes(value_at, len_of(value_len).min(PREVIEW)).await?
+        } else {
+            Vec::new()
+        };
+        match metadata_frame(&head) {
+            Some(f) => {
+                let value = span.sub(value_at, len_of(value_len));
+                cx.emit(
+                    Node::new("Value")
+                        .span(value)
+                        .summary(metadata_summary(&f, &head))
+                        .lazy(crate::expander!(self::metadata_value: Span), value),
+                );
+            }
+            None => cx.emit(blob(&cx, b.input, "Value", span, value_at, value_len).await?),
+        }
     }
     let (count, k) = varint(&mut r, p).await?;
     let headers_span = span.tail(p);
@@ -987,6 +1132,36 @@ async fn control_value(cx: &Cx, span: Span, kind: Option<u16>) -> Result<Node> {
             Ok(node)
         }
     }
+}
+
+/// A KRaft metadata record's value: its framing, then the message (a
+/// flexible-version Kafka message, shown raw).
+async fn metadata_value(cx: Cx, span: Span) -> Result<()> {
+    let head = cx.read(span.sub(0, 16)).await?;
+    let Some(f) = metadata_frame(&head) else {
+        return Err(Diagnostic::malformed("metadata record framing").at(span));
+    };
+    let [a, k, v] = f.lens;
+    cx.emit(
+        Node::new("Frame version")
+            .span(span.sub(0, a))
+            .value(val::uint(1u8, 8)),
+    );
+    cx.emit(
+        Node::new("Record type")
+            .span(span.sub(a, k))
+            .value(val::enumv(f.key, 16, METADATA_NAMES))
+            .desc("The API key of the metadata record type"),
+    );
+    cx.emit(
+        Node::new("Version")
+            .span(span.sub(a.saturating_add(k), v))
+            .value(val::uint(f.version, 16)),
+    );
+    let body = span.tail(f.len);
+    let bytes = cx.read(body.sub(0, MAX_SHOWN)).await?;
+    cx.emit(Node::new("Message").span(body).value(Value::Bytes(bytes)));
+    Ok(())
 }
 
 /// Lists a record's headers.
@@ -1227,6 +1402,22 @@ async fn dissect_timeindex(cx: Cx, input: Input) -> Result<()> {
     index_entries(cx, input, TimeIndexEntry::SIZE).await
 }
 
+record! {
+    /// A transaction index entry (`AbortedTxn`): an aborted transaction.
+    struct TxnIndexEntry {
+        version: i16 "Version",
+        producer: i64 "Producer ID",
+        first: i64 "First offset" .desc("The transaction's first offset"),
+        last: i64 "Last offset" .desc("The offset of its ABORT marker"),
+        stable: i64 "Last stable offset"
+            .desc("The log's last stable offset when the transaction was aborted"),
+    }
+}
+
+async fn dissect_txnindex(cx: Cx, input: Input) -> Result<()> {
+    index_entries(cx, input, TxnIndexEntry::SIZE).await
+}
+
 /// Lists an index's entries, up to the zeros of its preallocated tail.
 async fn index_entries(cx: Cx, input: Input, size: u64) -> Result<()> {
     let file = input.span;
@@ -1253,6 +1444,13 @@ async fn index_entries(cx: Cx, input: Input, size: u64) -> Result<()> {
             let position = u32_be(&e, 4).unwrap_or(0);
             IndexEntry::node(name, span, BE)
                 .summary(format!("relative offset {rel} at byte {position}"))
+        } else if size == TxnIndexEntry::SIZE {
+            let producer = i64_be(&e, 2).unwrap_or(-1);
+            let first = i64_be(&e, 10).unwrap_or(-1);
+            let last = i64_be(&e, 18).unwrap_or(-1);
+            TxnIndexEntry::node(name, span, BE).summary(format!(
+                "producer {producer}, aborted offsets {first}–{last}"
+            ))
         } else {
             let ts = i64_be(&e, 0).unwrap_or(-1);
             let rel = u32_be(&e, 8).unwrap_or(0);
@@ -1274,11 +1472,13 @@ async fn index_entries(cx: Cx, input: Input, size: u64) -> Result<()> {
         )
         .await;
     }
-    let kind = if offsets {
-        "offset index"
+    let (kind, what) = if offsets {
+        ("offset index", "entry")
+    } else if size == TxnIndexEntry::SIZE {
+        ("transaction index", "aborted transaction")
     } else {
-        "time index"
+        ("time index", "entry")
     };
-    cx.annotate(format!("Kafka {kind}, {}", plural(index, "entry")));
+    cx.annotate(format!("Kafka {kind}, {}", plural(index, what)));
     Ok(())
 }

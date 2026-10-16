@@ -12,6 +12,8 @@
 #                    module, a range and an extended String subclass
 #   array.marshal    600 two-element arrays (paging)
 #   regexps.marshal  regexps with a fixed encoding, /n and /imx
+#   dumps.marshal    a Gem::Specification (_dump data that is a Marshal
+#                    stream) and Times (UTC, local with nanoseconds)
 #
 # All are the same on every run.
 #
@@ -25,6 +27,6 @@ mkdir -p "$B"
 docker run --rm --hostname fillyfoal -v "$B:/out" -v "$SRC:/scripts:ro" \
   ruby:3.4-alpine ruby /scripts/make.rb /out
 mkdir -p "$FIX/ruby-marshal"
-for f in objects.marshal array.marshal regexps.marshal; do
+for f in objects.marshal array.marshal regexps.marshal dumps.marshal; do
   cp "$B/$f" "$FIX/ruby-marshal/$f"
 done
