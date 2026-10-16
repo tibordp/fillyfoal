@@ -121,7 +121,7 @@ export type ValueData = {
     /// a digest.
     radix: "dec" | "hex" | "oct" | "bin" | null;
     /// "other": a verdict this frontend predates (use `text`).
-    verdict: "valid" | "mismatch" | "not_checked" | "skipped" | "other";
+    verdict: "valid" | "mismatch" | "not_checked" | "skipped" | "deferred" | "other";
     /// For "mismatch": what the data gives, as hex, when known.
     computed: string | null;
     /// For "skipped": why it wasn't verified.

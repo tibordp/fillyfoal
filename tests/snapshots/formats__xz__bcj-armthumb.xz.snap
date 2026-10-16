@@ -29,7 +29,7 @@ expression: "common::explore(&display_name(&path), &data)"
           CRC32: 0xb8827c43 (CRC-32, valid)  [0x1c+0x4]
         Compressed data — BCJ ARM-Thumb + LZMA2, 4.8 KiB  [0x20+0x1337]
         Block padding  [0x1357+0x1]
-        Check: 0xfbb8020bb55efe41 (CRC-64/XZ, skipped: checked when decoded)  [0x1358+0x8]
+        Check: 0xfbb8020bb55efe41  [0x1358+0x8]
   ▾ Index — 1 record  [0x1360+0xc]
       Index indicator: 0  [0x1360+0x1]
       Number of records: 1  [0x1361+0x1]

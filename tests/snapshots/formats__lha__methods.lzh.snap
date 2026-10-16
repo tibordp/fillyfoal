@@ -15,7 +15,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Level: 0  [0x14+0x1]
         Name length: 7  [0x15+0x1]
         Name: "lh0.txt"  [0x16+0x7]
-        CRC-16: 0xa367 (CRC-16/ARC, skipped: checked when decoded)  [0x1d+0x2]
+        CRC-16: 0xa367  [0x1d+0x2]
     ▾ Content — UTF-8 text, CRLF line endings, 1 line  [0x1f+0xf]
         Encoding: "UTF-8"
         Line endings: "CRLF" — 0 LF, 1 CRLF, 0 CR
@@ -33,7 +33,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Level: 0  [0x42+0x1]
         Name length: 7  [0x43+0x1]
         Name: "lh1.txt"  [0x44+0x7]
-        CRC-16: 0xe9f2 (CRC-16/ARC, skipped: checked when decoded)  [0x4b+0x2]
+        CRC-16: 0xe9f2  [0x4b+0x2]
     ▾ Content — UTF-8 text, CRLF line endings, 40 lines  [0x4d+0x383]
         Encoding: "UTF-8"
         Line endings: "CRLF" — 0 LF, 39 CRLF, 0 CR
@@ -90,7 +90,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Level: 0  [0x3e4+0x1]
         Name length: 7  [0x3e5+0x1]
         Name: "lh4.bin"  [0x3e6+0x7]
-        CRC-16: 0xb21a (CRC-16/ARC, skipped: checked when decoded)  [0x3ed+0x2]
+        CRC-16: 0xb21a  [0x3ed+0x2]
     ▾ Content — 0xbb8 bytes decompressed  [0x3ef+0x4ee]
         Data  [#2:0x0+0xbb8]
   ▾ lh5.txt — -lh5-, 2.9 KiB  [0x8dd+0x35d]
@@ -105,7 +105,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Level: 0  [0x8f1+0x1]
         Name length: 7  [0x8f2+0x1]
         Name: "lh5.txt"  [0x8f3+0x7]
-        CRC-16: 0x3dee (CRC-16/ARC, skipped: checked when decoded)  [0x8fa+0x2]
+        CRC-16: 0x3dee  [0x8fa+0x2]
     ▾ Content — UTF-8 text, CRLF line endings, 40 lines  [0x8fc+0x33e]
         Encoding: "UTF-8"
         Line endings: "CRLF" — 0 LF, 39 CRLF, 0 CR
@@ -162,7 +162,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Level: 0  [0xc4e+0x1]
         Name length: 7  [0xc4f+0x1]
         Name: "lh6.bin"  [0xc50+0x7]
-        CRC-16: 0x22bf (CRC-16/ARC, skipped: checked when decoded)  [0xc57+0x2]
+        CRC-16: 0x22bf  [0xc57+0x2]
     ▾ Content — 0xbb8 bytes decompressed  [0xc59+0x6f0]
         Data  [#4:0x0+0xbb8]
   ▾ lh7.txt — -lh7-, 20.0 KiB  [0x1349+0x12f5]
@@ -177,7 +177,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Level: 0  [0x135d+0x1]
         Name length: 7  [0x135e+0x1]
         Name: "lh7.txt"  [0x135f+0x7]
-        CRC-16: 0x4ab5 (CRC-16/ARC, skipped: checked when decoded)  [0x1366+0x2]
+        CRC-16: 0x4ab5  [0x1366+0x2]
     ▾ Content — 0x5020 bytes decompressed  [0x1368+0x12d6]
         Data  [#5:0x0+0x5020]
   ▾ lzs.txt — -lzs-, 1.5 KiB  [0x263e+0x249]
@@ -192,7 +192,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Level: 0  [0x2652+0x1]
         Name length: 7  [0x2653+0x1]
         Name: "lzs.txt"  [0x2654+0x7]
-        CRC-16: 0x4241 (CRC-16/ARC, skipped: checked when decoded)  [0x265b+0x2]
+        CRC-16: 0x4241  [0x265b+0x2]
     ▾ Content — UTF-8 text, CRLF line endings, 21 lines  [0x265d+0x22a]
         Encoding: "UTF-8"
         Line endings: "CRLF" — 0 LF, 20 CRLF, 0 CR
@@ -230,7 +230,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Level: 0  [0x289b+0x1]
         Name length: 7  [0x289c+0x1]
         Name: "lz5.txt"  [0x289d+0x7]
-        CRC-16: 0x3030 (CRC-16/ARC, skipped: checked when decoded)  [0x28a4+0x2]
+        CRC-16: 0x3030  [0x28a4+0x2]
     ▾ Content — UTF-8 text, CRLF line endings, 20 lines  [0x28a6+0x23a]
         Encoding: "UTF-8"
         Line endings: "CRLF" — 0 LF, 19 CRLF, 0 CR

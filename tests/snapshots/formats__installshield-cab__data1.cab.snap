@@ -45,7 +45,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Compressed size: 58  [0x4bd+0x4]
         Unknown  [0x4c1+0x14]
         Data offset: 0x700  [0x4d5+0x4]
-        MD5: 624f214d951aa63672fb29bfdd5f1a5b (MD5, skipped: checked when decoded)  [0x4d9+0x10]
+        MD5: 624f214d951aa63672fb29bfdd5f1a5b  [0x4d9+0x10]
       ▾ Content — UTF-8 text, CRLF line endings, 3 lines  [0x700+0x3a]
           MD5 check: 624f214d951aa63672fb29bfdd5f1a5b (MD5, valid)  [#2:0x0+0x41]
           Encoding: "UTF-8"
@@ -62,7 +62,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Compressed size: 39  [0x4f7+0x4]
         Unknown  [0x4fb+0x14]
         Data offset: 0x73a  [0x50f+0x4]
-        MD5: 93333c7f0acc424e2573e7c6db1af9be (MD5, skipped: checked when decoded)  [0x513+0x10]
+        MD5: 93333c7f0acc424e2573e7c6db1af9be  [0x513+0x10]
       ▾ Content — UTF-8 text, CRLF line endings, 3 lines  [0x73a+0x27]
           MD5 check: 93333c7f0acc424e2573e7c6db1af9be (MD5, valid)  [#5:0x0+0x66]
           Encoding: "UTF-8"
@@ -79,7 +79,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Compressed size: 69  [0x531+0x4]
         Unknown  [0x535+0x14]
         Data offset: 0x761  [0x549+0x4]
-        MD5: 3ab739d7d4d7296eeafd3b9303b5121b (MD5, skipped: checked when decoded)  [0x54d+0x10]
+        MD5: 3ab739d7d4d7296eeafd3b9303b5121b  [0x54d+0x10]
       ▾ Content — 1×1, 8-bit RGB  [0x761+0x45]
           MD5 check: 3ab739d7d4d7296eeafd3b9303b5121b (MD5, valid)  [0x761+0x45]
           Signature  [0x761+0x8]

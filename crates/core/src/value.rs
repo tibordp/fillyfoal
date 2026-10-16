@@ -677,8 +677,11 @@ pub enum Verdict {
     /// Not verified: the dissector doesn't compute this check.
     NotChecked,
     /// Not verified here, for the reason given ("encrypted", "over the read
-    /// limit", "checked by the decoder"...).
+    /// limit"...).
     Skipped(Cow<'static, str>),
+    /// Verified where the data is decoded, not here: a mismatch is reported
+    /// on the decoded content. Shows the stored value alone.
+    Deferred,
 }
 
 /// A stored check value: the algorithm, the value and the verdict. Text:
@@ -752,9 +755,11 @@ impl Check {
 
     /// A check of decoded data that the decoder verifies (and reports as a
     /// diagnostic of the decoded stream) rather than the dissector:
-    /// `skipped: checked when decoded`.
-    pub fn on_decode(self) -> Check {
-        self.skipped("checked when decoded")
+    /// Verified when the data is decoded (a mismatch is reported on the
+    /// content): shows the stored value alone.
+    pub fn on_decode(mut self) -> Check {
+        self.verdict = Verdict::Deferred;
+        self
     }
 
     pub fn is_valid(&self) -> bool {
@@ -793,6 +798,7 @@ impl Check {
             Verdict::Mismatch { computed: None } => "mismatch".to_owned(),
             Verdict::NotChecked => "not checked".to_owned(),
             Verdict::Skipped(reason) => format!("skipped: {reason}"),
+            Verdict::Deferred => String::new(),
         }
     }
 
@@ -820,6 +826,9 @@ impl From<Check> for Value {
 
 impl fmt::Display for Check {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.verdict == Verdict::Deferred {
+            return write!(f, "{}", self.stored);
+        }
         write!(
             f,
             "{} ({}, {})",

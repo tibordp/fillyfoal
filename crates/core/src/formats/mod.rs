@@ -730,7 +730,8 @@ pub const STORED_CHECK_LIMIT: u64 = 16 * 1024 * 1024;
 
 /// The verdict to show on a container's check of content it passes to
 /// [`content`] as `codec.checked(..)`, `stored_len` bytes as stored:
-/// checked when decoded (a mismatch is a warning on the content), unless
+/// verified when decoded (shown as the stored value alone; a mismatch is a
+/// warning on the content), unless
 /// the content is stored and over [`STORED_CHECK_LIMIT`].
 pub fn decode_check(
     check: crate::value::Check,

@@ -102,7 +102,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   Header padding  [0x1b3+0x3]
                   CRC32: 0x408eb2cf (CRC-32, valid)  [0x1b6+0x4]
                 Compressed data — LZMA2, 256 bytes  [0x1ba+0x100]
-                Check: 0x535bafe2 (CRC-32, skipped: checked when decoded)  [0x2ba+0x4]
+                Check: 0x535bafe2  [0x2ba+0x4]
           ▾ Index — 1 record  [0x2be+0xc]
               Index indicator: 0  [0x2be+0x1]
               Number of records: 1  [0x2bf+0x1]

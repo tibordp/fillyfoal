@@ -21,7 +21,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Packed size: 1241 bytes (1.2 KiB)  [0x1b+0x4]
         Unpacked size: 5158 bytes (5.0 KiB)  [0x1f+0x4]
         Host OS: Unix (0x3)  [0x23+0x1]
-        File CRC: 0x87d3971f (CRC-32, skipped: checked when decoded)  [0x24+0x4]
+        File CRC: 0x87d3971f  [0x24+0x4]
         Modification time (DOS): 2025-03-11 09:33:02 (local time)  [0x28+0x4]
         Version needed: 29 — 2.9  [0x2c+0x1]
         Method: best (0x35)  [0x2d+0x1]

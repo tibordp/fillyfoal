@@ -566,13 +566,14 @@ human interpretation in `summary` ("640×480, 24-bit") and meaning in
     known (sums that must come to zero, AEAD tags, frames found by their
     CRC); `.skipped(reason)` when the dissector could but did not ("empty
     block", "covers 40 MiB", "needs the key"); `.on_decode()` when the
-    decoder verifies it. A container's CRC of a member's decoded data
+    decoder verifies it (the field then shows the stored value alone, with
+    no verdict: a mismatch is reported on the decoded content). A container's CRC of a member's decoded data
     (ZIP, ACE, LHA, ZOO) is verified by passing the member's codec to
     `content` as `codec.checked(DataCrc::Crc32, stored)`: the CRC runs
     over the decoded output (stored members are read whole on expansion,
     up to `STORED_CHECK_LIMIT`) and a mismatch is a warning on the
     content once it has been decoded to its end; the field shows
-    `formats::decode_check(check, &codec, len)` (checked when decoded).
+    `formats::decode_check(check, &codec, len)`.
     Nothing is decoded to list the member. A zero meaning "none" is
     `.skipped("zero: none recorded")`.
   - *Fields:* `.checksum(algo)` turns a number or byte field into an

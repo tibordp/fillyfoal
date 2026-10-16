@@ -72,7 +72,7 @@ fn intact_members_check_clean() {
     let (mut host, directory) = listed(mixed());
     assert_eq!(
         crc_field(&mut host, directory, "dir/notes.txt"),
-        "0xdf323ca2 (CRC-32, skipped: checked when decoded)"
+        "0xdf323ca2"
     );
     assert!(content_warnings(&mut host, directory, "dir/notes.txt").is_empty());
     assert!(content_warnings(&mut host, directory, "x.tar.gz").is_empty());

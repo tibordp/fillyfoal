@@ -28,7 +28,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Unpacked size: 12 bytes  [0x22+0x2]
         Attributes: 0x81a4  [0x24+0x3]
         Modification time: 2024-01-02 03:04:05 UTC  [0x27+0x4]
-        Data CRC32: 0x597d6495 (CRC-32, skipped: checked when decoded)  [0x2b+0x4]
+        Data CRC32: 0x597d6495  [0x2b+0x4]
         Compression information: 0x180 — version 0, method 3, dictionary 128 KiB  [0x2f+0x2]
         Host OS: Unix (0x1)  [0x31+0x1]
         Name length: 9  [0x32+0x1]

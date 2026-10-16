@@ -1117,6 +1117,7 @@ impl From<&Value> for WireValue {
                     ),
                     Verdict::NotChecked => ("not_checked", None, None),
                     Verdict::Skipped(why) => ("skipped", None, Some(why.to_string())),
+                    Verdict::Deferred => ("deferred", None, None),
                     _ => ("other", None, None),
                 };
                 (

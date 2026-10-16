@@ -29,7 +29,7 @@ expression: "common::explore(&display_name(&path), &data)"
           CRC32: 0x5c14c45e (CRC-32, valid)  [0x1c+0x4]
         Compressed data — BCJ RISC-V + LZMA2, 4.9 KiB  [0x20+0x13bd]
         Block padding  [0x13dd+0x3]
-        Check: 0xfbb8020bb55efe41 (CRC-64/XZ, skipped: checked when decoded)  [0x13e0+0x8]
+        Check: 0xfbb8020bb55efe41  [0x13e0+0x8]
   ▾ Index — 1 record  [0x13e8+0xc]
       Index indicator: 0  [0x13e8+0x1]
       Number of records: 1  [0x13e9+0x1]

@@ -28,7 +28,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Header padding  [0x1b+0x5]
           CRC32: 0x43526ba4 (CRC-32, valid)  [0x20+0x4]
         Compressed data — BCJ x86 + LZMA2, 4.8 KiB  [0x24+0x1360]
-        Check: 0xfbb8020bb55efe41 (CRC-64/XZ, skipped: checked when decoded)  [0x1384+0x8]
+        Check: 0xfbb8020bb55efe41  [0x1384+0x8]
   ▾ Index — 1 record  [0x138c+0xc]
       Index indicator: 0  [0x138c+0x1]
       Number of records: 1  [0x138d+0x1]
