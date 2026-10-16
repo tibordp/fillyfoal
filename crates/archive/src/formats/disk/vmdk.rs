@@ -897,11 +897,36 @@ fn encrypted_probe(h: &Head<'_>) -> bool {
         .is_some_and(|at| h.at(at, KEY_SAFE))
 }
 
-/// A length-prefixed block: the `u32` length field and the block.
-async fn sized_block(cx: &Cx, file: Span, at: u64) -> Result<(Span, Span)> {
+/// A length-prefixed block: the `u32` length field, the block (as much of
+/// it as the file holds) and the length the field gives. Emits the length
+/// node, with a truncation diagnostic if the file ends inside the block.
+async fn sized_block(cx: &Cx, file: Span, at: u64, name: &'static str) -> Result<(Span, Span)> {
     let field = file.sub(at, 4);
-    let len = u32_le(&cx.read_avail(field).await?, 0).map_or(0, u64::from);
-    Ok((field, file.sub(at.saturating_add(4), len)))
+    let raw = cx.read_avail(field).await?;
+    let mut node = Node::new(name).span(field);
+    let block = match u32_le(&raw, 0) {
+        Some(len) => {
+            let len = u64::from(len);
+            let block = file.sub(at.saturating_add(4), len);
+            node = node.value(uint(len, 32));
+            if block.len < len {
+                node = node.diag(Diagnostic::truncated(
+                    Span::new(block.source, block.offset, len),
+                    block.len,
+                ));
+            }
+            block
+        }
+        None => {
+            node = node.diag(Diagnostic::truncated(
+                Span::new(field.source, field.offset, 4),
+                field.len,
+            ));
+            file.sub(at.saturating_add(4), 0)
+        }
+    };
+    cx.emit(node);
+    Ok((field, block))
 }
 
 /// The descriptor of a disk in an encrypted VMware Workstation/Fusion VM
@@ -915,12 +940,7 @@ async fn sized_block(cx: &Cx, file: Span, at: u64) -> Result<(Span, Span)> {
 /// `u32` values whose meaning is not known.
 async fn encrypted_descriptor(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let (len_field, header) = sized_block(&cx, file, 0).await?;
-    cx.emit(
-        Node::new("Header length")
-            .span(len_field)
-            .value(uint(header.len, 32)),
-    );
+    let (len_field, header) = sized_block(&cx, file, 0, "Header length").await?;
     let head = cx.read_avail(header).await?;
     let adapter = crate::text::until_nul(head.get(..16).unwrap_or(&head));
     let mut fields = vec![
@@ -945,12 +965,7 @@ async fn encrypted_descriptor(cx: Cx, input: Input) -> Result<()> {
         cx.emit(node);
     }
     let at = len_field.len.saturating_add(header.len);
-    let (ks_field, key_safe) = sized_block(&cx, file, at).await?;
-    cx.emit(
-        Node::new("Key safe length")
-            .span(ks_field)
-            .value(uint(key_safe.len, 32)),
-    );
+    let (ks_field, key_safe) = sized_block(&cx, file, at, "Key safe length").await?;
     let ks_text = crate::text::until_nul(&cx.read_avail(key_safe.sub(0, MAX_KEY_SAFE)).await?);
     let pairs = key_safe_pairs(&ks_text);
     cx.emit(
@@ -968,12 +983,7 @@ async fn encrypted_descriptor(cx: Cx, input: Input) -> Result<()> {
             ),
     );
     let at = at.saturating_add(ks_field.len).saturating_add(key_safe.len);
-    let (ct_field, ciphertext) = sized_block(&cx, file, at).await?;
-    cx.emit(
-        Node::new("Encrypted descriptor length")
-            .span(ct_field)
-            .value(uint(ciphertext.len, 32)),
-    );
+    let (ct_field, ciphertext) = sized_block(&cx, file, at, "Encrypted descriptor length").await?;
     cx.emit(
         Node::new("Encrypted descriptor")
             .span(ciphertext)
@@ -983,16 +993,12 @@ async fn encrypted_descriptor(cx: Cx, input: Input) -> Result<()> {
     let end = at
         .saturating_add(ct_field.len)
         .saturating_add(ciphertext.len);
+    // (A block the file cuts short is reported at its length field.)
     if end < file.len {
         cx.emit(
             Node::new("Trailing data")
                 .span(file.tail(end))
                 .summary(size(file.len.saturating_sub(end))),
-        );
-    } else if end > file.len {
-        cx.diag(
-            Diagnostic::malformed("encrypted descriptor runs past the end of the file")
-                .at(ciphertext),
         );
     }
     let locks: Vec<String> = pairs.iter().map(|p| p.locator.clone()).collect();
@@ -1014,7 +1020,16 @@ struct KeyPair {
     locator: String,
     id: String,
     hmac: String,
-    wrapped_len: usize,
+    /// Byte ranges (in the key safe text) and percent-encoded text of the
+    /// locator's kind, its ID, each of its `:`-separated parameters, the
+    /// HMAC algorithm and the wrapped key.
+    parts: Vec<(&'static str, (usize, usize), String)>,
+}
+
+/// Bytes of a base64 text once decoded.
+fn base64_len(encoded: &str) -> u64 {
+    let n = to_u64(encoded.trim_end_matches('=').len());
+    n.saturating_mul(3) / 4
 }
 
 /// `vmware:key/list/(pair/(LOCATOR,HMAC,DATA),pair/(...))`, components
@@ -1060,35 +1075,109 @@ fn push_pair(out: &mut Vec<KeyPair>, pair: &str, at: usize) {
     else {
         return;
     };
-    let mut parts = body.splitn(3, ',');
-    let locator = parts.next().unwrap_or("");
-    let hmac = parts.next().unwrap_or("");
-    let data = parts.next().unwrap_or("");
-    let mut loc = locator.splitn(3, '/');
-    let kind = loc.next().unwrap_or("");
-    let id = loc.next().unwrap_or("");
+    // Positions of the comma-separated components in `body`.
+    let mut pieces = Vec::new();
+    let mut from = 0usize;
+    for piece in body.splitn(3, ',') {
+        pieces.push((from, piece));
+        from = from.saturating_add(piece.len()).saturating_add(1);
+    }
+    let base = at.saturating_add("pair/(".len());
+    let range = |off: usize, len: usize| {
+        let s = base.saturating_add(off);
+        (s, s.saturating_add(len))
+    };
     let decode = crate::text::url::percent_decode;
+    let (loc_at, locator) = pieces.first().copied().unwrap_or((0, ""));
+    let (hmac_at, hmac) = pieces.get(1).copied().unwrap_or((0, ""));
+    let (data_at, data) = pieces.get(2).copied().unwrap_or((0, ""));
+    let mut parts = Vec::new();
+    // kind/id[/param:param...]
+    let mut seg_at = loc_at;
+    for (i, seg) in locator.splitn(3, '/').enumerate() {
+        match i {
+            0 => parts.push(("Kind", range(seg_at, seg.len()), seg.to_owned())),
+            1 => parts.push(("ID", range(seg_at, seg.len()), seg.to_owned())),
+            _ => {
+                // Parameters, `:` percent-encoded as %3a.
+                let lower = seg.to_ascii_lowercase();
+                let mut p_at = 0usize;
+                for p in lower.split("%3a") {
+                    let raw = seg.get(p_at..p_at.saturating_add(p.len())).unwrap_or(p);
+                    parts.push((
+                        "Parameter",
+                        range(seg_at.saturating_add(p_at), p.len()),
+                        raw.to_owned(),
+                    ));
+                    p_at = p_at.saturating_add(p.len()).saturating_add(3);
+                }
+            }
+        }
+        seg_at = seg_at.saturating_add(seg.len()).saturating_add(1);
+    }
+    parts.push(("HMAC", range(hmac_at, hmac.len()), hmac.to_owned()));
+    parts.push(("Wrapped key", range(data_at, data.len()), data.to_owned()));
+    let mut loc = locator.splitn(3, '/');
     out.push(KeyPair {
         range: (at, at.saturating_add(pair.len())),
-        locator: kind.to_owned(),
-        id: decode(id),
+        locator: loc.next().unwrap_or("").to_owned(),
+        id: decode(loc.next().unwrap_or("")),
         hmac: decode(hmac),
-        wrapped_len: data.len(),
+        parts,
     });
 }
 
 async fn key_safe_nodes(cx: Cx, (span, text): (Span, Arc<str>)) -> Result<()> {
     for p in key_safe_pairs(&text) {
-        let (start, end) = (to_u64(p.range.0), to_u64(p.range.1));
-        let pspan = span.sub(start, end.saturating_sub(start));
+        let pspan = in_text(span, p.range);
+        let key = base64_len(&crate::text::url::percent_decode(
+            &p.parts
+                .last()
+                .map(|(_, _, s)| s.clone())
+                .unwrap_or_default(),
+        ));
+        let parts: Arc<[(&'static str, Span, String)]> = p
+            .parts
+            .into_iter()
+            .map(|(name, r, raw)| (name, in_text(span, r), raw))
+            .collect();
         cx.push(
             Node::new("Key locator")
                 .span(pspan)
                 .value(text_value(&p.locator))
-                .summary(format!("{} {}, {}, wrapped key {} encoded", p.locator, p.id, p.hmac, size(to_u64(p.wrapped_len))))
-                .desc("What wraps the descriptor key: null (no password: an empty key), phrase (a password), ..."),
+                .summary(format!("{} {}, {}, {}-byte wrapped key", p.locator, p.id, p.hmac, key))
+                .desc("What wraps the descriptor key: null (no password: an empty key), phrase (a password), ...")
+                .lazy(crate::expander!(key_pair_nodes: Arc<[(&'static str, Span, String)]>), parts),
         )
         .await;
+    }
+    Ok(())
+}
+
+/// A byte range of the key safe text as a span.
+fn in_text(span: Span, (start, end): (usize, usize)) -> Span {
+    let start = to_u64(start);
+    span.sub(start, to_u64(end).saturating_sub(start))
+}
+
+/// The components of one key pair.
+async fn key_pair_nodes(cx: Cx, parts: Arc<[(&'static str, Span, String)]>) -> Result<()> {
+    for (name, span, raw) in parts.iter() {
+        let decoded = crate::text::url::percent_decode(raw);
+        let node = match *name {
+            "Parameter" => match decoded.split_once('=') {
+                Some((k, v)) => Node::new(k.to_owned()).value(text_value(v)),
+                None => Node::new("Parameter").value(text_value(&decoded)),
+            },
+            "Wrapped key" => Node::new("Wrapped key")
+                .summary(format!("{} bytes, base64", base64_len(&decoded)))
+                .desc("The descriptor key, encrypted with the locator's key"),
+            "Kind" => Node::new("Kind")
+                .value(text_value(&decoded))
+                .desc("null: an empty key (no password); phrase: a key derived from a password"),
+            _ => Node::new(*name).value(text_value(&decoded)),
+        };
+        cx.push(node.span(*span)).await;
     }
     Ok(())
 }

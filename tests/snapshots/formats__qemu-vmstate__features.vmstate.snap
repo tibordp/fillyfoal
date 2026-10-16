@@ -112,7 +112,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Name: "widget/extra"  [0xec3+0xc]
           Version: 2  [0xecf+0x4]
           flag: 1  [0xed3+0x1]
-          tag: 70 61 64 21  |pad!| — buffer  [0xed4+0x4]
+          tag: "pad!" — buffer  [0xed4+0x4]
     ▾ Footer  [0xed8+0x5]
         Marker: QEMU_VM_SECTION_FOOTER (0x7e)  [0xed8+0x1]
         Section ID: 2  [0xed9+0x4]

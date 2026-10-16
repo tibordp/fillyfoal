@@ -7,4 +7,3 @@ expression: "common::explore(&display_name(&path), &data)"
     Image type: SECCOMP (0x64413049) — seccomp filters  [0x4+0x4]
   ▾ seccomp_entry [0] — 0 bytes  [0x8+0x4]
       Size: 0  [0x8+0x4]
-    ▾ seccomp_entry  [0xc+0x0]

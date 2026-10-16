@@ -24,7 +24,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ pieces — s  [0x49+0xa]
       piece: "s"  [0x4b+0x3]
       score: -3.5  [0x4e+0x5]
-  ▾ trainer_spec — UNIGRAM · 6  [0x53+0x1a]
+  ▾ trainer_spec — UNIGRAM · vocab_size=6  [0x53+0x1a]
       input: "corpus.txt"  [0x55+0xc]
       model_prefix: "m"  [0x61+0x3]
       model_type: UNIGRAM (0x1)  [0x64+0x2]

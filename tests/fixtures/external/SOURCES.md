@@ -1407,6 +1407,9 @@ tables only; CRIU paths are the container's (`/usr/bin/sleep`, libc,
 | `criu-image/seccomp.img` | CRIU 4.1.1 | same dump; unchanged |
 | `criu-image/timens-0.img` | CRIU 4.1.1 | same dump; unchanged |
 | `criu-image/stats-dump` | CRIU 4.1.1 | same dump; unchanged |
+| `criu-image/stopped-core-7.img` | CRIU 4.1.1 | `sh tests/data/criu-image/make-task-states.sh` (`inner-task-states.sh`): `criu dump --shell-job` of a `sleep 1000` stopped with `kill -STOP` (PID 7, `task_state` 3); `core-7.img` renamed |
+| `criu-image/zombie-core-20.img` | CRIU 4.1.1 | same script, second dump: `sh -c 'sleep 0 & exec sleep 1000'`, whose child is a zombie (PID 20, `task_state` 2); `core-20.img` renamed |
+| `criu-image/zombie-pstree.img` | CRIU 4.1.1 | same dump as `zombie-core-20.img`; `pstree.img` renamed |
 ## BorgBackup 1.2.4: repository segments
 
 Segment files (`<repo>/data/0/<n>`) copied unchanged out of repositories

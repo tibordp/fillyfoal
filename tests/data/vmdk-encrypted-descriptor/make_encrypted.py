@@ -47,3 +47,6 @@ open(f"{out}/phrase.vmdk", "wb").write(
         16 + 32 * 16 + 20,
     )
 )
+# Cut off inside the encrypted descriptor: its length field says 548 bytes,
+# the file holds 96.
+open(f"{out}/truncated.vmdk", "wb").write(open(f"{out}/phrase.vmdk", "rb").read()[:700])

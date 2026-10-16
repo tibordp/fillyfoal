@@ -27,12 +27,12 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::fmt::{clip, plural};
-use crate::formats::util::wire::protobuf::{self as proto, Elem, Msg, Ty, f, fields_in, varint_in};
+use crate::formats::util::fmt::plural;
+use crate::formats::util::wire::protobuf::{self as proto, Elem, Msg, Ty, f, varint_in};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, decode_flags, flag, lookup};
+use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 
 const IMG_COMMON: u32 = 0x5456_4319;
 const IMG_SERVICE: u32 = 0x5510_5940;
@@ -369,21 +369,15 @@ async fn criu(cx: Cx, input: Input) -> Result<()> {
             (Extra::Ghost, Phase::GhostChunks) => (&GHOST_CHUNK_ENTRY, "ghost_chunk_entry"),
             _ => (ty.msg, ty.msg.name),
         };
-        let data = if size <= TITLE_MAX {
-            cx.read(body).await?
-        } else {
-            Vec::new()
-        };
+        // The title and extra-data sizes are in the first fields: a
+        // prefix of a large entry is enough.
+        let data = cx.read(body.sub(0, TITLE_MAX)).await?;
         let title = entry_title(&data, msg);
         let entry_span = cur.since(start);
         let mut node = Node::new(format!("{label} [{index}]"))
             .span(entry_span)
-            .summary(if title.is_empty() {
-                plural(size, "byte")
-            } else {
-                title
-            })
-            .lazy(entry, (start, body, msg, endian));
+            .summary(title.unwrap_or_else(|| plural(size, "byte")))
+            .lazy(entry, (body, msg, endian));
         // Raw data after the entry.
         let extra = match (ty.extra, phase) {
             (Extra::Field(n), _) => varint_in(&data, n).unwrap_or(0),
@@ -470,11 +464,8 @@ fn enum32(raw: u32, table: EnumTable) -> Value {
     }
 }
 
-/// An entry: its size, its message, and raw data after it.
-async fn entry(
-    cx: Cx,
-    (start, body, msg, endian): (u64, Span, &'static Msg, Endian),
-) -> Result<()> {
+/// An entry: its size, then its message's fields.
+async fn entry(cx: Cx, (body, msg, endian): (Span, &'static Msg, Endian)) -> Result<()> {
     let size_span = Span::new(body.source, body.offset.saturating_sub(4), 4);
     let raw = cx.read(size_span).await?;
     let size = match endian {
@@ -482,55 +473,26 @@ async fn entry(
         Endian::Big => u32_be(&raw, 0),
     }
     .unwrap_or(0);
-    let _ = start;
-    cx.emit(Node::new("Size").span(size_span).value(Value::UInt {
+    cx.push(Node::new("Size").span(size_span).value(Value::UInt {
         value: size.into(),
         bits: 32,
         radix: crate::value::Radix::Dec,
-    }));
-    cx.emit(
-        Node::new(msg.name)
-            .span(body)
-            .lazy(proto::message, (body, msg, 0u32)),
-    );
-    Ok(())
+    }))
+    .await;
+    proto::message(cx, (body, msg, 0u32)).await
 }
 
-/// A summary of an entry from its schema's title fields.
-fn entry_title(data: &[u8], msg: &'static Msg) -> String {
-    let mut parts = Vec::new();
-    for &num in msg.title {
-        let Some(spec) = msg.fields.iter().find(|f| f.num == num) else {
-            continue;
-        };
-        let part = match spec.ty {
-            Ty::Str => fields_in(data)
-                .find(|r| r.number == num && r.wire == proto::LEN)
-                .map(|r| clip(&String::from_utf8_lossy(r.payload(data)), 80)),
-            Ty::Hex => varint_in(data, num).map(|v| format!("{}={v:#x}", spec.name)),
-            Ty::Enum(table) => varint_in(data, num)
-                .map(|v| lookup(table, v).map_or_else(|| v.to_string(), str::to_owned)),
-            Ty::Flags(table) => varint_in(data, num).map(|v| {
-                let (set, unknown) = decode_flags(table, v);
-                let mut s = set.join("|");
-                if unknown != 0 || s.is_empty() {
-                    if !s.is_empty() {
-                        s.push('|');
-                    }
-                    s.push_str(&format!("{unknown:#x}"));
-                }
-                s
-            }),
-            Ty::Int | Ty::Packed(Elem::Varint) => {
-                varint_in(data, num).map(|v| format!("{}={v}", spec.name))
-            }
-            _ => None,
-        };
-        if let Some(p) = part.filter(|p| !p.is_empty()) {
-            parts.push(p);
-        }
+/// A summary of an entry from its schema's title fields: the protobuf
+/// helper's, except that an entry summarised by a single number names it
+/// (`pages_id=1`), since nothing else around it says what it counts.
+fn entry_title(data: &[u8], msg: &'static Msg) -> Option<String> {
+    if let [num] = msg.title
+        && let Some(spec) = msg.fields.iter().find(|f| f.num == *num)
+        && let Ty::UInt | Ty::Int | Ty::SInt = spec.ty
+    {
+        return proto::title_of(data, msg).map(|v| format!("{}={v}", spec.name));
     }
-    parts.join(", ")
+    proto::title_of(data, msg)
 }
 
 // ---------------------------------------------------------------------------
@@ -574,7 +536,18 @@ const FD_TYPES: EnumTable = &[
     (65535, "AUTOFS_PIPE"),
 ];
 const SECCOMP_MODE: EnumTable = &[(0, "disabled"), (1, "strict"), (2, "filter")];
-const TASK_STATE: EnumTable = &[(1, "Alive"), (3, "Zombie"), (6, "Stopped")];
+/// `task_state`: CRIU's own values (`compel/include/uapi/task-state.h`,
+/// "Don't ever change the above values"): ALIVE 1, DEAD 2, STOPPED 3,
+/// ZOMBIE 6. Zombies are dumped as DEAD (`dump_one_zombie`). pycriu's
+/// table (3 Zombie, 6 Stopped) is wrong: a dumped `kill -STOP`ped task
+/// has 3, a dumped zombie child 2 (external fixtures).
+const TASK_STATE: EnumTable = &[
+    (1, "Alive"),
+    (2, "Dead (zombie)"),
+    (3, "Stopped"),
+    (6, "Zombie"),
+];
+const SK_SHUTDOWN: EnumTable = &[(0, "NONE"), (1, "READ"), (2, "WRITE"), (3, "BOTH")];
 const SK_FAMILY: EnumTable = &[
     (1, "UNIX"),
     (2, "INET"),
@@ -654,18 +627,18 @@ const fn msg(name: &'static str, fields: &'static [proto::F], title: &'static [u
 static IDS_ENTRY: Msg = msg(
     "task_kobj_ids_entry",
     &[
-        f(1, "vm_id", Ty::Int),
-        f(2, "files_id", Ty::Int),
-        f(3, "fs_id", Ty::Int),
-        f(4, "sighand_id", Ty::Int),
-        f(5, "pid_ns_id", Ty::Int),
-        f(6, "net_ns_id", Ty::Int),
-        f(7, "ipc_ns_id", Ty::Int),
-        f(8, "uts_ns_id", Ty::Int),
-        f(9, "mnt_ns_id", Ty::Int),
-        f(10, "user_ns_id", Ty::Int),
-        f(11, "cgroup_ns_id", Ty::Int),
-        f(12, "time_ns_id", Ty::Int),
+        f(1, "vm_id", Ty::UInt),
+        f(2, "files_id", Ty::UInt),
+        f(3, "fs_id", Ty::UInt),
+        f(4, "sighand_id", Ty::UInt),
+        f(5, "pid_ns_id", Ty::UInt),
+        f(6, "net_ns_id", Ty::UInt),
+        f(7, "ipc_ns_id", Ty::UInt),
+        f(8, "uts_ns_id", Ty::UInt),
+        f(9, "mnt_ns_id", Ty::UInt),
+        f(10, "user_ns_id", Ty::UInt),
+        f(11, "cgroup_ns_id", Ty::UInt),
+        f(12, "time_ns_id", Ty::UInt),
     ],
     &[],
 );
@@ -675,16 +648,16 @@ static PLUGINS_ENTRY: Msg = msg("plugins_entry", &[f(12, "plugins", Ty::Str)], &
 static INVENTORY_ENTRY: Msg = msg(
     "inventory_entry",
     &[
-        f(1, "img_version", Ty::Int),
+        f(1, "img_version", Ty::UInt),
         f(2, "fdinfo_per_id", Ty::Bool),
         f(3, "root_ids", Ty::Msg(&IDS_ENTRY)),
         f(4, "ns_per_id", Ty::Bool),
-        f(5, "root_cg_set", Ty::Int),
+        f(5, "root_cg_set", Ty::UInt),
         f(6, "lsmtype", Ty::Enum(LSMTYPE)),
-        f(8, "dump_uptime", Ty::Int),
-        f(9, "pre_dump_mode", Ty::Int),
+        f(8, "dump_uptime", Ty::UInt),
+        f(9, "pre_dump_mode", Ty::UInt),
         f(10, "tcp_close", Ty::Bool),
-        f(11, "network_lock_method", Ty::Int),
+        f(11, "network_lock_method", Ty::UInt),
         f(12, "plugins_entry", Ty::Msg(&PLUGINS_ENTRY)),
         f(13, "dump_criu_run_id", Ty::Str),
     ],
@@ -694,10 +667,10 @@ static INVENTORY_ENTRY: Msg = msg(
 static PSTREE_ENTRY: Msg = msg(
     "pstree_entry",
     &[
-        f(1, "pid", Ty::Int),
-        f(2, "ppid", Ty::Int),
-        f(3, "pgid", Ty::Int),
-        f(4, "sid", Ty::Int),
+        f(1, "pid", Ty::UInt),
+        f(2, "ppid", Ty::UInt),
+        f(3, "pgid", Ty::UInt),
+        f(4, "sid", Ty::UInt),
         f(5, "threads", Ty::Packed(Elem::Varint)),
     ],
     &[1, 2],
@@ -706,22 +679,22 @@ static PSTREE_ENTRY: Msg = msg(
 static FDINFO_ENTRY: Msg = msg(
     "fdinfo_entry",
     &[
-        f(1, "id", Ty::Int),
+        f(1, "id", Ty::UInt),
         f(2, "flags", Ty::Hex),
         f(3, "type", Ty::Enum(FD_TYPES)),
-        f(4, "fd", Ty::Int),
+        f(4, "fd", Ty::UInt),
         f(5, "xattr_security_selinux", Ty::Str),
     ],
     &[4, 3, 1],
 );
 
-static PAGEMAP_HEAD: Msg = msg("pagemap_head", &[f(1, "pages_id", Ty::Int)], &[1]);
+static PAGEMAP_HEAD: Msg = msg("pagemap_head", &[f(1, "pages_id", Ty::UInt)], &[1]);
 
 static PAGEMAP_ENTRY: Msg = msg(
     "pagemap_entry",
     &[
         f(1, "vaddr", Ty::Hex),
-        f(2, "nr_pages", Ty::Int),
+        f(2, "nr_pages", Ty::UInt),
         f(3, "in_parent", Ty::Bool),
         f(4, "flags", Ty::Flags(PMAP_FLAGS)),
     ],
@@ -733,10 +706,10 @@ static PAGEMAP_ENTRY: Msg = msg(
 static ITIMER_ENTRY: Msg = msg(
     "itimer_entry",
     &[
-        f(1, "isec", Ty::Int),
-        f(2, "iusec", Ty::Int),
-        f(3, "vsec", Ty::Int),
-        f(4, "vusec", Ty::Int),
+        f(1, "isec", Ty::UInt),
+        f(2, "iusec", Ty::UInt),
+        f(3, "vsec", Ty::UInt),
+        f(4, "vusec", Ty::UInt),
     ],
     &[],
 );
@@ -744,16 +717,16 @@ static ITIMER_ENTRY: Msg = msg(
 static POSIX_TIMER_ENTRY: Msg = msg(
     "posix_timer_entry",
     &[
-        f(1, "it_id", Ty::Int),
-        f(2, "clock_id", Ty::Int),
-        f(3, "si_signo", Ty::Int),
-        f(4, "it_sigev_notify", Ty::Int),
+        f(1, "it_id", Ty::UInt),
+        f(2, "clock_id", Ty::UInt),
+        f(3, "si_signo", Ty::UInt),
+        f(4, "it_sigev_notify", Ty::UInt),
         f(5, "sival_ptr", Ty::Hex),
-        f(6, "overrun", Ty::Int),
-        f(7, "isec", Ty::Int),
-        f(8, "insec", Ty::Int),
-        f(9, "vsec", Ty::Int),
-        f(10, "vnsec", Ty::Int),
+        f(6, "overrun", Ty::UInt),
+        f(7, "isec", Ty::UInt),
+        f(8, "insec", Ty::UInt),
+        f(9, "vsec", Ty::UInt),
+        f(10, "vnsec", Ty::UInt),
         f(11, "notify_thread_id", Ty::Int),
     ],
     &[1, 2],
@@ -772,7 +745,7 @@ static TASK_TIMERS: Msg = msg(
 
 static RLIMIT_ENTRY: Msg = msg(
     "rlimit_entry",
-    &[f(1, "cur", Ty::Int), f(2, "max", Ty::Int)],
+    &[f(1, "cur", Ty::UInt), f(2, "max", Ty::UInt)],
     &[],
 );
 
@@ -806,23 +779,23 @@ static TASK_CORE: Msg = msg(
     "task_core_entry",
     &[
         f(1, "task_state", Ty::Enum(TASK_STATE)),
-        f(2, "exit_code", Ty::Int),
+        f(2, "exit_code", Ty::UInt),
         f(3, "personality", Ty::Hex),
         f(4, "flags", Ty::Hex),
         f(5, "blk_sigset", Ty::Hex),
         f(6, "comm", Ty::Str),
         f(7, "timers", Ty::Msg(&TASK_TIMERS)),
         f(8, "rlimits", Ty::Msg(&TASK_RLIMITS)),
-        f(9, "cg_set", Ty::Int),
+        f(9, "cg_set", Ty::UInt),
         f(10, "signals_s", Ty::Msg(&SIGNAL_QUEUE)),
         f(11, "old_seccomp_mode", Ty::Enum(SECCOMP_MODE)),
-        f(12, "old_seccomp_filter", Ty::Int),
-        f(13, "loginuid", Ty::Int),
+        f(12, "old_seccomp_filter", Ty::UInt),
+        f(13, "loginuid", Ty::UInt),
         f(14, "oom_score_adj", Ty::Int),
         f(15, "sigactions", Ty::Msg(&SA_ENTRY)),
         f(18, "child_subreaper", Ty::Bool),
         f(20, "blk_sigset_extended", Ty::Hex),
-        f(21, "stop_signo", Ty::Int),
+        f(21, "stop_signo", Ty::UInt),
         f(22, "membarrier_registration_mask", Ty::Hex),
     ],
     &[6, 1],
@@ -831,14 +804,14 @@ static TASK_CORE: Msg = msg(
 static CREDS_ENTRY: Msg = msg(
     "creds_entry",
     &[
-        f(1, "uid", Ty::Int),
-        f(2, "gid", Ty::Int),
-        f(3, "euid", Ty::Int),
-        f(4, "egid", Ty::Int),
-        f(5, "suid", Ty::Int),
-        f(6, "sgid", Ty::Int),
-        f(7, "fsuid", Ty::Int),
-        f(8, "fsgid", Ty::Int),
+        f(1, "uid", Ty::UInt),
+        f(2, "gid", Ty::UInt),
+        f(3, "euid", Ty::UInt),
+        f(4, "egid", Ty::UInt),
+        f(5, "suid", Ty::UInt),
+        f(6, "sgid", Ty::UInt),
+        f(7, "fsuid", Ty::UInt),
+        f(8, "fsgid", Ty::UInt),
         f(9, "cap_inh", Ty::Hex),
         f(10, "cap_prm", Ty::Hex),
         f(11, "cap_eff", Ty::Hex),
@@ -848,7 +821,7 @@ static CREDS_ENTRY: Msg = msg(
         f(15, "lsm_profile", Ty::Str),
         f(16, "lsm_sockcreate", Ty::Str),
         f(17, "apparmor_data", Ty::Bytes),
-        f(18, "no_new_privs", Ty::Int),
+        f(18, "no_new_privs", Ty::UInt),
         f(19, "cap_amb", Ty::Hex),
     ],
     &[1, 2],
@@ -858,7 +831,7 @@ static THREAD_SAS: Msg = msg(
     "thread_sas_entry",
     &[
         f(1, "ss_sp", Ty::Hex),
-        f(2, "ss_size", Ty::Int),
+        f(2, "ss_size", Ty::UInt),
         f(3, "ss_flags", Ty::Hex),
     ],
     &[],
@@ -868,7 +841,7 @@ static RSEQ_ENTRY: Msg = msg(
     "rseq_entry",
     &[
         f(1, "rseq_abi_pointer", Ty::Hex),
-        f(2, "rseq_abi_size", Ty::Int),
+        f(2, "rseq_abi_size", Ty::UInt),
         f(3, "signature", Ty::Hex),
         f(4, "rseq_cs_pointer", Ty::Hex),
     ],
@@ -879,21 +852,21 @@ static THREAD_CORE: Msg = msg(
     "thread_core_entry",
     &[
         f(1, "futex_rla", Ty::Hex),
-        f(2, "futex_rla_len", Ty::Int),
+        f(2, "futex_rla_len", Ty::UInt),
         f(3, "sched_nice", Ty::SInt),
-        f(4, "sched_policy", Ty::Int),
-        f(5, "sched_prio", Ty::Int),
+        f(4, "sched_policy", Ty::UInt),
+        f(5, "sched_prio", Ty::UInt),
         f(6, "blk_sigset", Ty::Hex),
         f(7, "sas", Ty::Msg(&THREAD_SAS)),
-        f(8, "pdeath_sig", Ty::Int),
+        f(8, "pdeath_sig", Ty::UInt),
         f(9, "signals_p", Ty::Msg(&SIGNAL_QUEUE)),
         f(10, "creds", Ty::Msg(&CREDS_ENTRY)),
         f(11, "seccomp_mode", Ty::Enum(SECCOMP_MODE)),
-        f(12, "seccomp_filter", Ty::Int),
+        f(12, "seccomp_filter", Ty::UInt),
         f(13, "comm", Ty::Str),
         f(14, "blk_sigset_extended", Ty::Hex),
         f(15, "rseq_entry", Ty::Msg(&RSEQ_ENTRY)),
-        f(16, "cg_set", Ty::Int),
+        f(16, "cg_set", Ty::UInt),
     ],
     &[13],
 );
@@ -1003,8 +976,8 @@ static VMA_ENTRY: Msg = msg(
     &[
         f(1, "start", Ty::Hex),
         f(2, "end", Ty::Hex),
-        f(3, "pgoff", Ty::Int),
-        f(4, "shmid", Ty::Int),
+        f(3, "pgoff", Ty::UInt),
+        f(4, "shmid", Ty::UInt),
         f(5, "prot", Ty::Flags(PROT)),
         f(6, "flags", Ty::Flags(MAP_FLAGS)),
         f(7, "status", Ty::Flags(VMA_STATUS)),
@@ -1018,9 +991,9 @@ static VMA_ENTRY: Msg = msg(
 static AIO_RING: Msg = msg(
     "aio_ring_entry",
     &[
-        f(1, "id", Ty::Int),
-        f(2, "nr_req", Ty::Int),
-        f(3, "ring_len", Ty::Int),
+        f(1, "id", Ty::UInt),
+        f(2, "nr_req", Ty::UInt),
+        f(3, "ring_len", Ty::UInt),
     ],
     &[],
 );
@@ -1039,7 +1012,7 @@ static MM_ENTRY: Msg = msg(
         f(9, "mm_arg_end", Ty::Hex),
         f(10, "mm_env_start", Ty::Hex),
         f(11, "mm_env_end", Ty::Hex),
-        f(12, "exe_file_id", Ty::Int),
+        f(12, "exe_file_id", Ty::UInt),
         f(13, "mm_saved_auxv", Ty::Packed(Elem::Varint)),
         f(14, "vmas", Ty::Msg(&VMA_ENTRY)),
         f(15, "dumpable", Ty::Int),
@@ -1054,11 +1027,11 @@ static MM_ENTRY: Msg = msg(
 static FOWN_ENTRY: Msg = msg(
     "fown_entry",
     &[
-        f(1, "uid", Ty::Int),
-        f(2, "euid", Ty::Int),
-        f(3, "signum", Ty::Int),
-        f(4, "pid_type", Ty::Int),
-        f(5, "pid", Ty::Int),
+        f(1, "uid", Ty::UInt),
+        f(2, "euid", Ty::UInt),
+        f(3, "signum", Ty::UInt),
+        f(4, "pid_type", Ty::UInt),
+        f(5, "pid", Ty::UInt),
     ],
     &[],
 );
@@ -1066,19 +1039,19 @@ static FOWN_ENTRY: Msg = msg(
 static REG_FILE_ENTRY: Msg = msg(
     "reg_file_entry",
     &[
-        f(1, "id", Ty::Int),
+        f(1, "id", Ty::UInt),
         f(2, "flags", Ty::Flags(OPEN_FLAGS)),
-        f(3, "pos", Ty::Int),
+        f(3, "pos", Ty::UInt),
         f(5, "fown", Ty::Msg(&FOWN_ENTRY)),
         f(6, "name", Ty::Str),
         f(7, "mnt_id", Ty::SInt),
-        f(8, "size", Ty::Int),
+        f(8, "size", Ty::UInt),
         f(9, "ext", Ty::Bool),
         f(10, "mode", Ty::Hex),
         f(11, "build_id", Ty::Hex),
         f(12, "checksum", Ty::Hex),
-        f(13, "checksum_config", Ty::Int),
-        f(14, "checksum_parameter", Ty::Int),
+        f(13, "checksum_config", Ty::UInt),
+        f(14, "checksum_parameter", Ty::UInt),
     ],
     &[6],
 );
@@ -1086,8 +1059,8 @@ static REG_FILE_ENTRY: Msg = msg(
 static PIPE_ENTRY: Msg = msg(
     "pipe_entry",
     &[
-        f(1, "id", Ty::Int),
-        f(2, "pipe_id", Ty::Int),
+        f(1, "id", Ty::UInt),
+        f(2, "pipe_id", Ty::UInt),
         f(3, "flags", Ty::Flags(OPEN_FLAGS)),
         f(4, "fown", Ty::Msg(&FOWN_ENTRY)),
     ],
@@ -1097,9 +1070,9 @@ static PIPE_ENTRY: Msg = msg(
 static PIPE_DATA_ENTRY: Msg = msg(
     "pipe_data_entry",
     &[
-        f(1, "pipe_id", Ty::Int),
-        f(2, "bytes", Ty::Int),
-        f(3, "size", Ty::Int),
+        f(1, "pipe_id", Ty::UInt),
+        f(2, "bytes", Ty::UInt),
+        f(3, "size", Ty::UInt),
     ],
     &[1, 2],
 );
@@ -1107,9 +1080,9 @@ static PIPE_DATA_ENTRY: Msg = msg(
 static FIFO_ENTRY: Msg = msg(
     "fifo_entry",
     &[
-        f(1, "id", Ty::Int),
-        f(2, "pipe_id", Ty::Int),
-        f(3, "regf_id", Ty::Int),
+        f(1, "id", Ty::UInt),
+        f(2, "pipe_id", Ty::UInt),
+        f(3, "regf_id", Ty::UInt),
     ],
     &[2],
 );
@@ -1117,8 +1090,8 @@ static FIFO_ENTRY: Msg = msg(
 static NS_FILE_ENTRY: Msg = msg(
     "ns_file_entry",
     &[
-        f(1, "id", Ty::Int),
-        f(2, "ns_id", Ty::Int),
+        f(1, "id", Ty::UInt),
+        f(2, "ns_id", Ty::UInt),
         f(3, "ns_cflag", Ty::Hex),
         f(4, "flags", Ty::Flags(OPEN_FLAGS)),
     ],
@@ -1128,10 +1101,10 @@ static NS_FILE_ENTRY: Msg = msg(
 static EVENTFD_ENTRY: Msg = msg(
     "eventfd_file_entry",
     &[
-        f(1, "id", Ty::Int),
+        f(1, "id", Ty::UInt),
         f(2, "flags", Ty::Flags(OPEN_FLAGS)),
         f(3, "fown", Ty::Msg(&FOWN_ENTRY)),
-        f(4, "counter", Ty::Int),
+        f(4, "counter", Ty::UInt),
     ],
     &[4],
 );
@@ -1139,7 +1112,7 @@ static EVENTFD_ENTRY: Msg = msg(
 static SIGNALFD_ENTRY: Msg = msg(
     "signalfd_entry",
     &[
-        f(1, "id", Ty::Int),
+        f(1, "id", Ty::UInt),
         f(2, "flags", Ty::Hex),
         f(3, "fown", Ty::Msg(&FOWN_ENTRY)),
         f(4, "sigmask", Ty::Hex),
@@ -1150,16 +1123,16 @@ static SIGNALFD_ENTRY: Msg = msg(
 static TIMERFD_ENTRY: Msg = msg(
     "timerfd_entry",
     &[
-        f(1, "id", Ty::Int),
+        f(1, "id", Ty::UInt),
         f(2, "flags", Ty::Hex),
         f(3, "fown", Ty::Msg(&FOWN_ENTRY)),
-        f(4, "clockid", Ty::Int),
-        f(5, "ticks", Ty::Int),
+        f(4, "clockid", Ty::UInt),
+        f(5, "ticks", Ty::UInt),
         f(6, "settime_flags", Ty::Hex),
-        f(7, "vsec", Ty::Int),
-        f(8, "vnsec", Ty::Int),
-        f(9, "isec", Ty::Int),
-        f(10, "insec", Ty::Int),
+        f(7, "vsec", Ty::UInt),
+        f(8, "vnsec", Ty::UInt),
+        f(9, "isec", Ty::UInt),
+        f(10, "insec", Ty::UInt),
     ],
     &[4],
 );
@@ -1167,16 +1140,16 @@ static TIMERFD_ENTRY: Msg = msg(
 static SK_OPTS: Msg = msg(
     "sk_opts_entry",
     &[
-        f(1, "so_sndbuf", Ty::Int),
-        f(2, "so_rcvbuf", Ty::Int),
-        f(3, "so_snd_tmo_sec", Ty::Int),
-        f(4, "so_snd_tmo_usec", Ty::Int),
-        f(5, "so_rcv_tmo_sec", Ty::Int),
-        f(6, "so_rcv_tmo_usec", Ty::Int),
+        f(1, "so_sndbuf", Ty::UInt),
+        f(2, "so_rcvbuf", Ty::UInt),
+        f(3, "so_snd_tmo_sec", Ty::UInt),
+        f(4, "so_snd_tmo_usec", Ty::UInt),
+        f(5, "so_rcv_tmo_sec", Ty::UInt),
+        f(6, "so_rcv_tmo_usec", Ty::UInt),
         f(7, "reuseaddr", Ty::Bool),
-        f(8, "so_priority", Ty::Int),
-        f(9, "so_rcvlowat", Ty::Int),
-        f(10, "so_mark", Ty::Int),
+        f(8, "so_priority", Ty::UInt),
+        f(9, "so_rcvlowat", Ty::UInt),
+        f(10, "so_mark", Ty::UInt),
         f(11, "so_passcred", Ty::Bool),
         f(12, "so_passsec", Ty::Bool),
         f(13, "so_dontroute", Ty::Bool),
@@ -1185,12 +1158,12 @@ static SK_OPTS: Msg = msg(
         f(17, "so_reuseport", Ty::Bool),
         f(18, "so_broadcast", Ty::Bool),
         f(19, "so_keepalive", Ty::Bool),
-        f(20, "tcp_keepcnt", Ty::Int),
-        f(21, "tcp_keepidle", Ty::Int),
-        f(22, "tcp_keepintvl", Ty::Int),
-        f(23, "so_oobinline", Ty::Int),
-        f(24, "so_linger", Ty::Int),
-        f(25, "so_buf_lock", Ty::Int),
+        f(20, "tcp_keepcnt", Ty::UInt),
+        f(21, "tcp_keepidle", Ty::UInt),
+        f(22, "tcp_keepintvl", Ty::UInt),
+        f(23, "so_oobinline", Ty::UInt),
+        f(24, "so_linger", Ty::UInt),
+        f(25, "so_buf_lock", Ty::UInt),
     ],
     &[],
 );
@@ -1199,8 +1172,8 @@ static FILE_PERMS: Msg = msg(
     "file_perms_entry",
     &[
         f(1, "mode", Ty::Hex),
-        f(2, "uid", Ty::Int),
-        f(3, "gid", Ty::Int),
+        f(2, "uid", Ty::UInt),
+        f(3, "gid", Ty::UInt),
     ],
     &[],
 );
@@ -1208,22 +1181,22 @@ static FILE_PERMS: Msg = msg(
 static UNIX_SK_ENTRY: Msg = msg(
     "unix_sk_entry",
     &[
-        f(1, "id", Ty::Int),
-        f(2, "ino", Ty::Int),
+        f(1, "id", Ty::UInt),
+        f(2, "ino", Ty::UInt),
         f(3, "type", Ty::Enum(SK_TYPE)),
-        f(4, "state", Ty::Int),
+        f(4, "state", Ty::UInt),
         f(5, "flags", Ty::Hex),
         f(6, "uflags", Ty::Hex),
-        f(7, "backlog", Ty::Int),
-        f(8, "peer", Ty::Int),
+        f(7, "backlog", Ty::UInt),
+        f(8, "peer", Ty::UInt),
         f(9, "fown", Ty::Msg(&FOWN_ENTRY)),
         f(10, "opts", Ty::Msg(&SK_OPTS)),
         f(11, "name", Ty::Bytes),
-        f(12, "shutdown", Ty::Int),
+        f(12, "shutdown", Ty::Enum(SK_SHUTDOWN)),
         f(13, "file_perms", Ty::Msg(&FILE_PERMS)),
         f(14, "name_dir", Ty::Str),
         f(15, "deleted", Ty::Bool),
-        f(16, "ns_id", Ty::Int),
+        f(16, "ns_id", Ty::UInt),
         f(17, "mnt_id", Ty::SInt),
     ],
     &[3, 2],
@@ -1232,16 +1205,16 @@ static UNIX_SK_ENTRY: Msg = msg(
 static INET_SK_ENTRY: Msg = msg(
     "inet_sk_entry",
     &[
-        f(1, "id", Ty::Int),
-        f(2, "ino", Ty::Int),
+        f(1, "id", Ty::UInt),
+        f(2, "ino", Ty::UInt),
         f(3, "family", Ty::Enum(SK_FAMILY)),
         f(4, "type", Ty::Enum(SK_TYPE)),
-        f(5, "proto", Ty::Int),
-        f(6, "state", Ty::Int),
-        f(7, "src_port", Ty::Int),
-        f(8, "dst_port", Ty::Int),
+        f(5, "proto", Ty::UInt),
+        f(6, "state", Ty::UInt),
+        f(7, "src_port", Ty::UInt),
+        f(8, "dst_port", Ty::UInt),
         f(9, "flags", Ty::Hex),
-        f(10, "backlog", Ty::Int),
+        f(10, "backlog", Ty::UInt),
         f(11, "src_addr", Ty::Hex),
         f(12, "dst_addr", Ty::Hex),
         f(13, "fown", Ty::Msg(&FOWN_ENTRY)),
@@ -1249,8 +1222,8 @@ static INET_SK_ENTRY: Msg = msg(
         f(15, "v6only", Ty::Bool),
         f(16, "ip_opts", Ty::Msg(U)),
         f(17, "ifname", Ty::Str),
-        f(18, "ns_id", Ty::Int),
-        f(19, "shutdown", Ty::Int),
+        f(18, "ns_id", Ty::UInt),
+        f(19, "shutdown", Ty::Enum(SK_SHUTDOWN)),
         f(20, "tcp_opts", Ty::Msg(U)),
     ],
     &[3, 4, 7, 8],
@@ -1259,11 +1232,11 @@ static INET_SK_ENTRY: Msg = msg(
 static TTY_FILE_ENTRY: Msg = msg(
     "tty_file_entry",
     &[
-        f(1, "id", Ty::Int),
-        f(2, "tty_info_id", Ty::Int),
+        f(1, "id", Ty::UInt),
+        f(2, "tty_info_id", Ty::UInt),
         f(3, "flags", Ty::Flags(OPEN_FLAGS)),
         f(4, "fown", Ty::Msg(&FOWN_ENTRY)),
-        f(6, "regf_id", Ty::Int),
+        f(6, "regf_id", Ty::UInt),
     ],
     &[2],
 );
@@ -1272,7 +1245,7 @@ static FILE_ENTRY: Msg = msg(
     "file_entry",
     &[
         f(1, "type", Ty::Enum(FD_TYPES)),
-        f(2, "id", Ty::Int),
+        f(2, "id", Ty::UInt),
         f(3, "reg", Ty::Msg(&REG_FILE_ENTRY)),
         f(4, "isk", Ty::Msg(&INET_SK_ENTRY)),
         f(5, "nsf", Ty::Msg(&NS_FILE_ENTRY)),
@@ -1300,32 +1273,32 @@ static FILE_ENTRY: Msg = msg(
 static FS_ENTRY: Msg = msg(
     "fs_entry",
     &[
-        f(1, "cwd_id", Ty::Int),
-        f(2, "root_id", Ty::Int),
-        f(3, "umask", Ty::Int),
+        f(1, "cwd_id", Ty::UInt),
+        f(2, "root_id", Ty::UInt),
+        f(3, "umask", Ty::UInt),
     ],
     &[1, 2],
 );
 
 static TIMEVAL: Msg = msg(
     "timeval",
-    &[f(1, "tv_sec", Ty::Int), f(2, "tv_usec", Ty::Int)],
+    &[f(1, "tv_sec", Ty::UInt), f(2, "tv_usec", Ty::UInt)],
     &[],
 );
 
 static GHOST_FILE_ENTRY: Msg = msg(
     "ghost_file_entry",
     &[
-        f(1, "uid", Ty::Int),
-        f(2, "gid", Ty::Int),
+        f(1, "uid", Ty::UInt),
+        f(2, "gid", Ty::UInt),
         f(3, "mode", Ty::Hex),
         f(4, "dev", Ty::Hex),
-        f(5, "ino", Ty::Int),
+        f(5, "ino", Ty::UInt),
         f(6, "rdev", Ty::Hex),
         f(7, "atim", Ty::Msg(&TIMEVAL)),
         f(8, "mtim", Ty::Msg(&TIMEVAL)),
         f(9, "chunks", Ty::Bool),
-        f(10, "size", Ty::Int),
+        f(10, "size", Ty::UInt),
         f(11, "symlnk_target", Ty::Str),
     ],
     &[10],
@@ -1333,24 +1306,24 @@ static GHOST_FILE_ENTRY: Msg = msg(
 
 static GHOST_CHUNK_ENTRY: Msg = msg(
     "ghost_chunk_entry",
-    &[f(1, "len", Ty::Int), f(2, "off", Ty::Int)],
+    &[f(1, "len", Ty::UInt), f(2, "off", Ty::UInt)],
     &[2, 1],
 );
 
 static MNT_ENTRY: Msg = msg(
     "mnt_entry",
     &[
-        f(1, "fstype", Ty::Int),
-        f(2, "mnt_id", Ty::Int),
+        f(1, "fstype", Ty::UInt),
+        f(2, "mnt_id", Ty::UInt),
         f(3, "root_dev", Ty::Hex),
-        f(4, "parent_mnt_id", Ty::Int),
+        f(4, "parent_mnt_id", Ty::UInt),
         f(5, "flags", Ty::Hex),
         f(6, "root", Ty::Str),
         f(7, "mountpoint", Ty::Str),
         f(8, "source", Ty::Str),
         f(9, "options", Ty::Str),
-        f(10, "shared_id", Ty::Int),
-        f(11, "master_id", Ty::Int),
+        f(10, "shared_id", Ty::UInt),
+        f(11, "master_id", Ty::UInt),
         f(12, "with_plugin", Ty::Bool),
         f(13, "ext_mount", Ty::Bool),
         f(14, "fsname", Ty::Str),
@@ -1372,7 +1345,7 @@ static UTSNS_ENTRY: Msg = msg(
 
 static TIMESPEC: Msg = msg(
     "timespec",
-    &[f(1, "tv_sec", Ty::Int), f(2, "tv_nsec", Ty::Int)],
+    &[f(1, "tv_sec", Ty::UInt), f(2, "tv_nsec", Ty::UInt)],
     &[],
 );
 
@@ -1390,9 +1363,9 @@ static PIDNS_ENTRY: Msg = msg("pidns_entry", &[f(1, "ext_key", Ty::Str)], &[1]);
 static UID_GID_EXTENT: Msg = msg(
     "uid_gid_extent",
     &[
-        f(1, "first", Ty::Int),
-        f(2, "lower_first", Ty::Int),
-        f(3, "count", Ty::Int),
+        f(1, "first", Ty::UInt),
+        f(2, "lower_first", Ty::UInt),
+        f(3, "count", Ty::UInt),
     ],
     &[],
 );
@@ -1410,22 +1383,22 @@ static IPC_VAR_ENTRY: Msg = msg(
     "ipc_var_entry",
     &[
         f(1, "sem_ctls", Ty::Packed(Elem::Varint)),
-        f(2, "msg_ctlmax", Ty::Int),
-        f(3, "msg_ctlmnb", Ty::Int),
-        f(4, "msg_ctlmni", Ty::Int),
-        f(5, "auto_msgmni", Ty::Int),
-        f(6, "shm_ctlmax", Ty::Int),
-        f(7, "shm_ctlall", Ty::Int),
-        f(8, "shm_ctlmni", Ty::Int),
-        f(9, "shm_rmid_forced", Ty::Int),
-        f(10, "mq_queues_max", Ty::Int),
-        f(11, "mq_msg_max", Ty::Int),
-        f(12, "mq_msgsize_max", Ty::Int),
-        f(13, "mq_msg_default", Ty::Int),
-        f(14, "mq_msgsize_default", Ty::Int),
-        f(15, "msg_next_id", Ty::Int),
-        f(16, "sem_next_id", Ty::Int),
-        f(17, "shm_next_id", Ty::Int),
+        f(2, "msg_ctlmax", Ty::UInt),
+        f(3, "msg_ctlmnb", Ty::UInt),
+        f(4, "msg_ctlmni", Ty::UInt),
+        f(5, "auto_msgmni", Ty::UInt),
+        f(6, "shm_ctlmax", Ty::UInt),
+        f(7, "shm_ctlall", Ty::UInt),
+        f(8, "shm_ctlmni", Ty::UInt),
+        f(9, "shm_rmid_forced", Ty::UInt),
+        f(10, "mq_queues_max", Ty::UInt),
+        f(11, "mq_msg_max", Ty::UInt),
+        f(12, "mq_msgsize_max", Ty::UInt),
+        f(13, "mq_msg_default", Ty::UInt),
+        f(14, "mq_msgsize_default", Ty::UInt),
+        f(15, "msg_next_id", Ty::UInt),
+        f(16, "sem_next_id", Ty::UInt),
+        f(17, "shm_next_id", Ty::UInt),
     ],
     &[],
 );
@@ -1434,12 +1407,12 @@ static IPC_DESC: Msg = msg(
     "ipc_desc_entry",
     &[
         f(1, "key", Ty::Hex),
-        f(2, "uid", Ty::Int),
-        f(3, "gid", Ty::Int),
-        f(4, "cuid", Ty::Int),
-        f(5, "cgid", Ty::Int),
+        f(2, "uid", Ty::UInt),
+        f(3, "gid", Ty::UInt),
+        f(4, "cuid", Ty::UInt),
+        f(5, "cgid", Ty::UInt),
         f(6, "mode", Ty::Hex),
-        f(7, "id", Ty::Int),
+        f(7, "id", Ty::UInt),
     ],
     &[],
 );
@@ -1448,7 +1421,7 @@ static IPC_SHM_ENTRY: Msg = msg(
     "ipc_shm_entry",
     &[
         f(1, "desc", Ty::Msg(&IPC_DESC)),
-        f(2, "size", Ty::Int),
+        f(2, "size", Ty::UInt),
         f(3, "in_pagemaps", Ty::Bool),
         f(4, "hugetlb_flag", Ty::Hex),
     ],
@@ -1457,7 +1430,7 @@ static IPC_SHM_ENTRY: Msg = msg(
 
 static IPC_SEM_ENTRY: Msg = msg(
     "ipc_sem_entry",
-    &[f(1, "desc", Ty::Msg(&IPC_DESC)), f(2, "nsems", Ty::Int)],
+    &[f(1, "desc", Ty::Msg(&IPC_DESC)), f(2, "nsems", Ty::UInt)],
     &[2],
 );
 
@@ -1465,8 +1438,8 @@ static IPC_MSG_ENTRY: Msg = msg(
     "ipc_msg_entry",
     &[
         f(1, "desc", Ty::Msg(&IPC_DESC)),
-        f(2, "qbytes", Ty::Int),
-        f(3, "qnum", Ty::Int),
+        f(2, "qbytes", Ty::UInt),
+        f(3, "qnum", Ty::UInt),
     ],
     &[3],
 );
@@ -1474,7 +1447,7 @@ static IPC_MSG_ENTRY: Msg = msg(
 static SCM_ENTRY: Msg = msg(
     "scm_entry",
     &[
-        f(1, "type", Ty::Int),
+        f(1, "type", Ty::UInt),
         f(2, "rights", Ty::Packed(Elem::Varint)),
     ],
     &[],
@@ -1483,8 +1456,8 @@ static SCM_ENTRY: Msg = msg(
 static SK_PACKET_ENTRY: Msg = msg(
     "sk_packet_entry",
     &[
-        f(1, "id_for", Ty::Int),
-        f(2, "length", Ty::Int),
+        f(1, "id_for", Ty::UInt),
+        f(2, "length", Ty::UInt),
         f(4, "scm", Ty::Msg(&SCM_ENTRY)),
     ],
     &[1, 2],
@@ -1493,23 +1466,23 @@ static SK_PACKET_ENTRY: Msg = msg(
 static TCP_STREAM_ENTRY: Msg = msg(
     "tcp_stream_entry",
     &[
-        f(1, "inq_len", Ty::Int),
-        f(2, "inq_seq", Ty::Int),
-        f(3, "outq_len", Ty::Int),
-        f(4, "outq_seq", Ty::Int),
+        f(1, "inq_len", Ty::UInt),
+        f(2, "inq_seq", Ty::UInt),
+        f(3, "outq_len", Ty::UInt),
+        f(4, "outq_seq", Ty::UInt),
         f(5, "opt_mask", Ty::Hex),
-        f(6, "snd_wscale", Ty::Int),
-        f(7, "mss_clamp", Ty::Int),
-        f(8, "rcv_wscale", Ty::Int),
-        f(9, "timestamp", Ty::Int),
+        f(6, "snd_wscale", Ty::UInt),
+        f(7, "mss_clamp", Ty::UInt),
+        f(8, "rcv_wscale", Ty::UInt),
+        f(9, "timestamp", Ty::UInt),
         f(10, "cork", Ty::Bool),
         f(11, "nodelay", Ty::Bool),
-        f(12, "unsq_len", Ty::Int),
-        f(13, "snd_wl1", Ty::Int),
-        f(14, "snd_wnd", Ty::Int),
-        f(15, "max_window", Ty::Int),
-        f(16, "rcv_wnd", Ty::Int),
-        f(17, "rcv_wup", Ty::Int),
+        f(12, "unsq_len", Ty::UInt),
+        f(13, "snd_wl1", Ty::UInt),
+        f(14, "snd_wnd", Ty::UInt),
+        f(15, "max_window", Ty::UInt),
+        f(16, "rcv_wnd", Ty::UInt),
+        f(17, "rcv_wup", Ty::UInt),
     ],
     &[1, 3],
 );
@@ -1517,10 +1490,10 @@ static TCP_STREAM_ENTRY: Msg = msg(
 static BPFMAP_DATA_ENTRY: Msg = msg(
     "bpfmap_data_entry",
     &[
-        f(1, "map_id", Ty::Int),
-        f(2, "keys_bytes", Ty::Int),
-        f(3, "values_bytes", Ty::Int),
-        f(4, "count", Ty::Int),
+        f(1, "map_id", Ty::UInt),
+        f(2, "keys_bytes", Ty::UInt),
+        f(3, "values_bytes", Ty::UInt),
+        f(4, "count", Ty::UInt),
     ],
     &[1, 4],
 );
@@ -1530,14 +1503,14 @@ static CG_MEMBER: Msg = msg(
     &[
         f(1, "name", Ty::Str),
         f(2, "path", Ty::Str),
-        f(3, "cgns_prefix", Ty::Int),
+        f(3, "cgns_prefix", Ty::UInt),
     ],
     &[1, 2],
 );
 
 static CG_SET: Msg = msg(
     "cg_set_entry",
-    &[f(1, "id", Ty::Int), f(2, "ctls", Ty::Msg(&CG_MEMBER))],
+    &[f(1, "id", Ty::UInt), f(2, "ctls", Ty::Msg(&CG_MEMBER))],
     &[1],
 );
 
@@ -1554,7 +1527,7 @@ static SECCOMP_FILTER: Msg = msg(
     "seccomp_filter",
     &[
         f(1, "filter", Ty::Bytes),
-        f(2, "prev", Ty::Int),
+        f(2, "prev", Ty::UInt),
         f(3, "flags", Ty::Hex),
     ],
     &[],
@@ -1569,20 +1542,20 @@ static SECCOMP_ENTRY: Msg = msg(
 static DUMP_STATS: Msg = msg(
     "dump_stats_entry",
     &[
-        f(1, "freezing_time", Ty::Int),
-        f(2, "frozen_time", Ty::Int),
-        f(3, "memdump_time", Ty::Int),
-        f(4, "memwrite_time", Ty::Int),
-        f(5, "pages_scanned", Ty::Int),
-        f(6, "pages_skipped_parent", Ty::Int),
-        f(7, "pages_written", Ty::Int),
-        f(8, "irmap_resolve", Ty::Int),
-        f(9, "pages_lazy", Ty::Int),
-        f(10, "page_pipes", Ty::Int),
-        f(11, "page_pipe_bufs", Ty::Int),
-        f(12, "shpages_scanned", Ty::Int),
-        f(13, "shpages_skipped_parent", Ty::Int),
-        f(14, "shpages_written", Ty::Int),
+        f(1, "freezing_time", Ty::UInt),
+        f(2, "frozen_time", Ty::UInt),
+        f(3, "memdump_time", Ty::UInt),
+        f(4, "memwrite_time", Ty::UInt),
+        f(5, "pages_scanned", Ty::UInt),
+        f(6, "pages_skipped_parent", Ty::UInt),
+        f(7, "pages_written", Ty::UInt),
+        f(8, "irmap_resolve", Ty::UInt),
+        f(9, "pages_lazy", Ty::UInt),
+        f(10, "page_pipes", Ty::UInt),
+        f(11, "page_pipe_bufs", Ty::UInt),
+        f(12, "shpages_scanned", Ty::UInt),
+        f(13, "shpages_skipped_parent", Ty::UInt),
+        f(14, "shpages_written", Ty::UInt),
     ],
     &[],
 );
@@ -1590,11 +1563,11 @@ static DUMP_STATS: Msg = msg(
 static RESTORE_STATS: Msg = msg(
     "restore_stats_entry",
     &[
-        f(1, "pages_compared", Ty::Int),
-        f(2, "pages_skipped_cow", Ty::Int),
-        f(3, "forking_time", Ty::Int),
-        f(4, "restore_time", Ty::Int),
-        f(5, "pages_restored", Ty::Int),
+        f(1, "pages_compared", Ty::UInt),
+        f(2, "pages_skipped_cow", Ty::UInt),
+        f(3, "forking_time", Ty::UInt),
+        f(4, "restore_time", Ty::UInt),
+        f(5, "pages_restored", Ty::UInt),
     ],
     &[],
 );
