@@ -265,7 +265,7 @@ expression: "common::explore(&display_name(&path), &data)"
           NULL bitmap  [0x59f+0x3]
           id: 1 — INT  [0x5a2+0x4]
           tiny: -5 — TINYINT  [0x5a6+0x1]
-          small: 65000 — SMALLINT  [0x5a7+0x2]
+          small: 65000 — SMALLINT UNSIGNED  [0x5a7+0x2]
           medium: -100000 — MEDIUMINT  [0x5a9+0x3]
           big: 1234567890123 — BIGINT  [0x5ac+0x8]
           price: "12.50" — DECIMAL(10,2)  [0x5b4+0x5]
@@ -279,7 +279,7 @@ expression: "common::explore(&display_name(&path), &data)"
           at_time: "12:34:56.789" — TIME(3)  [0x5ec+0x5]
           stamp: "2026-01-02 03:04:05.678901" — DATETIME(6)  [0x5f1+0x8]
           changed: 2026-01-02 03:04:05 UTC — TIMESTAMP  [0x5f9+0x4]
-          made: 2026 — YEAR  [0x5fd+0x1]
+          made: 2026 — YEAR UNSIGNED  [0x5fd+0x1]
           colour: "green" — ENUM (1-byte index)  [0x5fe+0x1]
           flags: "a,c" — SET (1-byte bitmap)  [0x5ff+0x1]
           bits: 0x2aa — BIT(10)  [0x600+0x2]
@@ -288,7 +288,7 @@ expression: "common::explore(&display_name(&path), &data)"
           NULL bitmap  [0x634+0x3]
           id: 2 — INT  [0x637+0x4]
           tiny — NULL, TINYINT
-          small — NULL, SMALLINT
+          small — NULL, SMALLINT UNSIGNED
           medium — NULL, MEDIUMINT
           big — NULL, BIGINT
           price: "-0.99" — DECIMAL(10,2)  [0x63b+0x5]
@@ -302,7 +302,7 @@ expression: "common::explore(&display_name(&path), &data)"
           at_time — NULL, TIME(3)
           stamp — NULL, DATETIME(6)
           changed — NULL, TIMESTAMP
-          made — NULL, YEAR
+          made — NULL, YEAR UNSIGNED
           colour — NULL, ENUM (1-byte index)
           flags — NULL, SET (1-byte bitmap)
           bits — NULL, BIT(10)
@@ -426,7 +426,7 @@ expression: "common::explore(&display_name(&path), &data)"
             NULL bitmap  [0x835+0x3]
             id: 1 — INT  [0x838+0x4]
             tiny: -5 — TINYINT  [0x83c+0x1]
-            small: 65000 — SMALLINT  [0x83d+0x2]
+            small: 65000 — SMALLINT UNSIGNED  [0x83d+0x2]
             medium: -100000 — MEDIUMINT  [0x83f+0x3]
             big: 1234567890123 — BIGINT  [0x842+0x8]
             price: "12.50" — DECIMAL(10,2)  [0x84a+0x5]
@@ -440,7 +440,7 @@ expression: "common::explore(&display_name(&path), &data)"
             at_time: "12:34:56.789" — TIME(3)  [0x882+0x5]
             stamp: "2026-01-02 03:04:05.678901" — DATETIME(6)  [0x887+0x8]
             changed: 2026-01-02 03:04:05 UTC — TIMESTAMP  [0x88f+0x4]
-            made: 2026 — YEAR  [0x893+0x1]
+            made: 2026 — YEAR UNSIGNED  [0x893+0x1]
             colour: "green" — ENUM (1-byte index)  [0x894+0x1]
             flags: "a,c" — SET (1-byte bitmap)  [0x895+0x1]
             bits: 0x2aa — BIT(10)  [0x896+0x2]
@@ -449,7 +449,7 @@ expression: "common::explore(&display_name(&path), &data)"
             NULL bitmap  [0x8ca+0x3]
             id: 1 — INT  [0x8cd+0x4]
             tiny: -5 — TINYINT  [0x8d1+0x1]
-            small: 65000 — SMALLINT  [0x8d2+0x2]
+            small: 65000 — SMALLINT UNSIGNED  [0x8d2+0x2]
             medium: -100000 — MEDIUMINT  [0x8d4+0x3]
             big: 1234567890123 — BIGINT  [0x8d7+0x8]
             price: "13.75" — DECIMAL(10,2)  [0x8df+0x5]
@@ -463,7 +463,7 @@ expression: "common::explore(&display_name(&path), &data)"
             at_time: "12:34:56.789" — TIME(3)  [0x91b+0x5]
             stamp: "2026-01-02 03:04:05.678901" — DATETIME(6)  [0x920+0x8]
             changed: 2026-01-02 03:04:05 UTC — TIMESTAMP  [0x928+0x4]
-            made: 2026 — YEAR  [0x92c+0x1]
+            made: 2026 — YEAR UNSIGNED  [0x92c+0x1]
             colour: "green" — ENUM (1-byte index)  [0x92d+0x1]
             flags: "a,c" — SET (1-byte bitmap)  [0x92e+0x1]
             bits: 0x2aa — BIT(10)  [0x92f+0x2]
@@ -584,7 +584,7 @@ expression: "common::explore(&display_name(&path), &data)"
           NULL bitmap  [0xb48+0x3]
           id: 2 — INT  [0xb4b+0x4]
           tiny — NULL, TINYINT
-          small — NULL, SMALLINT
+          small — NULL, SMALLINT UNSIGNED
           medium — NULL, MEDIUMINT
           big — NULL, BIGINT
           price: "-0.99" — DECIMAL(10,2)  [0xb4f+0x5]
@@ -598,7 +598,7 @@ expression: "common::explore(&display_name(&path), &data)"
           at_time — NULL, TIME(3)
           stamp — NULL, DATETIME(6)
           changed — NULL, TIMESTAMP
-          made — NULL, YEAR
+          made — NULL, YEAR UNSIGNED
           colour — NULL, ENUM (1-byte index)
           flags — NULL, SET (1-byte bitmap)
           bits — NULL, BIT(10)

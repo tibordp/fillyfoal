@@ -1519,6 +1519,9 @@ the MariaDB files, with `mariadb-binlog -vv --base64-output=decode-rows`
 | `mysql-binlog/mariadb-compressed.bin` | MariaDB 10.5.29 | `log_bin_compress=ON`, `log_bin_compress_min_len=10`: a zlib-compressed rows event and query event; unchanged |
 | `mysql-binlog/mariadb-encrypted.bin` | MariaDB 10.5.29 | `sh tests/data/mysql-binlog/make_mariadb.sh`: `encrypt_binlog=ON` with `file_key_management` and the script's fixed test key; a start encryption event, then encrypted events (a database, a table, a row); unchanged |
 | `mysql-binlog/mariadb114-rows.bin` | MariaDB 11.4.13 | `make_mariadb.sh`: the workload, a `CREATE TABLE ... DEFAULT CHARSET=utf8mb4` (status variable 131, `character_set_collations`), an XA transaction; checked against `mariadb-binlog -vv --base64-output=decode-rows`; unchanged |
+| `mysql-binlog/mysql80-rows.bin` | MySQL 8.0.46 | `sh tests/data/mysql-binlog/make_mysql80.sh` (official `mysql:8.0` image, server defaults: `binlog_row_metadata=MINIMAL`, anonymous GTIDs): the workload, statement-based inserts with a user variable (User var event) and `RAND()` (Rand event), an XA transaction (XA prepare event) and a one-phase XA commit; the RAND() seeds also vary; unchanged |
+| `mysql-binlog/mysql80-partial.bin` | MySQL 8.0.46 | `make_mysql80.sh`: `binlog_row_value_options=PARTIAL_JSON`, `binlog_row_image=MINIMAL`, a `JSON_SET` and a `JSON_REMOVE` update (Partial update rows events: a REPLACE and a REMOVE diff, checked by hand against the statements); unchanged |
+| `mysql-binlog/mysql80-relay.bin` | MySQL 8.0.46 | `make_mysql80.sh`: the relay log of a replica (a second container on a private network) after replicating an insert and an update: the replica's format description and the source's rotate and format description, then the source's events with the source's positions; unchanged |
 
 ## Erlang external term format
 

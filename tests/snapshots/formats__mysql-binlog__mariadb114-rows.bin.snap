@@ -233,7 +233,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Sequence number: 1  [0x186+0x8]
       Domain ID: 0  [0x18e+0x4]
       Flags: 0x29 [STANDALONE | ALLOW_PARALLEL | DDL]  [0x192+0x1]
-      More: 00 00 00 00 00 00  |......|  [0x193+0x6]
+      Padding  [0x193+0x6]
       Checksum: 0x16a2011d — valid CRC-32  [0x199+0x4]
   ▾ Query — shop: CREATE DATABASE shop  [0x19d+0x57]
     ▾ Header  [0x19d+0x13]
@@ -267,7 +267,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Sequence number: 2  [0x207+0x8]
       Domain ID: 0  [0x20f+0x4]
       Flags: 0x29 [STANDALONE | ALLOW_PARALLEL | DDL]  [0x213+0x1]
-      More: 00 00 00 00 00 00  |......|  [0x214+0x6]
+      Padding  [0x214+0x6]
       Checksum: 0x752da97c — valid CRC-32  [0x21a+0x4]
   ▾ Query — shop: CREATE TABLE items (  [0x21e+0x1f9]
     ▾ Header  [0x21e+0x13]
@@ -302,7 +302,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Sequence number: 3  [0x42a+0x8]
       Domain ID: 0  [0x432+0x4]
       Flags: 0xc [TRANSACTIONAL | ALLOW_PARALLEL]  [0x436+0x1]
-      More: 00 00 00 00 00 00  |......|  [0x437+0x6]
+      Padding  [0x437+0x6]
       Checksum: 0x6761aaec — valid CRC-32  [0x43d+0x4]
   ▾ Annotate rows — INSERT INTO items VALUES  [0x441+0x1ca]
     ▾ Header  [0x441+0x13]
@@ -377,7 +377,7 @@ expression: "common::explore(&display_name(&path), &data)"
           NULL bitmap  [0x72e+0x3]
           id: 1 — INT  [0x731+0x4]
           tiny: -5 — TINYINT  [0x735+0x1]
-          small: 65000 — SMALLINT  [0x736+0x2]
+          small: 65000 — SMALLINT UNSIGNED  [0x736+0x2]
           medium: -100000 — MEDIUMINT  [0x738+0x3]
           big: 1234567890123 — BIGINT  [0x73b+0x8]
           price: "12.50" — DECIMAL(10,2)  [0x743+0x5]
@@ -391,7 +391,7 @@ expression: "common::explore(&display_name(&path), &data)"
           at_time: "12:34:56.789" — TIME(3)  [0x77b+0x5]
           stamp: "2026-01-02 03:04:05.678901" — DATETIME(6)  [0x780+0x8]
           changed: 2026-01-02 03:04:05 UTC — TIMESTAMP  [0x788+0x4]
-          made: 2026 — YEAR  [0x78c+0x1]
+          made: 2026 — YEAR UNSIGNED  [0x78c+0x1]
           colour: "green" — ENUM (1-byte index)  [0x78d+0x1]
           flags: "a,c" — SET (1-byte bitmap)  [0x78e+0x1]
           bits: 0x2aa — BIT(10)  [0x78f+0x2]
@@ -400,7 +400,7 @@ expression: "common::explore(&display_name(&path), &data)"
           NULL bitmap  [0x7b9+0x3]
           id: 2 — INT  [0x7bc+0x4]
           tiny — NULL, TINYINT
-          small — NULL, SMALLINT
+          small — NULL, SMALLINT UNSIGNED
           medium — NULL, MEDIUMINT
           big — NULL, BIGINT
           price: "-0.99" — DECIMAL(10,2)  [0x7c0+0x5]
@@ -414,7 +414,7 @@ expression: "common::explore(&display_name(&path), &data)"
           at_time — NULL, TIME(3)
           stamp — NULL, DATETIME(6)
           changed — NULL, TIMESTAMP
-          made — NULL, YEAR
+          made — NULL, YEAR UNSIGNED
           colour — NULL, ENUM (1-byte index)
           flags — NULL, SET (1-byte bitmap)
           bits — NULL, BIT(10)
@@ -441,7 +441,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Sequence number: 4  [0x7ff+0x8]
       Domain ID: 0  [0x807+0x4]
       Flags: 0xc [TRANSACTIONAL | ALLOW_PARALLEL]  [0x80b+0x1]
-      More: 00 00 00 00 00 00  |......|  [0x80c+0x6]
+      Padding  [0x80c+0x6]
       Checksum: 0x5bd6f945 — valid CRC-32  [0x812+0x4]
   ▾ Annotate rows — UPDATE items SET price = 13.75, name = 'big teapot' WHERE id = 1  [0x816+0x57]
     ▾ Header  [0x816+0x13]
@@ -518,7 +518,7 @@ expression: "common::explore(&display_name(&path), &data)"
             NULL bitmap  [0x993+0x3]
             id: 1 — INT  [0x996+0x4]
             tiny: -5 — TINYINT  [0x99a+0x1]
-            small: 65000 — SMALLINT  [0x99b+0x2]
+            small: 65000 — SMALLINT UNSIGNED  [0x99b+0x2]
             medium: -100000 — MEDIUMINT  [0x99d+0x3]
             big: 1234567890123 — BIGINT  [0x9a0+0x8]
             price: "12.50" — DECIMAL(10,2)  [0x9a8+0x5]
@@ -532,7 +532,7 @@ expression: "common::explore(&display_name(&path), &data)"
             at_time: "12:34:56.789" — TIME(3)  [0x9e0+0x5]
             stamp: "2026-01-02 03:04:05.678901" — DATETIME(6)  [0x9e5+0x8]
             changed: 2026-01-02 03:04:05 UTC — TIMESTAMP  [0x9ed+0x4]
-            made: 2026 — YEAR  [0x9f1+0x1]
+            made: 2026 — YEAR UNSIGNED  [0x9f1+0x1]
             colour: "green" — ENUM (1-byte index)  [0x9f2+0x1]
             flags: "a,c" — SET (1-byte bitmap)  [0x9f3+0x1]
             bits: 0x2aa — BIT(10)  [0x9f4+0x2]
@@ -541,7 +541,7 @@ expression: "common::explore(&display_name(&path), &data)"
             NULL bitmap  [0xa1e+0x3]
             id: 1 — INT  [0xa21+0x4]
             tiny: -5 — TINYINT  [0xa25+0x1]
-            small: 65000 — SMALLINT  [0xa26+0x2]
+            small: 65000 — SMALLINT UNSIGNED  [0xa26+0x2]
             medium: -100000 — MEDIUMINT  [0xa28+0x3]
             big: 1234567890123 — BIGINT  [0xa2b+0x8]
             price: "13.75" — DECIMAL(10,2)  [0xa33+0x5]
@@ -555,7 +555,7 @@ expression: "common::explore(&display_name(&path), &data)"
             at_time: "12:34:56.789" — TIME(3)  [0xa6f+0x5]
             stamp: "2026-01-02 03:04:05.678901" — DATETIME(6)  [0xa74+0x8]
             changed: 2026-01-02 03:04:05 UTC — TIMESTAMP  [0xa7c+0x4]
-            made: 2026 — YEAR  [0xa80+0x1]
+            made: 2026 — YEAR UNSIGNED  [0xa80+0x1]
             colour: "green" — ENUM (1-byte index)  [0xa81+0x1]
             flags: "a,c" — SET (1-byte bitmap)  [0xa82+0x1]
             bits: 0x2aa — BIT(10)  [0xa83+0x2]
@@ -582,7 +582,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Sequence number: 5  [0xae3+0x8]
       Domain ID: 0  [0xaeb+0x4]
       Flags: 0xc [TRANSACTIONAL | ALLOW_PARALLEL]  [0xaef+0x1]
-      More: 00 00 00 00 00 00  |......|  [0xaf0+0x6]
+      Padding  [0xaf0+0x6]
       Checksum: 0xded9c0cd — valid CRC-32  [0xaf6+0x4]
   ▾ Annotate rows — DELETE FROM items WHERE id = 2  [0xafa+0x35]
     ▾ Header  [0xafa+0x13]
@@ -657,7 +657,7 @@ expression: "common::explore(&display_name(&path), &data)"
           NULL bitmap  [0xc52+0x3]
           id: 2 — INT  [0xc55+0x4]
           tiny — NULL, TINYINT
-          small — NULL, SMALLINT
+          small — NULL, SMALLINT UNSIGNED
           medium — NULL, MEDIUMINT
           big — NULL, BIGINT
           price: "-0.99" — DECIMAL(10,2)  [0xc59+0x5]
@@ -671,7 +671,7 @@ expression: "common::explore(&display_name(&path), &data)"
           at_time — NULL, TIME(3)
           stamp — NULL, DATETIME(6)
           changed — NULL, TIMESTAMP
-          made — NULL, YEAR
+          made — NULL, YEAR UNSIGNED
           colour — NULL, ENUM (1-byte index)
           flags — NULL, SET (1-byte bitmap)
           bits — NULL, BIT(10)
@@ -698,7 +698,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Sequence number: 6  [0xc98+0x8]
       Domain ID: 0  [0xca0+0x4]
       Flags: 0x29 [STANDALONE | ALLOW_PARALLEL | DDL]  [0xca4+0x1]
-      More: 00 00 00 00 00 00  |......|  [0xca5+0x6]
+      Padding  [0xca5+0x6]
       Checksum: 0xdd35e51 — valid CRC-32  [0xcab+0x4]
   ▾ Query — shop: CREATE TABLE notes (id INT PRIMARY KEY AUTO_INCREMENT, body VARCHAR(100))  [0xcaf+0x95]
     ▾ Header  [0xcaf+0x13]
@@ -733,7 +733,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Sequence number: 7  [0xd57+0x8]
       Domain ID: 0  [0xd5f+0x4]
       Flags: 0xc [TRANSACTIONAL | ALLOW_PARALLEL]  [0xd63+0x1]
-      More: 00 00 00 00 00 00  |......|  [0xd64+0x6]
+      Padding  [0xd64+0x6]
       Checksum: 0x60871359 — valid CRC-32  [0xd6a+0x4]
   ▾ Intvar — INSERT_ID = 1  [0xd6e+0x20]
     ▾ Header  [0xd6e+0x13]
@@ -788,7 +788,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Sequence number: 8  [0xe3d+0x8]
       Domain ID: 0  [0xe45+0x4]
       Flags: 0xc [TRANSACTIONAL | ALLOW_PARALLEL]  [0xe49+0x1]
-      More: 00 00 00 00 00 00  |......|  [0xe4a+0x6]
+      Padding  [0xe4a+0x6]
       Checksum: 0xcfbacadb — valid CRC-32  [0xe50+0x4]
   ▾ Query — shop: UPDATE notes SET body = 'still a statement' WHERE id = 1  [0xe54+0x7b]
     ▾ Header  [0xe54+0x13]
@@ -832,7 +832,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Sequence number: 9  [0xf01+0x8]
       Domain ID: 0  [0xf09+0x4]
       Flags: 0xc [TRANSACTIONAL | ALLOW_PARALLEL]  [0xf0d+0x1]
-      More: 00 00 00 00 00 00  |......|  [0xf0e+0x6]
+      Padding  [0xf0e+0x6]
       Checksum: 0xfaf2514 — valid CRC-32  [0xf14+0x4]
   ▾ Annotate rows — INSERT INTO notes (body) VALUES ('written as a row')  [0xf18+0x4b]
     ▾ Header  [0xf18+0x13]
@@ -907,7 +907,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Sequence number: 10  [0x1015+0x8]
       Domain ID: 0  [0x101d+0x4]
       Flags: 0x29 [STANDALONE | ALLOW_PARALLEL | DDL]  [0x1021+0x1]
-      More: 00 00 00 00 00 00  |......|  [0x1022+0x6]
+      Padding  [0x1022+0x6]
       Checksum: 0x217194eb — valid CRC-32  [0x1028+0x4]
   ▾ Query — CREATE TABLE shop.tags (name VARCHAR(20)) DEFAULT CHARSET=utf8mb4  [0x102c+0x8f]
     ▾ Header  [0x102c+0x13]
@@ -932,7 +932,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Database: ""  [0x1075+0x0]
       Query: "CREATE TABLE shop.tags (name VARCHAR(20)) DEFAULT CHARSET=utf8mb4"  [0x1076+0x41]
       Checksum: 0x4b59767f — valid CRC-32  [0x10b7+0x4]
-  ▾ MariaDB GTID — 0-1-11 trans  [0x10bb+0x2e]
+  ▾ MariaDB GTID — 0-1-11 trans, XA START X'7831',X'',1  [0x10bb+0x2e]
     ▾ Header  [0x10bb+0x13]
         Timestamp: 2026-01-01 00:10:00 UTC  [0x10bb+0x4]
         Type: MariaDB GTID (0xa2)  [0x10bf+0x1]
@@ -943,7 +943,14 @@ expression: "common::explore(&display_name(&path), &data)"
       Sequence number: 11  [0x10ce+0x8]
       Domain ID: 0  [0x10d6+0x4]
       Flags: 0x4c [TRANSACTIONAL | ALLOW_PARALLEL | PREPARED_XA]  [0x10da+0x1]
-      More: 01 00 00 00 02 00 78 31 01 ff  |......x1..|  [0x10db+0xa]
+    ▾ XID: "X'7831',X'',1"  [0x10db+0x8]
+        Format ID: 1  [0x10db+0x4]
+        Gtrid length: 2  [0x10df+0x1]
+        Bqual length: 0  [0x10e0+0x1]
+        Gtrid: 78 31  |x1|  [0x10e1+0x2]
+        Bqual:   ||  [0x10e3+0x0]
+      Extra flags: 0x1 [MULTI_ENGINE]  [0x10e3+0x1]
+      Extra engines: 255  [0x10e4+0x1]
       Checksum: 0xd67095e0 — valid CRC-32  [0x10e5+0x4]
   ▾ Annotate rows — INSERT INTO shop.notes (body) VALUES ('in an XA transaction')  [0x10e9+0x54]
     ▾ Header  [0x10e9+0x13]
@@ -1018,7 +1025,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Database: ""  [0x11fb+0x0]
       Query: "XA END X'7831',X'',1"  [0x11fc+0x14]
       Checksum: 0x2139fd8 — valid CRC-32  [0x1210+0x4]
-  ▾ XA prepare —   [0x1214+0x26]
+  ▾ XA prepare — XA PREPARE X'7831',X'',1  [0x1214+0x26]
     ▾ Header  [0x1214+0x13]
         Timestamp: 2026-01-01 00:10:00 UTC  [0x1214+0x4]
         Type: XA prepare (0x26)  [0x1218+0x1]
@@ -1026,9 +1033,14 @@ expression: "common::explore(&display_name(&path), &data)"
         Event size: 38  [0x121d+0x4]
         Next position: 0x123a  [0x1221+0x4]
         Flags: 0x0 []  [0x1225+0x2]
-      Body  [0x1227+0xf]
+      One phase: false  [0x1227+0x1]
+      Format ID: 1  [0x1228+0x4]
+      Gtrid length: 2  [0x122c+0x4]
+      Bqual length: 0  [0x1230+0x4]
+      Gtrid: 78 31  |x1|  [0x1234+0x2]
+      Bqual:   ||  [0x1236+0x0]
       Checksum: 0xa2d7053e — valid CRC-32  [0x1236+0x4]
-  ▾ MariaDB GTID — 0-1-12  [0x123a+0x2c]
+  ▾ MariaDB GTID — 0-1-12, completes XA X'7831',X'',1  [0x123a+0x2c]
     ▾ Header  [0x123a+0x13]
         Timestamp: 2026-01-01 00:10:00 UTC  [0x123a+0x4]
         Type: MariaDB GTID (0xa2)  [0x123e+0x1]
@@ -1039,7 +1051,12 @@ expression: "common::explore(&display_name(&path), &data)"
       Sequence number: 12  [0x124d+0x8]
       Domain ID: 0  [0x1255+0x4]
       Flags: 0x8d [STANDALONE | TRANSACTIONAL | ALLOW_PARALLEL | COMPLETED_XA]  [0x1259+0x1]
-      More: 01 00 00 00 02 00 78 31  |......x1|  [0x125a+0x8]
+    ▾ XID: "X'7831',X'',1"  [0x125a+0x8]
+        Format ID: 1  [0x125a+0x4]
+        Gtrid length: 2  [0x125e+0x1]
+        Bqual length: 0  [0x125f+0x1]
+        Gtrid: 78 31  |x1|  [0x1260+0x2]
+        Bqual:   ||  [0x1262+0x0]
       Checksum: 0xaf039132 — valid CRC-32  [0x1262+0x4]
   ▾ Query — XA COMMIT X'7831',X'',1  [0x1266+0x56]
     ▾ Header  [0x1266+0x13]
