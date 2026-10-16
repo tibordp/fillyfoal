@@ -94,6 +94,84 @@ fn a_declined_prompt_leaves_the_content_encrypted() {
     );
 }
 
+/// Stored (`-mx0`) folders are AES + Copy: no decompressor rejects a
+/// wrong key, and their first file is larger than the start a compressed
+/// folder is checked on. The key is checked on the folder's padding or
+/// the first file's CRC instead, folder by folder.
+#[test]
+fn a_wrong_password_for_stored_folders_is_asked_again() {
+    for (name, valid) in [("aes-stored.7z", 1), ("aes-stored-two.7z", 2)] {
+        let host = explored(name, &["wrong", "fillyfoal"], Limits::default());
+        assert_eq!(attempts(&host), [0, 1], "{name}");
+        assert!(messages(&host).is_empty(), "{name}: {:?}", messages(&host));
+        let render = host.render();
+        assert!(render.contains("sierra echo romeo oscar bravo"), "{name}");
+        // Each file's content checks out.
+        assert_eq!(render.matches("— valid").count(), valid, "{name}: {render}");
+        assert!(!render.contains("mismatch"), "{name}: {render}");
+    }
+}
+
+/// The second folder of `aes-stored-two.7z` alone: 6 bytes, checked on
+/// its 10 bytes of zero padding before its CRC.
+#[test]
+fn a_stored_folder_is_checked_on_its_padding() {
+    let mut host = Host::named(
+        "aes-stored-two.7z",
+        fixture("aes-stored-two.7z"),
+        Limits::default(),
+    );
+    host.passwords = vec!["wrong".into(), "fillyfoal".into()];
+    host.session.expand(host.root, 100);
+    host.run();
+    let files = host.child(host.root, "Files").unwrap();
+    host.session.expand(files, 100);
+    host.run();
+    let file = host.child(files, "small.txt").unwrap();
+    host.session.expand(file, 100);
+    host.run();
+    let node = host.child(file, "Content").unwrap();
+    host.session.expand(node, 100);
+    host.run();
+    assert_eq!(attempts(&host), [0, 1]);
+    let crc = host.child(node, "CRC32").unwrap();
+    let crc = host.session.node(crc).unwrap();
+    assert_eq!(crc.summary.as_deref(), Some("valid"), "{crc:?}");
+}
+
+#[test]
+fn a_stored_folder_shows_no_garbage_without_the_password() {
+    for name in ["aes-stored.7z", "aes-stored-two.7z"] {
+        // Declined.
+        let host = explored(name, &[], Limits::default());
+        assert_eq!(attempts(&host), [0], "{name}");
+        let render = host.render();
+        assert!(!render.contains("sierra"), "{name}: {render}");
+        assert!(!render.contains("— valid"), "{name}: {render}");
+        assert!(!render.contains("mismatch"), "{name}: {render}");
+        assert!(
+            messages(&host)
+                .iter()
+                .all(|m| m == "encrypted (no password)"),
+            "{name}: {:?}",
+            messages(&host)
+        );
+        // Wrong, then declined: never taken for the key.
+        let host = explored(name, &["wrong"], Limits::default());
+        assert_eq!(attempts(&host), [0, 1], "{name}");
+        let render = host.render();
+        assert!(!render.contains("— valid"), "{name}: {render}");
+        assert!(!render.contains("mismatch"), "{name}: {render}");
+        assert!(
+            messages(&host)
+                .iter()
+                .all(|m| m == "encrypted (wrong password)"),
+            "{name}: {:?}",
+            messages(&host)
+        );
+    }
+}
+
 #[test]
 fn the_empty_password_unlocks() {
     let host = explored("aes-empty-password.7z", &[""], Limits::default());

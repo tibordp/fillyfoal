@@ -20,7 +20,12 @@
 //! steps, and the data is decrypted lazily with the rest of the chain.
 //! 7z keeps no password check value, so a password is checked by decoding
 //! the start of the folder (and its CRC where it covers that start): a
-//! wrong one fails there and the next attempt is asked for. An encrypted
+//! wrong one fails there and the next attempt is asked for. A stored
+//! folder (AES and no decompressor, `-mx0`) has nothing to fail, so it is
+//! checked on the zeros 7-Zip pads its last block with and on the CRC of
+//! its first file (decrypted as far as 64 MiB); with neither, it stays
+//! encrypted rather than show what a wrong password would. Only a checked
+//! key serves the other folders. An encrypted
 //! header (`-mhe=on`) is decrypted only when the files, folders or header
 //! outline are expanded. The password is hashed as UTF-16LE. Not
 //! supported: AES inside BCJ2 folders (an AES coder per packed stream).
@@ -1171,28 +1176,80 @@ impl AesProps {
     }
 }
 
+/// Bytes of a stored folder's output (AES and no decompressor, as 7-Zip
+/// writes `-mx0`) decrypted to check a password against a CRC: nothing
+/// else rejects a wrong key there. Decrypting is cheap, and it streams.
+const STORED_VERIFY_LEN: u64 = 64 << 20;
+
 /// What unlocks an encrypted folder: the realm of its password (the
-/// archive: one password serves the header and every folder) and a CRC
-/// of the start of its output to check a password against.
+/// archive: one password serves the header and every folder) and the
+/// CRCs of the start of its output to check a password against.
 #[derive(Clone, Copy, Debug)]
 struct Unlock {
     realm: Span,
-    /// The length and CRC-32 of the folder's first bytes, if known and
-    /// small enough to decode just to check.
-    check: Option<(u64, u32)>,
+    /// The folder's output size and CRC-32, if recorded.
+    folder: (u64, Option<u32>),
+    /// The size and CRC-32 of the folder's first stream, if known.
+    first: Option<(u64, Option<u32>)>,
 }
 
 impl Unlock {
     /// For folder `f` of the archive at `realm`, whose first stream has
     /// `first` (size, CRC).
     fn new(realm: Span, f: &Folder, first: Option<(u64, Option<u32>)>) -> Self {
-        let check = match (f.crc, first) {
-            (Some(crc), _) if f.unpack_size() <= VERIFY_LEN => Some((f.unpack_size(), crc)),
-            (_, Some((size, Some(crc)))) if size <= VERIFY_LEN => Some((size, crc)),
-            _ => None,
-        };
-        Unlock { realm, check }
+        Unlock {
+            realm,
+            folder: (f.unpack_size(), f.crc),
+            first,
+        }
     }
+
+    /// The length and CRC-32 of the folder's first bytes, if recorded and
+    /// at most `limit` bytes: the whole folder's, else its first stream's.
+    fn check(&self, limit: u64) -> Option<(u64, u32)> {
+        match (self.folder, self.first) {
+            ((size, Some(crc)), _) if size <= limit => Some((size, crc)),
+            (_, Some((size, Some(crc)))) if size <= limit => Some((size, crc)),
+            _ => None,
+        }
+    }
+}
+
+/// The padding of a stored encrypted folder: AES encrypts whole blocks,
+/// and 7-Zip fills the last one with zeros (its filter coder pads with
+/// them; checked on archives from 7-Zip 26.03). Returns the offset of the
+/// last block in the packed stream and how many bytes of it are padding,
+/// if the packed stream holds it.
+fn padding(size: u64, packed: u64) -> Option<(u64, usize)> {
+    let tail = size % 16;
+    if tail == 0 {
+        return None;
+    }
+    let block = size.saturating_sub(tail);
+    (packed >= block.saturating_add(16)).then(|| (block, to_usize(16u64.saturating_sub(tail))))
+}
+
+/// Padding bytes that check a password on their own (as a CRC-32 does).
+const PADDING_CHECK: usize = 4;
+
+/// The CRC a stored encrypted folder of `size` bytes (`packed` encrypted)
+/// checks a password against, if any, or why it cannot be checked: with
+/// neither a CRC nor enough padding, a wrong password would only show as
+/// garbage.
+fn stored_check(
+    unlock: &Unlock,
+    size: u64,
+    packed: u64,
+) -> std::result::Result<Option<(u64, u32)>, String> {
+    let pad = padding(size, packed).map_or(0, |p| p.1);
+    let check = unlock.check(STORED_VERIFY_LEN);
+    if check.is_none() && pad < PADDING_CHECK {
+        return Err(format!(
+            "encrypted, stored without a CRC (of at most {}) or padding to check a password against",
+            fmt::size(STORED_VERIFY_LEN)
+        ));
+    }
+    Ok(check)
 }
 
 /// An encrypted folder's AES coder.
@@ -1221,6 +1278,16 @@ async fn folder_key(cx: &Cx, span: Span, plan: &Plan, lock: &Lock) -> Result<[u8
         .as_ref()
         .map_err(|why| Diagnostic::unsupported(why.clone()).at(span))?;
     let realm = lock.unlock.realm;
+    // A stored folder is checked on its padding and its first CRC; with
+    // neither, a wrong password could only show as garbage. Decided from
+    // the archive alone, before asking.
+    let stored = plan.codec == Codec::Stored;
+    let check = if stored {
+        stored_check(&lock.unlock, plan.size, span.len)
+            .map_err(|why| Diagnostic::unsupported(why).at(span))?
+    } else {
+        lock.unlock.check(VERIFY_LEN)
+    };
     let cache = match cx.cached::<KeyCache>(realm, "7z keys") {
         Some(cache) => cache,
         None => {
@@ -1277,7 +1344,10 @@ async fn folder_key(cx: &Cx, span: Span, plan: &Plan, lock: &Lock) -> Result<[u8
                 key
             }
         };
-        if trial(cx, span, plan, &key, lock.unlock.check).await? {
+        let padded = !stored || padding_is_zero(cx, span, plan, props, &key).await?;
+        // Padding long enough to check on its own needs no CRC.
+        let checked = stored && check.is_none();
+        if padded && (checked || trial(cx, span, plan, &key, check).await?) {
             if let Ok(mut found) = cache.lock() {
                 found.push((props.cycles, props.salt.clone(), None, key));
             }
@@ -1287,10 +1357,39 @@ async fn folder_key(cx: &Cx, span: Span, plan: &Plan, lock: &Lock) -> Result<[u8
     Err(Diagnostic::unsupported("encrypted (wrong password)").at(span))
 }
 
+/// Whether the padding of the stored encrypted folder at `span` decrypts
+/// to zeros with `key` (see [`padding`]); true if it has none. Only the
+/// last block is decrypted: in CBC mode it needs just the block before.
+async fn padding_is_zero(
+    cx: &Cx,
+    span: Span,
+    plan: &Plan,
+    props: &AesProps,
+    key: &[u8; 32],
+) -> Result<bool> {
+    use crate::codec::filters::ByteFilter;
+    let Some((block, pad)) = padding(plan.size, span.len) else {
+        return Ok(true);
+    };
+    let iv = match block.checked_sub(16) {
+        Some(before) => cx.read(span.sub_exact(before, 16)?).await?.to_vec(),
+        None => props.iv.to_vec(),
+    };
+    let cipher = cx.read(span.sub_exact(block, 16)?).await?;
+    let mut aes = crate::codec::crypto::stream::AesCbcRaw::new(&Key::new([&key[..], &iv].concat()));
+    let mut plain = Vec::new();
+    for &b in cipher.iter() {
+        aes.byte(b, &mut plain)?;
+    }
+    Ok(plain
+        .get(16usize.saturating_sub(pad)..)
+        .is_some_and(|p| p.len() == pad && p.iter().all(|&b| b == 0)))
+}
+
 /// Whether the folder at `span` decodes with `key`: its first bytes (up to
 /// [`VERIFY_LEN`], or as many as `check` covers, whose CRC must then
-/// match). Decoded in memory: a derived source would be memoized whatever
-/// the key.
+/// match). Decoded in memory, a window at a time (the CRC is computed as
+/// output comes): a derived source would be memoized whatever the key.
 async fn trial(
     cx: &Cx,
     span: Span,
@@ -1301,45 +1400,72 @@ async fn trial(
     use crate::codec::pipeline::Status;
     let codec = plan.codec(Some(key));
     let Some(mut decoder) = codec.decoder() else {
-        return Ok(true);
+        return Ok(false);
     };
-    let want = to_usize(check.map_or(plan.size.min(VERIFY_LEN), |c| c.0));
+    let want = check.map_or(plan.size.min(VERIFY_LEN), |c| c.0);
     // A good stream gives `want` bytes from about as much input; garbage
     // makes the decoder ask for more until the input ends, so stop at a
     // generous multiple (block-based codecs need a whole block).
-    let cap = span
-        .len
-        .min(to_u64(want).saturating_mul(2).saturating_add(4 << 20));
+    let cap = span.len.min(want.saturating_mul(2).saturating_add(4 << 20));
     let limit = to_usize(cx.limits().max_derived);
     let mut input = Vec::new();
     let mut out = Vec::new();
-    let mut piece = 64 * 1024u64;
+    // Input bytes read, and output bytes released (before `out`).
+    let mut fed = 0u64;
+    let mut released = 0u64;
+    // Output bytes folded into the CRC, which runs over the first `want`.
+    let mut summed = 0u64;
+    let mut crc = u32::MAX;
     let mut eof = span.len == 0;
     loop {
-        match decoder.decode(&input, eof, &mut out, 16 * 1024, limit) {
+        let status = decoder.decode(&input, eof, &mut out, 16 * 1024, limit);
+        // Fold the new output (up to `want`) into the CRC.
+        let held = released.saturating_add(to_u64(out.len())).min(want);
+        if held > summed {
+            let from = to_usize(summed.saturating_sub(released));
+            let to = to_usize(held.saturating_sub(released));
+            crc = crate::codec::crc::crc32_update(crc, out.get(from..to).unwrap_or_default());
+            summed = held;
+        }
+        let done = summed >= want;
+        match status {
             Ok(Status::Done) => break,
-            Ok(Status::More) if out.len() >= want => break,
+            Ok(Status::More) if done => break,
             Ok(Status::More) => cx.checkpoint().await,
-            Ok(Status::NeedInput) if out.len() >= want => break,
+            Ok(Status::NeedInput) if done => break,
             Ok(Status::NeedInput) => {
-                let fed = to_u64(input.len());
                 if eof || fed >= cap {
                     return Ok(false);
                 }
-                let n = piece.min(cap.saturating_sub(fed));
+                let n = (1u64 << 20).min(cap.saturating_sub(fed));
                 let data = cx.read(span.sub(fed, n)).await?;
                 eof = to_u64(data.len()) < n || fed.saturating_add(n) >= span.len;
                 input.extend_from_slice(&data);
-                piece = piece.saturating_mul(2);
+                fed = fed.saturating_add(to_u64(data.len()));
+                cx.progress(summed, want);
             }
             Err(_) => return Ok(false),
         }
+        // Drop what the decoder no longer needs (summed output only).
+        let n = decoder
+            .releasable_output(out.len())
+            .min(to_usize(summed.saturating_sub(released)));
+        if n > 0 {
+            out.drain(..n);
+            decoder.release_output(n);
+            released = released.saturating_add(to_u64(n));
+        }
+        let n = decoder.releasable_input().min(input.len());
+        if n > 0 {
+            input.drain(..n);
+            decoder.release_input(n);
+        }
     }
-    if out.len() < want {
+    if summed < want {
         return Ok(false);
     }
     Ok(match check {
-        Some((len, crc)) => out.get(..to_usize(len)).is_some_and(|b| crc32(b) == crc),
+        Some((_, want)) => crc ^ u32::MAX == want,
         None => true,
     })
 }
@@ -1435,10 +1561,10 @@ async fn folder_output(cx: &Cx, span: Span, plan: &Plan) -> Result<(Span, Option
         return Ok((decoded, None));
     }
     // Decrypted but not decompressed: the cipher's output is padded to a
-    // whole block.
+    // whole block. Cut to the folder's size.
     let expected = (plan.aes.is_none() || plan.codec != Codec::Stored).then_some(plan.size);
     let decoded = decode_span(cx, span, &codec, expected).await?;
-    Ok((decoded.span, decoded.error))
+    Ok((decoded.span.sub(0, plan.size), decoded.error))
 }
 
 /// Expander: decodes a folder and dissects `len` bytes at `offset` of its
@@ -1951,4 +2077,48 @@ async fn list_files(cx: Cx, (input, header): (Input, Arc<Header>)) -> Result<()>
         cx.push(node).await;
     }
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod tests {
+    use super::*;
+
+    fn unlock(folder: (u64, Option<u32>), first: Option<(u64, Option<u32>)>) -> Unlock {
+        Unlock {
+            realm: Span::new(crate::span::SourceId::default_host(), 0, 0),
+            folder,
+            first,
+        }
+    }
+
+    #[test]
+    fn stored_padding() {
+        // 6 bytes in one block: 10 bytes of padding.
+        assert_eq!(padding(6, 16), Some((0, 10)));
+        assert_eq!(padding(21, 32), Some((16, 11)));
+        // Whole blocks: none. A packed stream short of the block: none.
+        assert_eq!(padding(32, 32), None);
+        assert_eq!(padding(21, 16), None);
+    }
+
+    #[test]
+    fn a_stored_folder_without_a_check_is_refused() {
+        let big = STORED_VERIFY_LEN + 16;
+        // No CRC within reach and whole blocks: nothing to check.
+        assert!(stored_check(&unlock((big, Some(1)), Some((big, Some(1)))), big, big).is_err());
+        assert!(stored_check(&unlock((64, None), Some((64, None))), 64, 64).is_err());
+        // Three bytes of padding are too few on their own; four do.
+        assert!(stored_check(&unlock((13, None), None), 13, 16).is_err());
+        assert_eq!(stored_check(&unlock((12, None), None), 12, 16), Ok(None));
+        // A CRC: the folder's, else the first stream's.
+        assert_eq!(
+            stored_check(&unlock((64, Some(7)), Some((16, Some(8)))), 64, 64),
+            Ok(Some((64, 7)))
+        );
+        assert_eq!(
+            stored_check(&unlock((big, None), Some((16, Some(8)))), big, big),
+            Ok(Some((16, 8)))
+        );
+    }
 }
