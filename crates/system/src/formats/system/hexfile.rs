@@ -307,7 +307,7 @@ async fn dissect(cx: &Cx, input: Input, flavor: Flavor) -> Result<()> {
         }
         if !r.checksum_ok {
             bad = bad.saturating_add(1);
-            node = node.diag(Diagnostic::warning("checksum mismatch"));
+            node = node.check_diag(&rec_check(&r));
         }
         cx.push(node).await;
         if flavor == Flavor::Intel && r.kind == 1 {
@@ -404,14 +404,13 @@ async fn record_fields(cx: Cx, (span, flavor, r): (Span, Flavor, Arc<Rec>)) -> R
 }
 
 fn checksum_node(span: Span, r: &Rec) -> Node {
-    let node = Node::new("Checksum")
-        .span(span)
-        .value(hex(r.checksum.into()));
-    if r.checksum_ok {
-        node.summary("valid")
-    } else {
-        node.diag(Diagnostic::warning("checksum mismatch"))
-    }
+    Node::new("Checksum").span(span).checksum(rec_check(r))
+}
+
+/// A record's checksum: the byte that makes the record's bytes sum to
+/// zero (Intel HEX), or to 0xff (S-records).
+fn rec_check(r: &Rec) -> crate::value::Check {
+    crate::value::Check::new("8-bit sum", r.checksum).verified(r.checksum_ok)
 }
 
 #[cfg(test)]

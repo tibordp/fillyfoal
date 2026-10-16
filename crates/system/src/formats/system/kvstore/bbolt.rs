@@ -747,13 +747,9 @@ fn meta_layout(f: &mut Fields<'_>, computed: &u64) -> Result<()> {
         .emit()?;
     f.u64("Transaction ID").emit()?;
     f.u64("Checksum")
-        .hex()
+        .checksum("FNV-1a 64")
+        .verify(Some(computed))
         .desc("FNV-1a 64 of the meta fields before it")
-        .check(|&c| {
-            (c != computed).then(|| {
-                Diagnostic::malformed(format!("checksum mismatch (computed {computed:#018x})"))
-            })
-        })
         .emit()?;
     Ok(())
 }

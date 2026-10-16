@@ -146,17 +146,11 @@ pub(super) async fn checksum_node(
 ) -> Result<Node> {
     let span = file.sub(file.len.saturating_sub(t.len), t.len);
     let stored = cx.read(span).await?;
-    let node = Node::new(name)
-        .span(span)
-        .value(Value::Text(hex_string(&stored)));
-    Ok(match t.valid {
-        Some(true) => node.summary(format!("valid {}", hash_name(t.len))),
-        Some(false) => node.diag(Diagnostic::warning(format!(
-            "{} mismatch",
-            hash_name(t.len)
-        ))),
-        None => node.summary(hash_name(t.len)),
-    })
+    let check = crate::value::Check::new(hash_name(t.len), stored);
+    Ok(Node::new(name).span(span).checksum(match t.valid {
+        Some(ok) => check.verified(ok),
+        None => check,
+    }))
 }
 
 /// The variable-length object header: type, size and header length.

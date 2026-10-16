@@ -21,7 +21,7 @@ use crate::formats::{Codec, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::text::until_nul;
-use crate::value::{EnumTable, FlagTable, Radix, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Radix, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -47,10 +47,15 @@ fn super_probe(h: &Head<'_>) -> bool {
 declare_format!(pub SUPER = "android-super", "Android dynamic partitions (super image)", ["img"], "application/x-android-super",
     Probe::Custom(super_probe), lp_super);
 
-fn lp_geometry(f: &mut Fields<'_>, _: &()) -> Result<(u32, u32)> {
+/// The checks of a structure's checksum fields, by position.
+#[derive(Clone, Default)]
+struct Checks(Vec<(u64, Check)>);
+
+fn lp_geometry(f: &mut Fields<'_>, checks: &Checks) -> Result<(u32, u32)> {
+    f.verifying(checks.0.clone());
     f.ascii("Magic", 4).desc("0x616c4467").emit()?;
     f.u32("Struct size").emit()?;
-    f.bytes("Checksum (SHA-256)", 32).emit()?;
+    f.bytes("Checksum", 32).checksum("SHA-256").emit()?;
     let max = f.u32("Metadata max size").emit()?;
     let slots = f.u32("Metadata slot count").emit()?;
     f.u32("Logical block size").emit()?;
@@ -69,14 +74,15 @@ struct LpHeader {
     devices: TableDesc,
 }
 
-fn lp_header(f: &mut Fields<'_>, _: &()) -> Result<LpHeader> {
+fn lp_header(f: &mut Fields<'_>, checks: &Checks) -> Result<LpHeader> {
+    f.verifying(checks.0.clone());
     f.ascii("Magic", 4).desc("0x414c5030").emit()?;
     f.u16("Major version").emit()?;
     let minor = f.u16("Minor version").emit()?;
     let header_size = f.u32("Header size").emit()?;
-    f.bytes("Header checksum (SHA-256)", 32).emit()?;
+    f.bytes("Header checksum", 32).checksum("SHA-256").emit()?;
     let tables_size = f.u32("Tables size").emit()?;
-    f.bytes("Tables checksum (SHA-256)", 32).emit()?;
+    f.bytes("Tables checksum", 32).checksum("SHA-256").emit()?;
     let desc = |f: &mut Fields<'_>,
                 a: &'static str,
                 b: &'static str,
@@ -131,20 +137,17 @@ async fn lp_super(cx: Cx, input: Input) -> Result<()> {
             .desc("LP_PARTITION_RESERVED_BYTES: left for a partition table or boot data"),
     );
     let geo_span = file.sub(LP_GEOMETRY_AT, 52);
-    let (max, slots) = crate::fields::parse(&cx, geo_span, LE, &(), lp_geometry).await?;
+    let (max, slots) =
+        crate::fields::parse(&cx, geo_span, LE, &Checks::default(), lp_geometry).await?;
     for (i, name) in ["Geometry", "Backup geometry"].into_iter().enumerate() {
         let at = LP_GEOMETRY_AT.saturating_add(LP_GEOMETRY_SIZE.saturating_mul(to_u64(i)));
         let g = cx.read(file.sub(at, 52)).await?;
-        let ok = g.get(8..40) == Some(&sha256_zeroed(&g, 8)[..]);
-        let mut node = struct_node(name, file.sub(at, 52), LE, (), lp_geometry).summary(if ok {
-            "checksum valid"
-        } else {
-            "checksum INVALID"
-        });
-        if !ok {
-            node = node.diag(Diagnostic::warning("SHA-256 checksum mismatch"));
-        }
-        cx.emit(node);
+        let check = Check::new("SHA-256", g.get(8..40).unwrap_or_default().to_vec())
+            .verify(sha256_zeroed(&g, 8));
+        cx.emit(
+            struct_node(name, file.sub(at, 52), LE, Checks(check.at(8)), lp_geometry)
+                .check_diag(&check),
+        );
         crate::formats::system::firmware::padding(
             &cx,
             file,
@@ -155,7 +158,7 @@ async fn lp_super(cx: Cx, input: Input) -> Result<()> {
     }
     let meta_at = LP_GEOMETRY_AT.saturating_add(LP_GEOMETRY_SIZE.saturating_mul(2));
     let head = file.sub(meta_at, 256);
-    let h = crate::fields::parse(&cx, head, LE, &(), lp_header).await?;
+    let h = crate::fields::parse(&cx, head, LE, &Checks::default(), lp_header).await?;
     // Metadata slots: the primary copies, then the backup copies, each
     // `max` bytes.
     let max64 = u64::from(max);
@@ -330,21 +333,27 @@ const LP_EXTENT_TYPE: EnumTable = &[(0, "LINEAR"), (1, "ZERO")];
 /// One metadata slot: header, the four tables, padding up to the slot size.
 async fn lp_slot(cx: Cx, slot: Span) -> Result<()> {
     let head = slot.sub(0, 256);
-    let h = crate::fields::parse(&cx, head, LE, &(), lp_header).await?;
+    let h = crate::fields::parse(&cx, head, LE, &Checks::default(), lp_header).await?;
     let header_span = head.sub(0, h.header_size.into());
     let tables = slot.sub(u64::from(h.header_size), h.tables_size.into());
     let header_bytes = cx.read(header_span).await?;
-    let header_ok = header_bytes.get(12..44) == Some(&sha256_zeroed(&header_bytes, 12)[..]);
-    let tables_ok = header_bytes.get(48..80) == Some(&sha256_span(&cx, tables).await?[..]);
-    let mut node = struct_node("Header", header_span, LE, (), lp_header).summary(format!(
-        "header checksum {}, tables checksum {}",
-        if header_ok { "valid" } else { "INVALID" },
-        if tables_ok { "valid" } else { "INVALID" }
-    ));
-    if !header_ok || !tables_ok {
-        node = node.diag(Diagnostic::warning("SHA-256 checksum mismatch"));
-    }
-    cx.emit(node);
+    let header_check = Check::new(
+        "SHA-256",
+        header_bytes.get(12..44).unwrap_or_default().to_vec(),
+    )
+    .verify(sha256_zeroed(&header_bytes, 12));
+    let tables_check = Check::new(
+        "SHA-256",
+        header_bytes.get(48..80).unwrap_or_default().to_vec(),
+    )
+    .verify(sha256_span(&cx, tables).await?);
+    let mut checks = header_check.at(12);
+    checks.extend(tables_check.at(48));
+    cx.emit(
+        struct_node("Header", header_span, LE, Checks(checks), lp_header)
+            .check_diag(&header_check)
+            .check_diag(&tables_check),
+    );
     let table = |d: TableDesc| tables.sub(d.0.into(), u64::from(d.1).saturating_mul(d.2.into()));
     let mut ordered = [
         ("Partitions", h.partitions, 0u8),

@@ -31,7 +31,7 @@ use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BINS: u64 = 0x1000;
@@ -199,12 +199,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             base.secondary_seq
         ))
         .lazy(base_block, file.sub(0, base_len));
-    if let Some((stored, computed)) = checksum
-        && stored != computed
-    {
-        base_node = base_node.diag(Diagnostic::warning(format!(
-            "checksum mismatch: stored {stored:#010x}, computed {computed:#010x}"
-        )));
+    if let Some((stored, computed)) = checksum {
+        base_node = base_node.check_diag(&Check::new(REGF_XOR, stored).verify(computed));
     }
     cx.emit(base_node);
     let name = base
@@ -299,6 +295,9 @@ async fn base_checksum(cx: &Cx, file: Span) -> Option<(u32, u32)> {
     Some((stored, computed))
 }
 
+/// The base block's checksum: the XOR of its first 127 dwords.
+const REGF_XOR: &str = "32-bit XOR";
+
 async fn base_block(cx: Cx, span: Span) -> Result<()> {
     let block = cx.block(span.sub(0, BaseBlock::SIZE)).await?;
     BaseBlock::read(&mut Fields::emitting(&cx, &block, LE))?;
@@ -308,17 +307,12 @@ async fn base_block(cx: Cx, span: Span) -> Result<()> {
     );
     let check_span = span.sub(508, 4);
     if let Some((stored, computed)) = base_checksum(&cx, span).await {
-        let node = Node::new("Checksum")
-            .span(check_span)
-            .value(hex(stored, 32))
-            .desc("XOR of the first 127 dwords");
-        cx.emit(if computed == stored {
-            node.summary("valid")
-        } else {
-            node.diag(Diagnostic::warning(format!(
-                "checksum mismatch: computed {computed:#010x}"
-            )))
-        });
+        cx.emit(
+            Node::new("Checksum")
+                .span(check_span)
+                .checksum(Check::new(REGF_XOR, stored).verify(computed))
+                .desc("XOR of the first 127 dwords"),
+        );
     }
     if span.len >= BINS {
         cx.emit(Node::new("Reserved").span(span.sub(512, 0xdc8)));
