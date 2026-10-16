@@ -25,7 +25,13 @@
 //! `BinaryLogRecordKind` (MIT, dotnet/msbuild), checked against logs that
 //! MSBuild 17.11 (.NET SDK 8.0.425) wrote. Versions before 18 have no
 //! record lengths, so records cannot be skipped without decoding every
-//! kind exactly; only their header is shown.
+//! kind exactly; only their header is shown. Timestamps are shown with
+//! their `DateTimeKind`: events carry the machine's local time, whose
+//! zone the log does not record (checked on a log written with
+//! `TZ=Asia/Tokyo`). The numbering of the enums `TargetBuiltReason`,
+//! `TargetSkipReason`, `TaskParameterMessageKind` and
+//! `AssemblyLoadingContext` is from memory, consistent with the values
+//! the fixtures hold.
 
 use std::sync::{Arc, Mutex};
 
@@ -189,6 +195,41 @@ const FIELD_FLAGS: crate::value::FlagTable = &[
 ];
 
 const IMPORTANCE: EnumTable = &[(0, "High"), (1, "Normal"), (2, "Low")];
+/// `TargetBuiltReason` (Microsoft.Build.Framework; numbering from memory,
+/// consistent with the fixtures: a target built through `DependsOnTargets`
+/// says 2).
+const BUILT_REASON: EnumTable = &[
+    (0, "None"),
+    (1, "BeforeTargets"),
+    (2, "DependsOn"),
+    (3, "AfterTargets"),
+];
+/// `TargetSkipReason` (numbering from memory).
+const SKIP_REASON: EnumTable = &[
+    (0, "None"),
+    (1, "PreviouslyBuiltSuccessfully"),
+    (2, "PreviouslyBuiltUnsuccessfully"),
+    (3, "OutputsUpToDate"),
+    (4, "ConditionWasFalse"),
+];
+/// `TaskParameterMessageKind` (numbering from memory, consistent with the
+/// fixtures: a task's inputs say 0).
+const PARAMETER_KIND: EnumTable = &[
+    (0, "TaskInput"),
+    (1, "TaskOutput"),
+    (2, "AddItem"),
+    (3, "RemoveItem"),
+    (4, "SkippedTargetInputs"),
+    (5, "SkippedTargetOutputs"),
+];
+/// `AssemblyLoadingContext` (numbering from memory, consistent with the
+/// fixtures: loads during evaluation say 1).
+const LOADING_CONTEXT: EnumTable = &[
+    (0, "TaskRun"),
+    (1, "Evaluation"),
+    (2, "SdkResolution"),
+    (3, "LoggerInitialization"),
+];
 
 // ---------------------------------------------------------------------------
 // String and list index
@@ -400,8 +441,45 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let ctx = Ctx { input, version };
     cx.emit(Node::new("Records").span(stream.tail(8)).lazy(records, ctx));
-    cx.annotate(format!("MSBuild binary log, format {version}"));
+    let msbuild = match msbuild_version(&cx, stream).await? {
+        Some(v) => format!("MSBuild {v}, "),
+        None => String::new(),
+    };
+    cx.annotate(format!("MSBuild binary log, {msbuild}format {version}"));
     Ok(())
+}
+
+/// The MSBuild version the log names in its first records (the message
+/// `MSBuild version = "17.11.48+02bf66295"`, without the commit), if
+/// the start of the stream has it.
+async fn msbuild_version(cx: &Cx, stream: Span) -> Result<Option<String>> {
+    const PREFIX: &[u8] = b"MSBuild version = \"";
+    let head = cx.read(stream.sub(8, 64 * 1024)).await?;
+    let mut r = Reader::new(&head);
+    for _ in 0..256 {
+        let (Some(kind), Some(len)) = (r.uleb(), r.uleb()) else {
+            break;
+        };
+        let Some(body) = usize::try_from(len).ok().and_then(|l| r.bytes(l)) else {
+            break;
+        };
+        if kind == 0 {
+            break;
+        }
+        if kind == K_STRING
+            && let Some(rest) = body.strip_prefix(PREFIX)
+        {
+            let v = rest
+                .iter()
+                .take_while(|&&b| b.is_ascii_graphic() && b != b'"' && b != b'+')
+                .map(|&b| char::from(b))
+                .collect::<String>();
+            if !v.is_empty() && v.len() <= 64 {
+                return Ok(Some(v));
+            }
+        }
+    }
+    Ok(None)
 }
 
 /// The record listing: strings, lists, the archive and events.
@@ -559,6 +637,8 @@ enum Ty {
     Str,
     Bool,
     Int,
+    /// An integer naming a value of the table.
+    Enum(EnumTable),
     /// A name-value list index (0: none).
     List,
     /// A flag, then a build event context (7-bit integers) if set.
@@ -596,7 +676,7 @@ fn schema(kind: u64) -> Option<Schema> {
             ("ProjectFile", Str, 0),
             ("TargetFile", Str, 0),
             ("ParentTarget", Str, 0),
-            ("BuildReason", Int, 0),
+            ("BuildReason", Enum(BUILT_REASON), 0),
         ],
         6 => &[
             ("Succeeded", Bool, 0),
@@ -649,8 +729,8 @@ fn schema(kind: u64) -> Option<Schema> {
             ("Condition", Str, 0),
             ("EvaluatedCondition", Str, 0),
             ("OriginallySucceeded", Bool, 0),
-            ("BuildReason", Int, 0),
-            ("SkipReason", Int, 0),
+            ("BuildReason", Enum(BUILT_REASON), 0),
+            ("SkipReason", Enum(SKIP_REASON), 0),
             ("OriginalBuildEventContext", OptContextFixed, 0),
         ],
         19 => &[
@@ -672,7 +752,7 @@ fn schema(kind: u64) -> Option<Schema> {
             ("PropertySource", Str, 0),
         ],
         25 => &[
-            ("Kind", Int, 0),
+            ("Kind", Enum(PARAMETER_KIND), 0),
             ("ItemType", Str, 0),
             ("Items", Items, 0),
             ("ParameterName", Str, 21),
@@ -680,7 +760,7 @@ fn schema(kind: u64) -> Option<Schema> {
         ],
         26 => &[("ResponseFilePath", Str, 0)],
         27 => &[
-            ("LoadingContext", Int, 0),
+            ("LoadingContext", Enum(LOADING_CONTEXT), 0),
             ("LoadingInitiator", Str, 0),
             ("AssemblyName", Str, 0),
             ("AssemblyPath", Str, 0),
@@ -715,6 +795,31 @@ struct Decoded {
 }
 
 const TICKS_AT_UNIX_EPOCH: i64 = 621_355_968_000_000_000;
+
+/// A .NET `DateTime` as MSBuild writes it (ticks of 100 ns since
+/// 0001-01-01, then its `DateTimeKind`), to the millisecond. Events carry
+/// local time (`BuildEventArgs.Timestamp` converts to it), so the kind
+/// says whether the clock is UTC: 1 is, 2 is the machine's local time
+/// (its zone is not recorded), 0 is unspecified.
+fn timestamp(ticks: i64, kind: u64) -> String {
+    let since = ticks.saturating_sub(TICKS_AT_UNIX_EPOCH);
+    let unix = since.div_euclid(10_000_000);
+    let ms = since.rem_euclid(10_000_000) / 10_000;
+    let (y, mo, d) = crate::formats::util::civil::civil(unix.div_euclid(86_400));
+    let t = unix.rem_euclid(86_400);
+    let zone = match kind {
+        1 => " UTC".to_owned(),
+        2 => " (local time)".to_owned(),
+        0 => " (unspecified time zone)".to_owned(),
+        k => format!(" (DateTimeKind {k})"),
+    };
+    format!(
+        "{y:04}-{mo:02}-{d:02} {:02}:{:02}:{:02}.{ms:03}{zone}",
+        t / 3600,
+        t / 60 % 60,
+        t % 60
+    )
+}
 
 /// Decodes a record body: the common fields, then the kind's own.
 async fn decode(cx: &Cx, ctx: &Ctx, index: &Index, kind: u64, body: &[u8]) -> Result<Decoded> {
@@ -806,11 +911,10 @@ async fn decode(cx: &Cx, ctx: &Ctx, index: &Index, kind: u64, body: &[u8]) -> Re
     }
     if has(5) {
         let s = r.pos();
-        let (Some(ticks), Some(_kind)) = (r.int::<i64>(LE), r.uleb()) else {
+        let (Some(ticks), Some(kind)) = (r.int::<i64>(LE), r.uleb()) else {
             return Ok(fail(items, message, s));
         };
-        let unix = ticks.saturating_sub(TICKS_AT_UNIX_EPOCH) / 10_000_000;
-        push!("Timestamp", s, Value::Timestamp { unix_seconds: unix });
+        push!("Timestamp", s, Value::Text(timestamp(ticks, kind)));
     }
     if has(16) {
         let s = r.pos();
@@ -936,6 +1040,20 @@ async fn decode(cx: &Cx, ctx: &Ctx, index: &Index, kind: u64, body: &[u8]) -> Re
                     return Ok(fail(items, message, s));
                 };
                 push!(name, s, uint(v));
+            }
+            Ty::Enum(table) => {
+                let Some(v) = r.uleb() else {
+                    return Ok(fail(items, message, s));
+                };
+                push!(
+                    name,
+                    s,
+                    Value::Enum {
+                        raw: v,
+                        bits: 32,
+                        name: crate::value::lookup(table, v),
+                    }
+                );
             }
             Ty::List => {
                 let Some(i) = r.uleb() else {
@@ -1162,4 +1280,23 @@ async fn event(cx: Cx, (ctx, rec, pos): (Ctx, Record, u64)) -> Result<()> {
 async fn list_pairs(cx: Cx, (ctx, body, pos): (Ctx, Span, u64)) -> Result<()> {
     let index = index_upto(&cx, &ctx, pos).await?;
     pairs(&cx, &ctx, &index, body).await
+}
+
+#[cfg(test)]
+#[allow(clippy::arithmetic_side_effects)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn timestamps_say_their_kind() {
+        // 2026-10-16 08:25:10.4829999 as .NET ticks.
+        let ticks = TICKS_AT_UNIX_EPOCH + 1_792_139_110 * 10_000_000 + 4_829_999;
+        assert_eq!(timestamp(ticks, 1), "2026-10-16 08:25:10.482 UTC");
+        assert_eq!(timestamp(ticks, 2), "2026-10-16 08:25:10.482 (local time)");
+        assert_eq!(
+            timestamp(ticks, 0),
+            "2026-10-16 08:25:10.482 (unspecified time zone)"
+        );
+        assert_eq!(timestamp(0, 1), "0001-01-01 00:00:00.000 UTC");
+    }
 }

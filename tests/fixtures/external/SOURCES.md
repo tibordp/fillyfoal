@@ -1832,4 +1832,5 @@ byte-reproducible (timestamps, MVIDs).
 | --- | --- | --- |
 | `msbuild-binlog/tiny.binlog.gz` | MSBuild 17.11.48 | `dotnet msbuild tiny.proj -bl:tiny.binlog` of an SDK-less project (targets, a property, items, a warning; the project import archive embeds the project file). The file unchanged, renamed so the harness dissects the gzip-compressed record stream inside it |
 | `msbuild-binlog/build-noimports.binlog.gz` | MSBuild 17.11.48 | `dotnet build "-bl:build-noimports.binlog;ProjectImports=None"` of a console app (restore, evaluation, about 7,000 records of 20 kinds). Unchanged, renamed as above |
+| `msbuild-binlog/tokyo-globalprops.binlog.gz` | MSBuild 17.11.48 (.NET SDK 8.0.425, `mcr.microsoft.com/dotnet/sdk:8.0`) | the last block of `tests/data/msbuild-binlog/make.sh`: `TZ=Asia/Tokyo dotnet msbuild tiny.proj -p:Foo=bar -bl:gp.binlog` of a two-target project in /tmp/t, in a container whose UTC clock read 08:25:10 (the events say 17:25:10, DateTimeKind Local). Unchanged, renamed as above |
 | `gzip/tiny.binlog` | MSBuild 17.11.48 | the same file as `msbuild-binlog/tiny.binlog.gz`, under its own name: as a host sees it (gzip, then the record stream) |
