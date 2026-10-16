@@ -1842,6 +1842,7 @@ Each was checked against `apk adbdump --format yaml` of the same file.
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
 | `nettrace/demo.nettrace` | .NET 8.0.31 runtime (`mcr.microsoft.com/dotnet/sdk:8.0` image, SDK 8.0.425, linux-arm64) | `tests/data/nettrace/make.sh` (its header has the `docker run` line): a console app with an `EventSource` (`Fillyfoal-Demo`) run with `DOTNET_EnableEventPipe=1`, `DOTNET_EventPipeConfig='Fillyfoal-Demo:0xFFFFFFFF:5,Microsoft-Windows-DotNETRuntime:0x1:4'` and `DOTNET_EventPipeRundown=0` (no rundown: it would list every JIT-compiled method). NetTrace format 4 (`Trace` version 4): metadata, a stack block, compressed event headers, a sequence point. Holds container paths (`/usr/share/dotnet`, `/work/app`) and the container's process IDs. Unchanged; not byte-reproducible (timestamps, addresses) |
+| `nettrace/sample.nettrace` | .NET 8.0.31 runtime (`mcr.microsoft.com/dotnet/sdk:8.0` image, SDK 8.0.425, linux-arm64) | `tests/data/nettrace/make_sample.sh` (its header has the `docker run` line): a program spinning for 30 ms run with `DOTNET_EnableEventPipe=1`, `DOTNET_EventPipeConfig='Microsoft-DotNETCore-SampleProfiler:0:5'` and `DOTNET_EventPipeRundown=1`: ThreadSample events with stacks, then the rundown (modules, assemblies, JIT-compiled methods); 44 KB, nearly all rundown, which the runtime does not let a trace narrow. Holds container paths (`/usr/share/dotnet`, `/work/app2`). Unchanged; not byte-reproducible (timestamps, addresses) |
 
 ## MSBuild binary logs
 

@@ -1,0 +1,1961 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sample.nettrace — .NET EventPipe trace, NetTrace 4/5 (FastSerialization), started 2026-10-16 12:27:24.542 UTC, process 83, 8 blocks  [0x0+0xadfe]
+  ▾ Stream header  [0x0+0x20]
+      Magic: "Nettrace"  [0x0+0x8]
+      Serializer name length: 20  [0x8+0x4]
+      Serializer: "!FastSerialization.1"  [0xc+0x14]
+  ▾ Trace — 48 bytes  [0x20+0x46]
+    ▾ Object header  [0x20+0x15]
+        BeginPrivateObject: 5  [0x20+0x1]
+        BeginPrivateObject (type): 5  [0x21+0x1]
+        NullReference (type of type): 1  [0x22+0x1]
+        Version: 4  [0x23+0x4]
+        MinimumReaderVersion: 4  [0x27+0x4]
+        Type name length: 5  [0x2b+0x4]
+        Type name: "Trace"  [0x2f+0x5]
+        EndObject (type): 6  [0x34+0x1]
+    ▾ Trace  [0x35+0x30]
+        SyncTimeUTC.Year: 2026  [0x35+0x2]
+        SyncTimeUTC.Month: 10  [0x37+0x2]
+        SyncTimeUTC.DayOfWeek: 5  [0x39+0x2]
+        SyncTimeUTC.Day: 16  [0x3b+0x2]
+        SyncTimeUTC.Hour: 12  [0x3d+0x2]
+        SyncTimeUTC.Minute: 27  [0x3f+0x2]
+        SyncTimeUTC.Second: 24  [0x41+0x2]
+        SyncTimeUTC.Millisecond: 542  [0x43+0x2]
+        SyncTimeQPC: 792815787868364  [0x45+0x8]
+        QPCFrequency: 1000000000  [0x4d+0x8]
+        PointerSize: 8  [0x55+0x4]
+        ProcessId: 83  [0x59+0x4]
+        NumberOfProcessors: 18  [0x5d+0x4]
+        ExpectedCPUSamplingRate: 1000000  [0x61+0x4]
+      EndObject: 6  [0x65+0x1]
+  ▾ MetadataBlock — 361 bytes, compressed headers  [0x66+0x18c]
+    ▾ Object header  [0x66+0x1d]
+        BeginPrivateObject: 5  [0x66+0x1]
+        BeginPrivateObject (type): 5  [0x67+0x1]
+        NullReference (type of type): 1  [0x68+0x1]
+        Version: 2  [0x69+0x4]
+        MinimumReaderVersion: 2  [0x6d+0x4]
+        Type name length: 13  [0x71+0x4]
+        Type name: "MetadataBlock"  [0x75+0xd]
+        EndObject (type): 6  [0x82+0x1]
+      BlockSize: 361  [0x83+0x4]
+      Padding  [0x87+0x1]
+    ▾ Header  [0x88+0x14]
+        HeaderSize: 20  [0x88+0x2]
+        Flags: 1 — compressed event headers  [0x8a+0x2]
+        MinTimestamp: 792815806210260  [0x8c+0x8]
+        MaxTimestamp: 792815838392544  [0x94+0x8]
+    ▾ Metadata events  [0x9c+0x155]
+      ▾ Metadata 1: Microsoft-DotNETCore-SampleProfiler/ThreadSample — level 4, keywords 0x0  [0x9c+0x7c]
+        ▾ Header — thread 83, sequence 0  [0x9c+0x16]
+            Flags: 0xc6 [CaptureThreadAndSequence | ThreadId | Sorted | DataLength]  [0x9c+0x1]
+            SequenceNumber (delta): -1  [0x9d+0x5]
+            CaptureThread: 0  [0xa2+0x1]
+            ProcessorNumber: 4294967295  [0xa3+0x5]
+            Thread: 83  [0xa8+0x1]
+            TimeStamp (delta): 792815806210260  [0xa9+0x8]
+            PayloadSize: 102  [0xb1+0x1]
+            SequenceNumber: 0
+            TimeStamp: 792815806210260
+            StackId: 0 — as the previous event
+            IsSorted: true
+            Time: 0.018341896 — seconds from the trace's sync time
+        ▾ Metadata  [0xb2+0x66]
+            MetaDataId: 1  [0xb2+0x4]
+            ProviderName: "Microsoft-DotNETCore-SampleProfiler"  [0xb6+0x48]
+            EventId: 0  [0xfe+0x4]
+            EventName: ""  [0x102+0x2]
+            Keywords: 0x0  [0x104+0x8]
+            Version: 0  [0x10c+0x4]
+            Level: Informational (0x4)  [0x110+0x4]
+            FieldCount: 0  [0x114+0x4]
+      ▾ Metadata 2: Microsoft-DotNETCore-EventPipe/ProcessInfo — level 0, keywords 0x0, fields: CommandLine, OSInformation, ArchInformation  [0x118+0xd9]
+        ▾ Header — thread 83, sequence 0  [0x118+0x7]
+            Flags: 0xc0 [Sorted | DataLength]  [0x118+0x1]
+            TimeStamp (delta): 32182284  [0x119+0x4]
+            PayloadSize: 210  [0x11d+0x2]
+            SequenceNumber: 0
+            TimeStamp: 792815838392544
+            Thread: 83 — as the previous event
+            StackId: 0 — as the previous event
+            IsSorted: true
+            Time: 0.05052418 — seconds from the trace's sync time
+        ▾ Metadata  [0x11f+0xd2]
+            MetaDataId: 2  [0x11f+0x4]
+            ProviderName: "Microsoft-DotNETCore-EventPipe"  [0x123+0x3e]
+            EventId: 1  [0x161+0x4]
+            EventName: "ProcessInfo"  [0x165+0x18]
+            Keywords: 0x0  [0x17d+0x8]
+            Version: 1  [0x185+0x4]
+            Level: LogAlways (0x0)  [0x189+0x4]
+            FieldCount: 3  [0x18d+0x4]
+            Field: "CommandLine: String"  [0x191+0x1c]
+            Field: "OSInformation: String"  [0x1ad+0x20]
+            Field: "ArchInformation: String"  [0x1cd+0x24]
+      EndObject: 6  [0x1f1+0x1]
+  ▾ StackBlock — 3 stacks, IDs 1–3  [0x1f2+0x53]
+    ▾ Object header  [0x1f2+0x1a]
+        BeginPrivateObject: 5  [0x1f2+0x1]
+        BeginPrivateObject (type): 5  [0x1f3+0x1]
+        NullReference (type of type): 1  [0x1f4+0x1]
+        Version: 2  [0x1f5+0x4]
+        MinimumReaderVersion: 2  [0x1f9+0x4]
+        Type name length: 10  [0x1fd+0x4]
+        Type name: "StackBlock"  [0x201+0xa]
+        EndObject (type): 6  [0x20b+0x1]
+      BlockSize: 52  [0x20c+0x4]
+    ▾ Header  [0x210+0x8]
+        FirstId: 1  [0x210+0x4]
+        Count: 3  [0x214+0x4]
+    ▾ Stacks  [0x218+0x2c]
+      ▾ Stack 1 — 1 frame  [0x218+0xc]
+          [0]: 0xffff64771db0  [0x21c+0x8]
+      ▾ Stack 2 — 3 frames  [0x224+0x1c]
+          [0]: 0xffff6485b70c  [0x228+0x8]
+          [1]: 0xffff6485aca0  [0x230+0x8]
+          [2]: 0xffff64771d8c  [0x238+0x8]
+      ▾ Stack 3 — 0 frames  [0x240+0x4]
+      EndObject: 6  [0x244+0x1]
+  ▾ EventBlock — 332 bytes, 0.018342–0.050524 s, compressed headers  [0x245+0x16c]
+    ▾ Object header  [0x245+0x1a]
+        BeginPrivateObject: 5  [0x245+0x1]
+        BeginPrivateObject (type): 5  [0x246+0x1]
+        NullReference (type of type): 1  [0x247+0x1]
+        Version: 2  [0x248+0x4]
+        MinimumReaderVersion: 2  [0x24c+0x4]
+        Type name length: 10  [0x250+0x4]
+        Type name: "EventBlock"  [0x254+0xa]
+        EndObject (type): 6  [0x25e+0x1]
+      BlockSize: 332  [0x25f+0x4]
+      Padding  [0x263+0x1]
+    ▾ Header  [0x264+0x14]
+        HeaderSize: 20  [0x264+0x2]
+        Flags: 1 — compressed event headers  [0x266+0x2]
+        MinTimestamp: 792815806210260  [0x268+0x8]
+        MaxTimestamp: 792815838392544  [0x270+0x8]
+    ▾ Events  [0x278+0x138]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.018342 s, thread 83, stack 1; Type=2  [0x278+0x18]
+        ▾ Header — thread 83, sequence 1  [0x278+0x14]
+            Flags: 0xcf [MetadataId | CaptureThreadAndSequence | ThreadId | StackId | Sorted | DataLength]  [0x278+0x1]
+            MetadataId: 1  [0x279+0x1]
+            SequenceNumber (delta): 0  [0x27a+0x1]
+            CaptureThread: 88  [0x27b+0x1]
+            ProcessorNumber: 4294967295  [0x27c+0x5]
+            Thread: 83  [0x281+0x1]
+            StackId: 1  [0x282+0x1]
+            TimeStamp (delta): 792815806210260  [0x283+0x8]
+            PayloadSize: 4  [0x28b+0x1]
+            SequenceNumber: 1
+            TimeStamp: 792815806210260
+            IsSorted: true
+            Time: 0.018341896 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x28c+0x4]
+            Type: 2  [0x28c+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.019447 s, thread 83, stack 1; Type=2  [0x290+0x8]
+        ▾ Header — thread 83, sequence 2  [0x290+0x4]
+            Flags: 0x0 []  [0x290+0x1]
+            TimeStamp (delta): 1105344  [0x291+0x3]
+            SequenceNumber: 2
+            TimeStamp: 792815807315604
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.01944724 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x294+0x4]
+            Type: 2  [0x294+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.020536 s, thread 83, stack 1; Type=2  [0x298+0x8]
+        ▾ Header — thread 83, sequence 3  [0x298+0x4]
+            Flags: 0x0 []  [0x298+0x1]
+            TimeStamp (delta): 1089134  [0x299+0x3]
+            SequenceNumber: 3
+            TimeStamp: 792815808404738
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.020536374 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x29c+0x4]
+            Type: 2  [0x29c+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.021621 s, thread 83, stack 1; Type=2  [0x2a0+0x8]
+        ▾ Header — thread 83, sequence 4  [0x2a0+0x4]
+            Flags: 0x0 []  [0x2a0+0x1]
+            TimeStamp (delta): 1084384  [0x2a1+0x3]
+            SequenceNumber: 4
+            TimeStamp: 792815809489122
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.021620758 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x2a4+0x4]
+            Type: 2  [0x2a4+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.022704 s, thread 83, stack 1; Type=2  [0x2a8+0x8]
+        ▾ Header — thread 83, sequence 5  [0x2a8+0x4]
+            Flags: 0x0 []  [0x2a8+0x1]
+            TimeStamp (delta): 1083468  [0x2a9+0x3]
+            SequenceNumber: 5
+            TimeStamp: 792815810572590
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.022704226 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x2ac+0x4]
+            Type: 2  [0x2ac+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.023834 s, thread 83, stack 1; Type=2  [0x2b0+0x8]
+        ▾ Header — thread 83, sequence 6  [0x2b0+0x4]
+            Flags: 0x0 []  [0x2b0+0x1]
+            TimeStamp (delta): 1129388  [0x2b1+0x3]
+            SequenceNumber: 6
+            TimeStamp: 792815811701978
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.023833614 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x2b4+0x4]
+            Type: 2  [0x2b4+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.024951 s, thread 83, stack 1; Type=2  [0x2b8+0x8]
+        ▾ Header — thread 83, sequence 7  [0x2b8+0x4]
+            Flags: 0x0 []  [0x2b8+0x1]
+            TimeStamp (delta): 1117303  [0x2b9+0x3]
+            SequenceNumber: 7
+            TimeStamp: 792815812819281
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.024950917 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x2bc+0x4]
+            Type: 2  [0x2bc+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.026226 s, thread 83, stack 1; Type=2  [0x2c0+0x8]
+        ▾ Header — thread 83, sequence 8  [0x2c0+0x4]
+            Flags: 0x0 []  [0x2c0+0x1]
+            TimeStamp (delta): 1274734  [0x2c1+0x3]
+            SequenceNumber: 8
+            TimeStamp: 792815814094015
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.026225651 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x2c4+0x4]
+            Type: 2  [0x2c4+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.027341 s, thread 83, stack 1; Type=2  [0x2c8+0x8]
+        ▾ Header — thread 83, sequence 9  [0x2c8+0x4]
+            Flags: 0x0 []  [0x2c8+0x1]
+            TimeStamp (delta): 1115803  [0x2c9+0x3]
+            SequenceNumber: 9
+            TimeStamp: 792815815209818
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.027341454 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x2cc+0x4]
+            Type: 2  [0x2cc+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.028434 s, thread 83, stack 1; Type=2  [0x2d0+0x8]
+        ▾ Header — thread 83, sequence 10  [0x2d0+0x4]
+            Flags: 0x0 []  [0x2d0+0x1]
+            TimeStamp (delta): 1092802  [0x2d1+0x3]
+            SequenceNumber: 10
+            TimeStamp: 792815816302620
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.028434256 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x2d4+0x4]
+            Type: 2  [0x2d4+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.029538 s, thread 83, stack 1; Type=2  [0x2d8+0x8]
+        ▾ Header — thread 83, sequence 11  [0x2d8+0x4]
+            Flags: 0x0 []  [0x2d8+0x1]
+            TimeStamp (delta): 1103885  [0x2d9+0x3]
+            SequenceNumber: 11
+            TimeStamp: 792815817406505
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.029538141 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x2dc+0x4]
+            Type: 2  [0x2dc+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.030614 s, thread 83, stack 1; Type=2  [0x2e0+0x8]
+        ▾ Header — thread 83, sequence 12  [0x2e0+0x4]
+            Flags: 0x0 []  [0x2e0+0x1]
+            TimeStamp (delta): 1076300  [0x2e1+0x3]
+            SequenceNumber: 12
+            TimeStamp: 792815818482805
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.030614441 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x2e4+0x4]
+            Type: 2  [0x2e4+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.031735 s, thread 83, stack 1; Type=2  [0x2e8+0x8]
+        ▾ Header — thread 83, sequence 13  [0x2e8+0x4]
+            Flags: 0x0 []  [0x2e8+0x1]
+            TimeStamp (delta): 1120929  [0x2e9+0x3]
+            SequenceNumber: 13
+            TimeStamp: 792815819603734
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.03173537 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x2ec+0x4]
+            Type: 2  [0x2ec+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.032870 s, thread 83, stack 1; Type=2  [0x2f0+0x8]
+        ▾ Header — thread 83, sequence 14  [0x2f0+0x4]
+            Flags: 0x0 []  [0x2f0+0x1]
+            TimeStamp (delta): 1134514  [0x2f1+0x3]
+            SequenceNumber: 14
+            TimeStamp: 792815820738248
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.032869884 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x2f4+0x4]
+            Type: 2  [0x2f4+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.034944 s, thread 83, stack 1; Type=2  [0x2f8+0x8]
+        ▾ Header — thread 83, sequence 15  [0x2f8+0x4]
+            Flags: 0x0 []  [0x2f8+0x1]
+            TimeStamp (delta): 2074218  [0x2f9+0x3]
+            SequenceNumber: 15
+            TimeStamp: 792815822812466
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.034944102 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x2fc+0x4]
+            Type: 2  [0x2fc+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.038750 s, thread 83, stack 1; Type=2  [0x300+0x9]
+        ▾ Header — thread 83, sequence 16  [0x300+0x5]
+            Flags: 0x0 []  [0x300+0x1]
+            TimeStamp (delta): 3806116  [0x301+0x4]
+            SequenceNumber: 16
+            TimeStamp: 792815826618582
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.038750218 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x305+0x4]
+            Type: 2  [0x305+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.041056 s, thread 83, stack 1; Type=2  [0x309+0x9]
+        ▾ Header — thread 83, sequence 17  [0x309+0x5]
+            Flags: 0x0 []  [0x309+0x1]
+            TimeStamp (delta): 2305613  [0x30a+0x4]
+            SequenceNumber: 17
+            TimeStamp: 792815828924195
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.041055831 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x30e+0x4]
+            Type: 2  [0x30e+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.043662 s, thread 83, stack 1; Type=2  [0x312+0x9]
+        ▾ Header — thread 83, sequence 18  [0x312+0x5]
+            Flags: 0x0 []  [0x312+0x1]
+            TimeStamp (delta): 2606639  [0x313+0x4]
+            SequenceNumber: 18
+            TimeStamp: 792815831530834
+            Thread: 83 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.04366247 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x317+0x4]
+            Type: 2  [0x317+0x4]
+      ▾ Microsoft-DotNETCore-SampleProfiler/ThreadSample — 0.047374 s, thread 83, stack 2; Type=1  [0x31b+0xa]
+        ▾ Header — thread 83, sequence 19  [0x31b+0x6]
+            Flags: 0x8 [StackId]  [0x31b+0x1]
+            StackId: 2  [0x31c+0x1]
+            TimeStamp (delta): 3711316  [0x31d+0x4]
+            SequenceNumber: 19
+            TimeStamp: 792815835242150
+            Thread: 83 — as the previous event
+            PayloadSize: 4 — as the previous event
+            IsSorted: false
+            Time: 0.047373786 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x321+0x4]
+            Type: 1  [0x321+0x4]
+      ▾ Microsoft-DotNETCore-EventPipe/ProcessInfo — 0.050524 s, thread 83, stack 3; CommandLine="/usr/share/dotnet/dotnet /work/app2/bin/app.dll" OSInformation="Linux" ArchInformation="arm64"  [0x325+0x8b]
+        ▾ Header — thread 83, sequence 1  [0x325+0x13]
+            Flags: 0xcb [MetadataId | CaptureThreadAndSequence | StackId | Sorted | DataLength]  [0x325+0x1]
+            MetadataId: 2  [0x326+0x1]
+            SequenceNumber (delta): -19  [0x327+0x5]
+            CaptureThread: 83  [0x32c+0x1]
+            ProcessorNumber: 4294967295  [0x32d+0x5]
+            StackId: 3  [0x332+0x1]
+            TimeStamp (delta): 3150394  [0x333+0x4]
+            PayloadSize: 120  [0x337+0x1]
+            SequenceNumber: 1
+            TimeStamp: 792815838392544
+            Thread: 83 — as the previous event
+            IsSorted: true
+            Time: 0.05052418 — seconds from the trace's sync time
+        ▾ Payload — 3 fields  [0x338+0x78]
+            CommandLine: "/usr/share/dotnet/dotnet /work/app2/bin/app.dll"  [0x338+0x60]
+            OSInformation: "Linux"  [0x398+0xc]
+            ArchInformation: "arm64"  [0x3a4+0xc]
+      EndObject: 6  [0x3b0+0x1]
+  ▾ MetadataBlock — 1263 bytes, compressed headers  [0x3b1+0x513]
+    ▾ Object header  [0x3b1+0x1d]
+        BeginPrivateObject: 5  [0x3b1+0x1]
+        BeginPrivateObject (type): 5  [0x3b2+0x1]
+        NullReference (type of type): 1  [0x3b3+0x1]
+        Version: 2  [0x3b4+0x4]
+        MinimumReaderVersion: 2  [0x3b8+0x4]
+        Type name length: 13  [0x3bc+0x4]
+        Type name: "MetadataBlock"  [0x3c0+0xd]
+        EndObject (type): 6  [0x3cd+0x1]
+      BlockSize: 1263  [0x3ce+0x4]
+      Padding  [0x3d2+0x2]
+    ▾ Header  [0x3d4+0x14]
+        HeaderSize: 20  [0x3d4+0x2]
+        Flags: 1 — compressed event headers  [0x3d6+0x2]
+        MinTimestamp: 792815838738448  [0x3d8+0x8]
+        MaxTimestamp: 792815841715160  [0x3e0+0x8]
+    ▾ Metadata events  [0x3e8+0x4db]
+      ▾ Metadata 3: Microsoft-Windows-DotNETRuntimeRundown/RuntimeInformationDCStart — level 4, keywords 0x0  [0x3e8+0x82]
+        ▾ Header — thread 83, sequence 0  [0x3e8+0x16]
+            Flags: 0xc6 [CaptureThreadAndSequence | ThreadId | Sorted | DataLength]  [0x3e8+0x1]
+            SequenceNumber (delta): -1  [0x3e9+0x5]
+            CaptureThread: 0  [0x3ee+0x1]
+            ProcessorNumber: 4294967295  [0x3ef+0x5]
+            Thread: 83  [0x3f4+0x1]
+            TimeStamp (delta): 792815838738448  [0x3f5+0x8]
+            PayloadSize: 108  [0x3fd+0x1]
+            SequenceNumber: 0
+            TimeStamp: 792815838738448
+            StackId: 0 — as the previous event
+            IsSorted: true
+            Time: 0.050870084 — seconds from the trace's sync time
+        ▾ Metadata  [0x3fe+0x6c]
+            MetaDataId: 3  [0x3fe+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntimeRundown"  [0x402+0x4e]
+            EventId: 187  [0x450+0x4]
+            EventName: ""  [0x454+0x2]
+            Keywords: 0x0  [0x456+0x8]
+            Version: 0  [0x45e+0x4]
+            Level: Informational (0x4)  [0x462+0x4]
+            FieldCount: 0  [0x466+0x4]
+      ▾ Metadata 4: Microsoft-Windows-DotNETRuntimeRundown/DCEndInit — level 4, keywords 0x20038  [0x46a+0x6f]
+        ▾ Header — thread 83, sequence 0  [0x46a+0x3]
+            Flags: 0x40 [Sorted]  [0x46a+0x1]
+            TimeStamp (delta): 1250  [0x46b+0x2]
+            SequenceNumber: 0
+            TimeStamp: 792815838739698
+            Thread: 83 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 108 — as the previous event
+            IsSorted: true
+            Time: 0.050871334 — seconds from the trace's sync time
+        ▾ Metadata  [0x46d+0x6c]
+            MetaDataId: 4  [0x46d+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntimeRundown"  [0x471+0x4e]
+            EventId: 148  [0x4bf+0x4]
+            EventName: ""  [0x4c3+0x2]
+            Keywords: 0x20038  [0x4c5+0x8]
+            Version: 1  [0x4cd+0x4]
+            Level: Informational (0x4)  [0x4d1+0x4]
+            FieldCount: 0  [0x4d5+0x4]
+      ▾ Metadata 5: Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndILToNativeMap — level 5, keywords 0x20000  [0x4d9+0x6f]
+        ▾ Header — thread 83, sequence 0  [0x4d9+0x3]
+            Flags: 0x40 [Sorted]  [0x4d9+0x1]
+            TimeStamp (delta): 14751  [0x4da+0x2]
+            SequenceNumber: 0
+            TimeStamp: 792815838754449
+            Thread: 83 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 108 — as the previous event
+            IsSorted: true
+            Time: 0.050886085 — seconds from the trace's sync time
+        ▾ Metadata  [0x4dc+0x6c]
+            MetaDataId: 5  [0x4dc+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntimeRundown"  [0x4e0+0x4e]
+            EventId: 150  [0x52e+0x4]
+            EventName: ""  [0x532+0x2]
+            Keywords: 0x20000  [0x534+0x8]
+            Version: 1  [0x53c+0x4]
+            Level: Verbose (0x5)  [0x540+0x4]
+            FieldCount: 0  [0x544+0x4]
+      ▾ Metadata 6: Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — level 4, keywords 0x30  [0x548+0x6f]
+        ▾ Header — thread 83, sequence 0  [0x548+0x3]
+            Flags: 0x40 [Sorted]  [0x548+0x1]
+            TimeStamp (delta): 8418  [0x549+0x2]
+            SequenceNumber: 0
+            TimeStamp: 792815838762867
+            Thread: 83 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 108 — as the previous event
+            IsSorted: true
+            Time: 0.050894503 — seconds from the trace's sync time
+        ▾ Metadata  [0x54b+0x6c]
+            MetaDataId: 6  [0x54b+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntimeRundown"  [0x54f+0x4e]
+            EventId: 144  [0x59d+0x4]
+            EventName: ""  [0x5a1+0x2]
+            Keywords: 0x30  [0x5a3+0x8]
+            Version: 1  [0x5ab+0x4]
+            Level: Informational (0x4)  [0x5af+0x4]
+            FieldCount: 0  [0x5b3+0x4]
+      ▾ Metadata 7: Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — level 4, keywords 0x30  [0x5b7+0x6f]
+        ▾ Header — thread 83, sequence 0  [0x5b7+0x3]
+            Flags: 0x40 [Sorted]  [0x5b7+0x1]
+            TimeStamp (delta): 9626  [0x5b8+0x2]
+            SequenceNumber: 0
+            TimeStamp: 792815838772493
+            Thread: 83 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 108 — as the previous event
+            IsSorted: true
+            Time: 0.050904129 — seconds from the trace's sync time
+        ▾ Metadata  [0x5ba+0x6c]
+            MetaDataId: 7  [0x5ba+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntimeRundown"  [0x5be+0x4e]
+            EventId: 144  [0x60c+0x4]
+            EventName: ""  [0x610+0x2]
+            Keywords: 0x30  [0x612+0x8]
+            Version: 2  [0x61a+0x4]
+            Level: Informational (0x4)  [0x61e+0x4]
+            FieldCount: 0  [0x622+0x4]
+      ▾ Metadata 8: Microsoft-Windows-DotNETRuntimeRundown/ModuleDCEnd — level 4, keywords 0x20000008  [0x626+0x71]
+        ▾ Header — thread 83, sequence 0  [0x626+0x5]
+            Flags: 0x40 [Sorted]  [0x626+0x1]
+            TimeStamp (delta): 2815156  [0x627+0x4]
+            SequenceNumber: 0
+            TimeStamp: 792815841587649
+            Thread: 83 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 108 — as the previous event
+            IsSorted: true
+            Time: 0.053719285 — seconds from the trace's sync time
+        ▾ Metadata  [0x62b+0x6c]
+            MetaDataId: 8  [0x62b+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntimeRundown"  [0x62f+0x4e]
+            EventId: 154  [0x67d+0x4]
+            EventName: ""  [0x681+0x2]
+            Keywords: 0x20000008  [0x683+0x8]
+            Version: 2  [0x68b+0x4]
+            Level: Informational (0x4)  [0x68f+0x4]
+            FieldCount: 0  [0x693+0x4]
+      ▾ Metadata 9: Microsoft-Windows-DotNETRuntimeRundown/DomainModuleDCEnd — level 4, keywords 0x8  [0x697+0x6f]
+        ▾ Header — thread 83, sequence 0  [0x697+0x3]
+            Flags: 0x40 [Sorted]  [0x697+0x1]
+            TimeStamp (delta): 3292  [0x698+0x2]
+            SequenceNumber: 0
+            TimeStamp: 792815841590941
+            Thread: 83 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 108 — as the previous event
+            IsSorted: true
+            Time: 0.053722577 — seconds from the trace's sync time
+        ▾ Metadata  [0x69a+0x6c]
+            MetaDataId: 9  [0x69a+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntimeRundown"  [0x69e+0x4e]
+            EventId: 152  [0x6ec+0x4]
+            EventName: ""  [0x6f0+0x2]
+            Keywords: 0x8  [0x6f2+0x8]
+            Version: 1  [0x6fa+0x4]
+            Level: Informational (0x4)  [0x6fe+0x4]
+            FieldCount: 0  [0x702+0x4]
+      ▾ Metadata 10: Microsoft-Windows-DotNETRuntimeRundown/AssemblyDCEnd — level 4, keywords 0x8  [0x706+0x6f]
+        ▾ Header — thread 83, sequence 0  [0x706+0x3]
+            Flags: 0x40 [Sorted]  [0x706+0x1]
+            TimeStamp (delta): 7584  [0x707+0x2]
+            SequenceNumber: 0
+            TimeStamp: 792815841598525
+            Thread: 83 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 108 — as the previous event
+            IsSorted: true
+            Time: 0.053730161 — seconds from the trace's sync time
+        ▾ Metadata  [0x709+0x6c]
+            MetaDataId: 10  [0x709+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntimeRundown"  [0x70d+0x4e]
+            EventId: 156  [0x75b+0x4]
+            EventName: ""  [0x75f+0x2]
+            Keywords: 0x8  [0x761+0x8]
+            Version: 1  [0x769+0x4]
+            Level: Informational (0x4)  [0x76d+0x4]
+            FieldCount: 0  [0x771+0x4]
+      ▾ Metadata 11: Microsoft-Windows-DotNETRuntimeRundown/AppDomainDCEnd — level 4, keywords 0x8  [0x775+0x70]
+        ▾ Header — thread 83, sequence 0  [0x775+0x4]
+            Flags: 0x40 [Sorted]  [0x775+0x1]
+            TimeStamp (delta): 114843  [0x776+0x3]
+            SequenceNumber: 0
+            TimeStamp: 792815841713368
+            Thread: 83 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 108 — as the previous event
+            IsSorted: true
+            Time: 0.053845004 — seconds from the trace's sync time
+        ▾ Metadata  [0x779+0x6c]
+            MetaDataId: 11  [0x779+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntimeRundown"  [0x77d+0x4e]
+            EventId: 158  [0x7cb+0x4]
+            EventName: ""  [0x7cf+0x2]
+            Keywords: 0x8  [0x7d1+0x8]
+            Version: 1  [0x7d9+0x4]
+            Level: Informational (0x4)  [0x7dd+0x4]
+            FieldCount: 0  [0x7e1+0x4]
+      ▾ Metadata 12: Microsoft-Windows-DotNETRuntimeRundown/GCSettingsRundown — level 4, keywords 0x0  [0x7e5+0x6f]
+        ▾ Header — thread 83, sequence 0  [0x7e5+0x3]
+            Flags: 0x40 [Sorted]  [0x7e5+0x1]
+            TimeStamp (delta): 1542  [0x7e6+0x2]
+            SequenceNumber: 0
+            TimeStamp: 792815841714910
+            Thread: 83 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 108 — as the previous event
+            IsSorted: true
+            Time: 0.053846546 — seconds from the trace's sync time
+        ▾ Metadata  [0x7e8+0x6c]
+            MetaDataId: 12  [0x7e8+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntimeRundown"  [0x7ec+0x4e]
+            EventId: 10  [0x83a+0x4]
+            EventName: ""  [0x83e+0x2]
+            Keywords: 0x0  [0x840+0x8]
+            Version: 0  [0x848+0x4]
+            Level: Informational (0x4)  [0x84c+0x4]
+            FieldCount: 0  [0x850+0x4]
+      ▾ Metadata 13: Microsoft-Windows-DotNETRuntimeRundown/DCEndComplete — level 4, keywords 0x20038  [0x854+0x6f]
+        ▾ Header — thread 83, sequence 0  [0x854+0x3]
+            Flags: 0x40 [Sorted]  [0x854+0x1]
+            TimeStamp (delta): 250  [0x855+0x2]
+            SequenceNumber: 0
+            TimeStamp: 792815841715160
+            Thread: 83 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 108 — as the previous event
+            IsSorted: true
+            Time: 0.053846796 — seconds from the trace's sync time
+        ▾ Metadata  [0x857+0x6c]
+            MetaDataId: 13  [0x857+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntimeRundown"  [0x85b+0x4e]
+            EventId: 146  [0x8a9+0x4]
+            EventName: ""  [0x8ad+0x2]
+            Keywords: 0x20038  [0x8af+0x8]
+            Version: 1  [0x8b7+0x4]
+            Level: Informational (0x4)  [0x8bb+0x4]
+            FieldCount: 0  [0x8bf+0x4]
+      EndObject: 6  [0x8c3+0x1]
+  ▾ EventBlock — 42198 bytes, 0.050870–0.053847 s, compressed headers  [0x8c4+0xa4f7]
+    ▾ Object header  [0x8c4+0x1a]
+        BeginPrivateObject: 5  [0x8c4+0x1]
+        BeginPrivateObject (type): 5  [0x8c5+0x1]
+        NullReference (type of type): 1  [0x8c6+0x1]
+        Version: 2  [0x8c7+0x4]
+        MinimumReaderVersion: 2  [0x8cb+0x4]
+        Type name length: 10  [0x8cf+0x4]
+        Type name: "EventBlock"  [0x8d3+0xa]
+        EndObject (type): 6  [0x8dd+0x1]
+      BlockSize: 42198  [0x8de+0x4]
+      Padding  [0x8e2+0x2]
+    ▾ Header  [0x8e4+0x14]
+        HeaderSize: 20  [0x8e4+0x2]
+        Flags: 1 — compressed event headers  [0x8e6+0x2]
+        MinTimestamp: 792815838738448  [0x8e8+0x8]
+        MaxTimestamp: 792815841715160  [0x8f0+0x8]
+    ▾ Events  [0x8f8+0xa4c2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/RuntimeInformationDCStart — 0.050870 s, thread 83, stack 3; ClrInstanceID=0 Sku=2 BclMajorVersion=8 BclMinorVersion=0  [0x8f8+0xc8]
+        ▾ Header — thread 83, sequence 2  [0x8f8+0x15]
+            Flags: 0xcf [MetadataId | CaptureThreadAndSequence | ThreadId | StackId | Sorted | DataLength]  [0x8f8+0x1]
+            MetadataId: 3  [0x8f9+0x1]
+            SequenceNumber (delta): 1  [0x8fa+0x1]
+            CaptureThread: 83  [0x8fb+0x1]
+            ProcessorNumber: 4294967295  [0x8fc+0x5]
+            Thread: 83  [0x901+0x1]
+            StackId: 3  [0x902+0x1]
+            TimeStamp (delta): 792815838738448  [0x903+0x8]
+            PayloadSize: 179  [0x90b+0x2]
+            SequenceNumber: 2
+            TimeStamp: 792815838738448
+            IsSorted: true
+            Time: 0.050870084 — seconds from the trace's sync time
+        ▾ Payload — 15 fields  [0x90d+0xb3]
+            ClrInstanceID: 0  [0x90d+0x2]
+            Sku: 2  [0x90f+0x2]
+            BclMajorVersion: 8  [0x911+0x2]
+            BclMinorVersion: 0  [0x913+0x2]
+            BclBuildNumber: 31  [0x915+0x2]
+            BclQfeNumber: 0  [0x917+0x2]
+            VMMajorVersion: 8  [0x919+0x2]
+            VMMinorVersion: 0  [0x91b+0x2]
+            VMBuildNumber: 3126  [0x91d+0x2]
+            VMQfeNumber: 42015  [0x91f+0x2]
+            StartupFlags: 8388611  [0x921+0x4]
+            StartupMode: 0  [0x925+0x1]
+            CommandLine: ""  [0x926+0x2]
+            ComObjectGuid: "00000000-0000-0000-0000-000000000000"  [0x928+0x10]
+            RuntimeDllPath: "/usr/share/dotnet/shared/Microsoft.NETCore.App/8.0.31/libcoreclr.so"  [0x938+0x88]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/DCEndInit — 0.050871 s, thread 83, stack 3; ClrInstanceID=0  [0x9c0+0x7]
+        ▾ Header — thread 83, sequence 3  [0x9c0+0x5]
+            Flags: 0x81 [MetadataId | DataLength]  [0x9c0+0x1]
+            MetadataId: 4  [0x9c1+0x1]
+            TimeStamp (delta): 1250  [0x9c2+0x2]
+            PayloadSize: 2  [0x9c4+0x1]
+            SequenceNumber: 3
+            TimeStamp: 792815838739698
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050871334 — seconds from the trace's sync time
+        ▾ Payload — 1 field  [0x9c5+0x2]
+            ClrInstanceID: 0  [0x9c5+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndILToNativeMap — 0.050886 s, thread 83, stack 3, 133 bytes  [0x9c7+0x8b]
+        ▾ Header — thread 83, sequence 4  [0x9c7+0x6]
+            Flags: 0x81 [MetadataId | DataLength]  [0x9c7+0x1]
+            MetadataId: 5  [0x9c8+0x1]
+            TimeStamp (delta): 14751  [0x9c9+0x2]
+            PayloadSize: 133  [0x9cb+0x2]
+            SequenceNumber: 4
+            TimeStamp: 792815838754449
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050886085 — seconds from the trace's sync time
+          Payload — 133 bytes  [0x9cd+0x85]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050895 s, thread 83, stack 3; MethodID=281472367167696 ModuleID=281472351289344 MethodStartAddress=281472367263768 MethodSize=144  [0xa52+0xfe]
+        ▾ Header — thread 83, sequence 5  [0xa52+0x6]
+            Flags: 0x81 [MetadataId | DataLength]  [0xa52+0x1]
+            MetadataId: 6  [0xa53+0x1]
+            TimeStamp (delta): 8418  [0xa54+0x2]
+            PayloadSize: 248  [0xa56+0x2]
+            SequenceNumber: 5
+            TimeStamp: 792815838762867
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050894503 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0xa58+0xf8]
+            MethodID: 281472367167696  [0xa58+0x8]
+            ModuleID: 281472351289344  [0xa60+0x8]
+            MethodStartAddress: 281472367263768  [0xa68+0x8]
+            MethodSize: 144  [0xa70+0x4]
+            MethodToken: 100688273  [0xa74+0x4]
+            MethodFlags: 520  [0xa78+0x4]
+            MethodNamespace: "System.Runtime.CompilerServices.CastHelpers"  [0xa7c+0x58]
+            MethodName: "StelemRef"  [0xad4+0x14]
+            MethodSignature: "void  (class System.Array,int,class System.Object)"  [0xae8+0x66]
+            ClrInstanceID: 0  [0xb4e+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndILToNativeMap — 0.050896 s, thread 83, stack 3, 77 bytes  [0xb50+0x52]
+        ▾ Header — thread 83, sequence 6  [0xb50+0x5]
+            Flags: 0x81 [MetadataId | DataLength]  [0xb50+0x1]
+            MetadataId: 5  [0xb51+0x1]
+            TimeStamp (delta): 1500  [0xb52+0x2]
+            PayloadSize: 77  [0xb54+0x1]
+            SequenceNumber: 6
+            TimeStamp: 792815838764367
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050896003 — seconds from the trace's sync time
+          Payload — 77 bytes  [0xb55+0x4d]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050898 s, thread 83, stack 3; MethodID=281472367167672 ModuleID=281472351289344 MethodStartAddress=281472367264496 MethodSize=88  [0xba2+0x104]
+        ▾ Header — thread 83, sequence 7  [0xba2+0x6]
+            Flags: 0x81 [MetadataId | DataLength]  [0xba2+0x1]
+            MetadataId: 6  [0xba3+0x1]
+            TimeStamp (delta): 1542  [0xba4+0x2]
+            PayloadSize: 254  [0xba6+0x2]
+            SequenceNumber: 7
+            TimeStamp: 792815838765909
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050897545 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0xba8+0xfe]
+            MethodID: 281472367167672  [0xba8+0x8]
+            ModuleID: 281472351289344  [0xbb0+0x8]
+            MethodStartAddress: 281472367264496  [0xbb8+0x8]
+            MethodSize: 88  [0xbc0+0x4]
+            MethodToken: 100688272  [0xbc4+0x4]
+            MethodFlags: 520  [0xbc8+0x4]
+            MethodNamespace: "System.Runtime.CompilerServices.CastHelpers"  [0xbcc+0x58]
+            MethodName: "LdelemaRef"  [0xc24+0x16]
+            MethodSignature: "class System.Object&  (class System.Array,int,void*)"  [0xc3a+0x6a]
+            ClrInstanceID: 0  [0xca4+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndILToNativeMap — 0.050900 s, thread 83, stack 3, 117 bytes  [0xca6+0x7a]
+        ▾ Header — thread 83, sequence 8  [0xca6+0x5]
+            Flags: 0x81 [MetadataId | DataLength]  [0xca6+0x1]
+            MetadataId: 5  [0xca7+0x1]
+            TimeStamp (delta): 2500  [0xca8+0x2]
+            PayloadSize: 117  [0xcaa+0x1]
+            SequenceNumber: 8
+            TimeStamp: 792815838768409
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050900045 — seconds from the trace's sync time
+          Payload — 117 bytes  [0xcab+0x75]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050902 s, thread 83, stack 3; MethodID=281472367850032 ModuleID=281472367840704 MethodStartAddress=281472367270800 MethodSize=272  [0xd20+0x57]
+        ▾ Header — thread 83, sequence 9  [0xd20+0x5]
+            Flags: 0x81 [MetadataId | DataLength]  [0xd20+0x1]
+            MetadataId: 6  [0xd21+0x1]
+            TimeStamp (delta): 1583  [0xd22+0x2]
+            PayloadSize: 82  [0xd24+0x1]
+            SequenceNumber: 9
+            TimeStamp: 792815838769992
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050901628 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0xd25+0x52]
+            MethodID: 281472367850032  [0xd25+0x8]
+            ModuleID: 281472367840704  [0xd2d+0x8]
+            MethodStartAddress: 281472367270800  [0xd35+0x8]
+            MethodSize: 272  [0xd3d+0x4]
+            MethodToken: 100663297  [0xd41+0x4]
+            MethodFlags: 392  [0xd45+0x4]
+            MethodNamespace: "Program"  [0xd49+0x10]
+            MethodName: "Main"  [0xd59+0xa]
+            MethodSignature: "void  ()"  [0xd63+0x12]
+            ClrInstanceID: 0  [0xd75+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndILToNativeMap — 0.050903 s, thread 83, stack 3, 93 bytes  [0xd77+0x62]
+        ▾ Header — thread 83, sequence 10  [0xd77+0x5]
+            Flags: 0x81 [MetadataId | DataLength]  [0xd77+0x1]
+            MetadataId: 5  [0xd78+0x1]
+            TimeStamp (delta): 1834  [0xd79+0x2]
+            PayloadSize: 93  [0xd7b+0x1]
+            SequenceNumber: 10
+            TimeStamp: 792815838771826
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050903462 — seconds from the trace's sync time
+          Payload — 93 bytes  [0xd7c+0x5d]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050904 s, thread 83, stack 3; MethodID=281472367850032 ModuleID=281472367840704 MethodStartAddress=281472367271104 MethodSize=244  [0xdd9+0x5f]
+        ▾ Header — thread 83, sequence 11  [0xdd9+0x5]
+            Flags: 0x81 [MetadataId | DataLength]  [0xdd9+0x1]
+            MetadataId: 7  [0xdda+0x1]
+            TimeStamp (delta): 667  [0xddb+0x2]
+            PayloadSize: 90  [0xddd+0x1]
+            SequenceNumber: 11
+            TimeStamp: 792815838772493
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050904129 — seconds from the trace's sync time
+        ▾ Payload — 11 fields  [0xdde+0x5a]
+            MethodID: 281472367850032  [0xdde+0x8]
+            ModuleID: 281472367840704  [0xde6+0x8]
+            MethodStartAddress: 281472367271104  [0xdee+0x8]
+            MethodSize: 244  [0xdf6+0x4]
+            MethodToken: 100663297  [0xdfa+0x4]
+            MethodFlags: 648  [0xdfe+0x4]
+            MethodNamespace: "Program"  [0xe02+0x10]
+            MethodName: "Main"  [0xe12+0xa]
+            MethodSignature: "void  ()"  [0xe1c+0x12]
+            ClrInstanceID: 0  [0xe2e+0x2]
+            ReJITID: 1  [0xe30+0x8]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050928 s, thread 83, stack 3; MethodID=281472369226352 ModuleID=281472351289344 MethodStartAddress=281472352518720 MethodSize=284  [0xe38+0xf5]
+        ▾ Header — thread 83, sequence 12  [0xe38+0x7]
+            Flags: 0x81 [MetadataId | DataLength]  [0xe38+0x1]
+            MetadataId: 6  [0xe39+0x1]
+            TimeStamp (delta): 24252  [0xe3a+0x3]
+            PayloadSize: 238  [0xe3d+0x2]
+            SequenceNumber: 12
+            TimeStamp: 792815838796745
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050928381 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0xe3f+0xee]
+            MethodID: 281472369226352  [0xe3f+0x8]
+            ModuleID: 281472351289344  [0xe47+0x8]
+            MethodStartAddress: 281472352518720  [0xe4f+0x8]
+            MethodSize: 284  [0xe57+0x4]
+            MethodToken: 100663373  [0xe5b+0x4]
+            MethodFlags: 256  [0xe5f+0x4]
+            MethodNamespace: "Interop+Kernel32"  [0xe63+0x22]
+            MethodName: "GetEnvironmentVariable"  [0xe85+0x2e]
+            MethodSignature: "unsigned int32  (class System.String,wchar&,unsigned int32)"  [0xeb3+0x78]
+            ClrInstanceID: 0  [0xf2b+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050940 s, thread 83, stack 3; MethodID=281472369169904 ModuleID=281472351289344 MethodStartAddress=281472352575776 MethodSize=100  [0xf2d+0xc1]
+        ▾ Header — thread 83, sequence 13  [0xf2d+0x5]
+            Flags: 0x80 [DataLength]  [0xf2d+0x1]
+            TimeStamp (delta): 12042  [0xf2e+0x2]
+            PayloadSize: 188  [0xf30+0x2]
+            SequenceNumber: 13
+            TimeStamp: 792815838808787
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050940423 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0xf32+0xbc]
+            MethodID: 281472369169904  [0xf32+0x8]
+            ModuleID: 281472351289344  [0xf3a+0x8]
+            MethodStartAddress: 281472352575776  [0xf42+0x8]
+            MethodSize: 100  [0xf4a+0x4]
+            MethodToken: 100663598  [0xf4e+0x4]
+            MethodFlags: 256  [0xf52+0x4]
+            MethodNamespace: "Microsoft.Win32.SafeHandles.SafeFileHandle"  [0xf56+0x56]
+            MethodName: ".ctor"  [0xfac+0xc]
+            MethodSignature: "instance void  (int,bool)"  [0xfb8+0x34]
+            ClrInstanceID: 0  [0xfec+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050942 s, thread 83, stack 3; MethodID=281472369170000 ModuleID=281472351289344 MethodStartAddress=281472352576064 MethodSize=32  [0xfee+0xb1]
+        ▾ Header — thread 83, sequence 14  [0xfee+0x5]
+            Flags: 0x80 [DataLength]  [0xfee+0x1]
+            TimeStamp (delta): 1125  [0xfef+0x2]
+            PayloadSize: 172  [0xff1+0x2]
+            SequenceNumber: 14
+            TimeStamp: 792815838809912
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050941548 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0xff3+0xac]
+            MethodID: 281472369170000  [0xff3+0x8]
+            ModuleID: 281472351289344  [0xffb+0x8]
+            MethodStartAddress: 281472352576064  [0x1003+0x8]
+            MethodSize: 32  [0x100b+0x4]
+            MethodToken: 100663602  [0x100f+0x4]
+            MethodFlags: 256  [0x1013+0x4]
+            MethodNamespace: "Microsoft.Win32.SafeHandles.SafeFileHandle"  [0x1017+0x56]
+            MethodName: ".ctor"  [0x106d+0xc]
+            MethodSignature: "instance void  ()"  [0x1079+0x24]
+            ClrInstanceID: 0  [0x109d+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050942 s, thread 83, stack 3; MethodID=281472369170016 ModuleID=281472351289344 MethodStartAddress=281472352576096 MethodSize=100  [0x109f+0xb9]
+        ▾ Header — thread 83, sequence 15  [0x109f+0x5]
+            Flags: 0x80 [DataLength]  [0x109f+0x1]
+            TimeStamp (delta): 834  [0x10a0+0x2]
+            PayloadSize: 180  [0x10a2+0x2]
+            SequenceNumber: 15
+            TimeStamp: 792815838810746
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050942382 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x10a4+0xb4]
+            MethodID: 281472369170016  [0x10a4+0x8]
+            ModuleID: 281472351289344  [0x10ac+0x8]
+            MethodStartAddress: 281472352576096  [0x10b4+0x8]
+            MethodSize: 100  [0x10bc+0x4]
+            MethodToken: 100663603  [0x10c0+0x4]
+            MethodFlags: 256  [0x10c4+0x4]
+            MethodNamespace: "Microsoft.Win32.SafeHandles.SafeFileHandle"  [0x10c8+0x56]
+            MethodName: ".ctor"  [0x111e+0xc]
+            MethodSignature: "instance void  (bool)"  [0x112a+0x2c]
+            ClrInstanceID: 0  [0x1156+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050944 s, thread 83, stack 3; MethodID=281472369170272 ModuleID=281472351289344 MethodStartAddress=281472352577296 MethodSize=48  [0x1158+0xc1]
+        ▾ Header — thread 83, sequence 16  [0x1158+0x5]
+            Flags: 0x80 [DataLength]  [0x1158+0x1]
+            TimeStamp (delta): 1625  [0x1159+0x2]
+            PayloadSize: 188  [0x115b+0x2]
+            SequenceNumber: 16
+            TimeStamp: 792815838812371
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050944007 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x115d+0xbc]
+            MethodID: 281472369170272  [0x115d+0x8]
+            ModuleID: 281472351289344  [0x1165+0x8]
+            MethodStartAddress: 281472352577296  [0x116d+0x8]
+            MethodSize: 48  [0x1175+0x4]
+            MethodToken: 100663614  [0x1179+0x4]
+            MethodFlags: 256  [0x117d+0x4]
+            MethodNamespace: "Microsoft.Win32.SafeHandles.SafeFileHandle"  [0x1181+0x56]
+            MethodName: "get_IsInvalid"  [0x11d7+0x1c]
+            MethodSignature: "instance bool  ()"  [0x11f3+0x24]
+            ClrInstanceID: 0  [0x1217+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050950 s, thread 83, stack 3; MethodID=281472366455368 ModuleID=281472351289344 MethodStartAddress=281472352589280 MethodSize=372  [0x1219+0xb7]
+        ▾ Header — thread 83, sequence 17  [0x1219+0x5]
+            Flags: 0x80 [DataLength]  [0x1219+0x1]
+            TimeStamp (delta): 5876  [0x121a+0x2]
+            PayloadSize: 178  [0x121c+0x2]
+            SequenceNumber: 17
+            TimeStamp: 792815838818247
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050949883 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x121e+0xb2]
+            MethodID: 281472366455368  [0x121e+0x8]
+            ModuleID: 281472351289344  [0x1226+0x8]
+            MethodStartAddress: 281472352589280  [0x122e+0x8]
+            MethodSize: 372  [0x1236+0x4]
+            MethodToken: 100663685  [0x123a+0x4]
+            MethodFlags: 256  [0x123e+0x4]
+            MethodNamespace: "System.Array"  [0x1242+0x1a]
+            MethodName: "Copy"  [0x125c+0xa]
+            MethodSignature: "void  (class System.Array,class System.Array,int32)"  [0x1266+0x68]
+            ClrInstanceID: 0  [0x12ce+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050962 s, thread 83, stack 3; MethodID=281472367840416 ModuleID=281472351289344 MethodStartAddress=281472352628064 MethodSize=276  [0x12d0+0xbd]
+        ▾ Header — thread 83, sequence 18  [0x12d0+0x5]
+            Flags: 0x80 [DataLength]  [0x12d0+0x1]
+            TimeStamp (delta): 12209  [0x12d1+0x2]
+            PayloadSize: 184  [0x12d3+0x2]
+            SequenceNumber: 18
+            TimeStamp: 792815838830456
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050962092 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x12d5+0xb8]
+            MethodID: 281472367840416  [0x12d5+0x8]
+            ModuleID: 281472351289344  [0x12dd+0x8]
+            MethodStartAddress: 281472352628064  [0x12e5+0x8]
+            MethodSize: 276  [0x12ed+0x4]
+            MethodToken: 100663903  [0x12f1+0x4]
+            MethodFlags: 256  [0x12f5+0x4]
+            MethodNamespace: "System.Buffer"  [0x12f9+0x1c]
+            MethodName: "Memmove"  [0x1315+0x10]
+            MethodSignature: "void  (unsigned int8&,unsigned int8&,unsigned int)"  [0x1325+0x66]
+            ClrInstanceID: 0  [0x138b+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050988 s, thread 83, stack 3; MethodID=281472367846240 ModuleID=281472351289344 MethodStartAddress=281472352693696 MethodSize=348  [0x138d+0xe2]
+        ▾ Header — thread 83, sequence 19  [0x138d+0x6]
+            Flags: 0x80 [DataLength]  [0x138d+0x1]
+            TimeStamp (delta): 25835  [0x138e+0x3]
+            PayloadSize: 220  [0x1391+0x2]
+            SequenceNumber: 19
+            TimeStamp: 792815838856291
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050987927 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x1393+0xdc]
+            MethodID: 281472367846240  [0x1393+0x8]
+            ModuleID: 281472351289344  [0x139b+0x8]
+            MethodStartAddress: 281472352693696  [0x13a3+0x8]
+            MethodSize: 348  [0x13ab+0x4]
+            MethodToken: 100664363  [0x13af+0x4]
+            MethodFlags: 256  [0x13b3+0x4]
+            MethodNamespace: "System.Environment"  [0x13b7+0x26]
+            MethodName: "InitializeCommandLineArgs"  [0x13dd+0x34]
+            MethodSignature: "class System.String[]  (wchar*,int32,wchar**)"  [0x1411+0x5c]
+            ClrInstanceID: 0  [0x146d+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050989 s, thread 83, stack 3; MethodID=281472367846488 ModuleID=281472351289344 MethodStartAddress=281472352694576 MethodSize=68  [0x146f+0xd5]
+        ▾ Header — thread 83, sequence 20  [0x146f+0x5]
+            Flags: 0x80 [DataLength]  [0x146f+0x1]
+            TimeStamp (delta): 1292  [0x1470+0x2]
+            PayloadSize: 208  [0x1472+0x2]
+            SequenceNumber: 20
+            TimeStamp: 792815838857583
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050989219 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x1474+0xd0]
+            MethodID: 281472367846488  [0x1474+0x8]
+            ModuleID: 281472351289344  [0x147c+0x8]
+            MethodStartAddress: 281472352694576  [0x1484+0x8]
+            MethodSize: 68  [0x148c+0x4]
+            MethodToken: 100664372  [0x1490+0x4]
+            MethodFlags: 256  [0x1494+0x4]
+            MethodNamespace: "System.Environment"  [0x1498+0x26]
+            MethodName: "GetEnvironmentVariable"  [0x14be+0x2e]
+            MethodSignature: "class System.String  (class System.String)"  [0x14ec+0x56]
+            ClrInstanceID: 0  [0x1542+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050991 s, thread 83, stack 3; MethodID=281472367847040 ModuleID=281472351289344 MethodStartAddress=281472352698112 MethodSize=428  [0x1544+0xdd]
+        ▾ Header — thread 83, sequence 21  [0x1544+0x5]
+            Flags: 0x80 [DataLength]  [0x1544+0x1]
+            TimeStamp (delta): 2167  [0x1545+0x2]
+            PayloadSize: 216  [0x1547+0x2]
+            SequenceNumber: 21
+            TimeStamp: 792815838859750
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050991386 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x1549+0xd8]
+            MethodID: 281472367847040  [0x1549+0x8]
+            ModuleID: 281472351289344  [0x1551+0x8]
+            MethodStartAddress: 281472352698112  [0x1559+0x8]
+            MethodSize: 428  [0x1561+0x4]
+            MethodToken: 100664395  [0x1565+0x4]
+            MethodFlags: 256  [0x1569+0x4]
+            MethodNamespace: "System.Environment"  [0x156d+0x26]
+            MethodName: "GetEnvironmentVariableCore"  [0x1593+0x36]
+            MethodSignature: "class System.String  (class System.String)"  [0x15c9+0x56]
+            ClrInstanceID: 0  [0x161f+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050994 s, thread 83, stack 3; MethodID=281472367847760 ModuleID=281472351289344 MethodStartAddress=281472352705408 MethodSize=172  [0x1621+0x70]
+        ▾ Header — thread 83, sequence 22  [0x1621+0x4]
+            Flags: 0x80 [DataLength]  [0x1621+0x1]
+            TimeStamp (delta): 2500  [0x1622+0x2]
+            PayloadSize: 108  [0x1624+0x1]
+            SequenceNumber: 22
+            TimeStamp: 792815838862250
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050993886 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x1625+0x6c]
+            MethodID: 281472367847760  [0x1625+0x8]
+            ModuleID: 281472351289344  [0x162d+0x8]
+            MethodStartAddress: 281472352705408  [0x1635+0x8]
+            MethodSize: 172  [0x163d+0x4]
+            MethodToken: 100664425  [0x1641+0x4]
+            MethodFlags: 256  [0x1645+0x4]
+            MethodNamespace: "System.Environment"  [0x1649+0x26]
+            MethodName: ".cctor"  [0x166f+0xe]
+            MethodSignature: "void  ()"  [0x167d+0x12]
+            ClrInstanceID: 0  [0x168f+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.050999 s, thread 83, stack 3; MethodID=281472369186400 ModuleID=281472351289344 MethodStartAddress=281472352715216 MethodSize=68  [0x1691+0x99]
+        ▾ Header — thread 83, sequence 23  [0x1691+0x5]
+            Flags: 0x80 [DataLength]  [0x1691+0x1]
+            TimeStamp (delta): 5501  [0x1692+0x2]
+            PayloadSize: 148  [0x1694+0x2]
+            SequenceNumber: 23
+            TimeStamp: 792815838867751
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.050999387 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x1696+0x94]
+            MethodID: 281472369186400  [0x1696+0x8]
+            ModuleID: 281472351289344  [0x169e+0x8]
+            MethodStartAddress: 281472352715216  [0x16a6+0x8]
+            MethodSize: 68  [0x16ae+0x4]
+            MethodToken: 100664504  [0x16b2+0x4]
+            MethodFlags: 256  [0x16b6+0x4]
+            MethodNamespace: "System.GC"  [0x16ba+0x14]
+            MethodName: "SuppressFinalize"  [0x16ce+0x22]
+            MethodSignature: "void  (class System.Object)"  [0x16f0+0x38]
+            ClrInstanceID: 0  [0x1728+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051009 s, thread 83, stack 3; MethodID=281472367166816 ModuleID=281472351289344 MethodStartAddress=281472352738864 MethodSize=68  [0x172a+0xc5]
+        ▾ Header — thread 83, sequence 24  [0x172a+0x5]
+            Flags: 0x80 [DataLength]  [0x172a+0x1]
+            TimeStamp (delta): 9751  [0x172b+0x2]
+            PayloadSize: 192  [0x172d+0x2]
+            SequenceNumber: 24
+            TimeStamp: 792815838877502
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051009138 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x172f+0xc0]
+            MethodID: 281472367166816  [0x172f+0x8]
+            ModuleID: 281472351289344  [0x1737+0x8]
+            MethodStartAddress: 281472352738864  [0x173f+0x8]
+            MethodSize: 68  [0x1747+0x4]
+            MethodToken: 100664740  [0x174b+0x4]
+            MethodFlags: 256  [0x174f+0x4]
+            MethodNamespace: "System.MulticastDelegate"  [0x1753+0x32]
+            MethodName: "CtorClosed"  [0x1785+0x16]
+            MethodSignature: "instance void  (class System.Object,int)"  [0x179b+0x52]
+            ClrInstanceID: 0  [0x17ed+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051012 s, thread 83, stack 3; MethodID=281472367175080 ModuleID=281472351289344 MethodStartAddress=281472352739952 MethodSize=120  [0x17ef+0xe1]
+        ▾ Header — thread 83, sequence 25  [0x17ef+0x5]
+            Flags: 0x80 [DataLength]  [0x17ef+0x1]
+            TimeStamp (delta): 2500  [0x17f0+0x2]
+            PayloadSize: 220  [0x17f2+0x2]
+            SequenceNumber: 25
+            TimeStamp: 792815838880002
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051011638 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x17f4+0xdc]
+            MethodID: 281472367175080  [0x17f4+0x8]
+            ModuleID: 281472351289344  [0x17fc+0x8]
+            MethodStartAddress: 281472352739952  [0x1804+0x8]
+            MethodSize: 120  [0x180c+0x4]
+            MethodToken: 100664757  [0x1810+0x4]
+            MethodFlags: 256  [0x1814+0x4]
+            MethodNamespace: "System.RuntimeTypeHandle"  [0x1818+0x32]
+            MethodName: "GetNativeHandle"  [0x184a+0x20]
+            MethodSignature: "instance value class System.RuntimeTypeHandle  ()"  [0x186a+0x64]
+            ClrInstanceID: 0  [0x18ce+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051013 s, thread 83, stack 3; MethodID=281472367175104 ModuleID=281472351289344 MethodStartAddress=281472352740080 MethodSize=120  [0x18d0+0xc7]
+        ▾ Header — thread 83, sequence 26  [0x18d0+0x5]
+            Flags: 0x80 [DataLength]  [0x18d0+0x1]
+            TimeStamp (delta): 1333  [0x18d1+0x2]
+            PayloadSize: 194  [0x18d3+0x2]
+            SequenceNumber: 26
+            TimeStamp: 792815838881335
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051012971 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x18d5+0xc2]
+            MethodID: 281472367175104  [0x18d5+0x8]
+            ModuleID: 281472351289344  [0x18dd+0x8]
+            MethodStartAddress: 281472352740080  [0x18e5+0x8]
+            MethodSize: 120  [0x18ed+0x4]
+            MethodToken: 100664758  [0x18f1+0x4]
+            MethodFlags: 256  [0x18f5+0x4]
+            MethodNamespace: "System.RuntimeTypeHandle"  [0x18f9+0x32]
+            MethodName: "GetTypeChecked"  [0x192b+0x1e]
+            MethodSignature: "instance class System.RuntimeType  ()"  [0x1949+0x4c]
+            ClrInstanceID: 0  [0x1995+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051016 s, thread 83, stack 3; MethodID=281472367175808 ModuleID=281472351289344 MethodStartAddress=281472352743168 MethodSize=256  [0x1997+0x163]
+        ▾ Header — thread 83, sequence 27  [0x1997+0x5]
+            Flags: 0x80 [DataLength]  [0x1997+0x1]
+            TimeStamp (delta): 3000  [0x1998+0x2]
+            PayloadSize: 350  [0x199a+0x2]
+            SequenceNumber: 27
+            TimeStamp: 792815838884335
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051015971 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x199c+0x15e]
+            MethodID: 281472367175808  [0x199c+0x8]
+            ModuleID: 281472351289344  [0x19a4+0x8]
+            MethodStartAddress: 281472352743168  [0x19ac+0x8]
+            MethodSize: 256  [0x19b4+0x4]
+            MethodToken: 100664784  [0x19b8+0x4]
+            MethodFlags: 256  [0x19bc+0x4]
+            MethodNamespace: "System.RuntimeTypeHandle"  [0x19c0+0x32]
+            MethodName: "GetActivationInfo"  [0x19f2+0x24]
+            MethodSignature: "void  (class System.RuntimeType,fnptr class System.Object(void*)&,void*&,fnptr void(class System.Object)&,bool&)"  [0x1a16+0xe2]
+            ClrInstanceID: 0  [0x1af8+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051027 s, thread 83, stack 3; MethodID=281472369208272 ModuleID=281472351289344 MethodStartAddress=281472352762016 MethodSize=168  [0x1afa+0xf3]
+        ▾ Header — thread 83, sequence 28  [0x1afa+0x5]
+            Flags: 0x80 [DataLength]  [0x1afa+0x1]
+            TimeStamp (delta): 10793  [0x1afb+0x2]
+            PayloadSize: 238  [0x1afd+0x2]
+            SequenceNumber: 28
+            TimeStamp: 792815838895128
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051026764 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x1aff+0xee]
+            MethodID: 281472369208272  [0x1aff+0x8]
+            ModuleID: 281472351289344  [0x1b07+0x8]
+            MethodStartAddress: 281472352762016  [0x1b0f+0x8]
+            MethodSize: 168  [0x1b17+0x4]
+            MethodToken: 100664986  [0x1b1b+0x4]
+            MethodFlags: 256  [0x1b1f+0x4]
+            MethodNamespace: "System.ModuleHandle"  [0x1b23+0x28]
+            MethodName: "GetModuleType"  [0x1b4b+0x1c]
+            MethodSignature: "class System.RuntimeType  (class System.Reflection.RuntimeModule)"  [0x1b67+0x84]
+            ClrInstanceID: 0  [0x1beb+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051031 s, thread 83, stack 3; MethodID=281472366449456 ModuleID=281472351289344 MethodStartAddress=281472352770496 MethodSize=560  [0x1bed+0xb9]
+        ▾ Header — thread 83, sequence 29  [0x1bed+0x5]
+            Flags: 0x80 [DataLength]  [0x1bed+0x1]
+            TimeStamp (delta): 3750  [0x1bee+0x2]
+            PayloadSize: 180  [0x1bf0+0x2]
+            SequenceNumber: 29
+            TimeStamp: 792815838898878
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051030514 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x1bf2+0xb4]
+            MethodID: 281472366449456  [0x1bf2+0x8]
+            ModuleID: 281472351289344  [0x1bfa+0x8]
+            MethodStartAddress: 281472352770496  [0x1c02+0x8]
+            MethodSize: 560  [0x1c0a+0x4]
+            MethodToken: 100665047  [0x1c0e+0x4]
+            MethodFlags: 256  [0x1c12+0x4]
+            MethodNamespace: "System.RuntimeType"  [0x1c16+0x26]
+            MethodName: "InitializeCache"  [0x1c3c+0x20]
+            MethodSignature: "instance class RuntimeTypeCache  ()"  [0x1c5c+0x48]
+            ClrInstanceID: 0  [0x1ca4+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051034 s, thread 83, stack 3; MethodID=281472366450568 ModuleID=281472351289344 MethodStartAddress=281472352789024 MethodSize=120  [0x1ca6+0xb1]
+        ▾ Header — thread 83, sequence 30  [0x1ca6+0x5]
+            Flags: 0x80 [DataLength]  [0x1ca6+0x1]
+            TimeStamp (delta): 3959  [0x1ca7+0x2]
+            PayloadSize: 172  [0x1ca9+0x2]
+            SequenceNumber: 30
+            TimeStamp: 792815838902837
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051034473 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x1cab+0xac]
+            MethodID: 281472366450568  [0x1cab+0x8]
+            ModuleID: 281472351289344  [0x1cb3+0x8]
+            MethodStartAddress: 281472352789024  [0x1cbb+0x8]
+            MethodSize: 120  [0x1cc3+0x4]
+            MethodToken: 100665106  [0x1cc7+0x4]
+            MethodFlags: 256  [0x1ccb+0x4]
+            MethodNamespace: "System.RuntimeType"  [0x1ccf+0x26]
+            MethodName: "get_ContainsGenericParameters"  [0x1cf5+0x3c]
+            MethodSignature: "instance bool  ()"  [0x1d31+0x24]
+            ClrInstanceID: 0  [0x1d55+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051036 s, thread 83, stack 3; MethodID=281472366450976 ModuleID=281472351289344 MethodStartAddress=281472352791264 MethodSize=416  [0x1d57+0xa5]
+        ▾ Header — thread 83, sequence 31  [0x1d57+0x5]
+            Flags: 0x80 [DataLength]  [0x1d57+0x1]
+            TimeStamp (delta): 1917  [0x1d58+0x2]
+            PayloadSize: 160  [0x1d5a+0x2]
+            SequenceNumber: 31
+            TimeStamp: 792815838904754
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.05103639 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x1d5c+0xa0]
+            MethodID: 281472366450976  [0x1d5c+0x8]
+            ModuleID: 281472351289344  [0x1d64+0x8]
+            MethodStartAddress: 281472352791264  [0x1d6c+0x8]
+            MethodSize: 416  [0x1d74+0x4]
+            MethodToken: 100665127  [0x1d78+0x4]
+            MethodFlags: 256  [0x1d7c+0x4]
+            MethodNamespace: "System.RuntimeType"  [0x1d80+0x26]
+            MethodName: "CreateInstanceCheckThis"  [0x1da6+0x30]
+            MethodSignature: "instance void  ()"  [0x1dd6+0x24]
+            ClrInstanceID: 0  [0x1dfa+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051038 s, thread 83, stack 3; MethodID=281472366451048 ModuleID=281472351289344 MethodStartAddress=281472352793712 MethodSize=448  [0x1dfc+0xb7]
+        ▾ Header — thread 83, sequence 32  [0x1dfc+0x5]
+            Flags: 0x80 [DataLength]  [0x1dfc+0x1]
+            TimeStamp (delta): 1167  [0x1dfd+0x2]
+            PayloadSize: 178  [0x1dff+0x2]
+            SequenceNumber: 32
+            TimeStamp: 792815838905921
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051037557 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x1e01+0xb2]
+            MethodID: 281472366451048  [0x1e01+0x8]
+            ModuleID: 281472351289344  [0x1e09+0x8]
+            MethodStartAddress: 281472352793712  [0x1e11+0x8]
+            MethodSize: 448  [0x1e19+0x4]
+            MethodToken: 100665130  [0x1e1d+0x4]
+            MethodFlags: 256  [0x1e21+0x4]
+            MethodNamespace: "System.RuntimeType"  [0x1e25+0x26]
+            MethodName: "CreateInstanceOfT"  [0x1e4b+0x24]
+            MethodSignature: "instance class System.Object  ()"  [0x1e6f+0x42]
+            ClrInstanceID: 0  [0x1eb1+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051042 s, thread 83, stack 3; MethodID=281472369192608 ModuleID=281472351289344 MethodStartAddress=281472352809152 MethodSize=780  [0x1eb3+0xcf]
+        ▾ Header — thread 83, sequence 33  [0x1eb3+0x5]
+            Flags: 0x80 [DataLength]  [0x1eb3+0x1]
+            TimeStamp (delta): 4500  [0x1eb4+0x2]
+            PayloadSize: 202  [0x1eb6+0x2]
+            SequenceNumber: 33
+            TimeStamp: 792815838910421
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051042057 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x1eb8+0xca]
+            MethodID: 281472369192608  [0x1eb8+0x8]
+            ModuleID: 281472351289344  [0x1ec0+0x8]
+            MethodStartAddress: 281472352809152  [0x1ec8+0x8]
+            MethodSize: 780  [0x1ed0+0x4]
+            MethodToken: 100665189  [0x1ed4+0x4]
+            MethodFlags: 256  [0x1ed8+0x4]
+            MethodNamespace: "System.RuntimeType+ActivatorCache"  [0x1edc+0x44]
+            MethodName: ".ctor"  [0x1f20+0xc]
+            MethodSignature: "instance void  (class System.RuntimeType)"  [0x1f2c+0x54]
+            ClrInstanceID: 0  [0x1f80+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051044 s, thread 83, stack 3; MethodID=281472369196880 ModuleID=281472351289344 MethodStartAddress=281472352810096 MethodSize=112  [0x1f82+0xd3]
+        ▾ Header — thread 83, sequence 34  [0x1f82+0x5]
+            Flags: 0x80 [DataLength]  [0x1f82+0x1]
+            TimeStamp (delta): 1875  [0x1f83+0x2]
+            PayloadSize: 206  [0x1f85+0x2]
+            SequenceNumber: 34
+            TimeStamp: 792815838912296
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051043932 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x1f87+0xce]
+            MethodID: 281472369196880  [0x1f87+0x8]
+            ModuleID: 281472351289344  [0x1f8f+0x8]
+            MethodStartAddress: 281472352810096  [0x1f97+0x8]
+            MethodSize: 112  [0x1f9f+0x4]
+            MethodToken: 100665201  [0x1fa3+0x4]
+            MethodFlags: 256  [0x1fa7+0x4]
+            MethodNamespace: "System.RuntimeType+RuntimeTypeCache"  [0x1fab+0x48]
+            MethodName: ".ctor"  [0x1ff3+0xc]
+            MethodSignature: "instance void  (class System.RuntimeType)"  [0x1fff+0x54]
+            ClrInstanceID: 0  [0x2053+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051048 s, thread 83, stack 3; MethodID=281472367850192 ModuleID=281472351289344 MethodStartAddress=281472352816112 MethodSize=132  [0x2055+0x9d]
+        ▾ Header — thread 83, sequence 35  [0x2055+0x5]
+            Flags: 0x80 [DataLength]  [0x2055+0x1]
+            TimeStamp (delta): 4334  [0x2056+0x2]
+            PayloadSize: 152  [0x2058+0x2]
+            SequenceNumber: 35
+            TimeStamp: 792815838916630
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051048266 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x205a+0x98]
+            MethodID: 281472367850192  [0x205a+0x8]
+            ModuleID: 281472351289344  [0x2062+0x8]
+            MethodStartAddress: 281472352816112  [0x206a+0x8]
+            MethodSize: 132  [0x2072+0x4]
+            MethodToken: 100665267  [0x2076+0x4]
+            MethodFlags: 256  [0x207a+0x4]
+            MethodNamespace: "System.StartupHookProvider"  [0x207e+0x36]
+            MethodName: "ManagedStartup"  [0x20b4+0x1e]
+            MethodSignature: "void  (wchar*)"  [0x20d2+0x1e]
+            ClrInstanceID: 0  [0x20f0+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051049 s, thread 83, stack 3; MethodID=281472367850216 ModuleID=281472351289344 MethodStartAddress=281472352816256 MethodSize=68  [0x20f2+0x93]
+        ▾ Header — thread 83, sequence 36  [0x20f2+0x5]
+            Flags: 0x80 [DataLength]  [0x20f2+0x1]
+            TimeStamp (delta): 1125  [0x20f3+0x2]
+            PayloadSize: 142  [0x20f5+0x2]
+            SequenceNumber: 36
+            TimeStamp: 792815838917755
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051049391 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x20f7+0x8e]
+            MethodID: 281472367850216  [0x20f7+0x8]
+            ModuleID: 281472351289344  [0x20ff+0x8]
+            MethodStartAddress: 281472352816256  [0x2107+0x8]
+            MethodSize: 68  [0x210f+0x4]
+            MethodToken: 100665268  [0x2113+0x4]
+            MethodFlags: 256  [0x2117+0x4]
+            MethodNamespace: "System.StartupHookProvider"  [0x211b+0x36]
+            MethodName: "get_IsSupported"  [0x2151+0x20]
+            MethodSignature: "bool  ()"  [0x2171+0x12]
+            ClrInstanceID: 0  [0x2183+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051051 s, thread 83, stack 3; MethodID=281472367850240 ModuleID=281472351289344 MethodStartAddress=281472352816336 MethodSize=648  [0x2185+0xc1]
+        ▾ Header — thread 83, sequence 37  [0x2185+0x5]
+            Flags: 0x80 [DataLength]  [0x2185+0x1]
+            TimeStamp (delta): 1250  [0x2186+0x2]
+            PayloadSize: 188  [0x2188+0x2]
+            SequenceNumber: 37
+            TimeStamp: 792815838919005
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051050641 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x218a+0xbc]
+            MethodID: 281472367850240  [0x218a+0x8]
+            ModuleID: 281472351289344  [0x2192+0x8]
+            MethodStartAddress: 281472352816336  [0x219a+0x8]
+            MethodSize: 648  [0x21a2+0x4]
+            MethodToken: 100665269  [0x21a6+0x4]
+            MethodFlags: 256  [0x21aa+0x4]
+            MethodNamespace: "System.StartupHookProvider"  [0x21ae+0x36]
+            MethodName: "ProcessStartupHooks"  [0x21e4+0x28]
+            MethodSignature: "void  (class System.String)"  [0x220c+0x38]
+            ClrInstanceID: 0  [0x2244+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051055 s, thread 83, stack 3; MethodID=281472367182272 ModuleID=281472351289344 MethodStartAddress=281472352826496 MethodSize=140  [0x2246+0x9f]
+        ▾ Header — thread 83, sequence 38  [0x2246+0x5]
+            Flags: 0x80 [DataLength]  [0x2246+0x1]
+            TimeStamp (delta): 4626  [0x2247+0x2]
+            PayloadSize: 154  [0x2249+0x2]
+            SequenceNumber: 38
+            TimeStamp: 792815838923631
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051055267 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x224b+0x9a]
+            MethodID: 281472367182272  [0x224b+0x8]
+            ModuleID: 281472351289344  [0x2253+0x8]
+            MethodStartAddress: 281472352826496  [0x225b+0x8]
+            MethodSize: 140  [0x2263+0x4]
+            MethodToken: 100665319  [0x2267+0x4]
+            MethodFlags: 256  [0x226b+0x4]
+            MethodNamespace: "System.String"  [0x226f+0x1c]
+            MethodName: "GetNonRandomizedHashCode"  [0x228b+0x32]
+            MethodSignature: "instance int32  ()"  [0x22bd+0x26]
+            ClrInstanceID: 0  [0x22e3+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051058 s, thread 83, stack 3; MethodID=281472367182608 ModuleID=281472351289344 MethodStartAddress=281472352828496 MethodSize=168  [0x22e5+0x8d]
+        ▾ Header — thread 83, sequence 39  [0x22e5+0x5]
+            Flags: 0x80 [DataLength]  [0x22e5+0x1]
+            TimeStamp (delta): 2333  [0x22e6+0x2]
+            PayloadSize: 136  [0x22e8+0x2]
+            SequenceNumber: 39
+            TimeStamp: 792815838925964
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.0510576 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x22ea+0x88]
+            MethodID: 281472367182608  [0x22ea+0x8]
+            ModuleID: 281472351289344  [0x22f2+0x8]
+            MethodStartAddress: 281472352828496  [0x22fa+0x8]
+            MethodSize: 168  [0x2302+0x4]
+            MethodToken: 100665333  [0x2306+0x4]
+            MethodFlags: 256  [0x230a+0x4]
+            MethodNamespace: "System.String"  [0x230e+0x1c]
+            MethodName: "Ctor"  [0x232a+0xa]
+            MethodSignature: "class System.String  (wchar*)"  [0x2334+0x3c]
+            ClrInstanceID: 0  [0x2370+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051060 s, thread 83, stack 3; MethodID=281472367183192 ModuleID=281472351289344 MethodStartAddress=281472352831264 MethodSize=140  [0x2372+0x89]
+        ▾ Header — thread 83, sequence 40  [0x2372+0x5]
+            Flags: 0x80 [DataLength]  [0x2372+0x1]
+            TimeStamp (delta): 2334  [0x2373+0x2]
+            PayloadSize: 132  [0x2375+0x2]
+            SequenceNumber: 40
+            TimeStamp: 792815838928298
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051059934 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x2377+0x84]
+            MethodID: 281472367183192  [0x2377+0x8]
+            ModuleID: 281472351289344  [0x237f+0x8]
+            MethodStartAddress: 281472352831264  [0x2387+0x8]
+            MethodSize: 140  [0x238f+0x4]
+            MethodToken: 100665357  [0x2393+0x4]
+            MethodFlags: 256  [0x2397+0x4]
+            MethodNamespace: "System.String"  [0x239b+0x1c]
+            MethodName: "ToCharArray"  [0x23b7+0x18]
+            MethodSignature: "instance wchar[]  ()"  [0x23cf+0x2a]
+            ClrInstanceID: 0  [0x23f9+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051061 s, thread 83, stack 3; MethodID=281472367183296 ModuleID=281472351289344 MethodStartAddress=281472352831792 MethodSize=160  [0x23fb+0xa5]
+        ▾ Header — thread 83, sequence 41  [0x23fb+0x5]
+            Flags: 0x80 [DataLength]  [0x23fb+0x1]
+            TimeStamp (delta): 1375  [0x23fc+0x2]
+            PayloadSize: 160  [0x23fe+0x2]
+            SequenceNumber: 41
+            TimeStamp: 792815838929673
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051061309 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x2400+0xa0]
+            MethodID: 281472367183296  [0x2400+0x8]
+            ModuleID: 281472351289344  [0x2408+0x8]
+            MethodStartAddress: 281472352831792  [0x2410+0x8]
+            MethodSize: 160  [0x2418+0x4]
+            MethodToken: 100665360  [0x241c+0x4]
+            MethodFlags: 256  [0x2420+0x4]
+            MethodNamespace: "System.String"  [0x2424+0x1c]
+            MethodName: "IsNullOrWhiteSpace"  [0x2440+0x26]
+            MethodSignature: "bool  (class System.String)"  [0x2466+0x38]
+            ClrInstanceID: 0  [0x249e+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051080 s, thread 83, stack 3; MethodID=281472366446104 ModuleID=281472351289344 MethodStartAddress=281472352885200 MethodSize=208  [0x24a0+0xa8]
+        ▾ Header — thread 83, sequence 42  [0x24a0+0x6]
+            Flags: 0x80 [DataLength]  [0x24a0+0x1]
+            TimeStamp (delta): 18751  [0x24a1+0x3]
+            PayloadSize: 162  [0x24a4+0x2]
+            SequenceNumber: 42
+            TimeStamp: 792815838948424
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.05108006 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x24a6+0xa2]
+            MethodID: 281472366446104  [0x24a6+0x8]
+            ModuleID: 281472351289344  [0x24ae+0x8]
+            MethodStartAddress: 281472352885200  [0x24b6+0x8]
+            MethodSize: 208  [0x24be+0x4]
+            MethodToken: 100665737  [0x24c2+0x4]
+            MethodFlags: 256  [0x24c6+0x4]
+            MethodNamespace: "System.Type"  [0x24ca+0x18]
+            MethodName: "GetRootElementType"  [0x24e2+0x26]
+            MethodSignature: "instance class System.Type  ()"  [0x2508+0x3e]
+            ClrInstanceID: 0  [0x2546+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051087 s, thread 83, stack 3; MethodID=281472367794568 ModuleID=281472351289344 MethodStartAddress=281472352903136 MethodSize=304  [0x2548+0xb5]
+        ▾ Header — thread 83, sequence 43  [0x2548+0x5]
+            Flags: 0x80 [DataLength]  [0x2548+0x1]
+            TimeStamp (delta): 6459  [0x2549+0x2]
+            PayloadSize: 176  [0x254b+0x2]
+            SequenceNumber: 43
+            TimeStamp: 792815838954883
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051086519 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x254d+0xb0]
+            MethodID: 281472367794568  [0x254d+0x8]
+            ModuleID: 281472351289344  [0x2555+0x8]
+            MethodStartAddress: 281472352903136  [0x255d+0x8]
+            MethodSize: 304  [0x2565+0x4]
+            MethodToken: 100665897  [0x2569+0x4]
+            MethodFlags: 256  [0x256d+0x4]
+            MethodNamespace: "System.AppContext"  [0x2571+0x24]
+            MethodName: "GetData"  [0x2595+0x10]
+            MethodSignature: "class System.Object  (class System.String)"  [0x25a5+0x56]
+            ClrInstanceID: 0  [0x25fb+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051088 s, thread 83, stack 3; MethodID=281472367794784 ModuleID=281472351289344 MethodStartAddress=281472352904992 MethodSize=548  [0x25fd+0xad]
+        ▾ Header — thread 83, sequence 44  [0x25fd+0x5]
+            Flags: 0x80 [DataLength]  [0x25fd+0x1]
+            TimeStamp (delta): 1875  [0x25fe+0x2]
+            PayloadSize: 168  [0x2600+0x2]
+            SequenceNumber: 44
+            TimeStamp: 792815838956758
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051088394 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x2602+0xa8]
+            MethodID: 281472367794784  [0x2602+0x8]
+            ModuleID: 281472351289344  [0x260a+0x8]
+            MethodStartAddress: 281472352904992  [0x2612+0x8]
+            MethodSize: 548  [0x261a+0x4]
+            MethodToken: 100665906  [0x261e+0x4]
+            MethodFlags: 256  [0x2622+0x4]
+            MethodNamespace: "System.AppContext"  [0x2626+0x24]
+            MethodName: "TryGetSwitch"  [0x264a+0x1a]
+            MethodSignature: "bool  (class System.String,bool&)"  [0x2664+0x44]
+            ClrInstanceID: 0  [0x26a8+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051090 s, thread 83, stack 3; MethodID=281472367794832 ModuleID=281472351289344 MethodStartAddress=281472352905968 MethodSize=272  [0x26aa+0x97]
+        ▾ Header — thread 83, sequence 45  [0x26aa+0x5]
+            Flags: 0x80 [DataLength]  [0x26aa+0x1]
+            TimeStamp (delta): 1167  [0x26ab+0x2]
+            PayloadSize: 146  [0x26ad+0x2]
+            SequenceNumber: 45
+            TimeStamp: 792815838957925
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051089561 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x26af+0x92]
+            MethodID: 281472367794832  [0x26af+0x8]
+            ModuleID: 281472351289344  [0x26b7+0x8]
+            MethodStartAddress: 281472352905968  [0x26bf+0x8]
+            MethodSize: 272  [0x26c7+0x4]
+            MethodToken: 100665908  [0x26cb+0x4]
+            MethodFlags: 256  [0x26cf+0x4]
+            MethodNamespace: "System.AppContext"  [0x26d3+0x24]
+            MethodName: "Setup"  [0x26f7+0xc]
+            MethodSignature: "void  (wchar**,wchar**,int32)"  [0x2703+0x3c]
+            ClrInstanceID: 0  [0x273f+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051226 s, thread 83, stack 3; MethodID=281472368008264 ModuleID=281472351289344 MethodStartAddress=281472353229776 MethodSize=312  [0x2741+0x102]
+        ▾ Header — thread 83, sequence 46  [0x2741+0x6]
+            Flags: 0x80 [DataLength]  [0x2741+0x1]
+            TimeStamp (delta): 136720  [0x2742+0x3]
+            PayloadSize: 252  [0x2745+0x2]
+            SequenceNumber: 46
+            TimeStamp: 792815839094645
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051226281 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x2747+0xfc]
+            MethodID: 281472368008264  [0x2747+0x8]
+            ModuleID: 281472351289344  [0x274f+0x8]
+            MethodStartAddress: 281472353229776  [0x2757+0x8]
+            MethodSize: 312  [0x275f+0x4]
+            MethodToken: 100669096  [0x2763+0x4]
+            MethodFlags: 256  [0x2767+0x4]
+            MethodNamespace: "System.LazyHelper"  [0x276b+0x24]
+            MethodName: "Create"  [0x278f+0xe]
+            MethodSignature: "class System.LazyHelper  (value class System.Threading.LazyThreadSafetyMode,bool)"  [0x279d+0xa4]
+            ClrInstanceID: 0  [0x2841+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051267 s, thread 83, stack 3; MethodID=281472367836008 ModuleID=281472351289344 MethodStartAddress=281472353340560 MethodSize=400  [0x2843+0x9c]
+        ▾ Header — thread 83, sequence 47  [0x2843+0x6]
+            Flags: 0x80 [DataLength]  [0x2843+0x1]
+            TimeStamp (delta): 40587  [0x2844+0x3]
+            PayloadSize: 150  [0x2847+0x2]
+            SequenceNumber: 47
+            TimeStamp: 792815839135232
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051266868 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x2849+0x96]
+            MethodID: 281472367836008  [0x2849+0x8]
+            ModuleID: 281472351289344  [0x2851+0x8]
+            MethodStartAddress: 281472353340560  [0x2859+0x8]
+            MethodSize: 400  [0x2861+0x4]
+            MethodToken: 100670465  [0x2865+0x4]
+            MethodFlags: 256  [0x2869+0x4]
+            MethodNamespace: "System.SpanHelpers"  [0x286d+0x26]
+            MethodName: "IndexOfNullCharacter"  [0x2893+0x2a]
+            MethodSignature: "int32  (wchar*)"  [0x28bd+0x20]
+            ClrInstanceID: 0  [0x28dd+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051317 s, thread 83, stack 3; MethodID=281472367834600 ModuleID=281472351289344 MethodStartAddress=281472353386912 MethodSize=88  [0x28df+0x94]
+        ▾ Header — thread 83, sequence 48  [0x28df+0x6]
+            Flags: 0x80 [DataLength]  [0x28df+0x1]
+            TimeStamp (delta): 50379  [0x28e0+0x3]
+            PayloadSize: 142  [0x28e3+0x2]
+            SequenceNumber: 48
+            TimeStamp: 792815839185611
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051317247 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x28e5+0x8e]
+            MethodID: 281472367834600  [0x28e5+0x8]
+            ModuleID: 281472351289344  [0x28ed+0x8]
+            MethodStartAddress: 281472353386912  [0x28f5+0x8]
+            MethodSize: 88  [0x28fd+0x4]
+            MethodToken: 100671739  [0x2901+0x4]
+            MethodFlags: 256  [0x2905+0x4]
+            MethodNamespace: "System.OrdinalCaseSensitiveComparer"  [0x2909+0x48]
+            MethodName: ".cctor"  [0x2951+0xe]
+            MethodSignature: "void  ()"  [0x295f+0x12]
+            ClrInstanceID: 0  [0x2971+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051318 s, thread 83, stack 3; MethodID=281472367835240 ModuleID=281472351289344 MethodStartAddress=281472353387520 MethodSize=92  [0x2973+0x8d]
+        ▾ Header — thread 83, sequence 49  [0x2973+0x5]
+            Flags: 0x80 [DataLength]  [0x2973+0x1]
+            TimeStamp (delta): 1125  [0x2974+0x2]
+            PayloadSize: 136  [0x2976+0x2]
+            SequenceNumber: 49
+            TimeStamp: 792815839186736
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051318372 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x2978+0x88]
+            MethodID: 281472367835240  [0x2978+0x8]
+            ModuleID: 281472351289344  [0x2980+0x8]
+            MethodStartAddress: 281472353387520  [0x2988+0x8]
+            MethodSize: 92  [0x2990+0x4]
+            MethodToken: 100671745  [0x2994+0x4]
+            MethodFlags: 256  [0x2998+0x4]
+            MethodNamespace: "System.OrdinalIgnoreCaseComparer"  [0x299c+0x42]
+            MethodName: ".cctor"  [0x29de+0xe]
+            MethodSignature: "void  ()"  [0x29ec+0x12]
+            ClrInstanceID: 0  [0x29fe+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051633 s, thread 83, stack 3; MethodID=281472367792896 ModuleID=281472351289344 MethodStartAddress=281472353995824 MethodSize=56  [0x2a00+0xae]
+        ▾ Header — thread 83, sequence 50  [0x2a00+0x6]
+            Flags: 0x80 [DataLength]  [0x2a00+0x1]
+            TimeStamp (delta): 315110  [0x2a01+0x3]
+            PayloadSize: 168  [0x2a04+0x2]
+            SequenceNumber: 50
+            TimeStamp: 792815839501846
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051633482 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x2a06+0xa8]
+            MethodID: 281472367792896  [0x2a06+0x8]
+            ModuleID: 281472351289344  [0x2a0e+0x8]
+            MethodStartAddress: 281472353995824  [0x2a16+0x8]
+            MethodSize: 56  [0x2a1e+0x4]
+            MethodToken: 100676857  [0x2a22+0x4]
+            MethodFlags: 256  [0x2a26+0x4]
+            MethodNamespace: "System.Threading.Monitor"  [0x2a2a+0x32]
+            MethodName: "Enter"  [0x2a5c+0xc]
+            MethodSignature: "void  (class System.Object,bool&)"  [0x2a68+0x44]
+            ClrInstanceID: 0  [0x2aac+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051703 s, thread 83, stack 3; MethodID=281472369829832 ModuleID=281472351289344 MethodStartAddress=281472354211984 MethodSize=272  [0x2aae+0x83]
+        ▾ Header — thread 83, sequence 51  [0x2aae+0x5]
+            Flags: 0x80 [DataLength]  [0x2aae+0x1]
+            TimeStamp (delta): 69590  [0x2aaf+0x3]
+            PayloadSize: 126  [0x2ab2+0x1]
+            SequenceNumber: 51
+            TimeStamp: 792815839571436
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051703072 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x2ab3+0x7e]
+            MethodID: 281472369829832  [0x2ab3+0x8]
+            ModuleID: 281472351289344  [0x2abb+0x8]
+            MethodStartAddress: 281472354211984  [0x2ac3+0x8]
+            MethodSize: 272  [0x2acb+0x4]
+            MethodToken: 100678545  [0x2acf+0x4]
+            MethodFlags: 256  [0x2ad3+0x4]
+            MethodNamespace: "System.Threading.Tasks.Task"  [0x2ad7+0x38]
+            MethodName: ".cctor"  [0x2b0f+0xe]
+            MethodSignature: "void  ()"  [0x2b1d+0x12]
+            ClrInstanceID: 0  [0x2b2f+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051707 s, thread 83, stack 3; MethodID=281472369839824 ModuleID=281472351289344 MethodStartAddress=281472354217872 MethodSize=84  [0x2b31+0x8b]
+        ▾ Header — thread 83, sequence 52  [0x2b31+0x5]
+            Flags: 0x80 [DataLength]  [0x2b31+0x1]
+            TimeStamp (delta): 3792  [0x2b32+0x2]
+            PayloadSize: 134  [0x2b34+0x2]
+            SequenceNumber: 52
+            TimeStamp: 792815839575228
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051706864 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x2b36+0x86]
+            MethodID: 281472369839824  [0x2b36+0x8]
+            ModuleID: 281472351289344  [0x2b3e+0x8]
+            MethodStartAddress: 281472354217872  [0x2b46+0x8]
+            MethodSize: 84  [0x2b4e+0x4]
+            MethodToken: 100678586  [0x2b52+0x4]
+            MethodFlags: 256  [0x2b56+0x4]
+            MethodNamespace: "System.Threading.Tasks.Task+<>c"  [0x2b5a+0x40]
+            MethodName: ".cctor"  [0x2b9a+0xe]
+            MethodSignature: "void  ()"  [0x2ba8+0x12]
+            ClrInstanceID: 0  [0x2bba+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051733 s, thread 83, stack 3; MethodID=281472369858752 ModuleID=281472351289344 MethodStartAddress=281472354284112 MethodSize=424  [0x2bbc+0xdc]
+        ▾ Header — thread 83, sequence 53  [0x2bbc+0x6]
+            Flags: 0x80 [DataLength]  [0x2bbc+0x1]
+            TimeStamp (delta): 25752  [0x2bbd+0x3]
+            PayloadSize: 214  [0x2bc0+0x2]
+            SequenceNumber: 53
+            TimeStamp: 792815839600980
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051732616 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x2bc2+0xd6]
+            MethodID: 281472369858752  [0x2bc2+0x8]
+            ModuleID: 281472351289344  [0x2bca+0x8]
+            MethodStartAddress: 281472354284112  [0x2bd2+0x8]
+            MethodSize: 424  [0x2bda+0x4]
+            MethodToken: 100679222  [0x2bde+0x4]
+            MethodFlags: 256  [0x2be2+0x4]
+            MethodNamespace: "System.Text.Ascii"  [0x2be6+0x24]
+            MethodName: "NarrowUtf16ToAscii"  [0x2c0a+0x26]
+            MethodSignature: "unsigned int  (wchar*,unsigned int8*,unsigned int)"  [0x2c30+0x66]
+            ClrInstanceID: 0  [0x2c96+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051742 s, thread 83, stack 3; MethodID=281472369819992 ModuleID=281472351289344 MethodStartAddress=281472354308704 MethodSize=300  [0x2c98+0xcf]
+        ▾ Header — thread 83, sequence 54  [0x2c98+0x5]
+            Flags: 0x80 [DataLength]  [0x2c98+0x1]
+            TimeStamp (delta): 9167  [0x2c99+0x2]
+            PayloadSize: 202  [0x2c9b+0x2]
+            SequenceNumber: 54
+            TimeStamp: 792815839610147
+            Thread: 83 — as the previous event
+            StackId: 3 — as the previous event
+            IsSorted: false
+            Time: 0.051741783 — seconds from the trace's sync time
+        ▾ Payload — 10 fields  [0x2c9d+0xca]
+            MethodID: 281472369819992  [0x2c9d+0x8]
+            ModuleID: 281472351289344  [0x2ca5+0x8]
+            MethodStartAddress: 281472354308704  [0x2cad+0x8]
+            MethodSize: 300  [0x2cb5+0x4]
+            MethodToken: 100679392  [0x2cb9+0x4]
+            MethodFlags: 256  [0x2cbd+0x4]
+            MethodNamespace: "System.Text.DecoderReplacementFallback"  [0x2cc1+0x4e]
+            MethodName: ".ctor"  [0x2d0f+0xc]
+            MethodSignature: "instance void  (class System.String)"  [0x2d1b+0x4a]
+            ClrInstanceID: 0  [0x2d65+0x2]
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051748 s, thread 83, stack 3; MethodID=281472369823024 ModuleID=281472351289344 MethodStartAddress=281472354319504 MethodSize=268  [0x2d67+0xdd]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051749 s, thread 83, stack 3; MethodID=281472369823120 ModuleID=281472351289344 MethodStartAddress=281472354320800 MethodSize=88  [0x2e44+0xa5]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051750 s, thread 83, stack 3; MethodID=281472369820640 ModuleID=281472351289344 MethodStartAddress=281472354322080 MethodSize=300  [0x2ee9+0xcf]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051753 s, thread 83, stack 3; MethodID=281472367190728 ModuleID=281472351289344 MethodStartAddress=281472354324000 MethodSize=36  [0x2fb8+0xab]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051754 s, thread 83, stack 3; MethodID=281472367190768 ModuleID=281472351289344 MethodStartAddress=281472354324080 MethodSize=132  [0x3063+0x8f]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051760 s, thread 83, stack 3; MethodID=281472367192576 ModuleID=281472351289344 MethodStartAddress=281472354335392 MethodSize=340  [0x30f2+0x109]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051762 s, thread 83, stack 3; MethodID=281472367192904 ModuleID=281472351289344 MethodStartAddress=281472354340000 MethodSize=108  [0x31fb+0x74]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051780 s, thread 83, stack 3; MethodID=281472369227792 ModuleID=281472351289344 MethodStartAddress=281472354408800 MethodSize=292  [0x326f+0xaa]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051782 s, thread 83, stack 3; MethodID=281472369228016 ModuleID=281472351289344 MethodStartAddress=281472354412336 MethodSize=112  [0x3319+0xed]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051785 s, thread 83, stack 3; MethodID=281472369228272 ModuleID=281472351289344 MethodStartAddress=281472354415808 MethodSize=136  [0x3406+0xc1]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051788 s, thread 83, stack 3; MethodID=281472369229144 ModuleID=281472351289344 MethodStartAddress=281472354417680 MethodSize=56  [0x34c7+0x119]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051789 s, thread 83, stack 3; MethodID=281472369229216 ModuleID=281472351289344 MethodStartAddress=281472354418256 MethodSize=68  [0x35e0+0xd3]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051797 s, thread 83, stack 3; MethodID=281472369857056 ModuleID=281472351289344 MethodStartAddress=281472354433376 MethodSize=1444  [0x36b3+0x15b]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051879 s, thread 83, stack 3; MethodID=281472368014184 ModuleID=281472351289344 MethodStartAddress=281472354545424 MethodSize=320  [0x380e+0x142]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051888 s, thread 83, stack 3; MethodID=281472369216816 ModuleID=281472351289344 MethodStartAddress=281472354560944 MethodSize=80  [0x3950+0xb3]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051889 s, thread 83, stack 3; MethodID=281472369216840 ModuleID=281472351289344 MethodStartAddress=281472354561024 MethodSize=80  [0x3a03+0xbb]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051893 s, thread 83, stack 3; MethodID=281472369217552 ModuleID=281472351289344 MethodStartAddress=281472354564480 MethodSize=240  [0x3abe+0x155]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051913 s, thread 83, stack 3; MethodID=281472367793992 ModuleID=281472351289344 MethodStartAddress=281472354599600 MethodSize=28  [0x3c13+0xbe]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051915 s, thread 83, stack 3; MethodID=281472367794128 ModuleID=281472351289344 MethodStartAddress=281472354599984 MethodSize=76  [0x3cd1+0xcd]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051916 s, thread 83, stack 3; MethodID=281472367794176 ModuleID=281472351289344 MethodStartAddress=281472354600096 MethodSize=360  [0x3d9e+0xcb]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051921 s, thread 83, stack 3; MethodID=281472367167456 ModuleID=281472351289344 MethodStartAddress=281472354605376 MethodSize=128  [0x3e69+0x109]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051922 s, thread 83, stack 3; MethodID=281472367167504 ModuleID=281472351289344 MethodStartAddress=281472354605792 MethodSize=272  [0x3f72+0xfb]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051930 s, thread 83, stack 3; MethodID=281472367167576 ModuleID=281472351289344 MethodStartAddress=281472354606496 MethodSize=56  [0x406d+0xff]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.051995 s, thread 83, stack 3; MethodID=281472369200752 ModuleID=281472351289344 MethodStartAddress=281472354841184 MethodSize=80  [0x416c+0xd8]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052123 s, thread 83, stack 3; MethodID=281472369183168 ModuleID=281472351289344 MethodStartAddress=281472355315968 MethodSize=16  [0x4244+0x7d]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052127 s, thread 83, stack 3; MethodID=281472369183184 ModuleID=281472351289344 MethodStartAddress=281472355315984 MethodSize=88  [0x42c1+0x6c]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052151 s, thread 83, stack 3; MethodID=281472369221464 ModuleID=281472351289344 MethodStartAddress=281472355354144 MethodSize=764  [0x432d+0x102]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052153 s, thread 83, stack 3; MethodID=281472369221792 ModuleID=281472351289344 MethodStartAddress=281472355357088 MethodSize=864  [0x442f+0x9b]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052154 s, thread 83, stack 3; MethodID=281472369221832 ModuleID=281472351289344 MethodStartAddress=281472355357984 MethodSize=100  [0x44ca+0xa1]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052155 s, thread 83, stack 3; MethodID=281472369221984 ModuleID=281472351289344 MethodStartAddress=281472355361520 MethodSize=688  [0x456b+0xb7]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052166 s, thread 83, stack 3; MethodID=281472369220240 ModuleID=281472351289344 MethodStartAddress=281472355405648 MethodSize=232  [0x4622+0xe1]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052167 s, thread 83, stack 3; MethodID=281472369220264 ModuleID=281472351289344 MethodStartAddress=281472355405888 MethodSize=212  [0x4703+0x74]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052172 s, thread 83, stack 3; MethodID=281472369867520 ModuleID=281472351289344 MethodStartAddress=281472355415312 MethodSize=180  [0x4777+0xd1]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052202 s, thread 83, stack 3; MethodID=281472368032528 ModuleID=281472351289344 MethodStartAddress=281472355520864 MethodSize=144  [0x4848+0xc6]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052203 s, thread 83, stack 3; MethodID=281472368032688 ModuleID=281472351289344 MethodStartAddress=281472355521520 MethodSize=100  [0x490e+0xbb]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052204 s, thread 83, stack 3; MethodID=281472368032808 ModuleID=281472351289344 MethodStartAddress=281472355521936 MethodSize=128  [0x49c9+0xb1]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052205 s, thread 83, stack 3; MethodID=281472368032904 ModuleID=281472351289344 MethodStartAddress=281472355522224 MethodSize=72  [0x4a7a+0x85]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052216 s, thread 83, stack 3; MethodID=281472368029312 ModuleID=281472351289344 MethodStartAddress=281472355539600 MethodSize=304  [0x4aff+0xc3]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052217 s, thread 83, stack 3; MethodID=281472368029328 ModuleID=281472351289344 MethodStartAddress=281472355539904 MethodSize=32  [0x4bc2+0x139]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052218 s, thread 83, stack 3; MethodID=281472368029344 ModuleID=281472351289344 MethodStartAddress=281472355539936 MethodSize=104  [0x4cfb+0xb3]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052220 s, thread 83, stack 3; MethodID=281472368018360 ModuleID=281472351289344 MethodStartAddress=281472355543680 MethodSize=88  [0x4dae+0xa1]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052230 s, thread 83, stack 3; MethodID=281472368013928 ModuleID=281472351289344 MethodStartAddress=281472355564960 MethodSize=344  [0x4e4f+0x11d]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052232 s, thread 83, stack 3; MethodID=281472368015376 ModuleID=281472351289344 MethodStartAddress=281472355579152 MethodSize=108  [0x4f6c+0x10b]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052235 s, thread 83, stack 3; MethodID=281472368013432 ModuleID=281472351289344 MethodStartAddress=281472355587200 MethodSize=16  [0x5077+0x113]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052237 s, thread 83, stack 3; MethodID=281472367850960 ModuleID=281472351289344 MethodStartAddress=281472355588176 MethodSize=68  [0x518a+0xb7]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052241 s, thread 83, stack 3; MethodID=281472367852248 ModuleID=281472351289344 MethodStartAddress=281472355599808 MethodSize=1540  [0x5241+0x135]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052310 s, thread 83, stack 3; MethodID=281472367984840 ModuleID=281472351289344 MethodStartAddress=281472355630448 MethodSize=148  [0x5376+0x18e]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052312 s, thread 83, stack 3; MethodID=281472367985448 ModuleID=281472351289344 MethodStartAddress=281472355639952 MethodSize=200  [0x5504+0x99]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052317 s, thread 83, stack 3; MethodID=281472367989960 ModuleID=281472351289344 MethodStartAddress=281472355644240 MethodSize=752  [0x559d+0x105]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052319 s, thread 83, stack 3; MethodID=281472367990056 ModuleID=281472351289344 MethodStartAddress=281472355646512 MethodSize=188  [0x56a2+0xdb]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052328 s, thread 83, stack 3; MethodID=281472368012040 ModuleID=281472351289344 MethodStartAddress=281472355683952 MethodSize=128  [0x577d+0xaf]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052329 s, thread 83, stack 3; MethodID=281472368012152 ModuleID=281472351289344 MethodStartAddress=281472355692384 MethodSize=300  [0x582c+0xb7]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052331 s, thread 83, stack 3; MethodID=281472368012168 ModuleID=281472351289344 MethodStartAddress=281472355692688 MethodSize=32  [0x58e3+0x12d]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052348 s, thread 83, stack 3; MethodID=281472367990424 ModuleID=281472351289344 MethodStartAddress=281472355732784 MethodSize=192  [0x5a10+0x124]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052350 s, thread 83, stack 3; MethodID=281472367990624 ModuleID=281472351289344 MethodStartAddress=281472355736144 MethodSize=1408  [0x5b34+0xa3]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052352 s, thread 83, stack 3; MethodID=281472368007768 ModuleID=281472351289344 MethodStartAddress=281472355737872 MethodSize=88  [0x5bd7+0xab]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052370 s, thread 83, stack 3; MethodID=281472367809320 ModuleID=281472351289344 MethodStartAddress=281472355784064 MethodSize=280  [0x5c82+0x9a]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052371 s, thread 83, stack 3; MethodID=281472367809344 ModuleID=281472351289344 MethodStartAddress=281472355784352 MethodSize=80  [0x5d1c+0x9f]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052381 s, thread 83, stack 3; MethodID=281472367823080 ModuleID=281472351289344 MethodStartAddress=281472355810560 MethodSize=792  [0x5dbb+0x10f]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052388 s, thread 83, stack 3; MethodID=281472367832176 ModuleID=281472351289344 MethodStartAddress=281472355813712 MethodSize=212  [0x5eca+0x18f]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052388 s, thread 83, stack 3; MethodID=281472367832200 ModuleID=281472351289344 MethodStartAddress=281472355813936 MethodSize=308  [0x6059+0xc9]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052390 s, thread 83, stack 3; MethodID=281472367832520 ModuleID=281472351289344 MethodStartAddress=281472355814352 MethodSize=36  [0x6122+0x12d]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052482 s, thread 83, stack 3; MethodID=281472368002200 ModuleID=281472351289344 MethodStartAddress=281472356019376 MethodSize=556  [0x624f+0xfa]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052543 s, thread 83, stack 3; MethodID=281472368002136 ModuleID=281472351289344 MethodStartAddress=281472356017392 MethodSize=236  [0x6349+0xf8]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052551 s, thread 83, stack 3; MethodID=281472369191184 ModuleID=281472351289344 MethodStartAddress=281472357316848 MethodSize=32  [0x6441+0x141]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052595 s, thread 83, stack 3; MethodID=281472369190448 ModuleID=281472351289344 MethodStartAddress=281472357316096 MethodSize=56  [0x6582+0x128]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052615 s, thread 83, stack 3; MethodID=281472367799760 ModuleID=281472351289344 MethodStartAddress=281472357621808 MethodSize=96  [0x66aa+0x102]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052635 s, thread 83, stack 3; MethodID=281472369191216 ModuleID=281472351289344 MethodStartAddress=281472357316912 MethodSize=92  [0x67ac+0x12a]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052652 s, thread 83, stack 3; MethodID=281472368017472 ModuleID=281472351289344 MethodStartAddress=281472357225872 MethodSize=224  [0x68d6+0xba]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052819 s, thread 83, stack 3; MethodID=281472367998120 ModuleID=281472351289344 MethodStartAddress=281472356003312 MethodSize=96  [0x6990+0xaa]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052851 s, thread 83, stack 3; MethodID=281472367799664 ModuleID=281472351289344 MethodStartAddress=281472357618048 MethodSize=996  [0x6a3a+0x16e]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052862 s, thread 83, stack 3; MethodID=281472367821368 ModuleID=281472351289344 MethodStartAddress=281472357370576 MethodSize=56  [0x6ba8+0x137]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052871 s, thread 83, stack 3; MethodID=281472369191168 ModuleID=281472351289344 MethodStartAddress=281472357316752 MethodSize=96  [0x6cdf+0x12b]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052927 s, thread 83, stack 3; MethodID=281472369874064 ModuleID=281472351289344 MethodStartAddress=281472355858160 MethodSize=20  [0x6e0a+0xd8]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.052945 s, thread 83, stack 3; MethodID=281472369191200 ModuleID=281472351289344 MethodStartAddress=281472357316880 MethodSize=20  [0x6ee2+0x130]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053002 s, thread 83, stack 3; MethodID=281472367821544 ModuleID=281472351289344 MethodStartAddress=281472357372128 MethodSize=176  [0x7012+0xc8]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053019 s, thread 83, stack 3; MethodID=281472369190432 ModuleID=281472351289344 MethodStartAddress=281472357316064 MethodSize=24  [0x70da+0x134]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053095 s, thread 83, stack 3; MethodID=281472368016856 ModuleID=281472351289344 MethodStartAddress=281472355887520 MethodSize=36  [0x720e+0x138]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053104 s, thread 83, stack 3; MethodID=281472367799056 ModuleID=281472351289344 MethodStartAddress=281472357612528 MethodSize=312  [0x7346+0x165]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053212 s, thread 83, stack 3; MethodID=281472369841824 ModuleID=281472351289344 MethodStartAddress=281472358127664 MethodSize=44  [0x74ab+0xee]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053230 s, thread 83, stack 3; MethodID=281472369192344 ModuleID=281472351289344 MethodStartAddress=281472358386464 MethodSize=120  [0x7599+0x8c]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053279 s, thread 83, stack 3; MethodID=281472367997384 ModuleID=281472351289344 MethodStartAddress=281472355997072 MethodSize=92  [0x7625+0xc2]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053356 s, thread 83, stack 3; MethodID=281472368001544 ModuleID=281472351289344 MethodStartAddress=281472356012528 MethodSize=148  [0x76e7+0x160]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053384 s, thread 83, stack 3; MethodID=281472367993048 ModuleID=281472351289344 MethodStartAddress=281472357205712 MethodSize=140  [0x7847+0xc6]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053484 s, thread 83, stack 3; MethodID=281472367799648 ModuleID=281472351289344 MethodStartAddress=281472357617808 MethodSize=236  [0x790d+0x100]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053494 s, thread 83, stack 3; MethodID=281472367996736 ModuleID=281472351289344 MethodStartAddress=281472355993904 MethodSize=240  [0x7a0d+0xd1]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053572 s, thread 83, stack 3; MethodID=281472367799632 ModuleID=281472351289344 MethodStartAddress=281472357617424 MethodSize=380  [0x7ade+0xf4]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053599 s, thread 83, stack 3; MethodID=281472367997056 ModuleID=281472351289344 MethodStartAddress=281472355995088 MethodSize=120  [0x7bd2+0xce]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053633 s, thread 83, stack 3; MethodID=281472369190416 ModuleID=281472351289344 MethodStartAddress=281472357316000 MethodSize=64  [0x7ca0+0x13a]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053686 s, thread 83, stack 3; MethodID=281472368002152 ModuleID=281472351289344 MethodStartAddress=281472356017632 MethodSize=1004  [0x7dda+0x168]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/ModuleDCEnd — 0.053719 s, thread 83, stack 3; ModuleID=281472351289344 AssemblyID=187650774761296 ModuleFlags=40 Reserved1=0  [0x7f42+0x1ad]  (+25 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/DomainModuleDCEnd — 0.053723 s, thread 83, stack 3; ModuleID=281472351289344 AssemblyID=187650774761296 AppDomainID=187650774615840 ModuleFlags=40  [0x80ef+0xcc]  (+20 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/AssemblyDCEnd — 0.053730 s, thread 83, stack 3; AssemblyID=187650774761296 AppDomainID=187650774615840 BindingID=0 AssemblyFlags=16  [0x81bb+0xd8]  (+18 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/ModuleDCEnd — 0.053734 s, thread 83, stack 3; ModuleID=281472367840704 AssemblyID=187650774027264 ModuleFlags=8 Reserved1=0  [0x8293+0xc6]  (+25 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/DomainModuleDCEnd — 0.053734 s, thread 83, stack 3; ModuleID=281472367840704 AssemblyID=187650774027264 AppDomainID=187650774615840 ModuleFlags=8  [0x8359+0x57]  (+20 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/AssemblyDCEnd — 0.053736 s, thread 83, stack 3; AssemblyID=187650774027264 AppDomainID=187650774615840 BindingID=0 AssemblyFlags=0  [0x83b0+0x9a]  (+18 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/ModuleDCEnd — 0.053739 s, thread 83, stack 3; ModuleID=281472367848216 AssemblyID=187650774996848 ModuleFlags=8 Reserved1=0  [0x844a+0x16e]  (+25 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/DomainModuleDCEnd — 0.053739 s, thread 83, stack 3; ModuleID=281472367848216 AssemblyID=187650774996848 AppDomainID=187650774615840 ModuleFlags=8  [0x85b8+0xbc]  (+20 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/AssemblyDCEnd — 0.053741 s, thread 83, stack 3; AssemblyID=187650774996848 AppDomainID=187650774615840 BindingID=0 AssemblyFlags=0  [0x8674+0xc8]  (+18 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053748 s, thread 83, stack 3; MethodID=281472369188176 ModuleID=281472368033208 MethodStartAddress=281472368207136 MethodSize=592  [0x873c+0x116]  (+22 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053750 s, thread 83, stack 3; MethodID=281472369188224 ModuleID=281472368033208 MethodStartAddress=281472368207904 MethodSize=420  [0x8852+0xc3]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053753 s, thread 83, stack 3; MethodID=281472369188672 ModuleID=281472368033208 MethodStartAddress=281472368212400 MethodSize=452  [0x8915+0xeb]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053754 s, thread 83, stack 3; MethodID=281472369188744 ModuleID=281472368033208 MethodStartAddress=281472368213312 MethodSize=200  [0x8a00+0x9d]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053757 s, thread 83, stack 3; MethodID=281472369185328 ModuleID=281472368033208 MethodStartAddress=281472368217024 MethodSize=248  [0x8a9d+0x82]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053759 s, thread 83, stack 3; MethodID=281472368036656 ModuleID=281472368033208 MethodStartAddress=281472368217904 MethodSize=256  [0x8b1f+0xad]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053761 s, thread 83, stack 3; MethodID=281472368036776 ModuleID=281472368033208 MethodStartAddress=281472368218832 MethodSize=64  [0x8bcc+0x97]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053762 s, thread 83, stack 3; MethodID=281472368036824 ModuleID=281472368033208 MethodStartAddress=281472368218960 MethodSize=228  [0x8c63+0xd9]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053762 s, thread 83, stack 3; MethodID=281472368036848 ModuleID=281472368033208 MethodStartAddress=281472368219200 MethodSize=76  [0x8d3c+0x87]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053763 s, thread 83, stack 3; MethodID=281472368036872 ModuleID=281472368033208 MethodStartAddress=281472368219280 MethodSize=80  [0x8dc3+0x89]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053768 s, thread 83, stack 3; MethodID=281472368038576 ModuleID=281472368033208 MethodStartAddress=281472368225408 MethodSize=68  [0x8e4c+0x95]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053770 s, thread 83, stack 3; MethodID=281472368039160 ModuleID=281472368033208 MethodStartAddress=281472368227616 MethodSize=84  [0x8ee1+0x68]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053770 s, thread 83, stack 3; MethodID=281472368039200 ModuleID=281472368033208 MethodStartAddress=281472368228000 MethodSize=252  [0x8f49+0xcd]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053772 s, thread 83, stack 3; MethodID=281472368039248 ModuleID=281472368033208 MethodStartAddress=281472368228512 MethodSize=168  [0x9016+0x123]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053773 s, thread 83, stack 3; MethodID=281472368039272 ModuleID=281472368033208 MethodStartAddress=281472368228688 MethodSize=168  [0x9139+0x125]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053775 s, thread 83, stack 3; MethodID=281472369167216 ModuleID=281472368033208 MethodStartAddress=281472368230272 MethodSize=196  [0x925e+0xab]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053777 s, thread 83, stack 3; MethodID=281472369167792 ModuleID=281472368033208 MethodStartAddress=281472368233216 MethodSize=52  [0x9309+0x9f]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053778 s, thread 83, stack 3; MethodID=281472369167816 ModuleID=281472368033208 MethodStartAddress=281472368233280 MethodSize=152  [0x93a8+0xb1]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053780 s, thread 83, stack 3; MethodID=281472369168368 ModuleID=281472368033208 MethodStartAddress=281472368237072 MethodSize=68  [0x9459+0xb3]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053781 s, thread 83, stack 3; MethodID=281472369168632 ModuleID=281472368033208 MethodStartAddress=281472368238400 MethodSize=688  [0x950c+0x8d]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053783 s, thread 83, stack 3; MethodID=281472369168680 ModuleID=281472368033208 MethodStartAddress=281472368239216 MethodSize=448  [0x9599+0x139]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053783 s, thread 83, stack 3; MethodID=281472369168704 ModuleID=281472368033208 MethodStartAddress=281472368239664 MethodSize=556  [0x96d2+0xcd]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053784 s, thread 83, stack 3; MethodID=281472369168728 ModuleID=281472368033208 MethodStartAddress=281472368240224 MethodSize=132  [0x979f+0xa3]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053785 s, thread 83, stack 3; MethodID=281472369168800 ModuleID=281472368033208 MethodStartAddress=281472368241248 MethodSize=308  [0x9842+0x6e]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053787 s, thread 83, stack 3; MethodID=281472369184712 ModuleID=281472368033208 MethodStartAddress=281472368243184 MethodSize=48  [0x98b0+0x103]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053788 s, thread 83, stack 3; MethodID=281472369184728 ModuleID=281472368033208 MethodStartAddress=281472368243232 MethodSize=92  [0x99b3+0xa3]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053789 s, thread 83, stack 3; MethodID=281472369870592 ModuleID=281472368033208 MethodStartAddress=281472368243328 MethodSize=84  [0x9a56+0x76]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053795 s, thread 83, stack 3; MethodID=281472369820976 ModuleID=281472368033208 MethodStartAddress=281472368261856 MethodSize=148  [0x9acc+0xf9]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053798 s, thread 83, stack 3; MethodID=281472369224312 ModuleID=281472368033208 MethodStartAddress=281472368264208 MethodSize=96  [0x9bc5+0xcd]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053802 s, thread 83, stack 3; MethodID=281472369224336 ModuleID=281472368033208 MethodStartAddress=281472368264304 MethodSize=320  [0x9c92+0xa7]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053803 s, thread 83, stack 3; MethodID=281472369224360 ModuleID=281472368033208 MethodStartAddress=281472368264624 MethodSize=196  [0x9d39+0x80]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053804 s, thread 83, stack 3; MethodID=281472369183848 ModuleID=281472368033208 MethodStartAddress=281472368264832 MethodSize=88  [0x9db9+0xcb]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053805 s, thread 83, stack 3; MethodID=281472369183968 ModuleID=281472368033208 MethodStartAddress=281472368265552 MethodSize=36  [0x9e84+0x99]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053806 s, thread 83, stack 3; MethodID=281472369183984 ModuleID=281472368033208 MethodStartAddress=281472368265600 MethodSize=20  [0x9f1d+0x97]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/MethodDCEndVerbose — 0.053811 s, thread 83, stack 3; MethodID=281472369181216 ModuleID=281472368033208 MethodStartAddress=281472368282688 MethodSize=180  [0x9fb4+0xa3]  (+21 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/ModuleDCEnd — 0.053812 s, thread 83, stack 3; ModuleID=281472368033208 AssemblyID=187650774983136 ModuleFlags=40 Reserved1=0  [0xa057+0x178]  (+25 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/DomainModuleDCEnd — 0.053813 s, thread 83, stack 3; ModuleID=281472368033208 AssemblyID=187650774983136 AppDomainID=187650774615840 ModuleFlags=40  [0xa1cf+0xbc]  (+20 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/AssemblyDCEnd — 0.053814 s, thread 83, stack 3; AssemblyID=187650774983136 AppDomainID=187650774615840 BindingID=0 AssemblyFlags=16  [0xa28b+0xc8]  (+18 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/ModuleDCEnd — 0.053823 s, thread 83, stack 3; ModuleID=281472369164288 AssemblyID=187650774166112 ModuleFlags=40 Reserved1=0  [0xa353+0x17a]  (+25 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/DomainModuleDCEnd — 0.053824 s, thread 83, stack 3; ModuleID=281472369164288 AssemblyID=187650774166112 AppDomainID=187650774615840 ModuleFlags=40  [0xa4cd+0xc0]  (+20 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/AssemblyDCEnd — 0.053825 s, thread 83, stack 3; AssemblyID=187650774166112 AppDomainID=187650774615840 BindingID=0 AssemblyFlags=16  [0xa58d+0xcc]  (+18 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/ModuleDCEnd — 0.053838 s, thread 83, stack 3; ModuleID=281472369209096 AssemblyID=187650774991952 ModuleFlags=40 Reserved1=0  [0xa659+0x1ce]  (+25 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/DomainModuleDCEnd — 0.053838 s, thread 83, stack 3; ModuleID=281472369209096 AssemblyID=187650774991952 AppDomainID=187650774615840 ModuleFlags=40  [0xa827+0xdc]  (+20 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/AssemblyDCEnd — 0.053840 s, thread 83, stack 3; AssemblyID=187650774991952 AppDomainID=187650774615840 BindingID=0 AssemblyFlags=16  [0xa903+0xe8]  (+18 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/ModuleDCEnd — 0.053842 s, thread 83, stack 3; ModuleID=281472369870920 AssemblyID=187650774149824 ModuleFlags=8 Reserved1=0  [0xa9eb+0x1b6]  (+25 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/DomainModuleDCEnd — 0.053843 s, thread 83, stack 3; ModuleID=281472369870920 AssemblyID=187650774149824 AppDomainID=187650774615840 ModuleFlags=8  [0xaba1+0xd4]  (+20 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/AssemblyDCEnd — 0.053844 s, thread 83, stack 3; AssemblyID=187650774149824 AppDomainID=187650774615840 BindingID=0 AssemblyFlags=0  [0xac75+0xe0]  (+18 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/AppDomainDCEnd — 0.053845 s, thread 83, stack 3; AppDomainID=187650774615840 AppDomainFlags=3 AppDomainName="clrhost" AppDomainIndex=1  [0xad55+0x27]  (+17 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/GCSettingsRundown — 0.053847 s, thread 83, stack 3, 50 bytes  [0xad7c+0x37]  (+12 nodes elided)
+      ▾ Microsoft-Windows-DotNETRuntimeRundown/DCEndComplete — 0.053847 s, thread 83, stack 3; ClrInstanceID=0  [0xadb3+0x7]  (+13 nodes elided)
+      EndObject: 6  [0xadba+0x1]
+  ▾ SequencePointBlock — 0.057063 s, 2 threads  [0xadbb+0x42]  (+18 nodes elided)
+    End of stream  [0xadfd+0x1]
