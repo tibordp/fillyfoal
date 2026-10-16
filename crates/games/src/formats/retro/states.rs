@@ -371,7 +371,7 @@ record! {
         author: ascii[32] "Author",
         video: ascii[16] "Video backend",
         audio: ascii[16] "Audio emulator",
-        md5: bytes[16] "Game MD5",
+        md5: bytes[16] "Game MD5" .checksum("MD5"),
         start_time: u64 "Recording start time" .timestamp(),
         save_config: u8 "Config saved",
         skip_idle: u8 "Idle skipping",
@@ -699,7 +699,7 @@ record! {
         controller_flags: u32 "Controller flags" .hex(),
         _reserved3: bytes[160] "Reserved",
         rom_name: ascii[32] "ROM name",
-        rom_crc: u32 "ROM CRC-32" .hex(),
+        rom_crc: u32 "ROM CRC-32" .checksum("CRC-32"),
         rom_country: u16 "ROM country code" .hex(),
         _reserved4: bytes[56] "Reserved",
         video: ascii[64] "Video plugin",
@@ -878,7 +878,7 @@ record! {
         next: u16 "Next block" .with(|&v, n| if v == 0xffff { n.summary("none") } else { n }),
         name: ascii[21] "File name",
         _padding: bytes[96] "Padding",
-        checksum: u8 "XOR checksum" .hex(),
+        checksum: u8 "XOR checksum" .checksum("8-bit XOR"),
     }
 }
 
@@ -893,8 +893,10 @@ async fn psx_memcard(cx: Cx, input: Input) -> Result<()> {
         let raw = cx.read(span).await?;
         let xor = raw.iter().take(127).fold(0u8, |x, &b| x ^ b);
         let block = file.sub(slot.saturating_mul(0x2000), 0x2000);
-        let mut node = PsxDirFrame::node(format!("Slot {slot}"), span, LE).target(block);
-        node = node.check_diag(&crate::value::Check::new("8-bit XOR", d.checksum).verify(xor));
+        let check = crate::value::Check::new("8-bit XOR", d.checksum).verify(xor);
+        let mut node = PsxDirFrame::checked_node(format!("Slot {slot}"), span, LE, check.at(127))
+            .target(block)
+            .check_diag(&check);
         if matches!(d.state, 0x51..=0x53) {
             used = used.saturating_add(1);
         }

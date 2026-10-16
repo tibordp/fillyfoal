@@ -141,7 +141,7 @@ async fn packet(cx: Cx, (span, header_len, key): (Span, u64, [u8; 2])) -> Result
         b"SH" => {
             let block = cx.block(payload.sub(0, 5)).await?;
             let mut f = Fields::emitting(&cx, &block, Endian::Big);
-            f.u32("CRC").hex().emit()?;
+            f.u32("CRC").checksum("CRC-32").emit()?;
             f.u8("Stream version").emit()?;
             let mut at = 5usize;
             for name in ["Sample count", "Beginning silence"] {

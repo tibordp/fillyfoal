@@ -311,7 +311,7 @@ record! {
         implementation: u16 "ImplementationVersion" .hex(),
         streams: u32 "NumberOfStreams",
         directory: u32 "StreamDirectoryRva" .hex(),
-        checksum: u32 "CheckSum" .hex(),
+        checksum: u32 "CheckSum" .checksum("PE image checksum"),
         time: u32 "TimeDateStamp" .timestamp(),
         flags: u64 "Flags" .flags(DUMP_FLAGS),
     }
@@ -362,7 +362,7 @@ record! {
     struct Module {
         base: u64 "BaseOfImage" .hex(),
         size: u32 "SizeOfImage" .hex(),
-        checksum: u32 "CheckSum" .hex(),
+        checksum: u32 "CheckSum" .checksum("PE image checksum"),
         time: u32 "TimeDateStamp" .timestamp(),
         name: u32 "ModuleNameRva" .hex(),
         version: bytes[52] "VersionInfo" .desc("VS_FIXEDFILEINFO"),
@@ -1575,7 +1575,7 @@ async fn module_fields(cx: Cx, (file, at): (Span, Span)) -> Result<()> {
     let mut f = Fields::emitting(&cx, &block, LE);
     f.u64("BaseOfImage").hex().emit()?;
     f.u32("SizeOfImage").hex().emit()?;
-    f.u32("CheckSum").hex().emit()?;
+    f.u32("CheckSum").checksum("PE image checksum").emit()?;
     f.u32("TimeDateStamp").timestamp().emit()?;
     let name = f.u32("ModuleNameRva").hex().emit()?;
     let version = f.peek_span(FixedFileInfo::SIZE);

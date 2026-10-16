@@ -845,7 +845,7 @@ record! {
         method: u16 "Compression method" .enumeration(METHOD),
         time: u16 "Modification time (DOS)" .hex() .with(|&t, n| n.summary(dos_time(t))),
         date: u16 "Modification date (DOS)" .with(crate::formats::disk::dos_date),
-        crc: u32 "CRC-32" .hex(),
+        crc: u32 "CRC-32" .checksum("CRC-32"),
         compressed: u32 "Compressed size",
         uncompressed: u32 "Uncompressed size",
         name_len: u16 "File name length",
@@ -866,7 +866,7 @@ record! {
         method: u16 "Compression method" .enumeration(METHOD),
         time: u16 "Modification time (DOS)" .hex() .with(|&t, n| n.summary(dos_time(t))),
         date: u16 "Modification date (DOS)" .with(crate::formats::disk::dos_date),
-        crc: u32 "CRC-32" .hex(),
+        crc: u32 "CRC-32" .checksum("CRC-32"),
         compressed: u32 "Compressed size",
         uncompressed: u32 "Uncompressed size",
         name_len: u16 "File name length",
@@ -1427,7 +1427,7 @@ fn descriptor_layout(f: &mut Fields<'_>, ctx: &DescriptorCtx) -> Result<bool> {
     if ctx.signature {
         f.bytes("Signature", 4).emit()?;
     }
-    let crc = f.u32("CRC-32").hex().emit()?;
+    let crc = f.u32("CRC-32").checksum("CRC-32").emit()?;
     let (compressed, uncompressed) = if ctx.wide {
         (
             f.u64("Compressed size").emit()?,
@@ -2121,7 +2121,9 @@ fn extra_layout(f: &mut Fields<'_>, &(id, zip64): &(u16, Zip64Wants)) -> Result<
         }
         0x7075 | 0x6375 if len >= 5 => {
             f.u8("Version").emit()?;
-            f.u32("CRC-32 of the header field").hex().emit()?;
+            f.u32("CRC-32 of the header field")
+                .checksum("CRC-32")
+                .emit()?;
             let rest = left(f);
             f.bytes("UTF-8 text", rest)
                 .with(|b, n| n.value(Value::Text(String::from_utf8_lossy(b).into_owned())))

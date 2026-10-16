@@ -584,7 +584,7 @@ struct WebHeader {
 fn web_header(f: &mut Fields<'_>, &version: &u32) -> Result<WebHeader> {
     if version >= 4 {
         f.bytes("Hash", 16).emit()?;
-        f.u32("CRC").hex().emit()?;
+        f.u32("CRC").checksum("CRC-32").emit()?;
     }
     f.u32("Minimum streamed bytes").emit()?;
     let header_size = f.u32("Header size").emit()?;

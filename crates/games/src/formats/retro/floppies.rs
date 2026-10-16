@@ -311,7 +311,7 @@ record! {
     pub struct IpfInfo {
         kind: ascii[4] "Type",
         length: u32 "Length",
-        crc: u32 "CRC-32" .hex(),
+        crc: u32 "CRC-32" .checksum("CRC-32"),
         media: u32 "Media type" .enumeration(&[(1, "floppy disk")]),
         encoder: u32 "Encoder" .enumeration(&[(1, "CAPS"), (2, "SPS")]),
         encoder_rev: u32 "Encoder revision",

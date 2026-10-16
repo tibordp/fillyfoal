@@ -112,8 +112,8 @@ record! {
     /// `EFI_FFS_FILE_HEADER`.
     pub struct FileHeader {
         name: guid "Name",
-        header_checksum: u8 "Header checksum" .hex(),
-        file_checksum: u8 "File checksum" .hex(),
+        header_checksum: u8 "Header checksum" .checksum("8-bit sum"),
+        file_checksum: u8 "File checksum" .checksum("8-bit sum"),
         kind: u8 "Type" .enumeration(FILE_TYPES),
         attributes: u8 "Attributes" .hex() .flags(FILE_ATTRIBUTES),
         size: bytes[3] "Size" .with(|b, n| n.summary(size(u24_le(b, 0).unwrap_or(0).into()))),

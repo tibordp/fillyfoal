@@ -296,6 +296,24 @@ pub struct BitField<'a> {
 }
 
 impl BitField<'_> {
+    /// The field is a check value of `algo`, not checked here.
+    pub fn checksum(mut self, algo: &'static str) -> Self {
+        if let Ok(v) = self.value {
+            self.node.value = Some(
+                crate::value::Check::new(
+                    algo,
+                    crate::value::Digest::Int {
+                        value: v,
+                        bits: self.bits,
+                        radix: crate::value::Radix::Hex,
+                    },
+                )
+                .into(),
+            );
+        }
+        self
+    }
+
     pub fn enumeration(mut self, table: EnumTable) -> Self {
         if let Ok(v) = self.value {
             self.node.value = Some(enumerated(v, self.bits, table));

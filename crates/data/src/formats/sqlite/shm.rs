@@ -175,7 +175,7 @@ fn header_layout(f: &mut Fields<'_>, &(_, s1, s2): &(Endian, u32, u32)) -> Resul
     f.u32("Database pages")
         .desc("nPage: the database size in pages")
         .emit()?;
-    f.u32("Frame checksum-1").hex().emit()?;
+    f.u32("Frame checksum-1").checksum("WAL checksum").emit()?;
     f.u32("Frame checksum-2")
         .hex()
         .desc("aFrameCksum: the cumulative checksum of the last valid frame")

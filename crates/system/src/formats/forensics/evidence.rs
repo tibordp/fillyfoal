@@ -508,7 +508,7 @@ record! {
         units: u32 "Number of units",
         flags: u32 "Flags" .hex(),
         max_decompressed: u32 "Maximum decompressed record size",
-        crc: u32 "CRC-32" .hex(),
+        crc: u32 "CRC-32" .checksum("CRC-32"),
     }
 }
 

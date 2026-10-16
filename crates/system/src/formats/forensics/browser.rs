@@ -781,7 +781,7 @@ const SIMPLE_EOF_FLAGS: FlagTable = &[flag(1, "HAS_CRC32"), flag(2, "HAS_KEY_SHA
 fn simple_eof_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u64("Final magic").hex().emit()?;
     f.u32("Flags").flags(SIMPLE_EOF_FLAGS).emit()?;
-    f.u32("Data CRC-32").hex().emit()?;
+    f.u32("Data CRC-32").checksum("CRC-32").emit()?;
     f.u32("Stream size").emit()?;
     Ok(())
 }
@@ -1626,7 +1626,7 @@ async fn chrome_simple_index(cx: Cx, input: Input) -> Result<()> {
     let head = cx.block(file.sub(0, 40)).await?;
     let mut f = Fields::emitting(&cx, &head, LE);
     f.u32("Payload size").emit()?;
-    f.u32("CRC-32").hex().emit()?;
+    f.u32("CRC-32").checksum("CRC-32").emit()?;
     f.u64("Magic").hex().emit()?;
     let version = f.u32("Version").emit()?;
     let entries = f.u64("Number of entries").emit()?;

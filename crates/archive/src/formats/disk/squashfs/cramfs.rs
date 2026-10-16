@@ -56,7 +56,7 @@ record! {
         flags: u32 "Flags" .flags(CRAM_FLAGS),
         future: u32 "Reserved",
         signature: ascii[16] "Signature",
-        crc: u32 "CRC" .hex(),
+        crc: u32 "CRC" .checksum("CRC-32"),
         edition: u32 "Edition",
         blocks: u32 "Blocks",
         files: u32 "Files",

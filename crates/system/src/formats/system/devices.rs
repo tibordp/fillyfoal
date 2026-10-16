@@ -286,7 +286,7 @@ async fn trx(cx: Cx, input: Input) -> Result<()> {
     let mut f = Fields::emitting(&cx, &head, LE);
     f.ascii("Magic", 4).emit()?;
     let len = f.u32("Length").emit()?;
-    f.u32("CRC-32").hex().emit()?;
+    f.u32("CRC-32").checksum("CRC-32").emit()?;
     let flags = f.u16("Flags").hex().emit()?;
     let version = f.u16("Version").emit()?;
     let offsets = [

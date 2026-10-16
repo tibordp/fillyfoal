@@ -27,7 +27,7 @@ record! {
         str_size: u64 "str_size" .hex(),
         script_offset: u64 "script_offset" .hex(),
         timestamp: u64 "timestamp" .timestamp(),
-        checksum: u32 "checksum" .hex() .desc("Adler-32 of the body"),
+        checksum: u32 "checksum" .checksum("Adler-32") .desc("Adler-32 of the body"),
     }
 }
 

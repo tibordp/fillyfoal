@@ -901,8 +901,8 @@ async fn aps_gba_block(cx: Cx, span: Span) -> Result<()> {
     let head = cx.block(span.sub(0, 8)).await?;
     let mut f = Fields::emitting(&cx, &head, LE);
     f.u32("Offset").hex().emit()?;
-    f.u16("Source CRC-16").hex().emit()?;
-    f.u16("Target CRC-16").hex().emit()?;
+    f.u16("Source CRC-16").checksum("CRC-16").emit()?;
+    f.u16("Target CRC-16").checksum("CRC-16").emit()?;
     cx.emit(Node::new("XOR data").span(span.tail(8)));
     Ok(())
 }

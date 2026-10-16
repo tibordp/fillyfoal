@@ -762,7 +762,7 @@ record! {
         length: i32 "Batch length" .desc("Bytes after this field"),
         leader_epoch: i32 "Partition leader epoch",
         magic: u8 "Magic",
-        crc: u32 "CRC" .hex(),
+        crc: u32 "CRC" .checksum("CRC-32"),
         attributes: u16 "Attributes" .flags(BATCH_ATTRIBUTES),
         last_offset_delta: i32 "Last offset delta",
         base_timestamp: i64 "Base timestamp",

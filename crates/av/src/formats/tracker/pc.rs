@@ -142,7 +142,7 @@ async fn j2b(cx: Cx, input: Input) -> Result<()> {
     let mut f = Fields::emitting(&cx, &head, LE);
     f.bytes("Signature", 8).emit()?;
     f.u32("File length").emit()?;
-    f.u32("CRC32").hex().emit()?;
+    f.u32("CRC32").checksum("CRC-32").emit()?;
     let packed = f.u32("Compressed length").emit()?;
     let unpacked = f.u32("Uncompressed length").emit()?;
     cx.emit(content(

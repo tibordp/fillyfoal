@@ -760,7 +760,7 @@ fn md5(f: &mut Fields<'_>) -> Result<()> {
 pub fn overrides(f: &mut Fields<'_>, table: Option<&IdTable>) -> Result<()> {
     let small = f.u32("c8BitOverrides").emit()?;
     let large = f.u32("c32BitOverrides").emit()?;
-    f.u32("crc").hex().emit()?;
+    f.u32("crc").checksum("CRC-32").emit()?;
     let total = u64::from(small).saturating_add(large.into());
     if total.saturating_mul(5) > f.remaining() {
         return Err(Diagnostic::malformed("more overrides than bytes"));

@@ -549,7 +549,7 @@ fn verify_flags(f: &mut Fields<'_>) -> Result<()> {
 /// `DynamicArchiveHeader`'s own fields: the CRCs of the base archive's
 /// header and regions it was made against.
 fn dynamic(f: &mut Fields<'_>, layout: &Layout) -> Result<()> {
-    f.u32("_base_header_crc").hex().emit()?;
+    f.u32("_base_header_crc").checksum("CRC-32").emit()?;
     for (name, _) in layout.names() {
         f.u32("_base_region_crc")
             .hex()

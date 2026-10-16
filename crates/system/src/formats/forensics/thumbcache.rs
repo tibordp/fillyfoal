@@ -100,8 +100,8 @@ fn entry(f: &mut Fields<'_>, version: &u32) -> Result<(u32, u32, u32)> {
         f.u32("Height").emit()?;
     }
     f.u32("Unknown").emit()?;
-    f.u64("Data checksum").hex().emit()?;
-    f.u64("Header checksum").hex().emit()?;
+    f.u64("Data checksum").checksum("CRC-64").emit()?;
+    f.u64("Header checksum").checksum("CRC-64").emit()?;
     Ok((id, padding, data))
 }
 

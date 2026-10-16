@@ -392,7 +392,7 @@ record! {
         port_normal: u32 "Port 0x40001A4 setting (normal)" .hex(),
         port_key1: u32 "Port 0x40001A4 setting (KEY1)" .hex(),
         banner_offset: u32 "Icon/title offset" .hex(),
-        secure_crc: u16 "Secure area CRC" .hex(),
+        secure_crc: u16 "Secure area CRC" .checksum("CRC-16/MODBUS"),
         secure_timeout: u16 "Secure transfer timeout",
         arm9_autoload: u32 "ARM9 autoload" .hex(),
         arm7_autoload: u32 "ARM7 autoload" .hex(),
@@ -872,7 +872,7 @@ record! {
         refs: u32 "Section reference count",
         head_ref: u32 "Head shared page reference count address" .hex(),
         tail_ref: u32 "Tail shared page reference count address" .hex(),
-        digest: bytes[20] "SHA-1 digest",
+        digest: bytes[20] "SHA-1 digest" .checksum("SHA-1"),
     }
 }
 

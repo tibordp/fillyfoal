@@ -55,7 +55,7 @@ record! {
         hash: ascii[32] "Hash specification",
         payload: u32 "Payload offset (sectors)" .with(|&v, n| n.summary(format!("at {:#x}", u64::from(v).saturating_mul(512)))),
         key_bytes: u32 "Master key length (bytes)" .with(|&v, n| n.summary(format!("{} bits", u64::from(v).saturating_mul(8)))),
-        digest: bytes[20] "Master key digest",
+        digest: bytes[20] "Master key digest" .checksum("PBKDF2 key digest"),
         salt: bytes[32] "Master key digest salt",
         iterations: u32 "Master key digest iterations",
         uuid: ascii[40] "UUID",

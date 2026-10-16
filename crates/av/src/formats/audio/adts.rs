@@ -211,7 +211,7 @@ fn adts_layout(b: &mut Bits<'_>) -> Result<()> {
                 .with(|v, n| n.summary(format!("block {}: byte {v}", i.saturating_add(1))))
                 .emit()?;
         }
-        b.field("CRC", 16).hex().emit()?;
+        b.field("CRC", 16).checksum("CRC-16").emit()?;
     }
     Ok(())
 }

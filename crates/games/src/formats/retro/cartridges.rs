@@ -656,7 +656,10 @@ async fn intv_segment(cx: Cx, span: Span) -> Result<()> {
     f.u8("End address (high byte)").hex().emit()?;
     cx.emit(Node::new("Data (16-bit words)").span(span.sub(2, span.len.saturating_sub(4))));
     let crc = cx.block(span.sub(span.len.saturating_sub(2), 2)).await?;
-    Fields::emitting(&cx, &crc, BE).u16("CRC-16").hex().emit()?;
+    Fields::emitting(&cx, &crc, BE)
+        .u16("CRC-16")
+        .checksum("CRC-16")
+        .emit()?;
     Ok(())
 }
 

@@ -2085,7 +2085,7 @@ record! {
         opt_offset: u32 "opt_offset" .hex(),
         opt_length: u32 "opt_length" .hex(),
         flags: u32 "flags" .hex(),
-        checksum: u32 "checksum" .hex() .desc("Adler-32 of the dependencies and optimized data"),
+        checksum: u32 "checksum" .checksum("Adler-32") .desc("Adler-32 of the dependencies and optimized data"),
     }
 }
 

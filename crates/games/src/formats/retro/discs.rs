@@ -293,7 +293,7 @@ async fn chd_metadata(cx: Cx, (file, entries): (Span, Vec<u64>)) -> Result<()> {
 fn chd_v5_map_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u32("Compressed map length").emit()?;
     super::util::uint_be(f, "First block offset", 6)?;
-    f.u16("Map CRC-16").hex().emit()?;
+    f.u16("Map CRC-16").checksum("CRC-16").emit()?;
     f.u8("Bits for compressed length").emit()?;
     f.u8("Bits for self references").emit()?;
     f.u8("Bits for parent references").emit()?;
@@ -1957,7 +1957,7 @@ record! {
         iso_size: u64 "ISO size",
         daa_size: u64 "DAA size",
         hdata: bytes[16] "Format data",
-        crc: u32 "Header CRC" .hex(),
+        crc: u32 "Header CRC" .checksum("CRC-32"),
     }
 }
 
@@ -1965,7 +1965,9 @@ async fn daa(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let span = file.sub(0, DaaHeader::SIZE);
     let h: DaaHeader = read_record(&cx, span, LE).await?;
-    cx.emit(DaaHeader::node("Header", span, LE));
+    let check = crate::value::Check::new("CRC-32", h.crc)
+        .verify(crate::codec::crc32(&cx.read(file.sub(0, 0x48)).await?));
+    cx.emit(DaaHeader::checked_node("Header", span, LE, check.at(0x48)).check_diag(&check));
     let chunks = h.iso_size.div_ceil(u64::from(h.chunk_size.max(1)));
     let table = file.sub(
         h.chunk_table.into(),
@@ -1977,13 +1979,6 @@ async fn daa(cx: Cx, input: Input) -> Result<()> {
             .summary(plural(chunks, "chunk")),
     );
     cx.emit(Node::new("Compressed data").span(file.tail(h.data_offset.into())));
-    let computed = crate::codec::crc32(&cx.read(file.sub(0, 0x48)).await?);
-    if let Some(m) = crate::value::Check::new("CRC-32", h.crc)
-        .verify(computed)
-        .mismatch_text()
-    {
-        cx.diag(Diagnostic::warning(m));
-    }
     cx.annotate(format!(
         "{} v{}.{}, {} ISO in {chunks_chunk} of {}",
         if h.signature.starts_with("GBI") {

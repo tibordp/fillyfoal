@@ -498,7 +498,10 @@ fn mz_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
         .desc("Initial SS, relative to the load segment")
         .emit()?;
     f.u16("e_sp").hex().desc("Initial SP").emit()?;
-    f.u16("e_csum").hex().desc("Checksum (rarely set)").emit()?;
+    f.u16("e_csum")
+        .checksum("DOS header checksum")
+        .desc("Checksum (rarely set)")
+        .emit()?;
     f.u16("e_ip").hex().desc("Initial IP").emit()?;
     f.u16("e_cs")
         .hex()

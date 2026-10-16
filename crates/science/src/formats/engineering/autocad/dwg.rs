@@ -832,7 +832,7 @@ async fn encrypted_header(cx: Cx, span: Span) -> Result<()> {
     f.u32("Section map ID").emit()?;
     f.u32("Section page array size").emit()?;
     f.u32("Gap array size").emit()?;
-    f.u32("CRC-32").hex().emit()?;
+    f.u32("CRC-32").checksum("CRC-32").emit()?;
     Ok(())
 }
 

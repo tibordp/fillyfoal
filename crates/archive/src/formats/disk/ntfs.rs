@@ -1698,7 +1698,7 @@ record! {
     pub struct UpcaseInfo {
         length: u32 "Length",
         _filler: u32 "Reserved",
-        crc: u64 "CRC-64 of the table" .hex(),
+        crc: u64 "CRC-64 of the table" .checksum("CRC-64"),
         os_major: u32 "OS major version",
         os_minor: u32 "OS minor version",
         build: u32 "OS build",

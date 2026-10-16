@@ -726,7 +726,10 @@ fn dos_header(f: &mut Fields<'_>, file: &Span) -> Result<u32> {
         .emit()?;
     f.u16("e_ss").hex().desc("Initial (relative) SS").emit()?;
     f.u16("e_sp").hex().desc("Initial SP").emit()?;
-    f.u16("e_csum").hex().desc("Checksum").emit()?;
+    f.u16("e_csum")
+        .checksum("DOS header checksum")
+        .desc("Checksum")
+        .emit()?;
     f.u16("e_ip").hex().desc("Initial IP").emit()?;
     f.u16("e_cs").hex().desc("Initial (relative) CS").emit()?;
     f.u16("e_lfarlc")

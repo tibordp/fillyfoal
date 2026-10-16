@@ -62,7 +62,7 @@ record! {
         frame_bytes: u32 "Frame data bytes",
         frame_bytes_high: u32 "Frame data bytes (high)",
         terminating_bytes: u32 "Terminating data bytes",
-        md5: bytes[16] "MD5",
+        md5: bytes[16] "MD5" .checksum("MD5"),
     }
 }
 

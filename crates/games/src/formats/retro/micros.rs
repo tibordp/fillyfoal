@@ -1126,7 +1126,7 @@ async fn binhex(cx: Cx, input: Input) -> Result<()> {
     f.u16("Finder flags").flags(FINDER_FLAGS).emit()?;
     let data_len = u64::from(f.u32("Data fork length").emit()?);
     let rsrc_len = u64::from(f.u32("Resource fork length").emit()?);
-    let stored = f.u16("Header CRC").hex().emit()?;
+    let stored = f.u16("Header CRC").checksum("CRC-16/XMODEM").emit()?;
     let mut status = Vec::new();
     // The header CRC covers the header before it (nothing if truncated).
     let covered = hlen.saturating_sub(2);
