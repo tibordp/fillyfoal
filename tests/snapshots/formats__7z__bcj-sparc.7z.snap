@@ -22,7 +22,8 @@ expression: "common::explore(&display_name(&path), &data)"
           Data  [#1:0x0+0x2000]
   ▾ Folders — 1 folder  [0x20+0x1469]
     ▾ Folder 0 — LZMA2 + BCJ SPARC, 5.1 KiB → 8 KiB, 1 stream  [0x20+0x1469]
-        Coder 0: "LZMA2" — 1 in, 1 out
+      ▾ Coder 0: "LZMA2" — 1 in, 1 out
+          Dictionary size: 8192 — 8 KiB
         Coder 1: "BCJ SPARC" — 1 in, 1 out
         Unpacked size: 8192 — 8 KiB
         Streams: 1

@@ -858,7 +858,10 @@ expression: "common::explore(&display_name(&path), &data)"
             Line 919: "yankee lima romeo whiskey quebec delt"  [#1:0x1001b+0x25]
   ▾ Folders — 1 folder  [0x20+0x10040]
     ▾ Folder 0 — AES-256 + Copy, 64.1 KiB → 64.1 KiB, 1 stream  [0x20+0x10040]
-        Coder 0: "AES-256" — 1 in, 1 out
+      ▾ Coder 0: "AES-256" — 1 in, 1 out
+          Key derivation: 19 — 2^19 SHA-256 rounds
+          Salt — (none)
+          IV: 8b 69 eb f7 9c 7c 1d 99 0b e8 11 ef c8 0b 49 42  |.i...|........IB|
         Coder 1: "Copy" — 1 in, 1 out
         Unpacked size: 65600 — 64.1 KiB
         Streams: 1

@@ -22,8 +22,12 @@ expression: "common::explore(&display_name(&path), &data)"
           Data  [#1:0x0+0x2000]
   ▾ Folders — 1 folder  [0x20+0x1430]
     ▾ Folder 0 — AES-256 + LZMA2 + BCJ x86, 5.0 KiB → 8 KiB, 1 stream  [0x20+0x1430]
-        Coder 0: "AES-256" — 1 in, 1 out
-        Coder 1: "LZMA2" — 1 in, 1 out
+      ▾ Coder 0: "AES-256" — 1 in, 1 out
+          Key derivation: 19 — 2^19 SHA-256 rounds
+          Salt — (none)
+          IV: 5e a1 4d f7 1a 50 76 1a 05 bc 17 5f c6 99 51 8b  |^.M..Pv...._..Q.|
+      ▾ Coder 1: "LZMA2" — 1 in, 1 out
+          Dictionary size: 8192 — 8 KiB
         Coder 2: "BCJ x86" — 1 in, 1 out
         Unpacked size: 8192 — 8 KiB
         Streams: 1

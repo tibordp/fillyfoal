@@ -294,7 +294,9 @@ expression: "common::explore(&display_name(&path), &data)"
             Line 270: "golf kilo whiskey sierra oscar alpha papa juliet kilo alpha foxtrot tango india tango quebec xray juliet delta xray sierra whiskey gol"  [#1:0x4d9a+0x86]
   ▾ Folders — 1 folder  [0x20+0x975]
     ▾ Folder 0 — PPMd, 2.4 KiB → 19.5 KiB, 1 stream  [0x20+0x975]
-        Coder 0: "PPMd" — 1 in, 1 out
+      ▾ Coder 0: "PPMd" — 1 in, 1 out
+          Order: 6
+          Memory: 524288 — 512 KiB
         Unpacked size: 20000 — 19.5 KiB
         Streams: 1
       ▾ Data — UTF-8 text, LF line endings, 270 lines  [0x20+0x975]

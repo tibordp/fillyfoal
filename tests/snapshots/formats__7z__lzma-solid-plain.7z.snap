@@ -167,7 +167,9 @@ expression: "common::explore(&display_name(&path), &data)"
             Line 3: "charlie"  [#1:0x434+0x7]
   ▾ Folders — 1 folder  [0x20+0xa3]
     ▾ Folder 0 — LZMA, 163 bytes → 1.1 KiB, 3 streams  [0x20+0xa3]
-        Coder 0: "LZMA" — 1 in, 1 out
+      ▾ Coder 0: "LZMA" — 1 in, 1 out
+          lc/lp/pb: "3/0/2" — literal context, literal position and position bits
+          Dictionary size: 4096 — 4 KiB
         Unpacked size: 1084 — 1.1 KiB
         Streams: 3
       ▾ Data — UTF-8 text, LF line endings, 123 lines  [0x20+0xa3]

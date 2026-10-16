@@ -100,7 +100,9 @@ expression: "common::explore(&display_name(&path), &data)"
           Data  [#2:0x212+0xbc5]
   ▾ Folders — 1 folder  [0x20+0x507]
     ▾ Folder 0 — LZMA + BCJ x86, 1.1 KiB → 3.5 KiB, 2 streams  [0x20+0x487]
-        Coder 0: "LZMA" — 1 in, 1 out
+      ▾ Coder 0: "LZMA" — 1 in, 1 out
+          lc/lp/pb: "3/0/2" — literal context, literal position and position bits
+          Dictionary size: 4096 — 4 KiB
         Coder 1: "BCJ x86" — 1 in, 1 out
         Unpacked size: 3543 — 3.5 KiB
         Streams: 2

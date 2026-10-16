@@ -22,8 +22,10 @@ expression: "common::explore(&display_name(&path), &data)"
           Data  [#1:0x0+0xfa0]
   ▾ Folders — 1 folder  [0x20+0x94]
     ▾ Folder 0 — LZMA2 + Delta, 148 bytes → 3.9 KiB, 1 stream  [0x20+0x94]
-        Coder 0: "LZMA2" — 1 in, 1 out
-        Coder 1: "Delta" — 1 in, 1 out
+      ▾ Coder 0: "LZMA2" — 1 in, 1 out
+          Dictionary size: 4096 — 4 KiB
+      ▾ Coder 1: "Delta" — 1 in, 1 out
+          Distance: 4
         Unpacked size: 4000 — 3.9 KiB
         Streams: 1
       ▾ Data — 0xfa0 bytes decompressed  [0x20+0x94]

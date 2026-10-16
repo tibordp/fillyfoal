@@ -877,7 +877,10 @@ expression: "common::explore(&display_name(&path), &data)"
             Line 1: "small"  [#3:0x0+0x5]
   ▾ Folders — 2 folders  [0x20+0x100e6]
     ▾ Folder 0 — AES-256 + Copy, 64.1 KiB → 64.1 KiB, 1 stream  [0x20+0x10040]
-        Coder 0: "AES-256" — 1 in, 1 out
+      ▾ Coder 0: "AES-256" — 1 in, 1 out
+          Key derivation: 19 — 2^19 SHA-256 rounds
+          Salt — (none)
+          IV: d1 b2 64 84 14 db ab 11 f6 6c 27 1b cd f9 c3 bd  |..d......l'.....|
         Coder 1: "Copy" — 1 in, 1 out
         Unpacked size: 65600 — 64.1 KiB
         Streams: 1
@@ -1720,7 +1723,10 @@ expression: "common::explore(&display_name(&path), &data)"
           … 86 more children elided (86 nodes)
             Line 919: "yankee lima romeo whiskey quebec delt"  [#2:0x1001b+0x25]
     ▾ Folder 1 — AES-256 + Copy, 16 bytes → 6 bytes, 1 stream  [0x10060+0x10]
-        Coder 0: "AES-256" — 1 in, 1 out
+      ▾ Coder 0: "AES-256" — 1 in, 1 out
+          Key derivation: 19 — 2^19 SHA-256 rounds
+          Salt — (none)
+          IV: 09 86 45 59 4a fe 17 0d a0 bc 57 2d ca 0f 85 35  |..EYJ.....W-...5|
         Coder 1: "Copy" — 1 in, 1 out
         Unpacked size: 6 — 6 bytes
         Streams: 1

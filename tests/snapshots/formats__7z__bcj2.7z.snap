@@ -1122,9 +1122,14 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Symbol Table — 4 symbols  [#2:0x62b0+0x40]  (+24 nodes elided)
   ▾ Folders — 1 folder  [0x20+0x84f]
     ▾ Folder 0 — LZMA + LZMA + LZMA2 + BCJ2, 2.1 KiB → 24.8 KiB, 1 stream  [0x20+0x84f]
-        Coder 0: "LZMA" — 1 in, 1 out
-        Coder 1: "LZMA" — 1 in, 1 out
-        Coder 2: "LZMA2" — 1 in, 1 out
+      ▾ Coder 0: "LZMA" — 1 in, 1 out
+          lc/lp/pb: "0/2/2" — literal context, literal position and position bits
+          Dictionary size: 32768 — 32 KiB
+      ▾ Coder 1: "LZMA" — 1 in, 1 out
+          lc/lp/pb: "0/2/2" — literal context, literal position and position bits
+          Dictionary size: 32768 — 32 KiB
+      ▾ Coder 2: "LZMA2" — 1 in, 1 out
+          Dictionary size: 32768 — 32 KiB
         Coder 3: "BCJ2" — 4 in, 1 out
         Unpacked size: 25408 — 24.8 KiB
         Streams: 1

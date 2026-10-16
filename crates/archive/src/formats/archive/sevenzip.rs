@@ -1933,11 +1933,7 @@ async fn list_folders(cx: Cx, (input, header): (Input, Arc<Header>)) -> Result<(
             .coders
             .iter()
             .enumerate()
-            .map(|(j, c)| {
-                Node::new(format!("Coder {j}"))
-                    .value(text(method_name(&c.id)))
-                    .summary(format!("{} in, {} out", c.ins, c.outs))
-            })
+            .map(|(j, c)| coder_node(j, c))
             .collect();
         children.push(
             Node::new("Unpacked size")
@@ -1969,6 +1965,104 @@ async fn list_folders(cx: Cx, (input, header): (Input, Arc<Header>)) -> Result<(
         .await;
     }
     Ok(())
+}
+
+/// A folder's coder, with its properties.
+fn coder_node(j: usize, c: &Coder) -> Node {
+    let node = Node::new(format!("Coder {j}"))
+        .value(text(method_name(&c.id)))
+        .summary(format!("{} in, {} out", c.ins, c.outs));
+    let bytes = |name: &'static str, b: &[u8]| {
+        if b.is_empty() {
+            Node::new(name).summary("(none)")
+        } else {
+            Node::new(name).value(Value::Bytes(b.to_vec()))
+        }
+    };
+    let mut props = Vec::new();
+    match c.id.as_slice() {
+        id if id == AES_ID => match AesProps::parse(&c.props) {
+            Ok(p) => {
+                let rounds = if p.cycles == sevenzip::RAW_KEY {
+                    "none: the salt and password are the key".to_owned()
+                } else {
+                    format!("2^{} SHA-256 rounds", p.cycles)
+                };
+                props.push(
+                    Node::new("Key derivation")
+                        .value(uint(p.cycles, 8))
+                        .summary(rounds),
+                );
+                props.push(bytes("Salt", &p.salt));
+                props.push(Node::new("IV").value(Value::Bytes(p.iv.to_vec())));
+            }
+            Err(why) => return node.diag(Diagnostic::unsupported(why)),
+        },
+        [0x03, 0x01, 0x01] => {
+            if let Some(p) = c
+                .props
+                .first()
+                .and_then(|&b| crate::codec::lzma::Props::from_byte(b).ok())
+            {
+                props.push(
+                    Node::new("lc/lp/pb")
+                        .value(text(format!("{}/{}/{}", p.lc, p.lp, p.pb)))
+                        .summary("literal context, literal position and position bits"),
+                );
+            }
+            if let Some(d) = u32_le(&c.props, 1) {
+                props.push(dict_node(d));
+            }
+        }
+        [0x21] => {
+            if let Some(d) = c
+                .props
+                .first()
+                .and_then(|&p| crate::codec::lzma::lzma2_dict(p))
+            {
+                props.push(dict_node(d));
+            }
+        }
+        [0x03, 0x04, 0x01] => {
+            if let Some(&order) = c.props.first() {
+                props.push(Node::new("Order").value(uint(order, 8)));
+            }
+            if let Some(mem) = u32_le(&c.props, 1) {
+                props.push(
+                    Node::new("Memory")
+                        .value(uint(mem, 32))
+                        .summary(fmt::size(u64::from(mem))),
+                );
+            }
+        }
+        // Delta: the distance minus one.
+        [0x03] if c.props.len() == 1 => {
+            let d = c
+                .props
+                .first()
+                .map_or(1, |&d| u16::from(d).saturating_add(1));
+            props.push(Node::new("Distance").value(uint(d, 16)));
+        }
+        // A branch converter: where the code starts.
+        id if method_name(id).starts_with("BCJ ") && c.props.len() == 4 => {
+            if let Some(start) = u32_le(&c.props, 0) {
+                props.push(Node::new("Start offset").value(hex(start, 32)));
+            }
+        }
+        _ if !c.props.is_empty() => props.push(bytes("Properties", &c.props)),
+        _ => {}
+    }
+    if props.is_empty() {
+        node
+    } else {
+        node.lazy(emit_nodes, Arc::new(props))
+    }
+}
+
+fn dict_node(d: u32) -> Node {
+    Node::new("Dictionary size")
+        .value(uint(d, 32))
+        .summary(fmt::size(u64::from(d)))
 }
 
 /// The (size, CRC) of stream `i`.
