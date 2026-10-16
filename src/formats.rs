@@ -1022,6 +1022,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "archive")]
     &archive::rpm::FORMAT,
     #[cfg(feature = "archive")]
+    &archive::alpine::FORMAT,
+    #[cfg(feature = "archive")]
     &archive::sevenzip::FORMAT,
     #[cfg(feature = "archive")]
     &archive::rar::FORMAT,

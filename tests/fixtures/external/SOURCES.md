@@ -1405,3 +1405,19 @@ byte-reproducible (addresses and CRCs vary with the build); the archives hold on
 | `jvm-cds/jdk21-dynamic-on-static.jsa.raw.zst` | Temurin 21.0.12.1+1 | `-XX:SharedArchiveFile=static.jsa -XX:ArchiveClassesAtExit`: records the base archive's name; unchanged |
 | `jvm-cds/jdk21-static-prefix.jsa.raw.zst` | Temurin 21.0.12.1+1 | `-Xshare:dump` (9,109,504 bytes), cut to its first 73,728 bytes: the header, region table and the start of the `rw` region |
 | `jvm-cds/jdk17-static-prefix.jsa.raw.zst` | Temurin 17.0.20.1+1 | `-Xshare:dump` (6,488,064 bytes), cut to its first 73,728 bytes, as above |
+
+## Alpine APK v3 packages and index
+
+Written by apk-tools 3.0.7 (`alpine:edge` image, aarch64) with `tests/data/alpine-apk-v3/make.sh`
+(its header has the `docker run` line): a package of a shell script, a symlink and a text file
+with a post-install script, built in the container from a tree dated 2024-01-01. Not
+byte-reproducible (the signature key is generated per run; index hashes follow the package).
+Each was checked against `apk adbdump --format yaml` of the same file.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `alpine-apk-v3/hello-plain.apk` | apk-tools 3.0.7 | `apk mkpkg --compression none`: `ADB.pckg`, an ADB block and two DATA blocks; unchanged |
+| `alpine-apk-v3/hello.apk` | apk-tools 3.0.7 | `apk mkpkg` (default compression): `ADBd` and raw DEFLATE; unchanged |
+| `alpine-apk-v3/hello-deflate9.apk` | apk-tools 3.0.7 | `apk mkpkg --compression deflate:9`: `ADBc` with algorithm and level; unchanged |
+| `alpine-apk-v3/hello-signed.apk` | apk-tools 3.0.7 | `apk mkpkg --compression none --sign-key` with a throwaway RSA key: a SIG block (v0, SHA-512); unchanged |
+| `alpine-apk-v3/index.adb` | apk-tools 3.0.7 | `apk mkndx -d "fillyfoal demo"` over `hello.apk`: `indx` schema, `ADBd`-compressed; unchanged |

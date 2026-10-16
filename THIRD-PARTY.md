@@ -853,3 +853,6 @@ closely enough to credit:
 - HotSpot CDS archives (`crates/exec/src/formats/java/cds.rs`): header and region layouts from
   OpenJDK 17, 21 and 25 (`include/cds.h`, `cds/filemap.hpp`, `cds/dynamicArchive.hpp`;
   GPL-2.0 with the Classpath exception; facts only, no code copied).
+- Alpine APK v3 / ADB (`crates/archive/src/formats/archive/alpine.rs`): block, value and schema
+  layouts from apk-tools (`doc/apk-v3.5.scd`, `src/adb.h`, `src/apk_adb.c`, `src/adb_comp.c`;
+  GPL-2.0; facts only, no code copied).
