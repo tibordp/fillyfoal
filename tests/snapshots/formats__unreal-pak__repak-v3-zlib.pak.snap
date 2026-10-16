@@ -26,4 +26,4 @@ expression: "common::explore(&display_name(&path), &data)"
       Version: CompressionEncryption (0x3)  [0x4c8+0x4]
       Index offset: 0x37b  [0x4cc+0x8]
       Index size: 329  [0x4d4+0x8]
-      Index hash (SHA-1): 83 01 4e f3 3e db f4 d7 41 62 82 9b 33 5c c5 61 …  |..N.>...Ab..3\.a|  [0x4dc+0x14]
+      Index hash (SHA-1): 83014ef33edbf4d74162829b335cc561eef28fa1 (SHA-1, not checked)  [0x4dc+0x14]

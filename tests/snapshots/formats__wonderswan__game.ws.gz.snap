@@ -14,4 +14,4 @@ expression: "common::explore(&display_name(&path), &data)"
       Save type: SRAM 64 Kbit (0x1)  [0x1fffb+0x1]
       Flags: 0x4 [ROM_1_CYCLE]  [0x1fffc+0x1]
       Mapper / RTC: none (0x0)  [0x1fffd+0x1]
-      Checksum: 0x4a1  [0x1fffe+0x2]
+      Checksum: 0x4a1 (16-bit byte sum, valid)  [0x1fffe+0x2]

@@ -5,7 +5,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ▾ sonic.gg — GG International, product 12345, 32 KiB, checksum valid  [0x0+0x8000]
     Signature: "TMR SEGA"  [0x7ff0+0x8]
     Reserved: 00 00  |..|  [0x7ff8+0x2]
-    Checksum: 0xd4e  [0x7ffa+0x2]
+    Checksum: 0xd4e (16-bit byte sum, valid)  [0x7ffa+0x2]
     Product code: 12345  [0x7ffc+0x3]
     Version: 0  [0x7ffe+0x1]
     Region: GG International (0x7)  [0x7fff+0x1]

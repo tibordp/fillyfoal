@@ -6,6 +6,6 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Header  [0x0+0x10]
       Signature: "CART"  [0x0+0x4]
       Cartridge type: Standard 8 KiB (0x1)  [0x4+0x4]
-      Checksum: 0xff000  [0x8+0x4]
+      Checksum: 0xff000 (32-bit byte sum, valid)  [0x8+0x4]
       Unused: 0  [0xc+0x4]
     ROM — 8 KiB  [0x10+0x2000]

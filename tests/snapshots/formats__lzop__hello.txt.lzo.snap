@@ -14,8 +14,8 @@ expression: "common::explore(&display_name(&path), &data)"
     Modification time (high): 0  [0x1d+0x4]
     Name length: 9  [0x21+0x1]
     Original name: "hello.txt"  [0x22+0x9]
-    Header checksum: 0x0 — Adler-32  [0x2b+0x4]
-      ! warning: header checksum mismatch [0x2b+0x4]
+    Header checksum: 0x0 (Adler-32, mismatch)  [0x2b+0x4]
+      ! warning: Adler-32 mismatch: stored 0x0
     End of stream  [0x2f+0x4]
   ▾ Decompressed  [0x0+0x3f]
       ! malformed: LZO: lzop header checksum mismatch [0x0+0x3f]

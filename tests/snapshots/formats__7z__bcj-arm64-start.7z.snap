@@ -7,10 +7,10 @@ expression: "common::explore(&display_name(&path), &data)"
       Signature: 37 7a bc af 27 1c  |7z..'.|  [0x0+0x6]
       Major version: 0  [0x6+0x1]
       Minor version: 4  [0x7+0x1]
-      Start header CRC: 0x438af6d1  [0x8+0x4]
+      Start header CRC: 0x438af6d1 (CRC-32, valid)  [0x8+0x4]
       Next header offset: 0x146e  [0xc+0x8]
       Next header size: 106 — 106 bytes  [0x14+0x8]
-      Next header CRC: 0x843e5fef  [0x1c+0x4]
+      Next header CRC: 0x843e5fef (CRC-32, valid)  [0x1c+0x4]
   ▾ Files — 1 file  [0x148e+0x6a]
     ▾ code.bin — 8 KiB  [0x20+0x146e]
         Modification time: 2024-01-02 03:04:00 UTC
@@ -18,7 +18,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 8192 — 8 KiB
         Folder: 0
       ▾ Content — 0x2000 bytes decompressed  [0x20+0x146e]
-          CRC32: 0x308f5345 — valid
+          CRC32: 0x308f5345 (CRC-32, valid)
           Data  [#1:0x0+0x2000]
   ▾ Folders — 1 folder  [0x20+0x146e]
     ▾ Folder 0 — LZMA2 + BCJ ARM64, 5.1 KiB → 8 KiB, 1 stream  [0x20+0x146e]

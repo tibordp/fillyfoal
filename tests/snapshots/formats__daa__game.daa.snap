@@ -14,6 +14,6 @@ expression: "common::explore(&display_name(&path), &data)"
       ISO size: 196608  [0x28+0x8]
       DAA size: 156  [0x30+0x8]
       Format data: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x38+0x10]
-      Header CRC: 0x8d06c6de  [0x48+0x4]
+      Header CRC: 0x8d06c6de (CRC-32, valid)  [0x48+0x4]
     Chunk table — 3 chunks  [0x4c+0x10]
     Compressed data  [0x5c+0x40]

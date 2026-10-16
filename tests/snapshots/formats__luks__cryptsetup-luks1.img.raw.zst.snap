@@ -11,7 +11,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Hash specification: "sha256"  [0x48+0x20]
       Payload offset (sectors): 4096 — at 0x200000  [0x68+0x4]
       Master key length (bytes): 32 — 256 bits  [0x6c+0x4]
-      Master key digest: 99 3b 17 4b b7 17 a0 50 22 fa 55 d3 3f bd ce 80 …  |.;.K...P".U.?...|  [0x70+0x14]
+      Master key digest: 993b174bb717a05022fa55d33fbdce80bad240d8 (PBKDF2 key digest, not checked)  [0x70+0x14]
       Master key digest salt: a9 37 af 24 75 fc 89 b8 26 21 c5 26 03 6c 34 29 …  |.7.$u...&!.&.l4)|  [0x84+0x20]
       Master key digest iterations: 1337462  [0xa4+0x4]
       UUID: "11111111-2222-4333-8444-555555555555"  [0xa8+0x28]

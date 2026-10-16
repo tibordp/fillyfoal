@@ -10,5 +10,5 @@ expression: "common::explore(&display_name(&path), &data)"
       Start address (high byte): 0x50  [0x3+0x1]
       End address (high byte): 0x50  [0x4+0x1]
       Data (16-bit words)  [0x5+0x200]
-      CRC-16: 0x1234  [0x205+0x2]
+      CRC-16: 0x1234 (CRC-16, not checked)  [0x205+0x2]
     Memory attribute table and CRC  [0x207+0x12]

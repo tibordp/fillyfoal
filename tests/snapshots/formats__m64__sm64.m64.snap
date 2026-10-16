@@ -17,7 +17,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Controller flags: 0x1  [0x20+0x4]
     Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x24+0xa0]
     ROM name: "SUPER MARIO 64"  [0xc4+0x20]
-    ROM CRC-32: 0x635a2bff  [0xe4+0x4]
+    ROM CRC-32: 0x635a2bff (CRC-32, not checked)  [0xe4+0x4]
     ROM country code: 0x45  [0xe8+0x2]
     Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0xea+0x38]
     Video plugin: "Jabo Direct3D8"  [0x122+0x40]

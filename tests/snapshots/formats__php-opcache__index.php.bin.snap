@@ -10,6 +10,6 @@ expression: "common::explore(&display_name(&path), &data)"
       str_size: 0x20  [0x30+0x8]
       script_offset: 0x8  [0x38+0x8]
       timestamp: 2023-11-14 22:13:20 UTC  [0x40+0x8]
-      checksum: 0x27eb0245  [0x48+0x4]
+      checksum: 0x27eb0245 (Adler-32, not checked)  [0x48+0x4]
     Script — script entry at 0x8  [0x50+0x30]
     Interned Strings  [0x80+0x20]

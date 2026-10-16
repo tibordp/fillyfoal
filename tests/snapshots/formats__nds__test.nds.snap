@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ test.nds — Fillyfoal (AFFE01)  [0x0+0x1000]
   ▾ Header  [0x0+0x88]
@@ -34,7 +34,7 @@ expression: "common::explore(&name, &data)"
       Port 0x40001A4 setting (normal): 0x0  [0x60+0x4]
       Port 0x40001A4 setting (KEY1): 0x0  [0x64+0x4]
       Icon/title offset: 0x400  [0x68+0x4]
-      Secure area CRC: 0x0  [0x6c+0x2]
+      Secure area CRC: 0x0 (CRC-16/MODBUS, not checked)  [0x6c+0x2]
       Secure transfer timeout: 0  [0x6e+0x2]
       ARM9 autoload: 0x0  [0x70+0x4]
       ARM7 autoload: 0x0  [0x74+0x4]
@@ -42,7 +42,7 @@ expression: "common::explore(&name, &data)"
       Total used ROM size: 0x4000  [0x80+0x4]
       ROM header size: 0x4000  [0x84+0x4]
     Nintendo logo  [0xc0+0x9c]
-    Header CRC: 0x3185 — valid  [0x15e+0x2]
+    Header CRC: 0x3185 (CRC-16/MODBUS, valid)  [0x15e+0x2]
     ARM9 binary  [0x200+0x100]
     ARM7 binary  [0x300+0x80]
     File name table  [0x380+0x10]

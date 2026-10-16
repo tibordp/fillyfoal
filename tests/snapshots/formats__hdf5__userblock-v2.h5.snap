@@ -16,7 +16,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Superblock extension address: 0xffffffffffffffff — undefined  [0x214+0x8]
       End of file address: 0xa18  [0x21c+0x8]
       Root group object header address: 0x30  [0x224+0x8]
-      Checksum: 0x779b5b17 — lookup3, valid  [0x22c+0x4]
+      Checksum: 0x779b5b17 (lookup3, valid)  [0x22c+0x4]
   ▾ Root group: 0x30 — group, 2 members → 0x230+0x4
     ▾ Object header — version 2, 5 messages  [0x230+0x83]
         Signature: "OHDR"  [0x230+0x4]
@@ -60,7 +60,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Size: 47  [0x27d+0x2]
           Flags: 0x0 []  [0x27f+0x1]
           Padding: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x280+0x2f]
-        Checksum: 0x6e965597 — lookup3, valid  [0x2af+0x4]
+        Checksum: 0x6e965597 (lookup3, valid)  [0x2af+0x4]
     ▾ values: 0xb3 — dataset, float32 BE [6], contiguous  [0x253+0x15] → 0x2b3+0x4
       ▾ Object header — version 2, 5 messages  [0x2b3+0x10c]
           Signature: "OHDR"  [0x2b3+0x4]
@@ -110,7 +110,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Size: 176  [0x308+0x2]
             Flags: 0x0 []  [0x30a+0x1]
             Padding: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x30b+0xb0]
-          Checksum: 0x8428eb22 — lookup3, valid  [0x3bb+0x4]
+          Checksum: 0x8428eb22 (lookup3, valid)  [0x3bb+0x4]
       ▾ Data — 6 elements, 24 bytes  [0xa00+0x18]
           [0]: 0  [0xa00+0x4]
           [1]: 1  [0xa04+0x4]
@@ -143,4 +143,4 @@ expression: "common::explore(&display_name(&path), &data)"
             Size: 88  [0x3e3+0x2]
             Flags: 0x0 []  [0x3e5+0x1]
             Padding: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x3e6+0x58]
-          Checksum: 0xacc8b9c5 — lookup3, valid  [0x43e+0x4]
+          Checksum: 0xacc8b9c5 (lookup3, valid)  [0x43e+0x4]

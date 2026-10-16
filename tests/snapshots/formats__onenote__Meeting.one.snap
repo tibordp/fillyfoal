@@ -24,7 +24,7 @@ expression: "common::explore(&display_name(&path), &data)"
       fNeedsGarbageCollect: 0  [0x7e+0x1]
       fHasNoEmbeddedFileObjects: 0  [0x7f+0x1]
       guidAncestor: {00000000-0000-0000-0000-000000000000}  [0x80+0x10]
-      crcName: 0xe9cae6c3  [0x90+0x4]
+      crcName: 0xe9cae6c3 (CRC-32, not checked)  [0x90+0x4]
       fcrHashedChunkList: "fcrNil"  [0x94+0xc]
       fcrTransactionLog: "0xea0 + 0xac"  [0xa0+0xc] → 0xea0+0xac
       fcrFileNodeListRoot: "0xe38 + 0x68"  [0xac+0xc] → 0xe38+0x68

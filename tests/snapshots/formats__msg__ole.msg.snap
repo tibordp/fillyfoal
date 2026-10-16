@@ -1028,7 +1028,7 @@ expression: "common::explore(&display_name(&path), &data)"
           compSize: 71  [#15:0x0+0x4]
           rawSize: 88  [#15:0x4+0x4]
           compType: LZFu (compressed) (0x75465a4c)  [#15:0x8+0x4]
-          crc: 0xd0a33a9c  [#15:0xc+0x4]
+          crc: 0xd0a33a9c (CRC-32, not checked)  [#15:0xc+0x4]
       ▾ Decompressed RTF — RTF document  [#15:0x0+0x4b]
         ▾ Document text  [#16:0x0+0x58]
             Paragraph 1: "Hello, RTF body."  [#16:0x3c+0x17]

@@ -6,7 +6,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Signature: "Rar!" — RAR 1.5–4.x  [0x0+0x7]
   ▾ Archive header  [0x7+0xd]
     ▾ Header  [0x7+0xd]
-        Header CRC: 0x90cf — valid  [0x7+0x2]
+        Header CRC: 0x90cf (CRC-32 (low 16 bits), valid)  [0x7+0x2]
         Header type: archive header (0x73)  [0x9+0x1]
         Flags: 0x0 []  [0xa+0x2]
         Header size: 13  [0xc+0x2]
@@ -14,14 +14,14 @@ expression: "common::explore(&display_name(&path), &data)"
         Reserved 2: 0  [0x10+0x4]
   ▾ ppmd.txt — 5.0 KiB  [0x14+0x501]
     ▾ Header  [0x14+0x28]
-        Header CRC: 0xb0a0 — valid  [0x14+0x2]
+        Header CRC: 0xb0a0 (CRC-32 (low 16 bits), valid)  [0x14+0x2]
         Header type: file header (0x74)  [0x16+0x1]
         Flags: 0x8040 [DICT_256K | LONG_BLOCK]  [0x17+0x2]
         Header size: 40  [0x19+0x2]
         Packed size: 1241 — 1.2 KiB  [0x1b+0x4]
         Unpacked size: 5158 — 5.0 KiB  [0x1f+0x4]
         Host OS: Unix (0x3)  [0x23+0x1]
-        File CRC: 0x87d3971f  [0x24+0x4]
+        File CRC: 0x87d3971f (CRC-32, skipped: checked when decoded)  [0x24+0x4]
         Modification time (DOS): 2025-03-11 09:33:02 (local time)  [0x28+0x4]
         Version needed: 29 — 2.9  [0x2c+0x1]
         Method: best (0x35)  [0x2d+0x1]
@@ -29,7 +29,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Attributes: 0x81a4  [0x30+0x4]
         Name: "ppmd.txt"  [0x34+0x8]
     ▾ Content — UTF-8 text, LF line endings, 100 lines  [0x3c+0x4d9]
-        CRC32: 0x87d3971f — valid
+        CRC32: 0x87d3971f (CRC-32, valid)
         Encoding: "UTF-8"
         Line endings: "LF" — 99 LF, 0 CRLF, 0 CR
       ▾ Lines — 100 lines  [#1:0x0+0x1426]
@@ -135,7 +135,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Line 100: "of"  [#1:0x1424+0x2]
   ▾ End of archive  [0x515+0x7]
     ▾ Header  [0x515+0x7]
-        Header CRC: 0x3dc4 — valid  [0x515+0x2]
+        Header CRC: 0x3dc4 (CRC-32 (low 16 bits), valid)  [0x515+0x2]
         Header type: end of archive (0x7b)  [0x517+0x1]
         Flags: 0x4000  [0x518+0x2]
         Header size: 7  [0x51a+0x2]

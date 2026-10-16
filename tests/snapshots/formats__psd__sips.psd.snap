@@ -53,7 +53,7 @@ expression: "common::explore(&display_name(&path), &data)"
             PCS illuminant Y: 1  [0x92+0x4]
             PCS illuminant Z: 0.8249053955078125  [0x96+0x4]
             Profile creator: "HP  " — Hewlett-Packard  [0x9a+0x4]
-            Profile ID: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x9e+0x10]
+            Profile ID: 00000000000000000000000000000000 (MD5, skipped: zero: none recorded)  [0x9e+0x10]
             Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0xae+0x1c]
         ▾ Tag table — 17 tags  [0xca+0xd0]
           ▾ Copyright: "Copyright (c) 1998 Hewlett-Packard Company" — 'cprt', type 'text', 51 bytes  [0x19a+0x33]

@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ test.gbc — "FILLYCOLOR", MBC3+RAM+BATTERY  [0x0+0x400]
     Interrupt vectors and RST  [0x0+0x100]
@@ -17,6 +17,6 @@ expression: "common::explore(&name, &data)"
       Destination: Overseas (0x1)  [0x14a+0x1]
       Old licensee code: 0x33  [0x14b+0x1]
       Mask ROM version: 0  [0x14c+0x1]
-      Header checksum: 0xbe  [0x14d+0x1]
-      Global checksum: 0x0  [0x14e+0x2]
+      Header checksum: 0xbe (Game Boy header sum, valid)  [0x14d+0x1]
+      Global checksum: 0x0 (16-bit byte sum, not checked)  [0x14e+0x2]
     Program  [0x150+0x2b0]

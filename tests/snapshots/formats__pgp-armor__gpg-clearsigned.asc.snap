@@ -13,7 +13,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Line 2: "- a line starting with a dash"  [#1:0x1b+0x1d]
           Line 3: "From the last line"  [#1:0x39+0x12]
   ▾ PGP SIGNATURE  [0x81+0xe4]
-      Checksum: 0x782f7c  [0x143+0x6]
+      Checksum: 0x782f7c (CRC-24, valid)  [0x143+0x6]
     ▾ Packets — 119 bytes  [#2:0x0+0x77]
       ▾ Signature Packet — v4 text document, EdDSA (legacy) with SHA-512  [#2:0x0+0x77]
           Packet header: Signature (0x2) — old format, 117 body bytes  [#2:0x0+0x2]

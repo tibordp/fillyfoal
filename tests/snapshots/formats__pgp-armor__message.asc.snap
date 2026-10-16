@@ -6,7 +6,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ PGP MESSAGE  [0x0+0x90]
       Version: "fillyfoal test"  [0x1c+0x18]
       Comment: "not really encrypted"  [0x34+0x1e]
-      Checksum: 0xba010b  [0x70+0x6]
+      Checksum: 0xba010b (CRC-24, valid)  [0x70+0x6]
     ▾ Packets — 19 bytes  [#1:0x0+0x13]
       ▾ Literal Data Packet — "x.txt"  [#1:0x0+0x13]
           Packet header: Literal Data (0xb) — new format, 17 body bytes  [#1:0x0+0x2]

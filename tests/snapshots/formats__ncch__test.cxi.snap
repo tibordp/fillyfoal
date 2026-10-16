@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ test.cxi — CTR-P-FFOL (program 0004000000123400)  [0x0+0x400]
   ▾ Header  [0x0+0x200]
@@ -13,9 +13,9 @@ expression: "common::explore(&name, &data)"
       Seed check hash: 0x0  [0x114+0x4]
       Program ID: 0x4000000123400  [0x118+0x8]
       Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x120+0x10]
-      Logo region hash: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x130+0x20]
+      Logo region hash: 0000000000000000000000000000000000000000000000000000000000000000 (SHA-256, not checked)  [0x130+0x20]
       Product code: "CTR-P-FFOL"  [0x150+0x10]
-      Extended header hash: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x160+0x20]
+      Extended header hash: 0000000000000000000000000000000000000000000000000000000000000000 (SHA-256, not checked)  [0x160+0x20]
       Extended header size: 0x0  [0x180+0x4]
       Reserved: 0  [0x184+0x4]
       Flags: 00 00 00 00 00 00 00 00  |........|  [0x188+0x8]
@@ -31,6 +31,6 @@ expression: "common::explore(&name, &data)"
       RomFS size (MU): 0  [0x1b4+0x4]
       RomFS hash region size (MU): 0  [0x1b8+0x4]
       Reserved: 0  [0x1bc+0x4]
-      ExeFS superblock hash: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x1c0+0x20]
-      RomFS superblock hash: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x1e0+0x20]
+      ExeFS superblock hash: 0000000000000000000000000000000000000000000000000000000000000000 (SHA-256, not checked)  [0x1c0+0x20]
+      RomFS superblock hash: 0000000000000000000000000000000000000000000000000000000000000000 (SHA-256, not checked)  [0x1e0+0x20]
     ExeFS  [0x200+0x200]

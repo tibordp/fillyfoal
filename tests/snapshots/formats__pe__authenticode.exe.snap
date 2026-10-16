@@ -13,7 +13,7 @@ expression: "common::explore(&display_name(&path), &data)"
       e_maxalloc: 0  [0xc+0x2]
       e_ss: 0x0  [0xe+0x2]
       e_sp: 0x0  [0x10+0x2]
-      e_csum: 0x0  [0x12+0x2]
+      e_csum: 0x0 (DOS header checksum, not checked)  [0x12+0x2]
       e_ip: 0x0  [0x14+0x2]
       e_cs: 0x0  [0x16+0x2]
       e_lfarlc: 0x40  [0x18+0x2]
@@ -58,7 +58,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Win32VersionValue: 0  [0xc4+0x4]
         SizeOfImage: 0x4000  [0xc8+0x4]
         SizeOfHeaders: 0x400  [0xcc+0x4]
-        CheckSum: 0x5288 — valid  [0xd0+0x4]
+        CheckSum: 0x5288 (PE image checksum, valid)  [0xd0+0x4]
         Subsystem: WINDOWS_CUI (0x3)  [0xd4+0x2]
         DllCharacteristics: 0x8160 [HIGH_ENTROPY_VA | DYNAMIC_BASE | NX_COMPAT | TERMINAL_SERVER_AWARE]  [0xd6+0x2]
         SizeOfStackReserve: 0x100000  [0xd8+0x8]
@@ -449,8 +449,8 @@ expression: "common::explore(&display_name(&path), &data)"
                                         s: ef 1e e1 56 1f 56 01 6e fa 9a cb be 1d c2 7b 5e …  |...V.V.n......{^| — INTEGER, 256-bit  [0x110f+0x23]
       ▾ Image Hash
           Signed digest: "825717E2CE440674B011EC28A15987FD5C56D3D61669AAB75DA0A00E339F3030" — sha256  [0xa8d+0x20]
-          Computed digest: "825717E2CE440674B011EC28A15987FD5C56D3D61669AAB75DA0A00E339F3030" — matches
-          Signer's messageDigest: "3BC5CF68F460AB5B7E1608B9479EF864FCBE5F637EC2EF25647051D15524B899" — matches SpcIndirectDataContent  [0xa45+0x68]
+          Image digest: 825717e2ce440674b011ec28a15987fd5c56d3d61669aab75da0a00e339f3030 (SHA-256, valid)
+          Signer's messageDigest: 3bc5cf68f460ab5b7e1608b9479ef864fcbe5f637ec2ef25647051d15524b899 (SHA-256, valid)  [0xa45+0x68]
       Padding — 6 bytes  [0x1132+0x6]
   ▾ Debug Directory — REPRO  [0x600+0x1c]
     ▾ REPRO — no data  [0x600+0x1c]

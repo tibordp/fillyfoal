@@ -3,14 +3,14 @@ source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ multi.uimg — U-Boot image "multi-file": Linux ARM multi-file, none, 52 bytes  [0x0+0x74]
-  ▾ Header — multi-file, header CRC valid  [0x0+0x40]
+  ▾ Header — multi-file  [0x0+0x40]
       Magic: 0x27051956  [0x0+0x4]
-      Header CRC: 0xbf54996  [0x4+0x4]
+      Header CRC: 0xbf54996 (CRC-32, valid)  [0x4+0x4]
       Creation time: 2024-01-02 03:04:00 UTC  [0x8+0x4]
       Data size: 52 — 52 bytes  [0xc+0x4]
       Load address: 0x80008000  [0x10+0x4]
       Entry point: 0x80008000  [0x14+0x4]
-      Data CRC: 0x5875fe3c  [0x18+0x4]
+      Data CRC: 0x5875fe3c (CRC-32, valid)  [0x18+0x4]
       Operating system: Linux (0x5)  [0x1c+0x1]
       Architecture: ARM (0x2)  [0x1d+0x1]
       Image type: multi-file (0x4)  [0x1e+0x1]
@@ -32,7 +32,7 @@ expression: "common::explore(&display_name(&path), &data)"
           XFL: best compression (0x2)  [0x60+0x1]
           OS: unknown (0xff)  [0x61+0x1]
       ▾ Trailer  [0x6b+0x8]
-          CRC32: 0x60fc07e  [0x6b+0x4]
+          CRC32: 0x60fc07e (CRC-32, valid)  [0x6b+0x4]
           ISIZE: 7  [0x6f+0x4]
       ▾ Content — UTF-8 text, LF line endings, 1 line  [0x62+0x11]
           Encoding: "UTF-8"

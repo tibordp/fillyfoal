@@ -28,7 +28,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Original size: 75 — 75 bytes  [#1:0x10+0x8]
           Part number: 1  [#1:0x18+0x2]
           Reference count: 1  [#1:0x1a+0x4]
-          SHA-1: da a9 96 31 13 11 ca 81 89 e4 81 a0 8f df 14 1f …  |...1............|  [#1:0x1e+0x14]
+          SHA-1: daa996311311ca8189e481a08fdf141f9f2fa159 (SHA-1, not checked)  [#1:0x1e+0x14]
         ▾ Data — UTF-8 text, CRLF line endings, 3 lines  [0xd0+0x4b]
             Encoding: "UTF-8"
             Line endings: "CRLF" — 0 LF, 3 CRLF, 0 CR
@@ -44,7 +44,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Original size: 128 — 128 bytes  [#1:0x42+0x8]
           Part number: 1  [#1:0x4a+0x2]
           Reference count: 1  [#1:0x4c+0x4]
-          SHA-1: 26 4a de 5e 71 b4 d1 78 66 33 e0 fb a5 c1 49 98 …  |&J.^q..xf3....I.|  [#1:0x50+0x14]
+          SHA-1: 264ade5e71b4d1786633e0fba5c14998726ebb9c (SHA-1, not checked)  [#1:0x50+0x14]
         ▾ Image metadata — security data and directory tree  [0x301+0x80]
           ▾ Security data — 0 descriptors  [#2:0x0+0x0]
               Total length: 0  [#2:0x0+0x4]

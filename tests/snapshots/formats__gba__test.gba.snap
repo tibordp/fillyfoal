@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ test.gba — "FILLYFOAL" (AFFE01)  [0x0+0x200]
   ▾ Cartridge header  [0x0+0xc0]
@@ -14,6 +14,6 @@ expression: "common::explore(&name, &data)"
       Device type: 0  [0xb4+0x1]
       Reserved: 00 00 00 00 00 00 00  |.......|  [0xb5+0x7]
       Software version: 0  [0xbc+0x1]
-      Complement check: 0x3c  [0xbd+0x1]
+      Complement check: 0x3c (GBA complement, valid)  [0xbd+0x1]
       Reserved: 00 00  |..|  [0xbe+0x2]
     Program  [0xc0+0x140]

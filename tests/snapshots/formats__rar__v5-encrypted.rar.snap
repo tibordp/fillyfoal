@@ -6,7 +6,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Signature: "Rar!" — RAR 5.0  [0x0+0x8]
   ▾ Main archive header  [0x8+0xf]
     ▾ Header  [0x8+0xf]
-        Header CRC32: 0xe5b59233 — valid  [0x8+0x4]
+        Header CRC32: 0xe5b59233 (CRC-32, valid)  [0x8+0x4]
         Header size: 10  [0xc+0x1]
         Header type: main archive header (0x1)  [0xd+0x1]
         Header flags: 0x5 [EXTRA_AREA | SKIP_IF_UNKNOWN]  [0xe+0x1]
@@ -18,7 +18,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Data: 01 80 80 00  |....|  [0x13+0x4]
   ▾ ascii.txt — 12 bytes  [0x17+0x76]
     ▾ Header  [0x17+0x56]
-        Header CRC32: 0xd8421245 — valid  [0x17+0x4]
+        Header CRC32: 0xd8421245 (CRC-32, valid)  [0x17+0x4]
         Header size: 81  [0x1b+0x1]
         Header type: file header (0x2)  [0x1c+0x1]
         Header flags: 0x3 [EXTRA_AREA | DATA_AREA]  [0x1d+0x1]
@@ -28,7 +28,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Unpacked size: 12 — 12 bytes  [0x22+0x2]
         Attributes: 0x81a4  [0x24+0x3]
         Modification time: 2024-01-02 03:04:05 UTC  [0x27+0x4]
-        Data CRC32: 0x597d6495  [0x2b+0x4]
+        Data CRC32: 0x597d6495 (CRC-32, skipped: checked when decoded)  [0x2b+0x4]
         Compression information: 0x180 — version 0, method 3, dictionary 128 KiB  [0x2f+0x2]
         Host OS: Unix (0x1)  [0x31+0x1]
         Name length: 9  [0x32+0x1]
@@ -43,14 +43,14 @@ expression: "common::explore(&display_name(&path), &data)"
             IV: 22 50 45 25 5e c6 56 eb 8c eb 1c fb cb 1e e8 3f  |"PE%^.V........?|  [0x51+0x10]
             Password check value: 76 4b 7b 07 78 30 04 d9 69 d7 b3 c4  |vK{.x0..i...|  [0x61+0xc]
     ▾ Content — UTF-8 text, LF line endings, 1 line  [0x6d+0x20]
-        CRC32: 0x597d6495 — valid
+        CRC32: 0x597d6495 (CRC-32 (HMAC-tweaked), valid)
         Encoding: "UTF-8"
         Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
       ▾ Lines — 1 line  [#2:0x0+0xc]
           Line 1: "plain ascii"  [#2:0x0+0xb]
   ▾ End of archive  [0x8d+0x8]
     ▾ Header  [0x8d+0x8]
-        Header CRC32: 0x5156771d — valid  [0x8d+0x4]
+        Header CRC32: 0x5156771d (CRC-32, valid)  [0x8d+0x4]
         Header size: 3  [0x91+0x1]
         Header type: end of archive (0x5)  [0x92+0x1]
         Header flags: 0x4 [SKIP_IF_UNKNOWN]  [0x93+0x1]

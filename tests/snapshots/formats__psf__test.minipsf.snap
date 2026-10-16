@@ -1,13 +1,13 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ test.minipsf — "Fillyfoal Prelude", PlayStation rip  [0x0+0x67]
     Magic: "PSF"  [0x0+0x3]
     Platform: PlayStation (0x1)  [0x3+0x1]
     Reserved area size: 0  [0x4+0x4]
     Compressed program size: 30  [0x8+0x4]
-    Program CRC-32: 0x63fbc679  [0xc+0x4]
+    Program CRC-32: 0x63fbc679 (CRC-32, not checked)  [0xc+0x4]
   ▾ Program — entry 0x0,   [0x10+0x1e]
       Magic: "PS-X EXE"  [#1:0x0+0x8]
       Reserved: 00 00 00 00 00 00 00 00  |........|  [#1:0x8+0x8]

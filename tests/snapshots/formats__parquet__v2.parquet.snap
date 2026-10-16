@@ -32,7 +32,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   Stop: 0x0  [0x4d+0x1]
                 Stop: 0x0  [0x4e+0x1]
               Stop: 0x0  [0x4f+0x1]
-            CRC check: 0x6ba9df7d — CRC-32 of the page data matches the header
+            CRC check: 0x6ba9df7d (CRC-32, valid)
           ▾ Levels — uncompressed  [0x50+0x2]
             ▾ Definition levels  [0x50+0x2]
                 RLE run: 1 — repeated 20 times  [0x50+0x2]
@@ -82,7 +82,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   Stop: 0x0  [0xc0+0x1]
                 Stop: 0x0  [0xc1+0x1]
               Stop: 0x0  [0xc2+0x1]
-            CRC check: 0xfc5c85e1 — CRC-32 of the page data matches the header
+            CRC check: 0xfc5c85e1 (CRC-32, valid)
           ▾ Levels — uncompressed  [0xc3+0x2]
             ▾ Definition levels  [0xc3+0x2]
                 RLE run: 1 — repeated 20 times  [0xc3+0x2]
@@ -134,7 +134,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   Stop: 0x0  [0x139+0x1]
                 Stop: 0x0  [0x13a+0x1]
               Stop: 0x0  [0x13b+0x1]
-            CRC check: 0x335da89 — CRC-32 of the page data matches the header
+            CRC check: 0x335da89 (CRC-32, valid)
           ▾ Levels — uncompressed  [0x13c+0x2]
             ▾ Definition levels  [0x13c+0x2]
                 RLE run: 1 — repeated 20 times  [0x13c+0x2]
@@ -184,7 +184,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   Stop: 0x0  [0x1a4+0x1]
                 Stop: 0x0  [0x1a5+0x1]
               Stop: 0x0  [0x1a6+0x1]
-            CRC check: 0x6cdcbaea — CRC-32 of the page data matches the header
+            CRC check: 0x6cdcbaea (CRC-32, valid)
           ▾ Levels — uncompressed  [0x1a7+0x4]
             ▾ Definition levels  [0x1a7+0x4]
                 Bit-packed run: "1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0" — 24 values  [0x1a7+0x4]
@@ -223,7 +223,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   Stop: 0x0  [0x211+0x1]
                 Stop: 0x0  [0x212+0x1]
               Stop: 0x0  [0x213+0x1]
-            CRC check: 0x4f894693 — CRC-32 of the page data matches the header
+            CRC check: 0x4f894693 (CRC-32, valid)
           ▾ Levels — uncompressed  [0x214+0x8]
             ▾ Repetition levels  [0x214+0x6]
                 Bit-packed run: "0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 0 1 …" — 40 values  [0x214+0x6]

@@ -307,6 +307,6 @@ expression: "common::explore(&display_name(&path), &data)"
         99 bottles of beer on the wall: "1 bottles of beer on the wall"  [#1:0x13d8+0x1d]
          99 bottles of beer.: " 1 bottles of beer."  [#1:0x13f6+0x13]
   ▾ Trailer  [0x12d+0x14]
-      CRC32: 0x322887ce  [0x12d+0x4]
+      CRC32: 0x322887ce (CRC-32, not checked)  [0x12d+0x4]
       Data size: 5130 — 5.0 KiB  [0x131+0x8]
       Member size: 321 — 321 bytes  [0x139+0x8]

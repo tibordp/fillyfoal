@@ -5,7 +5,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ▾ jdk17-static-prefix.jsa — static CDS archive, version 11 (JDK 17); OpenJDK 64-Bit Server VM (17.0.20.1+1) for linux-aarch64 JRE (17.0.20.1+1)  [0x0+0x12000]
   ▾ Header  [0x0+0xc]
       _magic: static archive (0xf00baba2)  [0x0+0x4]
-      _crc: 0x23e46cda — matches  [0x4+0x4]
+      _crc: 0x23e46cda (CRC-32, valid)  [0x4+0x4]
       _version: 11 — JDK 17  [0x8+0x4]
   ▾ Regions — 7 regions  [0x10+0x1f8]
     ▾ rw — read-write metadata, 2077552 bytes at 0x10000  [0x10+0x48]

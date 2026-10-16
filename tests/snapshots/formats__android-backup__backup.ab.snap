@@ -16,7 +16,7 @@ expression: "common::explore(&display_name(&path), &data)"
           GID: 0  [#1:0x74+0x8]
           Size: 29 — 29 bytes  [#1:0x7c+0xc]
           Modification time: 2023-11-14 22:13:20 UTC  [#1:0x88+0xc]
-          Checksum: 0o13251 — valid  [#1:0x94+0x8]
+          Checksum: 0o13251 (byte sum, valid)  [#1:0x94+0x8]
           Type: regular file (0x30)  [#1:0x9c+0x1]
           Link name: ""  [#1:0x9d+0x64]
           Magic: "ustar"  [#1:0x101+0x6]

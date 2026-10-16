@@ -7,7 +7,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Page 0 — heap, LSN 0/C65930, 9 items, 7.5 KiB free  [0x0+0x2000]
       ▾ Page header  [0x0+0x18]
           LSN: 0xc65930 — 0/C65930  [0x0+0x8]
-          Checksum: 0xa69b — valid  [0x8+0x2]
+          Checksum: 0xa69b (page checksum, valid)  [0x8+0x2]
           Flags: 0x5 [HAS_FREE_LINES | ALL_VISIBLE]  [0xa+0x2]
           Lower: 0x3c  [0xc+0x2]
           Upper: 0x1e58  [0xe+0x2]

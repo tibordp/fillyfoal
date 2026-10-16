@@ -116,4 +116,4 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ activity — local 1  [0xfd+0x7]
         timestamp: 2021-09-08 01:46:50 UTC  [0xfe+0x4]
         num_sessions: 1  [0x102+0x2]
-    CRC: 0x1b6a — valid  [0x104+0x2]
+    CRC: 0x1b6a (FIT CRC-16, valid)  [0x104+0x2]

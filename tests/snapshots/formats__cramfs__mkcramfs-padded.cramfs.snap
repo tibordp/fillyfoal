@@ -10,7 +10,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Flags: 0x3 [FSID_VERSION_2 | SORTED_DIRS]  [0x208+0x4]
       Reserved: 0  [0x20c+0x4]
       Signature: "Compressed ROMFS"  [0x210+0x10]
-      CRC: 0xe34e649  [0x220+0x4]
+      CRC: 0xe34e649 (CRC-32, not checked)  [0x220+0x4]
       Edition: 0  [0x224+0x4]
       Blocks: 24  [0x228+0x4]
       Files: 23  [0x22c+0x4]

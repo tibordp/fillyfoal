@@ -24,11 +24,11 @@ expression: "common::explore(&display_name(&path), &data)"
       Blocks per checksum: 8  [0x64+0x4]
       Reseed checksum: false  [0x68+0x1]
       Bitmap mode: BIT (0x1)  [0x69+0x1]
-    Header checksum: 0x3851f5c7  [0x6a+0x4]
+    Header checksum: 0x3851f5c7 (CRC-32 (not inverted), valid)  [0x6a+0x4]
   ▾ Bitmap — 1024 blocks, a bit per block  [0x6e+0x80]
       Blocks in use: 30
-      Computed checksum: 0xbc66015f  [0xee+0x4]
-    Bitmap checksum: 0xbc66015f  [0xee+0x4]
+      Bitmap checksum: 0xbc66015f (CRC-32 (not inverted), valid)  [0xee+0x4]
+    Bitmap checksum: 0xbc66015f (CRC-32 (not inverted), skipped: checked when the bitmap is expanded)  [0xee+0x4]
   ▾ Volume — ext2 filesystem "fillyfoal", 1 MiB, 1024-byte blocks, 16 inodes (3 free)
     ▾ Superblock  [#1:0x400+0x400]
         Inodes: 16  [#1:0x400+0x4]
@@ -1047,14 +1047,14 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Blocks — runs of blocks in use and free
       Blocks 0–7 — in use, 8 KiB  [0xf2+0x2000] → #1:0x0+0x2000
     ▾ Check value: 0xdfb2f11d — after stored block 7  [0x20f2+0x4]
-        Computed: 0xdfb2f11d
+        Checked: 0xdfb2f11d (CRC-32 (not inverted), valid)
       Blocks 8–15 — in use, 8 KiB  [0x20f6+0x2000] → #1:0x2000+0x2000
     ▾ Check value: 0xd2c15c8c — after stored block 15  [0x40f6+0x4]
-        Computed: 0xd2c15c8c
+        Checked: 0xd2c15c8c (CRC-32 (not inverted), valid)
       Blocks 16–23 — in use, 8 KiB  [0x40fa+0x2000] → #1:0x4000+0x2000
     ▾ Check value: 0x9fd458b — after stored block 23  [0x60fa+0x4]
-        Computed: 0x9fd458b
+        Checked: 0x9fd458b (CRC-32 (not inverted), valid)
       Blocks 24–29 — in use, 6 KiB  [0x60fe+0x1800] → #1:0x6000+0x1800
     ▾ Check value: 0xa879563c — after stored block 29  [0x78fe+0x4]
-        Computed: 0xa879563c
+        Checked: 0xa879563c (CRC-32 (not inverted), valid)
       Blocks 30–1023 — free, 994 KiB → #1:0x7800+0xf8800

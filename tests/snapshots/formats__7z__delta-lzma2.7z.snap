@@ -7,10 +7,10 @@ expression: "common::explore(&display_name(&path), &data)"
       Signature: 37 7a bc af 27 1c  |7z..'.|  [0x0+0x6]
       Major version: 0  [0x6+0x1]
       Minor version: 4  [0x7+0x1]
-      Start header CRC: 0xef9b9ca1  [0x8+0x4]
+      Start header CRC: 0xef9b9ca1 (CRC-32, valid)  [0x8+0x4]
       Next header offset: 0x94  [0xc+0x8]
       Next header size: 90 — 90 bytes  [0x14+0x8]
-      Next header CRC: 0x666be92b  [0x1c+0x4]
+      Next header CRC: 0x666be92b (CRC-32, valid)  [0x1c+0x4]
   ▾ Files — 1 file  [0xb4+0x5a]
     ▾ ramp.pcm — 3.9 KiB  [0x20+0x94]
         Modification time: 2026-10-06 12:28:45.5516270 UTC
@@ -18,7 +18,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 4000 — 3.9 KiB
         Folder: 0
       ▾ Content — 0xfa0 bytes decompressed  [0x20+0x94]
-          CRC32: 0xa1180571 — valid
+          CRC32: 0xa1180571 (CRC-32, valid)
           Data  [#1:0x0+0xfa0]
   ▾ Folders — 1 folder  [0x20+0x94]
     ▾ Folder 0 — LZMA2 + Delta, 148 bytes → 3.9 KiB, 1 stream  [0x20+0x94]

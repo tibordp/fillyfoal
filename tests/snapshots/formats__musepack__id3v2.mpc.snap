@@ -27,7 +27,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Stream header — 44100 Hz, 2 ch, 0:01  [0xf9+0xe]
       Key: "SH"  [0xf9+0x2]
       Size: 14  [0xfb+0x1]
-      CRC: 0x12345678  [0xfc+0x4]
+      CRC: 0x12345678 (CRC-32, not checked)  [0xfc+0x4]
       Stream version: 8  [0x100+0x1]
       Sample count: 44100  [0x101+0x3]
       Beginning silence: 0  [0x104+0x1]

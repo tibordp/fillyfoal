@@ -384,7 +384,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Indexes — 2 indexes
     ▾ shop.stock.PRIMARY — index 158, root page 4, (id)  [0x1000+0x400]
       ▾ FIL header  [0x1000+0x26]
-          Checksum: 0x6194b525 — CRC-32C (compressed page), valid  [0x1000+0x4]
+          Checksum: 0x6194b525 (CRC-32C, valid)  [0x1000+0x4]
           Page number: 4  [0x1004+0x4]
           Previous page: 0xffffffff — none  [0x1008+0x4]
           Next page: 0xffffffff — none  [0x100c+0x4]
@@ -412,7 +412,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Field description — 4 bytes, variable or NULL, variable or NULL
         ▾ Decompressed — 0x2 bytes decompressed  [0x105e+0x10]
             Data  [#7:0x0+0x2]
-          Adler-32 — valid  [0x106a+0x4]
+          Adler-32: 0x16000c (Adler-32, valid)  [0x106a+0x4]
       ▾ Modification log — 2 entries  [0x106e+0xd]
           Entry 0 — heap no 2: 6 bytes  [0x106e+0x6]
           Entry 1 — heap no 3: 6 bytes  [0x1074+0x6]
@@ -447,7 +447,7 @@ expression: "common::explore(&display_name(&path), &data)"
               id: 1  [#6:0x7e+0x4]
             ▾ Child page: 10  [#6:0x82+0x4] → 0x2800+0x400
               ▾ FIL header  [0x2800+0x26]
-                  Checksum: 0x8d5d57da — CRC-32C (compressed page), valid  [0x2800+0x4]
+                  Checksum: 0x8d5d57da (CRC-32C, valid)  [0x2800+0x4]
                   Page number: 10  [0x2804+0x4]
                   Previous page: 0xffffffff — none  [0x2808+0x4]
                   Next page: 11  [0x280c+0x4] → 0x2c00+0x400
@@ -475,7 +475,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   Field description — 4 bytes, 6 bytes, 7 bytes, variable, 4 bytes or NULL, long variable or NULL
                 ▾ Decompressed — 0x310 bytes decompressed  [0x285e+0x150]
                     Data  [#9:0x0+0x310]
-                  Adler-32 — valid  [0x29aa+0x4]
+                  Adler-32: 0x92bdab3a (Adler-32, valid)  [0x29aa+0x4]
               ▾ Modification log — 1 entry  [0x29ae+0x17]
                   Entry 0 — heap no 39: 22 bytes  [0x29ae+0x16]
                 Free space — 1 byte  [0x29c5+0x1]
@@ -1057,7 +1057,7 @@ expression: "common::explore(&display_name(&path), &data)"
                         Space ID: 0  [#8:0x383+0x4]
                       ▾ First page: 0  [#8:0x387+0x4] → 0x0+0x400
                         ▾ FIL header  [0x0+0x26]
-                            Checksum: 0x5ac9d7f2 — CRC-32C (compressed page), valid  [0x0+0x4]
+                            Checksum: 0x5ac9d7f2 (CRC-32C, valid)  [0x0+0x4]
                             Page number: 0  [0x4+0x4]
                             Server version: 90701 — 9.7.1  [0x8+0x4]
                             Space version: 1  [0xc+0x4]
@@ -1088,7 +1088,7 @@ expression: "common::explore(&display_name(&path), &data)"
                           SDI version: 1  [0x389+0x4]
                         ▾ SDI root page: 3  [0x38d+0x4] → 0xc00+0x400
                           ▾ FIL header  [0xc00+0x26]
-                              Checksum: 0x17756342 — CRC-32C (compressed page), valid  [0xc00+0x4]
+                              Checksum: 0x17756342 (CRC-32C, valid)  [0xc00+0x4]
                               Page number: 3  [0xc04+0x4]
                               Previous page: 0xffffffff — none  [0xc08+0x4]
                               Next page: 0xffffffff — none  [0xc0c+0x4]
@@ -1116,7 +1116,7 @@ expression: "common::explore(&display_name(&path), &data)"
                               Field description — 12 bytes, 6 bytes, 7 bytes, 8 bytes, long variable
                             ▾ Decompressed — 0x4 bytes decompressed  [0xc5e+0x12]
                                 Data  [#10:0x0+0x4]
-                              Adler-32 — valid  [0xc6c+0x4]
+                              Adler-32: 0x1e800c5 (Adler-32, valid)  [0xc6c+0x4]
                           ▾ Modification log — 2 entries  [0xc70+0x12c]
                               Entry 0 — heap no 2: 276 bytes  [0xc70+0x114]
                               Entry 1 — heap no 3: 23 bytes  [0xd84+0x17]
@@ -1158,7 +1158,7 @@ expression: "common::explore(&display_name(&path), &data)"
                                     Space ID: 2  [#1:0x1c5+0x4]
                                   ▾ First page: 7  [#1:0x1c9+0x4] → 0x1c00+0x400
                                     ▾ FIL header  [0x1c00+0x26]
-                                        Checksum: 0x41bb2249 — CRC-32C (compressed page), valid  [0x1c00+0x4]
+                                        Checksum: 0x41bb2249 (CRC-32C, valid)  [0x1c00+0x4]
                                         Page number: 7  [0x1c04+0x4]
                                         Previous page: 0xffffffff — unused  [0x1c08+0x4]
                                         Next page: 8  [0x1c0c+0x4] → 0x2000+0x400
@@ -1573,7 +1573,7 @@ expression: "common::explore(&display_name(&path), &data)"
               id: 19  [#6:0x8c+0x4]
             ▾ Child page: 11  [#6:0x90+0x4] → 0x2c00+0x400
               ▾ FIL header  [0x2c00+0x26]
-                  Checksum: 0x533673ae — CRC-32C (compressed page), valid  [0x2c00+0x4]
+                  Checksum: 0x533673ae (CRC-32C, valid)  [0x2c00+0x4]
                   Page number: 11  [0x2c04+0x4]
                   Previous page: 10  [0x2c08+0x4] → 0x2800+0x400
                   Next page: 0xffffffff — none  [0x2c0c+0x4]
@@ -1601,7 +1601,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   Field description — 4 bytes, 6 bytes, 7 bytes, variable, 4 bytes or NULL, long variable or NULL
                 ▾ Decompressed — 0x195 bytes decompressed  [0x2c5e+0xd2]
                     Data  [#12:0x0+0x195]
-                  Adler-32 — valid  [0x2d2c+0x4]
+                  Adler-32: 0x91eb5ac0 (Adler-32, valid)  [0x2d2c+0x4]
               ▾ Modification log — 6 entries  [0x2d30+0xa2]
                   Entry 0 — heap no 21: 20 bytes  [0x2d30+0x14]
                   Entry 1 — heap no 22: 28 bytes  [0x2d44+0x1c]
@@ -1684,7 +1684,7 @@ expression: "common::explore(&display_name(&path), &data)"
                         Space ID: 2  [#11:0xc4+0x4]
                       ▾ First page: 9  [#11:0xc8+0x4] → 0x2400+0x400
                         ▾ FIL header  [0x2400+0x26]
-                            Checksum: 0xb794ed91 — CRC-32C (compressed page), valid  [0x2400+0x4]
+                            Checksum: 0xb794ed91 (CRC-32C, valid)  [0x2400+0x4]
                             Page number: 9  [0x2404+0x4]
                             Previous page: 0xffffffff — unused  [0x2408+0x4]
                             Next page: 0xffffffff — unused  [0x240c+0x4]
@@ -1955,7 +1955,7 @@ expression: "common::explore(&display_name(&path), &data)"
                         Space ID: 2  [#11:0x3ea+0x4]
                       ▾ First page: 12  [#11:0x3ee+0x4] → 0x3000+0x400
                         ▾ FIL header  [0x3000+0x26]
-                            Checksum: 0xc44acf70 — CRC-32C (compressed page), valid  [0x3000+0x4]
+                            Checksum: 0xc44acf70 (CRC-32C, valid)  [0x3000+0x4]
                             Page number: 12  [0x3004+0x4]
                             Previous page: 0xffffffff — unused  [0x3008+0x4]
                             Next page: 0xffffffff — unused  [0x300c+0x4]
@@ -2055,7 +2055,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Slot 1: 0x70  [#6:0x3ff4+0x2] → #6:0x70+0x1
     ▾ shop.stock.by_name — index 159, root page 5, (name)  [0x1400+0x400]
       ▾ FIL header  [0x1400+0x26]
-          Checksum: 0xdb6fd822 — CRC-32C (compressed page), valid  [0x1400+0x4]
+          Checksum: 0xdb6fd822 (CRC-32C, valid)  [0x1400+0x4]
           Page number: 5  [0x1404+0x4]
           Previous page: 0xffffffff — none  [0x1408+0x4]
           Next page: 0xffffffff — none  [0x140c+0x4]
@@ -2083,7 +2083,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Field description — variable, 4 bytes
         ▾ Decompressed — 0x3 bytes decompressed  [0x145e+0x11]
             Data  [#18:0x0+0x3]
-          Adler-32 — valid  [0x146b+0x4]
+          Adler-32: 0x18000b (Adler-32, valid)  [0x146b+0x4]
       ▾ Modification log — 44 entries  [0x146f+0x296]
           Entry 0 — heap no 2: 15 bytes  [0x146f+0xf]
           Entry 1 — heap no 3: 15 bytes  [0x147e+0xf]
@@ -2592,7 +2592,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Pages — 15 pages of 1 KiB  [0x0+0x3c00]
     ▾ Page 0 — file space header  [0x0+0x400]
       ▾ FIL header  [0x0+0x26]
-          Checksum: 0x5ac9d7f2 — CRC-32C (compressed page), valid  [0x0+0x4]
+          Checksum: 0x5ac9d7f2 (CRC-32C, valid)  [0x0+0x4]
           Page number: 0  [0x4+0x4]
           Server version: 90701 — 9.7.1  [0x8+0x4]
           Space version: 1  [0xc+0x4]
@@ -2623,7 +2623,7 @@ expression: "common::explore(&display_name(&path), &data)"
         SDI version: 1  [0x389+0x4]
       ▾ SDI root page: 3  [0x38d+0x4] → 0xc00+0x400
         ▾ FIL header  [0xc00+0x26]
-            Checksum: 0x17756342 — CRC-32C (compressed page), valid  [0xc00+0x4]
+            Checksum: 0x17756342 (CRC-32C, valid)  [0xc00+0x4]
             Page number: 3  [0xc04+0x4]
             Previous page: 0xffffffff — none  [0xc08+0x4]
             Next page: 0xffffffff — none  [0xc0c+0x4]
@@ -2651,7 +2651,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Field description — 12 bytes, 6 bytes, 7 bytes, 8 bytes, long variable
           ▾ Decompressed — 0x4 bytes decompressed  [0xc5e+0x12]
               Data  [#10:0x0+0x4]
-            Adler-32 — valid  [0xc6c+0x4]
+            Adler-32: 0x1e800c5 (Adler-32, valid)  [0xc6c+0x4]
         ▾ Modification log — 2 entries  [0xc70+0x12c]
             Entry 0 — heap no 2: 276 bytes  [0xc70+0x114]
             Entry 1 — heap no 3: 23 bytes  [0xd84+0x17]
@@ -2693,7 +2693,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   Space ID: 2  [#1:0x1c5+0x4]
                 ▾ First page: 7  [#1:0x1c9+0x4] → 0x1c00+0x400
                   ▾ FIL header  [0x1c00+0x26]
-                      Checksum: 0x41bb2249 — CRC-32C (compressed page), valid  [0x1c00+0x4]
+                      Checksum: 0x41bb2249 (CRC-32C, valid)  [0x1c00+0x4]
                       Page number: 7  [0x1c04+0x4]
                       Previous page: 0xffffffff — unused  [0x1c08+0x4]
                       Next page: 8  [0x1c0c+0x4] → 0x2000+0x400
@@ -3075,7 +3075,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Unused  [0x391+0x6f]
     ▾ Page 1 — change buffer bitmap  [0x400+0x400]
       ▾ FIL header  [0x400+0x26]
-          Checksum: 0xaf79ae00 — CRC-32C (compressed page), valid  [0x400+0x4]
+          Checksum: 0xaf79ae00 (CRC-32C, valid)  [0x400+0x4]
           Page number: 1  [0x404+0x4]
           Previous page: 0x0 — unused  [0x408+0x4]
           Next page: 0x0 — unused  [0x40c+0x4]
@@ -3088,7 +3088,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Unused  [0x65e+0x1a2]
     ▾ Page 2 — file segment inodes  [0x800+0x400]
       ▾ FIL header  [0x800+0x26]
-          Checksum: 0x78abd699 — CRC-32C (compressed page), valid  [0x800+0x4]
+          Checksum: 0x78abd699 (CRC-32C, valid)  [0x800+0x4]
           Page number: 2  [0x804+0x4]
           Previous page: 0x0 — unused  [0x808+0x4]
           Next page: 0x0 — unused  [0x80c+0x4]
@@ -3141,7 +3141,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Unused  [0xbf2+0xe]
     ▾ Page 3 — SDI index: dictionary, leaf, 2 records  [0xc00+0x400]
       ▾ FIL header  [0xc00+0x26]
-          Checksum: 0x17756342 — CRC-32C (compressed page), valid  [0xc00+0x4]
+          Checksum: 0x17756342 (CRC-32C, valid)  [0xc00+0x4]
           Page number: 3  [0xc04+0x4]
           Previous page: 0xffffffff — none  [0xc08+0x4]
           Next page: 0xffffffff — none  [0xc0c+0x4]
@@ -3169,7 +3169,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Field description — 12 bytes, 6 bytes, 7 bytes, 8 bytes, long variable
         ▾ Decompressed — 0x4 bytes decompressed  [0xc5e+0x12]
             Data  [#10:0x0+0x4]
-          Adler-32 — valid  [0xc6c+0x4]
+          Adler-32: 0x1e800c5 (Adler-32, valid)  [0xc6c+0x4]
       ▾ Modification log — 2 entries  [0xc70+0x12c]
           Entry 0 — heap no 2: 276 bytes  [0xc70+0x114]
           Entry 1 — heap no 3: 23 bytes  [0xd84+0x17]
@@ -3211,7 +3211,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Space ID: 2  [#1:0x1c5+0x4]
               ▾ First page: 7  [#1:0x1c9+0x4] → 0x1c00+0x400
                 ▾ FIL header  [0x1c00+0x26]
-                    Checksum: 0x41bb2249 — CRC-32C (compressed page), valid  [0x1c00+0x4]
+                    Checksum: 0x41bb2249 (CRC-32C, valid)  [0x1c00+0x4]
                     Page number: 7  [0x1c04+0x4]
                     Previous page: 0xffffffff — unused  [0x1c08+0x4]
                     Next page: 8  [0x1c0c+0x4] → 0x2000+0x400
@@ -3592,7 +3592,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Slot 1: 0x70  [#1:0x3ff4+0x2] → #1:0x70+0x1
     ▾ Page 4 — B-tree index: shop.stock.PRIMARY, level 1, 2 records  [0x1000+0x400]
       ▾ FIL header  [0x1000+0x26]
-          Checksum: 0x6194b525 — CRC-32C (compressed page), valid  [0x1000+0x4]
+          Checksum: 0x6194b525 (CRC-32C, valid)  [0x1000+0x4]
           Page number: 4  [0x1004+0x4]
           Previous page: 0xffffffff — none  [0x1008+0x4]
           Next page: 0xffffffff — none  [0x100c+0x4]
@@ -3620,7 +3620,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Field description — 4 bytes, variable or NULL, variable or NULL
         ▾ Decompressed — 0x2 bytes decompressed  [0x105e+0x10]
             Data  [#7:0x0+0x2]
-          Adler-32 — valid  [0x106a+0x4]
+          Adler-32: 0x16000c (Adler-32, valid)  [0x106a+0x4]
       ▾ Modification log — 2 entries  [0x106e+0xd]
           Entry 0 — heap no 2: 6 bytes  [0x106e+0x6]
           Entry 1 — heap no 3: 6 bytes  [0x1074+0x6]
@@ -3655,7 +3655,7 @@ expression: "common::explore(&display_name(&path), &data)"
               id: 1  [#6:0x7e+0x4]
             ▾ Child page: 10  [#6:0x82+0x4] → 0x2800+0x400
               ▾ FIL header  [0x2800+0x26]
-                  Checksum: 0x8d5d57da — CRC-32C (compressed page), valid  [0x2800+0x4]
+                  Checksum: 0x8d5d57da (CRC-32C, valid)  [0x2800+0x4]
                   Page number: 10  [0x2804+0x4]
                   Previous page: 0xffffffff — none  [0x2808+0x4]
                   Next page: 11  [0x280c+0x4] → 0x2c00+0x400
@@ -3683,7 +3683,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   Field description — 4 bytes, 6 bytes, 7 bytes, variable, 4 bytes or NULL, long variable or NULL
                 ▾ Decompressed — 0x310 bytes decompressed  [0x285e+0x150]
                     Data  [#9:0x0+0x310]
-                  Adler-32 — valid  [0x29aa+0x4]
+                  Adler-32: 0x92bdab3a (Adler-32, valid)  [0x29aa+0x4]
               ▾ Modification log — 1 entry  [0x29ae+0x17]
                   Entry 0 — heap no 39: 22 bytes  [0x29ae+0x16]
                 Free space — 1 byte  [0x29c5+0x1]
@@ -3905,4 +3905,6 @@ expression: "common::explore(&display_name(&path), &data)"
                       Heap number: 39  [#8:0x633+0x2]
                       Status: ordinary (0x0)  [#8:0x634+0x1]
                       Next record: -958 — record at 0x279  [#8:0x635+0x2] → #8:0x279+0x1
-… snapshot cut at 256 KiB: 1366 more lines
+                      id: 13  [#8:0x637+0x4]
+                      DB_TRX_ID: 2078  [#8:0x63b+0x6]
+… snapshot cut at 256 KiB: 1364 more lines

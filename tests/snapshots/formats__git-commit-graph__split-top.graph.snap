@@ -370,4 +370,4 @@ expression: "common::explore(&display_name(&path), &data)"
         [5]: 1d 87 7a  |..z| — 3 bytes, 13 of 24 bits set  [0x631+0x3]
   ▾ BASE (Base graphs list) — 1 base graph  [0x634+0x14]
       [0]: "331866137316c7da81fd25bb19591402d62f399b" — graph-331866137316c7da81fd25bb19591402d62f399b.graph  [0x634+0x14]
-    Checksum: "e13092a6721f5c572ec8636c3d94db2cf18bf7e5" — valid SHA-1  [0x648+0x14]
+    Checksum: e13092a6721f5c572ec8636c3d94db2cf18bf7e5 (SHA-1, valid)  [0x648+0x14]

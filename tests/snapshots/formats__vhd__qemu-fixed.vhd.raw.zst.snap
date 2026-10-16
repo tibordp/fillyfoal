@@ -154,7 +154,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Heads: 4  [0x4403a+0x1]
       Sectors per track: 17 — CHS capacity 272 KiB  [0x4403b+0x1]
       Disk type: fixed (0x2)  [0x4403c+0x4]
-      Checksum: 0xffffe7e4  [0x44040+0x4]
+      Checksum: 0xffffe7e4 (ones' complement byte sum, valid)  [0x44040+0x4]
       Unique id: "2c17bddd-9b7f-4141-b479-2355c171eb38"  [0x44044+0x10]
       Saved state: 0 — no  [0x44054+0x1]
       Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x44055+0x1ab]

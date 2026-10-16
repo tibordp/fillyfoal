@@ -48,7 +48,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Page bitmap: aa fe ff ff ff ff ff ff ff ff ff ff ff ff ff ff  |................| — 59 of 64 pages free  [0xae+0x10]
         Unused  [0x2896+0x1762]
         LSN (low 32 bits): 0xb5ef  [0x3ff8+0x4]
-        Checksum (CRC-32C): 0x55942c43 — valid  [0x3ffc+0x4]
+        Checksum: 0x55942c43 (CRC-32C, valid)  [0x3ffc+0x4]
     ▾ Page 1 — change buffer bitmap  [0x4000+0x4000]
       ▾ FIL header  [0x4000+0x26]
           Key version: 0x0  [0x4000+0x4]
@@ -63,7 +63,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Change buffer bitmap — 4 bits for each of 16,384 pages  [0x405e+0x2000]
         Unused  [0x605e+0x1f9a]
         LSN (low 32 bits): 0xb0ed  [0x7ff8+0x4]
-        Checksum (CRC-32C): 0x2bb63a3a — valid  [0x7ffc+0x4]
+        Checksum: 0x2bb63a3a (CRC-32C, valid)  [0x7ffc+0x4]
     ▾ Page 2 — file segment inodes  [0x8000+0x4000]
       ▾ FIL header  [0x8000+0x26]
           Key version: 0x0  [0x8000+0x4]
@@ -110,7 +110,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Fragment pages — none  [0x82b2+0x80]
         Unused  [0xbff2+0x6]
         LSN (low 32 bits): 0xb5ef  [0xbff8+0x4]
-        Checksum (CRC-32C): 0x4461f3af — valid  [0xbffc+0x4]
+        Checksum: 0x4461f3af (CRC-32C, valid)  [0xbffc+0x4]
     ▾ Page 3 — B-tree index: index 25, leaf, 4 records  [0xc000+0x4000]
       ▾ FIL header  [0xc000+0x26]
           Key version: 0x0  [0xc000+0x4]
@@ -184,7 +184,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Slot 0: 0x63  [0xfff6+0x2] → 0xc063+0x1
           Slot 1: 0x70  [0xfff4+0x2] → 0xc070+0x1
         LSN (low 32 bits): 0xc4e9  [0xfff8+0x4]
-        Checksum (CRC-32C): 0x2072f587 — valid  [0xfffc+0x4]
+        Checksum: 0x2072f587 (CRC-32C, valid)  [0xfffc+0x4]
     ▾ Page 4 — B-tree index: index 26, leaf, 4 records  [0x10000+0x4000]
       ▾ FIL header  [0x10000+0x26]
           Key version: 0x0  [0x10000+0x4]
@@ -258,4 +258,4 @@ expression: "common::explore(&display_name(&path), &data)"
           Slot 0: 0x63  [0x13ff6+0x2] → 0x10063+0x1
           Slot 1: 0x70  [0x13ff4+0x2] → 0x10070+0x1
         LSN (low 32 bits): 0xbd27  [0x13ff8+0x4]
-        Checksum (CRC-32C): 0xa1e72787 — valid  [0x13ffc+0x4]
+        Checksum: 0xa1e72787 (CRC-32C, valid)  [0x13ffc+0x4]

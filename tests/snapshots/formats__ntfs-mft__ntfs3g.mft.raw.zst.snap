@@ -1364,7 +1364,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ Value  [#11:0x170+0x20]
           Length: 32  [#11:0x170+0x4]
           Reserved: 0  [#11:0x174+0x4]
-          CRC-64 of the table: 0xdadc7e776b1b690c  [#11:0x178+0x8]
+          CRC-64 of the table: 0xdadc7e776b1b690c (CRC-64, not checked)  [#11:0x178+0x8]
           OS major version: 0  [#11:0x180+0x4]
           OS minor version: 0  [#11:0x184+0x4]
           OS build: 0  [#11:0x188+0x4]

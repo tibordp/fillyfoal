@@ -46,7 +46,7 @@ expression: "common::explore(&display_name(&path), &data)"
         XFL: best compression (0x2)  [#2:0x8+0x1]
         OS: unknown (0xff)  [#2:0x9+0x1]
     ▾ Trailer  [#2:0x28+0x8]
-        CRC32: 0x8508b871  [#2:0x28+0x4]
+        CRC32: 0x8508b871 (CRC-32, valid)  [#2:0x28+0x4]
         ISIZE: 100  [#2:0x2c+0x4]
     ▾ Members — 1 member  [#2:0x0+0x8000]
       ▾ Member 1 — 0x1e compressed bytes, 100 bytes uncompressed  [#2:0x0+0x30]
@@ -59,7 +59,7 @@ expression: "common::explore(&display_name(&path), &data)"
             OS: unknown (0xff)  [#2:0x9+0x1]
           Compressed data — DEFLATE, 100 bytes uncompressed  [#2:0xa+0x1e]
         ▾ Trailer  [#2:0x28+0x8]
-            CRC32: 0x8508b871  [#2:0x28+0x4]
+            CRC32: 0x8508b871 (CRC-32, valid)  [#2:0x28+0x4]
             ISIZE: 100  [#2:0x2c+0x4]
         Trailing data — 32.0 KiB  [#2:0x30+0x7fd0]
           ! note: not another gzip member

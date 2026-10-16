@@ -10,7 +10,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Superblock size: 1024  [0x408+0x2]
       Flags: 0x0  [0x40a+0x2]
       CRC seed: 0x12345678  [0x40c+0x4]
-      Checksum: 0x65e35714  [0x410+0x4]
+      Checksum: 0x65e35714 (CRC-32 (seeded), valid)  [0x410+0x4]
       Block size (log2 - 10): 2  [0x414+0x4]
       Segments: 4  [0x418+0x8]
       Device size: 16384 — 16 KiB  [0x420+0x8]

@@ -24,7 +24,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Transaction reserved bytes: 0  [0x32+0x2]
         Transaction descriptor  [0x34+0x6]
         Ghost records: 0  [0x3a+0x2]
-        Checksum or torn bits: 0x2eed8de8 — checksum, valid  [0x3c+0x4]
+        Checksum or torn bits: 0x2eed8de8 (page checksum, valid)  [0x3c+0x4]
         Reserved  [0x40+0x20]
     ▾ File header record — 59 properties  [0x60+0x488]
         Binding ID: {61e8bed4-0ed9-4ad1-98a0-d511d46acf3f}  [0xea+0x10]

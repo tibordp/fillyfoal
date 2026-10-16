@@ -5,7 +5,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ▾ tiny.j2b — Jazz Jackrabbit 2 music, 26 → 20 bytes  [0x0+0x32]
     Signature: 4d 55 53 45 de ad be af  |MUSE....|  [0x0+0x8]
     File length: 50  [0x8+0x4]
-    CRC32: 0x0  [0xc+0x4]
+    CRC32: 0x0 (CRC-32, not checked)  [0xc+0x4]
     Compressed length: 26  [0x10+0x4]
     Uncompressed length: 20  [0x14+0x4]
   ▾ Module (RIFF AM) — RIFF AM  [0x18+0x1a]

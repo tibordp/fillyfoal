@@ -14,7 +14,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Key type: "ssh-ed25519"  [0x5e+0xf]
       Public key: 35 8f 73 84 7d 45 52 89 4c ee 71 ec d0 d2 55 51 …  |5.s.}ER.L.q...UQ| — 32 bytes  [0x6d+0x24]
   ▾ Private section (encrypted) — 152 bytes, chacha20-poly1305@openssh.com  [0x91+0xac]
-      Authentication tag — verified  [0x12d+0x10]
+      Authentication tag: c6bed40716b94f579bb8a2eab6832db7 (Poly1305 tag, valid)  [0x12d+0x10]
       Check 1: 0x489fc19a  [#1:0x0+0x4]
       Check 2: 0x489fc19a  [#1:0x4+0x4]
     ▾ chacha@fillyfoal — ssh-ed25519  [#1:0x8+0x8b]

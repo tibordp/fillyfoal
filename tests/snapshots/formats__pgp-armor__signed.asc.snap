@@ -13,7 +13,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Line 2: "-- dash escaped"  [#1:0x7+0xf]
           Line 3: "Bye."  [#1:0x17+0x4]
   ▾ PGP SIGNATURE  [0x4f+0x7a]
-      Checksum: 0x74849  [0xa7+0x6]
+      Checksum: 0x74849 (CRC-24, valid)  [0xa7+0x6]
     ▾ Packets — 40 bytes  [#2:0x0+0x28]
         Trailing data  [#2:0x0+0x28]
           ! malformed: not an OpenPGP packet header

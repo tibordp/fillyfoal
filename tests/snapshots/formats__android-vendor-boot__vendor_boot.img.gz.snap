@@ -31,7 +31,7 @@ expression: "common::explore(&display_name(&path), &data)"
           XFL: best compression (0x2)  [0x1008+0x1]
           OS: unknown (0xff)  [0x1009+0x1]
       ▾ Trailer  [0x1056+0x8]
-          CRC32: 0x95967339  [0x1056+0x4]
+          CRC32: 0x95967339 (CRC-32, valid)  [0x1056+0x4]
           ISIZE: 256  [0x105a+0x4]
       ▾ Content — cpio archive (SVR4 newc), 1 entry, 8 bytes  [0x100a+0x54]
         ▾ init.tiny.rc — 8 bytes  [#1:0x0+0x84]

@@ -5,7 +5,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ▾ jdk21-dynamic.jsa — dynamic CDS archive, version 18 (JDK 21), on the default base archive; OpenJDK 64-Bit Server VM (21.0.12.1+1-LTS) for linux-aarch64 JRE (21.0.12.1+1-LTS)  [0x0+0x40000]
   ▾ Generic header  [0x0+0x18]
       _magic: dynamic archive (0xf00baba8)  [0x0+0x4]
-      _crc: 0x70a72c9 — matches  [0x4+0x4]
+      _crc: 0x70a72c9 (CRC-32, valid)  [0x4+0x4]
       _version: 18 — JDK 21  [0x8+0x4]
       _header_size: 808  [0xc+0x4]
       _base_archive_name_offset: 0x0  [0x10+0x4]
@@ -27,7 +27,7 @@ expression: "common::explore(&display_name(&path), &data)"
         _ptrmap_size_in_bits: 0  [0x60+0x8]
         _mapped_base: 0x0  [0x68+0x8]
     ▾ rw data — read-write metadata, 51008 bytes  [0x10000+0xc740]
-        CRC-32: 0x5871ca98 — matches the region's contents
+        CRC-32: 0x5871ca98 (CRC-32, valid)
         Contents — 51008 bytes  [0x10000+0xc740]
     ▾ ro — read-only metadata, 62496 bytes at 0x20000  [0x70+0x58]
         _crc: 0xa91f260  [0x70+0x4]
@@ -45,7 +45,7 @@ expression: "common::explore(&display_name(&path), &data)"
         _ptrmap_size_in_bits: 0  [0xb8+0x8]
         _mapped_base: 0x0  [0xc0+0x8]
     ▾ ro data — read-only metadata, 62496 bytes  [0x20000+0xf420]
-        CRC-32: 0xa91f260 — matches the region's contents
+        CRC-32: 0xa91f260 (CRC-32, valid)
         Contents — 62496 bytes  [0x20000+0xf420]
     ▾ bm — relocation bitmaps, 2008 bytes at 0x30000  [0xc8+0x58]
         _crc: 0xe422212a  [0xc8+0x4]
@@ -63,7 +63,7 @@ expression: "common::explore(&display_name(&path), &data)"
         _ptrmap_size_in_bits: 0  [0x110+0x8]
         _mapped_base: 0x0  [0x118+0x8]
     ▾ bm data — relocation bitmaps, 2008 bytes  [0x30000+0x7d8]
-        CRC-32: 0xe422212a — matches the region's contents
+        CRC-32: 0xe422212a (CRC-32, valid)
         Contents — 2008 bytes  [0x30000+0x7d8]
     ▾ hp — archived heap objects, empty  [0x120+0x58]
         _crc: 0x0  [0x120+0x4]
@@ -114,7 +114,7 @@ expression: "common::explore(&display_name(&path), &data)"
       _use_full_module_graph: true  [0x302+0x1]
       _ptrmap_size_in_bits: 16004  [0x308+0x8]
   ▾ DynamicArchiveHeader  [0x310+0x14]
-      _base_header_crc: 0xd205040c  [0x310+0x4]
+      _base_header_crc: 0xd205040c (CRC-32, not checked)  [0x310+0x4]
       _base_region_crc: 0x2e38176a — base archive's rw region  [0x314+0x4]
       _base_region_crc: 0x66a623e3 — base archive's ro region  [0x318+0x4]
       _base_region_crc: 0x2a88c248 — base archive's bm region  [0x31c+0x4]

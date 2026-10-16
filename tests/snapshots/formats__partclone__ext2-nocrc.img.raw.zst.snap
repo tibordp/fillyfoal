@@ -24,11 +24,11 @@ expression: "common::explore(&display_name(&path), &data)"
       Blocks per checksum: 0  [0x64+0x4]
       Reseed checksum: true  [0x68+0x1]
       Bitmap mode: BIT (0x1)  [0x69+0x1]
-    Header checksum: 0x60e4bc1  [0x6a+0x4]
+    Header checksum: 0x60e4bc1 (CRC-32 (not inverted), valid)  [0x6a+0x4]
   ▾ Bitmap — 1024 blocks, a bit per block  [0x6e+0x80]
       Blocks in use: 30
-      Computed checksum: 0xbc66015f  [0xee+0x4]
-    Bitmap checksum: 0xbc66015f  [0xee+0x4]
+      Bitmap checksum: 0xbc66015f (CRC-32 (not inverted), valid)  [0xee+0x4]
+    Bitmap checksum: 0xbc66015f (CRC-32 (not inverted), skipped: checked when the bitmap is expanded)  [0xee+0x4]
   ▾ Volume — ext2 filesystem "fillyfoal", 1 MiB, 1024-byte blocks, 16 inodes (3 free)
     ▾ Superblock  [#1:0x400+0x400]
         Inodes: 16  [#1:0x400+0x4]

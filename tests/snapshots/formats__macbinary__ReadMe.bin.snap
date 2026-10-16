@@ -29,7 +29,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Secondary header length: 0  [0x78+0x2]
     Version: MacBinary III (0x82)  [0x7a+0x1]
     Minimum version: 129  [0x7b+0x1]
-    Header CRC: 0x4ec9  [0x7c+0x2]
+    Header CRC: 0x4ec9 (CRC-16/XMODEM, valid)  [0x7c+0x2]
   ▾ Data fork — UTF-8 text, CR line endings, 1 line  [0x80+0x17]
       Encoding: "UTF-8"
       Line endings: "CR" — 0 LF, 0 CRLF, 1 CR

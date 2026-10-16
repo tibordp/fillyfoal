@@ -48,7 +48,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Platform: x86 (0x0)  [0xa001+0x1]
         Reserved: 0  [0xa002+0x2]
         Id string: "TempleOS"  [0xa004+0x18]
-        Checksum: 0xc72e  [0xa01c+0x2]
+        Checksum: 0xc72e (16-bit sum, not checked)  [0xa01c+0x2]
         Key: 55 aa  |U.|  [0xa01e+0x2]
     ▾ Default entry — bootable, no emulation, 2 KiB at sector 21  [0xa020+0x20] → 0xa800+0x800
       ▾ Fields  [0xa020+0x20]
