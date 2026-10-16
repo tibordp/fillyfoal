@@ -59,6 +59,11 @@ export type ValueData = {
     set: string[];
     /// Bits no named flag accounts for.
     unknown: string;
+    /// Every entry of the flag table, matched or not (`raw & mask ==
+    /// value`), so a host can draw all the bits. Decimal strings. A
+    /// `number` entry is a multi-bit field holding a number (an offset, a
+    /// count), never `set`: its value is `raw & mask`.
+    table: { mask: string; value: string; name: string; set: boolean; number: boolean }[];
   };
   float: {
     /// Null when not finite (`text` then says NaN or inf).
@@ -96,8 +101,12 @@ export type ValueData = {
   guid: {
     /// The 16 bytes in stored order.
     hex: string;
-    /// "mixed": Microsoft's layout, the first three fields little-endian.
-    order: "mixed";
+    /// "mixed": Microsoft's layout, the first three fields little-endian
+    /// (`text` braced). "big": RFC 4122 order (`text` unbraced).
+    order: "mixed" | "big" | "other";
+    /// The identifier as RFC 4122 text, lowercase and unbraced, whatever
+    /// the stored order.
+    uuid: string;
   };
   checksum: {
     /// "CRC-32", "SHA-256", "Adler-32", or the format's own name.
@@ -138,6 +147,36 @@ export type ValueData = {
     per_sec: string;
     /// `ticks / per_sec` as a double.
     seconds: number;
+  };
+  addr: {
+    /// "other": a family this frontend predates (use `text`).
+    family: "ipv4" | "ipv6" | "mac" | "eui64" | "other";
+    /// The address bytes in network order.
+    hex: string;
+  };
+  color: {
+    model: "rgb" | "gray" | "cmyk" | "lab" | "hsb" | "other";
+    /// The model's components, normalised to 0..1 (Lab in its own ranges:
+    /// L 0..100, a and b about ±128).
+    components: number[];
+    /// How the file stores them.
+    depth: "bits" | "float" | "packed" | "other";
+    /// Bits per component ("bits", "float"), or the packed number's width.
+    bits: number | null;
+    /// For "packed": the packed number (hex) and its layout ("RGB565").
+    packed: string | null;
+    layout: string | null;
+    /// 0..1, when the colour has alpha.
+    alpha: number | null;
+    premultiplied: boolean;
+    space: "srgb" | "srgb-linear" | "display-p3" | "rec2020" | "device" | "other";
+    /// A spot colour's or swatch's name.
+    name: string | null;
+    /// A swatch to draw: 8-bit sRGB `rrggbbaa` (straight alpha).
+    swatch: string | null;
+    /// Whether `swatch` is the colour; false for CMYK, Lab, device values
+    /// and clipped colours, which it only approximates.
+    exact: boolean;
   };
 };
 
