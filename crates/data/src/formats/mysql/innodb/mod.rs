@@ -30,7 +30,7 @@
 //! lazy: the index B-trees from their roots, and every page by number
 //! (`page`, `index`).
 
-mod dict;
+pub(crate) mod dict;
 mod index;
 mod page;
 mod zip;

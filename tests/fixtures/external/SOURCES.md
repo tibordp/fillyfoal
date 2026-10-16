@@ -1416,3 +1416,25 @@ CRC-64 in the archive was checked against the documents
 | --- | --- | --- |
 | `mongo-archive/dump.archive` | mongodump 100.17.0 | `mongodump --archive=dump.archive`, unchanged |
 | `gzip/dump.archive.gz` | mongodump 100.17.0 | `mongodump --gzip --archive=dump.archive.gz` (the whole archive in one gzip stream), unchanged |
+
+## MySQL and MariaDB binary logs
+
+Made by `sh tests/data/mysql-binlog/make.sh`: throwaway containers (host
+name `fillyfoal`) from the official `mysql:9.7.1` and `mariadb:10.5`
+(10.5.29) images, each running `tests/data/mysql-binlog/workload.sql`
+(neutral DDL and DML at fixed session times, `binlog_row_metadata=FULL`,
+row-based events and a few statement-based ones); the binary log file
+holding the workload is copied out after `FLUSH BINARY LOGS`. Not
+byte-reproducible: the server UUID (MySQL GTIDs), the format description
+events' timestamps, commit timestamps and XIDs vary between runs. Every
+event's CRC-32 checks; the decoded rows agree with the workload and, for
+the MariaDB files, with `mariadb-binlog -vv --base64-output=decode-rows`
+(MariaDB 11.4).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `mysql-binlog/mysql-rows.bin` | MySQL 9.7.1 | the workload: GTIDs, query events, table maps with optional metadata, write/update/delete rows v2, intvar, XIDs, rotate; CRC32 checksums; unchanged |
+| `mysql-binlog/mysql-compressed.bin` | MySQL 9.7.1 | `binlog_transaction_compression=ON`: one transaction in a zstd transaction payload event; unchanged |
+| `mysql-binlog/mysql-nochecksum.bin` | MySQL 9.7.1 | `binlog_checksum=NONE`; unchanged |
+| `mysql-binlog/mariadb-rows.bin` | MariaDB 10.5.29 | the workload: MariaDB GTIDs, GTID list, binlog checkpoints, annotate-rows, rows v1; CRC32 checksums; unchanged |
+| `mysql-binlog/mariadb-compressed.bin` | MariaDB 10.5.29 | `log_bin_compress=ON`, `log_bin_compress_min_len=10`: a zlib-compressed rows event and query event; unchanged |

@@ -572,7 +572,7 @@ fn mbmaxlen(collation: u64) -> Option<(u64, u64)> {
 }
 
 /// Bytes of a packed decimal.
-fn decimal_bytes(precision: u32, scale: u32) -> u64 {
+pub(crate) fn decimal_bytes(precision: u32, scale: u32) -> u64 {
     const DIG2BYTES: [u64; 10] = [0, 1, 1, 2, 2, 3, 3, 4, 4, 4];
     let intg = precision.saturating_sub(scale);
     let part = |digits: u32| {
@@ -873,7 +873,7 @@ fn dropped_name(name: &str) -> &str {
 // Values
 
 /// A packed decimal as text.
-fn decimal(b: &[u8], precision: u32, scale: u32) -> Option<String> {
+pub(crate) fn decimal(b: &[u8], precision: u32, scale: u32) -> Option<String> {
     const DIG2BYTES: [usize; 10] = [0, 1, 1, 2, 2, 3, 3, 4, 4, 4];
     let mut v = b.to_vec();
     let first = v.first_mut()?;
