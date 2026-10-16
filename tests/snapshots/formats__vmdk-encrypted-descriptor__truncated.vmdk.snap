@@ -1,0 +1,26 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ truncated.vmdk — Encrypted VMDK descriptor (nvme), key wrapped by phrase, null  [0x0+0x2bc]
+    Header length: 24  [0x0+0x4]
+    Adapter type: "nvme"  [0x4+0x10]
+    Value 1: 22  [0x14+0x4]
+    Value 2: 305419896 — 0x12345678  [0x18+0x4]
+    Key safe length: 568  [0x1c+0x4]
+  ▾ Key safe — 2 key locators  [0x20+0x238]
+    ▾ Key locator: "phrase" — phrase fillyfoal-test, HMAC-SHA-1, 144-byte wrapped key  [0x31+0x126]
+        Kind: "phrase"  [0x37+0x6]
+        ID: "fillyfoal-test"  [0x3e+0x10]
+        pass2key: "PBKDF2-HMAC-SHA-1"  [0x4f+0x22]
+        rounds: "10000"  [0x74+0xe]
+        HMAC: "HMAC-SHA-1"  [0x83+0xe]
+        Wrapped key — 144 bytes, base64  [0x92+0xc4]
+    ▾ Key locator: "null" — null <VMWARE-EMPTYSTRING>, HMAC-SHA-1, 144-byte wrapped key  [0x158+0xfe]
+        Kind: "null"  [0x15e+0x4]
+        ID: "<VMWARE-EMPTYSTRING>"  [0x163+0x1a]
+        HMAC: "HMAC-SHA-1"  [0x17e+0xe]
+        Wrapped key — 144 bytes, base64  [0x18d+0xc8]
+    Encrypted descriptor length: 548  [0x258+0x4]
+      ! truncated: needed 0x224 bytes at 0x25c, only 0x60 available [0x25c+0x224]
+    Encrypted descriptor — 96 bytes  [0x25c+0x60]
