@@ -165,6 +165,26 @@ byte-reproducible; the others are (the scripts fix UUIDs, labels and times).
 | `fat/` | dosfstools 4.2 mkfs.fat, mtools 4.0 | `make-fat.sh`: `mkfs.fat -F 12/16/32 -i … -n FILLYFOAL`, filled with `mcopy -s -m` (long names, subdirectories) under `SOURCE_DATE_EPOCH` |
 | `exfat/linux-exfat.img.raw.zst` | exfatprogs mkfs.exfat, Linux 7.0 exfat | `make-fat.sh`: `mkfs.exfat -L fillyfoal -c 4K -b 4K`, mounted and filled; random volume serial |
 | `ntfs/mkntfs.img.raw.zst` | ntfs-3g 2022.10 mkntfs, Linux 7.0 ntfs3 | `make-fat.sh`: `mkntfs -T -F -L fillyfoal` (1100 KiB), mounted with ntfs3 and filled. 128 KiB compressed: the 128 KiB `$UpCase` table does not compress |
+## ntfsclone images (ntfs-3g)
+
+Reproduced byte-for-byte by `sh tests/data/ntfsclone/make-external.sh`
+(Docker `debian:trixie-slim`, host name `fillyfoal`, running
+`tests/data/ntfsclone/inner.sh`, which prints the package versions):
+ntfs-3g 1:2022.10.3-5+deb13u3 (`mkntfs`, `ntfslabel`, `ntfscp`,
+`ntfsclone`), faketime 0.9.10, gzip 1.13. The volume is 2 MiB and three
+sectors (`mkntfs -T -F -f -L fillyfoal -s 512 -c 4096 -p 0 -H 0 -S 0`, so
+the last cluster, holding the backup boot sector, is partial), serial
+`0123456789abcdef` (`ntfslabel --new-serial`), with two text files copied
+in by `ntfscp` under `faketime -f '2024-01-01 00:00:00'`. The script also
+restores the image with `ntfsclone --restore-image`, checks the result equals
+the volume byte for byte and prints its CRC-32, which `tests/ntfsclone.rs`
+checks the decoded volume against.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `ntfsclone/ntfsclone.img.raw.zst` | ntfsclone 2022.10.3 | `ntfsclone --save-image -o ntfsclone.img vol.img` (image version 10.1), stored with `zstd -19` |
+| `gzip/ntfsclone.img.gz` | ntfsclone 2022.10.3, gzip 1.13 | `ntfsclone --save-image -o - vol.img \| gzip -9 -n`: the same image (identical bytes) written to standard output |
+
 ## Disk images (Linux tools)
 
 All made by `sh tests/data/disk/make-fixtures.sh` in a Debian trixie
