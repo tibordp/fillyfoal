@@ -38,6 +38,7 @@ pub mod lzx;
 pub mod meatpack;
 pub mod ntfsclone;
 pub mod palmdoc;
+pub mod partclone;
 pub mod pbz;
 pub mod pipeline;
 pub mod ppmd8;
@@ -334,6 +335,9 @@ pub enum Codec {
     /// An ntfsclone special image's command stream (after its header),
     /// restored to the volume (see [`ntfsclone`]).
     NtfsClone(ntfsclone::Image),
+    /// A Partclone image's block area (after its header and bitmap),
+    /// restored to the volume (see [`partclone`]).
+    Partclone(Arc<partclone::Params>),
     /// Stages applied in order. `name` and `lazy_name` identify the chain
     /// for memoization (see `Origin`); they must be distinct.
     Chain {
@@ -453,6 +457,7 @@ impl Codec {
             Codec::Xor { .. } => "xor",
             Codec::ByteSwap { .. } => "byteswap",
             Codec::NtfsClone(_) => "ntfsclone",
+            Codec::Partclone(_) => "partclone",
             Codec::Chain { name, .. } => name,
         }
     }
@@ -554,6 +559,7 @@ impl Codec {
             Codec::Xor { .. } => "xor (lazy)",
             Codec::ByteSwap { .. } => "byteswap (lazy)",
             Codec::NtfsClone(_) => "ntfsclone (lazy)",
+            Codec::Partclone(_) => "partclone (lazy)",
             Codec::Chain { lazy_name, .. } => lazy_name,
         }
     }
@@ -638,7 +644,7 @@ impl Codec {
             | Codec::Xor { .. }
             | Codec::ByteSwap { .. } => "decoded",
             Codec::CapnpPacked => "unpacked",
-            Codec::NtfsClone(_) => "restored",
+            Codec::NtfsClone(_) | Codec::Partclone(_) => "restored",
             Codec::Chain { .. } => "decoded",
         }
     }
@@ -748,6 +754,8 @@ impl Codec {
             Codec::Ace(p) if p.members.len() > 1 => u64::MAX,
             // A 9-byte gap command stands for any number of empty clusters.
             Codec::NtfsClone(_) => u64::MAX,
+            // Free blocks are in the bitmap, not in the input.
+            Codec::Partclone(_) => u64::MAX,
             Codec::Ace(_) => 1024,
             // Arsenic and RLE90 runs: a few bits for up to 255 bytes, in
             // blocks of up to 16 MiB.
@@ -897,6 +905,7 @@ impl Codec {
                 filters::ByteSwap::new(*width),
             ))),
             Codec::NtfsClone(image) => Box::new(Streaming(ntfsclone::NtfsClone::new(*image))),
+            Codec::Partclone(p) => Box::new(Streaming(partclone::Partclone::new(p.clone()))),
             Codec::Chain { stages, .. } => Box::new(pipeline::Chain::new(
                 stages.iter().filter_map(Codec::decoder).collect(),
             )),

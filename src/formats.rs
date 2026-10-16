@@ -95,6 +95,8 @@ pub static STREAMING: &[&Format] = &[
     &archive::cpio::FORMAT,
     #[cfg(feature = "archive")]
     &disk::ntfsclone::FORMAT,
+    #[cfg(feature = "archive")]
+    &disk::partclone::FORMAT,
     #[cfg(feature = "text")]
     &text::plain::FORMAT,
 ];
@@ -901,6 +903,8 @@ pub static FORMATS: &[&Format] = &[
     &disk::parallels::FORMAT,
     #[cfg(feature = "archive")]
     &disk::ntfsclone::FORMAT,
+    #[cfg(feature = "archive")]
+    &disk::partclone::FORMAT,
     // A koly trailer is decisive: UDRO/UDRW-with-trailer images start with
     // a GPT, APM or HFS volume.
     #[cfg(feature = "archive")]

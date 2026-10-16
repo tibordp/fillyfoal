@@ -1380,3 +1380,31 @@ the same way locally (`TEMPLEOS_Z_DIRS`).
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
 | `templeos-iso/templeos-redseaiso.iso.gz` | TempleOS V5.03 (the distribution ISO above, booted as a live CD in QEMU 10.0.13 `qemu-system-x86_64 -accel tcg`, Debian 13 aarch64, in Docker, `-rtc base=2026-01-01T00:00:00`) | `tests/data/redsea/qemu_redseaiso.py` (its docstring has the `docker run` line) types, over QMP, `DirMk`/`Copy` of `/Demo/DateTime.HC.Z` and `/Doc/FileLowLevel.DD.Z` from the CD into `B:/Src` on the RAM drive, then `RedSeaISO("B:/Out","B:/Src");`, saves the guest's memory and carves `B:/Out.ISO.C` (contiguous) out of the RAM drive. Not reproducible byte for byte (the volume's `unique_id` mixes in the TSC, and creation times vary by seconds; two runs differed in 20 bytes). Apart from the slack after each file's last block (TempleOS writes from an uninitialised buffer, so it holds stale heap bytes), it is byte for byte what `tests/data/redsea/make_image.py` builds for the same tree, times and ID. Stored with `gzip -9 -n`. Public domain (TempleOS) |
+
+## Partclone images (partclone)
+
+Reproduced byte-for-byte by `sh tests/data/partclone/make-external.sh`
+(host name `fillyfoal`). Format 0002 images come from Docker
+`debian:trixie-slim` running `tests/data/partclone/inner.sh`: partclone
+0.3.36+repack-1, dosfstools 4.2-1.2, mtools 4.0.48-1, e2fsprogs
+1.47.2-3+b12, faketime 0.9.10, gzip 1.13, zstd 1.5.7. The format 0001 image
+comes from Docker `debian/eol:jessie` running `inner-v1.sh`: partclone
+0.2.73-2+b1, dosfstools 3.0.27-1, mtools 4.0.18-2. The volumes are a 4 MiB
+FAT16 (`mkfs.fat -F 16 -s 1 -n FILLYFOAL -i 12345678`) and a 1 MiB ext2
+(`mkfs.ext2 -b 1024 -N 16 -I 128 -L fillyfoal`, fixed UUID and hash seed,
+filled with `-d`), each holding two neutral text files
+(`tests/data/partclone/files.sh`), made under `faketime -f '2024-01-01
+00:00:00'`. `inner.sh` restores every format 0002 image with
+`partclone.restore` and checks the result equals the volume byte for byte;
+`tests/partclone.rs` checks the decoded volumes against the lengths and
+CRC-32s the scripts print. (FAT16 rather than FAT12: partclone 0.3.36's
+FAT12 bitmap leaves out clusters in use, so its FAT12 images do not restore.)
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `partclone/fat16.img.raw.zst` | partclone 0.3.36 | `partclone.fat16 -c -s fat.img -o fat16.img` (CRC32, reseeded, one check value per 2048 blocks), stored with `zstd -19` |
+| `partclone/ext2-k8-noreseed.img.raw.zst` | partclone 0.3.36 | `partclone.extfs -c -k 8 -K -s ext.img -o ...` (a check value every 8 blocks, not reseeded), stored with `zstd -19` |
+| `partclone/ext2-nocrc.img.raw.zst` | partclone 0.3.36 | `partclone.extfs -c -a 0 -s ext.img -o ...` (no check values), stored with `zstd -19` |
+| `partclone/fat16-v1.img.raw.zst` | partclone 0.2.73 | `partclone.fat16 -c -s fat.img -o fat16-v1.img` (image format 0001), stored with `zstd -19` |
+| `gzip/partclone-ext2.img.gz` | partclone 0.3.36, gzip 1.13 | `partclone.extfs -c -k 16 -s ext.img -o - \| gzip -9 -n` |
+| `zstd/partclone-fat16.img.zst` | partclone 0.3.36, zstd 1.5.7 | `partclone.fat16 -c -s fat.img -o - \| zstd -19` |
