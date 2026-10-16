@@ -6,11 +6,12 @@
 //! artifacts (`userdata`) and evidence containers and memory captures
 //! (`evidence`, Expert Witness images in `ewf`, AFF4 in `aff4`), and saved
 //! virtual machine and process state (`qemu`: QEMU migration streams and
-//! libvirt save images).
+//! libvirt save images; `criu`: CRIU checkpoint images).
 
 pub mod aff4;
 pub mod bookmark;
 pub mod browser;
+pub mod criu;
 pub mod dsstore;
 pub mod etl;
 pub mod evidence;

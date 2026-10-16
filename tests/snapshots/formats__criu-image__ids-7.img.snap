@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ids-7.img — CRIU IDS image (kernel object IDs of a task)  [0x0+0x24]
+    Image class: IMG_COMMON (0x54564319)  [0x0+0x4]
+    Image type: IDS (0x54432030) — kernel object IDs of a task  [0x4+0x4]
+  ▾ task_kobj_ids_entry [0] — 24 bytes  [0x8+0x1c]
+      Size: 24  [0x8+0x4]
+    ▾ task_kobj_ids_entry  [0xc+0x18]
+        vm_id: 2  [0xc+0x2]
+        files_id: 2  [0xe+0x2]
+        fs_id: 2  [0x10+0x2]
+        sighand_id: 2  [0x12+0x2]
+        pid_ns_id: 1  [0x14+0x2]
+        net_ns_id: 2  [0x16+0x2]
+        ipc_ns_id: 3  [0x18+0x2]
+        uts_ns_id: 4  [0x1a+0x2]
+        mnt_ns_id: 6  [0x1c+0x2]
+        user_ns_id: 7  [0x1e+0x2]
+        cgroup_ns_id: 8  [0x20+0x2]
+        time_ns_id: 5  [0x22+0x2]

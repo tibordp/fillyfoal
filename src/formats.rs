@@ -2586,6 +2586,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "system")]
     &forensics::qemu::LIBVIRT_SAVE,
     #[cfg(feature = "system")]
+    &forensics::criu::CRIU_IMAGE,
+    #[cfg(feature = "system")]
     &forensics::userdata::ZSH,
     #[cfg(feature = "system")]
     &forensics::userdata::BASH,

@@ -847,6 +847,7 @@ closely enough to credit:
   dictionary (`crates/docs/src/formats/documents/doldoc.rs`, `templeos_ac.rs`), sprites and GR
   (`crates/image/src/formats/image/templeos.rs`). Test fixtures come from its distribution ISO
   (public domain).
-- Saved VM state (`crates/system/src/formats/forensics/qemu.rs`): layouts read (facts only, no
-  code) from QEMU's migration code and docs (GPL-2.0-or-later) and libvirt's `qemu_saveimage.c`
-  (LGPL-2.1-or-later).
+- Saved VM and process state (`crates/system/src/formats/forensics/qemu.rs`, `criu.rs`): layouts
+  read (facts only, no code) from QEMU's migration code and docs (GPL-2.0-or-later), libvirt's
+  `qemu_saveimage.c` (LGPL-2.1-or-later), and CRIU's `images/*.proto`, `magic.h` and `crit`
+  flag tables (GPL-2.0): field numbers, names, magic numbers and flag values.
