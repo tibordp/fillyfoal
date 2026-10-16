@@ -404,13 +404,17 @@ impl Scan {
 /// first value as far as references need (shared through `cx.cache`).
 #[derive(Debug)]
 struct Tables {
-    /// Offsets of the values that take object indexes, in index order.
+    /// Offsets of the values that take object indexes, in index order
+    /// (of the `I` wrapping one with its instance variables, so a link
+    /// shows the string with its encoding).
     objects: Vec<u64>,
     /// Offsets of symbols (`:`), in index order.
     symbols: Vec<u64>,
     scan: Scan,
     /// The scan stopped on an error.
     failed: bool,
+    /// The last value the scan visited: its type, offset and header length.
+    last: Option<(u8, u64, u64)>,
 }
 
 const TABLES: &str = "ruby-marshal-tables";
@@ -433,6 +437,7 @@ async fn lookup_entry(cx: &Cx, region: Span, need: Need) -> Option<u64> {
                 symbols: Vec::new(),
                 scan: Scan::new(2),
                 failed: false,
+                last: None,
             }));
             cx.cache(region, TABLES, t.clone());
             t
@@ -440,7 +445,7 @@ async fn lookup_entry(cx: &Cx, region: Span, need: Need) -> Option<u64> {
     };
     let mut r = ByteReader::new(cx, region);
     loop {
-        let mut scan = {
+        let (mut scan, mut last) = {
             let t = lock(&tables);
             let found = match need {
                 Need::Object(i) => t.objects.get(to_usize(i)).copied(),
@@ -449,7 +454,7 @@ async fn lookup_entry(cx: &Cx, region: Span, need: Need) -> Option<u64> {
             if found.is_some() || t.scan.done || t.failed {
                 return found;
             }
-            t.scan.clone()
+            (t.scan.clone(), t.last)
         };
         let start = scan.steps;
         let mut objects = Vec::new();
@@ -459,10 +464,14 @@ async fn lookup_entry(cx: &Cx, region: Span, need: Need) -> Option<u64> {
             if scan.done {
                 break;
             }
-            let mut visit = |tag: u8, at: u64, _: u64| {
+            let mut visit = |tag: u8, at: u64, head: u64| {
                 if counted(tag) {
-                    objects.push(at);
+                    objects.push(match last {
+                        Some((b'I', i, n)) if i.saturating_add(n) == at => i,
+                        _ => at,
+                    });
                 }
+                last = Some((tag, at, head));
                 if tag == b':' {
                     symbols.push(at);
                 }
@@ -479,6 +488,7 @@ async fn lookup_entry(cx: &Cx, region: Span, need: Need) -> Option<u64> {
             t.symbols.extend(symbols);
             t.scan = scan;
             t.failed = failed;
+            t.last = last;
         }
     }
 }
@@ -547,26 +557,27 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     cx.emit(node);
     let first = head(&mut r, 2).await?;
-    let end = end_of(&mut r, 2).await?;
     cx.annotate(format!("Ruby Marshal data, {}", describe(first.tag)));
-    if end < input.span.len {
-        cx.emit(
-            Node::new("Trailing data")
-                .span(input.span.tail(end))
-                .diag(Diagnostic::warning("bytes after the value")),
-        );
+    if matches!(first.tag, b'[' | b'{' | b'}' | b'o' | b'S') {
+        // Listed as they are scanned; the trailing data check comes last.
+        return walk_members(cx, input.span, 2, Path::new(), true).await;
     }
-    let inner = if first.tag == b'I' {
-        head(&mut r, 3).await?.tag
-    } else {
-        first.tag
-    };
-    if matches!(inner, b'[' | b'{' | b'}' | b'o' | b'S') && first.tag != b'I' {
-        return members(cx, (input.span, 2, Path::new())).await;
-    }
+    let end = end_of(&mut r, 2).await?;
     let node = value_node(&mut r, 2, end, "Value".to_owned(), &Path::new()).await?;
     cx.emit(node);
+    if let Some(node) = trailing(input.span, end) {
+        cx.emit(node);
+    }
     Ok(())
+}
+
+/// What follows the value ending at `end` of `region`, if anything.
+fn trailing(region: Span, end: u64) -> Option<Node> {
+    (end < region.len).then(|| {
+        Node::new("Trailing data")
+            .span(region.tail(end))
+            .diag(Diagnostic::warning("bytes after the value"))
+    })
 }
 
 fn describe(tag: u8) -> &'static str {
@@ -659,6 +670,17 @@ fn string_node(node: Node, b: Vec<u8>, total: u64, enc: Option<&str>) -> Node {
             }
         }
     }
+}
+
+/// [`value_node`], boxed for an object link to show the object it links
+/// to (never another link).
+fn value_node_boxed<'a, 'b: 'a>(
+    r: &'a mut ByteReader<'b>,
+    start: u64,
+    end: u64,
+    path: &'a Path,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Node>> + Send + 'a>> {
+    Box::pin(value_node(r, start, end, String::new(), path))
 }
 
 /// A node for the value at `start..end`.
@@ -779,22 +801,30 @@ async fn value_node(
         }
         b'@' => {
             let (i, _) = count_at(r, start.saturating_add(1)).await?;
-            let mut node = node.value(Value::Text(format!("object #{i}")));
             match lookup_entry(r.cx(), region, Need::Object(i)).await {
-                Some(at) => {
+                Some(at) if head(r, at).await?.tag != b'@' => {
+                    // The object linked to, as it was shown where it was
+                    // written (its members too: a link back to an
+                    // enclosing object is caught by the path).
                     let t = head(r, at).await?.tag;
                     let target_end = end_of(r, at).await.unwrap_or(at);
-                    node = node
-                        .summary(format!("link to {}", describe(t)))
-                        .target(r.span(at, target_end.saturating_sub(at)));
+                    let target = r.span(at, target_end.saturating_sub(at));
+                    let shown = value_node_boxed(r, at, target_end, path).await?;
+                    let what = shown
+                        .summary
+                        .clone()
+                        .unwrap_or_else(|| describe(t).to_owned());
+                    shown
+                        .renamed(node.name)
+                        .span(span)
+                        .summary(format!("link to object #{i}, {what}"))
+                        .target(target)
                 }
-                None => {
-                    node = node
-                        .summary("object link")
-                        .diag(Diagnostic::malformed(format!("no object #{i} before it")));
-                }
+                _ => node
+                    .value(Value::Text(format!("object #{i}")))
+                    .summary("object link")
+                    .diag(Diagnostic::malformed(format!("no object #{i} before it"))),
             }
-            node
         }
         b'I' => {
             // The inner value, with the instance variables after it.
@@ -888,7 +918,8 @@ fn regexp_options(o: u8) -> String {
     if o & 4 != 0 {
         s.push('m');
     }
-    if o & 0x10 != 0 {
+    // Regexp::NOENCODING (/n); FIXEDENCODING (16) has no literal flag.
+    if o & 0x20 != 0 {
         s.push('n');
     }
     s
@@ -926,6 +957,12 @@ async fn key_name(r: &mut ByteReader<'_>, at: u64, index: u64) -> Result<String>
 /// (and the default), object and struct instance variables, the wrapped
 /// value of `U`/`d`/`C`/`e` and the instance variables of an `I` value.
 async fn members(cx: Cx, (region, start, path): (Span, u64, Path)) -> Result<()> {
+    walk_members(cx, region, start, path, false).await
+}
+
+/// [`members`]; `top` for the file's own value, which is followed by a
+/// check for trailing data once its end is reached.
+async fn walk_members(cx: Cx, region: Span, start: u64, path: Path, top: bool) -> Result<()> {
     let mut r = ByteReader::new(&cx, region);
     let it = head(&mut r, start).await?;
     let (mut pos, mut index) = match cx.resume::<(u64, u64)>() {
@@ -988,7 +1025,12 @@ async fn members(cx: Cx, (region, start, path): (Span, u64, Path)) -> Result<()>
         }
     };
     if it.tag != b'}' {
-        cx.set_count(Count::Exact(total));
+        // The file's own value may be followed by trailing data.
+        cx.set_count(if top {
+            Count::AtLeast(total)
+        } else {
+            Count::Exact(total)
+        });
     }
     let pairs = it.tag != b'[';
     while index < total {
@@ -1015,6 +1057,10 @@ async fn members(cx: Cx, (region, start, path): (Span, u64, Path)) -> Result<()>
     if it.tag == b'}' && index == total {
         let end = end_of(&mut r, pos).await?;
         let node = value_node(&mut r, pos, end, "(default)".to_owned(), &path).await?;
+        cx.push(node).await;
+        pos = end;
+    }
+    if top && let Some(node) = trailing(region, pos) {
         cx.push(node).await;
     }
     Ok(())

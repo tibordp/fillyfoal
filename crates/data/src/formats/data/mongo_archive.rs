@@ -27,7 +27,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::datakit::{ByteReader, hex};
 use crate::formats::util::fmt::plural;
-use crate::formats::{Format, Head, Input, Probe, embedded_as};
+use crate::formats::{Format, Head, Input, Probe, dissect_named};
 use crate::node::{Count, Node};
 use crate::span::Span;
 
@@ -168,8 +168,20 @@ async fn header_fields(cx: &Cx, span: Span) -> Result<Fields> {
     Ok(flat_fields(&data))
 }
 
-fn bson_node(input: &Input, name: impl Into<String>, span: Span) -> Node {
-    embedded_as(name.into(), input.nested(span), &bson::FORMAT)
+/// A BSON document dissected by the BSON dissector, keeping `summary`
+/// (what the document is in the archive) over the BSON dissector's own
+/// "BSON document, N bytes" once it is expanded.
+fn bson_node(input: &Input, name: impl Into<String>, span: Span, summary: String) -> Node {
+    Node::new(name.into())
+        .span(span)
+        .summary(summary.clone())
+        .lazy(bson_document, (input.nested(span), summary))
+}
+
+async fn bson_document(cx: Cx, (input, summary): (Input, String)) -> Result<()> {
+    let result = dissect_named(cx.clone(), (input, bson::FORMAT.name)).await;
+    cx.annotate(summary);
+    result
 }
 
 /// Walk state: position, block index and the running CRCs of namespaces
@@ -194,14 +206,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             };
             let header_span = file.sub(4, len);
             let header = header_fields(&cx, header_span).await?;
-            cx.emit(
-                bson_node(&input, "Prelude header", header_span).summary(format!(
+            cx.emit(bson_node(
+                &input,
+                "Prelude header",
+                header_span,
+                format!(
                     "archive format {}, server {}, tool {}",
                     header.text("version"),
                     header.text("server_version"),
                     header.text("tool_version")
-                )),
-            );
+                ),
+            ));
             // The collection metadata documents, up to the terminator.
             let start = 4u64.saturating_add(len);
             let mut at = start;
@@ -386,14 +401,12 @@ async fn collections(cx: Cx, (input, list, count): (Input, Span, u64)) -> Result
         if size > 0 {
             summary = format!("{summary}, {size} bytes");
         }
-        cx.push(
-            bson_node(
-                &input,
-                format!("{}.{}", f.text("db"), f.text("collection")),
-                span,
-            )
-            .summary(summary),
-        )
+        cx.push(bson_node(
+            &input,
+            format!("{}.{}", f.text("db"), f.text("collection")),
+            span,
+            summary,
+        ))
         .await;
         at = at.saturating_add(n);
     }
@@ -412,13 +425,17 @@ async fn block_contents(
             let header = span.sub(0, header_len);
             let f = header_fields(&cx, header).await?;
             let eof = f.bools.get("EOF").copied().unwrap_or(false);
-            cx.push(
-                bson_node(&input, "Namespace header", header).summary(if eof {
+            cx.push(bson_node(
+                &input,
+                "Namespace header",
+                header,
+                if eof {
                     "end of namespace"
                 } else {
                     "documents follow"
-                }),
-            )
+                }
+                .to_owned(),
+            ))
             .await;
             (header_len, 0)
         }
@@ -430,8 +447,13 @@ async fn block_contents(
             break;
         };
         let summary = bson::document_summary(&mut r, at, n).await;
-        cx.push(bson_node(&input, format!("Document {i}"), span.sub(at, n)).summary(summary))
-            .await;
+        cx.push(bson_node(
+            &input,
+            format!("Document {i}"),
+            span.sub(at, n),
+            summary,
+        ))
+        .await;
         at = at.saturating_add(n);
     }
     cx.push(

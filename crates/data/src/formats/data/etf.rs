@@ -344,29 +344,34 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let first = head(&mut r, 1).await?;
     cx.annotate(format!("Erlang term, {}", describe(&first)));
-    let end = end_of(&mut r, 1).await?;
-    if end < input.span.len {
-        cx.emit(
-            Node::new("Trailing data")
-                .span(input.span.tail(end))
-                .diag(Diagnostic::warning("bytes after the term")),
-        );
-    }
     root(cx, (input.span, 1)).await
 }
 
 /// The term at `start` of `region`: a container's members at this level,
-/// anything else as one node.
+/// anything else as one node; then whatever follows the term.
 async fn root(cx: Cx, (region, start): (Span, u64)) -> Result<()> {
     let mut r = ByteReader::new(&cx, region);
     let it = head(&mut r, start).await?;
     if matches!(it.tag, 104 | 105 | 108 | 116) {
-        return members(cx, (region, start, Path::new())).await;
+        // Listed as they are scanned; the trailing data check comes last.
+        return walk_members(cx, region, start, Path::new(), true).await;
     }
     let end = end_of(&mut r, start).await?;
     let node = item_node(&mut r, start, end, "Term".to_owned(), &Path::new()).await?;
     cx.emit(node);
+    if let Some(node) = trailing(region, end) {
+        cx.emit(node);
+    }
     Ok(())
+}
+
+/// What follows the term ending at `end` of `region`, if anything.
+fn trailing(region: Span, end: u64) -> Option<Node> {
+    (end < region.len).then(|| {
+        Node::new("Trailing data")
+            .span(region.tail(end))
+            .diag(Diagnostic::warning("bytes after the term"))
+    })
 }
 
 fn describe(it: &Item) -> String {
@@ -651,12 +656,23 @@ async fn key_name(r: &mut ByteReader<'_>, at: u64, index: u64) -> Result<String>
 }
 
 async fn members(cx: Cx, (region, start, path): (Span, u64, Path)) -> Result<()> {
+    walk_members(cx, region, start, path, false).await
+}
+
+/// [`members`]; `top` for the term at the root, which is followed by a
+/// check for trailing data once its end is reached.
+async fn walk_members(cx: Cx, region: Span, start: u64, path: Path, top: bool) -> Result<()> {
     let mut r = ByteReader::new(&cx, region);
     let it = head(&mut r, start).await?;
     let pairs = it.tag == 116;
     let count = if pairs { it.nested / 2 } else { it.nested };
     if it.tag != 108 {
-        cx.set_count(Count::Exact(count));
+        // The root term may be followed by trailing data.
+        cx.set_count(if top {
+            Count::AtLeast(count)
+        } else {
+            Count::Exact(count)
+        });
     }
     let (mut pos, mut index) = cx
         .resume::<(u64, u64)>()
@@ -687,6 +703,7 @@ async fn members(cx: Cx, (region, start, path): (Span, u64, Path)) -> Result<()>
             };
             // A proper list's nil tail is not shown.
             if is_tail && r.byte(pos).await? == 106 {
+                pos = end;
                 break;
             }
             let node = item_node(&mut r, pos, end, name, &path).await?;
@@ -695,6 +712,9 @@ async fn members(cx: Cx, (region, start, path): (Span, u64, Path)) -> Result<()>
         };
         cx.push(node).await;
         index = index.saturating_add(1);
+    }
+    if top && let Some(node) = trailing(region, pos) {
+        cx.push(node).await;
     }
     Ok(())
 }

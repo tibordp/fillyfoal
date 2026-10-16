@@ -40,7 +40,9 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ [0]: "shared string" — string, UTF-8  [0x146+0x14]
         Instance variables: 1  [0x156+0x1]
         :E: true  [0x157+0x3]
-      [1]: "object #16" — link to string  [0x15a+0x2] → 0x147+0xf
+    ▾ [1]: "shared string" — link to object #16, string, UTF-8  [0x15a+0x2] → 0x146+0x14
+        Instance variables: 1  [0x156+0x1]
+        :E: true  [0x157+0x3]
   ▾ :hash — hash, 2 entries  [0x15c+0x1e]
       "a": 1  [0x164+0xa]
     ▾ "b" — array, 1 element  [0x16e+0xc]

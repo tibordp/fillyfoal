@@ -505,3 +505,103 @@ fn r_cut_short_at_every_length_settles() {
         assert!(host.session.live_nodes() < 100, "{len}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Ruby Marshal and Erlang terms: a large top-level container lists its
+// first elements without scanning to its end first.
+
+/// Expands the root by one page and returns (bytes read, work charged).
+fn first_page(name: &str, data: Vec<u8>) -> (u64, u64) {
+    let mut host = Host::named(name, data, Limits::default());
+    let root = host.root;
+    page(&mut host, root, 16);
+    let kids = host.session.children(root).unwrap();
+    assert!(kids.ids.len() >= 16, "{}", host.render());
+    (host.bytes_supplied, host.session.work_done())
+}
+
+#[test]
+fn marshal_large_array_lists_its_start_without_scanning_it_all() {
+    // Marshal.dump of 400,000 fixnums: '[', a packed count, 'i' and one
+    // byte each (about 800 KB).
+    let n: u32 = 400_000;
+    let mut data = vec![4, 8, b'[', 3];
+    data.extend_from_slice(&n.to_le_bytes()[..3]);
+    for i in 0..n {
+        data.extend_from_slice(&[b'i', u8::try_from(i % 100).unwrap() + 5]);
+    }
+    let len = data.len() as u64;
+    let (read, work) = first_page("big.marshal", data);
+    assert!(read < len / 4, "read {read} of {len} bytes");
+    assert!(work < 20_000, "{work} units");
+}
+
+#[test]
+fn etf_large_list_lists_its_start_without_scanning_it_all() {
+    // term_to_binary of a list of 400,000 small integers: 131, 'l', the
+    // count, 'a' and one byte each, then nil.
+    let n: u32 = 400_000;
+    let mut data = vec![131, 108];
+    data.extend_from_slice(&n.to_be_bytes());
+    for i in 0..n {
+        data.extend_from_slice(&[97, u8::try_from(i % 200).unwrap()]);
+    }
+    data.push(106);
+    let len = data.len() as u64;
+    let (read, work) = first_page("big.etf", data);
+    assert!(read < len / 4, "read {read} of {len} bytes");
+    assert!(work < 20_000, "{work} units");
+}
+
+#[test]
+fn marshal_and_etf_trailing_data_is_listed_after_the_members() {
+    let cases: [(&str, Vec<u8>, &str); 4] = [
+        // [1, 2] then a stray byte.
+        (
+            "t.marshal",
+            vec![4, 8, b'[', 7, b'i', 6, b'i', 7, 0xff],
+            "[1]",
+        ),
+        // {} with default nil, then two stray bytes.
+        ("d.marshal", vec![4, 8, b'}', 0, b'0', 1, 2], "(default)"),
+        // [1, 2] (a proper list) then a stray byte.
+        (
+            "t.etf",
+            vec![131, 108, 0, 0, 0, 2, 97, 1, 97, 2, 106, 0xff],
+            "[1]",
+        ),
+        // {1} then a stray byte.
+        ("u.etf", vec![131, 104, 1, 97, 1, 0xff], "[0]"),
+    ];
+    for (name, data, last) in cases {
+        // Trailing data fails the probes: open them as their format.
+        let format = if name.ends_with("etf") {
+            "erlang-etf"
+        } else {
+            "ruby-marshal"
+        };
+        let format = fillyfoal::formats::by_name(format).unwrap();
+        let len = data.len();
+        let mut host = Host::open(name, data, Limits::default(), Some(format));
+        host.explore_all();
+        let text = host.render();
+        let at_last = text.find(last).unwrap_or_else(|| panic!("{text}"));
+        let at_trailing = text
+            .find("Trailing data")
+            .unwrap_or_else(|| panic!("{text}"));
+        assert!(at_last < at_trailing, "{text}");
+        assert_eq!(
+            text.matches("Trailing data").count(),
+            1,
+            "{name}, {len}: {text}"
+        );
+    }
+    // No trailing data: none listed.
+    let mut host = Host::named(
+        "ok.etf",
+        vec![131, 108, 0, 0, 0, 1, 97, 1, 106],
+        Limits::default(),
+    );
+    host.explore_all();
+    assert!(!host.render().contains("Trailing"), "{}", host.render());
+}

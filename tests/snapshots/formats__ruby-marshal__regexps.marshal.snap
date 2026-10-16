@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ regexps.marshal — Ruby Marshal data, array  [0x0+0x21]
+    Version: "4.8"  [0x0+0x2]
+  ▾ [0]: "/é/" — regexp, UTF-8  [0x4+0xb]
+      Instance variables: 1  [0xa+0x1]
+      :E: true  [0xb+0x4]
+  ▾ [1]: "/a/n" — regexp, US-ASCII  [0xf+0x9]
+      Instance variables: 1  [0x14+0x1]
+      :E: false  [0x15+0x3]
+  ▾ [2]: "/x/ixm" — regexp, US-ASCII  [0x18+0x9]
+      Instance variables: 1  [0x1d+0x1]
+      :E: false  [0x1e+0x3]
