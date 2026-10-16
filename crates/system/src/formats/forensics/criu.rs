@@ -346,7 +346,9 @@ async fn criu(cx: Cx, input: Input) -> Result<()> {
     let Some((endian, ty, at)) = layout(&head) else {
         return Err(Diagnostic::malformed("not a CRIU image (unknown magic)").at(file.sub(0, 8)));
     };
-    let (pos, mut index, mut phase) = match cx.resume::<(u64, u64, Phase)>() {
+    // For a pagemap: the pages image's ID and the next page in it.
+    let (pos, mut index, mut phase, mut pages) = match cx.resume::<(u64, u64, Phase, (u64, u64))>()
+    {
         Some(state) => state,
         None => {
             let read = |off: usize| match endian {
@@ -372,14 +374,14 @@ async fn criu(cx: Cx, input: Input) -> Result<()> {
                     .summary(ty.title),
             );
             cx.annotate(format!("CRIU {} image ({})", ty.name, ty.title));
-            (at, 0u64, Phase::First)
+            (at, 0u64, Phase::First, (0u64, 0u64))
         }
     };
     let mut cur = Cursor::new(&cx, file, endian);
     cur.seek(pos);
     while !cur.at_end() {
         let start = cur.pos();
-        let state = (start, index, phase);
+        let state = (start, index, phase, pages);
         cx.mark(move || state);
         cx.progress_in(file, file.offset.saturating_add(start));
         // Raw data that is the rest of a ghost file.
@@ -407,11 +409,30 @@ async fn criu(cx: Cx, input: Input) -> Result<()> {
         // The title and extra-data sizes are in the first fields: a
         // prefix of a large entry is enough.
         let data = cx.read(body.sub(0, TITLE_MAX)).await?;
-        let title = entry_title(&data, msg);
+        let mut title = entry_title(&data, msg).unwrap_or_else(|| plural(size, "byte"));
+        if ty.extra == Extra::Pagemap {
+            if phase == Phase::First {
+                pages.0 = varint_in(&data, 1).unwrap_or(0);
+            } else {
+                let (run, present) = pagemap_pages(&data);
+                title.push_str(&format!(" · {}", plural(run, "page")));
+                if present && run > 0 {
+                    // Present pages are in the pages image, in order.
+                    let (id, at) = pages;
+                    let last = at.saturating_add(run).saturating_sub(1);
+                    if run == 1 {
+                        title.push_str(&format!(", pages-{id}.img page {at}"));
+                    } else {
+                        title.push_str(&format!(", pages-{id}.img pages {at}–{last}"));
+                    }
+                    pages.1 = at.saturating_add(run);
+                }
+            }
+        }
         let entry_span = cur.since(start);
         let mut node = Node::new(format!("{label} [{index}]"))
             .span(entry_span)
-            .summary(title.unwrap_or_else(|| plural(size, "byte")));
+            .summary(title);
         // Raw data after the entry.
         let first = match ty.extra {
             Extra::Fields(a, ..) => varint_in(&data, a).unwrap_or(0),
@@ -485,9 +506,29 @@ async fn criu(cx: Cx, input: Input) -> Result<()> {
             (_, p) => p,
         };
         cx.push(node).await;
-        index = index.saturating_add(1);
+        // The pagemap's entries are numbered after its head.
+        index = if label == "pagemap_head" {
+            0
+        } else {
+            index.saturating_add(1)
+        };
     }
     Ok(())
+}
+
+/// A pagemap entry's page count (`nr_pages`, or `compat_nr_pages` in
+/// images from before it) and whether its pages are in the pages image
+/// (`PE_PRESENT`, or for images from before the flags, not `in_parent`;
+/// CRIU's `pagemap.c`).
+fn pagemap_pages(data: &[u8]) -> (u64, bool) {
+    let present = match varint_in(data, 4) {
+        Some(flags) => flags & 4 != 0,
+        None => varint_in(data, 3).unwrap_or(0) == 0,
+    };
+    let n = varint_in(data, 5)
+        .or_else(|| varint_in(data, 2))
+        .unwrap_or(0);
+    (n, present)
 }
 
 /// Where the walk is in an image whose entries are not all alike.
@@ -876,11 +917,12 @@ static PAGEMAP_ENTRY: Msg = msg(
     "pagemap_entry",
     &[
         f(1, "vaddr", Ty::Hex),
-        f(2, "nr_pages", Ty::UInt),
+        f(2, "compat_nr_pages", Ty::UInt),
         f(3, "in_parent", Ty::Bool),
         f(4, "flags", Ty::Flags(PMAP_FLAGS)),
+        f(5, "nr_pages", Ty::UInt),
     ],
-    &[1, 2, 4],
+    &[1, 4],
 );
 
 // --- core ------------------------------------------------------------------
