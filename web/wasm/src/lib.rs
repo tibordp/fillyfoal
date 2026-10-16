@@ -11,8 +11,9 @@
 use std::collections::HashMap;
 
 use fillyfoal::{
-    ByteRequest, ChildState, Count, DiagKind, Diagnostic, Limits, NodeId, Progress, Radix,
-    ReadProgress, Res, Secret, SecretRequest, Session, SourceId, Span, Value, Wait, Zone, formats,
+    ByteRequest, ChildState, Count, DiagKind, Diagnostic, Digest, Limits, NodeId, Progress, Radix,
+    ReadProgress, Res, Secret, SecretRequest, Session, SourceId, Span, Value, Verdict, Wait, Zone,
+    formats,
 };
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -700,6 +701,7 @@ enum ValueKind {
     Text,
     Bytes,
     Guid,
+    Checksum,
     /// A value this build doesn't structure: `text` only, `data` is null.
     Other,
 }
@@ -787,6 +789,23 @@ enum WireData {
         hex: String,
         /// "mixed": Microsoft's layout, the first three fields little-endian.
         order: &'static str,
+    },
+    Checksum {
+        /// "CRC-32", "SHA-256", "Adler-32", or the format's own name.
+        algo: String,
+        /// The stored value in full, lowercase hex (an integer check
+        /// big-endian at its width).
+        stored: String,
+        /// The stored value's width in bits when it is an integer (a CRC,
+        /// a sum: `text` shows it as `0x…`); null for a byte-string digest.
+        bits: Option<u8>,
+        /// "valid", "mismatch", "not_checked" or "skipped"; "other" for a
+        /// verdict this build predates.
+        verdict: &'static str,
+        /// For "mismatch": what the data gives, as hex, when known.
+        computed: Option<String>,
+        /// For "skipped": why.
+        reason: Option<String>,
     },
 }
 
@@ -950,6 +969,35 @@ impl From<&Value> for WireValue {
                     order: "mixed",
                 },
             ),
+            Value::Checksum(c) => {
+                let (verdict, computed, reason) = match &c.verdict {
+                    Verdict::Valid => ("valid", None, None),
+                    Verdict::Mismatch { computed } => (
+                        "mismatch",
+                        computed.as_ref().map(|d| hex(&d.to_bytes())),
+                        None,
+                    ),
+                    Verdict::NotChecked => ("not_checked", None, None),
+                    Verdict::Skipped(why) => ("skipped", None, Some(why.to_string())),
+                    _ => ("other", None, None),
+                };
+                (
+                    K::Checksum,
+                    c.to_string(),
+                    None,
+                    WireData::Checksum {
+                        algo: c.algo.to_string(),
+                        stored: hex(&c.stored.to_bytes()),
+                        bits: match c.stored {
+                            Digest::Int { bits, .. } => Some(bits),
+                            Digest::Bytes(_) => None,
+                        },
+                        verdict,
+                        computed,
+                        reason,
+                    },
+                )
+            }
             // An atom newer than this match: its text, unstructured.
             _ => {
                 return WireValue {
@@ -1083,6 +1131,14 @@ mod tests {
         assert_eq!(
             wire(Value::named(7, 8, format!("type {}", 7))),
             r#"{"kind":"enum","text":"type 7","raw":"0x7","data":{"raw":"7","bits":8,"name":"type 7"}}"#
+        );
+        assert_eq!(
+            wire(
+                fillyfoal::Check::new("CRC-16", 0x0012u16)
+                    .verify(0x89abu16)
+                    .into()
+            ),
+            r#"{"kind":"checksum","text":"0x12 (CRC-16, mismatch: computed 0x89ab)","raw":null,"data":{"algo":"CRC-16","stored":"0012","bits":16,"verdict":"mismatch","computed":"89ab","reason":null}}"#
         );
         let bytes = Value::Bytes((0..20).collect());
         assert!(wire(bytes).ends_with(

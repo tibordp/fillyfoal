@@ -99,6 +99,22 @@ export type ValueData = {
     /// "mixed": Microsoft's layout, the first three fields little-endian.
     order: "mixed";
   };
+  checksum: {
+    /// "CRC-32", "SHA-256", "Adler-32", or the format's own name.
+    algo: string;
+    /// The stored value in full, lowercase hex (an integer check big-endian
+    /// at its width).
+    stored: string;
+    /// The width in bits of an integer check (a CRC or sum, which `text`
+    /// shows as `0x…`); null for a byte-string digest.
+    bits: number | null;
+    /// "other": a verdict this frontend predates (use `text`).
+    verdict: "valid" | "mismatch" | "not_checked" | "skipped" | "other";
+    /// For "mismatch": what the data gives, as hex, when known.
+    computed: string | null;
+    /// For "skipped": why it wasn't verified.
+    reason: string | null;
+  };
 };
 
 /// A value this build doesn't structure: only `text` is meaningful.
