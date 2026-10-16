@@ -179,7 +179,7 @@ record! {
         name: bytes[38] "name" .with(|b, n| n.value(Value::Text(crate::text::latin1(until_nul(b))))),
         clus: i64 "clus" .desc("First block (absolute)"),
         size: i64 "size" .with(|&v, n| n.summary(size(u64::try_from(v).unwrap_or(0)))),
-        datetime: u64 "datetime" .with(cdate),
+        datetime: u64 "datetime (local time)" .with(cdate),
     }
 }
 
@@ -264,7 +264,22 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         node = node.summary(format!("{} described", plural(total, "block")));
     }
     cx.emit(node.lazy(free_runs, fs.clone()));
-    let root = Node::new("Root directory").summary(format!("block {}", boot.root_clus));
+    let mut root = Node::new("Root directory");
+    let mut root_summary = format!("block {}", boot.root_clus);
+    // The size is in the directory's own "." entry, as for any directory.
+    if let Some(first) = fs.at(boot.root_clus, ENTRY)
+        && let Ok(raw) = cx.read(first).await
+        && raw.len() >= 64
+    {
+        let own = entry(&raw);
+        if own.size >= ENTRY.saturating_mul(2) && own.size != u64::MAX {
+            if let Some(span) = fs.at(boot.root_clus, own.size.min(MAX_DIR_BYTES)) {
+                root = root.span(span);
+            }
+            root_summary.push_str(&format!(", {}", size(own.size)));
+        }
+    }
+    let root = root.summary(root_summary);
     cx.emit(root.lazy(
         crate::expander!(self::directory: (FsRef, u64, Arc<Vec<u64>>)),
         (fs.clone(), boot.root_clus, Arc::new(Vec::new())),

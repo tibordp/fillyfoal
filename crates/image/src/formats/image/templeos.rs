@@ -715,7 +715,7 @@ fn dc_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     // `DCSave` leaves a zero date when nothing set it.
     if time != 0 || date != 0 {
         f.node(
-            Node::new("Timestamp")
+            Node::new("Timestamp (local time)")
                 .span(f.peek_span(0))
                 .value(Value::Timestamp {
                     unix_seconds: civil::templeos_cdate(time, date),
