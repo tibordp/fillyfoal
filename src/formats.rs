@@ -1057,6 +1057,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "archive")]
     &archive::backup::borg::FORMAT,
     #[cfg(feature = "archive")]
+    &archive::backup::borg_index::FORMAT,
+    #[cfg(feature = "archive")]
     &archive::backup::pxar::PXAR,
     #[cfg(feature = "archive")]
     &archive::backup::pxar::PXAR_META,
@@ -3512,6 +3514,8 @@ pub static FORMATS: &[&Format] = &[
     &data::marshal::FORMAT,
     #[cfg(feature = "data")]
     &data::msgpack::FORMAT,
+    #[cfg(feature = "data")]
+    &data::msgpack::BORG,
     #[cfg(feature = "data")]
     &data::ubjson::FORMAT,
     #[cfg(feature = "data")]

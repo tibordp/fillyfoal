@@ -24,7 +24,11 @@
 //! (manifest, archive and item records) is MessagePack, and a chunk that
 //! decodes to an unidentified MessagePack map with a string key is shown as
 //! MessagePack (item streams are sequences of maps, which the MessagePack
-//! probe does not claim). Which chunk belongs to which file is recorded in
+//! probe does not claim), the way Borg writes it (`borg-msgpack`: IDs and
+//! other binary strings as hex, nanosecond times as timestamps). Item
+//! streams are cut into chunks of at most 512 KiB (Borg's items chunker),
+//! so they are always small enough for that check. The repository index
+//! and the chunks cache are `borg_index`. Which chunk belongs to which file is recorded in
 //! those item records, in other segments; a single segment does not say.
 //!
 //! The layout follows Borg 1.2's `repository.py` and `crypto/key.py`
@@ -500,7 +504,7 @@ async fn chunk_content(
     });
     cx.charge(units).await;
     if format.is_none() && (manifest || looks_msgpack(&head)) {
-        return dissect_named(cx, (inner, "msgpack")).await;
+        return dissect_named(cx, (inner, "borg-msgpack")).await;
     }
     dissect_or_data(cx, inner).await
 }

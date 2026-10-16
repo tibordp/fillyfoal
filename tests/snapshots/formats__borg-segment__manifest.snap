@@ -14,24 +14,19 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Content — MessagePack map, 6 entries  [0x34+0x2b3]
       ▾ archives — map, 5 entries  [#1:0x1+0x18b]
         ▾ lzma — map, 2 entries  [#1:0xb+0x4c]
-            id: "�qU��e�rK�\u{b}ye���\u{4}�ʘ�\u{14}wS�0�K�\u{c}w\u{13}"  [#1:0x11+0x26]
-              ! warning: string is not valid UTF-8
+            id: "b07155b18765c0724bec0b7965c0abcf04a3ca98a4147753ca308e4b830c7713" — binary, 32 bytes  [#1:0x11+0x26]
             time: "2026-10-16T01:07:40.354379"  [#1:0x37+0x20]
         ▾ none — map, 2 entries  [#1:0x57+0x4c]
-            id: "e��\u{e}?�B��Jq����<�%aG����H�5�@�@"  [#1:0x5d+0x26]
-              ! warning: string is not valid UTF-8
+            id: "65e2d90e3ff742f1bdef4a7184a58fbd3c90256147ddcce9c04886358c40a840" — binary, 32 bytes  [#1:0x5d+0x26]
             time: "2026-10-16T01:07:40.502374"  [#1:0x83+0x20]
         ▾ obfuscate — map, 2 entries  [#1:0xa3+0x51]
-            id: "\u{324}���\u{b}�\u{15}�\r\u{1}0iݸ\u{8}�V\u{1d}'5��(�K�cw\""  [#1:0xae+0x26]
-              ! warning: string is not valid UTF-8
+            id: "cca4e8e1b3c40bb015ab0d013069ddb808f6561d273584e028e54bf2ad637722" — binary, 32 bytes  [#1:0xae+0x26]
             time: "2026-10-16T01:07:40.636210"  [#1:0xd4+0x20]
         ▾ zlib — map, 2 entries  [#1:0xf4+0x4c]
-            id: "���NJ����\u{c}�� \u{1c}J���c\"Q�����\u{1c}xf\u{e}��"  [#1:0xfa+0x26]
-              ! warning: string is not valid UTF-8
+            id: "b8c6fc4e4ab6ffb0ce0cfff3201c4ab190f6632251c0ffc1ffb61c78660e84c6" — binary, 32 bytes  [#1:0xfa+0x26]
             time: "2026-10-16T01:07:40.219034"  [#1:0x120+0x20]
         ▾ zstd — map, 2 entries  [#1:0x140+0x4c]
-            id: "M\u{1b}�\u{12}��2\n�pAƥ\u{14}\t�\u{17}F^b|\u{16}��\u{b}\u{12}\u{16}���"  [#1:0x146+0x26]
-              ! warning: string is not valid UTF-8
+            id: "4d1b9d12e0d9320a9a7041c6a51409ad17465e627c1685bf0b1216f3b5f0f29b" — binary, 32 bytes  [#1:0x146+0x26]
             time: "2026-10-16T01:07:40.075817"  [#1:0x16c+0x20]
         config — map, 0 entries  [#1:0x18c+0x8]
       ▾ item_keys — array, 23 elements  [#1:0x194+0xbf]
@@ -59,10 +54,8 @@ expression: "common::explore(&display_name(&path), &data)"
           [21]: "user"  [#1:0x247+0x5]
           [22]: "xattrs"  [#1:0x24c+0x7]
       ▾ tam — map, 3 entries  [#1:0x253+0xab]
-          hmac: "�\u{1}�W�7\u{7}��G�L�R�C�i���,�\u{12}\u{6}a�\u{7}Q�\u{13}�78b�ƏRG)\u{611}��Qʢ�E�I*�\u{13}�yT�\u{8}R��<"  [#1:0x258+0x48]
-            ! warning: string is not valid UTF-8
-          salt: "��r)�|iTB�#�%[`\u{5}N�Nl��.��\u{1a}��\u{1d}�.�u��|�N\u{1e}\u{b}��z�\u{11}P�Md�\u{1}\u{14}\0&�S�(TG姮"  [#1:0x2a0+0x48]
-            ! warning: string is not valid UTF-8
+          hmac: "fa01ed57b4370799de47a34c8152cf43d769adecf72cb1120661bf0751bd13a73738629cc68f524729d8918ca251caa2b245de492ac613f87954a70852cbc23c" — binary, 64 bytes  [#1:0x258+0x48]
+          salt: "8bf07229a07c6954429723b8255b60054ee94e6ca2992e909f1a8dde1dc42ea475ace87c924e1e0b9cee7ace1150e74d648901140026fe53e582285447e5a7ae" — binary, 64 bytes  [#1:0x2a0+0x48]
           type: "HKDF_HMAC_SHA512"  [#1:0x2e8+0x16]
         timestamp: "2026-10-16T01:07:40.773683"  [#1:0x2fe+0x25]
         version: 1  [#1:0x323+0x9]
