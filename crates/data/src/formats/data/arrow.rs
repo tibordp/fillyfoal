@@ -229,7 +229,7 @@ fn enumv(raw: i64, bits: u8, table: EnumTable) -> Value {
     Value::Enum {
         raw: raw.cast_unsigned(),
         bits,
-        name: lookup(table, raw.cast_unsigned()),
+        name: lookup(table, raw.cast_unsigned()).map(Into::into),
     }
 }
 
@@ -1553,8 +1553,8 @@ fn value(f: &Field, c: &[u8]) -> Value {
                 }
             }
         }
-        (3, 4) => Value::Float(f32::from_le_bytes(c.try_into().unwrap_or([0; 4])).into()),
-        (3, 8) => Value::Float(f64::from_le_bytes(c.try_into().unwrap_or([0; 8]))),
+        (3, 4) => Value::f32(f32::from_le_bytes(c.try_into().unwrap_or([0; 4]))),
+        (3, 8) => Value::f64(f64::from_le_bytes(c.try_into().unwrap_or([0; 8]))),
         (8, 4) => int(le(4).cast_signed().wrapping_shl(32).wrapping_shr(32), 32),
         (10, 8) if f.unit == 0 => Value::Timestamp {
             unix_seconds: le(8).cast_signed(),

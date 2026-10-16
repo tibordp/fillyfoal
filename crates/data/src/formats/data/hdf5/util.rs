@@ -239,7 +239,7 @@ impl<'a> Rd<'a> {
         self.push(Node::new(name).span(span).value(Value::Enum {
             raw: v,
             bits: bits_of(n),
-            name: lookup(table, v),
+            name: lookup(table, v).map(Into::into),
         }));
         Some(v)
     }

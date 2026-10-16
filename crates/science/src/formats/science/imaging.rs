@@ -541,8 +541,8 @@ async fn dicom_value(cx: &Cx, vr: &str, span: Span, endian: Endian) -> Result<Op
             value: i64::from(v as u32 as i32),
             bits: 32,
         }),
-        "FL" => num(4).map(|v| Value::Float(f64::from(f32::from_bits(v as u32)))),
-        "FD" => num(8).map(|v| Value::Float(f64::from_bits(v))),
+        "FL" => num(4).map(|v| Value::f32(f32::from_bits(v as u32))),
+        "FD" => num(8).map(|v| Value::f64(f64::from_bits(v))),
         "AT" => match (num(2), bytes.get(2..4)) {
             (Some(g), Some(_)) => {
                 let e = if endian == LE {

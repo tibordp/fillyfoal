@@ -452,7 +452,7 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         n.value(Value::Enum {
             raw: kind.into(),
             bits: 8,
-            name: crate::value::lookup(BLOCK4, kind.into()),
+            name: crate::value::lookup(BLOCK4, kind.into()).map(Into::into),
         })
     });
     let flags = r.u16("Flags", LE).ok_or_else(bad)?;
@@ -490,7 +490,7 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
                 n.value(Value::Enum {
                     raw: os.into(),
                     bits: 8,
-                    name: crate::value::lookup(HOST_OS4, os.into()),
+                    name: crate::value::lookup(HOST_OS4, os.into()).map(Into::into),
                 })
             });
             let crc = r.u32("File CRC", LE).ok_or_else(bad)?;
@@ -509,7 +509,7 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
                 n.value(Value::Enum {
                     raw: method.into(),
                     bits: 8,
-                    name: crate::value::lookup(METHOD4, method.into()),
+                    name: crate::value::lookup(METHOD4, method.into()).map(Into::into),
                 })
             });
             let name_len = r.u16("Name size", LE).ok_or_else(bad)?;
@@ -863,7 +863,7 @@ fn file_fields(r: &mut ByteReader<'_>) -> Option<FileFields> {
         n.value(Value::Enum {
             raw: os,
             bits: 64,
-            name: crate::value::lookup(HOST_OS5, os),
+            name: crate::value::lookup(HOST_OS5, os).map(Into::into),
         })
     });
     let len = r.vint("Name length")?;
@@ -892,7 +892,7 @@ fn common5(r: &mut ByteReader<'_>) -> Option<Common> {
         n.value(Value::Enum {
             raw: kind,
             bits: 64,
-            name: crate::value::lookup(HEADER5, kind),
+            name: crate::value::lookup(HEADER5, kind).map(Into::into),
         })
     });
     let flags = r.vint("Header flags")?;
@@ -1222,7 +1222,7 @@ fn extra_records(data: &[u8], span: Span, main: bool) -> Vec<(u64, Node)> {
             n.value(Value::Enum {
                 raw: kind,
                 bits: 64,
-                name: crate::value::lookup(table, kind),
+                name: crate::value::lookup(table, kind).map(Into::into),
             })
         });
         if !main && kind == 3 {

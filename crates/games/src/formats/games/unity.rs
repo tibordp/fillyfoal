@@ -849,7 +849,7 @@ async fn serialized(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Node::new("Target platform").span(span).value(Value::Enum {
             raw: p.into(),
             bits: 32,
-            name,
+            name: name.map(Into::into),
         }));
     }
     let mut trees = true;
@@ -1033,9 +1033,10 @@ async fn read_type(
         Node::new("Class ID").span(span).value(Value::Enum {
             raw: u64::from(class_id as u32),
             bits: 32,
-            name: u64::try_from(class_id)
+            name: (u64::try_from(class_id)
                 .ok()
-                .and_then(|c| lookup(CLASSES, c)),
+                .and_then(|c| lookup(CLASSES, c)))
+            .map(Into::into),
         }),
     );
     if version >= 16 {
@@ -1915,11 +1916,11 @@ async fn primitive(cur: &mut Cursor<'_>, k: Kind) -> Result<(Value, String)> {
         }
         Kind::Float(4) => {
             let v = cur.int::<f32>().await?;
-            (Value::Float(v.into()), v.to_string())
+            (Value::f32(v), v.to_string())
         }
         Kind::Float(_) => {
             let v = cur.int::<f64>().await?;
-            (Value::Float(v), v.to_string())
+            (Value::f64(v), v.to_string())
         }
         _ => {
             let v = cur.u8().await? != 0;

@@ -647,7 +647,7 @@ async fn dict(cx: Cx, (cff, span): (Cff, Span)) -> Result<()> {
                     .collect();
                 node.value(text(absolute.join(" ")))
             }
-            [v] => node.value(Value::Float(*v)),
+            [v] => node.value(Value::f64(*v)),
             _ => node.value(text(
                 e.args.iter().map(|v| num(*v)).collect::<Vec<_>>().join(" "),
             )),
@@ -1005,7 +1005,7 @@ async fn tfm(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Design size")
             .span(header.sub(4, 4))
-            .value(Value::Float(design))
+            .value(Value::f64(design))
             .summary("points"),
     );
     let bcpl = |at: usize, max: usize| {
@@ -1091,7 +1091,7 @@ async fn tfm_params(cx: Cx, (span, design): (Span, f64)) -> Result<()> {
         cx.push(
             Node::new(name)
                 .span(span.sub(to_u64(i).saturating_mul(4), 4))
-                .value(Value::Float(v)),
+                .value(Value::f64(v)),
         )
         .await;
     }
@@ -1124,7 +1124,7 @@ async fn tfm_chars(
         cx.push(
             Node::new(name)
                 .span(span.sub(to_u64(i).saturating_mul(4), 4))
-                .value(Value::Float(dim(&wd, wi)))
+                .value(Value::f64(dim(&wd, wi)))
                 .summary(format!(
                     "height {:.3}, depth {:.3}{tag}",
                     dim(&ht, hd >> 4),

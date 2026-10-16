@@ -394,7 +394,7 @@ impl Unmarshal<'_> {
             }
             b'g' => {
                 let v = self.r.int::<f64>(LE).ok_or_else(|| self.fail("float"))?;
-                Ok(self.leaf(parent, label, start, Value::Float(v), v.to_string()))
+                Ok(self.leaf(parent, label, start, Value::f64(v), v.to_string()))
             }
             b'f' => {
                 let n = self.r.u8().ok_or_else(|| self.fail("float"))?;

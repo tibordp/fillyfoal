@@ -169,7 +169,7 @@ fn enum_value(item: &Item, table: EnumTable) -> Option<Value> {
     Some(Value::Enum {
         raw,
         bits: 8,
-        name: lookup(table, raw),
+        name: lookup(table, raw).map(Into::into),
     })
 }
 

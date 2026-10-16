@@ -379,7 +379,7 @@ fn describe(node: Node, e: &Entry, bytes: &[u8], endian: Endian) -> Node {
             node.summary(parts.join(", "))
         }
         (0x1807 | 0x1814, _) => match f32_at(bytes, 0, endian) {
-            Some(v) => node.value(Value::Float(v.into())),
+            Some(v) => node.value(Value::f32(v)),
             None => node,
         },
         (0x10b4 | 0x100a | 0x1010 | 0x1011, 0x1000) => {
@@ -393,7 +393,7 @@ fn describe(node: Node, e: &Entry, bytes: &[u8], endian: Endian) -> Node {
                 Some(&v) => node.value(Value::Enum {
                     raw: v.into(),
                     bits: 16,
-                    name: lookup(table, v.into()),
+                    name: lookup(table, v.into()).map(Into::into),
                 }),
                 None => node,
             }
@@ -466,7 +466,7 @@ async fn words(cx: Cx, (e, endian): (Entry, Endian)) -> Result<()> {
             Some(table) => Value::Enum {
                 raw: v,
                 bits: 16,
-                name: lookup(table, v),
+                name: lookup(table, v).map(Into::into),
             },
             None => uint(v, 64),
         };

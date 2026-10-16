@@ -96,7 +96,7 @@ fn token_value(token: u8) -> Value {
     Value::Enum {
         raw: token.into(),
         bits: 8,
-        name: lookup(TOKENS, (token & 0x0f).into()),
+        name: lookup(TOKENS, (token & 0x0f).into()).map(Into::into),
     }
 }
 
@@ -370,7 +370,7 @@ impl<'a> Parser<'a> {
                         .value(Value::Enum {
                             raw: kind.into(),
                             bits: 8,
-                            name: lookup(VALUE_TYPES, (kind & 0x7f).into()),
+                            name: lookup(VALUE_TYPES, (kind & 0x7f).into()).map(Into::into),
                         })
                         .summary(if optional {
                             "optional (omitted when null)"
@@ -1124,8 +1124,8 @@ fn typed_value(kind: u8, b: &[u8]) -> Value {
                 bits: u8::try_from(bits).unwrap_or(64),
             }
         }
-        0x0b if sized(4) => Value::Float(f64::from(f32::from_bits(u32_le(b, 0).unwrap_or(0)))),
-        0x0c if sized(8) => Value::Float(f64::from_bits(u64_le(b, 0).unwrap_or(0))),
+        0x0b if sized(4) => Value::f32(f32::from_bits(u32_le(b, 0).unwrap_or(0))),
+        0x0c if sized(8) => Value::f64(f64::from_bits(u64_le(b, 0).unwrap_or(0))),
         0x0d if sized(4) => Value::Bool(u32_le(b, 0).unwrap_or(0) != 0),
         0x0e => Value::Bytes(b.to_vec()),
         0x0f if sized(16) => Value::Guid(guid_le(b)),

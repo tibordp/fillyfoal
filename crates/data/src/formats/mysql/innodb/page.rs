@@ -411,7 +411,7 @@ async fn fil_fields(cx: Cx, state: PageState) -> Result<()> {
     cx.emit(Node::new("Page type").span(at(24, 2)).value(Value::Enum {
         raw: kind.into(),
         bits: 16,
-        name: lookup(PAGE_TYPES, kind.into()),
+        name: lookup(PAGE_TYPES, kind.into()).map(Into::into),
     }));
     cx.emit(
         Node::new("Flush LSN")
@@ -652,7 +652,7 @@ async fn extent_fields(cx: Cx, (span, per): (Span, u64)) -> Result<()> {
     cx.emit(Node::new("State").span(span.sub(20, 4)).value(Value::Enum {
         raw: st.into(),
         bits: 32,
-        name: lookup(XDES_STATES, st.into()),
+        name: lookup(XDES_STATES, st.into()).map(Into::into),
     }));
     let bitmap = b.get(24..).unwrap_or_default();
     let free = (0..per)
@@ -1065,7 +1065,7 @@ fn undo_page(cx: &Cx, space: &Space, span: Span, page: &[u8]) {
     cx.emit(Node::new("Undo type").span(at(38, 2)).value(Value::Enum {
         raw: kind.into(),
         bits: 16,
-        name: lookup(UNDO_TYPES, kind.into()),
+        name: lookup(UNDO_TYPES, kind.into()).map(Into::into),
     }));
     let start = u16_at(40);
     let free = u16_at(42);

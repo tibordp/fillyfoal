@@ -549,7 +549,7 @@ pub(super) async fn external_refs(cx: Cx, (m, span): (Macho, Span)) -> Result<()
                 .value(Value::Enum {
                     raw: flags.into(),
                     bits: 8,
-                    name: crate::value::lookup(REFERENCE_TYPE, flags.into()),
+                    name: crate::value::lookup(REFERENCE_TYPE, flags.into()).map(Into::into),
                 })
                 .summary(format!("symbol {symbol}")),
         )
@@ -630,7 +630,7 @@ pub(super) async fn relocations(cx: Cx, (m, span, section): (Macho, Span, usize)
                         Value::Enum {
                             raw: kind.into(),
                             bits: 4,
-                            name: crate::value::lookup(types, kind.into()),
+                            name: crate::value::lookup(types, kind.into()).map(Into::into),
                         },
                     ),
                     field("r_address", word0, hex(address, 24)),
@@ -708,7 +708,7 @@ pub(super) async fn relocations(cx: Cx, (m, span, section): (Macho, Span, usize)
                         Value::Enum {
                             raw: kind.into(),
                             bits: 4,
-                            name: crate::value::lookup(types, kind.into()),
+                            name: crate::value::lookup(types, kind.into()).map(Into::into),
                         },
                     ),
                 ],

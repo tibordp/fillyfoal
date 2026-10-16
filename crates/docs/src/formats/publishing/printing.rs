@@ -1987,10 +1987,11 @@ async fn urf_page(cx: Cx, (header, data): (Span, Span)) -> Result<()> {
             .value(Value::Enum {
                 raw: space.into(),
                 bits: 8,
-                name: URF_SPACES
+                name: (URF_SPACES
                     .iter()
                     .find(|(k, _)| *k == space)
-                    .map(|(_, v)| *v),
+                    .map(|(_, v)| *v))
+                .map(Into::into),
             }),
     );
     cx.emit(

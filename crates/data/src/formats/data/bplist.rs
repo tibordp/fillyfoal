@@ -270,7 +270,7 @@ async fn object(cx: &Cx, pl: &Plist, index: u64) -> Result<Obj> {
         (0x2, n @ (2 | 3)) => {
             let size = 1u64 << n;
             let bytes = cx.read(file.sub_exact(body, size)?).await?;
-            scalar(span_of(size), Value::Float(real(&bytes)), "real".into())
+            scalar(span_of(size), real_value(&bytes), "real".into())
         }
         (0x3, 0x3) => {
             let bytes = cx.read(file.sub_exact(body, 8)?).await?;
@@ -339,9 +339,17 @@ async fn object(cx: &Cx, pl: &Plist, index: u64) -> Result<Obj> {
 }
 
 fn real(bytes: &[u8]) -> f64 {
+    match real_value(bytes) {
+        Value::Float { value, .. } => value,
+        _ => 0.0,
+    }
+}
+
+/// A real at its stored width.
+fn real_value(bytes: &[u8]) -> Value {
     match bytes.len() {
-        4 => f64::from(f32::from_bits(be_uint(bytes) as u32)),
-        _ => f64::from_bits(be_uint(bytes)),
+        4 => Value::f32(f32::from_bits(be_uint(bytes) as u32)),
+        _ => Value::f64(f64::from_bits(be_uint(bytes))),
     }
 }
 
@@ -397,7 +405,9 @@ async fn uid_summary(cx: &Cx, pl: &Plist, uid: u64) -> Option<String> {
         (Some(Value::Text(t)), _) => format!("\"{}\"", clip(t, 60)),
         (Some(Value::UInt { value, .. }), _) => format!("{} {value}", obj.summary),
         (Some(Value::Int { value, .. }), _) => format!("{} {value}", obj.summary),
-        (Some(Value::Float(f)), _) => format!("{} {f}", obj.summary),
+        (Some(Value::Float { value, bits }), _) => {
+            format!("{} {}", obj.summary, crate::render::float(*value, *bits))
+        }
         (Some(Value::Bool(b)), _) => b.to_string(),
         (None, Kind::Dict) => match class_name(cx, pl, &obj).await {
             Some(c) => format!("<{c}>"),

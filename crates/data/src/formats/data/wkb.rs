@@ -250,7 +250,7 @@ pub async fn dissect_gp(cx: Cx, input: Input) -> Result<()> {
                 kids.push(
                     Node::new(*name)
                         .span(env_span.sub(to_u64(at), 8))
-                        .value(Value::Float(v)),
+                        .value(Value::f64(v)),
                 );
             }
         }
@@ -441,7 +441,7 @@ async fn geometry(cx: &Cx, span: Span, at: u64, depth: u32) -> Result<u64> {
                     cx.emit(
                         Node::new(*name)
                             .span(span.sub(body.saturating_add(to_u64(o)), 8))
-                            .value(Value::Float(v)),
+                            .value(Value::f64(v)),
                     );
                 }
             }

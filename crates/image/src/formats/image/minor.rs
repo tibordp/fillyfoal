@@ -109,9 +109,9 @@ async fn viff(cx: Cx, input: Input) -> Result<()> {
                 raw: head.get(4).copied().unwrap_or(0).into(),
                 bits: 8,
                 name: Some(if big {
-                    "big-endian (IEEE)"
+                    "big-endian (IEEE)".into()
                 } else {
-                    "little-endian"
+                    "little-endian".into()
                 }),
             }),
     );

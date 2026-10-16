@@ -49,7 +49,7 @@ async fn tokyo(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Type").span(file.sub(32, 1)).value(Value::Enum {
         raw: kind.into(),
         bits: 8,
-        name: Some(kind_name),
+        name: Some(kind_name.into()),
     }));
     let records = u64_le(&head, 48).unwrap_or(0);
     let size = u64_le(&head, 56).unwrap_or(0);
@@ -107,7 +107,7 @@ async fn kyoto(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Type").span(file.sub(8, 1)).value(Value::Enum {
         raw: kind.into(),
         bits: 8,
-        name: Some(kind_name),
+        name: Some(kind_name.into()),
     }));
     cx.emit(Node::new("Body").span(file.tail(64)));
     cx.annotate(format!("Kyoto Cabinet {kind_name} database"));
@@ -250,7 +250,7 @@ async fn rrd(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Float cookie")
             .span(file.sub(16, 8))
-            .value(Value::Float(cookie)),
+            .value(Value::f64(cookie)),
     );
     cx.emit(
         Node::new("Data sources")

@@ -167,7 +167,7 @@ fn header(f: &mut Fields<'_>, flavor: &Flavor) -> Result<Exec> {
             .value(crate::value::Value::Enum {
                 raw: magic.into(),
                 bits: 16,
-                name: crate::value::lookup(MAGIC, magic.into()),
+                name: crate::value::lookup(MAGIC, magic.into()).map(Into::into),
             }),
     );
     f.node(
@@ -176,7 +176,7 @@ fn header(f: &mut Fields<'_>, flavor: &Flavor) -> Result<Exec> {
             .value(crate::value::Value::Enum {
                 raw: machine.into(),
                 bits: 16,
-                name: crate::value::lookup(MACHINE, machine.into()),
+                name: crate::value::lookup(MACHINE, machine.into()).map(Into::into),
             }),
     );
     let text = f.u32("a_text").hex().desc("Text segment size").emit()?;

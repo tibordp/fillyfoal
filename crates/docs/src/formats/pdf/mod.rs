@@ -900,7 +900,7 @@ fn item_node(doc: &DocRef, name: Cow<'static, str>, item: &Item, base: Span, wal
             value: *v,
             bits: 64,
         }),
-        Obj::Real(v) => node.value(Value::Float(*v)),
+        Obj::Real(v) => node.value(Value::f64(*v)),
         Obj::Name(n) => node.value(Value::Text(format!("/{n}"))),
         Obj::Str { bytes, hex } => {
             // Only a prefix of a huge string is examined and shown, so the

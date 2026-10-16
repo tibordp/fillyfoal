@@ -254,7 +254,7 @@ async fn fceux_sections(cx: Cx, body: Span) -> Result<()> {
             .value(Value::Enum {
                 raw: kind.into(),
                 bits: 8,
-                name: lookup(FCEUX_SECTIONS, kind.into()),
+                name: lookup(FCEUX_SECTIONS, kind.into()).map(Into::into),
             })
             .summary(format!("{len} bytes"))
             .lazy(fceux_vars, data),

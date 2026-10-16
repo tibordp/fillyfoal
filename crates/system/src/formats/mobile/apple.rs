@@ -236,8 +236,8 @@ async fn nib_object(cx: Cx, (nib, first, count): (Arc<Nib>, u64, u64)) -> Result
             },
             4 => Value::Bool(true),
             5 => Value::Bool(false),
-            6 => Value::Float(f64::from(f32::from_bits(cur.u32().await?))),
-            7 => Value::Float(f64::from_bits(cur.u64().await?)),
+            6 => Value::f32(f32::from_bits(cur.u32().await?)),
+            7 => Value::f64(f64::from_bits(cur.u64().await?)),
             8 => {
                 let len = nib_varint(&mut cur).await?;
                 let data = cur.bytes(len.min(256)).await?;
@@ -256,7 +256,7 @@ async fn nib_object(cx: Cx, (nib, first, count): (Arc<Nib>, u64, u64)) -> Result
             _ => Value::Enum {
                 raw: kind.into(),
                 bits: 8,
-                name: lookup(NIB_TYPES, kind.into()),
+                name: lookup(NIB_TYPES, kind.into()).map(Into::into),
             },
         };
         let name = usize::try_from(key)
@@ -952,7 +952,7 @@ async fn key_format(cx: Cx, (span, tokens): (Span, Arc<Vec<u32>>)) -> Result<()>
                 .value(Value::Enum {
                     raw: (*t).into(),
                     bits: 32,
-                    name: lookup(CAR_ATTRIBUTES, (*t).into()),
+                    name: lookup(CAR_ATTRIBUTES, (*t).into()).map(Into::into),
                 }),
         );
     }

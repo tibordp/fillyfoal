@@ -287,7 +287,7 @@ async fn mysql_frm(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Engine").span(file.sub(3, 1)).value(Value::Enum {
         raw: engine.into(),
         bits: 8,
-        name,
+        name: name.map(Into::into),
     }));
     cx.emit(
         Node::new("I/O size")

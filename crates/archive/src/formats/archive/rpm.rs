@@ -535,14 +535,14 @@ async fn header(cx: Cx, (h, signature): (Header, bool)) -> Result<()> {
                 .value(Value::Enum {
                     raw: e.tag.into(),
                     bits: 32,
-                    name: crate::value::lookup(table, e.tag.into()),
+                    name: crate::value::lookup(table, e.tag.into()).map(Into::into),
                 }),
             Node::new("Type")
                 .span(entry_span.sub(4, 4))
                 .value(Value::Enum {
                     raw: e.kind.into(),
                     bits: 32,
-                    name: crate::value::lookup(TYPES, e.kind.into()),
+                    name: crate::value::lookup(TYPES, e.kind.into()).map(Into::into),
                 }),
             Node::new("Offset")
                 .span(entry_span.sub(8, 4))

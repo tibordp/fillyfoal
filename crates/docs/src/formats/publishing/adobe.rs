@@ -685,7 +685,7 @@ async fn acb(cx: Cx, input: Input) -> Result<()> {
             .value(Value::Enum {
                 raw: space.into(),
                 bits: 16,
-                name: space_name,
+                name: space_name.map(Into::into),
             }),
     );
     let comps: u64 = if space == 2 { 4 } else { 3 };

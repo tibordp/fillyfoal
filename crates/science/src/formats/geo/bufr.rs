@@ -894,7 +894,7 @@ async fn subset(cx: Cx, (data, subsets, index): (Span, Arc<Vec<Subset>>, usize))
         let span = data.sub(from / 8, to.div_ceil(8).saturating_sub(from / 8));
         let mut node = Node::new(name).span(span);
         node = match value {
-            Some(v) => node.value(Value::Float(v)),
+            Some(v) => node.value(Value::f64(v)),
             None => node.value(Value::Text("missing".into())),
         };
         node = node.summary(if unit.is_empty() || unit == "code table" {

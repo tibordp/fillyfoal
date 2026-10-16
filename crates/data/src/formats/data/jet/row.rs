@@ -372,11 +372,11 @@ pub fn value(col: &Column, b: &[u8], fmt: Fmt) -> Decoded {
         }),
         0x06 => u32_le(b, 0).filter(|_| n == 4).map(|x| {
             let f = f32::from_bits(x);
-            plain(Value::Float(f.into()), f.to_string())
+            plain(Value::f32(f), f.to_string())
         }),
         0x07 => u64_le(b, 0).filter(|_| n == 8).map(|x| {
             let f = f64::from_bits(x);
-            plain(Value::Float(f), f.to_string())
+            plain(Value::f64(f), f.to_string())
         }),
         0x08 => u64_le(b, 0).filter(|_| n == 8).map(|x| {
             let days = f64::from_bits(x);
@@ -385,7 +385,7 @@ pub fn value(col: &Column, b: &[u8], fmt: Fmt) -> Decoded {
                     Value::Timestamp { unix_seconds },
                     crate::formats::util::civil::date(unix_seconds),
                 ),
-                None => plain(Value::Float(days), days.to_string()),
+                None => plain(Value::f64(days), days.to_string()),
             }
         }),
         0x0f if n == 16 => {

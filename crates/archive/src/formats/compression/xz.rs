@@ -593,7 +593,7 @@ async fn block_header(cx: Cx, span: Span) -> Result<()> {
         let id_node = id_node.value(Value::Enum {
             raw: id,
             bits: 64,
-            name: crate::value::lookup(FILTERS, id),
+            name: crate::value::lookup(FILTERS, id).map(Into::into),
         });
         cx.emit(node.lazy(emit_nodes, Arc::new(vec![id_node, size_node, props_node])));
     }

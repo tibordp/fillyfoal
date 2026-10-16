@@ -112,7 +112,7 @@ impl Elem {
                 value: i64::from_le_bytes(Self::word(b, endian)?),
                 bits: 64,
             },
-            Elem::F32 | Elem::F64 => Value::Float(self.number(b, endian)?),
+            Elem::F32 | Elem::F64 => Value::f64(self.number(b, endian)?),
             Elem::Char => Value::Text(char::from(*b.first()?).to_string()),
             Elem::C64 => {
                 let re = f32::from_le_bytes(Self::word(b, endian)?);

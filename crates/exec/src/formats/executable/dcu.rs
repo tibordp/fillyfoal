@@ -862,7 +862,7 @@ fn field_node(f: &Field, span: Span, rec: &Rec, names: &Names) -> Node {
         Kind::Tag => node.value(Value::Enum {
             raw,
             bits: 8,
-            name: Some(rec.what),
+            name: Some(rec.what.into()),
         }),
         Kind::Name => node.value(text(f.text.clone().unwrap_or_default())),
         Kind::Time => node
@@ -935,7 +935,7 @@ async fn item_children(
             Node::new("End").span(at).value(Value::Enum {
                 raw: CLOSE.into(),
                 bits: 8,
-                name: Some(inner.what),
+                name: Some(inner.what.into()),
             })
         } else {
             let (label, summary) = describe(&inner, &names, this, 0);
@@ -1135,7 +1135,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .value(Value::Enum {
                     raw: END_TAG.into(),
                     bits: 8,
-                    name: Some("end of unit"),
+                    name: Some("end of unit".into()),
                 }),
         );
     }
@@ -1187,7 +1187,7 @@ async fn header_fields(cx: Cx, (span, d7): (Span, bool)) -> Result<()> {
                 .value(Value::Enum {
                     raw: cv.into(),
                     bits: 8,
-                    name: lookup(COMPILER_VERSION, cv.into()),
+                    name: lookup(COMPILER_VERSION, cv.into()).map(Into::into),
                 })
                 .desc(
                     "The magic's high byte, equal to CompilerVersion (verified for Delphi 7 \

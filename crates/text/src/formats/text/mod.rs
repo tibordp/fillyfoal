@@ -97,7 +97,7 @@ pub fn number(text: &str) -> Option<Value> {
         .bytes()
         .all(|b| b.is_ascii_digit() || matches!(b, b'.' | b'e' | b'E' | b'+' | b'-'));
     if numeric && t.bytes().any(|b| b.is_ascii_digit()) {
-        return t.parse::<f64>().ok().map(Value::Float);
+        return t.parse::<f64>().ok().map(Value::f64);
     }
     None
 }

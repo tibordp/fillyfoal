@@ -512,7 +512,7 @@ async fn element(
 ) -> Result<Node> {
     let node = Node::new(name);
     Ok(match t {
-        0x01 => node.value(Value::Float(f64::from_bits(r.le(at, 8).await?))),
+        0x01 => node.value(Value::f64(f64::from_bits(r.le(at, 8).await?))),
         0x02 => string(r, node, at).await?,
         0x03 | 0x04 => sub_document(r, node, at, n, t == 0x04, path),
         0x05 => {

@@ -778,11 +778,11 @@ pub fn scalar(bs: &mut Bs<'_>, ty: &Ty, p: Phys) -> Result<(String, Option<Value
         }
         Phys::F32 => {
             let v = bs.f32()?;
-            (v.to_string(), Some(Value::Float(v.into())))
+            (v.to_string(), Some(Value::f32(v)))
         }
         Phys::F64 => {
             let v = bs.f64()?;
-            (v.to_string(), Some(Value::Float(v)))
+            (v.to_string(), Some(Value::f64(v)))
         }
         Phys::Interval => {
             let (mut months, mut days, mut micros) = (0i64, 0i64, 0i64);

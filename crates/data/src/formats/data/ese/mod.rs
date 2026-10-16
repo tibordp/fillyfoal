@@ -846,7 +846,7 @@ async fn columns_view(cx: Cx, (db, cat, ti): (D, C, usize)) -> Result<()> {
             node.value(Value::Enum {
                 raw: c.def.coltyp.into(),
                 bits: 32,
-                name: lookup(COLUMN_TYPES, c.def.coltyp.into()),
+                name: lookup(COLUMN_TYPES, c.def.coltyp.into()).map(Into::into),
             })
             .summary(column_summary(&c.def)),
         );

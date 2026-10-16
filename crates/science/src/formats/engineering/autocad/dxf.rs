@@ -171,7 +171,7 @@ impl TagValue {
                 value: *v,
                 bits: 64,
             },
-            TagValue::Float(v) => Value::Float(*v),
+            TagValue::Float(v) => Value::f64(*v),
             TagValue::Bytes(b) => Value::Bytes(b.clone()),
         }
     }

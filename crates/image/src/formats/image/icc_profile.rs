@@ -386,13 +386,13 @@ fn header(f: &mut Fields<'_>, ctx: &HeaderCtx) -> Result<Header> {
             n.value(Value::Enum {
                 raw: (v & 0xffff).into(),
                 bits: 16,
-                name: lookup(INTENTS, (v & 0xffff).into()),
+                name: lookup(INTENTS, (v & 0xffff).into()).map(Into::into),
             })
         })
         .emit()?;
     for name in ["PCS illuminant X", "PCS illuminant Y", "PCS illuminant Z"] {
         f.int::<i32>(name)
-            .with(|&v, n| n.value(Value::Float(s15(v))))
+            .with(|&v, n| n.value(Value::f64(s15(v))))
             .emit()?;
     }
     let creator = sig_field(f, "Profile creator")?;
@@ -662,14 +662,14 @@ fn short_value(head: &[u8]) -> Option<String> {
 
 fn fixed(f: &mut Fields<'_>, name: &'static str) -> Result<()> {
     f.int::<i32>(name)
-        .with(|&v, n| n.value(Value::Float(s15(v))))
+        .with(|&v, n| n.value(Value::f64(s15(v))))
         .emit()?;
     Ok(())
 }
 
 fn ufixed(f: &mut Fields<'_>, name: &'static str) -> Result<()> {
     f.u32(name)
-        .with(|&v, n| n.value(Value::Float(u16f16(v))))
+        .with(|&v, n| n.value(Value::f64(u16f16(v))))
         .emit()?;
     Ok(())
 }
@@ -758,7 +758,7 @@ async fn tag_data(cx: Cx, span: Span) -> Result<()> {
                 0 => f.node(Node::new("Curve").summary("identity")),
                 1 => {
                     f.u16("Gamma")
-                        .with(|&g, node| node.value(Value::Float(f64::from(g) / 256.0)))
+                        .with(|&g, node| node.value(Value::f64(f64::from(g) / 256.0)))
                         .desc("u8Fixed8Number")
                         .emit()?;
                 }
@@ -939,7 +939,7 @@ async fn tag_data(cx: Cx, span: Span) -> Result<()> {
                 for colour in ["Red", "Green", "Blue"] {
                     for name in ["Gamma", "Minimum", "Maximum"] {
                         f.u32(name)
-                            .with(|&v, n| n.value(Value::Float(u16f16(v))).summary(colour))
+                            .with(|&v, n| n.value(Value::f64(u16f16(v))).summary(colour))
                             .emit()?;
                     }
                 }

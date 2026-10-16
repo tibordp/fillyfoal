@@ -451,10 +451,10 @@ async fn item_node(
         }
         Kind::Nil => node.summary("nil"),
         Kind::Bool(b) => node.value(Value::Bool(b)),
-        Kind::Float32 => node.value(Value::Float(f64::from(f32::from_bits(
+        Kind::Float32 => node.value(Value::f32(f32::from_bits(
             u32::try_from(h.arg).unwrap_or(0),
-        )))),
-        Kind::Float64 => node.value(Value::Float(f64::from_bits(h.arg))),
+        ))),
+        Kind::Float64 => node.value(Value::f64(f64::from_bits(h.arg))),
         Kind::Str if borg => {
             let data = r.bytes(body, h.arg.min(vt::MAX_TEXT)).await?;
             borg_string(node, data, h.arg, key)

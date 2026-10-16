@@ -605,7 +605,7 @@ fn value_node(name: String, val: Val, span: Span) -> Node {
         Val::Int(v) => Node::new(name)
             .span(span)
             .value(Value::Int { value: v, bits: 64 }),
-        Val::Float(v) => Node::new(name).span(span).value(Value::Float(v)),
+        Val::Float(v) => Node::new(name).span(span).value(Value::f64(v)),
         Val::Bool(v) => Node::new(name).span(span).value(Value::Bool(v)),
         Val::DateTime(text) => match parse_datetime(&text) {
             Some(t)

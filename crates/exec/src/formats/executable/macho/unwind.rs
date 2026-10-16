@@ -410,8 +410,8 @@ async fn second_level_page(
             raw: kind.into(),
             bits: 32,
             name: match kind {
-                2 => Some("UNWIND_SECOND_LEVEL_REGULAR"),
-                3 => Some("UNWIND_SECOND_LEVEL_COMPRESSED"),
+                2 => Some("UNWIND_SECOND_LEVEL_REGULAR".into()),
+                3 => Some("UNWIND_SECOND_LEVEL_COMPRESSED".into()),
                 _ => None,
             },
         },

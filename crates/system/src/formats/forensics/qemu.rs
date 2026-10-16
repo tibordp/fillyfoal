@@ -818,7 +818,7 @@ async fn eof(cx: &Cx, w: &Walk, cur: &mut Cursor<'_>) -> Result<()> {
             .value(Value::Enum {
                 raw: 0,
                 bits: 8,
-                name: Some("QEMU_VM_EOF"),
+                name: Some("QEMU_VM_EOF".into()),
             }),
     )
     .await;
@@ -1917,7 +1917,7 @@ async fn field_node(cx: &Cx, f: &FDesc, name: String, span: Span) -> Result<Node
             node
         }
     } else if ty == "float64" && f.size == 8 && whole {
-        node.value(Value::Float(f64::from_bits(be)))
+        node.value(Value::f64(f64::from_bits(be)))
     } else {
         node.value(Value::Bytes(raw)).summary(ty.to_owned())
     })

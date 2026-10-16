@@ -293,7 +293,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .value(Value::Enum {
                 raw: version.into(),
                 bits: 32,
-                name: lookup(VERSIONS, version.into()),
+                name: lookup(VERSIONS, version.into()).map(Into::into),
             }),
     );
     let enc_len: u64 = if jet3 { 126 } else { 128 };

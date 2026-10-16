@@ -171,7 +171,7 @@ async fn directory_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         n.value(Value::Enum {
             raw: method.into(),
             bits: 8,
-            name: crate::value::lookup(METHOD, method.into()),
+            name: crate::value::lookup(METHOD, method.into()).map(Into::into),
         })
     });
     let next = r.u32("Next entry", LE).ok_or_else(bad)?;

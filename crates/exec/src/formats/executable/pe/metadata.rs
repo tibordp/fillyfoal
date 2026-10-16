@@ -1507,7 +1507,8 @@ async fn row_columns(cx: Cx, (pe, root, table, row): (Pe, Span, usize, u32)) -> 
                 name: lookup(
                     t,
                     (value & if table == 0x0b { 0xff } else { u32::MAX }).into(),
-                ),
+                )
+                .map(Into::into),
             }),
             Show::Hex | Show::Rva => node.value(Value::UInt {
                 value: value.into(),

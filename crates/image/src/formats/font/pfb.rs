@@ -62,7 +62,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     .value(Value::Enum {
                         raw: 3,
                         bits: 8,
-                        name: lookup(SEGMENTS, 3),
+                        name: lookup(SEGMENTS, 3).map(Into::into),
                     }),
             );
             break;
@@ -75,7 +75,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .value(Value::Enum {
                 raw: kind.into(),
                 bits: 8,
-                name: lookup(SEGMENTS, kind.into()),
+                name: lookup(SEGMENTS, kind.into()).map(Into::into),
             })
             .summary(format!("{len} bytes"));
         if kind == 1 {

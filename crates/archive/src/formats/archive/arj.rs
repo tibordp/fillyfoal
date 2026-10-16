@@ -203,7 +203,7 @@ fn basic_header(r: &mut ByteReader<'_>, main: bool) -> Option<(u8, u32, usize)> 
         n.value(Value::Enum {
             raw: os.into(),
             bits: 8,
-            name: crate::value::lookup(HOST_OS, os.into()),
+            name: crate::value::lookup(HOST_OS, os.into()).map(Into::into),
         })
     });
     let flags = r.u8("Flags")?;
@@ -221,7 +221,7 @@ fn basic_header(r: &mut ByteReader<'_>, main: bool) -> Option<(u8, u32, usize)> 
         n.value(Value::Enum {
             raw: method.into(),
             bits: 8,
-            name: crate::value::lookup(METHOD, method.into()),
+            name: crate::value::lookup(METHOD, method.into()).map(Into::into),
         })
     });
     let kind = r.u8("File type")?;
@@ -229,7 +229,7 @@ fn basic_header(r: &mut ByteReader<'_>, main: bool) -> Option<(u8, u32, usize)> 
         n.value(Value::Enum {
             raw: kind.into(),
             bits: 8,
-            name: crate::value::lookup(FILE_TYPE, kind.into()),
+            name: crate::value::lookup(FILE_TYPE, kind.into()).map(Into::into),
         })
     });
     r.u8("Reserved")?;

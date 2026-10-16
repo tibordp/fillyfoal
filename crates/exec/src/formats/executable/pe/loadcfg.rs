@@ -782,7 +782,7 @@ async fn code_map(cx: Cx, entries: Vec<(Span, u32, u32)>) -> Result<()> {
                 .value(Value::Enum {
                     raw: kind.into(),
                     bits: 2,
-                    name: crate::value::lookup(CODE_RANGE, kind.into()),
+                    name: crate::value::lookup(CODE_RANGE, kind.into()).map(Into::into),
                 })
                 .summary(format!("{len:#x} bytes")),
         )
@@ -953,7 +953,7 @@ async fn arm64x_fixups(cx: Cx, (pe, span, page): (Pe, Span, u32)) -> Result<()> 
             .value(Value::Enum {
                 raw: kind.into(),
                 bits: 2,
-                name: crate::value::lookup(ARM64X_FIXUP, kind.into()),
+                name: crate::value::lookup(ARM64X_FIXUP, kind.into()).map(Into::into),
             });
         node = match pe.header_field(rva.into()) {
             Some(field) => node.summary(format!("{field}: {effect}")),

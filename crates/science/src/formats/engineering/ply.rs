@@ -90,7 +90,7 @@ impl Ty {
             Ty::I32 => int(i64::from(get!(i32, 4)), 32),
             Ty::U32 => uint(u64::from(get!(u32, 4)), 32),
             Ty::F32 => float32(get!(f32, 4)),
-            Ty::F64 => Value::Float(get!(f64, 8)),
+            Ty::F64 => Value::f64(get!(f64, 8)),
         })
     }
 
@@ -103,7 +103,7 @@ impl Ty {
             Ty::U16 => uint(u64::from(tok.parse::<u16>().ok()?), 16),
             Ty::I32 => int(i64::from(tok.parse::<i32>().ok()?), 32),
             Ty::U32 => uint(u64::from(tok.parse::<u32>().ok()?), 32),
-            Ty::F32 | Ty::F64 => Value::Float(tok.parse::<f64>().ok()?),
+            Ty::F32 | Ty::F64 => Value::f64(tok.parse::<f64>().ok()?),
         })
     }
 }

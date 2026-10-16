@@ -185,7 +185,7 @@ async fn header_block(cx: Cx, (file, format): (Span, u32)) -> Result<()> {
     cx.emit(Node::new("Format").span(span.sub(0, 4)).value(Value::Enum {
         raw: format.into(),
         bits: 32,
-        name: lookup(FORMATS, format.into()),
+        name: lookup(FORMATS, format.into()).map(Into::into),
     }));
     let second = u32_be(&b, 4).unwrap_or(0);
     cx.emit(if format == 6 {

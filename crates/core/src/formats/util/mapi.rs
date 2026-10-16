@@ -408,8 +408,8 @@ pub fn fixed_scalar(id: u16, ty: u16, raw: &[u8]) -> (Option<Value>, Option<Stri
                 bits: 32,
             },
         },
-        0x0004 => Value::Float(f64::from(f32::from_bits(low as u32))),
-        0x0005 | 0x0007 => Value::Float(f64::from_bits(wide)),
+        0x0004 => Value::f32(f32::from_bits(low as u32)),
+        0x0005 | 0x0007 => Value::f64(f64::from_bits(wide)),
         0x0006 => {
             let v = wide.cast_signed();
             return (

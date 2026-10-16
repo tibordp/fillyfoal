@@ -647,7 +647,7 @@ async fn kdbx(cx: Cx, input: Input) -> Result<()> {
                 node = node.value(Value::Enum {
                     raw: v.into(),
                     bits: 32,
-                    name: lookup(&[(0, "none"), (1, "gzip")], v.into()),
+                    name: lookup(&[(0, "none"), (1, "gzip")], v.into()).map(Into::into),
                 });
             }
             4 => {
@@ -680,7 +680,7 @@ async fn kdbx(cx: Cx, input: Input) -> Result<()> {
                 node = node.value(Value::Enum {
                     raw: v.into(),
                     bits: 32,
-                    name: lookup(STREAMS, v.into()),
+                    name: lookup(STREAMS, v.into()).map(Into::into),
                 });
             }
             11 | 12 => {
@@ -1151,7 +1151,7 @@ async fn inner_header(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
                 node = node.value(Value::Enum {
                     raw: v.into(),
                     bits: 32,
-                    name: lookup(STREAMS, v.into()),
+                    name: lookup(STREAMS, v.into()).map(Into::into),
                 });
             }
             3 => {

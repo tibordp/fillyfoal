@@ -452,7 +452,7 @@ async fn partition(cx: Cx, (input, mish, data_fork): (Input, Span, Span)) -> Res
             Node::new("Type").span(span.sub(0, 4)).value(Value::Enum {
                 raw: kind.into(),
                 bits: 32,
-                name: crate::value::lookup(CHUNK_TYPE, kind.into()),
+                name: crate::value::lookup(CHUNK_TYPE, kind.into()).map(Into::into),
             }),
             Node::new("Comment")
                 .span(span.sub(4, 4))

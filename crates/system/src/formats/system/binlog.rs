@@ -634,7 +634,7 @@ fn framing(rec: Record, head_len: u64) -> Node {
         .value(Value::Enum {
             raw: rec.kind,
             bits: 32,
-            name: crate::value::lookup(KIND, rec.kind),
+            name: crate::value::lookup(KIND, rec.kind).map(Into::into),
         })
         .summary(format!("{} bytes follow", rec.body.len))
 }
@@ -1048,7 +1048,7 @@ async fn decode(cx: &Cx, ctx: &Ctx, index: &Index, kind: u64, body: &[u8]) -> Re
             Value::Enum {
                 raw: v,
                 bits: 32,
-                name: crate::value::lookup(IMPORTANCE, v),
+                name: crate::value::lookup(IMPORTANCE, v).map(Into::into),
             }
         );
     }
@@ -1106,7 +1106,7 @@ async fn decode(cx: &Cx, ctx: &Ctx, index: &Index, kind: u64, body: &[u8]) -> Re
                     Value::Enum {
                         raw: v,
                         bits: 32,
-                        name: crate::value::lookup(table, v),
+                        name: crate::value::lookup(table, v).map(Into::into),
                     }
                 );
             }

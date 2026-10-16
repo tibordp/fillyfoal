@@ -665,7 +665,7 @@ fn enumerated(raw: u64, bits: u8, table: EnumTable) -> Shown {
         value: Some(Value::Enum {
             raw,
             bits,
-            name: lookup(table, raw),
+            name: lookup(table, raw).map(Into::into),
         }),
         summary: None,
     }
@@ -686,7 +686,7 @@ fn gps(e: &Entry, bytes: &[u8], values: &[Num], refs: &Refs) -> Option<Shown> {
         0x02 | 0x04 | 0x14 | 0x16 => {
             let reference = letter(e.tag.saturating_sub(1));
             let (decimal, text) = dms(values, reference)?;
-            Shown::new(Value::Float(decimal), text)
+            Shown::new(Value::f64(decimal), text)
         }
         0x05 if one => enumerated(u(values, 0)?, 8, GPS_ALTITUDE_REF),
         0x06 if one => {
@@ -698,7 +698,7 @@ fn gps(e: &Entry, bytes: &[u8], values: &[Num], refs: &Refs) -> Option<Shown> {
                 Some(3) => format!("{} m below the ellipsoid", trim(x, 2)),
                 _ => format!("{} m above sea level", trim(x, 2)),
             };
-            Shown::new(Value::Float(if below { -x } else { x }), text)
+            Shown::new(Value::f64(if below { -x } else { x }), text)
         }
         0x07 if e.count == 3 => {
             let (h, m, s) = (f(values, 0)?, f(values, 1)?, f(values, 2)?);

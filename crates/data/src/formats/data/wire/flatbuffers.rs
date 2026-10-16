@@ -25,9 +25,7 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::Value;
 
-use super::{
-    hex, plausible_f32, plausible_f64, plural, prefix, printable, short_text, uint, widen,
-};
+use super::{hex, plausible_f32, plausible_f64, plural, prefix, printable, short_text, uint};
 
 declare_format!(pub FORMAT = "flatbuffers", "FlatBuffers data (no schema)",
     ["fb", "bin"], "application/x-flatbuffers", Probe::Never, dissect);
@@ -361,7 +359,7 @@ async fn slot_node(
         8 => {
             let v = u64_le(&raw, 0).unwrap_or(0);
             if plausible_f64(v) {
-                node.value(Value::Float(f64::from_bits(v)))
+                node.value(Value::f64(f64::from_bits(v)))
                     .summary(format!("double?; 64-bit {v:#x}"))
             } else {
                 scalar(node, v, v.cast_signed(), 64)
@@ -372,7 +370,7 @@ async fn slot_node(
             None => {
                 let v = u32_le(&raw, 0).unwrap_or(0);
                 if plausible_f32(v) {
-                    node.value(Value::Float(widen(f32::from_bits(v))))
+                    node.value(Value::f32(f32::from_bits(v)))
                         .summary(format!("float?; 32-bit {v:#x}"))
                 } else {
                     scalar(node, v.into(), v.cast_signed().into(), 32)

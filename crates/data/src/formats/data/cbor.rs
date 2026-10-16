@@ -259,7 +259,7 @@ async fn item_node(r: &mut ByteReader<'_>, start: u64, end: u64, name: String) -
             let mut node = node.value(Value::Enum {
                 raw: h.arg,
                 bits: 64,
-                name,
+                name: name.map(Into::into),
             });
             // Epoch times are shown directly.
             if h.arg == 1 {
@@ -277,11 +277,11 @@ async fn item_node(r: &mut ByteReader<'_>, start: u64, end: u64, name: String) -
             21 => node.value(Value::Bool(true)),
             22 => node.value(Value::Text("null".into())),
             23 => node.value(Value::Text("undefined".into())),
-            25 => node.value(Value::Float(f16(u16::try_from(h.arg).unwrap_or(0)))),
-            26 => node.value(Value::Float(f64::from(f32::from_bits(
+            25 => node.value(Value::f16(f16(u16::try_from(h.arg).unwrap_or(0)))),
+            26 => node.value(Value::f32(f32::from_bits(
                 u32::try_from(h.arg).unwrap_or(0),
-            )))),
-            27 => node.value(Value::Float(f64::from_bits(h.arg))),
+            ))),
+            27 => node.value(Value::f64(f64::from_bits(h.arg))),
             _ => node.value(hex(h.arg, 8)).summary("simple value"),
         },
         _ => node.diag(Diagnostic::malformed("unknown major type")),

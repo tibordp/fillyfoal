@@ -610,7 +610,7 @@ impl<'a> Body<'a> {
             Some(t) => Value::Enum {
                 raw: v.into(),
                 bits: 8,
-                name: lookup(t, v.into()),
+                name: lookup(t, v.into()).map(Into::into),
             },
             None => Value::UInt {
                 value: v.into(),
@@ -720,7 +720,7 @@ async fn packet(cx: Cx, state: PacketState) -> Result<()> {
     let tag_value = Value::Enum {
         raw: state.tag.into(),
         bits: 8,
-        name: lookup(TAGS, state.tag.into()),
+        name: lookup(TAGS, state.tag.into()).map(Into::into),
     };
     cx.emit(
         Node::new("Packet header")
@@ -1093,7 +1093,7 @@ async fn subpackets(cx: Cx, (span, data): (Span, Arc<Vec<u8>>)) -> Result<()> {
                 node.value(Value::Enum {
                     raw: code.into(),
                     bits: 8,
-                    name: lookup(REVOCATION_REASONS, code.into()),
+                    name: lookup(REVOCATION_REASONS, code.into()).map(Into::into),
                 })
                 .summary(reason)
             }
@@ -1307,7 +1307,7 @@ async fn compressed(cx: &Cx, state: &PacketState) -> Result<()> {
             .value(Value::Enum {
                 raw: algo.into(),
                 bits: 8,
-                name: lookup(COMPRESSION, algo.into()),
+                name: lookup(COMPRESSION, algo.into()).map(Into::into),
             }),
     );
     let content = state.body.tail(1);

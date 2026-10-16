@@ -212,7 +212,7 @@ pub fn sei_rbsp(w: &mut Walker, hevc: bool, sps: Option<&SpsInfo>) -> Option<Vec
                     .value(crate::value::Value::Enum {
                         raw: kind,
                         bits: 32,
-                        name: crate::value::lookup(table, kind),
+                        name: crate::value::lookup(table, kind).map(Into::into),
                     }),
             );
             children.push(

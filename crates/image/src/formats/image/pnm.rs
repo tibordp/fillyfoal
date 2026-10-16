@@ -183,7 +183,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 } else {
                     "big-endian"
                 };
-                cx.emit(node.value(crate::value::Value::Float(scale)).summary(order));
+                cx.emit(node.value(crate::value::Value::f64(scale)).summary(order));
                 values.push(0);
             } else {
                 let Some(n) = number(&t) else {

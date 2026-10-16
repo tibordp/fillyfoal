@@ -225,7 +225,7 @@ async fn tex_pk(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Design size")
             .span(file.sub(3u64.saturating_add(k), 4))
-            .value(Value::Float(f64::from(design) / 1_048_576.0))
+            .value(Value::f64(f64::from(design) / 1_048_576.0))
             .summary("pt"),
     );
     cx.emit(

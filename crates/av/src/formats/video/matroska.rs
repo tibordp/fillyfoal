@@ -1221,7 +1221,7 @@ fn leaf(node: Node, kind: Kind, d: &[u8], el: &Element) -> Node {
             node.value(Value::Enum {
                 raw: v,
                 bits: 64,
-                name: crate::value::lookup(table, v),
+                name: crate::value::lookup(table, v).map(Into::into),
             })
         }
         Kind::Flags(table) => {
@@ -1240,7 +1240,7 @@ fn leaf(node: Node, kind: Kind, d: &[u8], el: &Element) -> Node {
         }),
         Kind::Float => match be_float(d) {
             Some(f) => {
-                let node = node.value(Value::Float(f));
+                let node = node.value(Value::f64(f));
                 match el.id {
                     DURATION => node.summary(seconds_f64(f * el.ctx.scale as f64 / 1e9)),
                     SAMPLING_FREQUENCY | OUTPUT_SAMPLING_FREQUENCY => node.summary(sound::hz(f)),

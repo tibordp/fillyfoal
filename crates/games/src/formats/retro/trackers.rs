@@ -190,7 +190,7 @@ async fn deflemask(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("System").span(cur.since(at)).value(Value::Enum {
         raw: system.into(),
         bits: 8,
-        name: lookup(DMF_SYSTEMS, system.into()),
+        name: lookup(DMF_SYSTEMS, system.into()).map(Into::into),
     }));
     let name = pstring(&cx, &mut cur, "Song name").await?;
     let author = pstring(&cx, &mut cur, "Author").await?;
@@ -393,7 +393,7 @@ async fn furnace_info(cx: Cx, data: Span) -> Result<()> {
                 .value(Value::Enum {
                     raw: c.into(),
                     bits: 8,
-                    name: lookup(FURNACE_CHIPS, c.into()),
+                    name: lookup(FURNACE_CHIPS, c.into()).map(Into::into),
                 }),
         );
     }
@@ -463,7 +463,7 @@ async fn s98(cx: Cx, input: Input) -> Result<()> {
                 .value(Value::Enum {
                     raw: kind.into(),
                     bits: 32,
-                    name: lookup(S98_DEVICES, kind.into()),
+                    name: lookup(S98_DEVICES, kind.into()).map(Into::into),
                 })
                 .summary(format!(
                     "{clock} Hz, pan {:#x}",

@@ -592,8 +592,8 @@ fn decode(bytes: &[u8], base: u8, endian: Endian) -> Vec<Value> {
                         .unwrap_or(0);
                     Value::Int { value: v, bits }
                 }
-                0x08 => Value::Float(f32::from_bits(u32::try_from(raw).unwrap_or(0)).into()),
-                0x09 => Value::Float(f64::from_bits(raw)),
+                0x08 => Value::f32(f32::from_bits(u32::try_from(raw).unwrap_or(0))),
+                0x09 => Value::f64(f64::from_bits(raw)),
                 _ => uint(raw, bits),
             }
         })

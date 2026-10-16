@@ -222,7 +222,7 @@ fn unused_entry(name: impl Into<std::borrow::Cow<'static, str>>, span: Span, raw
             .value(Value::Enum {
                 raw: 0,
                 bits: 8,
-                name: Some("unused"),
+                name: Some("unused".into()),
             })
             .summary("all zeros")
     } else {

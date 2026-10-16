@@ -610,8 +610,8 @@ async fn constant_pool(cx: Cx, c: Class) -> Result<()> {
                     value: *v,
                     bits: 64,
                 },
-                Constant::Float(v) => Value::Float((*v).into()),
-                Constant::Double(v) => Value::Float(*v),
+                Constant::Float(v) => Value::f32(*v),
+                Constant::Double(v) => Value::f64(*v),
                 _ => text(c.resolve(index)),
             };
             Node::new(label)

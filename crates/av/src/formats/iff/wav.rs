@@ -1454,7 +1454,7 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
                 cx.emit(
                     Node::new(format!("Channel {i}"))
                         .span(at)
-                        .value(Value::Float(value.into()))
+                        .value(Value::f32(value))
                         .summary(format!("{db} at sample {position}"))
                         .lazy(peak, (at, e)),
                 );

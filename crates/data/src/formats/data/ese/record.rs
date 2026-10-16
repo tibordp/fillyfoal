@@ -317,11 +317,11 @@ pub fn value(def: &ColDef, b: &[u8]) -> Value {
             let v = v.cast_signed();
             Value::Text(decimal_string(v < 0, &v.unsigned_abs().to_string(), -4))
         }),
-        6 => le(4).map(|v| Value::Float(f64::from(f32::from_bits(v as u32)))),
-        7 => le(8).map(|v| Value::Float(f64::from_bits(v))),
+        6 => le(4).map(|v| Value::f32(f32::from_bits(v as u32))),
+        7 => le(8).map(|v| Value::f64(f64::from_bits(v))),
         8 => le(8).map(|v| {
             let days = f64::from_bits(v);
-            ole_date(days).map_or(Value::Float(days), |unix_seconds| Value::Timestamp {
+            ole_date(days).map_or(Value::f64(days), |unix_seconds| Value::Timestamp {
                 unix_seconds,
             })
         }),

@@ -222,7 +222,7 @@ fn object_type(w: &mut Walker, name: &'static str) -> Option<u64> {
         Value::Enum {
             raw: t,
             bits: 11,
-            name: crate::value::lookup(AUDIO_OBJECT_TYPES, t),
+            name: crate::value::lookup(AUDIO_OBJECT_TYPES, t).map(Into::into),
         },
     );
     Some(t)

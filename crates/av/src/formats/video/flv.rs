@@ -326,7 +326,7 @@ async fn expand_tag(cx: Cx, tag: Tag) -> Result<()> {
             let n = n.value(Value::Enum {
                 raw: (t & 0x1f).into(),
                 bits: 5,
-                name: crate::value::lookup(TAG_TYPES, (t & 0x1f).into()),
+                name: crate::value::lookup(TAG_TYPES, (t & 0x1f).into()).map(Into::into),
             });
             if t & 0x20 != 0 {
                 n.summary("filtered (encrypted)")
@@ -1008,7 +1008,7 @@ fn amf_node(name: String, d: &[u8], pos: usize, span: Span, depth: u32) -> Node 
     match t {
         0 => {
             let v = crate::bytes::array::<8>(d, body).map_or(0.0, f64::from_be_bytes);
-            node.value(Value::Float(v))
+            node.value(Value::f64(v))
         }
         1 => node.value(Value::Bool(d.get(body).is_some_and(|&b| b != 0))),
         2 | 12 => {
@@ -1091,7 +1091,7 @@ fn amf_node(name: String, d: &[u8], pos: usize, span: Span, depth: u32) -> Node 
         _ => node.value(Value::Enum {
             raw: t.into(),
             bits: 8,
-            name: crate::value::lookup(AMF_TYPES, t.into()),
+            name: crate::value::lookup(AMF_TYPES, t.into()).map(Into::into),
         }),
     }
 }
@@ -1208,7 +1208,7 @@ impl<'a> Amf3<'a> {
             5 => {
                 let b = self.bytes(8)?;
                 let v = f64::from_be_bytes(b.try_into().ok()?);
-                (Some(Value::Float(v)), Vec::new())
+                (Some(Value::f64(v)), Vec::new())
             }
             6 | 7 | 11 => (Some(Value::Text(self.string()?)), Vec::new()),
             8 => {
@@ -1314,7 +1314,7 @@ impl<'a> Amf3<'a> {
                             bits: 32,
                             radix: crate::value::Radix::Dec,
                         },
-                        15 => Value::Float(f64::from_be_bytes(self.bytes(8)?.try_into().ok()?)),
+                        15 => Value::f64(f64::from_be_bytes(self.bytes(8)?.try_into().ok()?)),
                         _ => {
                             out.push(self.child(format!("[{i}]"), depth, base, origin)?);
                             continue;

@@ -350,7 +350,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let node = Node::new(name).span(file.sub(at, 8));
         match date_cell(v, 1.0, SAS_EPOCH, true) {
             Cell::Date { unix_seconds, .. } => node.value(Value::Timestamp { unix_seconds }),
-            _ => node.value(Value::Float(v)),
+            _ => node.value(Value::f64(v)),
         }
     };
     let text = |name: &'static str, at: u64, len: u64, s: &str| {
@@ -384,9 +384,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 raw: head.get(37).copied().unwrap_or(0).into(),
                 bits: 8,
                 name: Some(if endian == Endian::Little {
-                    "little-endian"
+                    "little-endian".into()
                 } else {
-                    "big-endian"
+                    "big-endian".into()
                 }),
             }),
         Node::new("Platform")
@@ -395,8 +395,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 raw: head.get(39).copied().unwrap_or(0).into(),
                 bits: 8,
                 name: match head.get(39) {
-                    Some(b'1') => Some("Unix"),
-                    Some(b'2') => Some("Windows"),
+                    Some(b'1') => Some("Unix".into()),
+                    Some(b'2') => Some("Windows".into()),
                     _ => None,
                 },
             }),
@@ -405,7 +405,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .value(Value::Enum {
                 raw: encoding_byte.into(),
                 bits: 8,
-                name: lookup(ENCODINGS, encoding_byte.into()),
+                name: lookup(ENCODINGS, encoding_byte.into()).map(Into::into),
             }),
         text(
             "Format",
@@ -709,7 +709,7 @@ async fn page_nodes(cx: Cx, (sas, i): (Arc<Sas>, u64)) -> Result<()> {
             .value(Value::Enum {
                 raw: page.kind.into(),
                 bits: 16,
-                name: lookup(PAGE_TYPES, page.kind.into()),
+                name: lookup(PAGE_TYPES, page.kind.into()).map(Into::into),
             }),
     );
     cx.emit(

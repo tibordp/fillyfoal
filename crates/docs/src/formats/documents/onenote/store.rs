@@ -708,7 +708,7 @@ pub fn jcid_value(v: u32) -> Value {
     Value::Enum {
         raw: v.into(),
         bits: 32,
-        name: lookup(JCIDS, v.into()),
+        name: lookup(JCIDS, v.into()).map(Into::into),
     }
 }
 

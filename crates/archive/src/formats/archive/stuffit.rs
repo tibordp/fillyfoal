@@ -293,7 +293,7 @@ async fn classic_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             let n = n.value(Value::Enum {
                 raw: m.into(),
                 bits: 8,
-                name: crate::value::lookup(METHOD, (m & !0x10).into()),
+                name: crate::value::lookup(METHOD, (m & !0x10).into()).map(Into::into),
             });
             if m & 0x10 != 0 && m < 32 {
                 n.summary("encrypted")

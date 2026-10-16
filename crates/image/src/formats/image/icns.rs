@@ -148,7 +148,7 @@ async fn element(cx: Cx, (input, span, kind): (Input, Span, Vec<u8>)) -> Result<
             let v = crate::bytes::array::<4>(&head, 0).map(f32::from_be_bytes);
             let mut node = Node::new("Version").span(data);
             if let Some(v) = v {
-                node = node.value(crate::value::Value::Float(v.into()));
+                node = node.value(crate::value::Value::f32(v));
             }
             cx.emit(node);
         }

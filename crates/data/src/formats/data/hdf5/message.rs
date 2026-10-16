@@ -1419,7 +1419,7 @@ pub fn header_fields(h: &Header, m: &Msg) -> Vec<Node> {
     let enum_type = Value::Enum {
         raw: m.kind.into(),
         bits: if v2 { 8 } else { 16 },
-        name: lookup(MESSAGES, m.kind.into()),
+        name: lookup(MESSAGES, m.kind.into()).map(Into::into),
     };
     let size = to_u64(m.len);
     let (decoded_flags, unknown) = crate::value::decode_flags(MESSAGE_FLAGS, m.flags.into());

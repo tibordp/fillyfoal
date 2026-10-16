@@ -175,7 +175,7 @@ fn fixed(v: u32) -> f64 {
 /// F2DOT14 is not needed; `Fixed` is shown as a number.
 fn fixed_field(f: &mut Fields<'_>, name: &'static str) -> Result<u32> {
     f.u32(name)
-        .with(|&v, n| n.value(Value::Float(fixed(v))))
+        .with(|&v, n| n.value(Value::f64(fixed(v))))
         .emit()
 }
 

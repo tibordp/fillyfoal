@@ -181,7 +181,7 @@ async fn keys(cx: Cx, (t, dir, doubles, ascii): State) -> Result<()> {
                     .collect();
                 node = node.target(at);
                 node = match v.as_slice() {
-                    [one] => node.value(Value::Float(*one)),
+                    [one] => node.value(Value::f64(*one)),
                     many => node.summary(format!(
                         "[{}]",
                         many.iter()

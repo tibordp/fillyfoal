@@ -500,8 +500,8 @@ impl Num {
                 radix: if hex { Radix::Hex } else { Radix::Dec },
             },
             Num::I(value) => Value::Int { value, bits: 64 },
-            Num::F(f) => Value::Float(f),
-            Num::R(..) | Num::S(..) => Value::Float(self.f64().unwrap_or(0.0)),
+            Num::F(f) => Value::f64(f),
+            Num::R(..) | Num::S(..) => Value::f64(self.f64().unwrap_or(0.0)),
         }
     }
 
@@ -1544,7 +1544,7 @@ async fn values(cx: Cx, (t, dir, e): (Tiff, Dir, Entry)) -> Result<()> {
             (Some(table), Some(raw)) => Value::Enum {
                 raw,
                 bits: u8::try_from(size.saturating_mul(8)).unwrap_or(64),
-                name: lookup(table, raw),
+                name: lookup(table, raw).map(Into::into),
             },
             _ => v.to_value(main && is_offset_tag(e.tag)),
         };

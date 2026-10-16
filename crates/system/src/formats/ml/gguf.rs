@@ -193,8 +193,8 @@ fn scalar_value(kind: u32, bytes: &[u8]) -> Value {
             value: crate::formats::util::sound::sign_extend(raw, bits),
             bits,
         },
-        6 => Value::Float(f64::from(f32::from_bits(raw as u32))),
-        12 => Value::Float(f64::from_bits(raw)),
+        6 => Value::f32(f32::from_bits(raw as u32)),
+        12 => Value::f64(f64::from_bits(raw)),
         7 => Value::Bool(raw != 0),
         _ => Value::Bytes(bytes.to_vec()),
     }
@@ -484,7 +484,7 @@ async fn tensor_infos(cx: Cx, g: Gguf) -> Result<()> {
             .value(Value::Enum {
                 raw: kind,
                 bits: 32,
-                name: lookup(TENSOR_TYPES, kind),
+                name: lookup(TENSOR_TYPES, kind).map(Into::into),
             });
         let mut summary = format!(
             "[{}] {type_name}, at data+{offset:#x}",

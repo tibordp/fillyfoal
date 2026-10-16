@@ -190,7 +190,7 @@ async fn page_header(cx: Cx, (span, long): (Span, bool)) -> Result<()> {
     cx.emit(Node::new("Magic").span(span.sub(0, 2)).value(Value::Enum {
         raw: magic.into(),
         bits: 16,
-        name: lookup(MAGICS, magic.into()),
+        name: lookup(MAGICS, magic.into()).map(Into::into),
     }));
     cx.emit(Node::new("Info").span(span.sub(2, 2)).value(flagsv(
         u16_le(&b, 2).unwrap_or(0),
@@ -775,7 +775,7 @@ async fn record(cx: Cx, rs: RecState) -> Result<()> {
             .value(Value::Enum {
                 raw: rmid.into(),
                 bits: 8,
-                name: lookup(RMGRS, rmid.into()),
+                name: lookup(RMGRS, rmid.into()).map(Into::into),
             }),
     );
     cx.emit(Node::new("Padding").span(at(18, 2)));

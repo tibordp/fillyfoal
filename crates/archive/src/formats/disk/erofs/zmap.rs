@@ -793,7 +793,7 @@ async fn pack_view(cx: Cx, (span, members): (Span, Arc<Vec<(usize, Lcl)>>)) -> R
                 .value(Value::Enum {
                     raw: l.kind.into(),
                     bits: 2,
-                    name: lookup(TYPES, l.kind.into()),
+                    name: lookup(TYPES, l.kind.into()).map(Into::into),
                 })
                 .summary(lcl_summary(l)),
         );

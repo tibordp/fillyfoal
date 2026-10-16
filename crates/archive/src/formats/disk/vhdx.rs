@@ -878,7 +878,7 @@ async fn bat_entries(cx: Cx, d: Arc<Disk>) -> Result<()> {
                     .value(Value::Enum {
                         raw: state,
                         bits: 3,
-                        name: lookup(BITMAP_STATES, state),
+                        name: lookup(BITMAP_STATES, state).map(Into::into),
                     })
                     .summary(format!(
                         "for blocks {}–{}{}",
@@ -944,7 +944,7 @@ async fn bat_entries(cx: Cx, d: Arc<Disk>) -> Result<()> {
                     .value(Value::Enum {
                         raw: 0,
                         bits: 3,
-                        name: Some("not present"),
+                        name: Some("not present".into()),
                     })
                     .summary(format!(
                         "guest {:#x}–{:#x}: {}",
@@ -967,7 +967,7 @@ async fn bat_entries(cx: Cx, d: Arc<Disk>) -> Result<()> {
                     .value(Value::Enum {
                         raw: state,
                         bits: 3,
-                        name: lookup(BAT_STATES, state),
+                        name: lookup(BAT_STATES, state).map(Into::into),
                     })
                     .summary(format!(
                         "guest {:#x}: {}{}",

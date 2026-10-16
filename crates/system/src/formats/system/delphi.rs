@@ -149,7 +149,7 @@ enum Parsed {
     Null,
     List,
     Int(i64),
-    Float(f64),
+    Float(Value),
     Text(String),
     Ident(String),
     Bool(bool),
@@ -511,14 +511,16 @@ async fn show(cx: &Cx, r: &mut Reader<'_>) -> Result<(u8, Parsed)> {
         0 => Parsed::Null,
         1 => Parsed::List,
         2 | 3 | 4 | 19 => Parsed::Int(r.int(kind)?),
-        5 => Parsed::Float(f80_le(r.take(10)?).unwrap_or(f64::NAN)),
-        15 => Parsed::Float(f32::from_le_bytes(r.take(4)?.try_into().unwrap_or_default()).into()),
+        5 => Parsed::Float(Value::f80(f80_le(r.take(10)?).unwrap_or(f64::NAN))),
+        15 => Parsed::Float(Value::f32(f32::from_le_bytes(
+            r.take(4)?.try_into().unwrap_or_default(),
+        ))),
         17 => Parsed::Date(f64::from_le_bytes(
             r.take(8)?.try_into().unwrap_or_default(),
         )),
-        21 => Parsed::Float(f64::from_le_bytes(
+        21 => Parsed::Float(Value::f64(f64::from_le_bytes(
             r.take(8)?.try_into().unwrap_or_default(),
-        )),
+        ))),
         16 => Parsed::Currency(i64::from_le_bytes(
             r.take(8)?.try_into().unwrap_or_default(),
         )),
@@ -737,7 +739,7 @@ async fn value_node(
         Parsed::Null => node.summary(type_name),
         Parsed::Nil => node.summary("nil"),
         Parsed::Int(v) => node.value(int(v)),
-        Parsed::Float(v) => node.value(float(v)).summary(type_name),
+        Parsed::Float(v) => node.value(v).summary(type_name),
         Parsed::Currency(v) => node
             .value(Value::Text(decimal_string(
                 v < 0,

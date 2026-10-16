@@ -2366,7 +2366,7 @@ fn fraction(
     f.node(if d == 0 {
         node.diag(Diagnostic::malformed("zero denominator"))
     } else {
-        node.value(Value::Float(n / f64::from(d)))
+        node.value(Value::f64(n / f64::from(d)))
     });
     Ok(())
 }

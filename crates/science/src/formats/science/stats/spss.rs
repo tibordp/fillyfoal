@@ -825,7 +825,7 @@ async fn extension(
             Some(t) => node.value(Value::Enum {
                 raw: u64::from(v as u32),
                 bits: 32,
-                name: lookup(t, u64::from(v as u32)),
+                name: lookup(t, u64::from(v as u32)).map(Into::into),
             }),
             None => node.value(Value::Int {
                 value: v.into(),
@@ -873,7 +873,7 @@ async fn extension(
                 cx.emit(
                     Node::new(name)
                         .span(data.sub(crate::bytes::to_u64(at), 8))
-                        .value(Value::Float(v))
+                        .value(Value::f64(v))
                         .summary(format!("{v:e}")),
                 );
             }
@@ -1016,18 +1016,18 @@ async fn variable_fields(cx: Cx, (dict, i): (Arc<Dict>, usize)) -> Result<()> {
             cx.emit(
                 Node::new("Missing range low")
                     .span(r.sub(at, 8))
-                    .value(Value::Float(*low)),
+                    .value(Value::f64(*low)),
             );
             cx.emit(
                 Node::new("Missing range high")
                     .span(r.sub(at.saturating_add(8), 8))
-                    .value(Value::Float(*high)),
+                    .value(Value::f64(*high)),
             );
             if let Some(x) = extra {
                 cx.emit(
                     Node::new("Missing value")
                         .span(r.sub(at.saturating_add(16), 8))
-                        .value(Value::Float(*x)),
+                        .value(Value::f64(*x)),
                 );
             }
         }
@@ -1090,7 +1090,7 @@ async fn variables(cx: Cx, dict: Arc<Dict>) -> Result<()> {
             fields.push(Node::new("Measure").value(Value::Enum {
                 raw: u64::from(measure as u32),
                 bits: 32,
-                name: lookup(MEASURES, u64::from(measure as u32)),
+                name: lookup(MEASURES, u64::from(measure as u32)).map(Into::into),
             }));
             if let Some(w) = width {
                 fields.push(Node::new("Display width").value(Value::Int {
@@ -1101,7 +1101,7 @@ async fn variables(cx: Cx, dict: Arc<Dict>) -> Result<()> {
             fields.push(Node::new("Alignment").value(Value::Enum {
                 raw: u64::from(align as u32),
                 bits: 32,
-                name: lookup(ALIGNMENTS, u64::from(align as u32)),
+                name: lookup(ALIGNMENTS, u64::from(align as u32)).map(Into::into),
             }));
         }
         for &set in &var.sets {

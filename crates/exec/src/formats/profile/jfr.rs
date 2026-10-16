@@ -27,7 +27,7 @@ use crate::fields::Endian;
 use crate::formats::util::binutil::{NodeExt, Reader, data_node};
 use crate::formats::util::civil::civil;
 use crate::formats::util::fmt::{clip, plural};
-use crate::formats::util::lines::{flags, float};
+use crate::formats::util::lines::flags;
 use crate::formats::util::val::{hex, int, text, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
@@ -450,7 +450,7 @@ enum Val {
     Null,
     Bool(bool),
     Int(i64),
-    Float(f64),
+    Float { value: f64, bits: u8 },
     Str(String),
     Ref { type_id: u64, key: u64 },
     Struct(u64, Vec<(usize, Val, usize, usize)>),
@@ -505,8 +505,14 @@ impl Decoder<'_> {
                 u32::try_from(i.int(r)? & 0xffff_ffff).ok()?.to_ne_bytes(),
             ))),
             "long" => Val::Int(i64::from_ne_bytes(i.long(r)?.to_ne_bytes())),
-            "float" => Val::Float(f64::from(f32::from_bits(r.int::<u32>(BE)?))),
-            "double" => Val::Float(f64::from_bits(r.int::<u64>(BE)?)),
+            "float" => Val::Float {
+                value: f64::from(f32::from_bits(r.int::<u32>(BE)?)),
+                bits: 32,
+            },
+            "double" => Val::Float {
+                value: f64::from_bits(r.int::<u64>(BE)?),
+                bits: 64,
+            },
             "java.lang.String" => match read_string(i, r)? {
                 Ok(Some(s)) => Val::Str(s),
                 Ok(None) => Val::Null,
@@ -714,7 +720,7 @@ impl View<'_> {
             Val::Null => "null".to_owned(),
             Val::Bool(b) => b.to_string(),
             Val::Int(i) => i.to_string(),
-            Val::Float(f) => f.to_string(),
+            Val::Float { value, bits } => crate::render::float(*value, *bits),
             Val::Str(s) => s.clone(),
             Val::Ref { type_id, key } => {
                 if *key == 0 {
@@ -1251,7 +1257,10 @@ fn value_node(
                 node
             }
         }
-        Val::Float(x) => node.value(float(*x)),
+        Val::Float { value, bits } => node.value(Value::Float {
+            value: *value,
+            bits: *bits,
+        }),
         Val::Str(s) => node.value(text(s.clone())),
         Val::Ref { type_id, key } => {
             let mut node = node.value(uint(*key, 64)).summary(if *key == 0 {

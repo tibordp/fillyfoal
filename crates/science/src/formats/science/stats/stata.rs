@@ -873,7 +873,10 @@ async fn decode_row(cx: &Cx, dta: &Dta, span: Span, raw: &[u8]) -> Result<Vec<It
                 if (0x7f00_0000..0x8000_0000).contains(&bits) {
                     missing(u64::from(bits.saturating_sub(0x7f00_0000) >> 11))
                 } else {
-                    number_cell(var, v.into())
+                    match number_cell(var, v.into()) {
+                        Cell::Number(_) => Cell::Single(v),
+                        cell => cell,
+                    }
                 }
             }
             Kind::Double => {
@@ -922,11 +925,11 @@ async fn decode_row(cx: &Cx, dta: &Dta, span: Span, raw: &[u8]) -> Result<Vec<It
             }
         };
         let label = match (&cell, dta.set(&var.labels)) {
-            (Cell::Number(v), Some(set)) => set
+            (Cell::Number(_) | Cell::Single(_), Some(set)) => set
                 .entries
                 .iter()
                 .inspect(|_| work = work.saturating_add(1))
-                .find(|(k, _)| f64::from(*k) == *v)
+                .find(|(k, _)| Some(f64::from(*k)) == cell.as_number())
                 .map(|(_, l)| l.clone()),
             _ => None,
         };

@@ -695,8 +695,8 @@ async fn item_node(
             };
             node.value(Value::Text(text)).summary("BigInteger")
         }
-        Tok::Float32(bits) => node.value(Value::Float(f64::from(f32::from_bits(bits)))),
-        Tok::Float64(bits) => node.value(Value::Float(f64::from_bits(bits))),
+        Tok::Float32(bits) => node.value(Value::f32(f32::from_bits(bits))),
+        Tok::Float64(bits) => node.value(Value::f64(f64::from_bits(bits))),
         Tok::BigDecimal(scale, raw) => {
             let enc = r.bytes(body, v.payload.min(seven_bit_len(256))).await?;
             let bytes = unpack7(&enc, usize::try_from(raw.min(256)).unwrap_or(0));

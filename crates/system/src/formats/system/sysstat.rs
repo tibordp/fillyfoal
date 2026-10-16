@@ -1342,7 +1342,7 @@ async fn item_fields(cx: Cx, (sa, act, span): (Sa, Activity, Span)) -> Result<()
             let value = match k {
                 Q | L => get::<u64>(&data, o, e).map(|v| uint(v, 64)),
                 I | I8 => get::<u32>(&data, o, e).map(|v| uint(v, 32)),
-                D => get::<f64>(&data, o, e).map(Value::Float),
+                D => get::<f64>(&data, o, e).map(Value::f64),
                 S(n) | S8(n) => data
                     .get(o..o.saturating_add(to_usize(n)))
                     .map(|b| text(crate::text::until_nul(b))),

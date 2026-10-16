@@ -263,7 +263,7 @@ async fn markers(cx: Cx, span: Span) -> Result<()> {
         .value(crate::value::Value::Enum {
             raw: marker.into(),
             bits: 16,
-            name: crate::value::lookup(MARKERS, marker.into()),
+            name: crate::value::lookup(MARKERS, marker.into()).map(Into::into),
         });
         if marker == 0xff90 {
             node = node.summary(format!(

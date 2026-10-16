@@ -290,7 +290,7 @@ async fn sparse_chunks(cx: Cx, s: Sparse) -> Result<()> {
                 .value(Value::Enum {
                     raw: kind.into(),
                     bits: 16,
-                    name: crate::value::lookup(CHUNK_TYPE, kind.into()),
+                    name: crate::value::lookup(CHUNK_TYPE, kind.into()).map(Into::into),
                 }),
             Node::new("Reserved").span(span.sub(2, 2)),
             Node::new("Output blocks")

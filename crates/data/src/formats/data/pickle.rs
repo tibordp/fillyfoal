@@ -177,7 +177,7 @@ async fn argument(r: &mut ByteReader<'_>, arg: Arg, at: u64) -> Result<(Option<V
         Arg::Float => {
             let b = r.bytes(at, 8).await?;
             (
-                Some(Value::Float(f64::from_bits(be_uint(&b)))),
+                Some(Value::f64(f64::from_bits(be_uint(&b)))),
                 at.saturating_add(8),
             )
         }

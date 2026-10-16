@@ -21,6 +21,15 @@ pub fn hex(value: impl Into<u64>, bits: u8) -> Value {
     }
 }
 
+/// An unsigned octal value (Unix modes).
+pub fn oct(value: impl Into<u64>, bits: u8) -> Value {
+    Value::UInt {
+        value: value.into(),
+        bits,
+        radix: Radix::Oct,
+    }
+}
+
 /// A signed value.
 pub fn int(value: impl Into<i64>, bits: u8) -> Value {
     Value::Int {
@@ -40,7 +49,7 @@ pub fn enumv(raw: impl Into<u64>, bits: u8, table: EnumTable) -> Value {
     Value::Enum {
         raw,
         bits,
-        name: lookup(table, raw),
+        name: lookup(table, raw).map(Into::into),
     }
 }
 

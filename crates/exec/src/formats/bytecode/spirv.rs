@@ -219,7 +219,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .value(Value::Enum {
                     raw: op.into(),
                     bits: 16,
-                    name: crate::value::lookup(OPCODE, op.into()),
+                    name: crate::value::lookup(OPCODE, op.into()).map(Into::into),
                 })
                 .maybe_summary(summary),
         )

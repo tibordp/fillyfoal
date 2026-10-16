@@ -392,8 +392,8 @@ async fn certificate(cx: &Cx, cur: &mut Cursor<'_>, input: Input) -> Result<Stri
                 raw: kind.into(),
                 bits: 32,
                 name: match kind {
-                    1 => Some("user"),
-                    2 => Some("host"),
+                    1 => Some("user".into()),
+                    2 => Some("host".into()),
                     _ => None,
                 },
             }),

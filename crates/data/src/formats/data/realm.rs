@@ -713,7 +713,7 @@ async fn table_x(cx: Cx, (file, r, _name, keys): TableState) -> Result<()> {
             Node::new("Type").value(Value::Enum {
                 raw: c.kind,
                 bits: 8,
-                name: lookup(COLUMN_TYPES, c.kind),
+                name: lookup(COLUMN_TYPES, c.kind).map(Into::into),
             }),
             Node::new("Attributes").value(Value::Flags {
                 raw: c.attrs,
@@ -979,7 +979,7 @@ async fn element(cx: &Cx, file: Span, c: &Column, a: &Arr, i: u64, in_list: bool
                 f64::from_le_bytes(b.try_into().unwrap_or_default())
             };
             node.span(a.body().sub(i.saturating_mul(w), w))
-                .value(Value::Float(v))
+                .value(Value::f64(v))
         }
         8 => {
             // A timestamp column is an array of two: seconds (nullable

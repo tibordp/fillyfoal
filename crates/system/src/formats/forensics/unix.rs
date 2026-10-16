@@ -954,11 +954,11 @@ impl AbxReader<'_> {
                 bits: 64,
             },
             9 => hex(u64_be(self.take(8)?, 0)?, 64),
-            10 => Value::Float(f64::from(f32::from_be_bytes(crate::bytes::array::<4>(
+            10 => Value::f32(f32::from_be_bytes(crate::bytes::array::<4>(
                 self.take(4)?,
                 0,
-            )?))),
-            11 => Value::Float(f64::from_be_bytes(crate::bytes::array::<8>(
+            )?)),
+            11 => Value::f64(f64::from_be_bytes(crate::bytes::array::<8>(
                 self.take(8)?,
                 0,
             )?)),
@@ -1064,7 +1064,7 @@ fn abx_value_text(v: &Value) -> String {
         Value::Text(s) => s.clone(),
         Value::Int { value, .. } => value.to_string(),
         Value::UInt { value, .. } => format!("{value:#x}"),
-        Value::Float(f) => f.to_string(),
+        Value::Float { value, bits } => crate::render::float(*value, *bits),
         Value::Bool(b) => b.to_string(),
         Value::Bytes(b) => hex_string(b),
         _ => String::new(),

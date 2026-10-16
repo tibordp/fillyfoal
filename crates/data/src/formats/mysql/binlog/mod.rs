@@ -1427,13 +1427,7 @@ fn user_var(cx: &Cx, out: &Body<'_>) {
     let v = at.saturating_add(10);
     match ty {
         0 => out.text(cx, "Value", v, len),
-        1 => out.emit(
-            cx,
-            "Value",
-            v,
-            len,
-            Value::Float(f64::from_bits(out.u64(v))),
-        ),
+        1 => out.emit(cx, "Value", v, len, Value::f64(f64::from_bits(out.u64(v)))),
         2 => out.emit(
             cx,
             "Value",

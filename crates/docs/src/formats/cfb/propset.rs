@@ -444,11 +444,8 @@ fn decode(
         0x0000 | 0x0001 => simple(None, 0),
         0x0002 => simple(int(i64::from(i16_le(data, at)?), 16), 4),
         0x0003 | 0x0016 => simple(int(i64::from(i32_le(data, at)?), 32), 4),
-        0x0004 => simple(
-            Some(Value::Float(f64::from(f32::from_bits(u32_le(data, at)?)))),
-            4,
-        ),
-        0x0005 => simple(Some(Value::Float(f64::from_bits(u64_le(data, at)?))), 8),
+        0x0004 => simple(Some(Value::f32(f32::from_bits(u32_le(data, at)?))), 4),
+        0x0005 => simple(Some(Value::f64(f64::from_bits(u64_le(data, at)?))), 8),
         0x0006 => {
             let v = u64_le(data, at)?.cast_signed();
             Some(Decoded {
@@ -466,7 +463,7 @@ fn decode(
             let days = f64::from_bits(u64_le(data, at)?);
             let value = match crate::formats::util::civil::ole_date(days) {
                 Some(unix_seconds) => Value::Timestamp { unix_seconds },
-                None => Value::Float(days),
+                None => Value::f64(days),
             };
             Some(Decoded {
                 value: Some(value),

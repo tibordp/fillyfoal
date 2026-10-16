@@ -279,7 +279,7 @@ async fn block_fields(cx: Cx, (input, pos, k): (Input, u64, Block)) -> Result<()
             .value(Value::Enum {
                 raw: kind8.into(),
                 bits: 8,
-                name: lookup(BLOCK_TYPES, kind8.into()),
+                name: lookup(BLOCK_TYPES, kind8.into()).map(Into::into),
             }),
     );
     let (row_at, row_len, data_at, data_len, unused_at, next_at) = match kind8 {

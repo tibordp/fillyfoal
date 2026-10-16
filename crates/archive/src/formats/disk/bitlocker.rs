@@ -490,7 +490,7 @@ fn method(r: &mut ByteReader<'_>) {
             n.value(Value::Enum {
                 raw: m.into(),
                 bits: 32,
-                name: lookup(METHODS, m.into()),
+                name: lookup(METHODS, m.into()).map(Into::into),
             })
         });
     }

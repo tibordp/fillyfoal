@@ -979,7 +979,7 @@ pub async fn record_nodes(
             Some((Val::Null, _)) => node.summary("NULL"),
             Some((Val::Int(v), _)) => node.value(Value::Int { value: v, bits: 64 }),
             Some((Val::Float(v), converted)) => {
-                let node = node.value(Value::Float(v));
+                let node = node.value(Value::f64(v));
                 let extreme = v != 0.0 && !(1e-4..1e16).contains(&v.abs());
                 match (converted, extreme) {
                     (true, _) => node.summary(format!("{v:?}: stored as an integer (REAL column)")),

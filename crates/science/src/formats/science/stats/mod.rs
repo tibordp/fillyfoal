@@ -33,6 +33,8 @@ const SUMMARY_TEXT: usize = 40;
 #[derive(Clone, Debug)]
 pub enum Cell {
     Number(f64),
+    /// A number stored as an `f32` (shown in its shortest `f32` form).
+    Single(f32),
     Int(i64),
     Text(String),
     /// A date (`time == false`) or date and time, in Unix seconds.
@@ -53,6 +55,14 @@ impl Cell {
     pub fn display(&self) -> String {
         match self {
             Cell::Number(v) => number(*v),
+            Cell::Single(v) => {
+                let w = f64::from(*v);
+                if w.fract() == 0.0 {
+                    number(w)
+                } else {
+                    crate::render::float(w, 32)
+                }
+            }
             Cell::Int(v) => v.to_string(),
             Cell::Text(s) => format!("{:?}", clip(s, SUMMARY_TEXT)),
             Cell::Date { unix_seconds, time } => date_string(*unix_seconds, *time),
@@ -62,7 +72,8 @@ impl Cell {
 
     fn value(&self) -> Value {
         match self {
-            Cell::Number(v) => Value::Float(*v),
+            Cell::Number(v) => Value::f64(*v),
+            Cell::Single(v) => Value::f32(*v),
             Cell::Int(v) => Value::Int {
                 value: *v,
                 bits: 64,
@@ -71,7 +82,7 @@ impl Cell {
             Cell::Date { unix_seconds, .. } => Value::Timestamp {
                 unix_seconds: *unix_seconds,
             },
-            Cell::Missing { raw: Some(v), .. } => Value::Float(*v),
+            Cell::Missing { raw: Some(v), .. } => Value::f64(*v),
             Cell::Missing { name, raw: None } => Value::Text(name.clone()),
         }
     }
@@ -80,6 +91,7 @@ impl Cell {
     pub fn as_number(&self) -> Option<f64> {
         match self {
             Cell::Number(v) => Some(*v),
+            Cell::Single(v) => Some(f64::from(*v)),
             Cell::Int(v) => Some(*v as f64),
             Cell::Missing { raw, .. } => *raw,
             _ => None,

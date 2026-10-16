@@ -377,7 +377,7 @@ async fn oma(cx: Cx, input: Input) -> Result<()> {
             .value(Value::Enum {
                 raw: codec.into(),
                 bits: 8,
-                name: Some(name),
+                name: Some(name.into()),
             }),
     );
     cx.emit(Node::new("Audio").span(file.tail(at.saturating_add(0x60))));
