@@ -9,6 +9,7 @@
 //! PMarc's methods are unsupported leaves.
 
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
+use crate::codec::checked::DataCrc;
 use crate::codec::{Codec, lzh};
 use crate::cx::Cx;
 use crate::dsl::Cursor;
@@ -85,10 +86,13 @@ const EXT_TYPES: EnumTable = &[
 /// LHA's CRC-16 (the ARC polynomial).
 const LHA_CRC: &str = "CRC-16/ARC";
 
-/// A member's data CRC: checked by the decoder for a compressed member.
-fn data_check(method: &str, crc: u16) -> Check {
+/// A member's data CRC: checked by the decoder for a compressed member,
+/// and over the data when a stored one (`len` bytes) is expanded.
+fn data_check(method: &str, crc: u16, len: u64) -> Check {
     let check = Check::new(LHA_CRC, crc);
-    if codec_method(method).is_some() {
+    if stored(method) {
+        crate::formats::decode_check(check, &Codec::Stored, len)
+    } else if codec_method(method).is_some() {
         check.on_decode()
     } else {
         check
@@ -433,7 +437,7 @@ async fn member(cx: Cx, (input, span, level): (Input, Span, u8)) -> Result<()> {
         r.u16("Header size", LE).ok_or_else(bad)?;
         let (method, compressed) = common_fields(&mut r, level).ok_or_else(bad)?;
         let crc = r.u16("CRC-16", LE).ok_or_else(bad)?;
-        r.with(|n| n.checksum(data_check(&method, crc)));
+        r.with(|n| n.checksum(data_check(&method, crc, compressed.into())));
         os_id(&mut r).ok_or_else(bad)?;
         r.u16("Next header size", LE).ok_or_else(bad)?;
         let mut pos = r.at;
@@ -460,7 +464,7 @@ async fn member(cx: Cx, (input, span, level): (Input, Span, u8)) -> Result<()> {
         let name_len = r.u8("Name length").ok_or_else(bad)?;
         r.text("Name", name_len.into()).ok_or_else(bad)?;
         let crc = r.u16("CRC-16", LE).ok_or_else(bad)?;
-        r.with(|n| n.checksum(data_check(&method, crc)));
+        r.with(|n| n.checksum(data_check(&method, crc, compressed.into())));
         if level == 1 {
             os_id(&mut r).ok_or_else(bad)?;
             r.u16("Next header size", LE).ok_or_else(bad)?;
@@ -504,7 +508,13 @@ async fn member(cx: Cx, (input, span, level): (Input, Span, u8)) -> Result<()> {
         let name_len = usize::from(header.get(21).copied().unwrap_or(0));
         u16_le(&header, 22usize.saturating_add(name_len))
     };
-    let node = if stored(&method) {
+    let node = if stored(&method)
+        && let Some(crc) = crc
+    {
+        let codec = Codec::Stored.checked(DataCrc::Crc16Arc, crc.into());
+        crate::formats::content("Content", input, data, codec, Some(data_len))
+            .summary(fmt::size(data_len))
+    } else if stored(&method) {
         embedded("Content", input.nested(data)).summary(fmt::size(data_len))
     } else if let Some(m) = codec_method(&method) {
         let check = crc.map_or(lzh::Check::None, lzh::Check::Crc16);

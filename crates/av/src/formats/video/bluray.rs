@@ -1830,6 +1830,6 @@ mod tests {
         for ((insn, dst, src), text) in cases {
             assert_eq!(hdmv_command(insn, dst, src), text, "{insn:#010x}");
         }
-        assert_eq!(ticks(27_045_000), "0:10:01");
+        assert_eq!(ticks(27_045_000), "10 min 1 s");
     }
 }

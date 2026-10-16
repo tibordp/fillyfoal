@@ -602,7 +602,7 @@ async fn expand_content_hinted(
 /// decoded from check this before collecting them for
 /// [`expand_content_seeded`].
 pub fn decodes_lazily(span: Span, codec: &Codec, expected: u64) -> bool {
-    !matches!(codec, Codec::Stored)
+    !codec.is_stored()
         && expected > LAZY_THRESHOLD
         && expected <= span.len.saturating_mul(codec.max_ratio())
 }
@@ -660,8 +660,17 @@ async fn expand_content_inner(
     expected: Option<u64>,
     format: Option<&'static str>,
 ) -> Result<()> {
+    let mut lazy = None;
     let inner = match codec {
         Codec::Stored => input.nested(span),
+        Codec::Checked {
+            codec: ref stored_codec,
+            crc,
+            stored,
+        } if stored_codec.is_stored() => {
+            check_stored(&cx, span, crc, stored).await?;
+            input.nested(span)
+        }
         // Large members are decoded lazily: listing the first entries of a
         // multi-gigabyte tarball only decodes what those entries need. A
         // claimed size beyond the codec's maximum ratio is bogus and gets the
@@ -670,6 +679,7 @@ async fn expand_content_inner(
             let len = expected.unwrap_or(0);
             let decoded = cx.decode_lazy(span, &codec, len)?;
             cx.annotate(format!("{len:#x} bytes, decoded on demand"));
+            lazy = Some(decoded.source);
             input.nested(decoded)
         }
         // Nothing records the decoded size: rather than decode the whole
@@ -695,10 +705,74 @@ async fn expand_content_inner(
             input.nested(decoded.span)
         }
     };
-    match format {
+    let shown = cx.clone();
+    let result = match format {
         Some(name) => dissect_named(cx, (inner, name)).await,
         None => dissect_or_data(cx, inner).await,
+    };
+    // Content decoded on demand that its dissection read to the end: a
+    // problem found there that did not stop it (a checksum mismatch, a
+    // stream shorter than declared) is the content's.
+    if let Some(e) = lazy
+        .and_then(|source| shown.source_problem(source))
+        .filter(|e| e.kind == crate::error::DiagKind::Warning)
+    {
+        shown.diag(e.at(span));
     }
+    result
+}
+
+/// Stored content up to this size has its container's CRC (passed to
+/// [`content`] as a [`Codec::Checked`] stored codec) checked when it is
+/// expanded, by reading it whole; larger stored content is not read just
+/// for that (see [`decode_check`]).
+pub const STORED_CHECK_LIMIT: u64 = 16 * 1024 * 1024;
+
+/// The verdict to show on a container's check of content it passes to
+/// [`content`] as `codec.checked(..)`, `stored_len` bytes as stored:
+/// checked when decoded (a mismatch is a warning on the content), unless
+/// the content is stored and over [`STORED_CHECK_LIMIT`].
+pub fn decode_check(
+    check: crate::value::Check,
+    codec: &Codec,
+    stored_len: u64,
+) -> crate::value::Check {
+    if codec.is_stored() && stored_len > STORED_CHECK_LIMIT {
+        check.skipped(format!(
+            "covers {}",
+            crate::formats::util::fmt::size(stored_len)
+        ))
+    } else {
+        check.on_decode()
+    }
+}
+
+/// Checks stored content against its container's CRC, reading it in
+/// pieces (up to [`STORED_CHECK_LIMIT`]): a mismatch is a warning on the
+/// node being expanded.
+async fn check_stored(
+    cx: &Cx,
+    span: Span,
+    crc: crate::codec::checked::DataCrc,
+    stored: u64,
+) -> Result<()> {
+    if span.len > STORED_CHECK_LIMIT {
+        return Ok(());
+    }
+    let mut running = crc.start();
+    let mut pos = 0u64;
+    while pos < span.len {
+        let data = cx.read(span.sub(pos, 1 << 16)).await?;
+        if data.is_empty() {
+            return Ok(());
+        }
+        running.update(&data);
+        pos = pos.saturating_add(crate::bytes::to_u64(data.len()));
+    }
+    if let Some(d) = crc.mismatch(stored, running.value()) {
+        cx.diag(d.at(span));
+    }
+    Ok(())
 }
 
 async fn dissect_as(cx: Cx, (input, given): (Input, &'static Format)) -> Result<()> {

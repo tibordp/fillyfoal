@@ -17,6 +17,7 @@ pub mod bzz;
 pub mod cab;
 pub mod capnp;
 pub mod charset;
+pub mod checked;
 pub mod crc;
 pub mod crypto;
 pub mod dwg;
@@ -338,6 +339,16 @@ pub enum Codec {
     /// A Partclone image's block area (after its header and bitmap),
     /// restored to the volume (see [`partclone`]).
     Partclone(Arc<partclone::Params>),
+    /// `codec` (stored data too) whose whole output must have the CRC
+    /// `stored`: a container's checksum of the decoded data (ZIP, ACE, LHA and
+    /// ZOO members), verified as the data is decoded and reported as a
+    /// warning once the stream ends (see [`checked`]). It decodes like
+    /// `codec` and shares its names. Not for seeded decoding.
+    Checked {
+        codec: Arc<Codec>,
+        crc: checked::DataCrc,
+        stored: u64,
+    },
     /// Stages applied in order. `name` and `lazy_name` identify the chain
     /// for memoization (see `Origin`); they must be distinct.
     Chain {
@@ -360,9 +371,33 @@ impl Codec {
         }
     }
 
+    /// This codec with its output checked against a container's CRC (see
+    /// [`Codec::Checked`]).
+    pub fn checked(self, crc: checked::DataCrc, stored: u64) -> Self {
+        Codec::Checked {
+            codec: Arc::new(self),
+            crc,
+            stored,
+        }
+    }
+
+    /// The codec without a [`Codec::Checked`] wrapper.
+    pub fn unchecked(&self) -> &Codec {
+        match self {
+            Codec::Checked { codec, .. } => codec.unchecked(),
+            other => other,
+        }
+    }
+
+    /// Whether the data is stored as it is (checked or not).
+    pub fn is_stored(&self) -> bool {
+        matches!(self.unchecked(), Codec::Stored)
+    }
+
     /// The transform name of eagerly decoded sources.
     pub fn name(&self) -> &'static str {
         match self {
+            Codec::Checked { codec, .. } => codec.name(),
             Codec::Stored => "stored",
             Codec::Deflate => "deflate",
             Codec::Deflate64 => "deflate64",
@@ -465,6 +500,7 @@ impl Codec {
     /// The transform name of lazily decoded sources.
     pub fn lazy_name(&self) -> &'static str {
         match self {
+            Codec::Checked { codec, .. } => codec.lazy_name(),
             Codec::Stored => "stored",
             Codec::Deflate => "deflate (lazy)",
             Codec::Deflate64 => "deflate64 (lazy)",
@@ -567,6 +603,7 @@ impl Codec {
     /// How the result is described ("decompressed", "decoded", "decrypted").
     pub fn verb(&self) -> &'static str {
         match self {
+            Codec::Checked { codec, .. } => codec.verb(),
             Codec::Stored => "stored",
             Codec::Deflate | Codec::Deflate64 | Codec::Zlib | Codec::Gzip => "decompressed",
             Codec::ZipCrypto(_)
@@ -653,6 +690,7 @@ impl Codec {
     /// from a container are treated as bogus.
     pub fn max_ratio(&self) -> u64 {
         match self {
+            Codec::Checked { codec, .. } => codec.max_ratio(),
             Codec::Stored
             | Codec::ZipCrypto(_)
             | Codec::AesCtrLe(_)
@@ -781,6 +819,9 @@ impl Codec {
     pub fn decoder(&self) -> Option<Box<dyn Decoder>> {
         Some(match self {
             Codec::Stored => return None,
+            Codec::Checked { codec, crc, stored } => {
+                Box::new(checked::Checked::new(codec.decoder(), *crc, *stored))
+            }
             Codec::Deflate => Box::new(Streaming(inflate::Inflate::new())),
             Codec::Deflate64 => Box::new(Streaming(inflate::Inflate::deflate64())),
             Codec::Zlib => Box::new(Streaming(Zlib::default())),

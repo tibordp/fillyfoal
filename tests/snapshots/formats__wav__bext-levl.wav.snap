@@ -24,7 +24,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Originator reference: "FF-REF-0001"  [0x14c+0x20]
       Origination date: "2026-10-09"  [0x16c+0xa]
       Origination time: "12:34:56"  [0x176+0x8]
-      Time reference: 6:00:00 (172800000/8000 s)  [0x17e+0x8]
+      Time reference: 6 h (172800000/8000 s)  [0x17e+0x8]
       Version: 1  [0x186+0x2]
     ▾ UMID — basic UMID  [0x188+0x40]
         Universal label: 06 0a 2b 34 01 01 01 05 01 01 0d 43  |..+4.......C|  [0x188+0xc]

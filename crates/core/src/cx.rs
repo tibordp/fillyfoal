@@ -1759,6 +1759,12 @@ impl Cx {
         found.map(|at| at.saturating_sub(span.offset))
     }
 
+    /// What stopped the decoding of a derived `source`, or a problem found
+    /// once it was decoded to its end (a checksum mismatch), if any yet.
+    pub fn source_problem(&self, source: SourceId) -> Option<Diagnostic> {
+        lock(&self.shared).source(source)?.error.clone()
+    }
+
     /// A previously derived source with this origin, if any. Dissectors use
     /// this to avoid decoding the same bytes twice (e.g. after a collapse).
     pub fn derived(&self, origin: Origin) -> Option<crate::codec::Decoded> {

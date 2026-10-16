@@ -566,7 +566,14 @@ human interpretation in `summary` ("640×480, 24-bit") and meaning in
     known (sums that must come to zero, AEAD tags, frames found by their
     CRC); `.skipped(reason)` when the dissector could but did not ("empty
     block", "covers 40 MiB", "needs the key"); `.on_decode()` when the
-    decoder verifies it. A zero meaning "none" is
+    decoder verifies it. A container's CRC of a member's decoded data
+    (ZIP, ACE, LHA, ZOO) is verified by passing the member's codec to
+    `content` as `codec.checked(DataCrc::Crc32, stored)`: the CRC runs
+    over the decoded output (stored members are read whole on expansion,
+    up to `STORED_CHECK_LIMIT`) and a mismatch is a warning on the
+    content once it has been decoded to its end; the field shows
+    `formats::decode_check(check, &codec, len)` (checked when decoded).
+    Nothing is decoded to list the member. A zero meaning "none" is
     `.skipped("zero: none recorded")`.
   - *Fields:* `.checksum(algo)` turns a number or byte field into an
     unchecked check, `.verify(computed)` / `.with_check(f)` give it its
@@ -605,7 +612,14 @@ human interpretation in `summary` ("640×480, 24-bit") and meaning in
   put the unit in the name ("Interval (ms)"). A point in time is a
   `Timestamp`, including the sub-second part of one ("Modified (ns)"
   stays a number). A count of frames or samples whose duration is
-  incidental may stay a count with a duration summary. Summaries use
+  incidental may stay a count with a duration summary. The text has one
+  style: under a second in ms, µs or ns (`250 ms`), under a minute in
+  seconds (`1.48 s`, `45 s`); from a minute, a whole number of seconds in
+  at most two units, largest first (`5 min`, `2 h`, `730 days`, `1 h 30
+  min`, `2 days 3 h`), and anything else (a fraction of a second, three
+  units or more) as `h:mm:ss` (`0:01:05.500`, `1:02:03`, `1 day,
+  1:01:01`). Ticks that are not a power-of-ten fraction of a second are
+  shown after it (`1.48 s (133200/90000 s)`). Summaries use
   `fmt::duration(ticks, per_sec)` / `fmt::duration_of` /
   `fmt::seconds(f64)`; never write another duration formatter.
 

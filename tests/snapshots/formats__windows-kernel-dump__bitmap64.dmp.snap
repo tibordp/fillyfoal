@@ -76,7 +76,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Required dump space: 20480  [0xfa0+0x8]
     System time: 2022-06-18 04:26:40 UTC  [0xfa8+0x8]
     Comment: "fillyfoal test dump"  [0xfb0+0x80]
-    System up time: 1:00:00  [0x1030+0x8]
+    System up time: 1 h  [0x1030+0x8]
     Minidump fields: 0x0  [0x1038+0x4]
     Secondary data state: 0  [0x103c+0x4]
     Product type: workstation (0x1)  [0x1040+0x4]
