@@ -70,7 +70,8 @@ expression: "common::explore(&display_name(&path), &data)"
             CRC: 0xae426082 — valid  [#1:0x4a+0x4]
   ▾ Folders — 1 folder  [0x20+0x51]
     ▾ Folder 0 — LZMA2, 81 bytes → 78 bytes, 3 streams  [0x20+0x51]
-        Coder 0: "LZMA2" — 1 in, 1 out
+      ▾ Coder 0: "LZMA2" — 1 in, 1 out
+          Dictionary size: 4096 — 4 KiB
         Unpacked size: 78 — 78 bytes
         Streams: 3
       ▾ Data — 0x4e bytes decompressed  [0x20+0x51]

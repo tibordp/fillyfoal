@@ -22,7 +22,8 @@ expression: "common::explore(&display_name(&path), &data)"
           Data  [#1:0x0+0x2000]
   ▾ Folders — 1 folder  [0x20+0x13bf]
     ▾ Folder 0 — LZMA2 + BCJ ARM-Thumb, 4.9 KiB → 8 KiB, 1 stream  [0x20+0x13bf]
-        Coder 0: "LZMA2" — 1 in, 1 out
+      ▾ Coder 0: "LZMA2" — 1 in, 1 out
+          Dictionary size: 8192 — 8 KiB
         Coder 1: "BCJ ARM-Thumb" — 1 in, 1 out
         Unpacked size: 8192 — 8 KiB
         Streams: 1

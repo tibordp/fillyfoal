@@ -22,8 +22,10 @@ expression: "common::explore(&display_name(&path), &data)"
           Data  [#1:0x0+0x2000]
   ▾ Folders — 1 folder  [0x20+0x1464]
     ▾ Folder 0 — LZMA2 + BCJ RISC-V, 5.1 KiB → 8 KiB, 1 stream  [0x20+0x1464]
-        Coder 0: "LZMA2" — 1 in, 1 out
-        Coder 1: "BCJ RISC-V" — 1 in, 1 out
+      ▾ Coder 0: "LZMA2" — 1 in, 1 out
+          Dictionary size: 8192 — 8 KiB
+      ▾ Coder 1: "BCJ RISC-V" — 1 in, 1 out
+          Start offset: 0x1000
         Unpacked size: 8192 — 8 KiB
         Streams: 1
       ▾ Data — 0x2000 bytes decompressed  [0x20+0x1464]

@@ -92,6 +92,8 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `7z/aes-data-lzma-solid.7z` | 7-Zip 25.01 for Linux (Debian trixie `7zip` 25.01+dfsg-1~deb13u2, arm64, Docker) | `tests/data/7z/make_aes.sh`, password `fillyfoal`, mtimes 2024-01-02 03:04 UTC, tested OK with 7zz 26.03 for macOS; not byte-reproducible (7-Zip draws a random IV per encrypted folder): `7z a -pfillyfoal -mhe=off -m0=LZMA -ms=on` of the same files: data encrypted, header LZMA only |
 | `7z/aes-bcj-lzma2.7z` | 7-Zip 25.01 for Linux (Debian trixie `7zip` 25.01+dfsg-1~deb13u2, arm64, Docker) | `tests/data/7z/make_aes.sh`, password `fillyfoal`, mtimes 2024-01-02 03:04 UTC, tested OK with 7zz 26.03 for macOS; not byte-reproducible (7-Zip draws a random IV per encrypted folder): `7z a -pfillyfoal -mhe=off -mhc=off -mf=BCJ -m0=LZMA2` of the pseudo machine code of `tests/data/xz/bcjdata.py`: BCJ + LZMA2 + AES, plain header |
 | `7z/aes-empty-password.7z` | 7-Zip 25.01 for Linux (Debian trixie `7zip` 25.01+dfsg-1~deb13u2, arm64, Docker) | `tests/data/7z/make_aes.sh`, password `fillyfoal`, mtimes 2024-01-02 03:04 UTC, tested OK with 7zz 26.03 for macOS; not byte-reproducible (7-Zip draws a random IV per encrypted folder): `7z a -p -mhe=on -m0=LZMA2` with an empty line for the password: the empty password; the header is AES only |
+| `7z/aes-stored.7z` | 7-Zip (7zz) 26.03 for macOS | `tests/data/7z/make_aes_stored.sh`, password `fillyfoal`, mtime 2024-01-02 03:04 UTC; not byte-reproducible (random IV per encrypted folder): `7zz a -t7z -mx0 -mhe=off -mtc=off -mta=off -pfillyfoal` of 65 600 bytes of the word salad of `tests/data/7z/salad.py`: one stored folder, AES-256 + Copy, no padding |
+| `7z/aes-stored-two.7z` | 7-Zip (7zz) 26.03 for macOS | `tests/data/7z/make_aes_stored.sh`, the same command over the same file and a 6-byte `small.txt`: two stored folders (AES-256 + Copy), the second with 10 bytes of zero padding |
 | `zip/deflate64.zip` | 7-Zip (7zz) 26.03 for macOS | reproduced byte-for-byte by `tests/data/7z/make_codecs.sh`: `7zz a -tzip -mm=Deflate64 -mx=9` (method 9, NTFS extra field); content is the deterministic word salad of `tests/data/7z/salad.py`, mtime 2024-01-02 03:04 UTC |
 | `zip/ppmd.zip` | 7-Zip (7zz) 26.03 for macOS | `tests/data/zip/make_ppmd.sh`: two `7zz a -tzip -mm=PPMd -mtc=off` runs (method 98, PPMd var. I rev. 1 with 7-Zip's default order and memory; the second with `-pfillyfoal`, ZipCrypto, password `fillyfoal`) of generated text, mtime 2024-01-02 03:04 UTC. Byte-for-byte reproducible except the encrypted entry's data (ZipCrypto's random 12-byte header) |
 | `xar/files.xar` | macOS xar(1) | TOC has real inode/device numbers and a `com.apple.provenance` extended attribute. Contents `hello.txt` (`hello tar\n`), `sub/pixel.png` and `sub/a-very-long-file-name-...-classic-tar-header.txt` (`x`), all with mtime `TZ=UTC touch -t 202401020304`, in a directory under `/tmp`; `xar -cf files.xar --prop-exclude user hello.txt sub` (no owner user name; uid, gid and group remain) |
@@ -1794,6 +1796,7 @@ PIDs). Checked by reading the traces back with `babeltrace2`.
 | --- | --- | --- |
 | `terraform-plan/create.tfplan` | Terraform v1.16.6 (`hashicorp/terraform:latest` image, linux_arm64) | `tests/data/terraform-plan/make.sh` (its header has the `docker run` line): `terraform plan -out=create.tfplan` of a configuration using only `terraform_data`, a variable, locals and outputs (no provider download), against an empty state. Unchanged; not byte-reproducible (resource IDs, ZIP timestamps) |
 | `terraform-plan/update.tfplan` | same | the same script, after `terraform apply` of the first plan: `terraform plan -var greeting=hi -out=update.tfplan` (updates, a replacement via `triggers_replace`, unknown values, non-empty `tfstate-prev`). Unchanged |
+| `zip/tfplan-artifact.zip` | Python 3.14 `zipfile` around Terraform v1.16.6 output | reproduced byte-for-byte by `tests/data/terraform-plan/make_artifact.py`: a deflated member `tfplan` holding `terraform-plan/create.tfplan` unchanged (a saved plan inside a CI artifact), mtime 2024-01-02 03:04 |
 
 ## HotSpot class data sharing archives
 
@@ -1812,6 +1815,8 @@ byte-reproducible (addresses and CRCs vary with the build); the archives hold on
 | `jvm-cds/jdk21-dynamic-on-static.jsa.raw.zst` | Temurin 21.0.12.1+1 | `-XX:SharedArchiveFile=static.jsa -XX:ArchiveClassesAtExit`: records the base archive's name; unchanged |
 | `jvm-cds/jdk21-static-prefix.jsa.raw.zst` | Temurin 21.0.12.1+1 | `-Xshare:dump` (9,109,504 bytes), cut to its first 73,728 bytes: the header, region table and the start of the `rw` region |
 | `jvm-cds/jdk17-static-prefix.jsa.raw.zst` | Temurin 17.0.20.1+1 | `-Xshare:dump` (6,488,064 bytes), cut to its first 73,728 bytes, as above |
+| `jvm-cds/jdk8-static-prefix.jsa.raw.zst` | Temurin 8u504 (OpenJDK 25.504-b01, linux-aarch64, `eclipse-temurin:8`) | `java -Xshare:dump`, the default archive `jre/lib/aarch64/server/classes.jsa` (20,279,296 bytes), cut to its first 4,096 bytes: version 2 header (commands in `tests/data/jvm-cds/make.sh`) |
+| `jvm-cds/jdk11-static-prefix.jsa.raw.zst` | Temurin 11.0.32.1+1 (linux-aarch64, `eclipse-temurin:11`) | the archive the JDK ships, `lib/server/classes.jsa` (11,882,496 bytes), cut to its first 4,096 bytes: version 5 header |
 
 ## Alpine APK v3 packages and index
 
@@ -1847,6 +1852,7 @@ byte-reproducible (timestamps, MVIDs).
 | --- | --- | --- |
 | `msbuild-binlog/tiny.binlog.gz` | MSBuild 17.11.48 | `dotnet msbuild tiny.proj -bl:tiny.binlog` of an SDK-less project (targets, a property, items, a warning; the project import archive embeds the project file). The file unchanged, renamed so the harness dissects the gzip-compressed record stream inside it |
 | `msbuild-binlog/build-noimports.binlog.gz` | MSBuild 17.11.48 | `dotnet build "-bl:build-noimports.binlog;ProjectImports=None"` of a console app (restore, evaluation, about 7,000 records of 20 kinds). Unchanged, renamed as above |
+| `msbuild-binlog/tokyo-globalprops.binlog.gz` | MSBuild 17.11.48 (.NET SDK 8.0.425, `mcr.microsoft.com/dotnet/sdk:8.0`) | the last block of `tests/data/msbuild-binlog/make.sh`: `TZ=Asia/Tokyo dotnet msbuild tiny.proj -p:Foo=bar -bl:gp.binlog` of a two-target project in /tmp/t, in a container whose UTC clock read 08:25:10 (the events say 17:25:10, DateTimeKind Local). Unchanged, renamed as above |
 | `gzip/tiny.binlog` | MSBuild 17.11.48 | the same file as `msbuild-binlog/tiny.binlog.gz`, under its own name: as a host sees it (gzip, then the record stream) |
 
 ## BPF Type Format: split BTF from pahole

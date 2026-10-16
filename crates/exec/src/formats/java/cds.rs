@@ -523,16 +523,22 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     ));
 
     let Some(layout) = layout else {
-        let len = header_size.unwrap_or(generic_len).max(generic_len);
-        cx.emit(
-            Node::new("Header data")
-                .span(file.sub(generic_len, len.saturating_sub(generic_len)))
-                .diag(Diagnostic::unsupported(format!(
-                    "the header layout of CDS archive version {version} is not known \
-                     (versions 11, 18 and 19 are)"
-                ))),
-        );
-        cx.annotate(format!("{kind} CDS archive, version {version}"));
+        // Where the rest of the header ends is known only from a header
+        // size (version 13 on); before, the node has no span.
+        let mut node = Node::new("Header data").diag(Diagnostic::unsupported(format!(
+            "the header layout of CDS archive version {version} is not known \
+             (versions 11, 18 and 19 are)"
+        )));
+        if let Some(len) = header_size.filter(|&l| l > generic_len) {
+            node = node.span(file.sub(generic_len, len.saturating_sub(generic_len)));
+        }
+        cx.emit(node);
+        let jdk = match version {
+            2 => " (JDK 8)",
+            5 => " (JDK 11)",
+            _ => "",
+        };
+        cx.annotate(format!("{kind} CDS archive, version {version}{jdk}"));
         return Ok(());
     };
 

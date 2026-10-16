@@ -54,3 +54,17 @@ class Program { static void Main() { System.Console.WriteLine("hello"); } }
 X
 $CLEAN dotnet build "-bl:/work/out/build-noimports.binlog;ProjectImports=None" -v:q 2>&1 | tail -3
 dotnet --version
+
+# Local time and global properties (tokyo-globalprops.binlog.gz, written as
+# gp.binlog): TZ=Asia/Tokyo, so the events' timestamps (DateTimeKind
+# Local) are nine hours ahead of UTC, and `-p:Foo=bar`, so ProjectStarted
+# and ProjectEvaluationFinished carry a global property list.
+mkdir -p /tmp/t && cd /tmp/t
+cat > tiny.proj <<'X'
+<Project DefaultTargets="Build">
+  <Target Name="Prepare"><Message Importance="high" Text="prep $(Foo)" /></Target>
+  <Target Name="Build" DependsOnTargets="Prepare"><Message Importance="high" Text="hi" /></Target>
+</Project>
+X
+date -u
+$CLEAN TZ=Asia/Tokyo dotnet msbuild tiny.proj -nologo -p:Foo=bar -bl:/work/out/gp.binlog -v:m

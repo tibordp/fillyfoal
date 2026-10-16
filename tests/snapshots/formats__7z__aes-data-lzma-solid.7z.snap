@@ -96,8 +96,13 @@ expression: "common::explore(&display_name(&path), &data)"
           Line 39: "lorem ipsum dolor sit amet, consectetur adipiscing elit."  [#2:0xa48+0x38]
   ▾ Folders — 1 folder  [0x20+0x187]
     ▾ Folder 0 — AES-256 + LZMA, 224 bytes → 2.6 KiB, 3 streams  [0x20+0xe0]
-        Coder 0: "AES-256" — 1 in, 1 out
-        Coder 1: "LZMA" — 1 in, 1 out
+      ▾ Coder 0: "AES-256" — 1 in, 1 out
+          Key derivation: 19 — 2^19 SHA-256 rounds
+          Salt — (none)
+          IV: d3 b9 8b 40 d4 9c 05 53 cd 4a ec 2c f4 7f 84 c0  |...@...S.J.,....|
+      ▾ Coder 1: "LZMA" — 1 in, 1 out
+          lc/lp/pb: "3/0/2" — literal context, literal position and position bits
+          Dictionary size: 4096 — 4 KiB
         Unpacked size: 2689 — 2.6 KiB
         Streams: 3
       ▾ Data — UTF-8 text, LF line endings, 44 lines  [0x20+0xe0]

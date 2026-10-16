@@ -58,6 +58,24 @@ fn deep_probe(d: &crate::formats::Deep<'_>) -> bool {
     named && looks_like_plan(d.head.data)
 }
 
+/// The format of content given as a plan that does not look like one, if
+/// the first phase of identification recognises it.
+async fn not_a_plan(cx: &Cx, span: Span) -> Result<Option<&'static Format>> {
+    let (data, tail) = crate::formats::head(cx, span).await?;
+    if looks_like_plan(&data) {
+        return Ok(None);
+    }
+    let (found, units) = cx.registry().identify_costed(&crate::formats::Head {
+        data: &data,
+        tail: &tail,
+        len: span.len,
+        len_known: cx.len_known(span.source),
+    });
+    // Probes run synchronously over the head; charge them.
+    cx.charge(units).await;
+    Ok(found.filter(|f| !std::ptr::eq(*f, &TFPLAN)))
+}
+
 fn looks_like_plan(data: &[u8]) -> bool {
     let mut at = 0usize;
     let Some(first) = pb::field(data, &mut at) else {
@@ -388,6 +406,14 @@ static PLAN: Msg = Msg {
 // Dissection
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
+    // A ZIP member named `tfplan` is taken for a plan by its name alone;
+    // in a CI artifact it is often a whole saved plan (a ZIP) instead.
+    // What the probes recognise is handed to them.
+    if let Some(format) = not_a_plan(&cx, input.span).await?
+        && cx.hand_off(&input, format)
+    {
+        return (format.dissect)(cx, input).await;
+    }
     let head = cx.read(input.span.sub(0, 64 * 1024)).await?;
     let whole = crate::bytes::to_u64(head.len()) == input.span.len;
     let mut version = None;
@@ -436,14 +462,26 @@ async fn walk(cx: Cx, (input, span, msg, depth): State) -> Result<()> {
     if depth > MAX_DEPTH {
         return Err(Diagnostic::limit("messages nested too deeply").at(span));
     }
+    // A change's values are named by its action.
+    let action = if std::ptr::eq(msg, &CHANGE) {
+        Some(change_action(&cx, span).await?)
+    } else {
+        None
+    };
+    let mut values = 0usize;
     let mut cur = Cursor::new(&cx, span, Endian::Little);
     while !cur.at_end() {
         let start = cur.pos();
         let (num, payload) = pb::read_field(&mut cur).await?;
         let spec: Option<&F> = msg.fields.iter().find(|s| s.num == num);
-        let label: String = match spec {
-            Some(s) => s.name.to_owned(),
-            None => format!("field {num}"),
+        let label: String = match (spec, action) {
+            (Some(s), Some(action)) if s.num == 2 => {
+                let label = value_label(action, values);
+                values = values.saturating_add(1);
+                label
+            }
+            (Some(s), _) => s.name.to_owned(),
+            (None, _) => format!("field {num}"),
         };
         let ty = spec.map(|s| s.ty);
         let node = match payload {
@@ -487,6 +525,34 @@ async fn walk(cx: Cx, (input, span, msg, depth): State) -> Result<()> {
         cx.push(node.span(cur.since(start))).await;
     }
     Ok(())
+}
+
+/// The action of the `Change` at `span`: its first field, as Go's
+/// protobuf writes fields in order; absent (proto3's default) is NOOP.
+async fn change_action(cx: &Cx, span: Span) -> Result<u64> {
+    let head = cx.read(span.sub(0, 11)).await?;
+    let mut at = 0usize;
+    Ok(match pb::field(&head, &mut at) {
+        Some(fl) if fl.number == 1 && fl.wire == VARINT => fl.value,
+        _ => 0,
+    })
+}
+
+/// The name of a change's `n`th value (planfile.proto: CREATE and READ
+/// hold the value after, DELETE the value before, UPDATE and the
+/// replacements both, NOOP the unchanged value).
+fn value_label(action: u64, n: usize) -> String {
+    let names: &[&str] = match action {
+        0 => &["value"],
+        1 | 2 => &["after"],
+        5 => &["before"],
+        3 | 6 | 7 => &["before", "after"],
+        _ => &[],
+    };
+    match names.get(n) {
+        Some(name) => format!("values[{n}] ({name})"),
+        None => format!("values[{n}]"),
+    }
 }
 
 async fn delimited(
@@ -541,7 +607,9 @@ async fn title(cx: &Cx, body: Span, msg: &'static Msg) -> Result<Option<String>>
         };
         match spec.ty {
             Ty::Enum(table) => {
-                if let Some(v) = pb::varint_in(&data, n) {
+                // A change's action is left out when it is NOOP (0).
+                let v = pb::varint_in(&data, n).or_else(|| std::ptr::eq(msg, &CHANGE).then_some(0));
+                if let Some(v) = v {
                     parts.push(lookup(table, v).map_or_else(|| v.to_string(), str::to_owned));
                 }
             }
