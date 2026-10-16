@@ -9,7 +9,7 @@ use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::Fields;
 use crate::formats::util::sound::clip;
-use crate::formats::util::vidutil::{fourcc, num, seconds_ms};
+use crate::formats::util::vidutil::{fourcc, num};
 use crate::formats::{embedded, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
@@ -369,7 +369,10 @@ async fn chpl(cx: &Cx, body: Span) -> Result<()> {
                 (),
                 chapter_layout,
             )
-            .summary(format!("{} {title}", seconds_ms(time / 10_000))),
+            .summary(format!(
+                "{} {title}",
+                crate::formats::util::fmt::duration_of(time / 10_000, 1000)
+            )),
         );
         f.skip(size);
     }
@@ -378,7 +381,7 @@ async fn chpl(cx: &Cx, body: Span) -> Result<()> {
 
 fn chapter_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u64("Start time")
-        .with(|&t, n| n.summary(seconds_ms(t / 10_000)))
+        .duration(10_000_000)
         .desc("In 100-nanosecond units")
         .emit()?;
     let len = f.u8("Title length").emit()?;

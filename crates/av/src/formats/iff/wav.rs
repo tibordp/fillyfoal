@@ -985,22 +985,6 @@ async fn fact_samples(cx: &Cx, chunk: &Chunk) -> Option<u64> {
     fact_value(cx, &chunk.ctx, fact.data).await
 }
 
-/// A sample count as a time of day: `06:00:00.000`.
-fn clock(samples: u64, rate: u32) -> Option<String> {
-    let rate = u64::from(rate);
-    let secs = samples.checked_div(rate)?;
-    let ms = samples
-        .checked_rem(rate)?
-        .saturating_mul(1000)
-        .checked_div(rate)?;
-    Some(format!(
-        "{:02}:{:02}:{:02}.{ms:03}",
-        secs / 3600,
-        secs / 60 % 60,
-        secs % 60
-    ))
-}
-
 // ---------------------------------------------------------------------------
 // Summaries
 
@@ -1493,8 +1477,8 @@ pub fn bext(f: &mut Fields<'_>, rate: u32) -> Result<()> {
         .span(at)
         .value(crate::formats::util::val::uint(reference, 64))
         .desc("Sample frames since midnight at the first sample");
-    if let Some(t) = clock(reference, rate) {
-        node = node.summary(t);
+    if rate > 0 {
+        node = node.as_duration(rate.into());
     }
     f.node(node);
     let version = f.u16("Version").emit()?;

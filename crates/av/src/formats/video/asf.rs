@@ -590,7 +590,8 @@ async fn describe(cx: &Cx, obj: &Object) -> Option<String> {
     } else if g == FILE_PROPERTIES {
         let play = u64_le(&d, 64)?;
         let preroll = u64_le(&d, 80)?;
-        let mut s = vidutil::seconds_ms((play / 10_000).saturating_sub(preroll));
+        let mut s =
+            crate::formats::util::fmt::duration_of((play / 10_000).saturating_sub(preroll), 1000);
         let bitrate = u32_le(&d, 100)?;
         if bitrate > 0 {
             s.push_str(&format!(", up to {} kb/s", bitrate / 1000));
@@ -860,15 +861,15 @@ fn decode_body(f: &mut Fields<'_>, obj: &Object) -> Result<()> {
         f.u64("Data packets count").emit()?;
         f.u64("Play duration")
             .desc("100-ns units, preroll included")
-            .with(|&d, n| n.summary(vidutil::seconds_ms(d / 10_000)))
+            .duration(10_000_000)
             .emit()?;
         f.u64("Send duration")
             .desc("100-ns units")
-            .with(|&d, n| n.summary(vidutil::seconds_ms(d / 10_000)))
+            .duration(10_000_000)
             .emit()?;
         f.u64("Preroll")
             .desc("Milliseconds to buffer before playing; timestamps include it")
-            .with(|&d, n| n.summary(format!("{d} ms")))
+            .duration(1000)
             .emit()?;
         f.u32("Flags").flags(FILE_FLAGS).emit()?;
         f.u32("Minimum data packet size").emit()?;
@@ -982,9 +983,7 @@ fn decode_body(f: &mut Fields<'_>, obj: &Object) -> Result<()> {
         || g == MEDIA_OBJECT_INDEX_PARAMETERS
         || g == TIMECODE_INDEX_PARAMETERS
     {
-        f.u32("Index entry time interval")
-            .with(|&v, n| n.summary(format!("{v} ms")))
-            .emit()?;
+        f.u32("Index entry time interval").duration(1000).emit()?;
         let n = f.u16("Index specifiers count").emit()?;
         for _ in 0..n {
             if f.remaining() < 4 {
@@ -1084,7 +1083,7 @@ fn stream_properties(f: &mut Fields<'_>) -> Result<()> {
     let ec = f.guid("Error correction type").with(named_guid).emit()?;
     f.u64("Time offset")
         .desc("100-ns units")
-        .with(|&t, n| n.summary(vidutil::seconds_ms(t / 10_000)))
+        .duration(10_000_000)
         .emit()?;
     let ts_len = f.u32("Type-specific data length").emit()?;
     let ec_len = f.u32("Error correction data length").emit()?;
@@ -1151,12 +1150,8 @@ fn stream_properties(f: &mut Fields<'_>) -> Result<()> {
 }
 
 fn extended_stream(f: &mut Fields<'_>) -> Result<()> {
-    f.u64("Start time")
-        .with(|&t, n| n.summary(format!("{t} ms")))
-        .emit()?;
-    f.u64("End time")
-        .with(|&t, n| n.summary(format!("{t} ms")))
-        .emit()?;
+    f.u64("Start time").duration(1000).emit()?;
+    f.u64("End time").duration(1000).emit()?;
     f.u32("Data bitrate")
         .with(|&b, n| n.summary(format!("{} kb/s", vidutil::num(f64::from(b) / 1000.0))))
         .emit()?;
@@ -1266,12 +1261,10 @@ fn marker(f: &mut Fields<'_>) -> Result<Option<String>> {
     let time = f
         .u64("Presentation time")
         .desc("100-ns units, preroll included")
-        .with(|&t, n| n.summary(vidutil::seconds_ms(t / 10_000)))
+        .duration(10_000_000)
         .emit()?;
     f.u16("Entry length").emit()?;
-    f.u32("Send time")
-        .with(|&t, n| n.summary(format!("{t} ms")))
-        .emit()?;
+    f.u32("Send time").duration(1000).emit()?;
     f.u32("Flags").hex().emit()?;
     let len = f
         .u32("Marker description length")
@@ -1280,22 +1273,19 @@ fn marker(f: &mut Fields<'_>) -> Result<Option<String>> {
     let name = f.utf16("Marker description", len.into()).emit()?;
     Ok(Some(format!(
         "{} \"{}\"",
-        vidutil::seconds_ms(time / 10_000),
+        crate::formats::util::fmt::duration_of(time / 10_000, 1000),
         name.trim_end_matches('\0')
     )))
 }
 
 fn script_command(f: &mut Fields<'_>) -> Result<Option<String>> {
-    let time = f
-        .u32("Presentation time")
-        .with(|&t, n| n.summary(vidutil::seconds_ms(t.into())))
-        .emit()?;
+    let time = f.u32("Presentation time").duration(1000).emit()?;
     f.u16("Type index").emit()?;
     let len = f.u16("Command name length").desc("In characters").emit()?;
     let name = f.utf16("Command name", len.into()).emit()?;
     Ok(Some(format!(
         "{} {}",
-        vidutil::seconds_ms(time.into()),
+        crate::formats::util::fmt::duration_of(time.into(), 1000),
         name.trim_end_matches('\0')
     )))
 }
@@ -1492,7 +1482,7 @@ async fn index_object(cx: &Cx, obj: &Object, body: Span) -> Result<()> {
         f.guid("File ID").emit()?;
         f.u64("Index entry time interval")
             .desc("100-ns units")
-            .with(|&t, n| n.summary(vidutil::seconds_ms(t / 10_000)))
+            .duration(10_000_000)
             .emit()?;
         f.u32("Maximum packet count").emit()?;
         let n = f.u32("Index entries count").emit()?;
@@ -1505,10 +1495,7 @@ async fn index_object(cx: &Cx, obj: &Object, body: Span) -> Result<()> {
         );
         return Ok(());
     }
-    let interval = f
-        .u32("Index entry time interval")
-        .with(|&v, n| n.summary(format!("{v} ms")))
-        .emit()?;
+    let interval = f.u32("Index entry time interval").duration(1000).emit()?;
     let specifiers = f.u16("Index specifiers count").emit()?;
     let blocks = f.u32("Index blocks count").emit()?;
     for _ in 0..specifiers {
@@ -1835,14 +1822,8 @@ fn parse_packet(f: &mut Fields<'_>) -> Result<Packet> {
     };
     sized(f, "Sequence", ltf >> 1)?;
     let padding = sized(f, "Padding length", ltf >> 3)?;
-    let send_time = f
-        .u32("Send time")
-        .with(|&t, n| n.summary(format!("{t} ms")))
-        .emit()?;
-    let duration = f
-        .u16("Duration")
-        .with(|&t, n| n.summary(format!("{t} ms")))
-        .emit()?;
+    let send_time = f.u32("Send time").duration(1000).emit()?;
+    let duration = f.u16("Duration").duration(1000).emit()?;
     let multiple = ltf & 1 != 0;
     let (payload_length_type, count) = if multiple {
         let pf = f
@@ -1913,11 +1894,7 @@ fn payload_header(f: &mut Fields<'_>, props: u8, length_type: Option<u8>) -> Res
         time = u32::try_from(offset).ok();
     } else if replicated >= 8 {
         object_size = Some(f.u32("Media object size").emit()?);
-        time = Some(
-            f.u32("Presentation time")
-                .with(|&t, n| n.summary(format!("{t} ms")))
-                .emit()?,
-        );
+        time = Some(f.u32("Presentation time").duration(1000).emit()?);
         if replicated > 8 {
             f.bytes("Payload extension data", replicated.saturating_sub(8))
                 .emit()?;
@@ -2118,7 +2095,10 @@ async fn file_summary(cx: &Cx, file: Span) -> Option<(String, u32)> {
         } else if g == FILE_PROPERTIES {
             let play = u64_le(obj, 64)?;
             let preroll = u64_le(obj, 80)?;
-            duration = Some(vidutil::seconds_ms((play / 10_000).saturating_sub(preroll)));
+            duration = Some(crate::formats::util::fmt::duration_of(
+                (play / 10_000).saturating_sub(preroll),
+                1000,
+            ));
             packet_size = u32_le(obj, 92).unwrap_or(0);
         } else if g == CONTENT_DESCRIPTION {
             let title_len = usize::from(u16_le(obj, 24)?);

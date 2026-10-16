@@ -34,24 +34,13 @@ pub async fn timescale(cx: &Cx, region: Span, path: &[&[u8; 4]]) -> Option<u32> 
     u32_be(&d, at).filter(|&t| t > 0)
 }
 
-/// A playing time for summaries: "0:00.20", "1:23.45", "1:02:03.04".
+/// A playing time for summaries ([`fmt::duration`](crate::formats::util::fmt::duration)),
+/// or "indefinite" for the all-ones value.
 pub fn short_duration(units: u64, timescale: u32) -> String {
     if units == u64::MAX || units == u64::from(u32::MAX) {
         return "indefinite".to_owned();
     }
-    let hundredths = u128::from(units)
-        .saturating_mul(100)
-        .checked_div(u128::from(timescale))
-        .unwrap_or(0);
-    let hundredths = u64::try_from(hundredths).unwrap_or(u64::MAX);
-    let cs = hundredths % 100;
-    let secs = hundredths / 100;
-    let (h, m, s) = (secs / 3600, secs / 60 % 60, secs % 60);
-    if h > 0 {
-        format!("{h}:{m:02}:{s:02}.{cs:02}")
-    } else {
-        format!("{m}:{s:02}.{cs:02}")
-    }
+    crate::formats::util::fmt::duration_of(units, timescale.into())
 }
 
 #[derive(Clone, Debug, Default)]

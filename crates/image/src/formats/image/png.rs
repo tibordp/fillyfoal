@@ -723,12 +723,7 @@ impl Fctl {
 }
 
 fn delay(seconds: f64) -> String {
-    let ms = seconds * 1000.0;
-    if (ms - ms.round()).abs() < 1e-9 {
-        format!("{ms:.0} ms")
-    } else {
-        format!("{ms:.2} ms")
-    }
+    crate::formats::util::fmt::seconds(seconds)
 }
 
 /// A short description of well-known chunk types.
@@ -1308,7 +1303,7 @@ fn gifg(f: &mut Fields<'_>, _: &Image) -> Result<()> {
     f.u8("Disposal method").emit()?;
     f.u8("User input flag").emit()?;
     f.u16("Delay time")
-        .with(|&v, n| n.summary(format!("{} ms", u32::from(v).saturating_mul(10))))
+        .duration(100)
         .desc("Hundredths of a second")
         .emit()?;
     Ok(())

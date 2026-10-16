@@ -5,7 +5,7 @@ use crate::bytes::{u16_be, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Fields, struct_node};
-use crate::formats::util::vidutil::{duration, fixed8, fixed16, fourcc, num, sfixed16, text, uuid};
+use crate::formats::util::vidutil::{fixed8, fixed16, fourcc, num, sfixed16, text, uuid};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag};
@@ -688,12 +688,15 @@ fn scheme_name(kind: &[u8]) -> Option<&'static str> {
 /// A rate in bits per second, for summaries.
 pub use crate::formats::util::vidutil::bitrate;
 
-/// Adds a duration summary to a node holding `units` of `1/timescale` s.
+/// A node holding `units` of `1/timescale` s as a duration ("indefinite"
+/// for the all-ones value).
 fn timed(n: Node, units: u64, timescale: u32) -> Node {
     if timescale == 0 {
         n
+    } else if units == u64::MAX || units == u64::from(u32::MAX) {
+        n.summary("indefinite")
     } else {
-        n.summary(span_of_time(units, timescale))
+        n.as_duration(timescale.into())
     }
 }
 
@@ -702,7 +705,7 @@ pub fn span_of_time(units: u64, timescale: u32) -> String {
     if units == u64::MAX || units == u64::from(u32::MAX) {
         "indefinite".to_owned()
     } else {
-        duration(units, timescale.into())
+        crate::formats::util::fmt::duration_of(units, timescale.into())
     }
 }
 
@@ -827,7 +830,7 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
             let lang = u16_be(&d, at.saturating_add(if wide { 12 } else { 8 }))?;
             Some(format!(
                 "{} @ {timescale}/s, {}",
-                duration(dur, timescale.into()),
+                crate::formats::util::fmt::duration_of(dur, timescale.into()),
                 language(lang)
             ))
         }
@@ -885,7 +888,7 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
             let units = word(4, wide)?;
             let ts = st.ctx.movie_timescale;
             Some(if ts > 0 {
-                duration(units, ts.into())
+                crate::formats::util::fmt::duration_of(units, ts.into())
             } else {
                 format!("{units} units")
             })
@@ -986,7 +989,7 @@ fn mvhd(f: &mut Fields<'_>) -> Result<()> {
     f.uword("Modification time", wide).mac_time().emit()?;
     let ts = f.u32("Timescale").desc("Time units per second").emit()?;
     f.uword("Duration", wide)
-        .with(|&d, n| n.summary(span_of_time(d, ts)))
+        .with(|&d, n| timed(n, d, ts))
         .emit()?;
     f.u32("Preferred rate")
         .with(|&r, n| n.summary(format!("{}×", num(fixed16(r)))))
@@ -1060,7 +1063,7 @@ fn mdhd(f: &mut Fields<'_>, brand: Brand) -> Result<()> {
     f.uword("Modification time", wide).mac_time().emit()?;
     let ts = f.u32("Timescale").desc("Time units per second").emit()?;
     f.uword("Duration", wide)
-        .with(|&d, n| n.summary(span_of_time(d, ts)))
+        .with(|&d, n| timed(n, d, ts))
         .emit()?;
     f.u16("Language")
         .hex()

@@ -460,7 +460,7 @@ record! {
         entry_array: u64 "Entry array offset" .hex(),
         head_realtime: u64 "Head entry realtime (µs)",
         tail_realtime: u64 "Tail entry realtime (µs)",
-        tail_monotonic: u64 "Tail entry monotonic (µs)",
+        tail_monotonic: u64 "Tail entry monotonic" .duration(1_000_000),
     }
 }
 

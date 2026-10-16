@@ -179,7 +179,7 @@ record! {
         errors: u16 "On errors" .enumeration(ERRORS),
         minor_rev: u16 "Minor revision",
         last_check: u32 "Last checked" .with(unix_time),
-        check_interval: u32 "Check interval (s)",
+        check_interval: u32 "Check interval" .duration(1),
         creator_os: u32 "Creator OS" .enumeration(OS),
         rev_level: u32 "Revision",
         def_resuid: u16 "Reserved blocks user",

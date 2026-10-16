@@ -8,7 +8,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, Layout, parse, struct_node};
 use crate::formats::util::fmt::plural;
-use crate::formats::util::sound::{channels, duration, duration_of, hz, leaf, peek_text, u24};
+use crate::formats::util::sound::{channels, duration_of, hz, leaf, peek_text, u24};
 use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -459,7 +459,7 @@ pub async fn ilbc(cx: Cx, input: Input) -> Result<()> {
     let frames = data.len.checked_div(frame).unwrap_or(0);
     cx.annotate(format!(
         "iLBC, {ms} ms frames, 8000 Hz, {}",
-        duration(frames as f64 * ms as f64 / 1000.0)
+        crate::formats::util::fmt::seconds(frames as f64 * ms as f64 / 1000.0)
     ));
     cx.emit(
         Node::new("Frames")

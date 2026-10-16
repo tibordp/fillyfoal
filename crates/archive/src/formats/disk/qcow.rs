@@ -154,7 +154,7 @@ record! {
         name_size: u16 "Name length",
         date: u32 "Created" .timestamp(),
         date_ns: u32 "Created (ns)",
-        vm_clock_ns: u64 "VM clock (ns)" .with(|&v, n| n.summary(format!("{}.{:09} s", v / 1_000_000_000, v % 1_000_000_000))),
+        vm_clock_ns: u64 "VM clock" .duration(1_000_000_000),
         vm_state_size: u32 "VM state size" .size(),
         extra_size: u32 "Extra data size",
     }

@@ -134,7 +134,7 @@ async fn gnome_keyring(cx: Cx, input: Input) -> Result<()> {
         .hex()
         .desc("1: lock on idle, 2: lock after a timeout")
         .emit()?;
-    f.u32("Lock timeout (s)").emit()?;
+    f.u32("Lock timeout").duration(1).emit()?;
     let iterations = f.u32("Hash iterations").emit()?;
     let salt = f.bytes("Salt", 8).emit()?;
     f.bytes("Reserved", 16).emit()?;

@@ -8,7 +8,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::util::vidutil::{
-    Entry, duration, enumerated, fourcc, num, read_small, table, text, uuid,
+    Entry, enumerated, fourcc, num, read_small, table, text, uuid,
 };
 use crate::node::{Count, Node};
 use crate::record;
@@ -418,13 +418,7 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
                 f.u32("Reference ID").emit()?;
                 let ts = f.u32("Timescale").emit()?;
                 f.uword("Earliest presentation time", v != 0)
-                    .with(|&t, n| {
-                        if ts == 0 {
-                            n
-                        } else {
-                            n.summary(duration(t, ts.into()))
-                        }
-                    })
+                    .with(|_, n| if ts == 0 { n } else { n.as_duration(ts.into()) })
                     .emit()?;
                 f.uword("First offset", v != 0)
                     .desc("From the end of this box to the first referenced byte")
@@ -808,7 +802,7 @@ struct Edit {
 impl Edit {
     fn summary(&self, movie: u32, media: u32) -> String {
         let length = if movie > 0 {
-            duration(self.duration, movie.into())
+            crate::formats::util::fmt::duration_of(self.duration, movie.into())
         } else {
             format!("{} units", self.duration)
         };
@@ -816,7 +810,7 @@ impl Edit {
             return format!("empty, {length}");
         }
         let from = match u64::try_from(self.media_time) {
-            Ok(t) if media > 0 => duration(t, media.into()),
+            Ok(t) if media > 0 => crate::formats::util::fmt::duration_of(t, media.into()),
             _ => format!("{}", self.media_time),
         };
         let mut s = format!("{length} from media time {from}");
@@ -882,9 +876,9 @@ async fn expand_edits(cx: Cx, e: Edits) -> Result<()> {
 
 fn edit_layout(f: &mut Fields<'_>, &(wide, movie, media): &(bool, u32, u32)) -> Result<()> {
     f.uword("Segment duration", wide)
-        .with(|&d, n| {
+        .with(|_, n| {
             if movie > 0 {
-                n.summary(duration(d, movie.into()))
+                n.as_duration(movie.into())
             } else {
                 n
             }
@@ -897,7 +891,7 @@ fn edit_layout(f: &mut Fields<'_>, &(wide, movie, media): &(bool, u32, u32)) -> 
         f.i32("Media time").map(i64::from)
     };
     time.with(|&t, n| match u64::try_from(t) {
-        Ok(t) if media > 0 => n.summary(duration(t, media.into())),
+        Ok(_) if media > 0 => n.as_duration(media.into()),
         _ if t == -1 => n.summary("empty edit"),
         _ => n,
     })

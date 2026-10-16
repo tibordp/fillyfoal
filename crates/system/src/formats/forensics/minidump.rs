@@ -490,11 +490,7 @@ fn emit_field(f: &mut Fields<'_>, field: F) -> Result<()> {
                 .emit()?;
         }
         F::Ticks(n) => {
-            f.u64(n)
-                .with(|&v, node| {
-                    node.summary(format!("{}.{:07} s", v / 10_000_000, v % 10_000_000))
-                })
-                .emit()?;
+            f.u64(n).duration(10_000_000).emit()?;
         }
         F::Enum32(n, t) => {
             f.u32(n).enumeration(t).emit()?;

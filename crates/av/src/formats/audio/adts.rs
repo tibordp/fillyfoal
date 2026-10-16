@@ -15,7 +15,7 @@ use crate::error::{Diagnostic, Result};
 use crate::formats::util::arcutil::human_size;
 use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{
-    Bits, FrameRef, FrameSyntax, bits_node, duration, estimate_frames, frames_node,
+    Bits, FrameRef, FrameSyntax, bits_node, estimate_frames, frames_node,
 };
 use crate::formats::util::vidutil::audio::{
     self as aac, AAC_PROFILES, AAC_SAMPLE_RATES, AscInfo, CHANNEL_CONFIGS, PceInfo,
@@ -349,7 +349,7 @@ async fn dissect_adif(cx: &Cx, stream: Span, title: &str) -> Result<()> {
         line.push_str(&format!(
             ", {} kbps, {}",
             a.bitrate / 1000,
-            duration(seconds)
+            crate::formats::util::fmt::seconds(seconds)
         ));
     }
     cx.annotate(format!("{line}{title}"));
@@ -422,7 +422,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         };
         cx.annotate(format!(
             "{describe} (ADTS), {kbps:.0} kbps, {}{title}",
-            duration(seconds)
+            crate::formats::util::fmt::seconds(seconds)
         ));
         cx.emit(frames_node(stream, &ADTS));
     } else if let Some((_, describe)) = parse_loas(&window) {
@@ -447,7 +447,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let what = asc.map_or(describe, |a| format!("{} (LOAS/LATM)", a.describe()));
         cx.annotate(format!(
             "{what}, {kbps:.0} kbps, {}{title}",
-            duration(seconds)
+            crate::formats::util::fmt::seconds(seconds)
         ));
         cx.emit(frames_node(stream, &LOAS));
     } else {

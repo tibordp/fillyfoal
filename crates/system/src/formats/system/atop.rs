@@ -99,6 +99,8 @@ struct Log {
     reclen: u64,
     sstatlen: u64,
     tstatlen: u64,
+    /// Clock ticks per second, for CPU times.
+    hertz: u64,
     /// The layouts decoded here are those of a 64-bit writer.
     wide: bool,
 }
@@ -150,6 +152,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         reclen,
         sstatlen: sstatlen.into(),
         tstatlen: tstatlen.into(),
+        hertz: w16(14),
         wide,
     };
     let records = file.tail(headlen);
@@ -454,7 +457,12 @@ async fn system_stats(cx: Cx, (_input, log, span): (Input, Log, Span)) -> Result
         "cpu.all.steal",
         "cpu.all.guest",
     ] {
-        f.u64(name).desc("Clock ticks").emit()?;
+        let field = f.u64(name).desc("Clock ticks");
+        if log.hertz > 0 {
+            field.duration(log.hertz).emit()?;
+        } else {
+            field.emit()?;
+        }
     }
     cx.emit(
         Node::new("Data")

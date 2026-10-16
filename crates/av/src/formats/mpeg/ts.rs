@@ -435,7 +435,7 @@ fn summary(ts: &Ts, duration: Option<f64>) -> String {
         parts.push(streams.join(" + "));
     }
     if let Some(d) = duration {
-        parts.push(vidutil::seconds_f64(d));
+        parts.push(crate::formats::util::fmt::seconds(d));
     }
     parts.push(plural(ts.count, "packet"));
     parts.join(", ")
@@ -928,7 +928,7 @@ fn clock_42(b: &[u8]) -> Option<u64> {
 }
 
 fn seconds_27m(v: u64) -> String {
-    format!("{:.6} s", v as f64 / 27_000_000.0)
+    crate::formats::util::fmt::duration_of(v, 27_000_000)
 }
 
 // ---------------------------------------------------------------------------
@@ -1421,7 +1421,7 @@ async fn packet(cx: Cx, (ts, index): (Ts, u64)) -> Result<()> {
         ));
         cx.emit(
             uint("Arrival timestamp", whole.sub(0, 4), ats, 30)
-                .summary(seconds_27m(ats))
+                .as_duration(27_000_000)
                 .desc("27 MHz clock, modulo 2^30"),
         );
     }
@@ -1642,7 +1642,7 @@ async fn adaptation(cx: Cx, span: Span) -> Result<()> {
         if let Some(v) = d.get(at..at.saturating_add(6)).and_then(clock_42) {
             cx.emit(
                 uint("PCR", span.sub(pos(at), 6), v, 42)
-                    .summary(seconds_27m(v))
+                    .as_duration(27_000_000)
                     .desc("Program clock reference: 33-bit base (90 kHz) × 300 + 9-bit extension"),
             );
         }
@@ -1650,7 +1650,7 @@ async fn adaptation(cx: Cx, span: Span) -> Result<()> {
     }
     if flags & 0x08 != 0 {
         if let Some(v) = d.get(at..at.saturating_add(6)).and_then(clock_42) {
-            cx.emit(uint("OPCR", span.sub(pos(at), 6), v, 42).summary(seconds_27m(v)));
+            cx.emit(uint("OPCR", span.sub(pos(at), 6), v, 42).as_duration(27_000_000));
         }
         at = at.saturating_add(6);
     }

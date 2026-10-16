@@ -68,7 +68,7 @@ pub fn playing_time(seconds: f64) -> String {
         let s = format!("{seconds:.2}");
         format!("{} s", s.trim_end_matches('0').trim_end_matches('.'))
     } else {
-        crate::formats::util::sound::duration(seconds)
+        crate::formats::util::fmt::seconds(seconds)
     }
 }
 

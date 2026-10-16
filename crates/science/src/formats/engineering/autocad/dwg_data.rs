@@ -1140,17 +1140,16 @@ pub async fn summary_info(cx: &Cx, d: &Drawing, data: Span) -> Result<()> {
     }
     let (days, a) = r.u32().ok_or_else(truncated)?;
     let (ms, _) = r.u32().ok_or_else(truncated)?;
-    let secs = ms / 1000;
     cx.emit(
         Node::new("Total editing time")
             .span(Span::new(a.source, a.offset, 8))
-            .value(uint(days, 64))
-            .summary(format!(
-                "{days} days, {:02}:{:02}:{:02}",
-                secs / 3600,
-                secs / 60 % 60,
-                secs % 60
-            )),
+            .value(Value::duration(
+                i64::from(days)
+                    .saturating_mul(86_400_000)
+                    .saturating_add(i64::from(ms)),
+                1000,
+            ))
+            .desc("Days, then milliseconds"),
     );
     cx.emit(r.date("Created").ok_or_else(truncated)?);
     cx.emit(r.date("Modified").ok_or_else(truncated)?);

@@ -1029,7 +1029,7 @@ fn job_fixed(f: &mut Fields<'_>, _: &()) -> Result<(u32, String)> {
     f.u16("Idle deadline (minutes)").emit()?;
     f.u16("Idle wait (minutes)").emit()?;
     f.u32("Priority").enumeration(JOB_PRIORITIES).emit()?;
-    f.u32("Maximum run time (ms)").emit()?;
+    f.u32("Maximum run time").duration(1000).emit()?;
     f.u32("Exit code").hex().emit()?;
     let status = f.u32("Status").enumeration(JOB_STATUS).emit()?;
     f.u32("Flags").flags(JOB_FLAGS).emit()?;

@@ -1043,14 +1043,9 @@ fn genres(value: &str) -> String {
     }
 }
 
-/// Milliseconds as `m:ss.mmm` (or `h:mm:ss.mmm`).
+/// Milliseconds, for summaries.
 pub fn ms_time(ms: u64) -> String {
-    let (h, m, s, frac) = (ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000);
-    if h > 0 {
-        format!("{h}:{m:02}:{s:02}.{frac:03}")
-    } else {
-        format!("{m}:{s:02}.{frac:03}")
-    }
+    crate::formats::util::fmt::duration_of(ms, 1000)
 }
 
 fn timestamp(format: u8, v: u64) -> String {
@@ -1651,7 +1646,7 @@ fn render(b: &mut Body<'_>, frame: &Frame, id: &str) -> Result<()> {
             b.string("Element ID", 0);
             for name in ["Start time", "End time"] {
                 if let Some((span, v)) = b.uint(4) {
-                    b.emit(leaf(name, span, uint(v, 32)).summary(ms_time(v)));
+                    b.emit(leaf(name, span, uint(v, 32).to_duration(1000)));
                 }
             }
             for name in ["Start offset", "End offset"] {
@@ -1803,8 +1798,7 @@ fn private(b: &mut Body<'_>, input: Input, owner: &str) {
     let node = match owner {
         "com.apple.streaming.transportStreamTimestamp" if data.len() == 8 => {
             let pts = be_uint(&data) & 0x1_ffff_ffff;
-            leaf("Timestamp", span, uint(pts, 33))
-                .summary(format!("{:.3} s", pts as f64 / 90_000.0))
+            leaf("Timestamp", span, uint(pts, 33).to_duration(90_000))
                 .desc("MPEG-TS presentation timestamp (90 kHz) of the first sample (HLS)")
         }
         _ if owner.starts_with("WM/") && data.len() == 16 => {

@@ -1818,9 +1818,15 @@ fn tcp_options(b: &mut Dec, p: Ix, off: usize, end: usize) {
             (28, 4) => {
                 let v = b.u16(body).unwrap_or(0);
                 b.numx(o, "Granularity / timeout", body, 2);
-                let unit = if v & 0x8000 != 0 { "min" } else { "s" };
-                b.tail(|n| n.summary(format!("{} {unit}", v & 0x7fff)));
-                format!("UTO={} {unit}", v & 0x7fff)
+                let n = u64::from(v & 0x7fff);
+                let secs = if v & 0x8000 != 0 {
+                    n.saturating_mul(60)
+                } else {
+                    n
+                };
+                let text = crate::formats::util::fmt::duration_of(secs, 1);
+                b.tail(|n| n.summary(text.clone()));
+                format!("UTO={text}")
             }
             (30, _) => {
                 let st = b.u8(body).map(|v| v >> 4).unwrap_or(0);
@@ -1977,7 +1983,8 @@ fn icmp(b: &mut Dec, p: Ix, off: usize, end: usize, ip: Ip) -> usize {
         9 => {
             let n = b.num(ix, "Number of addresses", r, 1).unwrap_or(0);
             b.num(ix, "Address entry size", r.saturating_add(1), 1);
-            b.num(ix, "Lifetime (s)", r.saturating_add(2), 2);
+            b.num(ix, "Lifetime", r.saturating_add(2), 2);
+            b.tail(|n| n.as_duration(1));
             let mut at = r.saturating_add(4);
             for _ in 0..n {
                 if end.saturating_sub(at) < 8 {
@@ -2088,7 +2095,8 @@ fn icmpv6(b: &mut Dec, p: Ix, off: usize, end: usize, ip: Ip) -> usize {
             }
         }
         130..=132 => {
-            b.num(ix, "Maximum response delay (ms)", r, 2);
+            b.num(ix, "Maximum response delay", r, 2);
+            b.tail(|n| n.as_duration(1000));
             b.num(ix, "Reserved", r.saturating_add(2), 2);
             if let Some(a) = b.ip6(ix, "Multicast address", r.saturating_add(4)) {
                 detail = ipv6(&a);
@@ -2132,8 +2140,10 @@ fn icmpv6(b: &mut Dec, p: Ix, off: usize, end: usize, ip: Ip) -> usize {
             let life = b
                 .num(ix, "Router lifetime (s)", r.saturating_add(2), 2)
                 .unwrap_or(0);
-            b.num(ix, "Reachable time (ms)", r.saturating_add(4), 4);
-            b.num(ix, "Retransmission timer (ms)", r.saturating_add(8), 4);
+            b.num(ix, "Reachable time", r.saturating_add(4), 4);
+            b.tail(|n| n.as_duration(1000));
+            b.num(ix, "Retransmission timer", r.saturating_add(8), 4);
+            b.tail(|n| n.as_duration(1000));
             detail = format!("router lifetime {life} s");
             ndp_options(b, ix, r.saturating_add(12), end);
         }
@@ -2265,8 +2275,10 @@ fn ndp_options(b: &mut Dec, p: Ix, off: usize, end: usize) {
             3 if len == 32 => {
                 let pl = b.num(o, "Prefix length", body, 1).unwrap_or(0);
                 b.flg(o, "Flags", body.saturating_add(1), 1, PREFIX_FLAGS);
-                b.num(o, "Valid lifetime (s)", body.saturating_add(2), 4);
-                b.num(o, "Preferred lifetime (s)", body.saturating_add(6), 4);
+                b.num(o, "Valid lifetime", body.saturating_add(2), 4);
+                b.tail(|n| n.as_duration(1));
+                b.num(o, "Preferred lifetime", body.saturating_add(6), 4);
+                b.tail(|n| n.as_duration(1));
                 b.num(o, "Reserved", body.saturating_add(10), 4);
                 if let Some(a) = b.ip6(o, "Prefix", body.saturating_add(14)) {
                     let s = format!("{}/{pl}", ipv6(&a));
@@ -2284,7 +2296,8 @@ fn ndp_options(b: &mut Dec, p: Ix, off: usize, end: usize) {
             }
             25 => {
                 b.num(o, "Reserved", body, 2);
-                b.num(o, "Lifetime (s)", body.saturating_add(2), 4);
+                b.num(o, "Lifetime", body.saturating_add(2), 4);
+                b.tail(|n| n.as_duration(1));
                 let mut a = body.saturating_add(6);
                 let mut list = Vec::new();
                 while a.saturating_add(16) <= oend {

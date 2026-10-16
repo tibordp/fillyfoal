@@ -123,16 +123,9 @@ async fn emit_section(
     }
 }
 
-/// 45 kHz ticks as `h:mm:ss.mmm`.
+/// 45 kHz ticks, for summaries.
 fn ticks(t: u32) -> String {
-    let ms = u64::from(t) / 45;
-    format!(
-        "{}:{:02}:{:02}.{:03}",
-        ms / 3_600_000,
-        ms / 60_000 % 60,
-        ms / 1000 % 60,
-        ms % 1000
-    )
+    crate::formats::util::fmt::duration_of(t.into(), 45_000)
 }
 
 const VIDEO_FORMAT: EnumTable = &[
@@ -1054,15 +1047,15 @@ fn play_item_fields(f: &mut Fields<'_>) -> Result<bool> {
         })
         .emit()?;
     f.u8("STC ID").emit()?;
-    f.u32("In time").with(|&v, n| n.summary(ticks(v))).emit()?;
-    f.u32("Out time").with(|&v, n| n.summary(ticks(v))).emit()?;
+    f.u32("In time").duration(45_000).emit()?;
+    f.u32("Out time").duration(45_000).emit()?;
     f.u64("User operation mask").flags(UO_MASK).emit()?;
     f.u8("Random access prohibited")
         .with(|&v, n| n.value(crate::value::Value::Bool(v & 0x80 != 0)))
         .emit()?;
     let still = f.u8("Still mode").enumeration(STILL_MODE).emit()?;
     if still == 1 {
-        f.u16("Still time (s)").emit()?;
+        f.u16("Still time").duration(1).emit()?;
     } else {
         f.skip(2);
     }
@@ -1297,12 +1290,10 @@ fn sub_play_item(f: &mut Fields<'_>, _: &()) -> Result<()> {
         })
         .emit()?;
     f.u8("STC ID").emit()?;
-    f.u32("In time").with(|&v, n| n.summary(ticks(v))).emit()?;
-    f.u32("Out time").with(|&v, n| n.summary(ticks(v))).emit()?;
+    f.u32("In time").duration(45_000).emit()?;
+    f.u32("Out time").duration(45_000).emit()?;
     f.u16("Sync play item").emit()?;
-    f.u32("Sync start time")
-        .with(|&v, n| n.summary(ticks(v)))
-        .emit()?;
+    f.u32("Sync start time").duration(45_000).emit()?;
     if flags & 1 != 0 {
         let clips = f.u8("Clips").emit()?;
         f.skip(1);
@@ -1354,9 +1345,9 @@ fn mark(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.skip(1);
     f.u8("Mark type").enumeration(MARK_TYPE).emit()?;
     f.u16("Play item").emit()?;
-    f.u32("Time").with(|&v, n| n.summary(ticks(v))).emit()?;
+    f.u32("Time").duration(45_000).emit()?;
     f.u16("Entry ES PID").hex().emit()?;
-    f.u32("Duration").with(|&v, n| n.summary(ticks(v))).emit()?;
+    f.u32("Duration").duration(45_000).emit()?;
     Ok(())
 }
 
@@ -1562,12 +1553,8 @@ fn atc_sequence(f: &mut Fields<'_>, _: &()) -> Result<()> {
 fn stc_sequence(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u16("PCR PID").hex().emit()?;
     f.u32("SPN STC start").emit()?;
-    f.u32("Presentation start")
-        .with(|&v, n| n.summary(ticks(v)))
-        .emit()?;
-    f.u32("Presentation end")
-        .with(|&v, n| n.summary(ticks(v)))
-        .emit()?;
+    f.u32("Presentation start").duration(45_000).emit()?;
+    f.u32("Presentation end").duration(45_000).emit()?;
     Ok(())
 }
 
@@ -1843,6 +1830,6 @@ mod tests {
         for ((insn, dst, src), text) in cases {
             assert_eq!(hdmv_command(insn, dst, src), text, "{insn:#010x}");
         }
-        assert_eq!(ticks(27_045_000), "0:10:01.000");
+        assert_eq!(ticks(27_045_000), "0:10:01");
     }
 }

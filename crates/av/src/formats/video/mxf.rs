@@ -444,7 +444,7 @@ impl Summary {
                 && n > 0
             {
                 let seconds = dur as f64 * f64::from(den) / f64::from(n);
-                self.duration = Some(vidutil::seconds_f64(seconds));
+                self.duration = Some(crate::formats::util::fmt::seconds(seconds));
             }
         } else if let Some((n, den)) = sample_rate
             && den != 0

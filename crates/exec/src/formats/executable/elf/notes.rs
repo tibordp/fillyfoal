@@ -418,9 +418,10 @@ fn registers_len(region: &Region) -> u64 {
     names.saturating_mul(region.class.word())
 }
 
+/// A `struct timeval` of CPU time: a span, seconds and microseconds.
 fn timeval(f: &mut Fields<'_>, c: &Class, sec: &'static str, usec: &'static str) -> Result<()> {
-    f.uword(sec, c.wide).emit()?;
-    f.uword(usec, c.wide).emit()?;
+    f.uword(sec, c.wide).duration(1).emit()?;
+    f.uword(usec, c.wide).duration(1_000_000).emit()?;
     Ok(())
 }
 

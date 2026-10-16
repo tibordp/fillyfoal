@@ -136,8 +136,7 @@ record! {
             "disposal: {}",
             crate::value::lookup(DISPOSAL, ((v >> 2) & 7).into()).unwrap_or("reserved")
         ))) .desc("Bits 2–4: disposal method (what happens to the image's area before the next one is drawn); bit 1: wait for user input; bit 0: transparent color index is valid"),
-        delay: u16 "Delay time" .desc("In hundredths of a second")
-            .with(|&d, n| n.summary(format!("{} ms", u32::from(d).saturating_mul(10)))),
+        delay: u16 "Delay time" .desc("In hundredths of a second") .duration(100),
         transparent: u8 "Transparent color index" .desc("Pixels of this index are not drawn (only if the transparency flag is set)"),
     }
 }

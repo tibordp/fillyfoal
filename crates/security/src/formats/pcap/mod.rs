@@ -215,20 +215,13 @@ impl Stats {
     }
 }
 
-/// Nanoseconds as seconds with six decimals.
+/// Nanoseconds, for summaries.
 pub fn seconds(ns: i128) -> String {
-    let neg = ns < 0;
-    let ns = ns.unsigned_abs();
-    let micros = ns / 1000;
-    format!(
-        "{}{}.{:06} s",
-        if neg { "-" } else { "" },
-        micros / 1_000_000,
-        micros % 1_000_000
-    )
+    let ns = i64::try_from(ns).unwrap_or(if ns < 0 { i64::MIN } else { i64::MAX });
+    crate::formats::util::fmt::duration(ns, 1_000_000_000)
 }
 
-/// A time relative to the first packet: `+0.000474 s` or `-0.1 s`.
+/// A time relative to the first packet: `+474 µs` or `-100 ms`.
 pub fn offset(ns: i128) -> String {
     if ns < 0 {
         seconds(ns)

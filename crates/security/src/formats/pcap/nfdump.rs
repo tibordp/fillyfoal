@@ -1433,9 +1433,9 @@ fn element(f: &mut Fields<'_>, &(kind, e): &(u16, Endian)) -> Result<()> {
             f.u32("Previous adjacent AS").emit()?;
         }
         17 => {
-            f.u64("Client network delay (µs)").emit()?;
-            f.u64("Server network delay (µs)").emit()?;
-            f.u64("Application latency (µs)").emit()?;
+            f.u64("Client network delay").duration(1_000_000).emit()?;
+            f.u64("Server network delay").duration(1_000_000).emit()?;
+            f.u64("Application latency").duration(1_000_000).emit()?;
         }
         19 => {
             ms_field(f, "Event time")?;

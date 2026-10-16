@@ -347,7 +347,7 @@ fn anmf(f: &mut Fields<'_>, _: &()) -> Result<Frame> {
     let width = u24(f, "Width − 1", LE).with(minus).emit()?;
     let height = u24(f, "Height − 1", LE).with(minus).emit()?;
     let duration = u24(f, "Duration", LE)
-        .with(|&v, n| n.summary(format!("{v} ms")))
+        .duration(1000)
         .desc("Milliseconds before the next frame")
         .emit()?;
     let flags = f

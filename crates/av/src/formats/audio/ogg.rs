@@ -25,7 +25,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::arcutil::{count, emit_nodes, human_size};
 use crate::formats::util::fmt::plural;
-use crate::formats::util::sound::{Bits, duration, leaf, u24};
+use crate::formats::util::sound::{Bits, leaf, u24};
 use crate::formats::util::val::uint;
 use crate::formats::util::vidutil::{audio::OpusInfo, nal};
 use crate::formats::{Format, Head, Input, Probe, audio::flac, audio::vorbis};
@@ -428,7 +428,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             if let Some((_, g)) = link.last.iter().find(|(serial, _)| *serial == s.serial)
                 && let Some(seconds) = s.seconds(*g)
             {
-                summary.push_str(&format!(", {}", duration(seconds)));
+                summary.push_str(&format!(
+                    ", {}",
+                    crate::formats::util::fmt::seconds(seconds)
+                ));
             }
             let mut node = Node::new(format!("{} stream", s.codec.name()));
             if links.len() > 1 {
@@ -630,7 +633,7 @@ fn describe(streams: &[Stream], links: &[Link], title: Option<String>, bytes: u6
                 })
                 .sum::<Option<f64>>();
             if let Some(total) = total {
-                line.push_str(&format!(", {}", duration(total)));
+                line.push_str(&format!(", {}", crate::formats::util::fmt::seconds(total)));
                 if streams.len() == links.len() && total > 0.0 {
                     line.push_str(&format!(
                         ", {:.0} kbps",
@@ -669,7 +672,10 @@ fn describe_link(streams: &[Stream], last: &[(u32, u64)], bytes: u64) -> String 
         && let Some((_, g)) = last.iter().find(|(s, _)| *s == main.serial)
         && let Some(seconds) = main.seconds(*g)
     {
-        line.push_str(&format!(", {}", duration(seconds)));
+        line.push_str(&format!(
+            ", {}",
+            crate::formats::util::fmt::seconds(seconds)
+        ));
         if streams.len() == 1 && seconds > 0.0 {
             line.push_str(&format!(
                 ", {:.0} kbps",

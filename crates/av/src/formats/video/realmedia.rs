@@ -113,7 +113,7 @@ fn chunk_summary(id: &[u8; 4], d: &[u8]) -> Option<String> {
         b"PROP" => Some(format!(
             "{} streams, {}",
             u16_be(d, 46)?,
-            vidutil::seconds_ms(u32_be(d, 30)?.into())
+            crate::formats::util::fmt::duration_of(u32_be(d, 30)?.into(), 1000)
         )),
         b"MDPR" => {
             let (name, mime) = stream_names(d)?;
@@ -210,7 +210,7 @@ impl Info {
             parts.push(self.streams.join(" + "));
         }
         if let Some(d) = self.duration {
-            parts.push(vidutil::seconds_ms(d.into()));
+            parts.push(crate::formats::util::fmt::duration_of(d.into(), 1000));
         }
         if let Some(t) = &self.title {
             parts.push(format!("\"{t}\""));
@@ -257,9 +257,7 @@ async fn expand_chunk(cx: Cx, chunk: Chunk) -> Result<()> {
             f.u32("Max packet size").emit()?;
             f.u32("Average packet size").emit()?;
             f.u32("Number of packets").emit()?;
-            f.u32("Duration")
-                .with(|&d, n| n.summary(vidutil::seconds_ms(d.into())))
-                .emit()?;
+            f.u32("Duration").duration(1000).emit()?;
             f.u32("Preroll").desc("Milliseconds").emit()?;
             f.u32("Index offset").hex().emit()?;
             f.u32("Data offset").hex().emit()?;
@@ -274,9 +272,7 @@ async fn expand_chunk(cx: Cx, chunk: Chunk) -> Result<()> {
             f.u32("Average packet size").emit()?;
             f.u32("Start time").emit()?;
             f.u32("Preroll").emit()?;
-            f.u32("Duration")
-                .with(|&d, n| n.summary(vidutil::seconds_ms(d.into())))
-                .emit()?;
+            f.u32("Duration").duration(1000).emit()?;
             let n = f.u8("Stream name size").emit()?;
             f.ascii("Stream name", n.into()).emit()?;
             let n = f.u8("MIME type size").emit()?;
@@ -370,7 +366,7 @@ impl vidutil::Entry for IndexEntry {
     fn summary(&self) -> Option<String> {
         Some(format!(
             "{} → packet {} at {:#x}",
-            vidutil::seconds_ms(self.timestamp.into()),
+            crate::formats::util::fmt::duration_of(self.timestamp.into(), 1000),
             self.packet,
             self.offset
         ))
@@ -403,7 +399,7 @@ async fn expand_packets(cx: Cx, (span, declared): (Span, u32)) -> Result<()> {
                 .span(pspan)
                 .summary(format!(
                     "stream {stream}, {}{}, {len} bytes",
-                    vidutil::seconds_ms(ts.into()),
+                    crate::formats::util::fmt::duration_of(ts.into(), 1000),
                     if key { ", keyframe" } else { "" }
                 ))
                 .lazy(expand_packet, pspan),
@@ -422,9 +418,7 @@ async fn expand_packet(cx: Cx, span: Span) -> Result<()> {
     let version = f.u16("Version").emit()?;
     f.u16("Length").emit()?;
     f.u16("Stream number").emit()?;
-    f.u32("Timestamp")
-        .with(|&t, n| n.summary(vidutil::seconds_ms(t.into())))
-        .emit()?;
+    f.u32("Timestamp").duration(1000).emit()?;
     let header = if version == 0 {
         f.u8("Packet group").emit()?;
         f.u8("Flags")

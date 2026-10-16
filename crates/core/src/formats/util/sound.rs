@@ -37,26 +37,10 @@ pub fn fourcc(bytes: &[u8]) -> String {
     }
 }
 
-/// A playing time: `250 ms`, `0:05`, `3:25`, `1:02:03`.
-pub fn duration(seconds: f64) -> String {
-    if !seconds.is_finite() || seconds < 0.0 {
-        return "?".to_owned();
-    }
-    if seconds < 1.0 {
-        return format!("{:.0} ms", seconds * 1000.0);
-    }
-    let total = seconds as u64;
-    let (h, m, s) = (total / 3600, total / 60 % 60, total % 60);
-    if h > 0 {
-        format!("{h}:{m:02}:{s:02}")
-    } else {
-        format!("{m}:{s:02}")
-    }
-}
-
-/// `count / rate` seconds, formatted; `None` if the rate is zero.
+/// `count` samples at `rate` per second as a playing time for summaries
+/// ([`fmt::duration`](super::fmt::duration)); `None` if the rate is zero.
 pub fn duration_of(count: u64, rate: u64) -> Option<String> {
-    (rate > 0).then(|| duration(count as f64 / rate as f64))
+    (rate > 0).then(|| super::fmt::duration_of(count, rate))
 }
 
 /// A channel count for summaries: "2 ch".

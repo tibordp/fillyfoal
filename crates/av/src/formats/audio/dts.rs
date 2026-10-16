@@ -9,7 +9,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::arcutil::human_size;
 use crate::formats::util::fmt::plural;
-use crate::formats::util::sound::{Bits, FrameRef, FrameSyntax, bits_node, duration, frames_node};
+use crate::formats::util::sound::{Bits, FrameRef, FrameSyntax, bits_node, frames_node};
 use crate::formats::{Format, Input, Probe, audio::id3};
 use crate::node::Node;
 use crate::span::{SourceId, Span};
@@ -441,7 +441,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if !hd.is_empty() {
             line = format!("{line}; DTS-HD: {}", hd.join(", "));
         }
-        cx.annotate(format!("{line}, {}", duration(seconds)));
+        cx.annotate(format!(
+            "{line}, {}",
+            crate::formats::util::fmt::seconds(seconds)
+        ));
     } else if let Some((_, _, _)) = substream(&window) {
         let found = components(&window);
         cx.annotate(format!(

@@ -57,7 +57,7 @@ record! {
         size: u32 "Frame size",
         magic: u16 "Magic" .hex(),
         old_chunks: u16 "Chunks (old field)",
-        duration: u16 "Duration (ms)",
+        duration: u16 "Duration" .duration(1000),
         _reserved: bytes[2] "Reserved",
         chunks: u32 "Chunks",
     }

@@ -117,7 +117,7 @@ record! {
 
 record! {
     pub struct EnvelopePoint {
-        duration: u16 "Duration (ms)",
+        duration: u16 "Duration" .duration(1000),
         destination: u32 "Destination volume" .hex(),
     }
 }

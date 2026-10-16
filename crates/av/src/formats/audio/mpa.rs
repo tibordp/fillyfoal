@@ -20,7 +20,7 @@ use crate::formats::audio::{ac3, adts, ape, dts, flac, musepack, tta, wavpack};
 use crate::formats::util::arcutil::human_size;
 use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{
-    Bits, CRC16_MPEG, FrameSyntax, bits_node, duration, junk_node, leaf, resync, tail_node,
+    Bits, CRC16_MPEG, FrameSyntax, bits_node, junk_node, leaf, resync, tail_node,
 };
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, HEAD_LEN, Head, Input, Probe, audio::id3};
@@ -1479,7 +1479,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         header.layer_name(),
         header.rate,
         header.mode_name(),
-        duration(seconds)
+        crate::formats::util::fmt::seconds(seconds)
     );
     if let Some(e) = vbr.and_then(|v| v.encoder()) {
         line.push_str(&format!(", {e}"));

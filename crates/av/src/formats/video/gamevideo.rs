@@ -283,9 +283,7 @@ pub async fn dissect_smjpeg(cx: Cx, input: Input) -> Result<()> {
         32,
     ));
     let length = u32_be(&head, 12).unwrap_or(0);
-    cx.emit(
-        uint("Length", h.sub(12, 4), length.into(), 32).summary(vidutil::seconds_ms(length.into())),
-    );
+    cx.emit(uint("Length", h.sub(12, 4), length.into(), 32).as_duration(1000));
     let mut parts = vec!["SMJPEG".to_owned()];
     let mut pos = 16u64;
     let mut in_header = true;
@@ -350,7 +348,7 @@ pub async fn dissect_smjpeg(cx: Cx, input: Input) -> Result<()> {
                     len,
                     Some(format!(
                         "{}, {} bytes",
-                        vidutil::seconds_ms(ts.into()),
+                        crate::formats::util::fmt::duration_of(ts.into(), 1000),
                         len.saturating_sub(4)
                     )),
                 )

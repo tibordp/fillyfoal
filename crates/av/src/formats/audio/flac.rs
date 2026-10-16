@@ -151,9 +151,12 @@ pub fn streaminfo(b: &mut Bits<'_>) -> Result<StreamInfo> {
         .saturating_add(1);
     let samples = b
         .field("Total samples", 36)
-        .with(|v, n| match duration_of(v, rate) {
-            Some(d) if v > 0 => n.summary(d),
-            _ => n.summary("unknown"),
+        .with(|v, n| {
+            if v > 0 && rate > 0 {
+                n.as_duration(rate)
+            } else {
+                n.summary("unknown")
+            }
         })
         .emit()?;
     b.bytes("MD5 signature", 16)
