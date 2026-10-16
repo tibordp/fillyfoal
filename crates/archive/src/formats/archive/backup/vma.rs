@@ -18,6 +18,13 @@
 //! extent header once (charged, and shared by all devices); the data blocks
 //! themselves are only read when the disk is.
 //!
+//! Proxmox VE configuration files (`qemu-server.conf`, `qemu-server.fw`)
+//! are listed line by line: `key: value` entries, `#` lines (the VM's
+//! description, %-decoded, and vzdump's `#qmdump#map` notes), `[section]`
+//! headers with their lines, and other lines (firewall rules) as they are.
+//! vzdump itself drops the snapshot sections; `vma create` keeps whatever
+//! it is given.
+//!
 //! The layout is from `vma_spec.txt` in Proxmox's pve-qemu repository (and
 //! agrees with `vma create` from pve-qemu-kvm 9.2.0, whose archives were
 //! reassembled byte for byte against their source images). Blob sizes in
@@ -36,7 +43,7 @@ use crate::fields::{Endian, parse};
 use crate::formats::disk::PieceList;
 use crate::formats::util::datakit::digest_paced;
 use crate::formats::util::fmt::{plural, size};
-use crate::formats::util::val::hex;
+use crate::formats::util::val::{self, hex};
 use crate::formats::{Format, Head, Input, Probe, content, dissect_or_data};
 use crate::node::{Count, Node};
 use crate::record;
@@ -163,6 +170,18 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         configs = configs.saturating_add(1);
         let node = match (archive.string(&cx, n).await, archive.blob(&cx, d).await) {
+            (Ok((name, _)), Ok(data)) if pve_config_name(&name) => {
+                let what = if name.ends_with(".fw") {
+                    "firewall configuration"
+                } else {
+                    "VM configuration"
+                };
+                Node::new(name)
+                    .span(data)
+                    .summary(format!("Proxmox {what}, {}", size(data.len)))
+                    .desc("VM configuration file")
+                    .lazy(config_lines, (data, false))
+            }
             (Ok((name, _)), Ok(data)) => {
                 content(name, input, data, crate::formats::Codec::Stored, None)
                     .summary(size(data.len))
@@ -221,10 +240,128 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
+/// Whether a config blob is a Proxmox VE configuration file
+/// (`qemu-server.conf`, `qemu-server.fw`): `key: value` lines, `#` lines
+/// (the VM's description, %-encoded, and vzdump's `#qmdump#` notes) and
+/// `[section]` headers (a snapshot's settings; the firewall's options,
+/// rules and IP sets, whose rules are not `key: value`).
+fn pve_config_name(name: &str) -> bool {
+    name.ends_with(".conf") || name.ends_with(".fw")
+}
+
+/// A configuration line's node.
+fn config_line(span: Span, line: &[u8]) -> Option<Node> {
+    let text = String::from_utf8_lossy(line);
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some(map) = trimmed.strip_prefix("#qmdump#map:") {
+        return Some(
+            Node::new("qmdump map")
+                .span(span)
+                .value(val::text(map))
+                .desc(
+                    "vzdump's note for restoring a disk: VM drive, archive device, storage, format",
+                ),
+        );
+    }
+    if let Some(comment) = trimmed.strip_prefix('#') {
+        return Some(
+            Node::new("Description")
+                .span(span)
+                .value(val::text(crate::text::url::percent_decode(comment)))
+                .desc("A line of the VM's description (stored %-encoded as a comment)"),
+        );
+    }
+    if let Some((key, value)) = trimmed.split_once(':') {
+        let is_key = !key.is_empty()
+            && key
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-');
+        if is_key {
+            return Some(
+                Node::new(key.to_owned())
+                    .span(span)
+                    .value(val::text(value.trim())),
+            );
+        }
+    }
+    Some(Node::new("Line").span(span).value(val::text(trimmed)))
+}
+
+/// The lines of a Proxmox VE configuration file, or with `section`, of one
+/// `[section]` (its header line first).
+async fn config_lines(cx: Cx, (span, section): (Span, bool)) -> Result<()> {
+    let b = cx.read(span).await?;
+    // (offset, length) of each line, newline excluded.
+    let mut lines = Vec::new();
+    let mut off = 0u64;
+    for line in b.split(|&c| c == b'\n') {
+        let len = to_u64(line.len());
+        lines.push((off, len));
+        off = off.saturating_add(len).saturating_add(1);
+    }
+    cx.charge(to_u64(lines.len()) / 64).await;
+    let is_section = |l: &[u8]| {
+        let t = String::from_utf8_lossy(l);
+        let t = t.trim();
+        t.starts_with('[') && t.ends_with(']')
+    };
+    let line_at = |&(o, l): &(u64, u64)| {
+        let start = usize::try_from(o).unwrap_or(usize::MAX);
+        let end = usize::try_from(o.saturating_add(l)).unwrap_or(usize::MAX);
+        b.get(start..end).unwrap_or_default()
+    };
+    let mut i = usize::from(section);
+    while let Some(&(o, l)) = lines.get(i) {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+        let line = line_at(&(o, l));
+        if is_section(line) {
+            if section {
+                break;
+            }
+            // The section runs to the next one.
+            let mut j = i.saturating_add(1);
+            while let Some(next) = lines.get(j) {
+                if is_section(line_at(next)) {
+                    break;
+                }
+                j = j.saturating_add(1);
+            }
+            let end = lines.get(j).map_or(span.len, |&(no, _)| no);
+            let name = String::from_utf8_lossy(line).trim().to_owned();
+            cx.push(
+                Node::new(name)
+                    .span(span.sub(o, end.saturating_sub(o)))
+                    .lazy(
+                        crate::expander!(self::config_lines: (Span, bool)),
+                        (span.sub(o, end.saturating_sub(o)), true),
+                    ),
+            )
+            .await;
+            i = j;
+            continue;
+        }
+        if let Some(node) = config_line(span.sub(o, l), line) {
+            cx.push(node).await;
+        }
+        i = i.saturating_add(1);
+    }
+    Ok(())
+}
+
 /// Where each stored cluster's blocks are: (device, cluster) to (offset of
-/// its first stored block in the file, block mask).
+/// its first stored block in the file, block mask). Clusters stored as all
+/// zeros (mask 0, one per zero cluster in `vma create`'s output) are only
+/// counted: they read as zeros like clusters the archive does not mention,
+/// and a large sparse disk has millions of them.
 struct ClusterMap {
     clusters: BTreeMap<(u8, u32), (u64, u16)>,
+    /// Per device, the block infos with mask 0.
+    zero_clusters: Vec<u64>,
     duplicates: u64,
     error: Option<Diagnostic>,
 }
@@ -237,6 +374,7 @@ async fn cluster_map(cx: &Cx, archive: &Archive) -> Arc<ClusterMap> {
     }
     let mut map = ClusterMap {
         clusters: BTreeMap::new(),
+        zero_clusters: vec![0; 256],
         duplicates: 0,
         error: None,
     };
@@ -269,7 +407,16 @@ async fn cluster_map(cx: &Cx, archive: &Archive) -> Arc<ClusterMap> {
             let mask = u16::try_from(info >> 48).unwrap_or(0);
             let dev = u8::try_from((info >> 32) & 0xff).unwrap_or(0);
             let cluster = u32::try_from(info & 0xffff_ffff).unwrap_or(0);
-            if map.clusters.insert((dev, cluster), (data, mask)).is_some() {
+            let replaced = if mask == 0 {
+                if let Some(n) = map.zero_clusters.get_mut(usize::from(dev)) {
+                    *n = n.saturating_add(1);
+                }
+                // A later all-zero copy overrides an earlier stored one.
+                map.clusters.remove(&(dev, cluster)).is_some()
+            } else {
+                map.clusters.insert((dev, cluster), (data, mask)).is_some()
+            };
+            if replaced {
                 map.duplicates = map.duplicates.saturating_add(1);
             }
             data = data.saturating_add(u64::from(mask.count_ones()).saturating_mul(BLOCK));
@@ -346,6 +493,13 @@ async fn device(cx: Cx, (archive, dev, len): (Arc<Archive>, u8, u64)) -> Result<
     if next < end_cluster {
         missing = missing.saturating_add(end_cluster.saturating_sub(next));
     }
+    // Clusters stored as zeros are in the archive, if not in the map.
+    let zero_clusters = map
+        .zero_clusters
+        .get(usize::from(dev))
+        .copied()
+        .unwrap_or(0);
+    let missing = missing.saturating_sub(zero_clusters);
     if list.len() < len {
         list.hole(&cx, len.saturating_sub(list.len()))?;
     }
@@ -355,11 +509,11 @@ async fn device(cx: Cx, (archive, dev, len): (Arc<Archive>, u8, u64)) -> Result<
             plural(missing, "cluster")
         )));
     }
-    cx.annotate(format!(
-        "{}, {} stored",
-        size(len),
-        plural(stored, "4 KiB block")
-    ));
+    cx.annotate(if stored == 0 {
+        format!("{}, all zeros", size(len))
+    } else {
+        format!("{}, {} stored", size(len), plural(stored, "4 KiB block"))
+    });
     let span = list.finish(&cx, "vma-clusters").await?;
     dissect_or_data(cx, archive.input.nested(span)).await
 }

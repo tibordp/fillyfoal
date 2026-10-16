@@ -119,6 +119,65 @@ fn vma_sparse_device_is_bounded() {
     assert_eq!(&bytes[..9], b"far block");
 }
 
+/// A VMA archive whose device is stored as `extents` extents of 59
+/// all-zero clusters each (mask 0, no data: what `vma create` writes for
+/// zero clusters), the last of which overrides the stored copy of cluster
+/// 5 that comes first.
+fn zero_cluster_vma(extents: u32) -> Vec<u8> {
+    let mut v = sparse_vma();
+    v.truncate(12_800);
+    // The device: exactly the clusters the extents mention.
+    let len = u64::from(extents) * 59 * 65_536;
+    v[4096 + 40..4096 + 48].copy_from_slice(&len.to_be_bytes());
+    // Cluster 5, stored (mask 1, one block).
+    let mut extent = vec![0u8; 512];
+    extent[..4].copy_from_slice(b"VMAE");
+    extent[6..8].copy_from_slice(&1u16.to_be_bytes());
+    let info: u64 = (1 << 48) | (1 << 32) | 5;
+    extent[40..48].copy_from_slice(&info.to_be_bytes());
+    v.extend_from_slice(&extent);
+    v.extend_from_slice(&[0xaa; 4096]);
+    let mut cluster = 0u64;
+    for _ in 0..extents {
+        let mut extent = vec![0u8; 512];
+        extent[..4].copy_from_slice(b"VMAE");
+        for k in 0..59 {
+            let info: u64 = (1 << 32) | cluster;
+            extent[40 + k * 8..48 + k * 8].copy_from_slice(&info.to_be_bytes());
+            cluster += 1;
+        }
+        v.extend_from_slice(&extent);
+    }
+    v
+}
+
+/// Zero clusters cost no map entries: assembling the device costs work in
+/// proportion to the extents walked, not to one entry per zero cluster, and
+/// a later all-zero copy of a cluster overrides an earlier stored one.
+#[test]
+fn vma_zero_clusters_are_not_mapped() {
+    let extents = 4_000;
+    let mut host = Host::named("zero.vma", zero_cluster_vma(extents), Limits::default());
+    let disk = open(&mut host, &["disk0"]);
+    let work = host.session.work_done();
+    eprintln!("work for {} zero clusters: {work}", extents * 59);
+    // The extent walk is most of it (about 10,700 units); with a map entry
+    // per zero cluster, assembling iterated them all too (11,646).
+    assert!(work < 11_000, "assembling took {work} units");
+    let first = host.session.children(disk).unwrap().ids[0];
+    let source = host.session.node(first).unwrap().span.unwrap().source;
+    let cluster5 = Span::new(source, 5 * 65_536, 16);
+    let bytes = loop {
+        match host.session.read_step(cluster5, 1_000_000) {
+            ReadProgress::Done(bytes) => break bytes,
+            ReadProgress::NeedBytes(requests) => host.supply(requests),
+            ReadProgress::Yielded => {}
+        }
+    };
+    assert_eq!(bytes, vec![0; 16]);
+    assert!(!host.render().contains("not in the archive"));
+}
+
 /// A truncated Borg segment entry shows the size its header declares, not
 /// what is left of the file (the truncation is a diagnostic of its own).
 #[test]
