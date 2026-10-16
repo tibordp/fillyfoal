@@ -440,13 +440,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         pos = next;
     }
 
-    let what = match schema {
-        0x676b_6370 => "package",
-        0x7864_6e69 => "index",
-        0x0062_6469 => "installed database",
-        _ => "file",
-    };
-    let mut summary = format!("Alpine APK v3 {what}");
+    let mut summary = format!("Alpine APK v3 {}", what(schema));
     if let Some(adb) = adb
         && let Some(name) = describe(&cx, adb, schema).await?
     {
@@ -460,6 +454,41 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     summary.push_str(if sigs > 0 { ", signed" } else { ", unsigned" });
     cx.annotate(summary);
     Ok(())
+}
+
+/// What a file of `schema` holds.
+fn what(schema: u32) -> &'static str {
+    match schema {
+        0x676b_6370 => "package",
+        0x7864_6e69 => "index",
+        0x0062_6469 => "installed database",
+        _ => "file",
+    }
+}
+
+/// "package NAME VERSION (ARCH)" (or the index's description) from the
+/// start of a compressed file's content: the file header and the ADB
+/// block come first, so only they are decoded.
+async fn compressed_summary(cx: &Cx, stream: Span, codec: &Codec) -> Option<String> {
+    let decoded = match codec {
+        Codec::Stored => stream,
+        codec => cx.decode_lazy_unsized(stream, codec).ok()?,
+    };
+    let head = cx.read(decoded.sub(0, 8)).await.ok()?;
+    if head.get(..4) != Some(b"ADB.".as_slice()) {
+        return None;
+    }
+    let schema = u32_le(&head, 4)?;
+    let mut out = what(schema).to_owned();
+    let block = read_block(cx, decoded, 8).await.ok()?;
+    if block.kind == 0
+        && block.body.len <= 1 << 20
+        && let Ok(Some(name)) = describe(cx, block.body, schema).await
+    {
+        out.push(' ');
+        out.push_str(&name);
+    }
+    Some(out)
 }
 
 fn file_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
@@ -512,10 +541,13 @@ async fn compressed(cx: Cx, input: Input, head: &[u8]) -> Result<()> {
         }
     };
     let name = crate::value::lookup(COMPRESSION, alg.into()).unwrap_or("?");
+    let what = compressed_summary(&cx, stream, &codec)
+        .await
+        .unwrap_or_else(|| "package or index".to_owned());
     cx.emit(
         content("Content", input, stream, codec, None).summary(format!("{name}-compressed ADB")),
     );
-    cx.annotate(format!("Alpine APK v3 package or index, {name}-compressed"));
+    cx.annotate(format!("Alpine APK v3 {what}, {name}-compressed"));
     Ok(())
 }
 
