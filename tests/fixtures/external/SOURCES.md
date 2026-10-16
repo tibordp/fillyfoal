@@ -1412,3 +1412,21 @@ disks, interfaces, restart and comment records).
 | --- | --- | --- |
 | `sysstat-sa/sa-all.sa` | `sadc -S ALL 1 2`, `sadc -C "fillyfoal test comment"`, `sadc -S ALL` (restart mark), `sadc -S ALL 1 1`, all appending to one file | 30 activities; statistics, comment and restart records; unchanged |
 | `sysstat-sa/sa-default.sa` | `sadc 1 3` | the default activities, three samples; unchanged |
+
+## atop: a raw log
+
+Written by `tests/data/atop-raw/make.sh` (which runs `inside.sh`) with atop
+2.11.1 (Debian trixie `atop 2.11.1-3`) in a `debian:trixie` container on the
+Docker VM (Linux 7.0.14 aarch64, 18 CPUs), host name `fillyfoal`, `TZ=UTC`:
+`atop -w atop_20261016 1 2` with only the script's shell (`bash
+/work/inside.sh`), a `sleep 30` and atop itself running. The system
+statistics are the VM's (CPU, memory, its block devices `vda` to `vdc`,
+the container's `eth0`); the header names the VM kernel's release and
+build (`7.0.14-orbstack-...`). The uncompressed `struct sstat` also holds
+stale buffer bytes (file names from `/proc` and the container's cgroup
+directory). Not reproducible byte for byte. Checked against
+`atop -r ... -P PRG,PRC` and by inflating every stream.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `atop-raw/atop_20261016` | `atop -w ... 1 2` | two samples (the first since boot), three tasks, cgroup v2 statistics; written as `atop.raw` and renamed after atop's daily log names; otherwise unchanged |
