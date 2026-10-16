@@ -258,7 +258,10 @@ async fn commands(cx: Cx, state: Arc<State>) -> Result<()> {
     // Stream offset, next cluster, data clusters seen before it.
     let (mut pos, mut lcn, mut data) = cx.resume::<(u64, u64, u64)>().unwrap_or((0, 0, 0));
     let mut clean = true;
-    while lcn <= clusters {
+    // Version 10.1 images go one cluster further, to the backup boot
+    // sector; 10.0 images end with the volume.
+    let end = clusters.saturating_add(u64::from(state.backup));
+    while lcn < end {
         let run = (pos, lcn, data);
         cx.progress_in(stream, pos);
         let Some(&cmd) = cx.read_avail(stream.sub(pos, 1)).await?.first() else {
@@ -376,9 +379,7 @@ async fn commands(cx: Cx, state: Arc<State>) -> Result<()> {
                         }
                         break;
                     }
-                    if next != Some(CMD_NEXT)
-                        || lcn > clusters
-                        || lcn.saturating_sub(first) >= MAX_RUN
+                    if next != Some(CMD_NEXT) || lcn >= end || lcn.saturating_sub(first) >= MAX_RUN
                     {
                         break;
                     }

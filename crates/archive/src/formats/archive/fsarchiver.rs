@@ -25,17 +25,28 @@
 //! - `DaEn`: the end of a filesystem's (or the directories') data.
 //!
 //! Files smaller than a block are packed together: their objects come
-//! first, each with its offset in the shared block that follows them.
-//! Larger files are an object, their own blocks and a footer; the listing
-//! groups those, and their content is the blocks decoded on demand, one
-//! piece per block. Blocks decode with the existing codecs: LZO1X, zlib
-//! ("gzip"), bzip2, xz ("lzma"), raw LZ4 blocks and zstd; Blowfish
-//! encryption is not supported (its blocks are listed, not decoded), nor is
-//! the MD5 of file contents checked.
+//! first, each with its offset in the shared block that follows them; each
+//! one's content is its slice of that block, decoded on demand (the
+//! listing looks ahead once per run of objects for the block). Larger
+//! files are an object, their own blocks and a footer; the listing groups
+//! those, and their content is the blocks decoded on demand, one piece per
+//! block. Blocks decode with the existing codecs: LZO1X, zlib ("gzip"),
+//! bzip2, xz ("lzma"), raw LZ4 blocks and zstd; Blowfish encryption is not
+//! supported (its blocks are listed, not decoded), nor is the MD5 of file
+//! contents checked.
+//!
+//! A split archive (`-s`) is several files, `.fsa`, `.f01`, ..., each
+//! starting with a volume header and ending with a volume footer that says
+//! whether it is the last. A large file's blocks may go on into the next
+//! volume: its node says so, and the blocks and footer at the start of the
+//! next volume are labelled as the continuation. Volumes are dissected one
+//! at a time; nothing joins them.
 //!
 //! Written from archives made by fsarchiver 0.8.8 (`savedir` with every
 //! compression algorithm and with encryption, and `savefs` of an ext2
-//! filesystem; fixtures in `tests/fixtures/external/fsarchiver/`): the
+//! filesystem, a split archive, and `savefs` of an ext4 and an ext2
+//! filesystem whose descriptions were checked against `dumpe2fs`;
+//! fixtures in `tests/fixtures/external/fsarchiver/`): the
 //! header magics, the dictionary encoding and the Fletcher-32 checksums
 //! were worked out from those archives, the meaning of the keys from what
 //! they hold there and from memory of fsarchiver's sources (none were read
@@ -45,13 +56,14 @@ use std::sync::Arc;
 
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::disk::ext::{COMPAT, INCOMPAT, RO_COMPAT};
 use crate::formats::util::arcutil::unix_mode;
 use crate::formats::util::fmt::{plural, size};
-use crate::formats::util::val::{enumv, hex, text, uint};
+use crate::formats::util::val::{enumv, flagsv, hex, text, uint};
 use crate::formats::{Codec, Format, Head, Input, Probe, content, dissect_or_data};
 use crate::node::Node;
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, Value};
+use crate::value::{EnumTable, FlagTable, Value};
 
 pub static FORMAT: Format = Format {
     name: "fsarchiver",
@@ -83,7 +95,7 @@ const MAGICS: &[(&[u8; 4], &str)] = &[
     (b"DaEn", "Data end"),
 ];
 
-const ARCHIVE_TYPES: EnumTable = &[(1, "filesystems"), (2, "flat files")];
+const ARCHIVE_TYPES: EnumTable = &[(1, "savefs (filesystems)"), (2, "savedir (directories)")];
 const COMPRESSION: EnumTable = &[
     (1, "none"),
     (2, "lzo"),
@@ -114,7 +126,10 @@ enum Show {
     Time,
     Mode,
     Size,
+    /// fsarchiver's packed version: four 16-bit parts, major first.
+    Version,
     Enum(EnumTable),
+    Flags(FlagTable),
 }
 
 /// Names of the keys of section 0, per header.
@@ -139,7 +154,7 @@ fn key_name(magic: &[u8; 4], key: u16) -> Option<(&'static str, Show)> {
         (b"ArCh", 11) => ("Password check (MD5)", Plain),
         (b"ArCh", 12) => ("Password check (encrypted)", Plain),
         (b"ArCh", 13) => ("fsarchiver level (-z / -Z)", Plain),
-        (b"ArCh", 14) => ("Minimum fsarchiver version", Hex),
+        (b"ArCh", 14) => ("Minimum fsarchiver version", Version),
         (b"ArCh", 15) => ("Has directories info", Plain),
         (b"FsIn", 1) => ("Filesystem", Plain),
         (b"FsIn", 2) => ("Mount point", Plain),
@@ -147,8 +162,14 @@ fn key_name(magic: &[u8; 4], key: u16) -> Option<(&'static str, Show)> {
         (b"FsIn", 4) => ("Used bytes", Size),
         (b"FsIn", 5) => ("Label", Plain),
         (b"FsIn", 6) => ("UUID", Plain),
-        (b"FsIn", 9) => ("Mount options", Plain),
-        (b"FsIn", 25) => ("Minimum fsarchiver version", Hex),
+        (b"FsIn", 7) => ("ext inode size", Plain),
+        (b"FsIn", 9) => ("Default mount options", Plain),
+        (b"FsIn", 10) => ("ext revision", Plain),
+        (b"FsIn", 11) => ("ext block size", Plain),
+        (b"FsIn", 12) => ("ext compatible features", Flags(COMPAT)),
+        (b"FsIn", 13) => ("ext incompatible features", Flags(INCOMPAT)),
+        (b"FsIn", 14) => ("ext read-only compatible features", Flags(RO_COMPAT)),
+        (b"FsIn", 25) => ("Minimum fsarchiver version", Version),
         (b"FsIn", 27) => ("Device", Plain),
         (b"ObJt", 1) => ("Object id", Plain),
         (b"ObJt", 2) => ("Path", Plain),
@@ -414,35 +435,116 @@ fn block_at(region: Span, header: Header) -> Result<Block> {
     Ok(Block { header, data })
 }
 
+/// Small-file objects looked ahead at most for their shared block (fsarchiver
+/// packs far fewer into one); a longer run is looked at again from where
+/// this lookahead stopped.
+const MAX_GROUP: u64 = 1 << 16;
+
+/// The shared block of a run of small files, found by looking ahead from
+/// the first of them.
+#[derive(Clone, Debug)]
+struct Lookahead {
+    /// Where the lookahead stopped (the block's header, or what stopped
+    /// it): objects before this share its answer.
+    until: u64,
+    block: std::result::Result<Arc<Block>, Diagnostic>,
+}
+
+/// Looks for the block shared by the small files whose objects start at
+/// `pos`: fsarchiver writes a run of their objects, then the block.
+async fn find_shared(cx: &Cx, region: Span, mut pos: u64) -> Lookahead {
+    for _ in 0..MAX_GROUP {
+        let h = match read_header(cx, region, pos).await {
+            Ok(Some(h)) => h,
+            Ok(None) => {
+                return Lookahead {
+                    until: pos,
+                    block: Err(Diagnostic::malformed(
+                        "the archive ends before the shared block",
+                    )),
+                };
+            }
+            Err(e) => {
+                return Lookahead {
+                    until: pos,
+                    block: Err(e),
+                };
+            }
+        };
+        let problem = match &h.magic {
+            b"BlKh" => {
+                return Lookahead {
+                    until: pos,
+                    block: block_at(region, h).map(Arc::new),
+                };
+            }
+            b"ObJt" if h.uint(3) == Some(9) => {
+                pos = h.span.end().saturating_sub(region.offset);
+                continue;
+            }
+            b"FsAE" if h.uint(2) != Some(1) => {
+                Diagnostic::note("the shared block is in the next volume of the archive")
+            }
+            _ => Diagnostic::malformed(format!("{} where the shared block should be", h.name())),
+        };
+        return Lookahead {
+            until: pos,
+            block: Err(problem),
+        };
+    }
+    Lookahead {
+        until: pos,
+        block: Err(Diagnostic::unsupported(format!(
+            "more than {MAX_GROUP} small files before their shared block"
+        ))),
+    }
+}
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let region = input.span;
     // The volume and archive headers, for the summary.
-    if cx.resume::<(u64, u64)>().is_none()
+    if cx.resume::<(u64, u64, bool)>().is_none()
         && let Some(volume) = read_header(&cx, region, 0).await?
-        && let Some(main) = read_header(&cx, region, volume.span.len).await?
-        && main.magic == *b"ArCh"
+        && volume.magic == *b"FsA0"
     {
-        let kind =
-            crate::formats::util::val::name_or(ARCHIVE_TYPES, main.uint(6).unwrap_or(0), "type ");
-        let algo = crate::formats::util::val::name_or(
-            COMPRESSION,
-            main.uint(8).unwrap_or(0),
-            "algorithm ",
-        );
-        let enc = if main.uint(10).unwrap_or(1) == 2 {
-            ", Blowfish-encrypted"
-        } else {
-            ""
-        };
-        cx.annotate(format!(
-            "FSArchiver archive ({kind}), {} by fsarchiver {}, {algo}{enc}",
-            main.string(1).unwrap_or_default(),
-            main.string(2).unwrap_or_default()
-        ));
+        match read_header(&cx, region, volume.span.len).await? {
+            Some(main) if main.magic == *b"ArCh" => {
+                let kind = crate::formats::util::val::name_or(
+                    ARCHIVE_TYPES,
+                    main.uint(6).unwrap_or(0),
+                    "type ",
+                );
+                let algo = crate::formats::util::val::name_or(
+                    COMPRESSION,
+                    main.uint(8).unwrap_or(0),
+                    "algorithm ",
+                );
+                let enc = if main.uint(10).unwrap_or(1) == 2 {
+                    ", Blowfish-encrypted"
+                } else {
+                    ""
+                };
+                cx.annotate(format!(
+                    "FSArchiver archive: {kind}, {} by fsarchiver {}, {algo}{enc}",
+                    main.string(1).unwrap_or_default(),
+                    main.string(2).unwrap_or_default()
+                ));
+            }
+            _ => cx.annotate(format!(
+                "FSArchiver archive, volume {} of a split archive (id {:#010x})",
+                volume.uint(0).unwrap_or(0),
+                volume.archive
+            )),
+        }
     }
-    let (mut pos, mut index) = cx.resume::<(u64, u64)>().unwrap_or((0, 0));
+    // Position, index, and whether blocks and a footer here continue a
+    // file from the previous volume (before the first object of a volume
+    // after the first).
+    let (mut pos, mut index, mut continued) =
+        cx.resume::<(u64, u64, bool)>().unwrap_or((0, 0, false));
+    let mut shared: Option<Lookahead> = None;
     while pos < region.len {
-        let at = (pos, index);
+        let at = (pos, index, continued);
         cx.progress_in(region, pos);
         let header = match read_header(&cx, region, pos).await {
             Ok(Some(h)) => h,
@@ -460,6 +562,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 break;
             }
         };
+        match &header.magic {
+            b"FsA0" => continued = header.uint(0).is_some_and(|v| v > 0),
+            b"BlKh" | b"FiLf" => {}
+            _ => continued = false,
+        }
         let (node, end) = match &header.magic {
             b"BlKh" => {
                 let block = match block_at(region, header.clone()) {
@@ -471,13 +578,34 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     }
                 };
                 let end = block.data.end().saturating_sub(region.offset);
+                let whose = if continued {
+                    "of a file continued from the previous volume"
+                } else {
+                    "shared by small files"
+                };
                 let node = Node::new("Block")
                     .span(region.sub(pos, end.saturating_sub(pos)))
-                    .summary(format!("{} (shared by small files)", block.summary()))
+                    .summary(format!("{} ({whose})", block.summary()))
                     .lazy(block_node, (input, block));
                 (node, end)
             }
+            b"FiLf" if continued => {
+                let end = header.span.end().saturating_sub(region.offset);
+                let node =
+                    header_node(header).summary("of a file continued from the previous volume");
+                (node, end)
+            }
             b"ObJt" if header.uint(3) == Some(8) => file_node(&cx, input, header).await?,
+            b"ObJt" if header.uint(3) == Some(9) => {
+                let look = match shared.take() {
+                    Some(l) if pos < l.until => l,
+                    _ => find_shared(&cx, region, pos).await,
+                };
+                let end = header.span.end().saturating_sub(region.offset);
+                let node = small_file_node(input, header, look.block.clone());
+                shared = Some(look);
+                (node, end)
+            }
             _ => {
                 let end = header.span.end().saturating_sub(region.offset);
                 (header_node(header), end)
@@ -494,12 +622,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
 /// The node of a header (not a block), named for what it is.
 fn header_node(h: Header) -> Node {
+    header_line(&h).lazy(fields, h)
+}
+
+/// A header's node with no children yet.
+fn header_line(h: &Header) -> Node {
     let mut name = h.name().to_string();
     let mut summary = String::new();
     match &h.magic {
         b"ObJt" => {
             name = h.string(2).unwrap_or_else(|| "Object".into());
-            summary = object_summary(&h);
+            summary = object_summary(h);
         }
         b"FsA0" => summary = format!("volume {}", h.uint(0).unwrap_or(0)),
         b"FsAE" => {
@@ -546,7 +679,7 @@ fn header_node(h: Header) -> Node {
             h.checksum, h.computed
         )));
     }
-    node.lazy(fields, h)
+    node
 }
 
 fn object_summary(h: &Header) -> String {
@@ -634,12 +767,86 @@ fn item_node(magic: &[u8; 4], item: &Item) -> Node {
             Show::Mode => node.value(text(format!("{v:o}"))).summary(unix_mode(v)),
             Show::Size => node.value(uint(v, bits)).summary(size(v)),
             Show::Enum(t) => node.value(enumv(v, bits, t)),
+            Show::Flags(t) => node.value(flagsv(v, bits, t)),
+            Show::Version => node.value(hex(v, bits)).summary(format!(
+                "{}.{}.{}.{}",
+                v >> 48,
+                (v >> 32) & 0xffff,
+                (v >> 16) & 0xffff,
+                v & 0xffff
+            )),
             Show::Plain => node.value(uint(v, bits)),
         },
         (6, None) => node.value(text(item.string())),
         _ => node.value(Value::Bytes(item.data.clone())),
     };
     node
+}
+
+/// A small file: what its object says, and a slice of its shared block.
+#[derive(Clone, Debug)]
+struct SmallFile {
+    input: Input,
+    object: Header,
+    block: std::result::Result<Arc<Block>, Diagnostic>,
+}
+
+fn small_file_node(
+    input: Input,
+    object: Header,
+    block: std::result::Result<Arc<Block>, Diagnostic>,
+) -> Node {
+    header_line(&object).lazy(
+        small_file,
+        SmallFile {
+            input,
+            object,
+            block,
+        },
+    )
+}
+
+/// A small file's fields, then its content: its size (key 8) in bytes
+/// from its offset (key 15) in the shared block's decoded content.
+async fn small_file(cx: Cx, file: SmallFile) -> Result<()> {
+    fields(cx.clone(), file.object.clone()).await?;
+    let len = file.object.uint(8).unwrap_or(0);
+    let offset = file.object.uint(15).unwrap_or(0);
+    let node = Node::new("Content").summary(size(len));
+    let node = match &file.block {
+        Err(e) => node.diag(e.clone()),
+        Ok(b) if offset.checked_add(len).is_none_or(|end| end > b.decoded()) => {
+            node.span(b.data).diag(Diagnostic::malformed(format!(
+                "bytes {offset:#x}+{len:#x} of a shared block of {}",
+                size(b.decoded())
+            )))
+        }
+        Ok(b) => match b.codec() {
+            Err(e) => node.span(b.data).diag(e),
+            Ok(codec) => {
+                let shown = if matches!(codec, Codec::Stored) {
+                    b.data.sub(offset, len)
+                } else {
+                    b.data
+                };
+                node.span(shown)
+                    .lazy(shared_content, (file.input, b.clone(), offset, len))
+            }
+        },
+    };
+    cx.push(node).await;
+    Ok(())
+}
+
+/// A slice of a shared block, decoded on demand.
+async fn shared_content(
+    cx: Cx,
+    (input, block, offset, len): (Input, Arc<Block>, u64, u64),
+) -> Result<()> {
+    let codec = block.codec().map_err(|e| e.at(block.data))?;
+    let whole = cx.decode_lazy(block.data, &codec, block.decoded())?;
+    let span = whole.sub_exact(offset, len)?;
+    dissect_or_data(cx, input.nested(span)).await
 }
 
 /// A block's fields, the check of its data and its decoded content.
@@ -694,6 +901,8 @@ async fn file_node(cx: &Cx, input: Input, object: Header) -> Result<(Node, u64)>
     let mut blocks = Vec::new();
     let mut footer = None;
     let mut problem = None;
+    // The volume the file goes on into (split archives).
+    let mut next_volume = None;
     loop {
         let h = match read_header(cx, region, pos).await {
             Ok(Some(h)) => h,
@@ -724,6 +933,10 @@ async fn file_node(cx: &Cx, input: Input, object: Header) -> Result<(Node, u64)>
                 footer = Some(h);
                 break;
             }
+            b"FsAE" if h.uint(2) != Some(1) => {
+                next_volume = Some(h.uint(0).unwrap_or(0).saturating_add(1));
+                break;
+            }
             _ => {
                 problem = Some(Diagnostic::malformed(format!(
                     "{} where the file's blocks or footer should be",
@@ -746,7 +959,12 @@ async fn file_node(cx: &Cx, input: Input, object: Header) -> Result<(Node, u64)>
             object_summary(&object),
             plural(blocks.len(), "block")
         ));
-    if decoded != object.uint(8).unwrap_or(0) {
+    if let Some(next) = next_volume {
+        node = node.diag(Diagnostic::note(format!(
+            "continued in volume {next}: the blocks here hold {decoded} of {} bytes",
+            object.uint(8).unwrap_or(0)
+        )));
+    } else if decoded != object.uint(8).unwrap_or(0) {
         node = node.diag(Diagnostic::warning(format!(
             "the blocks hold {decoded} bytes; the object says {}",
             object.uint(8).unwrap_or(0)

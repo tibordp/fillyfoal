@@ -413,3 +413,25 @@ fn damaged_streams_report() {
         "{tree}"
     );
 }
+
+/// A version 10.0 image ends with the volume (no backup boot sector's
+/// cluster), so a cluster saved after it is trailing data, not a backup
+/// boot sector.
+#[test]
+fn version_10_0_images_end_with_the_volume() {
+    let mut img = header(2, 2 * CS as u64, 2);
+    img[17] = 0;
+    data(&mut img, 0x11, b"zero");
+    data(&mut img, 0x22, b"one");
+    data(&mut img, 0x33, b"not a backup boot sector");
+    let mut host = Host::named("v100.img", img, Limits::default());
+    open(&mut host, &["Commands"]);
+    let tree = host.render();
+    assert!(!tree.contains("backup boot sector"), "{tree}");
+    assert!(tree.contains("Trailing data"), "{tree}");
+    assert!(
+        tree.contains(&format!("{} bytes after the last cluster (2)", CS + 1)),
+        "{tree}"
+    );
+    assert!(!tree.contains("the header says"), "{tree}");
+}
