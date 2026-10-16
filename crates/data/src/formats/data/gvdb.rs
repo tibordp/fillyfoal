@@ -34,7 +34,7 @@ use crate::formats::util::val;
 use crate::formats::{Format, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::record;
-use crate::value::{FlagTable, Value, decode_flags, flag};
+use crate::value::{FlagTable, Value, flag};
 
 use super::gvariant::{self as gv, Kind as Kind_, Seg, Style, Ty};
 
@@ -410,13 +410,7 @@ async fn resource(r: &mut ByteReader<'_>, seg: Seg, endian: Endian) -> Result<Op
 }
 
 fn flags_value(raw: u64) -> Value {
-    let (set, unknown) = decode_flags(RESOURCE_FLAGS, raw);
-    Value::Flags {
-        raw,
-        bits: 32,
-        set,
-        unknown,
-    }
+    Value::flags(raw, 32, RESOURCE_FLAGS)
 }
 
 fn type_name(kind: u8) -> String {

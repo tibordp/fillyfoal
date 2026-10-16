@@ -1427,16 +1427,10 @@ async fn type_spec(cx: Cx, (doc, c): (Doc, Chunk)) -> Result<()> {
     for i in 0..n {
         let o = at.saturating_add(i.saturating_mul(4));
         let v = u32_le(&doc.data, o).unwrap_or(0);
-        let (set, unknown) = crate::value::decode_flags(SPEC_FLAGS, v.into());
         cx.push(
             Node::new(format!("{i}"))
                 .span(doc.at(o, 4))
-                .value(crate::value::Value::Flags {
-                    raw: v.into(),
-                    bits: 32,
-                    set,
-                    unknown,
-                }),
+                .value(crate::value::Value::flags(v.into(), 32, SPEC_FLAGS)),
         )
         .await;
     }

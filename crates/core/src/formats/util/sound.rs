@@ -316,13 +316,7 @@ impl BitField<'_> {
 
     pub fn flags(mut self, table: FlagTable) -> Self {
         if let Ok(v) = self.value {
-            let (set, unknown) = crate::value::decode_flags(table, v);
-            self.node.value = Some(Value::Flags {
-                raw: v,
-                bits: self.bits,
-                set,
-                unknown,
-            });
+            self.node.value = Some(Value::flags(v, self.bits, table));
         }
         self
     }

@@ -38,7 +38,7 @@ use crate::formats::{Input, Probe, embedded_as};
 use crate::node::Node;
 use crate::secret::{MAX_ATTEMPTS, SecretRequest};
 use crate::span::{Origin, Span};
-use crate::value::{FlagTable, Radix, Value, decode_flags, flag};
+use crate::value::{FlagTable, Radix, Value, flag};
 
 declare_format!(pub OPENSSH_KEY = "openssh-key", "OpenSSH private key", [], "application/octet-stream",
     Probe::Magic(&[(0, b"openssh-key-v1\0")]), dissect);
@@ -509,15 +509,11 @@ async fn private_key(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         let start = cur.pos();
         if k == Kind::Byte {
             let flags = cur.u8().await?;
-            cx.emit(Node::new(name).span(cur.since(start)).value({
-                let (set, unknown) = decode_flags(SK_FLAGS, flags.into());
-                Value::Flags {
-                    raw: flags.into(),
-                    bits: 8,
-                    set,
-                    unknown,
-                }
-            }));
+            cx.emit(Node::new(name).span(cur.since(start)).value(Value::flags(
+                flags.into(),
+                8,
+                SK_FLAGS,
+            )));
             continue;
         }
         let (data, s) = ssh_string(&mut cur).await?;

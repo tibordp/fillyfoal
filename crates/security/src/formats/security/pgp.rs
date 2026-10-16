@@ -1044,13 +1044,7 @@ async fn subpackets(cx: Cx, (span, data): (Span, Arc<Vec<u8>>)) -> Result<()> {
                 } else {
                     KEY_SERVER_PREFERENCES
                 };
-                let (set, unknown) = crate::value::decode_flags(table, raw);
-                node.value(Value::Flags {
-                    raw,
-                    bits: 8,
-                    set,
-                    unknown,
-                })
+                node.value(Value::flags(raw, 8, table))
             }
             34 => {
                 let names: Vec<String> = body
@@ -1124,13 +1118,7 @@ async fn subpackets(cx: Cx, (span, data): (Span, Arc<Vec<u8>>)) -> Result<()> {
                 .summary(format!("v{}", body.first().copied().unwrap_or(0))),
             27 => {
                 let raw = u64::from(body.first().copied().unwrap_or(0));
-                let (set, unknown) = crate::value::decode_flags(KEY_FLAGS, raw);
-                node.value(Value::Flags {
-                    raw,
-                    bits: 8,
-                    set,
-                    unknown,
-                })
+                node.value(Value::flags(raw, 8, KEY_FLAGS))
             }
             11 | 21 | 22 => {
                 let table = match kind {

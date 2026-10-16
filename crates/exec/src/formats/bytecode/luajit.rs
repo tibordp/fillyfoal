@@ -65,16 +65,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let flags = r
         .uleb()
         .ok_or_else(|| Diagnostic::malformed("bad flags").at(file.sub(4, 1)))?;
-    let (set, unknown) = crate::value::decode_flags(FLAGS, flags);
     cx.emit(
         Node::new("flags")
             .span(at(start, r.pos()))
-            .value(Value::Flags {
-                raw: flags,
-                bits: 32,
-                set,
-                unknown,
-            }),
+            .value(Value::flags(flags, 32, FLAGS)),
     );
     let mut name = None;
     if flags & 2 == 0 {
@@ -138,13 +132,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 body_start.saturating_add(p.pos()),
             );
             let value = if label == "flags" {
-                let (set, unknown) = crate::value::decode_flags(PROTO_FLAGS, v);
-                Value::Flags {
-                    raw: v,
-                    bits: 8,
-                    set,
-                    unknown,
-                }
+                Value::flags(v, 8, PROTO_FLAGS)
             } else {
                 uint(v, 32)
             };

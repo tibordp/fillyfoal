@@ -22,12 +22,23 @@ use crate::formats::util::vidutil::{self, NalCodec, ParamSets, enumerated, flag_
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, Value};
+use crate::value::{EnumTable, FlagTable, Value, flag};
 
 use super::es::{Parts, Target};
 use super::si::{self, STREAM_TYPES};
 use super::{pes_header, pes_summary, pes_times, seconds_90k};
 use crate::formats::util::fmt::plural;
+
+const ADAPTATION_FLAGS: FlagTable = &[
+    flag(0x80, "DISCONTINUITY"),
+    flag(0x40, "RANDOM_ACCESS"),
+    flag(0x20, "ES_PRIORITY"),
+    flag(0x10, "PCR"),
+    flag(0x08, "OPCR"),
+    flag(0x04, "SPLICING_POINT"),
+    flag(0x02, "PRIVATE_DATA"),
+    flag(0x01, "EXTENSION"),
+];
 
 pub static FORMAT: Format = Format {
     name: "mpegts",
@@ -1614,27 +1625,11 @@ async fn adaptation(cx: Cx, span: Span) -> Result<()> {
         return Ok(());
     }
     let flags = d.get(1).copied().unwrap_or(0);
-    let mut set = Vec::new();
-    for (bit, name) in [
-        (0x80, "DISCONTINUITY"),
-        (0x40, "RANDOM_ACCESS"),
-        (0x20, "ES_PRIORITY"),
-        (0x10, "PCR"),
-        (0x08, "OPCR"),
-        (0x04, "SPLICING_POINT"),
-        (0x02, "PRIVATE_DATA"),
-        (0x01, "EXTENSION"),
-    ] {
-        if flags & bit != 0 {
-            set.push(name);
-        }
-    }
-    cx.emit(Node::new("Flags").span(span.sub(1, 1)).value(Value::Flags {
-        raw: flags.into(),
-        bits: 8,
-        set,
-        unknown: 0,
-    }));
+    cx.emit(Node::new("Flags").span(span.sub(1, 1)).value(Value::flags(
+        flags.into(),
+        8,
+        ADAPTATION_FLAGS,
+    )));
     let end = usize::from(len).saturating_add(1);
     let mut at = 2usize;
     let pos = |a: usize| to_u64(a);

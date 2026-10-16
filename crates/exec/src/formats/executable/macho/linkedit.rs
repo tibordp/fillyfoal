@@ -913,14 +913,13 @@ pub(super) async fn exports_trie(cx: Cx, (m, span): (Macho, Span)) -> Result<()>
         if terminal > 0 {
             let s = r.pos();
             let flags = r.uleb().ok_or_else(bad)?;
-            let (set, unknown) = crate::value::decode_flags(EXPORT_FLAGS, flags);
+            let (set, _) = crate::value::decode_flags(EXPORT_FLAGS, flags);
             summary.extend(set.iter().map(|s| (*s).to_owned()));
-            fields.push(Node::new("flags").span(at(s, r.pos())).value(Value::Flags {
-                raw: flags,
-                bits: 64,
-                set,
-                unknown,
-            }));
+            fields.push(Node::new("flags").span(at(s, r.pos())).value(Value::flags(
+                flags,
+                64,
+                EXPORT_FLAGS,
+            )));
             if flags & 0x8 != 0 {
                 let s = r.pos();
                 let ordinal = r.uleb().ok_or_else(bad)?;

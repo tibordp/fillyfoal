@@ -41,7 +41,7 @@ use crate::record;
 use crate::secret::{MAX_ATTEMPTS, SecretRequest};
 use crate::span::{Origin, Span};
 use crate::text::{hex_lower, until_nul};
-use crate::value::{Check, EnumTable, FlagTable, Radix, Value, decode_flags, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Radix, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 
@@ -1184,15 +1184,11 @@ const BINARY_FLAGS: FlagTable = &[flag(1, "PROTECTED")];
 async fn binary_node(cx: Cx, (input, data): (Input, Span)) -> Result<()> {
     let flags = cx.read(data.sub_exact(0, 1)?).await?;
     let raw = flags.first().copied().unwrap_or(0);
-    cx.emit(Node::new("Flags").span(data.sub(0, 1)).value({
-        let (set, unknown) = decode_flags(BINARY_FLAGS, raw.into());
-        Value::Flags {
-            raw: raw.into(),
-            bits: 8,
-            set,
-            unknown,
-        }
-    }));
+    cx.emit(Node::new("Flags").span(data.sub(0, 1)).value(Value::flags(
+        raw.into(),
+        8,
+        BINARY_FLAGS,
+    )));
     cx.emit(embedded("Content", input.nested(data.tail(1))));
     Ok(())
 }

@@ -449,15 +449,7 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         _ => None,
     };
     r.with(|n| match table {
-        Some(t) => {
-            let (set, unknown) = crate::value::decode_flags(t, flags.into());
-            n.value(Value::Flags {
-                raw: flags.into(),
-                bits: 16,
-                set,
-                unknown,
-            })
-        }
+        Some(t) => n.value(Value::flags(flags.into(), 16, t)),
         None => n.value(hex(flags, 64)),
     });
     r.u16("Header size", LE).ok_or_else(bad)?;
@@ -717,15 +709,7 @@ fn header_crypt5(r: &mut ByteReader<'_>) -> Option<Crypt5> {
     let version = r.vint("Encryption version")?;
     r.with(|n| n.summary(if version == 0 { "AES-256" } else { "unknown" }));
     let flags = r.vint("Encryption flags")?;
-    r.with(|n| {
-        let (set, unknown) = crate::value::decode_flags(CRYPT_FLAGS5, flags);
-        n.value(Value::Flags {
-            raw: flags,
-            bits: 64,
-            set,
-            unknown,
-        })
-    });
+    r.with(|n| n.value(Value::flags(flags, 64, CRYPT_FLAGS5)));
     let kdf = r.u8("KDF count")?;
     r.with(|n| n.summary(format!("2^{kdf} PBKDF2 iterations")));
     let salt: [u8; 16] = r.bytes("Salt", 16)?.try_into().ok()?;
@@ -803,15 +787,7 @@ fn part5(
 
 fn file_fields(r: &mut ByteReader<'_>) -> Option<FileFields> {
     let flags = r.vint("File flags")?;
-    r.with(|n| {
-        let (set, unknown) = crate::value::decode_flags(FILE_FLAGS5, flags);
-        n.value(Value::Flags {
-            raw: flags,
-            bits: 64,
-            set,
-            unknown,
-        })
-    });
+    r.with(|n| n.value(Value::flags(flags, 64, FILE_FLAGS5)));
     let unpacked = r.vint("Unpacked size")?;
     r.with(|n| n.as_size());
     let attr = r.vint("Attributes")?;
@@ -874,15 +850,7 @@ fn common5(r: &mut ByteReader<'_>) -> Option<Common> {
         })
     });
     let flags = r.vint("Header flags")?;
-    r.with(|n| {
-        let (set, unknown) = crate::value::decode_flags(COMMON_FLAGS5, flags);
-        n.value(Value::Flags {
-            raw: flags,
-            bits: 64,
-            set,
-            unknown,
-        })
-    });
+    r.with(|n| n.value(Value::flags(flags, 64, COMMON_FLAGS5)));
     let extra = if flags & 0x01 != 0 {
         r.vint("Extra area size")?
     } else {
@@ -1068,15 +1036,7 @@ async fn block5(
     match c.kind {
         1 => {
             let flags = r.vint("Archive flags").ok_or_else(bad)?;
-            r.with(|n| {
-                let (set, unknown) = crate::value::decode_flags(ARCHIVE_FLAGS5, flags);
-                n.value(Value::Flags {
-                    raw: flags,
-                    bits: 64,
-                    set,
-                    unknown,
-                })
-            });
+            r.with(|n| n.value(Value::flags(flags, 64, ARCHIVE_FLAGS5)));
             if flags & 0x02 != 0 {
                 r.vint("Volume number").ok_or_else(bad)?;
             }
@@ -1232,15 +1192,7 @@ fn crypt_record(r: &mut ByteReader<'_>) -> Option<()> {
     let version = r.vint("Encryption version")?;
     r.with(|n| n.summary(if version == 0 { "AES-256" } else { "unknown" }));
     let flags = r.vint("Encryption flags")?;
-    r.with(|n| {
-        let (set, unknown) = crate::value::decode_flags(CRYPT_FLAGS5, flags);
-        n.value(Value::Flags {
-            raw: flags,
-            bits: 64,
-            set,
-            unknown,
-        })
-    });
+    r.with(|n| n.value(Value::flags(flags, 64, CRYPT_FLAGS5)));
     let kdf = r.u8("KDF count")?;
     r.with(|n| n.summary(format!("2^{kdf} PBKDF2 iterations")));
     r.bytes("Salt", 16)?;

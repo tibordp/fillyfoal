@@ -269,13 +269,7 @@ pub fn enumeration(table: crate::value::EnumTable, raw: u64, bits: u8) -> crate:
 }
 
 pub fn flags(table: crate::value::FlagTable, raw: u64, bits: u8) -> crate::value::Value {
-    let (set, unknown) = crate::value::decode_flags(table, raw);
-    crate::value::Value::Flags {
-        raw,
-        bits,
-        set,
-        unknown,
-    }
+    crate::value::Value::flags(raw, bits, table)
 }
 
 /// A number parsed from text: an integer if it is one, else a float, else text.

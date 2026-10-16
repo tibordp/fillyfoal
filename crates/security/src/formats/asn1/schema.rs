@@ -3,7 +3,7 @@
 //! described here is shown generically by its tag.
 
 use super::x509;
-use crate::value::EnumTable;
+use crate::value::{EnumTable, FlagTable, flag};
 
 /// Content decoders for primitives with a structure of their own.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,8 +46,9 @@ pub enum Schema {
     Implicit(u64),
     /// An OCTET or BIT STRING holding DER whose elements have this schema.
     Encap(&'static Schema),
-    /// A BIT STRING of named bits (bit 0 first).
-    Bits(&'static [&'static str]),
+    /// A named-bit BIT STRING: bit `n` (from the first byte's top bit)
+    /// is `1 << n`.
+    Bits(FlagTable),
     /// An INTEGER or ENUMERATED with named values.
     Enum(EnumTable),
     /// A constructed element summarised from its content by a function.
@@ -602,41 +603,41 @@ static AUTHORITY_KEY_ID: Schema = Schema::Seq(&[
     opt("authorityCertSerialNumber", &[0x82], &IMPLICIT_INT),
 ]);
 
-pub const KEY_USAGE_BITS: &[&str] = &[
-    "digitalSignature",
-    "nonRepudiation",
-    "keyEncipherment",
-    "dataEncipherment",
-    "keyAgreement",
-    "keyCertSign",
-    "cRLSign",
-    "encipherOnly",
-    "decipherOnly",
+pub const KEY_USAGE_BITS: FlagTable = &[
+    flag(1 << 0, "digitalSignature"),
+    flag(1 << 1, "nonRepudiation"),
+    flag(1 << 2, "keyEncipherment"),
+    flag(1 << 3, "dataEncipherment"),
+    flag(1 << 4, "keyAgreement"),
+    flag(1 << 5, "keyCertSign"),
+    flag(1 << 6, "cRLSign"),
+    flag(1 << 7, "encipherOnly"),
+    flag(1 << 8, "decipherOnly"),
 ];
 static KEY_USAGE: Schema = Schema::Bits(KEY_USAGE_BITS);
 
-pub const NS_CERT_TYPE_BITS: &[&str] = &[
-    "sslClient",
-    "sslServer",
-    "smime",
-    "objectSigning",
-    "reserved",
-    "sslCA",
-    "smimeCA",
-    "objectSigningCA",
+pub const NS_CERT_TYPE_BITS: FlagTable = &[
+    flag(1 << 0, "sslClient"),
+    flag(1 << 1, "sslServer"),
+    flag(1 << 2, "smime"),
+    flag(1 << 3, "objectSigning"),
+    flag(1 << 4, "reserved"),
+    flag(1 << 5, "sslCA"),
+    flag(1 << 6, "smimeCA"),
+    flag(1 << 7, "objectSigningCA"),
 ];
 static NS_CERT_TYPE: Schema = Schema::Bits(NS_CERT_TYPE_BITS);
 
-pub const REASON_FLAGS_BITS: &[&str] = &[
-    "unused",
-    "keyCompromise",
-    "cACompromise",
-    "affiliationChanged",
-    "superseded",
-    "cessationOfOperation",
-    "certificateHold",
-    "privilegeWithdrawn",
-    "aACompromise",
+pub const REASON_FLAGS_BITS: FlagTable = &[
+    flag(1 << 0, "unused"),
+    flag(1 << 1, "keyCompromise"),
+    flag(1 << 2, "cACompromise"),
+    flag(1 << 3, "affiliationChanged"),
+    flag(1 << 4, "superseded"),
+    flag(1 << 5, "cessationOfOperation"),
+    flag(1 << 6, "certificateHold"),
+    flag(1 << 7, "privilegeWithdrawn"),
+    flag(1 << 8, "aACompromise"),
 ];
 static REASON_FLAGS: Schema = Schema::Bits(REASON_FLAGS_BITS);
 
@@ -1530,33 +1531,15 @@ pub const PKI_STATUS: EnumTable = &[
     (4, "revocationWarning"),
     (5, "revocationNotification"),
 ];
-pub const PKI_FAILURE_BITS: &[&str] = &[
-    "badAlg",
-    "",
-    "badRequest",
-    "",
-    "",
-    "badDataFormat",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "timeNotAvailable",
-    "unacceptedPolicy",
-    "unacceptedExtension",
-    "addInfoNotAvailable",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "systemFailure",
+pub const PKI_FAILURE_BITS: FlagTable = &[
+    flag(1 << 0, "badAlg"),
+    flag(1 << 2, "badRequest"),
+    flag(1 << 5, "badDataFormat"),
+    flag(1 << 14, "timeNotAvailable"),
+    flag(1 << 15, "unacceptedPolicy"),
+    flag(1 << 16, "unacceptedExtension"),
+    flag(1 << 17, "addInfoNotAvailable"),
+    flag(1 << 25, "systemFailure"),
 ];
 
 pub static TIME_STAMP_RESP: Schema = Schema::Seq(&[

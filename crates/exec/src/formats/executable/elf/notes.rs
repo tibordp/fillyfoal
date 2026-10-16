@@ -365,15 +365,10 @@ fn properties(desc: &[u8], region: &Region) -> Vec<Property> {
         let name = name_or(GNU_PROPERTY, kind.into(), "property");
         let (summary, value) = match table {
             Some(t) if size == 4 => {
-                let (set, unknown) = decode_flags(t, value.into());
+                let (set, _) = decode_flags(t, value.into());
                 (
                     format!("{}: {}", short_property(&name), set.join(", ")),
-                    Some(crate::value::Value::Flags {
-                        raw: value.into(),
-                        bits: 32,
-                        set,
-                        unknown,
-                    }),
+                    Some(crate::value::Value::flags(value.into(), 32, t)),
                 )
             }
             _ if size == 4 => (

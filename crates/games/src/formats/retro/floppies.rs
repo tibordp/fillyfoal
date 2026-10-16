@@ -472,16 +472,10 @@ async fn stx(cx: Cx, input: Input) -> Result<()> {
         cur.seek(start.saturating_add(len.max(16)));
         sectors = sectors.saturating_add(n.into());
         fuzzy = fuzzy.saturating_add(fz.into());
-        let (set, unknown) = crate::value::decode_flags(STX_TRACK_FLAGS, flags.into());
         cx.push(
             Node::new(format!("Track {} side {}", number & 0x7f, number >> 7))
                 .span(cur.since(start))
-                .value(Value::Flags {
-                    raw: flags.into(),
-                    bits: 16,
-                    set,
-                    unknown,
-                })
+                .value(Value::flags(flags.into(), 16, STX_TRACK_FLAGS))
                 .summary(format!(
                     "{n_sector}, {mfm} MFM bytes, type {kind}{}",
                     if fz > 0 {

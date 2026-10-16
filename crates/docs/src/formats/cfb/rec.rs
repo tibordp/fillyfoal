@@ -347,11 +347,5 @@ pub fn quoted(s: &str, max: usize) -> String {
 /// A typed flags value.
 pub fn flagsv(raw: impl Into<u64>, bits: u8, table: FlagTable) -> Value {
     let raw = raw.into();
-    let (set, unknown) = crate::value::decode_flags(table, raw);
-    Value::Flags {
-        raw,
-        bits,
-        set,
-        unknown,
-    }
+    Value::flags(raw, bits, table)
 }

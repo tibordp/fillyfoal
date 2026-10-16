@@ -207,15 +207,7 @@ fn basic_header(r: &mut ByteReader<'_>, main: bool) -> Option<(u8, u32, usize)> 
         })
     });
     let flags = r.u8("Flags")?;
-    r.with(|n| {
-        let (set, unknown) = crate::value::decode_flags(FLAGS, flags.into());
-        n.value(Value::Flags {
-            raw: flags.into(),
-            bits: 8,
-            set,
-            unknown,
-        })
-    });
+    r.with(|n| n.value(Value::flags(flags.into(), 8, FLAGS)));
     let method = r.u8("Method")?;
     r.with(|n| {
         n.value(Value::Enum {

@@ -893,15 +893,7 @@ fn susp_fields(entry: &[u8], span: Span) -> (Arc<Vec<Node>>, Option<Value>, Stri
     ];
     let mut value = None;
     let mut summary = String::new();
-    let flags_value = |raw: u8, table: FlagTable| {
-        let (set, unknown) = crate::value::decode_flags(table, raw.into());
-        Value::Flags {
-            raw: raw.into(),
-            bits: 8,
-            set,
-            unknown,
-        }
-    };
+    let flags_value = |raw: u8, table: FlagTable| Value::flags(raw.into(), 8, table);
     match &sig {
         b"SP" => {
             let _ = r.bytes("Check bytes", 2);

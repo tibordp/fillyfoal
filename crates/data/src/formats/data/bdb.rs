@@ -17,7 +17,7 @@ use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, Radix, Value, decode_flags, flag, lookup};
+use crate::value::{EnumTable, FlagTable, Radix, Value, flag, lookup};
 
 const BTREE: u32 = 0x0005_3162;
 const HASH: u32 = 0x0006_1561;
@@ -192,15 +192,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 bits: 8,
                 name: lookup(PAGE_TYPES, head.get(25).copied().unwrap_or(0).into()).map(Into::into),
             }),
-        Node::new("Metadata flags").span(meta.sub(26, 1)).value({
-            let (set, unknown) = decode_flags(META_FLAGS, metaflags.into());
-            Value::Flags {
-                raw: metaflags.into(),
-                bits: 8,
-                set,
-                unknown,
-            }
-        }),
+        Node::new("Metadata flags")
+            .span(meta.sub(26, 1))
+            .value(Value::flags(metaflags.into(), 8, META_FLAGS)),
         num("Free list page", 28, Radix::Dec),
         num("Last page", 32, Radix::Dec),
         num("Partitions", 36, Radix::Dec).desc("Unused before 4.8"),

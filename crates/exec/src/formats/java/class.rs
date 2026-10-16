@@ -502,15 +502,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .summary(plural(c.pool.len().saturating_sub(1), "entry"))
             .lazy(constant_pool, c.clone()),
     );
-    let flags = |raw: u16, table: FlagTable| {
-        let (set, unknown) = decode_flags(table, raw.into());
-        Value::Flags {
-            raw: raw.into(),
-            bits: 16,
-            set,
-            unknown,
-        }
-    };
+    let flags = |raw: u16, table: FlagTable| Value::flags(raw.into(), 16, table);
     cx.emit(
         Node::new("Access Flags")
             .span(c.span(c.access_offset, 2))

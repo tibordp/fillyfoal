@@ -6,7 +6,7 @@ use crate::cx::Cx;
 use crate::fields::Endian;
 use crate::formats::util::fmt::plural;
 use crate::formats::util::val::uint;
-use crate::value::{EnumTable, Value, decode_flags, lookup};
+use crate::value::{EnumTable, Value, lookup};
 
 use super::super::tiff_tags::{
     EXTRA_SAMPLES, FILE_SOURCE, FLASH_FLAGS, GPS_ALTITUDE_REF, GPS_DIFFERENTIAL, SAMPLE_FORMAT,
@@ -556,16 +556,7 @@ fn main(t: Tiff, e: &Entry, bytes: &[u8], values: &[Num], refs: &Refs) -> Option
         ),
         0x9209 if one => {
             let raw = values.first()?.as_u64()?;
-            let (set, unknown) = decode_flags(FLASH_FLAGS, raw);
-            Shown::new(
-                Value::Flags {
-                    raw,
-                    bits: 16,
-                    set,
-                    unknown,
-                },
-                flash_text(raw),
-            )
+            Shown::new(Value::flags(raw, 16, FLASH_FLAGS), flash_text(raw))
         }
         0x00fe | 0x0124 | 0x0125 if one => {
             let raw = values.first()?.as_u64()?;
@@ -574,14 +565,8 @@ fn main(t: Tiff, e: &Entry, bytes: &[u8], values: &[Num], refs: &Refs) -> Option
                 0x0124 => T4_FLAGS,
                 _ => T6_FLAGS,
             };
-            let (set, unknown) = decode_flags(table, raw);
             Shown {
-                value: Some(Value::Flags {
-                    raw,
-                    bits: 32,
-                    set,
-                    unknown,
-                }),
+                value: Some(Value::flags(raw, 32, table)),
                 summary: None,
             }
         }

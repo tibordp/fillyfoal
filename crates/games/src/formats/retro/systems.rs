@@ -633,7 +633,6 @@ async fn xiso_dir(cx: Cx, (input, dir, depth): (Input, Span, u32)) -> Result<()>
         .into_owned();
         let entry = dir.sub(to_u64(pos), to_u64(name_len).saturating_add(14));
         let data = file.sub(sector.saturating_mul(XISO_SECTOR), len);
-        let (set, unknown) = crate::value::decode_flags(XISO_ATTRS, attrs.into());
         let node = if attrs & 0x10 != 0 {
             Node::new(format!("{name}/")).span(data).lazy(
                 crate::expander!(self::xiso_dir: (Input, Span, u32)),
@@ -643,13 +642,8 @@ async fn xiso_dir(cx: Cx, (input, dir, depth): (Input, Span, u32)) -> Result<()>
             embedded(name.clone(), input.nested(data)).summary(size(len))
         };
         cx.push(
-            node.value(Value::Flags {
-                raw: attrs.into(),
-                bits: 8,
-                set,
-                unknown,
-            })
-            .target(entry),
+            node.value(Value::flags(attrs.into(), 8, XISO_ATTRS))
+                .target(entry),
         )
         .await;
         pos = pos

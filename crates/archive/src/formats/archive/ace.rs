@@ -429,15 +429,7 @@ async fn ace_block(
         1 | 3 => ACE_FILE_FLAGS,
         _ => ACE_RECOVERY_FLAGS,
     };
-    r.with(|n| {
-        let (set, unknown) = crate::value::decode_flags(table, flags.into());
-        n.value(Value::Flags {
-            raw: flags.into(),
-            bits: 16,
-            set,
-            unknown,
-        })
-    });
+    r.with(|n| n.value(Value::flags(flags.into(), 16, table)));
     let mut extra: Vec<Node> = Vec::new();
     let data = span.tail(header_span.len);
     match kind {
@@ -477,15 +469,7 @@ async fn ace_block(
             };
             dos_time(&mut r, "Modification time").ok_or_else(bad)?;
             let attr = r.u32("Attributes", LE).ok_or_else(bad)?;
-            r.with(|n| {
-                let (set, unknown) = crate::value::decode_flags(FILE_ATTRIBUTES, attr.into());
-                n.value(Value::Flags {
-                    raw: attr.into(),
-                    bits: 32,
-                    set,
-                    unknown,
-                })
-            });
+            r.with(|n| n.value(Value::flags(attr.into(), 32, FILE_ATTRIBUTES)));
             let crc = r.u32("CRC-32", LE).ok_or_else(bad)?;
             r.with(|n| n.checksum(Check::new(ACE_CRC32, crc)));
             let comp = r.u8("Compression type").ok_or_else(bad)?;
