@@ -386,7 +386,7 @@ fn timestamp(data: &[u8]) -> Option<(i64, u32)> {
 
 /// A Borg integer timestamp (nanoseconds since 1970).
 fn borg_time(node: Node, ns: i64) -> Node {
-    node.value(Value::utc(ns.div_euclid(1_000_000_000)))
+    node.value(Value::Timestamp(crate::value::Time::unix_nanos(ns)))
         .summary(format!("{ns} ns"))
 }
 
@@ -473,15 +473,11 @@ async fn item_node(
             let data = r.bytes(body, h.arg.min(12)).await?;
             match timestamp(&data) {
                 Some((secs, nanos)) if nanos < 1_000_000_000 => {
-                    node.value(Value::utc(secs)).summary(if nanos == 0 {
-                        format!("timestamp extension, {} bytes", h.arg)
-                    } else {
-                        format!(
-                            "timestamp extension, {} bytes: {}",
-                            h.arg,
-                            vt::datetime(secs, nanos)
-                        )
-                    })
+                    // timestamp 32 holds whole seconds; 64 and 96 nanoseconds.
+                    let t = crate::value::Time::utc(secs);
+                    let t = if h.arg == 4 { t } else { t.nanos(nanos) };
+                    node.value(Value::Timestamp(t))
+                        .summary(format!("timestamp extension, {} bytes", h.arg))
                 }
                 _ => vt::bytes(node, "timestamp extension", data, h.arg)
                     .diag(Diagnostic::malformed("invalid timestamp extension")),

@@ -399,7 +399,7 @@ fn key_node(hive: &H, offset: u32, info: &KeyInfo, path: &[u32]) -> Node {
     };
     let mut node = Node::new(name)
         .span(hive.whole(info.span))
-        .value(Value::utc(crate::text::filetime_to_unix(info.written)))
+        .value(Value::filetime(info.written))
         .summary(format!(
             "{}, {}",
             plural(info.subkeys, "subkey"),

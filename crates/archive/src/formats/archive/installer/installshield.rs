@@ -299,7 +299,7 @@ async fn z_files(cx: Cx, (input, a): (Input, Arc<ZArchive>)) -> Result<()> {
                 .target(data),
             Node::new("Modification time (DOS)")
                 .span(span.sub(0x0f, 4))
-                .value(text(crate::text::dos_datetime(f.date, f.time))),
+                .value(crate::formats::util::val::dos(f.date, f.time)),
             Node::new("Unknown").span(span.sub(0x13, 4)),
             Node::new("Entry size")
                 .span(span.sub(0x17, 2))

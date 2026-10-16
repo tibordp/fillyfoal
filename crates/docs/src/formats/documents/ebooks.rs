@@ -112,7 +112,7 @@ record! {
 /// 1970. Zero means "never" (an unset backup date).
 fn palm_date(&raw: &u32, node: Node) -> Node {
     if raw == 0 {
-        return node.summary("not set");
+        return node.not_set();
     }
     let unix_seconds = if raw & 0x8000_0000 != 0 {
         crate::text::mac_to_unix(raw.into())

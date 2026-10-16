@@ -202,7 +202,7 @@ record! {
         boot_blk: u32 "boot_blk" .desc("Set at boot"),
         patch_base: u32 "boot_patch_table_base" .hex() .desc("Set at boot"),
         run_level: u32 "sys_run_level" .flags(RUN_LEVEL) .desc("Set at boot"),
-        compile_time: u64 "compile_time (local time)" .hex() .desc("CDate of the build, local time; boot loaders match it to find their kernel") .with(|&v, n| n.value(Value::utc(civil::templeos_cdate_raw(v)))),
+        compile_time: u64 "compile_time" .hex() .desc("CDate of the build; boot loaders match it to find their kernel") .with(|&v, n| n.value(Value::Timestamp(crate::value::Time::local(civil::templeos_cdate_raw(v))))),
     }
 }
 

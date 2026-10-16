@@ -438,8 +438,8 @@ record! {
         packets_udp: u64 "UDP packets",
         packets_icmp: u64 "ICMP packets",
         packets_other: u64 "Other packets",
-        first: u64 "First seen" .with(|&v, n| n.summary(ms_text(v))),
-        last: u64 "Last seen" .with(|&v, n| n.summary(ms_text(v))),
+        first: u64 "First seen" .unix_millis(),
+        last: u64 "Last seen" .unix_millis(),
         sequence_failures: u64 "Sequence failures",
     }
 }
@@ -1309,7 +1309,7 @@ async fn v3_record(cx: &Cx, file: File, span: Span) -> Result<()> {
 // Field helpers
 
 fn ms_field(f: &mut Fields<'_>, name: &'static str) -> Result<u64> {
-    f.u64(name).with(|&v, n| n.summary(ms_text(v))).emit()
+    f.u64(name).unix_millis().emit()
 }
 
 fn ip4_field(f: &mut Fields<'_>, name: &'static str) -> Result<u32> {

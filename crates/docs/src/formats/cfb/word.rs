@@ -921,9 +921,9 @@ async fn fc_lcb(cx: Cx, doc: Doc) -> Result<()> {
             let t = u64::from(fc) | (u64::from(lcb) << 32);
             let node = Node::new("ftModified").span(span);
             cx.push(if t == 0 {
-                node.value(uint(0u64, 64)).summary("not set")
+                node.not_set()
             } else {
-                node.value(Value::utc(crate::text::filetime_to_unix(t)))
+                node.value(Value::filetime(t))
             })
             .await;
             continue;

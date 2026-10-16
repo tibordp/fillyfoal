@@ -526,7 +526,7 @@ fn decode(
                     children: Vec::new(),
                 })
             } else {
-                simple(Some(Value::utc(crate::text::filetime_to_unix(t))), 8)
+                simple(Some(Value::filetime(t)), 8)
             }
         }
         0x0041 | 0x0046 => {

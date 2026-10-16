@@ -19,6 +19,14 @@ use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Guid, Value, field, flag};
 
 const LE: Endian = Endian::Little;
+
+/// Decorator for a DOS date (a local date); the time field follows.
+fn dos_date(d: &u16, node: Node) -> Node {
+    match crate::value::Time::dos_date(*d) {
+        Some(t) => node.value(Value::Timestamp(t)),
+        None => node.value(crate::formats::util::val::hex(*d, 16)),
+    }
+}
 const MAX_STRING: u64 = 0x10000;
 
 pub static FORMAT: Format = Format {
@@ -467,7 +475,7 @@ async fn item_fields(cx: Cx, span: Span) -> Result<()> {
         0x30..=0x3f => {
             f.u8("Unknown").emit()?;
             f.u32("File size").emit()?;
-            let date = f.u16("Modification date (DOS)").hex().emit()?;
+            let date = f.u16("Modification date (DOS)").with(dos_date).emit()?;
             f.u16("Modification time (DOS)")
                 .hex()
                 .with(|&t, n| n.summary(crate::text::dos_datetime(date, t)))
@@ -524,12 +532,12 @@ async fn beef0004(cx: Cx, span: Span) -> Result<()> {
     let size = f.u16("Size").emit()?;
     let version = f.u16("Version").emit()?;
     f.u32("Signature").hex().emit()?;
-    let date = f.u16("Creation date (DOS)").hex().emit()?;
+    let date = f.u16("Creation date (DOS)").with(dos_date).emit()?;
     f.u16("Creation time (DOS)")
         .hex()
         .with(|&t, n| n.summary(crate::text::dos_datetime(date, t)))
         .emit()?;
-    let date = f.u16("Access date (DOS)").hex().emit()?;
+    let date = f.u16("Access date (DOS)").with(dos_date).emit()?;
     f.u16("Access time (DOS)")
         .hex()
         .with(|&t, n| n.summary(crate::text::dos_datetime(date, t)))

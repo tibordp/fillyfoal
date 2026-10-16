@@ -891,7 +891,7 @@ fn prop_node(
                 Kind::Time32 => node.value(Value::utc(
                     i64::try_from(*v).unwrap_or(0).saturating_add(TIME32_EPOCH),
                 )),
-                Kind::FileTime => node.value(Value::utc(crate::text::filetime_to_unix(*v))),
+                Kind::FileTime => node.value(Value::filetime(*v)),
                 Kind::Color => {
                     let summary = if *v == 0xFFFF_FFFF {
                         "automatic".to_owned()

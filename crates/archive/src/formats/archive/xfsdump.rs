@@ -253,7 +253,7 @@ const DRIVE_SIMPLE: i32 = 1;
 /// A time field: 0 means none.
 fn time_or_unset(v: &u32, n: Node) -> Node {
     if *v == 0 {
-        return n.summary("not set");
+        return n.not_set();
     }
     n.value(Value::utc(i64::from(*v)))
 }

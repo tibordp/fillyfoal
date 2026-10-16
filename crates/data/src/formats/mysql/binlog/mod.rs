@@ -33,7 +33,7 @@
 //! decoded rows against the statements that wrote them and, for MariaDB, against
 //! `mariadb-binlog -vv` (MariaDB 11.4).
 
-mod rows;
+pub(crate) mod rows;
 
 use std::sync::Arc;
 

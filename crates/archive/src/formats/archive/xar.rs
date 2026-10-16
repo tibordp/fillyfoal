@@ -25,7 +25,7 @@ use crate::formats::{Codec, Format, Input, Probe, content, embedded, embedded_na
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
-use crate::value::EnumTable;
+use crate::value::{EnumTable, Value};
 
 const BE: Endian = Endian::Big;
 
@@ -349,7 +349,12 @@ async fn files(cx: Cx, (input, toc, expected, heap): (Input, Span, u64, Span)) -
             );
         }
         if !e.mtime.is_empty() {
-            children.push(Node::new("Modification time").value(text(e.mtime.clone())));
+            children.push(
+                Node::new("Modification time").value(
+                    crate::formats::text::parse_time(&e.mtime)
+                        .map_or_else(|| text(e.mtime.clone()), Value::Timestamp),
+                ),
+            );
         }
         let mut node = Node::new(path);
         if let (Some(offset), Some(length)) = (e.offset, e.length) {

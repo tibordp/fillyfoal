@@ -659,30 +659,30 @@ fn scalar(o: &Objects, pos: usize, ty: usize) -> Result<Option<(Value, Option<St
                     64
                 },
             };
-            let (div, per_sec) = match *logical {
-                Some("date") => (None, Some(0)),
-                Some("timestamp-millis" | "local-timestamp-millis") => (Some(1_000i64), None),
-                Some("timestamp-micros" | "local-timestamp-micros") => (Some(1_000_000), None),
-                Some("timestamp-nanos") => (Some(1_000_000_000), None),
-                _ => (None, None),
+            use crate::value::{Time, Zone};
+            // `local-timestamp-*` is a wall clock in no particular zone.
+            let local = |t: Time| {
+                if logical.is_some_and(|l| l.starts_with("local-")) {
+                    Time {
+                        zone: Zone::Local,
+                        ..t
+                    }
+                } else {
+                    t
+                }
             };
-            match (div, per_sec) {
-                (_, Some(_)) => (
-                    Value::utc(v.saturating_mul(86_400)),
+            let per_sec = match *logical {
+                Some("timestamp-millis" | "local-timestamp-millis") => Some(1_000),
+                Some("timestamp-micros" | "local-timestamp-micros") => Some(1_000_000),
+                Some("timestamp-nanos" | "local-timestamp-nanos") => Some(1_000_000_000),
+                _ => None,
+            };
+            match (*logical, per_sec) {
+                (Some("date"), _) => (
+                    Value::Timestamp(Time::utc(v.saturating_mul(86_400)).day()),
                     Some(format!("{v} days")),
                 ),
-                (Some(d), _) => {
-                    let secs = v.div_euclid(d);
-                    let frac = v.rem_euclid(d);
-                    let nanos = u32::try_from(
-                        frac.saturating_mul(1_000_000_000i64.checked_div(d).unwrap_or(0)),
-                    )
-                    .unwrap_or(0);
-                    (
-                        Value::utc(secs),
-                        (nanos != 0).then(|| super::valuetree::datetime(secs, nanos)),
-                    )
-                }
+                (_, Some(per)) => (Value::Timestamp(local(Time::unix_scaled(v, per))), None),
                 _ => (int, logical.map(str::to_owned)),
             }
         }

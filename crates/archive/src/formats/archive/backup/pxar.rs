@@ -251,9 +251,7 @@ record! {
         flags: u64 "Flags" .flags(ENTRY_FLAGS),
         uid: u32 "UID",
         gid: u32 "GID",
-        mtime: u64 "Modification time" .with(|&v, n| n
-            .value(Value::utc(i64::try_from(v / 1_000_000_000).unwrap_or(i64::MAX)))
-            .summary(format!("{v} ns"))),
+        mtime: u64 "Modification time" .unix_nanos() .with(|&v, n| n.summary(format!("{v} ns"))),
     }
 }
 

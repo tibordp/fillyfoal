@@ -1687,7 +1687,7 @@ static FS_ENTRY: Msg = msg(
 
 static TIMEVAL: Msg = msg(
     "timeval",
-    &[f(1, "tv_sec", Ty::UInt), f(2, "tv_usec", Ty::UInt)],
+    &[f(1, "tv_sec", Ty::Time), f(2, "tv_usec", Ty::UInt)],
     &[],
 );
 

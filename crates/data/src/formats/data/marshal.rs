@@ -41,7 +41,7 @@ use crate::formats::util::datakit::ByteReader;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::Value;
+use crate::value::{Time, Value};
 
 use super::valuetree as vt;
 
@@ -888,10 +888,8 @@ async fn value_node(
                         _ => None,
                     };
                     match time {
-                        Some((t, extra)) => {
-                            lazy_members(node, format!("Time, {}", t.text(Some(&extra))))
-                                .value(Value::utc(t.unix_seconds()))
-                        }
+                        Some((t, extra)) => lazy_members(node, format!("Time{}", t.note(&extra)))
+                            .value(Value::Timestamp(t.time(Some(&extra)))),
                         None => lazy_members(
                             node,
                             format!("{class}, _dump data, with instance variables"),
@@ -937,11 +935,11 @@ async fn value_node(
                     {
                         // Time#_dump: the time in UTC, packed into 8 bytes.
                         return Ok(node
-                            .value(Value::utc(t.unix_seconds()))
+                            .value(Value::Timestamp(t.time(None)))
                             .summary(if t.utc || t.old {
-                                format!("Time, {}", t.text(None))
+                                "Time"
                             } else {
-                                format!("Time, {} (a local time, stored in UTC)", t.text(None))
+                                "Time (a local time, stored in UTC)"
                             })
                             .lazy(crate::expander!(self::user_dump: Dump), state));
                     }
@@ -1106,8 +1104,10 @@ impl PackedTime {
         )
     }
 
-    /// The time as Ruby shows it: local with its offset, or UTC.
-    fn text(&self, extra: Option<&TimeExtra>) -> String {
+    /// The time: the UTC instant with the recorded offset of a local time
+    /// (when it is whole minutes), to the nanosecond when it has a
+    /// fraction.
+    fn time(&self, extra: Option<&TimeExtra>) -> Time {
         let mut nanos = self.usec.saturating_mul(1000);
         let mut unix = self.unix_seconds();
         if let Some(x) = extra {
@@ -1134,29 +1134,47 @@ impl PackedTime {
         let nanos = u32::try_from(nanos.min(999_999_999)).unwrap_or(0);
         let offset = extra
             .and_then(|x| x.offset)
-            .filter(|_| !self.utc && !self.old);
-        let mut text = match offset {
-            Some(off) => {
-                let local = vt::datetime(unix.saturating_add(off), nanos);
-                let stem = local.strip_suffix(" UTC").unwrap_or(&local).to_owned();
-                let sign = if off < 0 { '-' } else { '+' };
-                let a = off.unsigned_abs();
-                let (h, m, s) = (a / 3600, a / 60 % 60, a % 60);
-                if s == 0 {
-                    format!("{stem} {sign}{h:02}:{m:02}")
-                } else {
-                    format!("{stem} {sign}{h:02}:{m:02}:{s:02}")
-                }
-            }
-            None => vt::datetime(unix, nanos),
+            .filter(|_| !self.utc && !self.old)
+            .filter(|off| off % 60 == 0)
+            .and_then(|off| i16::try_from(off / 60).ok());
+        let t = match offset {
+            Some(minutes) => Time::offset(unix, minutes),
+            None => Time::utc(unix),
         };
+        if nanos == 0 {
+            t
+        } else if nanos.is_multiple_of(1000) {
+            t.micros(nanos / 1000)
+        } else {
+            t.nanos(nanos)
+        }
+    }
+
+    /// What the summary adds: the zone name, and an offset of a local
+    /// time that is not whole minutes (the value then shows UTC).
+    fn note(&self, extra: &TimeExtra) -> String {
+        let mut note = String::new();
+        if let Some(off) = extra
+            .offset
+            .filter(|off| !self.utc && !self.old && off % 60 != 0)
+        {
+            let sign = if off < 0 { '-' } else { '+' };
+            let a = off.unsigned_abs();
+            note.push_str(&format!(
+                ", UTC{sign}{:02}:{:02}:{:02}",
+                a / 3600,
+                a / 60 % 60,
+                a % 60
+            ));
+        }
         if let Some(zone) = extra
-            .and_then(|x| x.zone.as_deref())
+            .zone
+            .as_deref()
             .filter(|z| !z.is_empty() && *z != "UTC")
         {
-            text.push_str(&format!(" ({zone})"));
+            note.push_str(&format!(" ({zone})"));
         }
-        text
+        note
     }
 }
 

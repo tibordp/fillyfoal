@@ -577,15 +577,8 @@ async fn element(
         }
         0x09 => {
             let ms = i64::from_le_bytes(r.le(at, 8).await?.to_le_bytes());
-            let secs = ms.div_euclid(1000);
-            let nanos = u32::try_from(ms.rem_euclid(1000))
-                .unwrap_or(0)
-                .saturating_mul(1_000_000);
-            node.value(Value::utc(secs)).summary(if nanos == 0 {
-                "UTC datetime".to_owned()
-            } else {
-                format!("UTC datetime, {}", vt::datetime(secs, nanos))
-            })
+            node.value(Value::Timestamp(crate::value::Time::unix_millis(ms)))
+                .summary("UTC datetime")
         }
         0x0a => node.summary("null"),
         0x0b => {

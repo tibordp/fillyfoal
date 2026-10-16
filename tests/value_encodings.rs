@@ -139,7 +139,7 @@ fn msgpack_stream_by_extension() {
         "MessagePack, first value: array, 3 elements",
         "[1]: \"second value\"",
         "tags — array, 2 elements",
-        "timestamp extension, 8 bytes: 1970-01-01 00:00:00.000000001 UTC",
+        "1970-01-01 00:00:00.000000001 UTC — timestamp extension, 8 bytes",
         "[4] — nil",
     ] {
         assert!(tree.contains(line), "{line:?} missing from\n{tree}");

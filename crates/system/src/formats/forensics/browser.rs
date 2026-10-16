@@ -23,7 +23,8 @@ const BE: Endian = Endian::Big;
 
 /// Chromium's internal time: microseconds since 1601-01-01.
 fn chrome_time(us: u64) -> Value {
-    Value::utc(crate::text::filetime_to_unix(us.saturating_mul(10)))
+    let t = crate::value::Time::filetime(us.saturating_mul(10));
+    Value::Timestamp(t.frac(t.nanos, 6))
 }
 
 /// A FAT date/time pair stored as one little-endian u32 (date in the high
@@ -32,9 +33,7 @@ fn fat_time(v: u32) -> Value {
     if v == 0 {
         return text("not set");
     }
-    let date = u16::try_from(v >> 16).unwrap_or(0);
-    let time = u16::try_from(v & 0xffff).unwrap_or(0);
-    text(crate::text::dos_datetime(date, time))
+    crate::formats::util::val::dos_stamp(v)
 }
 
 // ---------------------------------------------------------------------------
@@ -274,7 +273,7 @@ async fn ie_records(cx: Cx, (file, first): (Span, u32)) -> Result<()> {
                 let url = ie_url_layout(&mut Fields::new(&block, LE), &()).unwrap_or_default();
                 let accessed = u64_le(&block.data, 0x10).unwrap_or(0);
                 struct_node(kind, span, LE, (), ie_url_layout)
-                    .value(Value::utc(crate::text::filetime_to_unix(accessed)))
+                    .value(Value::filetime(accessed))
                     .summary(url)
             }
             "REDR" => {

@@ -44,7 +44,7 @@ use crate::formats::util::fmt::{clip, plural};
 use crate::formats::{Codec, Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value};
+use crate::value::{EnumTable, Radix, Time, Value, Zone};
 
 const LE: Endian = Endian::Little;
 /// The first version with record lengths.
@@ -852,28 +852,26 @@ struct Decoded {
 const TICKS_AT_UNIX_EPOCH: i64 = 621_355_968_000_000_000;
 
 /// A .NET `DateTime` as MSBuild writes it (ticks of 100 ns since
-/// 0001-01-01, then its `DateTimeKind`), to the millisecond. Events carry
-/// local time (`BuildEventArgs.Timestamp` converts to it), so the kind
-/// says whether the clock is UTC: 1 is, 2 is the machine's local time
-/// (its zone is not recorded), 0 is unspecified.
-fn timestamp(ticks: i64, kind: u64) -> String {
+/// 0001-01-01, then its `DateTimeKind`), to the tick. Events carry local
+/// time (`BuildEventArgs.Timestamp` converts to it), so the kind says
+/// whether the clock is UTC: 1 is, 2 is the machine's local time (its zone
+/// is not recorded), 0 is unspecified (shown as a local time too).
+fn timestamp(ticks: i64, kind: u64) -> Value {
     let since = ticks.saturating_sub(TICKS_AT_UNIX_EPOCH);
-    let unix = since.div_euclid(10_000_000);
-    let ms = since.rem_euclid(10_000_000) / 10_000;
-    let (y, mo, d) = crate::formats::util::civil::civil(unix.div_euclid(86_400));
-    let t = unix.rem_euclid(86_400);
-    let zone = match kind {
-        1 => " UTC".to_owned(),
-        2 => " (local time)".to_owned(),
-        0 => " (unspecified time zone)".to_owned(),
-        k => format!(" (DateTimeKind {k})"),
-    };
-    format!(
-        "{y:04}-{mo:02}-{d:02} {:02}:{:02}:{:02}.{ms:03}{zone}",
-        t / 3600,
-        t / 60 % 60,
-        t % 60
-    )
+    let t = Time::utc(since.div_euclid(10_000_000)).frac(
+        u32::try_from(since.rem_euclid(10_000_000))
+            .unwrap_or(0)
+            .saturating_mul(100),
+        7,
+    );
+    match kind {
+        1 => Value::Timestamp(t),
+        0 | 2 => Value::Timestamp(Time {
+            zone: Zone::Local,
+            ..t
+        }),
+        k => Value::Text(format!("{} (DateTimeKind {k})", t.iso8601())),
+    }
 }
 
 /// Decodes a record body: the common fields, then the kind's own.
@@ -969,7 +967,7 @@ async fn decode(cx: &Cx, ctx: &Ctx, index: &Index, kind: u64, body: &[u8]) -> Re
         let (Some(ticks), Some(kind)) = (r.int::<i64>(LE), r.uleb()) else {
             return Ok(fail(items, message, s));
         };
-        push!("Timestamp", s, Value::Text(timestamp(ticks, kind)));
+        push!("Timestamp", s, timestamp(ticks, kind));
     }
     if has(16) {
         let s = r.pos();
@@ -1346,13 +1344,14 @@ mod tests {
     fn timestamps_say_their_kind() {
         // 2026-10-16 08:25:10.4829999 as .NET ticks.
         let ticks = TICKS_AT_UNIX_EPOCH + 1_792_139_110 * 10_000_000 + 4_829_999;
-        assert_eq!(timestamp(ticks, 1), "2026-10-16 08:25:10.482 UTC");
-        assert_eq!(timestamp(ticks, 2), "2026-10-16 08:25:10.482 (local time)");
+        let shown = |k| crate::render::value(&timestamp(ticks, k));
+        assert_eq!(shown(1), "2026-10-16 08:25:10.4829999 UTC");
+        assert_eq!(shown(2), "2026-10-16 08:25:10.4829999 (local time)");
+        assert_eq!(shown(0), "2026-10-16 08:25:10.4829999 (local time)");
         assert_eq!(
-            timestamp(ticks, 0),
-            "2026-10-16 08:25:10.482 (unspecified time zone)"
+            crate::render::value(&timestamp(0, 1)),
+            "0001-01-01 00:00:00 UTC"
         );
-        assert_eq!(timestamp(0, 1), "0001-01-01 00:00:00.000 UTC");
     }
 
     /// A first record that runs past the end of a short stream is no

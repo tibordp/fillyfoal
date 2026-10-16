@@ -1088,12 +1088,7 @@ impl Reader<'_> {
             .desc("Julian day and milliseconds");
         // Day 0 (4713 BC) means the date was never set (LibreDWG writes it).
         Some(if day == 0 && ms == 0 {
-            node.value(Value::UInt {
-                value: 0,
-                bits: 32,
-                radix: crate::value::Radix::Dec,
-            })
-            .summary("not set")
+            node.not_set()
         } else {
             node.value(Value::utc(julian(day, ms)))
         })

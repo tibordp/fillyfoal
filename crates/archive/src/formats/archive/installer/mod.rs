@@ -23,6 +23,5 @@ use crate::value::Value;
 
 /// A FILETIME field (`None` for 0 and all ones, which mean "not set").
 fn filetime(name: &'static str, ticks: u64) -> Option<Node> {
-    (ticks != 0 && ticks != u64::MAX)
-        .then(|| Node::new(name).value(Value::utc(crate::text::filetime_to_unix(ticks))))
+    (ticks != 0 && ticks != u64::MAX).then(|| Node::new(name).value(Value::filetime(ticks)))
 }

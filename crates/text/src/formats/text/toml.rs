@@ -17,7 +17,7 @@ use crate::value::Value;
 use super::decode::preview;
 use super::encoding::prepare;
 use super::scan::{Lines, Scanner};
-use super::{parse_datetime, plural, probe, text_node};
+use super::{parse_time, plural, probe, text_node};
 
 pub static FORMAT: Format = Format {
     name: "toml",
@@ -607,13 +607,11 @@ fn value_node(name: String, val: Val, span: Span) -> Node {
             .value(Value::Int { value: v, bits: 64 }),
         Val::Float(v) => Node::new(name).span(span).value(Value::f64(v)),
         Val::Bool(v) => Node::new(name).span(span).value(Value::Bool(v)),
-        Val::DateTime(text) => match parse_datetime(&text) {
-            Some(t)
-                if text.contains(['Z', 'z', '+']) || text.rfind('-').is_some_and(|i| i > 10) =>
-            {
-                Node::new(name).span(span).value(Value::utc(t))
-            }
-            _ => text_node(name, span, &text).summary("local date/time"),
+        // Offset date-times, local date-times and local dates; a local
+        // time of day alone stays text.
+        Val::DateTime(text) => match parse_time(&text) {
+            Some(t) => Node::new(name).span(span).value(Value::Timestamp(t)),
+            None => text_node(name, span, &text).summary("local time"),
         },
         Val::Array(n) => {
             let node = Node::new(name)

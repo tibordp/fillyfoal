@@ -33,7 +33,7 @@ use crate::formats::util::val::{text, uint};
 use crate::formats::{Codec, Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{EnumTable, FlagTable, Time, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 pub(crate) const SECTOR: u64 = 2048;
@@ -249,21 +249,60 @@ fn read_both32(r: &mut ByteReader<'_>, name: &'static str) -> Option<u32> {
     Some(le)
 }
 
+/// An ISO 9660 GMT offset byte (signed 15-minute units) in minutes.
+fn offset_minutes(b: u8) -> i16 {
+    i16::from(b.cast_signed()).saturating_mul(15)
+}
+
 /// The 7-byte directory record date (years since 1900, ..., GMT offset in
-/// 15-minute units) as Unix seconds.
-fn record_time(b: &[u8]) -> Option<i64> {
+/// 15-minute units): the recorded wall clock and its offset.
+fn record_time(b: &[u8]) -> Option<Time> {
     let get = |i: usize| b.get(i).map(|&v| i64::from(v));
     if b.get(..6).is_some_and(|d| d.iter().all(|&x| x == 0)) {
         return None;
     }
     let days = days_from_civil(get(0)?.saturating_add(1900), get(1)?, get(2)?)?;
-    let offset = i64::from(b.get(6)?.cast_signed()).saturating_mul(15 * 60);
+    let wall = days
+        .saturating_mul(86_400)
+        .saturating_add(get(3)?.saturating_mul(3600))
+        .saturating_add(get(4)?.saturating_mul(60))
+        .saturating_add(get(5)?);
+    Some(Time::offset_wall(wall, offset_minutes(*b.get(6)?)))
+}
+
+/// The 17-byte descriptor date "YYYYMMDDHHMMSScc" + offset: `None` when
+/// not set (all zeros), else the time or, when the digits are not a date,
+/// the text as stored.
+fn long_time(b: &[u8]) -> Option<Value> {
+    let digits = b.get(..16).unwrap_or_default();
+    if digits.iter().all(|&c| c == b'0' || c == 0) {
+        return None;
+    }
+    Some(parse_long_time(b).map_or_else(|| text(long_date(b)), Value::Timestamp))
+}
+
+fn parse_long_time(b: &[u8]) -> Option<Time> {
+    let num = |a: usize, z: usize| -> Option<i64> {
+        let d = b.get(a..z)?;
+        if !d.iter().all(u8::is_ascii_digit) {
+            return None;
+        }
+        std::str::from_utf8(d).ok()?.parse().ok()
+    };
+    let days = days_from_civil(num(0, 4)?, num(4, 6)?, num(6, 8)?)?;
+    let (h, m, s) = (num(8, 10)?, num(10, 12)?, num(12, 14)?);
+    if h > 23 || m > 59 || s > 60 {
+        return None;
+    }
+    let wall = days
+        .saturating_mul(86_400)
+        .saturating_add(h.saturating_mul(3600))
+        .saturating_add(m.saturating_mul(60))
+        .saturating_add(s);
+    let cs = u32::try_from(num(14, 16)?).ok()?;
     Some(
-        days.saturating_mul(86_400)
-            .saturating_add(get(3)?.saturating_mul(3600))
-            .saturating_add(get(4)?.saturating_mul(60))
-            .saturating_add(get(5)?)
-            .saturating_sub(offset),
+        Time::offset_wall(wall, offset_minutes(b.get(16).copied().unwrap_or(0)))
+            .frac(cs.saturating_mul(10_000_000), 2),
     )
 }
 
@@ -292,7 +331,10 @@ fn long_date(b: &[u8]) -> String {
 
 fn long_date_field(f: &mut Fields<'_>, name: &'static str) -> Result<()> {
     f.bytes(name, 17)
-        .with(|b, n| n.value(text(long_date(b))))
+        .with(|b, n| match long_time(b) {
+            Some(v) => n.value(v),
+            None => n.not_set(),
+        })
         .emit()?;
     Ok(())
 }
@@ -720,8 +762,8 @@ fn record_fields(f: &mut Fields<'_>, joliet: bool, ctx: Option<RecCtx>) -> Resul
         .emit()?;
     f.bytes("Recording time", 7)
         .with(|b, n| match record_time(b) {
-            Some(t) => n.value(Value::utc(t)),
-            None => n.summary("not set"),
+            Some(t) => n.value(Value::Timestamp(t)),
+            None => n.not_set(),
         })
         .emit()?;
     f.u8("File flags").flags(FILE_FLAGS).emit()?;
@@ -991,14 +1033,17 @@ fn susp_fields(entry: &[u8], span: Span) -> (Arc<Vec<Node>>, Option<Value>, Stri
                 }
                 if long {
                     let Some(b) = r.bytes(name, 17) else { break };
-                    let t = long_date(b);
-                    r.with(|n| n.value(text(t)));
+                    let t = long_time(b);
+                    r.with(|n| match t {
+                        Some(v) => n.value(v),
+                        None => n.not_set(),
+                    });
                 } else {
                     let Some(b) = r.bytes(name, 7) else { break };
                     let t = record_time(b);
                     r.with(|n| match t {
-                        Some(t) => n.value(Value::utc(t)),
-                        None => n.summary("not set"),
+                        Some(t) => n.value(Value::Timestamp(t)),
+                        None => n.not_set(),
                     });
                 }
             }

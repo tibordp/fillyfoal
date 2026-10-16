@@ -377,10 +377,12 @@ fn logtime(b: &[u8]) -> Option<(Value, String)> {
         min.into(),
         sec.into(),
     );
-    Some((
-        Value::utc(unix),
-        format!("{ms} ms{}", if utc { "" } else { ", local time" }),
-    ))
+    let t = if utc {
+        crate::value::Time::utc(unix)
+    } else {
+        crate::value::Time::local(unix)
+    };
+    Some((Value::Timestamp(t.millis(ms.into())), String::new()))
 }
 
 fn lgpos(b: &[u8]) -> String {

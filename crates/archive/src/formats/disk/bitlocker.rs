@@ -418,11 +418,7 @@ async fn entry_fields(cx: Cx, (span, bytes, depth): (Span, Arc<Vec<u8>>, usize))
         }
         0x0005 => {
             let _ = r.u64("Nonce time", LE);
-            r.with(|n| {
-                n.value(Value::utc(crate::text::filetime_to_unix(
-                    u64_le(&bytes, 8).unwrap_or(0),
-                )))
-            });
+            r.with(|n| n.value(Value::filetime(u64_le(&bytes, 8).unwrap_or(0))));
             let _ = r.u32("Nonce counter", LE);
             let n = r.remaining();
             let _ = r.bytes("MAC and encrypted key", to_u64(n));
@@ -438,7 +434,7 @@ async fn entry_fields(cx: Cx, (span, bytes, depth): (Span, Arc<Vec<u8>>, usize))
             });
             let _ = r.u64("Last modified", LE);
             let t = u64_le(&bytes, at.saturating_add(16)).unwrap_or(0);
-            r.with(|n| n.value(Value::utc(crate::text::filetime_to_unix(t))));
+            r.with(|n| n.value(Value::filetime(t)));
             if value_type == 0x0008 {
                 let _ = r.u16("Unknown", LE);
                 let p = r.u16("Protection type", LE).unwrap_or(0);

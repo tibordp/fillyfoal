@@ -191,7 +191,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if let Some(&t) = info.last_run.first() {
         summary = format!(
             "{summary}, last {}",
-            crate::render::value(&Value::utc(crate::text::filetime_to_unix(t)))
+            crate::render::value(&Value::filetime(t))
         );
     }
     cx.annotate(summary);
@@ -355,7 +355,7 @@ async fn volumes_list(cx: Cx, pf: P) -> Result<()> {
         cx.push(
             Node::new(clip(&path, 120))
                 .span(span)
-                .value(Value::utc(crate::text::filetime_to_unix(created)))
+                .value(Value::filetime(created))
                 .summary(format!(
                     "serial {:04X}-{:04X}",
                     serial >> 16,

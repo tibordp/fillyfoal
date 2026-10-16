@@ -47,7 +47,7 @@ use crate::formats::{Format, Head, Input, Probe, content_named, embedded_as};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{FlagTable, Value, flag};
+use crate::value::{FlagTable, Time, Value, flag};
 
 const LE: Endian = Endian::Little;
 const BLK: u64 = 512;
@@ -152,11 +152,10 @@ const ATTR_COMPRESSED: u16 = 0x400;
 /// Decorator for a `CDate` (`time` in the low 32 bits, `date` above).
 fn cdate(v: &u64, node: Node) -> Node {
     if *v == 0 {
-        return node.summary("not set");
+        return node.not_set();
     }
-    node.value(Value::utc(templeos_cdate_raw(*v))).desc(
-        "CDate: days since year 0 (high half), time of day in 2^-32 days (low half); local time",
-    )
+    node.value(Value::Timestamp(Time::local(templeos_cdate_raw(*v))))
+        .desc("CDate: days since year 0 (high half), time of day in 2^-32 days (low half)")
 }
 
 record! {
@@ -183,7 +182,7 @@ record! {
         name: bytes[38] "name" .with(|b, n| n.value(Value::Text(crate::text::latin1(until_nul(b))))),
         clus: i64 "clus" .desc("First block (absolute)"),
         size: i64 "size" .with(|&v, n| n.summary(size(u64::try_from(v).unwrap_or(0)))),
-        datetime: u64 "datetime (local time)" .with(cdate),
+        datetime: u64 "datetime" .with(cdate),
     }
 }
 

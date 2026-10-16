@@ -509,11 +509,46 @@ fn dttm(v: u32) -> String {
     )
 }
 
+/// A DTTM as a local time to the minute, if it is a date.
+fn dttm_time(v: u32) -> Option<crate::value::Time> {
+    let days = crate::formats::util::civil::days_from_civil(
+        1900i64.saturating_add(((v >> 20) & 0x1ff).into()),
+        ((v >> 16) & 0xf).into(),
+        ((v >> 11) & 0x1f).into(),
+    )?;
+    let (hour, minute) = (i64::from((v >> 6) & 0x1f), i64::from(v & 0x3f));
+    if hour > 23 || minute > 59 {
+        return None;
+    }
+    let wall = days
+        .saturating_mul(86_400)
+        .saturating_add(hour.saturating_mul(3600))
+        .saturating_add(minute.saturating_mul(60));
+    Some(crate::value::Time::local(wall).minute())
+}
+
+/// Decorator for a DTTM field: the local time, its day of the week as
+/// the summary.
+fn dttm_node(v: u32, n: Node) -> Node {
+    match (v, dttm_time(v)) {
+        (0, _) => n.not_set(),
+        (_, Some(t)) => n.value(Value::Timestamp(t)).summary(
+            WEEKDAYS
+                .get(to_usize(((v >> 29) & 7).into()))
+                .copied()
+                .unwrap_or("?"),
+        ),
+        (_, None) => n
+            .value(crate::formats::util::val::hex(v, 32))
+            .summary(dttm(v)),
+    }
+}
+
 fn dop_summary(data: &[u8]) -> String {
     match (u32_le(data, 0x14), u16_le(data, 0x20)) {
         (Some(created), Some(revision)) => format!(
             "created {}, revision {revision}",
-            dttm(created).trim_end_matches(", local time")
+            dttm_time(created).map_or_else(|| dttm(created), |t| t.to_string())
         ),
         _ => format!("{} bytes", data.len()),
     }
@@ -533,8 +568,7 @@ async fn dop(cx: Cx, span: Span) -> Result<()> {
         ("dttmLastPrint", "When it was last printed"),
     ] {
         f.u32(name)
-            .hex()
-            .with(|&v, n| n.summary(dttm(v)))
+            .with(|&v, n| dttm_node(v, n))
             .desc(desc)
             .emit()?;
     }

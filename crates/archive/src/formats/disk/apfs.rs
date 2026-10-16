@@ -167,7 +167,7 @@ const VOLUME_INCOMPAT: FlagTable = &[
 
 fn ns_time(v: &u64, n: Node) -> Node {
     if *v == 0 {
-        return n.summary("not set");
+        return n.not_set();
     }
     n.value(Value::utc(
         i64::try_from(*v / 1_000_000_000).unwrap_or(i64::MAX),

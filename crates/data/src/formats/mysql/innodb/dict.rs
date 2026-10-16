@@ -13,13 +13,14 @@ use crate::bytes::{to_u64, to_usize, u16_be, u32_be, u64_be};
 use crate::codec::Codec;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::mysql::binlog::rows;
 use crate::formats::util::fmt::clip;
 use crate::formats::util::json::{self, Json};
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Input, content};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::value::{Radix, Value};
+use crate::value::{Radix, Time, Value};
 
 /// SDI records read for the dictionary.
 const MAX_OBJECTS: usize = 4096;
@@ -984,8 +985,9 @@ pub fn value(f: &Field, b: &[u8]) -> (Value, String) {
             if v & 0x80_0000 != 0 {
                 v ^= 0x80_0000;
             }
-            let s = format!("{:04}-{:02}-{:02}", v >> 9, (v >> 5) & 15, v & 31);
-            shown(text(s.clone()), s)
+            let ymd = (v >> 9, (v >> 5) & 15, v & 31);
+            let s = format!("{:04}-{:02}-{:02}", ymd.0, ymd.1, ymd.2);
+            rows::time_or_text(rows::wall_time(ymd, None), s)
         }
         Ty::DateTime { fsp } => {
             let v = be(b.get(..5).unwrap_or_default()).wrapping_sub(0x80_0000_0000);
@@ -1000,12 +1002,19 @@ pub fn value(f: &Field, b: &[u8]) -> (Value, String) {
                 v & 63,
                 frac(b.get(5..).unwrap_or_default(), *fsp)
             );
-            shown(text(s.clone()), s)
+            let t = rows::wall_time(
+                (ym / 13, ym % 13, (v >> 17) & 31),
+                Some(((v >> 12) & 31, (v >> 6) & 63, v & 63)),
+            )
+            .map(|t| rows::with_fraction(t, &frac(b.get(5..).unwrap_or_default(), *fsp)));
+            rows::time_or_text(t, s)
         }
         Ty::Timestamp { fsp } => {
             let secs = be(b.get(..4).unwrap_or_default());
-            let s = format!("{secs}{}", frac(b.get(4..).unwrap_or_default(), *fsp));
-            (Value::utc(i64::try_from(secs).unwrap_or(0)), s)
+            let fr = frac(b.get(4..).unwrap_or_default(), *fsp);
+            let s = format!("{secs}{fr}");
+            let t = rows::with_fraction(Time::utc(i64::try_from(secs).unwrap_or(0)), &fr);
+            (Value::Timestamp(t), s)
         }
         Ty::Time { fsp } => {
             let raw = be(b.get(..3).unwrap_or_default());

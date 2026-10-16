@@ -58,7 +58,7 @@ use crate::formats::util::fmt::count;
 use crate::formats::util::val::{text, uint};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, field, flag};
+use crate::value::{EnumTable, FlagTable, Time, Value, field, flag};
 
 const LE: Endian = Endian::Little;
 /// Volume descriptors read per sequence (and sequence hops).
@@ -250,9 +250,10 @@ fn regid_suffix(b: &[u8]) -> Option<String> {
     })
 }
 
-/// A 12-byte timestamp as Unix seconds and its recorded UTC offset (in
-/// minutes), or `None` if it is all zeros.
-fn timestamp(b: &[u8]) -> Option<(i64, Option<i16>)> {
+/// A 12-byte timestamp (ECMA-167 1/7.3): UTC (type 0), or a local time
+/// with its offset from UTC when recorded (type 1), to the microsecond;
+/// `None` if it is all zeros.
+fn timestamp(b: &[u8]) -> Option<Time> {
     let tt = u16_le(b, 0)?;
     let year = u16_le(b, 2)?.cast_signed();
     let get = |i: usize| b.get(i).copied().map(u32::from);
@@ -266,16 +267,21 @@ fn timestamp(b: &[u8]) -> Option<(i64, Option<i16>)> {
     } else {
         raw.cast_signed()
     };
-    let tz = (tt >> 12 == 1 && tz != -2047).then_some(tz);
-    let local = civil_to_unix(year.into(), month, day, get(6)?, get(7)?, get(8)?);
-    Some((
-        local.saturating_sub(i64::from(tz.unwrap_or(0)).saturating_mul(60)),
-        tz,
-    ))
-}
-
-fn time_text(t: i64) -> String {
-    crate::render::value(&Value::utc(t))
+    let kind = tt >> 12;
+    let tz = (kind == 1 && tz != -2047).then_some(tz);
+    let wall = civil_to_unix(year.into(), month, day, get(6)?, get(7)?, get(8)?);
+    let t = match (kind, tz) {
+        (_, Some(m)) => Time::offset_wall(wall, m),
+        (1, None) => Time::local(wall),
+        _ => Time::utc(wall),
+    };
+    // Centiseconds, hundreds of microseconds, microseconds.
+    let micros = get(9)?
+        .min(99)
+        .saturating_mul(10_000)
+        .saturating_add(get(10)?.min(99).saturating_mul(100))
+        .saturating_add(get(11)?.min(99));
+    Some(t.micros(micros))
 }
 
 /// Problems with a descriptor tag: checksum, CRC, recorded location.
@@ -461,24 +467,13 @@ fn charspec(f: &mut Fields<'_>, name: &'static str) -> Result<()> {
     Ok(())
 }
 
-fn time_field(f: &mut Fields<'_>, name: &'static str) -> Result<Option<i64>> {
+fn time_field(f: &mut Fields<'_>, name: &'static str) -> Result<Option<Time>> {
     f.bytes(name, 12)
         .with(|b, n| match timestamp(b) {
-            Some((t, tz)) => {
-                let n = n.value(Value::utc(t));
-                match tz {
-                    Some(m) => n.summary(format!(
-                        "recorded as local time, UTC{}{:02}:{:02}",
-                        if m < 0 { '-' } else { '+' },
-                        m.unsigned_abs() / 60,
-                        m.unsigned_abs() % 60
-                    )),
-                    None => n,
-                }
-            }
-            None => n.summary("not set"),
+            Some(t) => n.value(Value::Timestamp(t)),
+            None => n.not_set(),
         })
-        .map(|b| timestamp(&b).map(|t| t.0))
+        .map(|b| timestamp(&b))
         .emit()
 }
 
@@ -1772,7 +1767,7 @@ struct Icb {
     gid: u32,
     perms: u32,
     size: u64,
-    mtime: Option<i64>,
+    mtime: Option<Time>,
     ads: Span,
     ad_data: Arc<Vec<u8>>,
     stream: Option<LongAd>,
@@ -1841,8 +1836,7 @@ async fn read_icb(cx: &Cx, vol: &Vol, mut addr: LongAd) -> Result<Icb> {
             mtime: timestamp(
                 data.get(if efe { 92..104 } else { 84..96 })
                     .unwrap_or_default(),
-            )
-            .map(|t| t.0),
+            ),
             ads,
             ad_data: Arc::new(ad_data),
             stream,
@@ -1981,7 +1975,7 @@ fn entry_node(name: String, icb: Option<&Icb>, is_dir: bool, e: Entry) -> Node {
             };
             s = format!("{s}, {}", i.mode());
             if let Some(t) = i.mtime {
-                s = format!("{s}, modified {}", time_text(t));
+                s = format!("{s}, modified {t}");
             }
             s
         }

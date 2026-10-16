@@ -634,7 +634,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(summary);
     let mut node = struct_node("Logfile header", lf_span, LE, pointer, logfile_layout);
     if lf.clock.start > 0 {
-        node = node.value(Value::utc(crate::text::filetime_to_unix(lf.clock.start)));
+        node = node.value(Value::filetime(lf.clock.start));
     }
     if u64::from(lf.buffer_size) != size && !compressed {
         node = node.diag(Diagnostic::warning(format!(
@@ -1558,7 +1558,7 @@ fn tl_scalar(in_type: u8, out_type: u8, b: &[u8]) -> Value {
         12 => Value::f64(f64::from_bits(u(8))),
         13 => Value::Bool(u(4) != 0),
         15 => Value::Guid(guid_le(b)),
-        17 => Value::utc(crate::text::filetime_to_unix(u(8))),
+        17 => Value::filetime(u(8)),
         18 => {
             let mut w = [0u16; 8];
             for (i, dst) in w.iter_mut().enumerate() {

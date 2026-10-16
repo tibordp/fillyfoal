@@ -158,7 +158,8 @@ fn typed(phys: i64, bytes: &[u8]) -> Value {
             value: i64::from_le_bytes(b),
             bits: 64,
         }),
-        (3, 12) => int96(bytes).map(|(unix_seconds, _)| Value::utc(unix_seconds)),
+        (3, 12) => int96(bytes)
+            .map(|(secs, nanos)| Value::Timestamp(crate::value::Time::utc(secs).nanos(nanos))),
         (4, 4) => le(4).map(|b| Value::f32(f32::from_le_bytes([b[0], b[1], b[2], b[3]]))),
         (5, 8) => le(8).map(|b| Value::f64(f64::from_le_bytes(b))),
         (6, _) => std::str::from_utf8(bytes)
@@ -2482,15 +2483,9 @@ async fn plain(cx: Cx, (leaf, span, count): (Leaf, Span, u64)) -> Result<()> {
             let data = cx.read(window).await?;
             for (j, chunk) in data.chunks_exact(to_usize(w)).enumerate() {
                 let index = i.saturating_add(to_u64(j));
-                let mut node = Node::new(format!("[{index}]"))
+                let node = Node::new(format!("[{index}]"))
                     .span(window.sub(to_u64(j).saturating_mul(w), w))
                     .value(typed(leaf.phys, chunk));
-                if leaf.phys == 3
-                    && let Some((secs, nanos)) = int96(chunk)
-                    && nanos != 0
-                {
-                    node = node.summary(super::valuetree::datetime(secs, nanos));
-                }
                 cx.push(node).await;
             }
             i = i.saturating_add(k);

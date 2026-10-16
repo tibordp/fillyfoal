@@ -11,8 +11,9 @@
 //! that MariaDB also writes by default).
 
 use crate::bytes::{f32_le, f64_le, to_usize};
+use crate::formats::util::civil::days_from_civil;
 use crate::formats::util::fmt::clip;
-use crate::value::{EnumTable, Value};
+use crate::value::{EnumTable, Time, Value};
 
 use crate::formats::mysql::innodb::dict::{decimal, decimal_bytes};
 
@@ -523,6 +524,61 @@ fn time2(b: &[u8], fsp: u16) -> Option<String> {
     Some(s)
 }
 
+/// `t` with the fraction `fraction` gives (`.678901`), to its digits.
+pub(crate) fn with_fraction(t: Time, fraction: &str) -> Time {
+    let digits = fraction.trim_start_matches('.');
+    if digits.is_empty() {
+        return t;
+    }
+    let padded = format!("{digits:0<9}");
+    let nanos = padded.get(..9).and_then(|d| d.parse().ok()).unwrap_or(0);
+    t.frac(nanos, u8::try_from(digits.len()).unwrap_or(9))
+}
+
+/// A DATE or DATETIME as the wall clock it is (MySQL records no zone
+/// with it); `None` for zero and other non-calendar dates.
+pub(crate) fn wall_time(ymd: (u64, u64, u64), hms: Option<(u64, u64, u64)>) -> Option<Time> {
+    let n = |v: u64| i64::try_from(v).ok();
+    let days = days_from_civil(n(ymd.0)?, n(ymd.1)?, n(ymd.2)?)?;
+    let Some((h, m, s)) = hms else {
+        return Some(Time::local(days.saturating_mul(86_400)).day());
+    };
+    if h > 23 || m > 59 || s > 59 {
+        return None;
+    }
+    let secs = n(h
+        .saturating_mul(3600)
+        .saturating_add(m.saturating_mul(60))
+        .saturating_add(s))?;
+    Some(Time::local(
+        days.saturating_mul(86_400).saturating_add(secs),
+    ))
+}
+
+/// `text` as a time value when `t` is one, else as text.
+pub(crate) fn time_or_text(t: Option<Time>, text: String) -> (Value, String) {
+    match t {
+        Some(t) => (Value::Timestamp(t), text),
+        None => (Value::Text(text.clone()), text),
+    }
+}
+
+/// A DATETIME2 value as a local time (`my_datetime_packed_from_binary`).
+fn datetime2_time(b: &[u8], fsp: u16) -> Option<Time> {
+    let v = be(b.get(..5)?).checked_sub(0x80_0000_0000)?;
+    let ymd = v >> 17;
+    let ym = ymd >> 5;
+    let hms = v & 0x1_ffff;
+    let t = wall_time(
+        (ym / 13, ym % 13, ymd & 31),
+        Some((hms >> 12, (hms >> 6) & 63, hms & 63)),
+    )?;
+    Some(with_fraction(
+        t,
+        &fraction(b.get(5..).unwrap_or_default(), fsp),
+    ))
+}
+
 /// A DATETIME2 value (`my_datetime_packed_from_binary`).
 fn datetime2(b: &[u8], fsp: u16) -> Option<String> {
     let v = be(b.get(..5)?).checked_sub(0x80_0000_0000)?;
@@ -566,7 +622,11 @@ pub fn value(c: &Column, b: &[u8]) -> (Value, String) {
         }
         10 | 14 => {
             let v = le(b);
-            shown(format!("{:04}-{:02}-{:02}", v >> 9, (v >> 5) & 15, v & 31))
+            let ymd = (v >> 9, (v >> 5) & 15, v & 31);
+            time_or_text(
+                wall_time(ymd, None),
+                format!("{:04}-{:02}-{:02}", ymd.0, ymd.1, ymd.2),
+            )
         }
         7 => {
             let secs = le(b);
@@ -578,15 +638,15 @@ pub fn value(c: &Column, b: &[u8]) -> (Value, String) {
         12 => {
             let v = le(b);
             let (date, time) = (v / 1_000_000, v % 1_000_000);
-            shown(format!(
-                "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
-                date / 10000,
-                (date / 100) % 100,
-                date % 100,
-                time / 10000,
-                (time / 100) % 100,
-                time % 100
-            ))
+            let ymd = (date / 10000, (date / 100) % 100, date % 100);
+            let hms = (time / 10000, (time / 100) % 100, time % 100);
+            time_or_text(
+                wall_time(ymd, Some(hms)),
+                format!(
+                    "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+                    ymd.0, ymd.1, ymd.2, hms.0, hms.1, hms.2
+                ),
+            )
         }
         11 => {
             let v = le(b);
@@ -600,11 +660,13 @@ pub fn value(c: &Column, b: &[u8]) -> (Value, String) {
         17 => {
             let secs = be(b.get(..4).unwrap_or_default());
             let frac = fraction(b.get(4..).unwrap_or_default(), c.meta);
-            let ts = Value::utc(i64::try_from(secs).unwrap_or(0));
-            let s = format!("{}{frac}", crate::render::value(&ts));
-            (ts, s)
+            let t = with_fraction(Time::utc(i64::try_from(secs).unwrap_or(0)), &frac);
+            (Value::Timestamp(t), t.text_full())
         }
-        18 => shown(datetime2(b, c.meta).unwrap_or_else(|| "?".to_owned())),
+        18 => time_or_text(
+            datetime2_time(b, c.meta),
+            datetime2(b, c.meta).unwrap_or_else(|| "?".to_owned()),
+        ),
         19 => shown(time2(b, c.meta).unwrap_or_else(|| "?".to_owned())),
         16 => {
             let bits = (u32::from(c.meta >> 8) * 8).saturating_add(u32::from(c.meta & 0xff));

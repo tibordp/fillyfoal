@@ -844,7 +844,7 @@ record! {
         flags: u16 "General purpose flags" .flags(GP_FLAGS),
         method: u16 "Compression method" .enumeration(METHOD),
         time: u16 "Modification time (DOS)" .hex() .with(|&t, n| n.summary(dos_time(t))),
-        date: u16 "Modification date (DOS)" .hex() .with(|&d, n| n.summary(dos_date(d))),
+        date: u16 "Modification date (DOS)" .with(crate::formats::disk::dos_date),
         crc: u32 "CRC-32" .hex(),
         compressed: u32 "Compressed size",
         uncompressed: u32 "Uncompressed size",
@@ -865,7 +865,7 @@ record! {
         flags: u16 "General purpose flags" .flags(GP_FLAGS),
         method: u16 "Compression method" .enumeration(METHOD),
         time: u16 "Modification time (DOS)" .hex() .with(|&t, n| n.summary(dos_time(t))),
-        date: u16 "Modification date (DOS)" .hex() .with(|&d, n| n.summary(dos_date(d))),
+        date: u16 "Modification date (DOS)" .with(crate::formats::disk::dos_date),
         crc: u32 "CRC-32" .hex(),
         compressed: u32 "Compressed size",
         uncompressed: u32 "Uncompressed size",
@@ -880,15 +880,6 @@ fn dos_time(t: u16) -> String {
         t >> 11,
         (t >> 5) & 0x3f,
         (t & 0x1f).saturating_mul(2)
-    )
-}
-
-fn dos_date(d: u16) -> String {
-    format!(
-        "{:04}-{:02}-{:02}",
-        1980u16.saturating_add(d >> 9),
-        (d >> 5) & 0x0f,
-        d & 0x1f
     )
 }
 

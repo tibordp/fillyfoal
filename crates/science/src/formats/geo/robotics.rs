@@ -614,8 +614,8 @@ async fn tlog(cx: Cx, input: Input) -> Result<()> {
             .map_or_else(|| format!("Message {id}"), str::to_owned);
         let secs = i64::try_from(stamp / 1_000_000).unwrap_or(0);
         let summary = format!(
-            "{} UTC, system {sys}/{comp}, v{}",
-            crate::render::value(&Value::utc(secs)).trim_end_matches(" UTC"),
+            "{}, system {sys}/{comp}, v{}",
+            crate::value::Time::utc(secs),
             if v2 { 2 } else { 1 }
         );
         cx.push(

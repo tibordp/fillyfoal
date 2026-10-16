@@ -865,9 +865,9 @@ fn field_node(f: &Field, span: Span, rec: &Rec, names: &Names) -> Node {
             name: Some(rec.what.into()),
         }),
         Kind::Name => node.value(text(f.text.clone().unwrap_or_default())),
-        Kind::Time => node
-            .value(text(dos_time(u32::try_from(raw).unwrap_or(0))))
-            .summary(format!("{raw:#010x}")),
+        Kind::Time => node.value(crate::formats::util::val::dos_stamp(
+            u32::try_from(raw).unwrap_or(0),
+        )),
         Kind::Byte => node.value(hex(raw, 8)),
         Kind::Raw32 | Kind::Check => node.value(hex(raw, 32)),
         Kind::Flags => node.value(hex(raw, 32)),
@@ -1212,8 +1212,7 @@ async fn header_fields(cx: Cx, (span, d7): (Span, bool)) -> Result<()> {
         cx.emit(
             Node::new("Compile time")
                 .span(span.sub(8, 4))
-                .value(text(dos_time(t)))
-                .summary(format!("{t:#010x}"))
+                .value(crate::formats::util::val::dos_stamp(t))
                 .desc("DOS date and time"),
         );
     }

@@ -173,26 +173,6 @@ pub fn decimal_string(negative: bool, digits: &str, exponent: i64) -> String {
     }
 }
 
-/// A UTC date and time with a fraction of a second (`nanos` < 10^9),
-/// trimmed to milliseconds or microseconds when the rest is zero.
-pub fn datetime(unix_seconds: i64, nanos: u32) -> String {
-    let base = crate::render::value(&Value::utc(unix_seconds));
-    if nanos == 0 {
-        return base;
-    }
-    let frac = if nanos.is_multiple_of(1_000_000) {
-        format!("{:03}", nanos / 1_000_000)
-    } else if nanos.is_multiple_of(1000) {
-        format!("{:06}", nanos / 1000)
-    } else {
-        format!("{nanos:09}")
-    };
-    match base.strip_suffix(" UTC") {
-        Some(stem) => format!("{stem}.{frac} UTC"),
-        None => base,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -218,14 +198,5 @@ mod tests {
         assert_eq!(decimal_string(false, "5", -7), "5E-7");
         assert_eq!(decimal_string(false, "5", -6), "0.000005");
         assert_eq!(decimal_string(false, "42", 0), "42");
-    }
-
-    #[test]
-    fn fractions() {
-        assert_eq!(datetime(0, 250_000_000), "1970-01-01 00:00:00.250 UTC");
-        assert_eq!(
-            datetime(0, 123_456_789),
-            "1970-01-01 00:00:00.123456789 UTC"
-        );
     }
 }

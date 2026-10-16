@@ -24,7 +24,7 @@ use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 const LE: Endian = Endian::Little;
 
 fn filetime(ticks: u64) -> Value {
-    Value::utc(crate::text::filetime_to_unix(ticks))
+    Value::filetime(ticks)
 }
 
 // ---------------------------------------------------------------------------
@@ -519,7 +519,7 @@ async fn usn_journal(cx: Cx, input: Input) -> Result<()> {
         count = count.saturating_add(1);
         cx.push(
             struct_node(name, span, LE, (), usn_layout)
-                .value(Value::utc(crate::text::filetime_to_unix(time)))
+                .value(Value::filetime(time))
                 .summary(reason_text(reason)),
         )
         .await;
@@ -997,19 +997,25 @@ fn systemtime_text(raw: &[u8]) -> String {
     if year == 0 {
         return "never".to_owned();
     }
-    match crate::formats::util::civil::systemtime(w) {
-        Some(unix_seconds) => {
-            let shown = crate::render::value(&Value::utc(unix_seconds));
-            shown.strip_suffix(" UTC").unwrap_or(&shown).to_owned()
-        }
+    match systemtime_value(raw) {
+        Some(t) => t.to_string(),
         None => format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}"),
     }
+}
+
+/// A SYSTEMTIME as a local time to the second, if it is a valid date.
+fn systemtime_value(raw: &[u8]) -> Option<crate::value::Time> {
+    let w: [u16; 8] = std::array::from_fn(|i| u16_le(raw, i.saturating_mul(2)).unwrap_or(0));
+    crate::formats::util::civil::systemtime(w).map(crate::value::Time::local)
 }
 
 fn systemtime(f: &mut Fields<'_>, name: &'static str) -> Result<String> {
     let raw = f
         .bytes(name, 16)
-        .with(|b, n| n.value(text(systemtime_text(b))))
+        .with(|b, n| match systemtime_value(b) {
+            Some(t) => n.value(Value::Timestamp(t)),
+            None => n.value(text(systemtime_text(b))),
+        })
         .emit()?;
     Ok(systemtime_text(&raw))
 }

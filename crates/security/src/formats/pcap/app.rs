@@ -753,9 +753,9 @@ fn ntp_time(b: &mut Dec, p: Ix, name: &'static str, at: usize) {
     let unix = secs.saturating_add(era).saturating_sub(NTP_UNIX);
     let nanos = frac.saturating_mul(1_000_000_000) >> 32;
     let unix = i64::try_from(unix).unwrap_or(0);
-    let text = super::time_text(unix, nanos, 9);
+    let t = super::time(unix, nanos, 9);
     b.add(p, name, at, 8, |n| {
-        n.value(crate::value::Value::utc(unix)).summary(text)
+        n.value(crate::value::Value::Timestamp(t))
     });
 }
 

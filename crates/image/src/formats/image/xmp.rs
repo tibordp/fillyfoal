@@ -561,11 +561,22 @@ async fn tree(cx: Cx, input: Input) -> Result<()> {
 }
 
 fn prop_node(p: &Prop, name: String) -> Node {
+    let dated = name
+        .rsplit(':')
+        .next()
+        .is_some_and(|local| local.contains("Date"));
     let mut node = Node::new(name).span(p.span);
     let lang = p.lang.as_ref().map(|l| format!("xml:lang={l}"));
     match &p.value {
         Val::Text(t) => {
-            node = node.value(Value::Text(t.clone()));
+            // Date properties (`xmp:CreateDate`, `exif:DateTimeOriginal`,
+            // `photoshop:DateCreated`...) are XMP Dates: ISO 8601, local
+            // when they carry no zone.
+            let date = dated.then(|| crate::formats::text::parse_time(t)).flatten();
+            node = node.value(match date {
+                Some(d) => Value::Timestamp(d),
+                None => Value::Text(t.clone()),
+            });
             if let Some(l) = lang {
                 node = node.summary(l);
             }

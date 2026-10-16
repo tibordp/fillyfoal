@@ -124,11 +124,30 @@ struct Capture {
     extended: bool,
 }
 
-/// `seconds.fraction` formatted like a timestamp.
+/// `seconds.fraction` (`fraction` in units of 10^-`digits` s) as a UTC
+/// time shown to that many digits (at most nine).
+pub fn time(seconds: i64, fraction: u64, digits: usize) -> crate::value::Time {
+    let d = u32::try_from(digits).unwrap_or(9);
+    let nanos = if d <= 9 {
+        fraction.saturating_mul(10u64.pow(9u32.saturating_sub(d)))
+    } else {
+        fraction
+            .checked_div(10u64.checked_pow(d.saturating_sub(9)).unwrap_or(u64::MAX))
+            .unwrap_or(0)
+    };
+    let t = crate::value::Time::utc(seconds);
+    if d == 0 {
+        return t;
+    }
+    t.frac(
+        u32::try_from(nanos).unwrap_or(0),
+        u8::try_from(d.min(9)).unwrap_or(9),
+    )
+}
+
+/// [`time`] as text for summaries, with all its digits.
 pub fn time_text(seconds: i64, fraction: u64, digits: usize) -> String {
-    let base = crate::render::value(&crate::value::Value::utc(seconds));
-    let date = base.trim_end_matches(" UTC");
-    format!("{date}.{fraction:0digits$} UTC")
+    time(seconds, fraction, digits).text_full()
 }
 
 pub fn link_name(link: u32) -> String {
