@@ -24,11 +24,12 @@ use crate::bytes::{to_u64, u32_le};
 use crate::codec::crc::crc32_update;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::util::fmt::size;
+use crate::formats::util::fmt::{hex_lower, size};
 use crate::formats::util::val::{hex, text};
 use crate::formats::{Codec, Format, Input, Probe, content, embedded};
 use crate::node::Node;
 use crate::span::Span;
+use crate::value::Value;
 
 const UNCOMPRESSED: [u8; 8] = [66, 171, 56, 7, 190, 131, 112, 161];
 const COMPRESSED: [u8; 8] = [49, 185, 88, 66, 111, 182, 163, 127];
@@ -122,10 +123,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         size(data.len)
     ));
     if encrypted {
-        cx.emit(Node::new("IV").span(file.sub(12, 16)));
+        let iv_tag = cx.read(file.sub(12, 32)).await?;
+        let hex16 = |at: usize| {
+            Value::Text(hex_lower(
+                iv_tag.get(at..at.saturating_add(16)).unwrap_or_default(),
+            ))
+        };
+        cx.emit(Node::new("IV").span(file.sub(12, 16)).value(hex16(0)));
         cx.emit(
             Node::new("Tag")
                 .span(file.sub(28, 16))
+                .value(hex16(16))
                 .desc("AES-256-GCM authentication tag"),
         );
         cx.emit(
