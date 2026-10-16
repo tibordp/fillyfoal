@@ -10,10 +10,15 @@
 //!   the event records and padding. The layout of the header and context is
 //!   declared in the metadata, which is a separate file, so it is inferred
 //!   here: the layouts LTTng 2.8 and later (64- and 32-bit tracers), older
-//!   LTTng and babeltrace2's `sink.ctf.fs` write are each tried, and the
-//!   first whose packet and content sizes fit the file and lead from packet
-//!   to packet is used. Event records are shown as data: decoding them needs
-//!   the event classes of the metadata.
+//!   LTTng and babeltrace2's `sink.ctf.fs` write (with a clock and LTTng's
+//!   `cpu_id`, with a clock, without) are each tried. A layout must have
+//!   packet and content sizes that fit the file and lead from packet to
+//!   packet, a CPU number below 4096, a 64-bit discarded count below 2^32
+//!   (a 32-bit tracer's narrower count read as 64-bit takes in the CPU),
+//!   and packet sequence numbers that start small and count up; of the
+//!   layouts that do, one whose stream instance ID is its CPU (an LTTng
+//!   per-CPU stream) wins, else the first. Event records are shown as data:
+//!   decoding them needs the event classes of the metadata.
 //! - **Metadata** (`ctf-metadata`): plain TSDL text (starting with the
 //!   `/* CTF 1.8` comment the specification requires), packetized TSDL (each
 //!   packet a 37-byte header with the magic `0x75d11d57`, the UUID, a
@@ -181,6 +186,39 @@ const LAYOUTS: &[Layout] = &[
         header: 3,
     },
     Layout {
+        name: "babeltrace2 sink.ctf.fs (clock, CPU)",
+        fields: &[
+            (Magic, "magic", 4),
+            (Uuid, "uuid", 16),
+            (StreamId, "stream_id", 8),
+            (StreamInstanceId, "stream_instance_id", 8),
+            (PacketSize, "packet_size", 8),
+            (ContentSize, "content_size", 8),
+            (TimestampBegin, "timestamp_begin", 8),
+            (TimestampEnd, "timestamp_end", 8),
+            (EventsDiscarded, "events_discarded", 8),
+            (PacketSeqNum, "packet_seq_num", 8),
+            (CpuId, "cpu_id", 4),
+        ],
+        header: 4,
+    },
+    Layout {
+        name: "babeltrace2 sink.ctf.fs (clock)",
+        fields: &[
+            (Magic, "magic", 4),
+            (Uuid, "uuid", 16),
+            (StreamId, "stream_id", 8),
+            (StreamInstanceId, "stream_instance_id", 8),
+            (PacketSize, "packet_size", 8),
+            (ContentSize, "content_size", 8),
+            (TimestampBegin, "timestamp_begin", 8),
+            (TimestampEnd, "timestamp_end", 8),
+            (EventsDiscarded, "events_discarded", 8),
+            (PacketSeqNum, "packet_seq_num", 8),
+        ],
+        header: 4,
+    },
+    Layout {
         name: "babeltrace2 sink.ctf.fs",
         fields: &[
             (Magic, "magic", 4),
@@ -237,28 +275,67 @@ impl Layout {
         };
         (fits && ordered).then_some((packet / 8, content.div_ceil(8)))
     }
+
+    /// Whether the CPU and discarded-event fields hold what they could: a
+    /// CPU number below 4096, and (where the count is 64-bit next to a CPU,
+    /// as LTTng's 64-bit tracer writes it) a count below 2^32. A 32-bit
+    /// tracer's 32-bit count read as 64-bit takes in the CPU number.
+    fn plausible(&self, b: &[u8], e: Endian) -> bool {
+        let Some(cpu) = self.get(b, CpuId, e) else {
+            return true;
+        };
+        let wide = matches!(self.offset(EventsDiscarded), Some((_, 8)));
+        let discarded = self.get(b, EventsDiscarded, e).unwrap_or(0);
+        cpu < 4096 && !(wide && discarded >> 32 != 0)
+    }
+
+    /// LTTng's per-CPU streams number their instances by CPU.
+    fn cpu_is_instance(&self, b: &[u8], e: Endian) -> bool {
+        match (self.get(b, StreamInstanceId, e), self.get(b, CpuId, e)) {
+            (Some(i), Some(c)) => i == c,
+            _ => false,
+        }
+    }
 }
 
-/// Picks the first layout whose first packet fits and is followed by
-/// another packet or the end of the file.
+/// Packet sequence numbers count packets: the first is small, and the next
+/// packet's follows it closely. A timestamp read in their place is neither.
+fn seq_plausible(first: u64, next: Option<u64>) -> bool {
+    first < 1 << 32 && next.is_none_or(|n| n > first && n.saturating_sub(first) < 1 << 16)
+}
+
+/// Picks the layout whose first packet fits, is followed by another packet
+/// or the end of the file, and holds plausible values; of those, one whose
+/// stream instance is its CPU (an LTTng per-CPU stream) wins, else the first.
 async fn infer_layout(cx: &Cx, file: Span, e: Endian) -> Option<usize> {
     let head = cx.read(file.sub(0, 128)).await.ok()?;
+    let mut first = None;
     for (i, l) in LAYOUTS.iter().enumerate() {
         let Some((packet, _)) = l.sizes(&head, e, file.len) else {
             continue;
         };
-        if packet == 0 {
+        if packet == 0 || !l.plausible(&head, e) {
             continue;
         }
+        let mut next_seq = None;
         if packet < file.len {
-            let next = cx.read(file.sub(packet, 4)).await.ok()?;
+            let next = cx.read(file.sub(packet, l.len())).await.ok()?;
             if magic_endian(&next, PACKET_MAGIC) != Some(e) {
                 continue;
             }
+            next_seq = l.get(&next, PacketSeqNum, e);
         }
-        return Some(i);
+        if let Some(seq) = l.get(&head, PacketSeqNum, e)
+            && !seq_plausible(seq, next_seq)
+        {
+            continue;
+        }
+        if l.cpu_is_instance(&head, e) {
+            return Some(i);
+        }
+        first = first.or(Some(i));
     }
-    None
+    first
 }
 
 pub async fn dissect_stream(cx: Cx, input: Input) -> Result<()> {
