@@ -28,8 +28,9 @@
 //! format 0001's first-byte CRC) were worked out from those images and
 //! `partclone.restore`'s output. No partclone code was read or copied.
 //!
-//! The decoder's state is a few counters and a shared reference to the
-//! bitmap, so it checkpoints for almost nothing, and a container can start
+//! Runs of free blocks are zero runs a caller can skip (see "Zero runs" in
+//! the pipeline docs). The decoder's state is a few counters and a shared
+//! reference to the bitmap, so it checkpoints for almost nothing, and a container can start
 //! it at any block (see [`Partclone::at`]): the bitmap says where each
 //! block is stored. Checks that depend on what came before (a CRC carried
 //! on from the start) are skipped by a decoder started that way.
@@ -282,6 +283,10 @@ impl Decode for Partclone {
         }
         let start = out.len();
         let goal = start.saturating_add(step.max(1));
+        // A run of free blocks found in this step: stop before writing its
+        // zeros, so a caller that skips zero runs can (see "Zero runs" in
+        // the pipeline docs); one that does not calls again and gets them.
+        let mut found_free = false;
         loop {
             if self.done {
                 return Ok(Step::Done);
@@ -297,6 +302,9 @@ impl Decode for Partclone {
                 Ok(())
             };
             if self.zeros > 0 {
+                if found_free {
+                    return Ok(Step::More);
+                }
                 let n = crate::bytes::to_usize(self.zeros).min(room);
                 grow(out, n)?;
                 out.resize(out.len().saturating_add(n), 0);
@@ -353,6 +361,7 @@ impl Decode for Partclone {
             if !self.next()? {
                 self.done = true;
             }
+            found_free = self.zeros > 0;
         }
     }
 
@@ -393,6 +402,18 @@ impl Decode for Partclone {
     fn truncation_is_exact(&self) -> bool {
         true
     }
+
+    fn window_free(&self) -> bool {
+        true
+    }
+
+    fn zero_run(&self) -> u64 {
+        self.zeros
+    }
+
+    fn skip_zeros(&mut self, n: u64) {
+        self.zeros = self.zeros.saturating_sub(n);
+    }
 }
 
 impl Partclone {
@@ -411,7 +432,9 @@ impl Partclone {
 mod tests {
     use super::*;
     use crate::codec::Codec;
-    use crate::codec::pipeline::{Decoder, Status, decode_all, verify_checkpoints};
+    use crate::codec::pipeline::{
+        Decoder, Status, decode_all, decode_all_skipping, verify_checkpoints,
+    };
 
     const BS: u32 = 16;
 
@@ -627,10 +650,54 @@ mod tests {
             );
             assert!(out.len() < 2 * 4096 && out.iter().all(|&b| b == 0));
         }
+        // The first step stops after finding the free run, before its zeros.
         let mut d = Codec::Partclone(p).decoder().unwrap();
+        assert_eq!(
+            d.decode(&[], true, &mut Vec::new(), 1 << 20, 1000),
+            Ok(Status::More)
+        );
         let e = d
             .decode(&[], true, &mut Vec::new(), 1 << 20, 1000)
             .unwrap_err();
         assert_eq!(e.kind, DiagKind::Limit);
+    }
+
+    /// A caller that skips zero runs gets the same volume, in every layout,
+    /// without the free blocks being written.
+    #[test]
+    fn free_blocks_can_be_skipped() {
+        for check in CHECKS {
+            let s = area(check);
+            let mut d = decoder(check);
+            assert!(d.window_free());
+            let (out, skipped) = decode_all_skipping(d.as_mut(), &s, 1 << 20).unwrap();
+            assert_eq!(out, expected(), "{check:?}");
+            assert_eq!(skipped, 7 * u64::from(BS), "{check:?}");
+            assert_eq!(d.warning(&out), None, "{check:?}");
+        }
+        // A billion free blocks: a free run per bounded scan, each skipped
+        // at once.
+        let p = Arc::new(Params {
+            block_size: 4096,
+            blocks: 1 << 30,
+            bitmap: Arc::from(vec![0u8; 1 << 10]),
+            stored: 0,
+            check: Check::None,
+        });
+        let mut d = Codec::Partclone(p).decoder().unwrap();
+        let mut out = Vec::new();
+        assert_eq!(
+            d.decode(&[], true, &mut out, 4096, 1 << 20),
+            Ok(Status::More)
+        );
+        assert!(out.is_empty());
+        assert_eq!(d.zero_run(), SCAN * 4096);
+        d.skip_zeros(SCAN * 4096);
+        assert_eq!(
+            d.decode(&[], true, &mut out, 4096, 1 << 20),
+            Ok(Status::More)
+        );
+        assert!(out.is_empty());
+        assert_eq!(d.zero_run(), SCAN * 4096);
     }
 }

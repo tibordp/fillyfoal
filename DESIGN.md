@@ -206,8 +206,9 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
 - **Holes.** A host may declare the holes of a sparse source
   (`Session::set_holes`, from `SEEK_HOLE`/`SEEK_DATA` or `FIEMAP`). Reads
   wholly inside them are answered as zeros without asking the host, and
-  `Cx::next_data` lets a walker skip them and the zero pieces of piecewise
-  sources.
+  `Cx::next_data` lets a walker skip them, the zero pieces of piecewise
+  sources, and the holes decoding has found in a lazily decoded source
+  (below).
 - **Identification** has two phases. The first runs every `Probe` in
   `FORMATS` order over the head (`HEAD_LEN`, 66 KiB) and tail (`TAIL_LEN`,
   1 KiB); it is charged as work (`Registry::identify_costed`), since custom
@@ -259,6 +260,31 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
     trusted only until decoding disagrees with one at a boundary the
     codec reports (`Decode::boundary`); then they are dropped. Codec tests
     check checkpoints with `pipeline::verify_checkpoints`.
+  - *Zero runs*: a disk image that stores only the clusters in use
+    (ntfsclone, Partclone) describes terabytes of free space in a few
+    bytes; writing it out would make a far read cost work in proportion to
+    the volume. A codec with no window declares so
+    (`Decode::window_free`), reports the zeros it is about to produce
+    (`Decode::zero_run`, a run it has parsed, stopping its step there) and
+    advances past them on `Decode::skip_zeros`; callers that do not skip
+    get the zeros written as before (see "Zero runs" in
+    `codec::pipeline`). `Shared::read_lazy` asks only window-free decoders:
+    a run of at least 64 KiB is recorded as a **hole** of the source, and
+    the part of it before the read is skipped for a unit of work (the
+    output held is dropped, not written past; what the read wants of the
+    run is written, at most the read). So a far read costs work in
+    proportion to the encoded stream. Holes are knowledge, never needed for
+    correctness: a read wholly in holes and held output is answered without
+    decoding (a read starting in one decodes from its end), checkpoints are
+    taken at the front after a skip as after a step (resuming mid-run
+    resumes the run), a rewind re-records what it passes (merged), eviction
+    keeps them, memory pressure drops them with the checkpoints, a seed
+    found wrong drops those recorded while decoding from seeds, and past
+    16,384 every other one is forgotten (they count against
+    `max_derived`). `Cx::decode_cost` ignores them: it must not depend on
+    what decoding has found, and runs too short to skip are written, so the
+    decoded size stays the worst case. Progress (`Session::activity`) sees
+    the front jump over them.
   - *Damage*: `Streaming` treats a malformed-data error as a possible
     shortage of input until the input ends. A codec that reports every
     shortage as `Truncated` opts out (`Decode::truncation_is_exact`), so

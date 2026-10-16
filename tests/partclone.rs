@@ -146,6 +146,46 @@ fn far_reads_start_from_the_bitmap() {
     assert_eq!(bytes, b"block 0");
 }
 
+/// Free blocks are skipped rather than written out: a far read starts from
+/// the nearest resume point and then costs a few units, not a unit per 4
+/// KiB of free space up to it; reads in free space the decoding has passed
+/// are zeros at once; reads across free and used blocks return the right
+/// bytes; reads behind the front decode again.
+#[test]
+fn free_space_is_skipped() {
+    let mut host = Host::named("big.img", big_image(), Limits::default());
+    open(&mut host, &["Volume"]);
+    let len = BIG * BS as u64;
+    let vol = volume_span(&mut host, len);
+    // In steps of one unit: a few, against about a thousand to write the 4
+    // MiB of zeros from the nearest resume point.
+    let (bytes, steps) = read_in_steps(&mut host, vol.sub((BIG - 1) * BS as u64, 16), 1);
+    assert_eq!(&bytes[..12], b"block 262143");
+    assert!(steps < 20, "{steps} steps");
+    for at in [len - (1 << 20) - BS as u64, len - (3 << 20)] {
+        match host.session.read_step(vol.sub(at, 1 << 20), 1) {
+            ReadProgress::Done(bytes) => {
+                assert_eq!(bytes.len(), 1 << 20);
+                assert!(bytes.iter().all(|&b| b == 0), "{at:#x}");
+            }
+            _ => panic!("a read in known free space at {at:#x} decodes"),
+        }
+    }
+    let across = vol.sub((BIG - 2) * BS as u64, 2 * BS as u64);
+    let (bytes, steps) = read_in_steps(&mut host, across, 1);
+    assert!(bytes[..BS].iter().all(|&b| b == 0));
+    assert_eq!(&bytes[BS..BS + 12], b"block 262143");
+    assert!(steps < 20, "{steps} steps");
+    let (bytes, steps) = read_in_steps(&mut host, vol.sub(0, 2 * BS as u64), 1);
+    assert_eq!(&bytes[..7], b"block 0");
+    assert!(bytes[BS..].iter().all(|&b| b == 0));
+    assert!(steps < 20, "{steps} steps");
+    // A read in the middle, from its resume point (seeds still work).
+    let (bytes, steps) = read_in_steps(&mut host, vol.sub(len / 2, 1 << 16), 1);
+    assert!(bytes.iter().all(|&b| b == 0));
+    assert!(steps < 20, "{steps} steps");
+}
+
 /// The block listing of the large image is a few nodes, and costs work in
 /// proportion to the bitmap, not the volume.
 #[test]
