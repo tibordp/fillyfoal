@@ -856,3 +856,6 @@ closely enough to credit:
 - Alpine APK v3 / ADB (`crates/archive/src/formats/archive/alpine.rs`): block, value and schema
   layouts from apk-tools (`doc/apk-v3.5.scd`, `src/adb.h`, `src/apk_adb.c`, `src/adb_comp.c`;
   GPL-2.0; facts only, no code copied).
+- .NET EventPipe traces (`crates/exec/src/formats/profile/nettrace.rs`): layouts from
+  TraceEvent's `NetTraceFormat_v5.md` and `NetTraceFormat.md` (PerfView repository, MIT,
+  Copyright (c) .NET Foundation and Contributors); no code copied.

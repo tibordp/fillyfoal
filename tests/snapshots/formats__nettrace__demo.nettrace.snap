@@ -1,0 +1,907 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ demo.nettrace — .NET EventPipe trace, NetTrace 4/5 (FastSerialization), started 2026-10-16 02:23:56.473 UTC, process 96, 6 blocks  [0x0+0xfb2]
+  ▾ Stream header  [0x0+0x20]
+      Magic: "Nettrace"  [0x0+0x8]
+      Serializer name length: 20  [0x8+0x4]
+      Serializer: "!FastSerialization.1"  [0xc+0x14]
+  ▾ Trace — 48 bytes  [0x20+0x46]
+    ▾ Object header  [0x20+0x15]
+        BeginPrivateObject: 5  [0x20+0x1]
+        BeginPrivateObject (type): 5  [0x21+0x1]
+        NullReference (type of type): 1  [0x22+0x1]
+        Version: 4  [0x23+0x4]
+        MinimumReaderVersion: 4  [0x27+0x4]
+        Type name length: 5  [0x2b+0x4]
+        Type name: "Trace"  [0x2f+0x5]
+        EndObject (type): 6  [0x34+0x1]
+    ▾ Trace  [0x35+0x30]
+        SyncTimeUTC.Year: 2026  [0x35+0x2]
+        SyncTimeUTC.Month: 10  [0x37+0x2]
+        SyncTimeUTC.DayOfWeek: 5  [0x39+0x2]
+        SyncTimeUTC.Day: 16  [0x3b+0x2]
+        SyncTimeUTC.Hour: 2  [0x3d+0x2]
+        SyncTimeUTC.Minute: 23  [0x3f+0x2]
+        SyncTimeUTC.Second: 56  [0x41+0x2]
+        SyncTimeUTC.Millisecond: 473  [0x43+0x2]
+        SyncTimeQPC: 769296430437263  [0x45+0x8]
+        QPCFrequency: 1000000000  [0x4d+0x8]
+        PointerSize: 8  [0x55+0x4]
+        ProcessId: 96  [0x59+0x4]
+        NumberOfProcessors: 18  [0x5d+0x4]
+        ExpectedCPUSamplingRate: 1000000  [0x61+0x4]
+      EndObject: 6  [0x65+0x1]
+  ▾ MetadataBlock — 1927 bytes, compressed headers  [0x66+0x7aa]
+    ▾ Object header  [0x66+0x1d]
+        BeginPrivateObject: 5  [0x66+0x1]
+        BeginPrivateObject (type): 5  [0x67+0x1]
+        NullReference (type of type): 1  [0x68+0x1]
+        Version: 2  [0x69+0x4]
+        MinimumReaderVersion: 2  [0x6d+0x4]
+        Type name length: 13  [0x71+0x4]
+        Type name: "MetadataBlock"  [0x75+0xd]
+        EndObject (type): 6  [0x82+0x1]
+      BlockSize: 1927  [0x83+0x4]
+      Padding  [0x87+0x1]
+    ▾ Header  [0x88+0x14]
+        HeaderSize: 20  [0x88+0x2]
+        Flags: 1 — compressed event headers  [0x8a+0x2]
+        MinTimestamp: 769296430575805  [0x8c+0x8]
+        MaxTimestamp: 769296447269322  [0x94+0x8]
+    ▾ Metadata events  [0x9c+0x773]
+      ▾ Metadata 1: Microsoft-Windows-DotNETRuntime/187 — level 4, keywords 0x0  [0x9c+0x74]
+        ▾ Header — thread 96, sequence 4294967295  [0x9c+0x16]
+            Flags: 0xc6 [CaptureThreadAndSequence | ThreadId | Sorted | DataLength]  [0x9c+0x1]
+            SequenceNumber (delta): -1  [0x9d+0x5]
+            CaptureThread: 0  [0xa2+0x1]
+            ProcessorNumber: 4294967295  [0xa3+0x5]
+            Thread: 96  [0xa8+0x1]
+            TimeStamp (delta): 769296430575805  [0xa9+0x8]
+            PayloadSize: 94  [0xb1+0x1]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296430575805
+            StackId: 0 — as the previous event
+            IsSorted: true
+            Time: 0.000138542 — seconds from the trace's sync time
+        ▾ Metadata  [0xb2+0x5e]
+            MetaDataId: 1  [0xb2+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0xb6+0x40]
+            EventId: 187  [0xf6+0x4]
+            EventName: ""  [0xfa+0x2]
+            Keywords: 0x0  [0xfc+0x8]
+            Version: 0  [0x104+0x4]
+            Level: Informational (0x4)  [0x108+0x4]
+            FieldCount: 0  [0x10c+0x4]
+      ▾ Metadata 2: Microsoft-Windows-DotNETRuntime/5 — level 4, keywords 0x1  [0x110+0x62]
+        ▾ Header — thread 96, sequence 4294967295  [0x110+0x4]
+            Flags: 0x40 [Sorted]  [0x110+0x1]
+            TimeStamp (delta): 381920  [0x111+0x3]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296430957725
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 94 — as the previous event
+            IsSorted: true
+            Time: 0.000520462 — seconds from the trace's sync time
+        ▾ Metadata  [0x114+0x5e]
+            MetaDataId: 2  [0x114+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0x118+0x40]
+            EventId: 5  [0x158+0x4]
+            EventName: ""  [0x15c+0x2]
+            Keywords: 0x1  [0x15e+0x8]
+            Version: 1  [0x166+0x4]
+            Level: Informational (0x4)  [0x16a+0x4]
+            FieldCount: 0  [0x16e+0x4]
+      ▾ Metadata 3: Fillyfoal-Demo/Hello — level 4, keywords 0xf00000000000, fields: name, count  [0x172+0x6a]
+        ▾ Header — thread 96, sequence 4294967295  [0x172+0x6]
+            Flags: 0xc0 [Sorted | DataLength]  [0x172+0x1]
+            TimeStamp (delta): 14779292  [0x173+0x4]
+            PayloadSize: 100  [0x177+0x1]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296445737017
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            IsSorted: true
+            Time: 0.015299754 — seconds from the trace's sync time
+        ▾ Metadata  [0x178+0x64]
+            MetaDataId: 3  [0x178+0x4]
+            ProviderName: "Fillyfoal-Demo"  [0x17c+0x1e]
+            EventId: 1  [0x19a+0x4]
+            EventName: "Hello"  [0x19e+0xc]
+            Keywords: 0xf00000000000  [0x1aa+0x8]
+            Version: 0  [0x1b2+0x4]
+            Level: Informational (0x4)  [0x1b6+0x4]
+            FieldCount: 2  [0x1ba+0x4]
+            Field: "name: String"  [0x1be+0xe]
+            Field: "count: Int32"  [0x1cc+0x10]
+      ▾ Metadata 4: Microsoft-Windows-DotNETRuntime/9 — level 4, keywords 0x1  [0x1dc+0x63]
+        ▾ Header — thread 96, sequence 4294967295  [0x1dc+0x5]
+            Flags: 0xc0 [Sorted | DataLength]  [0x1dc+0x1]
+            TimeStamp (delta): 121460  [0x1dd+0x3]
+            PayloadSize: 94  [0x1e0+0x1]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296445858477
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            IsSorted: true
+            Time: 0.015421214 — seconds from the trace's sync time
+        ▾ Metadata  [0x1e1+0x5e]
+            MetaDataId: 4  [0x1e1+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0x1e5+0x40]
+            EventId: 9  [0x225+0x4]
+            EventName: ""  [0x229+0x2]
+            Keywords: 0x1  [0x22b+0x8]
+            Version: 1  [0x233+0x4]
+            Level: Informational (0x4)  [0x237+0x4]
+            FieldCount: 0  [0x23b+0x4]
+      ▾ Metadata 5: Microsoft-Windows-DotNETRuntime/8 — level 4, keywords 0x1  [0x23f+0x61]
+        ▾ Header — thread 96, sequence 4294967295  [0x23f+0x3]
+            Flags: 0x40 [Sorted]  [0x23f+0x1]
+            TimeStamp (delta): 3291  [0x240+0x2]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296445861768
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 94 — as the previous event
+            IsSorted: true
+            Time: 0.015424505 — seconds from the trace's sync time
+        ▾ Metadata  [0x242+0x5e]
+            MetaDataId: 5  [0x242+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0x246+0x40]
+            EventId: 8  [0x286+0x4]
+            EventName: ""  [0x28a+0x2]
+            Keywords: 0x1  [0x28c+0x8]
+            Version: 1  [0x294+0x4]
+            Level: Informational (0x4)  [0x298+0x4]
+            FieldCount: 0  [0x29c+0x4]
+      ▾ Metadata 6: Microsoft-Windows-DotNETRuntime/35 — level 4, keywords 0x1  [0x2a0+0x61]
+        ▾ Header — thread 96, sequence 4294967295  [0x2a0+0x3]
+            Flags: 0x40 [Sorted]  [0x2a0+0x1]
+            TimeStamp (delta): 2042  [0x2a1+0x2]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296445863810
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 94 — as the previous event
+            IsSorted: true
+            Time: 0.015426547 — seconds from the trace's sync time
+        ▾ Metadata  [0x2a3+0x5e]
+            MetaDataId: 6  [0x2a3+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0x2a7+0x40]
+            EventId: 35  [0x2e7+0x4]
+            EventName: ""  [0x2eb+0x2]
+            Keywords: 0x1  [0x2ed+0x8]
+            Version: 0  [0x2f5+0x4]
+            Level: Informational (0x4)  [0x2f9+0x4]
+            FieldCount: 0  [0x2fd+0x4]
+      ▾ Metadata 7: Microsoft-Windows-DotNETRuntime/1 — level 4, keywords 0x1  [0x301+0x62]
+        ▾ Header — thread 96, sequence 4294967295  [0x301+0x4]
+            Flags: 0x40 [Sorted]  [0x301+0x1]
+            TimeStamp (delta): 39584  [0x302+0x3]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296445903394
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 94 — as the previous event
+            IsSorted: true
+            Time: 0.015466131 — seconds from the trace's sync time
+        ▾ Metadata  [0x305+0x5e]
+            MetaDataId: 7  [0x305+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0x309+0x40]
+            EventId: 1  [0x349+0x4]
+            EventName: ""  [0x34d+0x2]
+            Keywords: 0x1  [0x34f+0x8]
+            Version: 2  [0x357+0x4]
+            Level: Informational (0x4)  [0x35b+0x4]
+            FieldCount: 0  [0x35f+0x4]
+      ▾ Metadata 8: Microsoft-Windows-DotNETRuntime/39 — level 4, keywords 0x3f00003  [0x363+0x61]
+        ▾ Header — thread 96, sequence 4294967295  [0x363+0x3]
+            Flags: 0x40 [Sorted]  [0x363+0x1]
+            TimeStamp (delta): 1833  [0x364+0x2]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296445905227
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 94 — as the previous event
+            IsSorted: true
+            Time: 0.015467964 — seconds from the trace's sync time
+        ▾ Metadata  [0x366+0x5e]
+            MetaDataId: 8  [0x366+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0x36a+0x40]
+            EventId: 39  [0x3aa+0x4]
+            EventName: ""  [0x3ae+0x2]
+            Keywords: 0x3f00003  [0x3b0+0x8]
+            Version: 0  [0x3b8+0x4]
+            Level: Informational (0x4)  [0x3bc+0x4]
+            FieldCount: 0  [0x3c0+0x4]
+      ▾ Metadata 9: Microsoft-Windows-DotNETRuntime/202 — level 4, keywords 0x1  [0x3c4+0x61]
+        ▾ Header — thread 96, sequence 4294967295  [0x3c4+0x3]
+            Flags: 0x40 [Sorted]  [0x3c4+0x1]
+            TimeStamp (delta): 10583  [0x3c5+0x2]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296445915810
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 94 — as the previous event
+            IsSorted: true
+            Time: 0.015478547 — seconds from the trace's sync time
+        ▾ Metadata  [0x3c7+0x5e]
+            MetaDataId: 9  [0x3c7+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0x3cb+0x40]
+            EventId: 202  [0x40b+0x4]
+            EventName: ""  [0x40f+0x2]
+            Keywords: 0x1  [0x411+0x8]
+            Version: 0  [0x419+0x4]
+            Level: Informational (0x4)  [0x41d+0x4]
+            FieldCount: 0  [0x421+0x4]
+      ▾ Metadata 10: Microsoft-Windows-DotNETRuntime/205 — level 4, keywords 0x1  [0x425+0x62]
+        ▾ Header — thread 96, sequence 4294967295  [0x425+0x4]
+            Flags: 0x40 [Sorted]  [0x425+0x1]
+            TimeStamp (delta): 276628  [0x426+0x3]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296446192438
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 94 — as the previous event
+            IsSorted: true
+            Time: 0.015755175 — seconds from the trace's sync time
+        ▾ Metadata  [0x429+0x5e]
+            MetaDataId: 10  [0x429+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0x42d+0x40]
+            EventId: 205  [0x46d+0x4]
+            EventName: ""  [0x471+0x2]
+            Keywords: 0x1  [0x473+0x8]
+            Version: 4  [0x47b+0x4]
+            Level: Informational (0x4)  [0x47f+0x4]
+            FieldCount: 0  [0x483+0x4]
+      ▾ Metadata 11: Microsoft-Windows-DotNETRuntime/204 — level 4, keywords 0x1  [0x487+0x61]
+        ▾ Header — thread 96, sequence 4294967295  [0x487+0x3]
+            Flags: 0x40 [Sorted]  [0x487+0x1]
+            TimeStamp (delta): 625  [0x488+0x2]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296446193063
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 94 — as the previous event
+            IsSorted: true
+            Time: 0.0157558 — seconds from the trace's sync time
+        ▾ Metadata  [0x48a+0x5e]
+            MetaDataId: 11  [0x48a+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0x48e+0x40]
+            EventId: 204  [0x4ce+0x4]
+            EventName: ""  [0x4d2+0x2]
+            Keywords: 0x1  [0x4d4+0x8]
+            Version: 3  [0x4dc+0x4]
+            Level: Informational (0x4)  [0x4e0+0x4]
+            FieldCount: 0  [0x4e4+0x4]
+      ▾ Metadata 12: Microsoft-Windows-DotNETRuntime/2 — level 4, keywords 0x1  [0x4e8+0x61]
+        ▾ Header — thread 96, sequence 4294967295  [0x4e8+0x3]
+            Flags: 0x40 [Sorted]  [0x4e8+0x1]
+            TimeStamp (delta): 4125  [0x4e9+0x2]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296446197188
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 94 — as the previous event
+            IsSorted: true
+            Time: 0.015759925 — seconds from the trace's sync time
+        ▾ Metadata  [0x4eb+0x5e]
+            MetaDataId: 12  [0x4eb+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0x4ef+0x40]
+            EventId: 2  [0x52f+0x4]
+            EventName: ""  [0x533+0x2]
+            Keywords: 0x1  [0x535+0x8]
+            Version: 1  [0x53d+0x4]
+            Level: Informational (0x4)  [0x541+0x4]
+            FieldCount: 0  [0x545+0x4]
+      ▾ Metadata 13: Microsoft-Windows-DotNETRuntime/4 — level 4, keywords 0x1  [0x549+0x61]
+        ▾ Header — thread 96, sequence 4294967295  [0x549+0x3]
+            Flags: 0x40 [Sorted]  [0x549+0x1]
+            TimeStamp (delta): 250  [0x54a+0x2]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296446197438
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 94 — as the previous event
+            IsSorted: true
+            Time: 0.015760175 — seconds from the trace's sync time
+        ▾ Metadata  [0x54c+0x5e]
+            MetaDataId: 13  [0x54c+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0x550+0x40]
+            EventId: 4  [0x590+0x4]
+            EventName: ""  [0x594+0x2]
+            Keywords: 0x1  [0x596+0x8]
+            Version: 2  [0x59e+0x4]
+            Level: Informational (0x4)  [0x5a2+0x4]
+            FieldCount: 0  [0x5a6+0x4]
+      ▾ Metadata 14: Microsoft-Windows-DotNETRuntime/7 — level 4, keywords 0x1  [0x5aa+0x61]
+        ▾ Header — thread 96, sequence 4294967295  [0x5aa+0x3]
+            Flags: 0x40 [Sorted]  [0x5aa+0x1]
+            TimeStamp (delta): 5375  [0x5ab+0x2]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296446202813
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 94 — as the previous event
+            IsSorted: true
+            Time: 0.01576555 — seconds from the trace's sync time
+        ▾ Metadata  [0x5ad+0x5e]
+            MetaDataId: 14  [0x5ad+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0x5b1+0x40]
+            EventId: 7  [0x5f1+0x4]
+            EventName: ""  [0x5f5+0x2]
+            Keywords: 0x1  [0x5f7+0x8]
+            Version: 1  [0x5ff+0x4]
+            Level: Informational (0x4)  [0x603+0x4]
+            FieldCount: 0  [0x607+0x4]
+      ▾ Metadata 15: Microsoft-Windows-DotNETRuntime/3 — level 4, keywords 0x1  [0x60b+0x61]
+        ▾ Header — thread 96, sequence 4294967295  [0x60b+0x3]
+            Flags: 0x40 [Sorted]  [0x60b+0x1]
+            TimeStamp (delta): 1458  [0x60c+0x2]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296446204271
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 94 — as the previous event
+            IsSorted: true
+            Time: 0.015767008 — seconds from the trace's sync time
+        ▾ Metadata  [0x60e+0x5e]
+            MetaDataId: 15  [0x60e+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0x612+0x40]
+            EventId: 3  [0x652+0x4]
+            EventName: ""  [0x656+0x2]
+            Keywords: 0x1  [0x658+0x8]
+            Version: 1  [0x660+0x4]
+            Level: Informational (0x4)  [0x664+0x4]
+            FieldCount: 0  [0x668+0x4]
+      ▾ Metadata 16: Microsoft-DotNETCore-EventPipe/ProcessInfo — level 0, keywords 0x0, fields: CommandLine, OSInformation, ArchInformation  [0x66c+0xd8]
+        ▾ Header — thread 96, sequence 4294967295  [0x66c+0x6]
+            Flags: 0xc0 [Sorted | DataLength]  [0x66c+0x1]
+            TimeStamp (delta): 1065051  [0x66d+0x3]
+            PayloadSize: 210  [0x670+0x2]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296447269322
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            IsSorted: true
+            Time: 0.016832059 — seconds from the trace's sync time
+        ▾ Metadata  [0x672+0xd2]
+            MetaDataId: 16  [0x672+0x4]
+            ProviderName: "Microsoft-DotNETCore-EventPipe"  [0x676+0x3e]
+            EventId: 1  [0x6b4+0x4]
+            EventName: "ProcessInfo"  [0x6b8+0x18]
+            Keywords: 0x0  [0x6d0+0x8]
+            Version: 1  [0x6d8+0x4]
+            Level: LogAlways (0x0)  [0x6dc+0x4]
+            FieldCount: 3  [0x6e0+0x4]
+            Field: "CommandLine: String"  [0x6e4+0x1c]
+            Field: "OSInformation: String"  [0x700+0x20]
+            Field: "ArchInformation: String"  [0x720+0x24]
+      ▾ Metadata 17: Microsoft-Windows-DotNETRuntime/14 — level 4, keywords 0x1  [0x744+0x6a]
+        ▾ Header — thread 96, sequence 4294967295  [0x744+0xc]
+            Flags: 0xc0 [Sorted | DataLength]  [0x744+0x1]
+            TimeStamp (delta): -232544  [0x745+0xa]
+            PayloadSize: 94  [0x74f+0x1]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296447036778
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            IsSorted: true
+            Time: 0.016599515 — seconds from the trace's sync time
+        ▾ Metadata  [0x750+0x5e]
+            MetaDataId: 17  [0x750+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0x754+0x40]
+            EventId: 14  [0x794+0x4]
+            EventName: ""  [0x798+0x2]
+            Keywords: 0x1  [0x79a+0x8]
+            Version: 1  [0x7a2+0x4]
+            Level: Informational (0x4)  [0x7a6+0x4]
+            FieldCount: 0  [0x7aa+0x4]
+      ▾ Metadata 18: Microsoft-Windows-DotNETRuntime/13 — level 4, keywords 0x1  [0x7ae+0x61]
+        ▾ Header — thread 96, sequence 4294967295  [0x7ae+0x3]
+            Flags: 0x40 [Sorted]  [0x7ae+0x1]
+            TimeStamp (delta): 10375  [0x7af+0x2]
+            SequenceNumber: 4294967295
+            TimeStamp: 769296447047153
+            Thread: 96 — as the previous event
+            StackId: 0 — as the previous event
+            PayloadSize: 94 — as the previous event
+            IsSorted: true
+            Time: 0.01660989 — seconds from the trace's sync time
+        ▾ Metadata  [0x7b1+0x5e]
+            MetaDataId: 18  [0x7b1+0x4]
+            ProviderName: "Microsoft-Windows-DotNETRuntime"  [0x7b5+0x40]
+            EventId: 13  [0x7f5+0x4]
+            EventName: ""  [0x7f9+0x2]
+            Keywords: 0x1  [0x7fb+0x8]
+            Version: 1  [0x803+0x4]
+            Level: Informational (0x4)  [0x807+0x4]
+            FieldCount: 0  [0x80b+0x4]
+      EndObject: 6  [0x80f+0x1]
+  ▾ StackBlock — 3 stacks, IDs 1–3  [0x810+0x75]
+    ▾ Object header  [0x810+0x1a]
+        BeginPrivateObject: 5  [0x810+0x1]
+        BeginPrivateObject (type): 5  [0x811+0x1]
+        NullReference (type of type): 1  [0x812+0x1]
+        Version: 2  [0x813+0x4]
+        MinimumReaderVersion: 2  [0x817+0x4]
+        Type name length: 10  [0x81b+0x4]
+        Type name: "StackBlock"  [0x81f+0xa]
+        EndObject (type): 6  [0x829+0x1]
+      BlockSize: 84  [0x82a+0x4]
+      Padding  [0x82e+0x2]
+    ▾ Header  [0x830+0x8]
+        FirstId: 1  [0x830+0x4]
+        Count: 3  [0x834+0x4]
+    ▾ Stacks  [0x838+0x4c]
+      ▾ Stack 1 — 0 frames  [0x838+0x4]
+      ▾ Stack 2 — 6 frames  [0x83c+0x34]
+          [0]: 0xffff456480c8  [0x840+0x8]
+          [1]: 0xffff4564d324  [0x848+0x8]
+          [2]: 0xffff4564fcf4  [0x850+0x8]
+          [3]: 0xffff4564f428  [0x858+0x8]
+          [4]: 0xffff46174660  [0x860+0x8]
+          [5]: 0xffff46174060  [0x868+0x8]
+      ▾ Stack 3 — 2 frames  [0x870+0x14]
+          [0]: 0xffff4538fbdc  [0x874+0x8]
+          [1]: 0xffff46174124  [0x87c+0x8]
+      EndObject: 6  [0x884+0x1]
+  ▾ EventBlock — 1740 bytes, 0.000139–0.016832 s, compressed headers  [0x885+0x6ec]
+    ▾ Object header  [0x885+0x1a]
+        BeginPrivateObject: 5  [0x885+0x1]
+        BeginPrivateObject (type): 5  [0x886+0x1]
+        NullReference (type of type): 1  [0x887+0x1]
+        Version: 2  [0x888+0x4]
+        MinimumReaderVersion: 2  [0x88c+0x4]
+        Type name length: 10  [0x890+0x4]
+        Type name: "EventBlock"  [0x894+0xa]
+        EndObject (type): 6  [0x89e+0x1]
+      BlockSize: 1740  [0x89f+0x4]
+      Padding  [0x8a3+0x1]
+    ▾ Header  [0x8a4+0x14]
+        HeaderSize: 20  [0x8a4+0x2]
+        Flags: 1 — compressed event headers  [0x8a6+0x2]
+        MinTimestamp: 769296430575805  [0x8a8+0x8]
+        MaxTimestamp: 769296447269322  [0x8b0+0x8]
+    ▾ Events  [0x8b8+0x6b8]
+      ▾ Microsoft-Windows-DotNETRuntime/187 — 0.000139 s, thread 96, stack 1, 179 bytes  [0x8b8+0xc8]
+        ▾ Header — thread 96, sequence 1  [0x8b8+0x15]
+            Flags: 0xcf [MetadataId | CaptureThreadAndSequence | ThreadId | StackId | Sorted | DataLength]  [0x8b8+0x1]
+            MetadataId: 1  [0x8b9+0x1]
+            SequenceNumber (delta): 0  [0x8ba+0x1]
+            CaptureThread: 96  [0x8bb+0x1]
+            ProcessorNumber: 4294967295  [0x8bc+0x5]
+            Thread: 96  [0x8c1+0x1]
+            StackId: 1  [0x8c2+0x1]
+            TimeStamp (delta): 769296430575805  [0x8c3+0x8]
+            PayloadSize: 179  [0x8cb+0x2]
+            SequenceNumber: 1
+            TimeStamp: 769296430575805
+            IsSorted: true
+            Time: 0.000138542 — seconds from the trace's sync time
+          Payload — 179 bytes  [0x8cd+0xb3]
+      ▾ Microsoft-Windows-DotNETRuntime/5 — 0.000520 s, thread 96, stack 1, 22 bytes  [0x980+0x1c]
+        ▾ Header — thread 96, sequence 2  [0x980+0x6]
+            Flags: 0x81 [MetadataId | DataLength]  [0x980+0x1]
+            MetadataId: 2  [0x981+0x1]
+            TimeStamp (delta): 381920  [0x982+0x3]
+            PayloadSize: 22  [0x985+0x1]
+            SequenceNumber: 2
+            TimeStamp: 769296430957725
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            IsSorted: false
+            Time: 0.000520462 — seconds from the trace's sync time
+          Payload — 22 bytes  [0x986+0x16]
+      ▾ Microsoft-Windows-DotNETRuntime/5 — 0.000521 s, thread 96, stack 1, 22 bytes  [0x99c+0x19]
+        ▾ Header — thread 96, sequence 3  [0x99c+0x3]
+            Flags: 0x0 []  [0x99c+0x1]
+            TimeStamp (delta): 292  [0x99d+0x2]
+            SequenceNumber: 3
+            TimeStamp: 769296430958017
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 22 — as the previous event
+            IsSorted: false
+            Time: 0.000520754 — seconds from the trace's sync time
+          Payload — 22 bytes  [0x99f+0x16]
+      ▾ Microsoft-Windows-DotNETRuntime/5 — 0.000521 s, thread 96, stack 1, 22 bytes  [0x9b5+0x18]
+        ▾ Header — thread 96, sequence 4  [0x9b5+0x2]
+            Flags: 0x0 []  [0x9b5+0x1]
+            TimeStamp (delta): 83  [0x9b6+0x1]
+            SequenceNumber: 4
+            TimeStamp: 769296430958100
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 22 — as the previous event
+            IsSorted: false
+            Time: 0.000520837 — seconds from the trace's sync time
+          Payload — 22 bytes  [0x9b7+0x16]
+      ▾ Microsoft-Windows-DotNETRuntime/5 — 0.000521 s, thread 96, stack 1, 22 bytes  [0x9cd+0x18]
+        ▾ Header — thread 96, sequence 5  [0x9cd+0x2]
+            Flags: 0x0 []  [0x9cd+0x1]
+            TimeStamp (delta): 42  [0x9ce+0x1]
+            SequenceNumber: 5
+            TimeStamp: 769296430958142
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 22 — as the previous event
+            IsSorted: false
+            Time: 0.000520879 — seconds from the trace's sync time
+          Payload — 22 bytes  [0x9cf+0x16]
+      ▾ Microsoft-Windows-DotNETRuntime/5 — 0.000521 s, thread 96, stack 1, 22 bytes  [0x9e5+0x18]
+        ▾ Header — thread 96, sequence 6  [0x9e5+0x2]
+            Flags: 0x0 []  [0x9e5+0x1]
+            TimeStamp (delta): 83  [0x9e6+0x1]
+            SequenceNumber: 6
+            TimeStamp: 769296430958225
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 22 — as the previous event
+            IsSorted: false
+            Time: 0.000520962 — seconds from the trace's sync time
+          Payload — 22 bytes  [0x9e7+0x16]
+      ▾ Microsoft-Windows-DotNETRuntime/5 — 0.005550 s, thread 96, stack 1, 22 bytes  [0x9fd+0x1b]
+        ▾ Header — thread 96, sequence 7  [0x9fd+0x5]
+            Flags: 0x0 []  [0x9fd+0x1]
+            TimeStamp (delta): 5029376  [0x9fe+0x4]
+            SequenceNumber: 7
+            TimeStamp: 769296435987601
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 22 — as the previous event
+            IsSorted: false
+            Time: 0.005550338 — seconds from the trace's sync time
+          Payload — 22 bytes  [0xa02+0x16]
+      ▾ Fillyfoal-Demo/Hello — 0.015300 s, thread 96, stack 2; name="fillyfoal" count=0  [0xa18+0x20]
+        ▾ Header — thread 96, sequence 8  [0xa18+0x8]
+            Flags: 0x89 [MetadataId | StackId | DataLength]  [0xa18+0x1]
+            MetadataId: 3  [0xa19+0x1]
+            StackId: 2  [0xa1a+0x1]
+            TimeStamp (delta): 9749416  [0xa1b+0x4]
+            PayloadSize: 24  [0xa1f+0x1]
+            SequenceNumber: 8
+            TimeStamp: 769296445737017
+            Thread: 96 — as the previous event
+            IsSorted: false
+            Time: 0.015299754 — seconds from the trace's sync time
+        ▾ Payload — 2 fields  [0xa20+0x18]
+            name: "fillyfoal"  [0xa20+0x14]
+            count: 0  [0xa34+0x4]
+      ▾ Fillyfoal-Demo/Hello — 0.015417 s, thread 96, stack 2; name="fillyfoal" count=1  [0xa38+0x1c]
+        ▾ Header — thread 96, sequence 9  [0xa38+0x4]
+            Flags: 0x0 []  [0xa38+0x1]
+            TimeStamp (delta): 117210  [0xa39+0x3]
+            SequenceNumber: 9
+            TimeStamp: 769296445854227
+            Thread: 96 — as the previous event
+            StackId: 2 — as the previous event
+            PayloadSize: 24 — as the previous event
+            IsSorted: false
+            Time: 0.015416964 — seconds from the trace's sync time
+        ▾ Payload — 2 fields  [0xa3c+0x18]
+            name: "fillyfoal"  [0xa3c+0x14]
+            count: 1  [0xa50+0x4]
+      ▾ Fillyfoal-Demo/Hello — 0.015418 s, thread 96, stack 2; name="fillyfoal" count=2  [0xa54+0x1b]
+        ▾ Header — thread 96, sequence 10  [0xa54+0x3]
+            Flags: 0x0 []  [0xa54+0x1]
+            TimeStamp (delta): 1333  [0xa55+0x2]
+            SequenceNumber: 10
+            TimeStamp: 769296445855560
+            Thread: 96 — as the previous event
+            StackId: 2 — as the previous event
+            PayloadSize: 24 — as the previous event
+            IsSorted: false
+            Time: 0.015418297 — seconds from the trace's sync time
+        ▾ Payload — 2 fields  [0xa57+0x18]
+            name: "fillyfoal"  [0xa57+0x14]
+            count: 2  [0xa6b+0x4]
+      ▾ Microsoft-Windows-DotNETRuntime/9 — 0.015421 s, thread 96, stack 1, 10 bytes  [0xa6f+0x10]
+        ▾ Header — thread 96, sequence 11  [0xa6f+0x6]
+            Flags: 0x89 [MetadataId | StackId | DataLength]  [0xa6f+0x1]
+            MetadataId: 4  [0xa70+0x1]
+            StackId: 1  [0xa71+0x1]
+            TimeStamp (delta): 2917  [0xa72+0x2]
+            PayloadSize: 10  [0xa74+0x1]
+            SequenceNumber: 11
+            TimeStamp: 769296445858477
+            Thread: 96 — as the previous event
+            IsSorted: false
+            Time: 0.015421214 — seconds from the trace's sync time
+          Payload — 10 bytes  [0xa75+0xa]
+      ▾ Microsoft-Windows-DotNETRuntime/8 — 0.015425 s, thread 96, stack 1, 2 bytes  [0xa7f+0x7]
+        ▾ Header — thread 96, sequence 12  [0xa7f+0x5]
+            Flags: 0x81 [MetadataId | DataLength]  [0xa7f+0x1]
+            MetadataId: 5  [0xa80+0x1]
+            TimeStamp (delta): 3291  [0xa81+0x2]
+            PayloadSize: 2  [0xa83+0x1]
+            SequenceNumber: 12
+            TimeStamp: 769296445861768
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            IsSorted: false
+            Time: 0.015424505 — seconds from the trace's sync time
+          Payload — 2 bytes  [0xa84+0x2]
+      ▾ Microsoft-Windows-DotNETRuntime/35 — 0.015427 s, thread 96, stack 3, 6 bytes  [0xa86+0xc]
+        ▾ Header — thread 96, sequence 13  [0xa86+0x6]
+            Flags: 0x89 [MetadataId | StackId | DataLength]  [0xa86+0x1]
+            MetadataId: 6  [0xa87+0x1]
+            StackId: 3  [0xa88+0x1]
+            TimeStamp (delta): 2042  [0xa89+0x2]
+            PayloadSize: 6  [0xa8b+0x1]
+            SequenceNumber: 13
+            TimeStamp: 769296445863810
+            Thread: 96 — as the previous event
+            IsSorted: false
+            Time: 0.015426547 — seconds from the trace's sync time
+          Payload — 6 bytes  [0xa8c+0x6]
+      ▾ Microsoft-Windows-DotNETRuntime/5 — 0.015436 s, thread 96, stack 1, 22 bytes  [0xa92+0x1c]
+        ▾ Header — thread 96, sequence 14  [0xa92+0x6]
+            Flags: 0x89 [MetadataId | StackId | DataLength]  [0xa92+0x1]
+            MetadataId: 2  [0xa93+0x1]
+            StackId: 1  [0xa94+0x1]
+            TimeStamp (delta): 9792  [0xa95+0x2]
+            PayloadSize: 22  [0xa97+0x1]
+            SequenceNumber: 14
+            TimeStamp: 769296445873602
+            Thread: 96 — as the previous event
+            IsSorted: false
+            Time: 0.015436339 — seconds from the trace's sync time
+          Payload — 22 bytes  [0xa98+0x16]
+      ▾ Microsoft-Windows-DotNETRuntime/1 — 0.015466 s, thread 96, stack 1, 26 bytes  [0xaae+0x20]
+        ▾ Header — thread 96, sequence 15  [0xaae+0x6]
+            Flags: 0x81 [MetadataId | DataLength]  [0xaae+0x1]
+            MetadataId: 7  [0xaaf+0x1]
+            TimeStamp (delta): 29792  [0xab0+0x3]
+            PayloadSize: 26  [0xab3+0x1]
+            SequenceNumber: 15
+            TimeStamp: 769296445903394
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            IsSorted: false
+            Time: 0.015466131 — seconds from the trace's sync time
+          Payload — 26 bytes  [0xab4+0x1a]
+      ▾ Microsoft-Windows-DotNETRuntime/39 — 0.015468 s, thread 96, stack 3, 78 bytes  [0xace+0x54]
+        ▾ Header — thread 96, sequence 16  [0xace+0x6]
+            Flags: 0x89 [MetadataId | StackId | DataLength]  [0xace+0x1]
+            MetadataId: 8  [0xacf+0x1]
+            StackId: 3  [0xad0+0x1]
+            TimeStamp (delta): 1833  [0xad1+0x2]
+            PayloadSize: 78  [0xad3+0x1]
+            SequenceNumber: 16
+            TimeStamp: 769296445905227
+            Thread: 96 — as the previous event
+            IsSorted: false
+            Time: 0.015467964 — seconds from the trace's sync time
+          Payload — 78 bytes  [0xad4+0x4e]
+      ▾ Microsoft-Windows-DotNETRuntime/202 — 0.015479 s, thread 96, stack 1, 18 bytes  [0xb22+0x18]
+        ▾ Header — thread 96, sequence 17  [0xb22+0x6]
+            Flags: 0x89 [MetadataId | StackId | DataLength]  [0xb22+0x1]
+            MetadataId: 9  [0xb23+0x1]
+            StackId: 1  [0xb24+0x1]
+            TimeStamp (delta): 10583  [0xb25+0x2]
+            PayloadSize: 18  [0xb27+0x1]
+            SequenceNumber: 17
+            TimeStamp: 769296445915810
+            Thread: 96 — as the previous event
+            IsSorted: false
+            Time: 0.015478547 — seconds from the trace's sync time
+          Payload — 18 bytes  [0xb28+0x12]
+      ▾ Microsoft-Windows-DotNETRuntime/202 — 0.015479 s, thread 96, stack 1, 18 bytes  [0xb3a+0x15]
+        ▾ Header — thread 96, sequence 18  [0xb3a+0x3]
+            Flags: 0x0 []  [0xb3a+0x1]
+            TimeStamp (delta): 334  [0xb3b+0x2]
+            SequenceNumber: 18
+            TimeStamp: 769296445916144
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 18 — as the previous event
+            IsSorted: false
+            Time: 0.015478881 — seconds from the trace's sync time
+          Payload — 18 bytes  [0xb3d+0x12]
+      ▾ Microsoft-Windows-DotNETRuntime/202 — 0.015521 s, thread 96, stack 1, 18 bytes  [0xb4f+0x16]
+        ▾ Header — thread 96, sequence 19  [0xb4f+0x4]
+            Flags: 0x0 []  [0xb4f+0x1]
+            TimeStamp (delta): 41917  [0xb50+0x3]
+            SequenceNumber: 19
+            TimeStamp: 769296445958061
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 18 — as the previous event
+            IsSorted: false
+            Time: 0.015520798 — seconds from the trace's sync time
+          Payload — 18 bytes  [0xb53+0x12]
+      ▾ Microsoft-Windows-DotNETRuntime/202 — 0.015521 s, thread 96, stack 1, 18 bytes  [0xb65+0x15]
+        ▾ Header — thread 96, sequence 20  [0xb65+0x3]
+            Flags: 0x0 []  [0xb65+0x1]
+            TimeStamp (delta): 625  [0xb66+0x2]
+            SequenceNumber: 20
+            TimeStamp: 769296445958686
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 18 — as the previous event
+            IsSorted: false
+            Time: 0.015521423 — seconds from the trace's sync time
+          Payload — 18 bytes  [0xb68+0x12]
+      ▾ Microsoft-Windows-DotNETRuntime/202 — 0.015533 s, thread 96, stack 1, 18 bytes  [0xb7a+0x15]
+        ▾ Header — thread 96, sequence 21  [0xb7a+0x3]
+            Flags: 0x0 []  [0xb7a+0x1]
+            TimeStamp (delta): 11833  [0xb7b+0x2]
+            SequenceNumber: 21
+            TimeStamp: 769296445970519
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 18 — as the previous event
+            IsSorted: false
+            Time: 0.015533256 — seconds from the trace's sync time
+          Payload — 18 bytes  [0xb7d+0x12]
+      ▾ Microsoft-Windows-DotNETRuntime/202 — 0.015534 s, thread 96, stack 1, 18 bytes  [0xb8f+0x15]
+        ▾ Header — thread 96, sequence 22  [0xb8f+0x3]
+            Flags: 0x0 []  [0xb8f+0x1]
+            TimeStamp (delta): 292  [0xb90+0x2]
+            SequenceNumber: 22
+            TimeStamp: 769296445970811
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 18 — as the previous event
+            IsSorted: false
+            Time: 0.015533548 — seconds from the trace's sync time
+          Payload — 18 bytes  [0xb92+0x12]
+      ▾ Microsoft-Windows-DotNETRuntime/205 — 0.015755 s, thread 96, stack 3, 82 bytes  [0xba4+0x59]
+        ▾ Header — thread 96, sequence 23  [0xba4+0x7]
+            Flags: 0x89 [MetadataId | StackId | DataLength]  [0xba4+0x1]
+            MetadataId: 10  [0xba5+0x1]
+            StackId: 3  [0xba6+0x1]
+            TimeStamp (delta): 221627  [0xba7+0x3]
+            PayloadSize: 82  [0xbaa+0x1]
+            SequenceNumber: 23
+            TimeStamp: 769296446192438
+            Thread: 96 — as the previous event
+            IsSorted: false
+            Time: 0.015755175 — seconds from the trace's sync time
+          Payload — 82 bytes  [0xbab+0x52]
+      ▾ Microsoft-Windows-DotNETRuntime/204 — 0.015756 s, thread 96, stack 1, 486 bytes  [0xbfd+0x1ed]
+        ▾ Header — thread 96, sequence 24  [0xbfd+0x7]
+            Flags: 0x89 [MetadataId | StackId | DataLength]  [0xbfd+0x1]
+            MetadataId: 11  [0xbfe+0x1]
+            StackId: 1  [0xbff+0x1]
+            TimeStamp (delta): 625  [0xc00+0x2]
+            PayloadSize: 486  [0xc02+0x2]
+            SequenceNumber: 24
+            TimeStamp: 769296446193063
+            Thread: 96 — as the previous event
+            IsSorted: false
+            Time: 0.0157558 — seconds from the trace's sync time
+          Payload — 486 bytes  [0xc04+0x1e6]
+      ▾ Microsoft-Windows-DotNETRuntime/39 — 0.015759 s, thread 96, stack 3, 78 bytes  [0xdea+0x54]
+        ▾ Header — thread 96, sequence 25  [0xdea+0x6]
+            Flags: 0x89 [MetadataId | StackId | DataLength]  [0xdea+0x1]
+            MetadataId: 8  [0xdeb+0x1]
+            StackId: 3  [0xdec+0x1]
+            TimeStamp (delta): 3250  [0xded+0x2]
+            PayloadSize: 78  [0xdef+0x1]
+            SequenceNumber: 25
+            TimeStamp: 769296446196313
+            Thread: 96 — as the previous event
+            IsSorted: false
+            Time: 0.01575905 — seconds from the trace's sync time
+          Payload — 78 bytes  [0xdf0+0x4e]
+      ▾ Microsoft-Windows-DotNETRuntime/2 — 0.015760 s, thread 96, stack 1, 10 bytes  [0xe3e+0x10]
+        ▾ Header — thread 96, sequence 26  [0xe3e+0x6]
+            Flags: 0x89 [MetadataId | StackId | DataLength]  [0xe3e+0x1]
+            MetadataId: 12  [0xe3f+0x1]
+            StackId: 1  [0xe40+0x1]
+            TimeStamp (delta): 875  [0xe41+0x2]
+            PayloadSize: 10  [0xe43+0x1]
+            SequenceNumber: 26
+            TimeStamp: 769296446197188
+            Thread: 96 — as the previous event
+            IsSorted: false
+            Time: 0.015759925 — seconds from the trace's sync time
+          Payload — 10 bytes  [0xe44+0xa]
+      ▾ Microsoft-Windows-DotNETRuntime/4 — 0.015760 s, thread 96, stack 1, 110 bytes  [0xe4e+0x73]
+        ▾ Header — thread 96, sequence 27  [0xe4e+0x5]
+            Flags: 0x81 [MetadataId | DataLength]  [0xe4e+0x1]
+            MetadataId: 13  [0xe4f+0x1]
+            TimeStamp (delta): 250  [0xe50+0x2]
+            PayloadSize: 110  [0xe52+0x1]
+            SequenceNumber: 27
+            TimeStamp: 769296446197438
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            IsSorted: false
+            Time: 0.015760175 — seconds from the trace's sync time
+          Payload — 110 bytes  [0xe53+0x6e]
+      ▾ Microsoft-Windows-DotNETRuntime/7 — 0.015766 s, thread 96, stack 1, 2 bytes  [0xec1+0x7]
+        ▾ Header — thread 96, sequence 28  [0xec1+0x5]
+            Flags: 0x81 [MetadataId | DataLength]  [0xec1+0x1]
+            MetadataId: 14  [0xec2+0x1]
+            TimeStamp (delta): 5375  [0xec3+0x2]
+            PayloadSize: 2  [0xec5+0x1]
+            SequenceNumber: 28
+            TimeStamp: 769296446202813
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            IsSorted: false
+            Time: 0.01576555 — seconds from the trace's sync time
+          Payload — 2 bytes  [0xec6+0x2]
+      ▾ Microsoft-Windows-DotNETRuntime/3 — 0.015767 s, thread 96, stack 1, 2 bytes  [0xec8+0x6]
+        ▾ Header — thread 96, sequence 29  [0xec8+0x4]
+            Flags: 0x1 [MetadataId]  [0xec8+0x1]
+            MetadataId: 15  [0xec9+0x1]
+            TimeStamp (delta): 1458  [0xeca+0x2]
+            SequenceNumber: 29
+            TimeStamp: 769296446204271
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            PayloadSize: 2 — as the previous event
+            IsSorted: false
+            Time: 0.015767008 — seconds from the trace's sync time
+          Payload — 2 bytes  [0xecc+0x2]
+      ▾ Microsoft-DotNETCore-EventPipe/ProcessInfo — 0.016832 s, thread 96, stack 1; CommandLine="/usr/share/dotnet/dotnet /work/app/bin/app.dll" OSInformation="Linux" ArchInformation="arm64"  [0xece+0x7c]
+        ▾ Header — thread 96, sequence 30  [0xece+0x6]
+            Flags: 0x81 [MetadataId | DataLength]  [0xece+0x1]
+            MetadataId: 16  [0xecf+0x1]
+            TimeStamp (delta): 1065051  [0xed0+0x3]
+            PayloadSize: 118  [0xed3+0x1]
+            SequenceNumber: 30
+            TimeStamp: 769296447269322
+            Thread: 96 — as the previous event
+            StackId: 1 — as the previous event
+            IsSorted: false
+            Time: 0.016832059 — seconds from the trace's sync time
+        ▾ Payload — 3 fields  [0xed4+0x76]
+            CommandLine: "/usr/share/dotnet/dotnet /work/app/bin/app.dll"  [0xed4+0x5e]
+            OSInformation: "Linux"  [0xf32+0xc]
+            ArchInformation: "arm64"  [0xf3e+0xc]
+      ▾ Microsoft-Windows-DotNETRuntime/14 — 0.016600 s, thread 101, stack 1, 2 bytes  [0xf4a+0x1b]
+        ▾ Header — thread 101, sequence 1  [0xf4a+0x19]
+            Flags: 0xc7 [MetadataId | CaptureThreadAndSequence | ThreadId | Sorted | DataLength]  [0xf4a+0x1]
+            MetadataId: 17  [0xf4b+0x1]
+            SequenceNumber (delta): -30  [0xf4c+0x5]
+            CaptureThread: 101  [0xf51+0x1]
+            ProcessorNumber: 4294967295  [0xf52+0x5]
+            Thread: 101  [0xf57+0x1]
+            TimeStamp (delta): -232544  [0xf58+0xa]
+            PayloadSize: 2  [0xf62+0x1]
+            SequenceNumber: 1
+            TimeStamp: 769296447036778
+            StackId: 1 — as the previous event
+            IsSorted: true
+            Time: 0.016599515 — seconds from the trace's sync time
+          Payload — 2 bytes  [0xf63+0x2]
+      ▾ Microsoft-Windows-DotNETRuntime/13 — 0.016610 s, thread 101, stack 1, 6 bytes  [0xf65+0xb]
+        ▾ Header — thread 101, sequence 2  [0xf65+0x5]
+            Flags: 0x81 [MetadataId | DataLength]  [0xf65+0x1]
+            MetadataId: 18  [0xf66+0x1]
+            TimeStamp (delta): 10375  [0xf67+0x2]
+            PayloadSize: 6  [0xf69+0x1]
+            SequenceNumber: 2
+            TimeStamp: 769296447047153
+            Thread: 101 — as the previous event
+            StackId: 1 — as the previous event
+            IsSorted: false
+            Time: 0.01660989 — seconds from the trace's sync time
+          Payload — 6 bytes  [0xf6a+0x6]
+      EndObject: 6  [0xf70+0x1]
+  ▾ SequencePointBlock — 0.017044 s, 2 threads  [0xf71+0x40]
+    ▾ Object header  [0xf71+0x17]
+        BeginPrivateObject: 5  [0xf71+0x1]
+        BeginPrivateObject (type): 5  [0xf72+0x1]
+        NullReference (type of type): 1  [0xf73+0x1]
+        Version: 2  [0xf74+0x4]
+        MinimumReaderVersion: 2  [0xf78+0x4]
+        Type name length: 7  [0xf7c+0x4]
+        Type name: "SPBlock"  [0xf80+0x7]
+        EndObject (type): 6  [0xf87+0x1]
+      BlockSize: 36  [0xf88+0x4]
+    ▾ Sequence point  [0xf8c+0x24]
+      ▾ Header  [0xf8c+0xc]
+          TimeStamp: 769296447481199  [0xf8c+0x8]
+          ThreadCount: 2  [0xf94+0x4]
+        Thread 96 — sequence number 30  [0xf98+0xc]
+        Thread 101 — sequence number 2  [0xfa4+0xc]
+      EndObject: 6  [0xfb0+0x1]
+    End of stream  [0xfb1+0x1]

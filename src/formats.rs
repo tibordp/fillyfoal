@@ -255,6 +255,8 @@ pub static FORMATS: &[&Format] = &[
     &profile::llvm::PROFRAW,
     #[cfg(feature = "exec")]
     &profile::llvm::PROFDATA,
+    #[cfg(feature = "exec")]
+    &profile::nettrace::FORMAT,
     // Weaker probes (sizes and machine numbers rather than long magics).
     #[cfg(feature = "exec")]
     &executable::coff::FORMAT,

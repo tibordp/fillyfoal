@@ -1421,3 +1421,9 @@ Each was checked against `apk adbdump --format yaml` of the same file.
 | `alpine-apk-v3/hello-deflate9.apk` | apk-tools 3.0.7 | `apk mkpkg --compression deflate:9`: `ADBc` with algorithm and level; unchanged |
 | `alpine-apk-v3/hello-signed.apk` | apk-tools 3.0.7 | `apk mkpkg --compression none --sign-key` with a throwaway RSA key: a SIG block (v0, SHA-512); unchanged |
 | `alpine-apk-v3/index.adb` | apk-tools 3.0.7 | `apk mkndx -d "fillyfoal demo"` over `hello.apk`: `indx` schema, `ADBd`-compressed; unchanged |
+
+## .NET EventPipe trace
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `nettrace/demo.nettrace` | .NET 8.0.31 runtime (`mcr.microsoft.com/dotnet/sdk:8.0` image, SDK 8.0.425, linux-arm64) | `tests/data/nettrace/make.sh` (its header has the `docker run` line): a console app with an `EventSource` (`Fillyfoal-Demo`) run with `DOTNET_EnableEventPipe=1`, `DOTNET_EventPipeConfig='Fillyfoal-Demo:0xFFFFFFFF:5,Microsoft-Windows-DotNETRuntime:0x1:4'` and `DOTNET_EventPipeRundown=0` (no rundown: it would list every JIT-compiled method). NetTrace format 4 (`Trace` version 4): metadata, a stack block, compressed event headers, a sequence point. Holds container paths (`/usr/share/dotnet`, `/work/app`) and the container's process IDs. Unchanged; not byte-reproducible (timestamps, addresses) |
