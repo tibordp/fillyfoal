@@ -1,5 +1,6 @@
 //! Data serialisation and database files: Arrow, Avro, Parquet, ORC, HDF5,
-//! NetCDF, MATLAB, NumPy and safetensors, pickles, CBOR, MessagePack, BSON,
+//! NetCDF, MATLAB, NumPy and safetensors, pickles, CBOR, MessagePack, BSON
+//! (and `mongodump --archive` files in `mongo_archive`),
 //! Amazon Ion, Smile and UBJSON (shared presentation in `valuetree`), bencode, binary
 //! plists, Berkeley DB, Access (Jet), ESE, LevelDB/RocksDB tables, embedded
 //! databases (`embedded_db`; DuckDB in `duckdb`, Realm in `realm`, WiredTiger
@@ -26,6 +27,7 @@ pub mod hdf5;
 pub mod ion;
 pub mod jet;
 pub mod matlab;
+pub mod mongo_archive;
 pub mod msgpack;
 pub mod netcdf;
 pub mod npy;

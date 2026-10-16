@@ -1398,3 +1398,21 @@ parents and dates agree with `git log --format='%H %T %P %ct'`.
 | `git-commit-graph/split-base.graph` | git 2.47.3 | `git commit-graph write --reachable --split=no-merge` after the first five commits: the base layer of a chain |
 | `git-commit-graph/split-top.graph` | git 2.47.3 | the same command with `--changed-paths` after the other six: the top layer, with a BASE chunk naming the base layer |
 | `git-commit-graph/sha256.graph` | git 2.47.3 | the same history in a `--object-format=sha256` repository, `git commit-graph write --reachable` |
+
+## mongodump archives
+
+Made by `sh tests/data/mongo-archive/make.sh`: Docker `mongo:7` (mongod
+7.0.39, mongodump 100.17.0), a new container with host name `fillyfoal`
+running `tests/data/mongo-archive/inside.sh`, which starts a throwaway
+mongod, inserts neutral documents (fixed `_id`s and dates) into `shop.items`
+(most BSON types), `shop.orders` and `notes.memos`, adds an index and a view
+(`shop.cheap`), and dumps everything with `--numParallelCollections=1`. Not
+byte-reproducible: each collection's UUID in the prelude metadata is new
+per run (the documents, and so the CRCs, are the same). Every namespace's
+CRC-64 in the archive was checked against the documents
+(Go's `hash/crc64` with the ECMA table).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `mongo-archive/dump.archive` | mongodump 100.17.0 | `mongodump --archive=dump.archive`, unchanged |
+| `gzip/dump.archive.gz` | mongodump 100.17.0 | `mongodump --gzip --archive=dump.archive.gz` (the whole archive in one gzip stream), unchanged |

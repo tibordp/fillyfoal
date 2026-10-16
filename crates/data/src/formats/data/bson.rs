@@ -77,7 +77,7 @@ const SUBTYPES: EnumTable = &[
 
 /// The value length of an element of type `t` whose value starts with
 /// `b` (`None` if unknown or `b` too short to tell).
-fn value_len(t: u8, b: &[u8]) -> Option<u64> {
+pub fn value_len(t: u8, b: &[u8]) -> Option<u64> {
     let i32_at = |o: usize| -> Option<u64> {
         let v = i32::from_le_bytes(b.get(o..o.checked_add(4)?)?.try_into().ok()?);
         u64::try_from(v).ok()
@@ -267,7 +267,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 }
 
 /// "document, N bytes", with the `_id` when it comes first.
-async fn document_summary(r: &mut ByteReader<'_>, at: u64, len: u64) -> String {
+pub async fn document_summary(r: &mut ByteReader<'_>, at: u64, len: u64) -> String {
     let base = format!(
         "document, {}",
         crate::formats::util::fmt::grouped_count(len, "byte", "bytes")

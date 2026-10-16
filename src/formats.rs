@@ -702,6 +702,8 @@ pub static FORMATS: &[&Format] = &[
     &data::gvdb::DCONF,
     #[cfg(feature = "data")]
     &data::gvdb::GVDB,
+    #[cfg(feature = "data")]
+    &data::mongo_archive::FORMAT,
     #[cfg(feature = "system")]
     &system::git::PACK,
     #[cfg(feature = "system")]
