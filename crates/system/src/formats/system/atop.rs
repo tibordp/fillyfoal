@@ -19,7 +19,9 @@
 //! `struct cpustat` (CPU count, interrupts, context switches, load averages,
 //! the all-CPU times) and the start of each task's `struct gen` (IDs, name,
 //! state, start time, command line, thread counts); the rest is shown as
-//! data. Only 64-bit writers' layouts are decoded.
+//! data. Only 64-bit writers' layouts are decoded. Counters are what atop
+//! stores: the change since the previous sample (since boot in the first
+//! sample of a log, flagged `RRBOOT`).
 
 use crate::bytes::{to_u64, to_usize};
 use crate::codec::Codec;

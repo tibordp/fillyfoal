@@ -23,7 +23,8 @@
 //! Split BTF (kernel modules) continues the numbering and the string offsets
 //! of a base BTF (vmlinux) that is not in the file: its IDs are shown as if
 //! it started at 1, and names whose offsets fall past its own strings are
-//! shown as offsets.
+//! shown as offsets. The `.BTF.ext` section of BPF objects (function and
+//! line information, CO-RE relocations) is not decoded.
 
 use std::sync::Arc;
 
