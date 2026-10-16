@@ -1451,3 +1451,89 @@ neutral files owned by root.
 | `pbs-blob/uncompressed-chunk.blob` | the same | the smallest uncompressed chunk (a catalog) |
 | `pbs-blob/encrypted-chunk.blob` | the same, `--keyfile` (a fresh key, `--kdf none`) | the smallest encrypted, uncompressed chunk |
 | `pbs-blob/encrypted-compressed-chunk.blob` | the same, `--keyfile` | the smallest encrypted, compressed chunk |
+## Git commit-graph files
+
+Reproduced byte for byte by `sh tests/data/git-commit-graph/make.sh`
+(Docker `debian:trixie`, host name `fillyfoal`, running
+`tests/data/git-commit-graph/inside.sh`): git 2.47.3. Eleven commits by
+`fillyfoal <fillyfoal@example.invalid>` with fixed dates: a merge, an
+octopus merge of three branches, a commit dated 2100-01-01 and its child
+dated 1970-01-01 00:00:01 (a corrected commit date offset above 2^31).
+`git commit-graph verify` accepts every file, and the snapshots' trees,
+parents and dates agree with `git log --format='%H %T %P %ct'`.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `git-commit-graph/commit-graph` | git 2.47.3 | `git commit-graph write --reachable --changed-paths`: OIDF, OIDL, CDAT, GDA2, GDO2, EDGE, BIDX, BDAT |
+| `git-commit-graph/split-base.graph` | git 2.47.3 | `git commit-graph write --reachable --split=no-merge` after the first five commits: the base layer of a chain |
+| `git-commit-graph/split-top.graph` | git 2.47.3 | the same command with `--changed-paths` after the other six: the top layer, with a BASE chunk naming the base layer |
+| `git-commit-graph/sha256.graph` | git 2.47.3 | the same history in a `--object-format=sha256` repository, `git commit-graph write --reachable` |
+
+## mongodump archives
+
+Made by `sh tests/data/mongo-archive/make.sh`: Docker `mongo:7` (mongod
+7.0.39, mongodump 100.17.0), a new container with host name `fillyfoal`
+running `tests/data/mongo-archive/inside.sh`, which starts a throwaway
+mongod, inserts neutral documents (fixed `_id`s and dates) into `shop.items`
+(most BSON types), `shop.orders` and `notes.memos`, adds an index and a view
+(`shop.cheap`), and dumps everything with `--numParallelCollections=1`. Not
+byte-reproducible: each collection's UUID in the prelude metadata is new
+per run (the documents, and so the CRCs, are the same). Every namespace's
+CRC-64 in the archive was checked against the documents
+(Go's `hash/crc64` with the ECMA table).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `mongo-archive/dump.archive` | mongodump 100.17.0 | `mongodump --archive=dump.archive`, unchanged |
+| `gzip/dump.archive.gz` | mongodump 100.17.0 | `mongodump --gzip --archive=dump.archive.gz` (the whole archive in one gzip stream), unchanged |
+
+## MySQL and MariaDB binary logs
+
+Made by `sh tests/data/mysql-binlog/make.sh`: throwaway containers (host
+name `fillyfoal`) from the official `mysql:9.7.1` and `mariadb:10.5`
+(10.5.29) images, each running `tests/data/mysql-binlog/workload.sql`
+(neutral DDL and DML at fixed session times, `binlog_row_metadata=FULL`,
+row-based events and a few statement-based ones); the binary log file
+holding the workload is copied out after `FLUSH BINARY LOGS`. Not
+byte-reproducible: the server UUID (MySQL GTIDs), the format description
+events' timestamps, commit timestamps and XIDs vary between runs. Every
+event's CRC-32 checks; the decoded rows agree with the workload and, for
+the MariaDB files, with `mariadb-binlog -vv --base64-output=decode-rows`
+(MariaDB 11.4).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `mysql-binlog/mysql-rows.bin` | MySQL 9.7.1 | the workload: GTIDs, query events, table maps with optional metadata, write/update/delete rows v2, intvar, XIDs, rotate; CRC32 checksums; unchanged |
+| `mysql-binlog/mysql-compressed.bin` | MySQL 9.7.1 | `binlog_transaction_compression=ON`: one transaction in a zstd transaction payload event; unchanged |
+| `mysql-binlog/mysql-nochecksum.bin` | MySQL 9.7.1 | `binlog_checksum=NONE`; unchanged |
+| `mysql-binlog/mariadb-rows.bin` | MariaDB 10.5.29 | the workload: MariaDB GTIDs, GTID list, binlog checkpoints, annotate-rows, rows v1; CRC32 checksums; unchanged |
+| `mysql-binlog/mariadb-compressed.bin` | MariaDB 10.5.29 | `log_bin_compress=ON`, `log_bin_compress_min_len=10`: a zlib-compressed rows event and query event; unchanged |
+
+## Erlang external term format
+
+Made by `sh tests/data/erlang-etf/make.sh`: `term_to_binary/2` in the
+official `erlang:27-alpine` image (OTP 27, host name `fillyfoal`, not
+distributed, so node names are `nonode@nohost`), running
+`tests/data/erlang-etf/make.escript`. The pid, port, reference and local
+fun differ between runs (creation numbers, the escript's generated module
+name); everything else is the same every time. `binary_to_term/1` of each
+file gives the term back.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `erlang-etf/terms.etf` | OTP 27 | `term_to_binary(Map)`: a map with small, 32-bit and big integers (positive and a 2100-bit negative), a float, UTF-8 atoms, nil, a string, lists (one improper), small and large tuples, nested maps, binaries, a bit binary, a pid, a port, a reference, an export fun and a local fun; unchanged |
+| `erlang-etf/latin1.etf` | OTP 27 | `term_to_binary(List, [{minor_version, 1}])`: Latin-1 atoms; unchanged |
+| `erlang-etf/old-float.etf` | OTP 27 | `term_to_binary([2.5, -0.125], [{minor_version, 0}])`: floats as text; unchanged |
+| `erlang-etf/compressed.etf` | OTP 27 | `term_to_binary(List, [compressed])`: a zlib-compressed term; unchanged |
+
+## Ruby Marshal data
+
+Reproduced byte for byte by `sh tests/data/ruby-marshal/make.sh`:
+`Marshal.dump` in the official `ruby:3.4-alpine` image (Ruby 3.4.11, host
+name `fillyfoal`), running `tests/data/ruby-marshal/make.rb`.
+`Marshal.load` of each file gives the data back.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `ruby-marshal/objects.marshal` | Ruby 3.4.11 | a hash of nil/true/false, fixnums, bignums, floats (NaN, -Infinity), symbols and a symbol link, strings in UTF-8, US-ASCII, ISO-8859-1 and binary, arrays, an object link, hashes (one with a default), a struct, an object, `_dump` and `marshal_dump` objects, a regexp, a class, a module, a range and an extended String subclass; unchanged |
+| `ruby-marshal/array.marshal` | Ruby 3.4.11 | 600 `[i, "item i"]` pairs; unchanged |

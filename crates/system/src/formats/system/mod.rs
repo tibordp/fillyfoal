@@ -5,11 +5,12 @@
 //! gettext catalogs (`mo`), Apple BOM stores, Windows compatibility
 //! databases (`shim_sdb`), .NET resources and BinaryFormatter streams
 //! (`dotnet`), developer artifacts (`devtools`, Delphi form
-//! streams in `delphi`), Git storage, OSTree objects and flatpak bundles
+//! streams in `delphi`), Git storage (commit-graphs in `commit_graph`), OSTree objects and flatpak bundles
 //! (`ostree`) and Outlook PST/OST mail stores (`pst`).
 
 pub mod artifacts;
 pub mod bom;
+pub mod commit_graph;
 pub mod delphi;
 pub mod devices;
 pub mod devtools;

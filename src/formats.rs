@@ -702,12 +702,16 @@ pub static FORMATS: &[&Format] = &[
     &data::gvdb::DCONF,
     #[cfg(feature = "data")]
     &data::gvdb::GVDB,
+    #[cfg(feature = "data")]
+    &data::mongo_archive::FORMAT,
     #[cfg(feature = "system")]
     &system::git::PACK,
     #[cfg(feature = "system")]
     &system::git::PACK_INDEX,
     #[cfg(feature = "system")]
     &system::git::INDEX,
+    #[cfg(feature = "system")]
+    &system::commit_graph::FORMAT,
     #[cfg(feature = "system")]
     &system::ostree::FLATPAK,
     #[cfg(feature = "system")]
@@ -3013,6 +3017,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "data")]
     &mysql::mypack::FORMAT,
     #[cfg(feature = "data")]
+    &mysql::binlog::FORMAT,
+    #[cfg(feature = "data")]
     &mysql::myd::FORMAT,
     #[cfg(feature = "data")]
     &postgres::control::FORMAT,
@@ -3448,6 +3454,10 @@ pub static FORMATS: &[&Format] = &[
     &compression::brotli::FORMAT,
     // Magic-less binary value encodings: only whole small files that parse
     // exactly to their end as one record (see each module).
+    #[cfg(feature = "data")]
+    &data::etf::FORMAT,
+    #[cfg(feature = "data")]
+    &data::marshal::FORMAT,
     #[cfg(feature = "data")]
     &data::msgpack::FORMAT,
     #[cfg(feature = "data")]
