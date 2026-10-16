@@ -18,7 +18,8 @@
 //! ```
 //!
 //! Field kinds: `u8 u16 u32 u64 i8 i16 i32 i64 f32 f64`, `ascii[N]`
-//! (NUL-padded text), `utf16[N]` (N code units), `bytes[N]`, `guid`. Anything after the label is a chain of
+//! (NUL-padded text), `utf16[N]` (N code units), `bytes[N]`, `guid` (Microsoft
+//! mixed-endian), `uuid` (RFC 4122 order). Anything after the label is a chain of
 //! [`crate::Field`] decorators; closures in decorators can refer to fields
 //! declared earlier (they are local variables).
 //!
@@ -83,6 +84,7 @@ macro_rules! __record_ty {
     (ascii) => { ::std::string::String };
     (bytes) => { ::std::vec::Vec<u8> };
     (guid) => { $crate::value::Guid };
+    (uuid) => { $crate::value::Guid };
 }
 
 #[doc(hidden)]
@@ -121,6 +123,9 @@ macro_rules! __record_size {
     (guid) => {
         16u64
     };
+    (uuid) => {
+        16u64
+    };
     (utf16 [$n:expr]) => {
         (($n) as u64) * 2
     };
@@ -143,6 +148,9 @@ macro_rules! __record_read {
     };
     ($f:ident, guid, $label:literal) => {
         $f.guid($label)
+    };
+    ($f:ident, uuid, $label:literal) => {
+        $f.uuid($label)
     };
     ($f:ident, utf16 [$n:expr], $label:literal) => {
         $f.utf16($label, ($n) as u64)

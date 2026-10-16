@@ -41,4 +41,7 @@ pub use session::{
     NodeId, Progress, ReadPosition, ReadProgress, Session, Wait,
 };
 pub use span::{Origin, SourceId, Span};
-pub use value::{Check, Digest, Guid, Radix, Res, SizeUnit, Time, Value, Verdict, Zone};
+pub use value::{
+    Addr, Alpha, Check, Color, ColorDepth, ColorModel, ColorSpace, Digest, Exactness, Guid,
+    GuidOrder, Radix, Res, SizeUnit, Time, Value, Verdict, Zone,
+};
