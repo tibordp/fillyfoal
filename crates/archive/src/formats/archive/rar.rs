@@ -469,9 +469,9 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         }
         0x74 | 0x7a => {
             let pack = r.u32("Packed size", LE).ok_or_else(bad)?;
-            r.with(|n| n.summary(fmt::size(pack.into())));
+            r.with(|n| n.as_size());
             let unp = r.u32("Unpacked size", LE).ok_or_else(bad)?;
-            r.with(|n| n.summary(fmt::size(unp.into())));
+            r.with(|n| n.as_size());
             let os = r.u8("Host OS").ok_or_else(bad)?;
             r.with(|n| {
                 n.value(Value::Enum {
@@ -813,7 +813,7 @@ fn file_fields(r: &mut ByteReader<'_>) -> Option<FileFields> {
         })
     });
     let unpacked = r.vint("Unpacked size")?;
-    r.with(|n| n.summary(fmt::size(unpacked)));
+    r.with(|n| n.as_size());
     let attr = r.vint("Attributes")?;
     r.with(|n| n.value(hex(attr, 64)));
     if flags & 0x02 != 0 {
@@ -890,7 +890,7 @@ fn common5(r: &mut ByteReader<'_>) -> Option<Common> {
     };
     let data = if flags & 0x02 != 0 {
         let d = r.vint("Data size")?;
-        r.with(|n| n.summary(fmt::size(d)));
+        r.with(|n| n.as_size());
         d
     } else {
         0

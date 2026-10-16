@@ -190,7 +190,7 @@ record! {
         signature: ascii[4] "bin_signature",
         org: u64 "org" .hex() .with(|&v, n| if v == INVALID_PTR { n.summary("INVALID_PTR: relocatable") } else { n.summary("fixed load address") }),
         table: u64 "patch_table_offset" .hex(),
-        size: u64 "file_size" .with(|&v, n| n.summary(crate::formats::util::fmt::size(v))),
+        size: u64 "file_size" .size(),
     }
 }
 

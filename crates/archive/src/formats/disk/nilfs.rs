@@ -47,7 +47,7 @@ record! {
         sum: u32 "Checksum" .checksum(NILFS_CRC),
         log_block_size: u32 "Block size (log2 - 10)",
         segments: u64 "Segments",
-        dev_size: u64 "Device size" .with(|&v, n| n.summary(size(v))),
+        dev_size: u64 "Device size" .size(),
         first_data_block: u64 "First data block",
         blocks_per_segment: u32 "Blocks per segment",
         reserved_percent: u32 "Reserved segments (%)",

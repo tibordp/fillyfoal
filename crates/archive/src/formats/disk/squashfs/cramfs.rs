@@ -52,7 +52,7 @@ const MAX_DEPTH: usize = 64;
 record! {
     pub struct CramSuper {
         magic: u32 "Magic" .hex(),
-        size: u32 "Size" .with(|&s, n| n.summary(fmt::size(s.into()))),
+        size: u32 "Size" .size(),
         flags: u32 "Flags" .flags(CRAM_FLAGS),
         future: u32 "Reserved",
         signature: ascii[16] "Signature",

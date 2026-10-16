@@ -98,11 +98,11 @@ record! {
     /// Format 0002: the file system.
     pub struct FsInfo {
         fs: ascii[16] "File system",
-        device_size: u64 "Device size" .with(|&v, n| n.summary(size(v))),
+        device_size: u64 "Device size" .size(),
         blocks: u64 "Blocks",
         used: u64 "Blocks in use",
         used_bitmap: u64 "Blocks in use (bitmap)" .desc("Blocks the bitmap marks, as counted when it was written"),
-        block_size: u32 "Block size" .with(|&v, n| n.summary(size(v.into()))),
+        block_size: u32 "Block size" .size(),
     }
 }
 
@@ -127,8 +127,8 @@ record! {
         fs: ascii[15] "File system",
         version: ascii[4] "Image version",
         _padding: bytes[2] "Padding",
-        block_size: u32 "Block size" .with(|&v, n| n.summary(size(v.into()))),
-        device_size: u64 "Device size" .with(|&v, n| n.summary(size(v))),
+        block_size: u32 "Block size" .size(),
+        device_size: u64 "Device size" .size(),
         blocks: u64 "Blocks",
         used: u64 "Blocks in use",
         _reserved: bytes[4096] "Reserved",

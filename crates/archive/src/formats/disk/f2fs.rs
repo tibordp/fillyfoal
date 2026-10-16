@@ -710,7 +710,7 @@ fn inode_layout(f: &mut Fields<'_>, ctx: &InodeCtx) -> Result<()> {
     f.u32("Owner UID").emit()?;
     f.u32("Group GID").emit()?;
     f.u32("Links").emit()?;
-    f.u64("Size").with(|&v, n| n.summary(size(v))).emit()?;
+    f.u64("Size").size().emit()?;
     f.u64("Blocks").desc("In 512-byte units").emit()?;
     f.u64("Accessed").timestamp().emit()?;
     f.u64("Changed").timestamp().emit()?;

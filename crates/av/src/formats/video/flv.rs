@@ -953,8 +953,8 @@ fn annotate_property(name: &str, node: Node, d: &[u8], pos: usize) -> Node {
         "videodatarate" | "audiodatarate" => node.summary("kb/s"),
         "audiosamplerate" => node.summary("Hz"),
         "audiosamplesize" => node.summary("bits"),
-        "filesize" | "datasize" | "videosize" | "audiosize" => {
-            node.summary(crate::formats::util::arcutil::human_size(count(n)))
+        "filesize" | "datasize" | "videosize" | "audiosize" if n >= 0.0 && n.fract() == 0.0 => {
+            node.value(Value::size(count(n)))
         }
         "videocodecid" => node.summary(codec_id_name(n, VIDEO_CODECS)),
         "audiocodecid" => node.summary(codec_id_name(n, SOUND_FORMATS)),

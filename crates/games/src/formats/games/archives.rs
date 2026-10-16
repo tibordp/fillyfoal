@@ -238,14 +238,7 @@ fn psarc_entry(f: &mut Fields<'_>, _: &()) -> Result<(u32, u64, u64)> {
     let size = f
         .bytes("Uncompressed size", 5)
         .map(|b| be40(&b))
-        .with(|&v, n| {
-            n.value(Value::UInt {
-                value: v,
-                bits: 40,
-                radix: crate::value::Radix::Dec,
-            })
-            .summary(crate::formats::util::fmt::size(v))
-        })
+        .with(|&v, n| n.value(Value::size(v).bits(40)))
         .emit()?;
     let offset = f
         .bytes("Offset", 5)

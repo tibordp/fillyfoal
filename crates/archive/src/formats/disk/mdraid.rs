@@ -350,11 +350,8 @@ fn uuid_node(b: &Vec<u8>, n: Node) -> Node {
 }
 
 /// Decorator for a count of 512-byte sectors.
-fn sectors<T: Copy + Into<u64>>(v: &T, n: Node) -> Node {
-    match (*v).into() {
-        0 => n,
-        v => n.summary(size(v.saturating_mul(512))),
-    }
+fn sectors<T: Copy + Into<u64>>(_: &T, n: Node) -> Node {
+    n.as_blocks(512u32)
 }
 
 /// RAID4/5/6 parity layouts (`ALGORITHM_*` in the kernel's `raid5.h`).
@@ -416,8 +413,8 @@ record! {
         ctime: u64 "Created" .with(|&v, n| n.value(Value::utc(i64::try_from(v & 0xff_ffff_ffff).unwrap_or(0)))),
         level: u32 "RAID level" .enumeration(LEVELS),
         layout: u32 "Layout" .with(|&v, n| layout_summary(n, level, v)),
-        size: u64 "Component size (sectors)" .with(sectors),
-        chunk: u32 "Chunk size (sectors)" .with(sectors),
+        size: u64 "Component size" .with(sectors),
+        chunk: u32 "Chunk size" .with(sectors),
         raid_disks: u32 "RAID disks",
         bitmap_offset: i32 "Bitmap offset (sectors from the superblock)",
         new_level: u32 "New level",

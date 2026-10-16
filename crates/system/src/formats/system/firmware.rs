@@ -69,7 +69,7 @@ record! {
         minor: u16 "Minor version",
         header_size: u16 "File header size",
         chunk_header_size: u16 "Chunk header size",
-        block_size: u32 "Block size" .with(|&b, n| n.summary(human_size(b.into()))),
+        block_size: u32 "Block size" .size(),
         blocks: u32 "Total blocks",
         chunks: u32 "Total chunks",
         checksum: u32 "Image checksum" .hex(),
@@ -372,10 +372,7 @@ fn boot_layout(f: &mut Fields<'_>, _: &()) -> Result<Boot> {
         ..Boot::default()
     };
     let size = |f: &mut Fields<'_>, name: &'static str| -> Result<u64> {
-        Ok(f.u32(name)
-            .with(|&s, n| n.summary(human_size(s.into())))
-            .emit()?
-            .into())
+        Ok(f.u32(name).size().emit()?.into())
     };
     if b.version >= 3 {
         b.page = 4096;
@@ -594,7 +591,7 @@ record! {
         magic: u32 "Magic" .hex(),
         header_crc: u32 "Header CRC" .checksum("CRC-32"),
         time: u32 "Creation time" .timestamp(),
-        size: u32 "Data size" .with(|&s, n| n.summary(human_size(s.into()))),
+        size: u32 "Data size" .size(),
         load: u32 "Load address" .hex(),
         entry: u32 "Entry point" .hex(),
         data_crc: u32 "Data CRC" .checksum("CRC-32"),

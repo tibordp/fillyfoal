@@ -96,7 +96,7 @@ fn vp8(b: &mut Bits<'_>) -> Result<Option<Size>> {
         .emit()?;
     b.field("Show frame", 1).flag().emit()?;
     b.field("First partition size", 19)
-        .with(|v, n| n.summary(format!("{v} bytes")))
+        .size()
         .desc("Size of the first (mode and probability) partition, after this header")
         .emit()?;
     if !key {

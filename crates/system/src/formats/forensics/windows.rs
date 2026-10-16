@@ -201,7 +201,7 @@ record! {
         entries: u32 "Number of entries" .desc("Not maintained reliably by every Windows version"),
         _unknown: u32 "Unknown",
         record_size: u32 "Record size",
-        total: u32 "Total size of deleted files" .with(|&v, n| n.summary(size(v.into()))),
+        total: u32 "Total size of deleted files" .size(),
     }
 }
 
@@ -217,9 +217,7 @@ fn info2_layout(f: &mut Fields<'_>, unicode: &bool) -> Result<(String, u32, u64)
         })
         .emit()?;
     let deleted = f.u64("Deletion time").filetime().emit()?;
-    f.u32("Size on disk")
-        .with(|&v, n| n.summary(size(v.into())))
-        .emit()?;
+    f.u32("Size on disk").size().emit()?;
     let path = if *unicode {
         f.utf16("Original path (Unicode)", 260).emit()?
     } else {
@@ -827,7 +825,7 @@ fn restart_layout(f: &mut Fields<'_>, _: &()) -> Result<u64> {
     f.u32("Sequence number bits").emit()?;
     f.u16("Restart area length").emit()?;
     let clients = f.u16("Client array offset").hex().emit()?;
-    f.u64("File size").with(|&v, n| n.summary(size(v))).emit()?;
+    f.u64("File size").size().emit()?;
     f.u32("Last LSN data length").emit()?;
     f.u16("Record header length").emit()?;
     f.u16("Log page data offset").hex().emit()?;

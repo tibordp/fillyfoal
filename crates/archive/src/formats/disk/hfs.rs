@@ -133,7 +133,7 @@ record! {
 record! {
     /// `HFSPlusForkData`: size and the first eight extents.
     pub struct ForkData {
-        logical_size: u64 "Logical size" .with(|&v, n| n.summary(size(v))),
+        logical_size: u64 "Logical size" .size(),
         clump_size: u32 "Clump size",
         total_blocks: u32 "Total blocks",
         extents: bytes[64] "Extents" .with(|b, n| n.summary(extents_text(b))),

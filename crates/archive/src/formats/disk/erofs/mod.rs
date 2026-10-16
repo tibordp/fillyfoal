@@ -149,10 +149,7 @@ fn sb_layout(f: &mut Fields<'_>, computed: &Option<u32>) -> Result<Sb> {
     let build_time = f.u64("Build time").timestamp().emit()?;
     f.u32("Build time (ns)").emit()?;
     let block = 1u64.checked_shl(blkbits.into()).unwrap_or(0);
-    let blocks = f
-        .u32("Blocks")
-        .with(|&v, n| n.summary(size(u64::from(v).saturating_mul(block))))
-        .emit()?;
+    let blocks = f.u32("Blocks").size_in(block).emit()?;
     let meta = f
         .u32("Metadata area block")
         .desc("Inodes are found at this block plus 32 × nid bytes")
@@ -536,9 +533,7 @@ fn lz4_cfg(f: &mut Fields<'_>, _: &()) -> Result<()> {
 
 fn lzma_cfg(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u16("Length").emit()?;
-    f.u32("Dictionary size")
-        .with(|&v, n| n.summary(size(v.into())))
-        .emit()?;
+    f.u32("Dictionary size").size().emit()?;
     f.u16("Format").emit()?;
     f.bytes("Reserved", 8).emit()?;
     Ok(())
@@ -665,12 +660,10 @@ fn inode_layout(f: &mut Fields<'_>, ctx: &InoCtx) -> Result<()> {
         .emit()?;
     if ctx.ext {
         f.u16("Reserved").emit()?;
-        f.u64("Size").with(|&v, n| n.summary(size(v))).emit()?;
+        f.u64("Size").size().emit()?;
     } else {
         f.u16("Link count").emit()?;
-        f.u32("Size")
-            .with(|&v, n| n.summary(size(v.into())))
-            .emit()?;
+        f.u32("Size").size().emit()?;
         match ctx.mtime_base {
             Some(base) => {
                 f.u32("Modification time")

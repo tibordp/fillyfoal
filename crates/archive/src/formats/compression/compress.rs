@@ -95,9 +95,7 @@ pub async fn dissect_compress(cx: Cx, input: Input) -> Result<()> {
 /// counts per level followed by the leaf characters.
 fn pack_header(f: &mut Fields<'_>, _: &()) -> Result<u64> {
     f.bytes("Magic", 2).emit()?;
-    f.u32("Original size")
-        .with(|&s, n| n.summary(fmt::size(s.into())))
-        .emit()?;
+    f.u32("Original size").size().emit()?;
     let levels = f.u8("Tree depth").emit()?;
     let mut leaves = 0u64;
     for level in 1..=levels {

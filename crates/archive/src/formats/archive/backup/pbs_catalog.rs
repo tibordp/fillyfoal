@@ -274,8 +274,7 @@ async fn fields(cx: Cx, (span, name_span): (Span, Span)) -> Result<()> {
         cx.emit(
             Node::new("Size")
                 .span(cur.since(start))
-                .value(uint(size_, 64))
-                .summary(size(size_)),
+                .value(crate::formats::util::val::size(size_, 64)),
         );
         let start = cur.pos();
         let mtime = catalog_i64(&mut cur).await?;

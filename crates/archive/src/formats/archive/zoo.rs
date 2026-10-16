@@ -184,7 +184,7 @@ async fn directory_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let crc = r.u16("File CRC-16", LE).ok_or_else(bad)?;
     r.with(|n| n.checksum(Check::new("CRC-16/ARC", crc).on_decode()));
     let original = r.u32("Original size", LE).ok_or_else(bad)?;
-    r.with(|n| n.summary(fmt::size(original.into())));
+    r.with(|n| n.as_size());
     let packed = r.u32("Compressed size", LE).ok_or_else(bad)?;
     r.u8("Major version").ok_or_else(bad)?;
     r.u8("Minor version").ok_or_else(bad)?;

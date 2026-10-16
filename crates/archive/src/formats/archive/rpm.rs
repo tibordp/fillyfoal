@@ -195,7 +195,7 @@ record! {
         version: u8 "Version",
         reserved: bytes[4] "Reserved",
         entries: u32 "Index entries",
-        size: u32 "Data store size" .with(|&s, n| n.summary(fmt::size(s.into()))),
+        size: u32 "Data store size" .size(),
     }
 }
 

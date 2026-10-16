@@ -166,7 +166,7 @@ record! {
         reserved: bytes[4] "reserved",
         drv_offset: i64 "drv_offset"
             .desc("Block where the volume begins; block numbers count from the drive's start"),
-        sects: i64 "sects" .with(|&v, n| n.summary(size(u64::try_from(v).unwrap_or(0).saturating_mul(BLK)))),
+        sects: i64 "sects" .size_in(BLK),
         root_clus: i64 "root_clus" .desc("First block of the root directory"),
         bitmap_sects: i64 "bitmap_sects" .desc("Blocks of allocation bitmap, after this one"),
         unique_id: u64 "unique_id" .hex(),
@@ -181,7 +181,7 @@ record! {
         attr: u16 "attr" .flags(ATTRS),
         name: bytes[38] "name" .with(|b, n| n.value(Value::Text(crate::text::latin1(until_nul(b))))),
         clus: i64 "clus" .desc("First block (absolute)"),
-        size: i64 "size" .with(|&v, n| n.summary(size(u64::try_from(v).unwrap_or(0)))),
+        size: i64 "size" .size(),
         datetime: u64 "datetime" .with(cdate),
     }
 }
@@ -255,12 +255,7 @@ async fn boot_hd_fields(cx: Cx, code: Span) -> Result<()> {
     cx.emit(
         Node::new("BHD_BLK_CNT")
             .span(at(BHD_BLK_CNT, 2))
-            .value(Value::UInt {
-                value: cnt.into(),
-                bits: 16,
-                radix: crate::value::Radix::Dec,
-            })
-            .summary(size(u64::from(cnt).saturating_mul(BLK)))
+            .value(Value::blocks(cnt.into(), BLK).bits(16))
             .desc("Blocks the loader reads (BootHDIns: the kernel file's size)"),
     );
     let mut dap = Node::new("BHD_DAP_BLK")

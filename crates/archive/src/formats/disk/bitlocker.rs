@@ -81,7 +81,7 @@ record! {
         version: u16 "Version" .with(|&v, n| n.summary(match v { 1 => "Windows Vista", 2 => "Windows 7 or later", _ => "unknown" })),
         _unknown: u16 "Unknown",
         _unknown2: u16 "Unknown",
-        volume_size: u64 "Encrypted volume size" .with(|&v, n| n.summary(size(v))),
+        volume_size: u64 "Encrypted volume size" .size(),
         _unknown3: u32 "Unknown",
         header_sectors: u32 "Volume header sectors",
         block1: u64 "FVE metadata block 1 offset" .hex(),
@@ -451,8 +451,8 @@ async fn entry_fields(cx: Cx, (span, bytes, depth): (Span, Arc<Vec<u8>>, usize))
                     radix: Radix::Hex,
                 })
             });
-            let s = r.u64("Size", LE).unwrap_or(0);
-            r.with(|n| n.summary(size(s)));
+            r.u64("Size", LE);
+            r.with(|n| n.as_size());
         }
         _ => {
             let n = r.remaining();

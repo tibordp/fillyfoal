@@ -371,10 +371,7 @@ fn text_clip(s: &str) -> String {
 fn avb_hashtree(f: &mut Fields<'_>, _: &()) -> Result<String> {
     avb_descriptor_header(f)?;
     f.u32("dm-verity version").emit()?;
-    let image = f
-        .u64("Image size")
-        .with(|&s, n| n.summary(crate::formats::util::fmt::size(s)))
-        .emit()?;
+    let image = f.u64("Image size").size().emit()?;
     f.u64("Tree offset").hex().emit()?;
     f.u64("Tree size").emit()?;
     f.u32("Data block size").emit()?;
@@ -404,10 +401,7 @@ const AVB_HASHTREE_FLAGS: FlagTable = &[flag(1, "DO_NOT_USE_AB"), flag(2, "CHECK
 /// name, salt and digest.
 fn avb_hash(f: &mut Fields<'_>, _: &()) -> Result<String> {
     avb_descriptor_header(f)?;
-    let image = f
-        .u64("Image size")
-        .with(|&s, n| n.summary(crate::formats::util::fmt::size(s)))
-        .emit()?;
+    let image = f.u64("Image size").size().emit()?;
     let alg = f.ascii("Hash algorithm", 32).emit()?;
     let name_len = f.u32("Partition name length").emit()?;
     let salt_len = f.u32("Salt length").emit()?;

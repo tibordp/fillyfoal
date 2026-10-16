@@ -15,9 +15,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::ntfs::FILE_ATTRIBUTES;
-use crate::formats::disk::{
-    assemble, content_node, dos_date, dos_stamp, fragments_node, size, size_summary,
-};
+use crate::formats::disk::{assemble, content_node, dos_date, dos_stamp, fragments_node, size};
 use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
@@ -159,7 +157,7 @@ record! {
         cluster_hi: u16 "First cluster (high word)",
         modified: u32 "Modified" .with(dos_stamp),
         cluster_lo: u16 "First cluster (low word)",
-        size: u32 "File size" .with(size_summary),
+        size: u32 "File size" .size(),
     }
 }
 

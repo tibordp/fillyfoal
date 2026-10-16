@@ -37,7 +37,7 @@ record! {
         cylinders: u32 "Cylinders",
         tracks: u32 "Sectors per cluster",
         bat_entries: u32 "BAT entries",
-        sectors: u64 "Disk size (sectors)" .with(|&v, n| n.summary(size(v.saturating_mul(SECTOR)))),
+        sectors: u64 "Disk size" .size_in(SECTOR),
         in_use: u32 "In use" .hex(),
         data_offset: u32 "Data offset (sectors)",
         flags: u32 "Flags" .hex(),

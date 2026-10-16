@@ -93,8 +93,8 @@ record! {
         _ctime: i64 "Creation time" .with(time_value),
         csum: bytes[32] "Index checksum" .checksum("SHA-256")
             .desc("SHA-256 of all the entries after the header"),
-        image_size: u64 "Size" .with(|&v, n| n.summary(size(v))) .desc("Size of the image"),
-        chunk_size: u64 "Chunk size" .with(|&v, n| n.summary(size(v))),
+        image_size: u64 "Size" .size() .desc("Size of the image"),
+        chunk_size: u64 "Chunk size" .size(),
     }
 }
 

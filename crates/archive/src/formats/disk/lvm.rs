@@ -65,14 +65,14 @@ record! {
 record! {
     pub struct PvHeader {
         uuid: ascii[32] "PV UUID" .with(|u, n| n.value(Value::Text(dashed(u)))),
-        device_size: u64 "Device size" .with(|&v, n| n.summary(size(v))),
+        device_size: u64 "Device size" .size(),
     }
 }
 
 record! {
     pub struct Area {
         offset: u64 "Offset" .hex(),
-        len: u64 "Size" .with(|&v, n| n.summary(size(v))),
+        len: u64 "Size" .size(),
     }
 }
 
@@ -82,7 +82,7 @@ record! {
         magic: bytes[16] "Magic",
         version: u32 "Version",
         start: u64 "Start" .hex(),
-        len: u64 "Size" .with(|&v, n| n.summary(size(v))),
+        len: u64 "Size" .size(),
     }
 }
 

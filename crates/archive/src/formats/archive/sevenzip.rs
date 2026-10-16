@@ -139,7 +139,7 @@ record! {
         minor: u8 "Minor version",
         start_crc: u32 "Start header CRC" .checksum("CRC-32"),
         next_offset: u64 "Next header offset" .hex() .desc("Relative to the end of this header"),
-        next_size: u64 "Next header size" .with(|&s, n| n.summary(fmt::size(s))),
+        next_size: u64 "Next header size" .size(),
         next_crc: u32 "Next header CRC" .checksum("CRC-32"),
     }
 }
@@ -2136,9 +2136,7 @@ async fn list_folders(cx: Cx, (input, header): (Input, Arc<Header>)) -> Result<(
             .map(|(j, c)| coder_node(j, c))
             .collect();
         children.push(
-            Node::new("Unpacked size")
-                .value(uint(f.unpack_size(), 64))
-                .summary(fmt::size(f.unpack_size())),
+            Node::new("Unpacked size").value(crate::formats::util::val::size(f.unpack_size(), 64)),
         );
         children.push(Node::new("Streams").value(uint(f.streams, 64)));
         children.push(match plan(f, unlock) {
@@ -2228,11 +2226,7 @@ fn coder_node(j: usize, c: &Coder) -> Node {
                 props.push(Node::new("Order").value(uint(order, 8)));
             }
             if let Some(mem) = u32_le(&c.props, 1) {
-                props.push(
-                    Node::new("Memory")
-                        .value(uint(mem, 32))
-                        .summary(fmt::size(u64::from(mem))),
-                );
+                props.push(Node::new("Memory").value(crate::formats::util::val::size(mem, 32)));
             }
         }
         // Delta: the distance minus one.
@@ -2260,9 +2254,7 @@ fn coder_node(j: usize, c: &Coder) -> Node {
 }
 
 fn dict_node(d: u32) -> Node {
-    Node::new("Dictionary size")
-        .value(uint(d, 32))
-        .summary(fmt::size(u64::from(d)))
+    Node::new("Dictionary size").value(crate::formats::util::val::size(d, 32))
 }
 
 /// The (size, CRC) of stream `i`.
@@ -2316,11 +2308,7 @@ async fn list_files(cx: Cx, (input, header): (Input, Arc<Header>)) -> Result<()>
             let crc = archive.streams.crcs.get(stream).copied().flatten();
             let fo = archive.streams.folders.get(folder);
             let span = spans.get(folder).copied().unwrap_or(file.sub(0, 0));
-            children.push(
-                Node::new("Size")
-                    .value(uint(size, 64))
-                    .summary(fmt::size(size)),
-            );
+            children.push(Node::new("Size").value(crate::formats::util::val::size(size, 64)));
             children.push(Node::new("Folder").value(uint(to_u64(folder), 64)));
             let methods = fo.map(Folder::methods).unwrap_or_default();
             let first = first_of(&archive, stream.saturating_sub(to_usize(in_folder)));

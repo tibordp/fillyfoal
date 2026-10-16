@@ -104,7 +104,7 @@ record! {
         valid_length: u64 "Valid data length",
         _reserved3: u32 "Reserved",
         first_cluster: u32 "First cluster",
-        length: u64 "Data length" .with(|&v, n| n.summary(size(v))),
+        length: u64 "Data length" .size(),
     }
 }
 
@@ -127,7 +127,7 @@ record! {
         checksum: u32 "Table checksum (up-case)" .hex(),
         _reserved2: bytes[12] "Reserved",
         first_cluster: u32 "First cluster",
-        length: u64 "Data length" .with(|&v, n| n.summary(size(v))),
+        length: u64 "Data length" .size(),
     }
 }
 

@@ -423,9 +423,7 @@ async fn lp_extents(cx: Cx, (span, entry): (Span, u32)) -> Result<()> {
         };
         cx.push(
             struct_node(format!("Extent {i}"), one, LE, (), |f, _| {
-                f.u64("Sectors")
-                    .with(|&s, n| n.summary(size(s.saturating_mul(SECTOR))))
-                    .emit()?;
+                f.u64("Sectors").size_in(SECTOR).emit()?;
                 f.u32("Target type").enumeration(LP_EXTENT_TYPE).emit()?;
                 f.u64("Target data")
                     .desc("First physical sector (LINEAR)")
@@ -461,7 +459,7 @@ async fn lp_devices(cx: Cx, (span, entry): (Span, u32)) -> Result<()> {
                 f.u64("First logical sector").emit()?;
                 f.u32("Alignment").emit()?;
                 f.u32("Alignment offset").emit()?;
-                f.u64("Size").with(|&s, n| n.summary(size(s))).emit()?;
+                f.u64("Size").size().emit()?;
                 f.ascii("Partition name", 36).emit()?;
                 f.u32("Flags").flags(SLOT_SUFFIXED).emit()?;
                 Ok(())
@@ -483,11 +481,11 @@ async fn lp_groups(cx: Cx, (span, entry): (Span, u32)) -> Result<()> {
             f.u32("Flags").flags(SLOT_SUFFIXED).emit()?;
             f.u64("Maximum size")
                 .with(|&s, n| {
-                    n.summary(if s == 0 {
-                        "unlimited".to_owned()
+                    if s == 0 {
+                        n.summary("unlimited")
                     } else {
-                        size(s)
-                    })
+                        n.as_size()
+                    }
                 })
                 .emit()?;
             Ok(())
@@ -521,18 +519,12 @@ fn vendor_layout(f: &mut Fields<'_>, _: &()) -> Result<VendorBoot> {
     let page = f.u32("Page size").emit()?;
     f.u32("Kernel load address").hex().emit()?;
     f.u32("Ramdisk load address").hex().emit()?;
-    let ramdisk = f
-        .u32("Vendor ramdisk size")
-        .with(|&s, n| n.summary(size(s.into())))
-        .emit()?;
+    let ramdisk = f.u32("Vendor ramdisk size").size().emit()?;
     f.ascii("Command line", 2048).emit()?;
     f.u32("Tags address").hex().emit()?;
     f.ascii("Product name", 16).emit()?;
     f.u32("Header size").emit()?;
-    let dtb = f
-        .u32("DTB size")
-        .with(|&s, n| n.summary(size(s.into())))
-        .emit()?;
+    let dtb = f.u32("DTB size").size().emit()?;
     f.u64("DTB load address").hex().emit()?;
     let mut b = VendorBoot {
         version,
@@ -657,9 +649,7 @@ async fn ramdisk_table(cx: Cx, (table, entries, entry_size): (Span, u32, u32)) -
         let name = until_nul(e.get(12..44).unwrap_or_default());
         cx.push(
             struct_node(format!("Entry {i}"), entry, LE, (), |f, _| {
-                f.u32("Ramdisk size")
-                    .with(|&s, n| n.summary(size(s.into())))
-                    .emit()?;
+                f.u32("Ramdisk size").size().emit()?;
                 f.u32("Ramdisk offset").hex().emit()?;
                 f.u32("Ramdisk type").enumeration(RAMDISK_TYPE).emit()?;
                 f.ascii("Ramdisk name", 32).emit()?;

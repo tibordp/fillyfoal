@@ -111,11 +111,7 @@ fn descriptor(f: &mut Fields<'_>, _: &()) -> Result<Descriptor> {
         content_size: None,
     };
     if flg & 0x08 != 0 {
-        d.content_size = Some(
-            f.u64("Content size")
-                .with(|&s, n| n.summary(fmt::size(s)))
-                .emit()?,
-        );
+        d.content_size = Some(f.u64("Content size").size().emit()?);
     }
     if flg & 0x01 != 0 {
         f.u32("Dictionary ID").hex().emit()?;
@@ -541,8 +537,7 @@ async fn snappy_chunk(cx: Cx, (span, kind): (Span, u8)) -> Result<()> {
                     cx.emit(
                         Node::new("Uncompressed length")
                             .span(data.sub(0, to_u64(n)))
-                            .value(uint(len, 64))
-                            .summary(fmt::size(len)),
+                            .value(crate::formats::util::val::size(len, 64)),
                     );
                 }
                 cx.emit(

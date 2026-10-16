@@ -239,7 +239,7 @@ record! {
         nondirs: u64 "Other inodes",
         first_ino: u64 "First inode",
         last_ino: u64 "Last inode",
-        data_size: u64 "Data size" .with(|&v, n| n.summary(size(v))),
+        data_size: u64 "Data size" .size(),
         _pad2: bytes[0x18] "Padding",
     }
 }
@@ -1358,8 +1358,7 @@ async fn file_header_fields(cx: Cx, span: Span) -> Result<()> {
             .value(uint(u32_at(44), 32)),
         Node::new("Size")
             .span(st.sub(32, 8))
-            .value(uint(u64_at(48), 64))
-            .summary(size(u64_at(48))),
+            .value(crate::formats::util::val::size(u64_at(48), 64)),
         Node::new("Accessed").span(st.sub(40, 8)).value(time(56)),
         Node::new("Modified").span(st.sub(48, 8)).value(time(64)),
         Node::new("Changed").span(st.sub(56, 8)).value(time(72)),

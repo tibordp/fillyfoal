@@ -846,8 +846,8 @@ record! {
         time: u16 "Modification time (DOS)" .hex() .with(|&t, n| n.summary(dos_time(t))),
         date: u16 "Modification date (DOS)" .with(crate::formats::disk::dos_date),
         crc: u32 "CRC-32" .checksum("CRC-32"),
-        compressed: u32 "Compressed size",
-        uncompressed: u32 "Uncompressed size",
+        compressed: u32 "Compressed size" .with(zip32_size),
+        uncompressed: u32 "Uncompressed size" .with(zip32_size),
         name_len: u16 "File name length",
         extra_len: u16 "Extra field length",
         comment_len: u16 "Comment length",
@@ -867,10 +867,19 @@ record! {
         time: u16 "Modification time (DOS)" .hex() .with(|&t, n| n.summary(dos_time(t))),
         date: u16 "Modification date (DOS)" .with(crate::formats::disk::dos_date),
         crc: u32 "CRC-32" .checksum("CRC-32"),
-        compressed: u32 "Compressed size",
-        uncompressed: u32 "Uncompressed size",
+        compressed: u32 "Compressed size" .with(zip32_size),
+        uncompressed: u32 "Uncompressed size" .with(zip32_size),
         name_len: u16 "File name length",
         extra_len: u16 "Extra field length",
+    }
+}
+
+/// A 32-bit size, or 0xffffffff: the size is in the Zip64 extra field.
+fn zip32_size(&v: &u32, n: Node) -> Node {
+    if v == u32::MAX {
+        n.summary("in the Zip64 extra field")
+    } else {
+        n.as_size()
     }
 }
 
@@ -1430,13 +1439,13 @@ fn descriptor_layout(f: &mut Fields<'_>, ctx: &DescriptorCtx) -> Result<bool> {
     let crc = f.u32("CRC-32").checksum("CRC-32").emit()?;
     let (compressed, uncompressed) = if ctx.wide {
         (
-            f.u64("Compressed size").emit()?,
-            f.u64("Uncompressed size").emit()?,
+            f.u64("Compressed size").size().emit()?,
+            f.u64("Uncompressed size").size().emit()?,
         )
     } else {
         (
-            f.u32("Compressed size").emit()?.into(),
-            f.u32("Uncompressed size").emit()?.into(),
+            f.u32("Compressed size").size().emit()?.into(),
+            f.u32("Uncompressed size").size().emit()?.into(),
         )
     };
     Ok(crc == ctx.crc && compressed == ctx.compressed && uncompressed == ctx.uncompressed)
@@ -2050,7 +2059,9 @@ fn extra_layout(f: &mut Fields<'_>, &(id, zip64): &(u16, Zip64Wants)) -> Result<
                 if left(f) < width {
                     break;
                 }
-                if width == 8 {
+                if name.ends_with("size") {
+                    f.u64(name).size().emit()?;
+                } else if width == 8 {
                     f.u64(name).emit()?;
                 } else {
                     f.u32(name).emit()?;

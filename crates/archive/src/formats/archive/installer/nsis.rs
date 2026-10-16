@@ -783,11 +783,11 @@ fn first_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.ascii("Magic", 12).emit()?;
     f.u32("Script header size")
         .desc("Uncompressed")
-        .with(|&v, n| n.summary(size(v.into())))
+        .size()
         .emit()?;
     f.u32("Data length")
         .desc("Of everything from the first header to the CRC, inclusive")
-        .with(|&v, n| n.summary(size(v.into())))
+        .size()
         .emit()?;
     Ok(())
 }

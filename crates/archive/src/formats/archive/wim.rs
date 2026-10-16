@@ -103,8 +103,7 @@ fn resource_layout(f: &mut Fields<'_>, in_solid: &bool) -> Result<()> {
     f.node(
         Node::new(if *in_solid { "Size" } else { "Compressed size" })
             .span(span.sub(0, 7))
-            .value(uint(r.size, 64))
-            .summary(fmt::size(r.size)),
+            .value(crate::formats::util::val::size(r.size, 64)),
     );
     let (set, unknown) = crate::value::decode_flags(RESOURCE_FLAGS, r.flags.into());
     f.node(
@@ -131,7 +130,7 @@ fn resource_layout(f: &mut Fields<'_>, in_solid: &bool) -> Result<()> {
             if s == SOLID_RESOURCE {
                 n.summary("solid resource")
             } else {
-                n.summary(fmt::size(s))
+                n.as_size()
             }
         })
         .emit()?;
@@ -143,8 +142,8 @@ const SOLID_FORMATS: EnumTable = &[(0, "none"), (1, "XPRESS"), (2, "LZX"), (3, "
 record! {
     /// The header a solid resource starts with.
     pub struct SolidHeader {
-        size: u64 "Decoded size" .with(|&s, n| n.summary(fmt::size(s))),
-        chunk: u32 "Chunk size" .with(|&c, n| n.summary(fmt::size(c.into()))),
+        size: u64 "Decoded size" .size(),
+        chunk: u32 "Chunk size" .size(),
         format: u32 "Compression" .enumeration(SOLID_FORMATS),
     }
 }
@@ -167,7 +166,7 @@ record! {
         size: u32 "Header size",
         version: u32 "Version" .hex(),
         flags: u32 "Flags" .flags(HEADER_FLAGS),
-        chunk: u32 "Chunk size" .with(|&c, n| n.summary(fmt::size(c.into()))),
+        chunk: u32 "Chunk size" .size(),
         guid: guid "GUID",
         part: u16 "Part number",
         parts: u16 "Total parts",

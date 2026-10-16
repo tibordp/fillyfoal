@@ -157,7 +157,7 @@ record! {
     pub struct Header {
         signature: ascii[4] "Signature",
         files: u16 "Number of entries",
-        length: u32 "Archive length" .with(|&l, n| n.summary(fmt::size(l.into()))),
+        length: u32 "Archive length" .size(),
         signature2: ascii[4] "Signature 2",
         version: u8 "Version",
         reserved: bytes[7] "Reserved",
@@ -492,8 +492,8 @@ pub async fn dissect_sit5(cx: Cx, input: Input) -> Result<()> {
     r.u8("Version").ok_or_else(bad)?;
     let flags = r.u8("Flags").ok_or_else(bad)?;
     r.with(|n| n.value(hex(flags, 64)));
-    let total = r.u32("Total size", BE).ok_or_else(bad)?;
-    r.with(|n| n.summary(fmt::size(total.into())));
+    r.u32("Total size", BE).ok_or_else(bad)?;
+    r.with(|n| n.as_size());
     r.u32("Unknown", BE).ok_or_else(bad)?;
     let entries = r.u16("Root entries", BE).ok_or_else(bad)?;
     let first = r.u32("First entry offset", BE).ok_or_else(bad)?;

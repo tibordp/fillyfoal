@@ -523,7 +523,7 @@ fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<(u8, u8, u32)> {
     let size = f
         .bytes("Size", 4)
         .map(|b| syncsafe(&b).unwrap_or(0))
-        .with(|&s, n| n.value(uint(s, 28)).summary(human_size(s.into())))
+        .with(|&s, n| n.value(Value::size(s.into()).bits(28)))
         .desc("Syncsafe (7 bits per byte); excludes the header and footer")
         .emit()?;
     Ok((major, flags, size))

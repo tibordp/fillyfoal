@@ -1077,7 +1077,7 @@ fn item_node(magic: &[u8; 4], item: &Item) -> Node {
             Show::Mode => node
                 .value(crate::formats::util::val::oct(v, 64))
                 .summary(unix_mode(v)),
-            Show::Size => node.value(uint(v, bits)).summary(size(v)),
+            Show::Size => node.value(crate::formats::util::val::size(v, bits)),
             Show::Enum(t) => node.value(enumv(v, bits, t)),
             Show::Flags(t) => node.value(flagsv(v, bits, t)),
             Show::Version => node.value(hex(v, bits)).summary(format!(

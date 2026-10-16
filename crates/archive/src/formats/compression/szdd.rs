@@ -43,7 +43,7 @@ record! {
         magic: bytes[8] "Magic",
         mode: ascii[1] "Compression mode" .desc("'A': LZSS with a 4 KiB window"),
         missing: ascii[1] "Missing last character" .desc("Replaces the '_' at the end of the file name"),
-        size: u32 "Uncompressed size" .with(|&s, n| n.summary(fmt::size(s.into()))),
+        size: u32 "Uncompressed size" .size(),
     }
 }
 
@@ -103,11 +103,7 @@ fn kwaj_header(f: &mut Fields<'_>, _: &()) -> Result<(u16, u16, Option<u32>)> {
     let flags = f.u16("Flags").flags(KWAJ_FLAGS).emit()?;
     let mut size = None;
     if flags & 0x01 != 0 {
-        size = Some(
-            f.u32("Uncompressed size")
-                .with(|&s, n| n.summary(fmt::size(s.into())))
-                .emit()?,
-        );
+        size = Some(f.u32("Uncompressed size").size().emit()?);
     }
     if flags & 0x02 != 0 {
         f.u16("Unknown").emit()?;

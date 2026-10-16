@@ -39,10 +39,7 @@ fn probe(h: &Head<'_>) -> bool {
 
 fn layout(f: &mut Fields<'_>, _: &()) -> Result<(u64, String)> {
     let version = f.u64("Version").emit()?;
-    let original = f
-        .u64("Original size")
-        .with(|&s, n| n.summary(size(s)))
-        .emit()?;
+    let original = f.u64("Original size").size().emit()?;
     f.u64("Deletion time").filetime().emit()?;
     let path = if version >= 2 {
         let chars = f

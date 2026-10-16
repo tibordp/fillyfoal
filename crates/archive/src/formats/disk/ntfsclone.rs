@@ -75,8 +75,8 @@ record! {
         magic: bytes[16] "Magic",
         major: u8 "Major version",
         minor: u8 "Minor version",
-        cluster_size: u32 "Cluster size" .with(|&v, n| n.summary(size(v.into()))),
-        device_size: u64 "Device size" .with(|&v, n| n.summary(size(v))),
+        cluster_size: u32 "Cluster size" .size(),
+        device_size: u64 "Device size" .size(),
         clusters: i64 "Clusters" .desc("Clusters in the volume; the image goes one further, to the backup boot sector"),
         in_use: u64 "Clusters in use" .desc("Not counting the backup boot sector's cluster"),
     }

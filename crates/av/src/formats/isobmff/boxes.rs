@@ -1254,11 +1254,11 @@ fn tenc(f: &mut Fields<'_>) -> Result<()> {
     let iv = f
         .u8("Default per-sample IV size")
         .with(|&s, n| {
-            n.summary(if s == 0 {
-                "constant IV".to_owned()
+            if s == 0 {
+                n.summary("constant IV")
             } else {
-                format!("{s} bytes")
-            })
+                n.as_size()
+            }
         })
         .emit()?;
     let kid = f.bytes("Default KID", 16);

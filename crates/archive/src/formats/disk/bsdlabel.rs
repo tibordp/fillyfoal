@@ -100,7 +100,7 @@ record! {
         tracks: u32 "Tracks per cylinder",
         cylinders: u32 "Cylinders",
         sectors_per_cylinder: u32 "Sectors per cylinder",
-        sectors_per_unit: u32 "Sectors per unit" .with(|&v, n| n.summary(size(u64::from(v).saturating_mul(SECTOR)))),
+        sectors_per_unit: u32 "Sectors per unit" .size_in(SECTOR),
         spares_per_track: u16 "Spare sectors per track",
         spares_per_cylinder: u16 "Spare sectors per cylinder",
         alt_cylinders: u32 "Alternate cylinders",
