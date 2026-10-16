@@ -71,7 +71,7 @@ record! {
     pub struct VolumeHeader {
         zero: bytes[16] "Zero vector",
         file_system: guid "File system GUID" .with(|g, n| match fs_name(g) { Some(s) => n.summary(s), None => n }),
-        length: u64 "Volume length" .with(|&v, n| n.summary(size(v))),
+        length: u64 "Volume length" .size(),
         signature: ascii[4] "Signature",
         attributes: u32 "Attributes" .hex() .flags(FV_ATTRIBUTES),
         header_length: u16 "Header length",
@@ -116,7 +116,7 @@ record! {
         file_checksum: u8 "File checksum" .checksum("8-bit sum"),
         kind: u8 "Type" .enumeration(FILE_TYPES),
         attributes: u8 "Attributes" .hex() .flags(FILE_ATTRIBUTES),
-        size: bytes[3] "Size" .with(|b, n| n.summary(size(u24_le(b, 0).unwrap_or(0).into()))),
+        size: bytes[3] "Size" .with(|b, n| n.value(Value::size(u24_le(b, 0).unwrap_or(0).into()).bits(24))),
         state: u8 "State" .hex(),
     }
 }
@@ -408,7 +408,7 @@ record! {
     /// The `.lzma` ("LZMA alone") header EDK2's `LzmaCompress` writes.
     pub struct LzmaHeader {
         props: u8 "Properties" .hex() .desc("(pb × 5 + lp) × 9 + lc"),
-        dict: u32 "Dictionary size" .with(|&v, n| n.summary(size(v.into()))),
+        dict: u32 "Dictionary size" .size(),
         size: u64 "Decoded size",
     }
 }
@@ -416,15 +416,15 @@ record! {
 record! {
     /// The header of EFI and Tiano compressed data.
     pub struct UefiHeader {
-        comp: u32 "Compressed size" .with(|&v, n| n.summary(size(v.into()))),
-        orig: u32 "Decoded size" .with(|&v, n| n.summary(size(v.into()))),
+        comp: u32 "Compressed size" .size(),
+        orig: u32 "Decoded size" .size(),
     }
 }
 
 record! {
     /// The header EDK2's `BrotliCompress` writes before the Brotli stream.
     pub struct BrotliHeader {
-        size: u64 "Decoded size" .with(|&v, n| n.summary(size(v))),
+        size: u64 "Decoded size" .size(),
         scratch: u64 "Scratch size" .desc("Memory the decoder needs (the encoder's estimate)"),
     }
 }
@@ -548,7 +548,7 @@ async fn encoded_sections(
 record! {
     /// The fields of a compression section after its common header.
     pub struct CompressionFields {
-        length: u32 "Uncompressed length" .with(|&v, n| n.summary(size(v.into()))),
+        length: u32 "Uncompressed length" .size(),
         kind: u8 "Compression type" .enumeration(COMPRESSION_TYPES),
     }
 }

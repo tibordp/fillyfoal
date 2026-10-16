@@ -502,7 +502,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ CodeInfo at 0x1fdc — code 52 bytes, frame 32 bytes  [0x1fdc+0x13]
           flags: 0
           code_size: 52
-          packed_frame_size: 2 — 32 bytes
+          packed_frame_size: 2 × 16 bytes (32 bytes)
           core_spill_mask: 0x40400000
           fp_spill_mask: 0x0
           number_of_dex_registers: 1
@@ -511,7 +511,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ CodeInfo at 0x1fef — code 88 bytes, frame 48 bytes  [0x1fef+0x17]
           flags: 0
           code_size: 88
-          packed_frame_size: 3 — 48 bytes
+          packed_frame_size: 3 × 16 bytes (48 bytes)
           core_spill_mask: 0x40c00000
           fp_spill_mask: 0x0
           number_of_dex_registers: 2
@@ -520,7 +520,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ CodeInfo at 0x2006 — code 4 bytes, frame 0 bytes  [0x2006+0x8]
           flags: 0
           code_size: 4
-          packed_frame_size: 0 — 0 bytes
+          packed_frame_size: 0 × 16 bytes (0 bytes)
           core_spill_mask: 0x40000000
           fp_spill_mask: 0x0
           number_of_dex_registers: 1

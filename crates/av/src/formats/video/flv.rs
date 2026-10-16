@@ -27,7 +27,7 @@ use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::fmt::plural;
 use crate::formats::util::vidutil::bitwalk::Walker;
 use crate::formats::util::vidutil::nal::{self, group};
-use crate::formats::util::vidutil::{self, enumerated, seconds_ms, text, uint};
+use crate::formats::util::vidutil::{self, enumerated, text, uint};
 use crate::formats::video::coded;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
@@ -278,7 +278,7 @@ fn capitalise(s: &str) -> String {
 }
 
 fn tag_summary(kind: u8, ts: u32, size: u64, body: &[u8]) -> String {
-    let mut parts = vec![seconds_ms(ts.into())];
+    let mut parts = vec![crate::formats::util::fmt::duration_of(ts.into(), 1000)];
     let b = body.first().copied().unwrap_or(0);
     match kind {
         8 => {
@@ -341,7 +341,7 @@ async fn expand_tag(cx: Cx, tag: Tag) -> Result<()> {
     let ts = (ts >> 8) | ((ts & 0xff) << 24);
     cx.emit(
         uint("Timestamp", at(4, 4), ts.into(), 32)
-            .summary(seconds_ms(ts.into()))
+            .as_duration(1000)
             .desc("Milliseconds; 24 bits plus an 8-bit extension holding the high byte"),
     );
     let stream_id = crate::bytes::u24_be(&block.data, 8).unwrap_or(0);
@@ -632,11 +632,7 @@ fn composition_time(span: Span, d: &[u8], at: usize) -> Node {
     let ct = i32::from_ne_bytes((ct << 8).to_ne_bytes()) >> 8;
     Node::new("Composition time")
         .span(span)
-        .value(Value::Int {
-            value: ct.into(),
-            bits: 24,
-        })
-        .summary(format!("{ct} ms"))
+        .value(Value::duration(ct.into(), 1000))
 }
 
 async fn enhanced_video(cx: &Cx, data: Span, d: &[u8], codec: &Codec) -> Result<()> {
@@ -946,15 +942,15 @@ fn annotate_property(name: &str, node: Node, d: &[u8], pos: usize) -> Node {
     };
     match name {
         "duration" | "lasttimestamp" | "lastkeyframetimestamp" => {
-            node.summary(vidutil::seconds_f64(n))
+            node.summary(crate::formats::util::fmt::seconds(n))
         }
         "width" | "height" => node.summary("pixels"),
         "framerate" => node.summary("fps"),
         "videodatarate" | "audiodatarate" => node.summary("kb/s"),
         "audiosamplerate" => node.summary("Hz"),
         "audiosamplesize" => node.summary("bits"),
-        "filesize" | "datasize" | "videosize" | "audiosize" => {
-            node.summary(crate::formats::util::arcutil::human_size(count(n)))
+        "filesize" | "datasize" | "videosize" | "audiosize" if n >= 0.0 && n.fract() == 0.0 => {
+            node.value(Value::size(count(n)))
         }
         "videocodecid" => node.summary(codec_id_name(n, VIDEO_CODECS)),
         "audiocodecid" => node.summary(codec_id_name(n, SOUND_FORMATS)),
@@ -1567,7 +1563,7 @@ impl Summary {
             parts.push(streams.join(" + "));
         }
         if let Some(d) = self.duration {
-            parts.push(vidutil::seconds_f64(d));
+            parts.push(crate::formats::util::fmt::seconds(d));
         }
         if let Some(k) = self.keyframes {
             parts.push(format!("keyframe index of {k}"));

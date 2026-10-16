@@ -817,7 +817,7 @@ async fn kernel_dump(cx: Cx, input: Input) -> Result<()> {
             .emit()?;
         f.u64("System up time")
             .desc("In 100-nanosecond units")
-            .with(|&t, n| n.summary(uptime(t)))
+            .duration(10_000_000)
             .emit()?;
         f.u32("Minidump fields").hex().emit()?;
         f.u32("Secondary data state").emit()?;
@@ -980,19 +980,6 @@ fn context_len(machine: u32) -> Option<u64> {
         0x14c => Some(0x2cc),
         _ => None,
     }
-}
-
-/// `h:mm:ss.fff` of a duration in 100-nanosecond units.
-fn uptime(t: u64) -> String {
-    let ms = t / 10_000;
-    let s = ms / 1000;
-    format!(
-        "{}:{:02}:{:02}.{:03}",
-        s / 3600,
-        s / 60 % 60,
-        s % 60,
-        ms % 1000
-    )
 }
 
 const TRIAGE64_LEN: u64 = 0x80;

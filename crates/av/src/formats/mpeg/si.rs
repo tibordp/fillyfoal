@@ -554,7 +554,11 @@ fn bcd_duration(w: &mut Walker, name: &'static str) -> Option<u64> {
         .saturating_mul(3600)
         .saturating_add(bcd((v >> 8) & 0xff).saturating_mul(60))
         .saturating_add(bcd(v & 0xff));
-    w.text(name, start, vidutil::seconds_ms(secs.saturating_mul(1000)));
+    w.text(
+        name,
+        start,
+        crate::formats::util::fmt::duration_of(secs.saturating_mul(1000), 1000),
+    );
     Some(secs)
 }
 
@@ -1217,10 +1221,13 @@ fn section_walk(w: &mut Walker, d: &[u8], out: &mut Decoded) -> Option<()> {
                 });
                 let _ = start;
                 let text = match &title {
-                    Some(t) => format!("{t}, {}", vidutil::seconds_ms(dur.saturating_mul(1000))),
+                    Some(t) => format!(
+                        "{t}, {}",
+                        crate::formats::util::fmt::duration_of(dur.saturating_mul(1000), 1000)
+                    ),
                     None => format!(
                         "event {id}, {}",
-                        vidutil::seconds_ms(dur.saturating_mul(1000))
+                        crate::formats::util::fmt::duration_of(dur.saturating_mul(1000), 1000)
                     ),
                 };
                 w.end_summary(|| text);
@@ -1328,7 +1335,7 @@ fn splice_time(w: &mut Walker) -> Option<Option<u64>> {
     if w.flag("time_specified_flag")? {
         w.u("reserved", 6)?;
         let pts = w.u("pts_time", 33)?;
-        w.summary(|| super::seconds_90k(pts));
+        w.with(|n| n.as_duration(90_000));
         Some(Some(pts))
     } else {
         w.u("reserved", 7)?;
@@ -1341,8 +1348,8 @@ fn splice_info(w: &mut Walker, crc_at: usize) -> Option<String> {
     w.u("protocol_version", 8)?;
     let encrypted = w.flag("encrypted_packet")?;
     w.u("encryption_algorithm", 6)?;
-    let adj = w.u("pts_adjustment", 33)?;
-    w.summary(|| super::seconds_90k(adj));
+    w.u("pts_adjustment", 33)?;
+    w.with(|n| n.as_duration(90_000));
     w.u("cw_index", 8)?;
     w.x("tier", 12)?;
     let cmd_len = w.u("splice_command_length", 12)?;
@@ -1383,7 +1390,7 @@ fn splice_info(w: &mut Walker, crc_at: usize) -> Option<String> {
                     w.flag("auto_return")?;
                     w.u("reserved", 6)?;
                     let d = w.u("duration", 33)?;
-                    w.summary(|| super::seconds_90k(d));
+                    w.with(|n| n.as_duration(90_000));
                     duration = Some(d);
                 }
                 w.u("unique_program_id", 16)?;
@@ -1579,14 +1586,14 @@ fn segmentation_descriptor(w: &mut Walker) -> Option<String> {
             let tag = w.u("component_tag", 8)?;
             w.u("reserved", 7)?;
             let offset = w.u("pts_offset", 33)?;
-            w.summary(|| super::seconds_90k(offset));
+            w.with(|n| n.as_duration(90_000));
             w.end_summary(|| format!("tag {tag}, {}", super::seconds_90k(offset)));
         }
     }
     let mut duration = None;
     if has_duration {
         let d = w.u("segmentation_duration", 40)?;
-        w.summary(|| super::seconds_90k(d));
+        w.with(|n| n.as_duration(90_000));
         duration = Some(d);
     }
     let upid_type = w.en("segmentation_upid_type", 8, UPID_TYPES)?;

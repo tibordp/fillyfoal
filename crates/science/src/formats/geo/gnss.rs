@@ -132,7 +132,7 @@ fn mm(v: i32) -> String {
 
 record! {
     pub struct NavPvt {
-        itow: u32 "iTOW (ms)",
+        itow: u32 "iTOW" .duration(1000),
         year: u16 "Year",
         month: u8 "Month",
         day: u8 "Day",
@@ -140,7 +140,7 @@ record! {
         min: u8 "Minute",
         sec: u8 "Second",
         valid: u8 "Validity flags" .hex(),
-        t_acc: u32 "Time accuracy (ns)",
+        t_acc: u32 "Time accuracy" .duration(1_000_000_000),
         nano: i32 "Fraction of second (ns)",
         fix: u8 "Fix type" .enumeration(FIX_TYPES),
         flags: u8 "Flags" .hex(),
@@ -165,7 +165,7 @@ record! {
 
 record! {
     pub struct NavPosllh {
-        itow: u32 "iTOW (ms)",
+        itow: u32 "iTOW" .duration(1000),
         lon: i32 "Longitude (1e-7°)" .with(|&v, n| n.summary(deg7(v))),
         lat: i32 "Latitude (1e-7°)" .with(|&v, n| n.summary(deg7(v))),
         height: i32 "Height above ellipsoid (mm)" .with(|&v, n| n.summary(mm(v))),
@@ -628,7 +628,7 @@ async fn sbf(cx: Cx, input: Input) -> Result<()> {
 
 record! {
     pub struct PvtGeodetic {
-        tow: u32 "TOW (ms)",
+        tow: u32 "TOW" .duration(1000),
         wnc: u16 "Week number",
         mode: u8 "Mode",
         error: u8 "Error",

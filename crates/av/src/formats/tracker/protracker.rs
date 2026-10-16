@@ -54,7 +54,7 @@ fn channels(h: &Head<'_>) -> Option<u64> {
 record! {
     pub struct Sample {
         name: ascii[22] "Name",
-        length: u16 "Length" .desc("In 16-bit words") .with(|&l, n| n.summary(format!("{} bytes", u32::from(l).saturating_mul(2)))),
+        length: u16 "Length" .desc("In 16-bit words") .size_in(2u32),
         finetune: u8 "Finetune" .with(|&f, n| n.summary(format!("{}", ((f & 0xf) as i8) << 4 >> 4))),
         volume: u8 "Volume" .desc("0–64"),
         repeat_start: u16 "Repeat start" .desc("In words"),

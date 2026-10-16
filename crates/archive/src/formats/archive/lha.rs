@@ -319,9 +319,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 fn common_fields(r: &mut ByteReader<'_>, level: u8) -> Option<(String, u32)> {
     let method = r.text("Method", 5)?;
     let compressed = r.u32("Compressed size", LE)?;
-    r.with(|n| n.summary(fmt::size(compressed.into())));
-    let original = r.u32("Original size", LE)?;
-    r.with(|n| n.summary(fmt::size(original.into())));
+    r.with(|n| n.as_size());
+    r.u32("Original size", LE)?;
+    r.with(|n| n.as_size());
     let time = r.u32(
         if level == 2 {
             "Modification time"

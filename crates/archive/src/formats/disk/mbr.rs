@@ -50,7 +50,7 @@ record! {
         kind: u8 "Partition type" .enumeration(MBR_TYPES),
         chs_last: bytes[3] "Last sector (CHS)" .with(chs),
         lba: u32 "First sector (LBA)",
-        sectors: u32 "Sectors" .with(|&n, node| node.summary(size(u64::from(n).saturating_mul(SECTOR)))),
+        sectors: u32 "Sectors" .size_in(SECTOR),
     }
 }
 

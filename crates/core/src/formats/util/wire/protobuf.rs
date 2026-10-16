@@ -43,6 +43,11 @@ pub enum Ty {
     Hex,
     /// An unsigned varint of seconds since the Unix epoch, UTC.
     Time,
+    /// An unsigned varint of ticks of `1/per_sec` second: a span of time
+    /// (`Duration(1)` for seconds, `Duration(1_000_000_000)` for ns).
+    Duration(u64),
+    /// An unsigned varint counting bytes.
+    Size,
     /// An unsigned varint holding flags.
     Flags(FlagTable),
     /// An unsigned varint some of whose values have names (sentinels such
@@ -498,6 +503,8 @@ fn varint_value(ty: Option<Ty>, v: u64) -> Value {
         },
         Some(Ty::UInt) => uint(v),
         Some(Ty::Time) => Value::utc(i64::try_from(v).unwrap_or(i64::MAX)),
+        Some(Ty::Duration(per_sec)) => uint(v).to_duration(per_sec),
+        Some(Ty::Size) => Value::size(v),
         _ => signed(v),
     }
 }

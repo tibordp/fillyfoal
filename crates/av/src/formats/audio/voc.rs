@@ -7,7 +7,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::fmt::plural;
-use crate::formats::util::sound::{channels, duration, leaf, peek_text, u24};
+use crate::formats::util::sound::{channels, leaf, peek_text, u24};
 use crate::formats::util::val::text;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
@@ -162,7 +162,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if bytes_per_second > 0 && matches!(sum.codec, 0 | 4 | 6 | 7) {
         line.push_str(&format!(
             ", {}",
-            duration(sum.bytes as f64 / bytes_per_second as f64 + sum.silence)
+            crate::formats::util::fmt::seconds(
+                sum.bytes as f64 / bytes_per_second as f64 + sum.silence
+            )
         ));
     }
     cx.annotate(line);

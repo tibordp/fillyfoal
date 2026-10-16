@@ -14,7 +14,7 @@ use crate::error::{Diagnostic, Result};
 use crate::formats::util::arcutil::human_size;
 use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{
-    Bits, CRC16_BUYPASS, FrameRef, FrameSyntax, bits_node, duration, frames_node,
+    Bits, CRC16_BUYPASS, FrameRef, FrameSyntax, bits_node, frames_node,
 };
 use crate::formats::{Format, Head, Input, Probe, audio::id3};
 use crate::node::Node;
@@ -881,7 +881,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         line.push_str(&format!(
             ", dialnorm −{} dB, {}",
             first.dialnorm,
-            duration(seconds)
+            crate::formats::util::fmt::seconds(seconds)
         ));
         cx.annotate(line);
     }

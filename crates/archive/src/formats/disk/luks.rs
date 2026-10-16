@@ -78,7 +78,7 @@ record! {
     pub struct Luks2 {
         magic: bytes[6] "Magic",
         version: u16 "Version",
-        header_size: u64 "Header size (binary + JSON)" .with(|&v, n| n.summary(size(v))),
+        header_size: u64 "Header size (binary + JSON)" .size(),
         seqid: u64 "Sequence id" .desc("Incremented on every metadata update; the copies must agree"),
         label: ascii[48] "Label",
         checksum_alg: ascii[32] "Checksum algorithm",

@@ -564,11 +564,7 @@ async fn variant_dict_node(cx: Cx, span: Span) -> Result<()> {
                             Radix::Dec
                         },
                     });
-                    if item.key == "M" {
-                        n.summary(size(v))
-                    } else {
-                        n
-                    }
+                    if item.key == "M" { n.as_size() } else { n }
                 }
                 None => node.diag(Diagnostic::malformed("bad integer size")),
             },

@@ -107,7 +107,7 @@ record! {
         backing_offset: u64 "Backing file name offset" .hex(),
         backing_size: u32 "Backing file name length",
         cluster_bits: u32 "Cluster bits" .with(|&b, n| n.summary(size(1u64.checked_shl(b).unwrap_or(0)))),
-        size: u64 "Virtual disk size" .with(|&v, n| n.summary(size(v))),
+        size: u64 "Virtual disk size" .size(),
         crypt: u32 "Encryption" .enumeration(CRYPT),
         l1_size: u32 "L1 entries",
         l1_offset: u64 "L1 table offset" .hex(),
@@ -137,7 +137,7 @@ record! {
         backing_offset: u64 "Backing file name offset" .hex(),
         backing_size: u32 "Backing file name length",
         mtime: u32 "Modified" .with(crate::formats::disk::unix_time),
-        size: u64 "Virtual disk size" .with(|&v, n| n.summary(size(v))),
+        size: u64 "Virtual disk size" .size(),
         cluster_bits: u8 "Cluster bits" .with(|&b, n| n.summary(crate::formats::disk::size(1u64.checked_shl(b.into()).unwrap_or(0)))),
         l2_bits: u8 "L2 bits" .with(|&b, n| n.summary(format!("{} per L2 table", plural(1u64.checked_shl(b.into()).unwrap_or(0), "entry")))),
         _padding: u16 "Padding",
@@ -154,8 +154,8 @@ record! {
         name_size: u16 "Name length",
         date: u32 "Created" .timestamp(),
         date_ns: u32 "Created (ns)",
-        vm_clock_ns: u64 "VM clock (ns)" .with(|&v, n| n.summary(format!("{}.{:09} s", v / 1_000_000_000, v % 1_000_000_000))),
-        vm_state_size: u32 "VM state size" .with(|&v, n| n.summary(size(v.into()))),
+        vm_clock_ns: u64 "VM clock" .duration(1_000_000_000),
+        vm_state_size: u32 "VM state size" .size(),
         extra_size: u32 "Extra data size",
     }
 }
@@ -596,16 +596,12 @@ fn ext_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
         EXT_BITMAPS => {
             f.u32("Bitmaps").emit()?;
             f.u32("Reserved").emit()?;
-            f.u64("Bitmap directory size")
-                .with(|&v, n| n.summary(size(v)))
-                .emit()?;
+            f.u64("Bitmap directory size").size().emit()?;
             f.u64("Bitmap directory offset").hex().emit()?;
         }
         EXT_CRYPTO => {
             f.u64("Encryption header offset").hex().emit()?;
-            f.u64("Encryption header length")
-                .with(|&v, n| n.summary(size(v)))
-                .emit()?;
+            f.u64("Encryption header length").size().emit()?;
         }
         _ => {
             f.bytes("Data", len).emit()?;
@@ -1309,14 +1305,10 @@ fn snapshot_layout(f: &mut Fields<'_>, image: &Arc<Image>) -> Result<()> {
     let extra = u64::from(s.extra_size);
     let extra_start = f.pos();
     if extra >= 8 {
-        f.u64("VM state size (64-bit)")
-            .with(|&v, n| n.summary(size(v)))
-            .emit()?;
+        f.u64("VM state size (64-bit)").size().emit()?;
     }
     if extra >= 16 {
-        f.u64("Virtual disk size")
-            .with(|&v, n| n.summary(size(v)))
-            .emit()?;
+        f.u64("Virtual disk size").size().emit()?;
     }
     if extra >= 24 {
         f.u64("Instruction count")

@@ -677,7 +677,7 @@ async fn sparse_map(cx: Cx, (header, ext): (Span, Option<Span>)) -> Result<()> {
 
 fn sparse_entry(f: &mut Fields<'_>, _: &()) -> Result<()> {
     ascii_num(f, "Offset", 12, 8, Num::Hex).emit()?;
-    ascii_num(f, "Size", 12, 8, Num::Dec).emit()?;
+    ascii_num(f, "Size", 12, 8, Num::Size).emit()?;
     Ok(())
 }
 
@@ -689,12 +689,7 @@ fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     ascii_num(f, "Mode", 8, 8, Num::ModeOf(kind)).emit()?;
     ascii_num(f, "UID", 8, 8, Num::Dec).emit()?;
     ascii_num(f, "GID", 8, 8, Num::Dec).emit()?;
-    ascii_num(f, "Size", 12, 8, Num::Dec)
-        .with(|&v, n| match v {
-            Some(v) => n.summary(fmt::size(v)),
-            None => n,
-        })
-        .emit()?;
+    ascii_num(f, "Size", 12, 8, Num::Size).emit()?;
     ascii_num(f, "Modification time", 12, 8, Num::Time).emit()?;
     ascii_num(f, "Checksum", 8, 8, Num::Oct)
         .checksum(TAR_SUM)
@@ -722,6 +717,6 @@ fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u8("Unused").emit()?;
     f.skip(96); // sparse map, shown separately
     f.u8("Is extended").emit()?;
-    ascii_num(f, "Real size", 12, 8, Num::Dec).emit()?;
+    ascii_num(f, "Real size", 12, 8, Num::Size).emit()?;
     Ok(())
 }

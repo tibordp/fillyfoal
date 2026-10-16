@@ -239,14 +239,18 @@ fn chained_ogg_links_are_all_found() {
         "{summary}"
     );
     // 400 s + 1 s + 1 s, less the pre-skip of each link.
-    let kbps = format!(", 6:41, {:.0} kbps", len as f64 * 8.0 / 401.9805 / 1000.0);
+    let kbps = format!(
+        ", 0:06:41.981, {:.0} kbps",
+        len as f64 * 8.0 / 401.9805 / 1000.0
+    );
     assert!(summary.ends_with(&kbps), "{summary} vs {kbps}");
     let streams: Vec<String> = host.session.children(root).unwrap().ids[..3]
         .iter()
         .map(|&id| host.session.node(id).unwrap().summary.clone().unwrap())
         .collect();
     assert!(
-        streams[0].starts_with("link 1, serial 0x00000001") && streams[0].ends_with(", 6:39"),
+        streams[0].starts_with("link 1, serial 0x00000001")
+            && streams[0].ends_with(", 0:06:39.994"),
         "{streams:?}"
     );
     assert!(

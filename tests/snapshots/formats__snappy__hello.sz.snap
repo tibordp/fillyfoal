@@ -17,7 +17,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Chunk type: compressed data (0x0)  [0xa+0x1]
       Length: 37  [0xb+0x3]
       Masked CRC-32C: 0xa6d6e0c2 (masked CRC-32C, not checked)  [0xe+0x4]
-      Uncompressed length: 31 — 31 bytes  [0x12+0x1]
+      Uncompressed length: 31 bytes  [0x12+0x1]
       Compressed data  [0x12+0x21]
   ▾ Uncompressed data — 28 bytes  [0x33+0x20]
       Chunk type: uncompressed data (0x1)  [0x33+0x1]

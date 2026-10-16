@@ -611,13 +611,11 @@ fn picture(w: &mut Walker) -> Option<()> {
     w.u("temporal_reference", 10)?;
     let t = w.en("picture_coding_type", 3, PICTURE_TYPES)?;
     let vbv = w.u("vbv_delay", 16)?;
-    w.summary(|| {
-        if vbv == 0xffff {
-            "variable bit rate".to_owned()
-        } else {
-            format!("{:.3} ms", vbv as f64 / 90.0)
-        }
-    });
+    if vbv == 0xffff {
+        w.summary(|| "variable bit rate".to_owned());
+    } else {
+        w.with(|n| n.as_duration(90_000));
+    }
     if t == 2 || t == 3 {
         w.flag("full_pel_forward_vector")?;
         w.u("forward_f_code", 3)?;

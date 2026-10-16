@@ -1033,13 +1033,8 @@ async fn subpackets(cx: Cx, (span, data): (Span, Arc<Vec<u8>>)) -> Result<()> {
                 None => node,
             },
             3 | 9 => match u32_be(body, 0) {
-                Some(s) => node
-                    .value(Value::UInt {
-                        value: s.into(),
-                        bits: 32,
-                        radix: Radix::Dec,
-                    })
-                    .summary(duration(s)),
+                Some(0) => node.value(Value::secs(0)).summary("does not expire"),
+                Some(s) => node.value(Value::secs(s.into())),
                 None => node,
             },
             30 | 23 => {
@@ -1177,20 +1172,6 @@ fn notation(body: &[u8]) -> Option<(String, String)> {
         hex_upper(value)
     };
     Some((String::from_utf8_lossy(name).into_owned(), value))
-}
-
-/// A duration in seconds, as days or years.
-fn duration(secs: u32) -> String {
-    let days = secs / 86_400;
-    match (days, secs % 86_400) {
-        (0, _) => format!("{secs} seconds"),
-        (d, 0) if d % 365 == 0 => format!(
-            "{} ({d} days)",
-            crate::formats::util::fmt::plural(d / 365, "year")
-        ),
-        (d, 0) => format!("{d} days"),
-        (d, _) => format!("about {d} days"),
-    }
 }
 
 /// An Embedded Signature subpacket: a whole signature packet body.

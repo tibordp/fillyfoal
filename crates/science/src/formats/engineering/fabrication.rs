@@ -773,14 +773,9 @@ async fn survey(cx: &Cx, span: Span) -> Result<Arc<Survey>> {
     Ok(s)
 }
 
-/// `6646` seconds as `1h 50m 46s`.
+/// A print time in seconds, for summaries.
 fn duration(seconds: u64) -> String {
-    let (h, m, s) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
-    match (h, m) {
-        (0, 0) => format!("{s}s"),
-        (0, _) => format!("{m}m {s}s"),
-        _ => format!("{h}h {m}m {s}s"),
-    }
+    crate::formats::util::fmt::duration_of(seconds, 1)
 }
 
 // ---------------------------------------------------------------------------

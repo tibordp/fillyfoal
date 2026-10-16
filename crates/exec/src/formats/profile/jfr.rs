@@ -819,12 +819,7 @@ fn timestamp(nanos: u64) -> Value {
 }
 
 fn duration(nanos: u64) -> String {
-    match nanos {
-        0..1_000 => format!("{nanos} ns"),
-        1_000..1_000_000 => format!("{:.3} µs", nanos as f64 / 1e3),
-        1_000_000..1_000_000_000 => format!("{:.3} ms", nanos as f64 / 1e6),
-        _ => format!("{:.3} s", nanos as f64 / 1e9),
-    }
+    crate::formats::util::fmt::duration_of(nanos, 1_000_000_000)
 }
 
 // ---------------------------------------------------------------------------
@@ -1062,8 +1057,7 @@ async fn chunk_header(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Duration")
             .span(span.sub(40, 8))
-            .value(uint(h.duration, 64))
-            .summary(duration(h.duration)),
+            .value(uint(h.duration, 64).to_duration(1_000_000_000)),
     );
     cx.emit(
         Node::new("Start ticks")
@@ -1543,8 +1537,8 @@ async fn checkpoint_event(cx: Cx, (chunk, span): (Arc<Chunk>, Span)) -> Result<(
     let mut node = Node::new("Duration")
         .span(field(&r, start))
         .value(uint(dur, 64));
-    if let Some(ns) = chunk.clock.ticks_to_nanos(dur) {
-        node = node.summary(duration(ns));
+    if chunk.clock.ticks_per_second > 0 {
+        node = node.as_duration(chunk.clock.ticks_per_second);
     }
     cx.emit(node);
     let start = r.pos();
@@ -1679,10 +1673,8 @@ async fn metadata_event(cx: Cx, (chunk, span): (Arc<Chunk>, Span)) -> Result<()>
             && let Some(ns) = chunk.clock.epoch_nanos(v)
         {
             node = node.summary(time_of_day(ns));
-        } else if name == "Duration"
-            && let Some(ns) = chunk.clock.ticks_to_nanos(v)
-        {
-            node = node.summary(duration(ns));
+        } else if name == "Duration" && chunk.clock.ticks_per_second > 0 {
+            node = node.as_duration(chunk.clock.ticks_per_second);
         }
         cx.emit(node);
     }

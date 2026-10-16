@@ -262,7 +262,7 @@ fn cp_layout(f: &mut Fields<'_>, computed: &Option<u32>) -> Result<()> {
     let sit = f.u32("SIT bitmap bytes").emit()?;
     let nat = f.u32("NAT bitmap bytes").emit()?;
     let csum_at = f.u32("Checksum offset").emit()?;
-    f.u64("Elapsed time (s)").emit()?;
+    f.u64("Elapsed time").duration(1).emit()?;
     f.bytes("Allocation types", 16).emit()?;
     let csum_at = u64::from(csum_at);
     // LARGE_NAT_BITMAP moves the checksum in front of the bitmaps
@@ -710,7 +710,7 @@ fn inode_layout(f: &mut Fields<'_>, ctx: &InodeCtx) -> Result<()> {
     f.u32("Owner UID").emit()?;
     f.u32("Group GID").emit()?;
     f.u32("Links").emit()?;
-    f.u64("Size").with(|&v, n| n.summary(size(v))).emit()?;
+    f.u64("Size").size().emit()?;
     f.u64("Blocks").desc("In 512-byte units").emit()?;
     f.u64("Accessed").timestamp().emit()?;
     f.u64("Changed").timestamp().emit()?;

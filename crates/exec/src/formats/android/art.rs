@@ -113,7 +113,7 @@ fn header_119(f: &mut Fields<'_>, _: &()) -> Result<()> {
         if name.ends_with("_count") || *name == "pointer_size" {
             field.emit()?;
         } else if name.ends_with("_size") {
-            field.with(|&v, n| n.summary(size(v.into()))).emit()?;
+            field.size().emit()?;
         } else {
             field.hex().emit()?;
         }

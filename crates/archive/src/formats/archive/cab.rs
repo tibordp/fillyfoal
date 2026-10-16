@@ -57,7 +57,7 @@ record! {
     pub struct Header {
         signature: ascii[4] "Signature",
         reserved1: u32 "Reserved",
-        size: u32 "Cabinet size" .with(|&s, n| n.summary(fmt::size(s.into()))),
+        size: u32 "Cabinet size" .size(),
         reserved2: u32 "Reserved",
         files_offset: u32 "First file entry offset" .hex(),
         reserved3: u32 "Reserved",
@@ -392,9 +392,7 @@ async fn file_entry(
 ) -> Result<()> {
     let block = cx.block(span).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
-    f.u32("Size")
-        .with(|&s, n| n.summary(fmt::size(s.into())))
-        .emit()?;
+    f.u32("Size").size().emit()?;
     f.u32("Offset in folder").hex().emit()?;
     f.u16("Folder")
         .with(|&i, n| match i {

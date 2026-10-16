@@ -9,7 +9,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Minor version: 4  [0x7+0x1]
       Start header CRC: 0xc8f55f27 (CRC-32, valid)  [0x8+0x4]
       Next header offset: 0x100e6  [0xc+0x8]
-      Next header size: 36 — 36 bytes  [0x14+0x8]
+      Next header size: 36 bytes  [0x14+0x8]
       Next header CRC: 0xaa361781 (CRC-32, valid)  [0x1c+0x4]
   ▾ Encoded header — LZMA, 150 bytes → 182 bytes  [0x10070+0x96]
     ▾ kEncodedHeader  [0x10106+0x24]
@@ -23,7 +23,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ big.txt — 64.1 KiB  [0x20+0x10040]
         Modification time: 2024-01-02 03:04:00 UTC
         Attributes: 0x81a48020 — -rw-r--r--
-        Size: 65600 — 64.1 KiB
+        Size: 65600 bytes (64.1 KiB)
         Folder: 0
       ▾ Content — UTF-8 text, LF line endings, 919 lines  [0x20+0x10040]
           CRC32: 0x5fb22c21 (CRC-32, valid)
@@ -867,7 +867,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ small.txt — 6 bytes  [0x10060+0x10]
         Modification time: 2024-01-02 03:04:00 UTC
         Attributes: 0x81a48020 — -rw-r--r--
-        Size: 6 — 6 bytes
+        Size: 6 bytes
         Folder: 1
       ▾ Content — UTF-8 text, LF line endings, 1 line  [0x10060+0x10]
           CRC32: 0xb61c02a7 (CRC-32, valid)
@@ -882,7 +882,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Salt — (none)
           IV: d1 b2 64 84 14 db ab 11 f6 6c 27 1b cd f9 c3 bd  |..d......l'.....|
         Coder 1: "Copy" — 1 in, 1 out
-        Unpacked size: 65600 — 64.1 KiB
+        Unpacked size: 65600 bytes (64.1 KiB)
         Streams: 1
       ▾ Data — UTF-8 text, LF line endings, 919 lines  [0x20+0x10040]
           Encoding: "UTF-8"
@@ -1728,7 +1728,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Salt — (none)
           IV: 09 86 45 59 4a fe 17 0d a0 bc 57 2d ca 0f 85 35  |..EYJ.....W-...5|
         Coder 1: "Copy" — 1 in, 1 out
-        Unpacked size: 6 — 6 bytes
+        Unpacked size: 6 bytes
         Streams: 1
       ▾ Data — UTF-8 text, LF line endings, 1 line  [0x10060+0x10]
           Encoding: "UTF-8"

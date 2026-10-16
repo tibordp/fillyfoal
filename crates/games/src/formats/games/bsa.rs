@@ -143,6 +143,9 @@ fn file_record(f: &mut Fields<'_>, _: &()) -> Result<(u32, u32)> {
         .u32("Size")
         .desc("Bit 30 inverts the archive's compression default for this file")
         .with(|&v, n| {
+            if v & (SIZE_TOGGLE | SIZE_CHECKED) == 0 {
+                return n.as_size();
+            }
             let toggled = if v & SIZE_TOGGLE != 0 {
                 ", compression toggled"
             } else {

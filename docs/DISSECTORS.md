@@ -511,7 +511,7 @@ let key = match derive_key(b"") {
 
 Prefer typed values over formatted strings: `Value::UInt` (with radix),
 `Int`, `Float`, `Enum`, `Flags`, `Timestamp`, `Text`, `Bytes`, `Guid`,
-`Checksum`. Put
+`Checksum`, `Size`, `Duration`. Put
 human interpretation in `summary` ("640×480, 24-bit") and meaning in
 `desc`. Which value to use:
 
@@ -580,6 +580,34 @@ human interpretation in `summary` ("640×480, 24-bit") and meaning in
     the field (a header, a page) repeats it with `node.check_diag(&check)`
     so it shows collapsed, and does not say "checksum valid" in its
     summary unless the check is not shown as a field.
+
+- **Sizes** (a field that counts bytes): a `Size`, never a number with
+  `fmt::size` as its summary (`Length: 698 — 698 bytes`). Fields:
+  `.size()`, or `.size_in(block)` for a count of sectors, clusters or
+  pages (`2048 × 512 bytes (1 MiB)`); nodes: `Value::size(n)` /
+  `val::size(n, bits)`, `Value::blocks(n, block)`, or `node.as_size()`
+  / `as_blocks(block)` on a node whose number is the size (readers that
+  aren't `Fields`, bit fields, `Num::Size` for text-encoded archive
+  numbers, protobuf `Ty::Size`). Don't put the unit in the name
+  ("Capacity (sectors)"). Counts of other things stay `UInt`, and so do
+  values that encode a size rather than count it (a log2 block size,
+  zlib's CINFO, "size − 1"): those keep the size in the summary. A
+  sentinel ("unlimited", "in the Zip64 extra field") is a summary on
+  the number. A node without a value may give its own length as a
+  summary (`fmt::size`).
+- **Durations** (a span of time: a delay, a TTL, a media timestamp on a
+  stream clock, an uptime, CPU time): a `Duration` of the ticks the file
+  stores, `.duration(per_sec)` (1 for seconds, 1000 for ms, 100 for
+  centiseconds, 10_000_000 for 100 ns units, 90_000 for MPEG, a track's
+  timescale, a sample rate for sample counts), `Value::duration(ticks,
+  per_sec)`, `node.as_duration(per_sec)`, protobuf `Ty::Duration`. Keep
+  the stored ticks (don't divide them to milliseconds first), and don't
+  put the unit in the name ("Interval (ms)"). A point in time is a
+  `Timestamp`, including the sub-second part of one ("Modified (ns)"
+  stays a number). A count of frames or samples whose duration is
+  incidental may stay a count with a duration summary. Summaries use
+  `fmt::duration(ticks, per_sec)` / `fmt::duration_of` /
+  `fmt::seconds(f64)`; never write another duration formatter.
 
 Annotate the file node with `cx.annotate("PE32+ DLL, AMD64")`: that
 summary is the first thing the user sees on F3.

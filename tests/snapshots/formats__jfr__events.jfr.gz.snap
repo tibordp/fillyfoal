@@ -12,7 +12,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Constant pool offset: 0x1b5ca  [0x10+0x8] → 0x1b5ca+0x0
         Metadata offset: 0x281d  [0x18+0x8] → 0x281d+0x0
         Start time: 2026-10-12 03:53:47.100003587 UTC  [0x20+0x8]
-        Duration: 23018758 — 23.019 ms  [0x28+0x8]
+        Duration: 23.018758 ms  [0x28+0x8]
         Start ticks: 318445662  [0x30+0x8]
         Ticks per second: 1000000000  [0x38+0x8]
         Generation: 0 — complete  [0x40+0x1]
@@ -22,7 +22,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 7352  [0x44+0x2]
         Type: 1 — checkpoint  [0x46+0x1]
         Start time: 318718956 — 2026-10-12 03:53:47.100276881 UTC  [0x47+0x5]
-        Duration: 26667 — 26.667 µs  [0x4c+0x3]
+        Duration: 26.667 µs  [0x4c+0x3]
         Delta to previous: 0  [0x4f+0x1]
         Kind: 0x4 [STATICS]  [0x50+0x1]
         Pools: 19  [0x51+0x1]
@@ -1033,7 +1033,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 1130  [0x1cfc+0x2]
         Type: 1 — checkpoint  [0x1cfe+0x1]
         Start time: 318745748 — 2026-10-12 03:53:47.100303673 UTC  [0x1cff+0x5]
-        Duration: 17375 — 17.375 µs  [0x1d04+0x3]
+        Duration: 17.375 µs  [0x1d04+0x3]
         Delta to previous: -7352  [0x1d07+0x9] → 0x44+0x0
         Kind: 0x8 [THREAD]  [0x1d10+0x1]
         Pools: 2  [0x1d11+0x1]
@@ -1480,7 +1480,7 @@ expression: "common::explore(&display_name(&path), &data)"
             name: "main"  [0x2156+0x6]
           virtual: false  [0x229e+0x1]
     ▾ jdk.ThreadStart — 2026-10-12 03:53:47.121547000 UTC, thread: DestroyJavaVM, parentThread: null  [0x2171+0xb]  (+27 nodes elided)
-    ▾ jdk.GarbageCollection — 2026-10-12 03:53:47.111046046 UTC, duration: 9.839 ms, gcId: 0  [0x217c+0x17]  (+17 nodes elided)
+    ▾ jdk.GarbageCollection — 2026-10-12 03:53:47.111046046 UTC, duration: 9.838782 ms, gcId: 0  [0x217c+0x17]  (+17 nodes elided)
     ▾ jdk.ThreadStart — 2026-10-12 03:53:47.102577106 UTC, thread: Notification Thread, parentThread: main  [0x2193+0xb]  (+33 nodes elided)
     ▾ jdk.ThreadStart — 2026-10-12 03:53:47.105252002 UTC, thread: worker, parentThread: main  [0x219e+0xb]  (+83 nodes elided)
     ▾ jdk.ThreadEnd — 2026-10-12 03:53:47.109540409 UTC, thread: worker  [0x21a9+0x9]  (+25 nodes elided)

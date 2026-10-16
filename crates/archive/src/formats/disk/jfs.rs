@@ -320,7 +320,7 @@ fn dinode_layout(f: &mut Fields<'_>, names: &EnumTable) -> Result<()> {
     f.u32("Inode number").enumeration(names).emit()?;
     f.u32("Generation").emit()?;
     f.bytes("Inode extent", 8).with(pxd_summary).emit()?;
-    f.u64("Size").with(|&v, n| n.summary(size(v))).emit()?;
+    f.u64("Size").size().emit()?;
     f.u64("Blocks").emit()?;
     f.u32("Links").emit()?;
     f.u32("Owner UID").emit()?;

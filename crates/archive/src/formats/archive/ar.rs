@@ -227,12 +227,7 @@ fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     ascii_num(f, "Owner ID", 6, 10, Num::Dec).emit()?;
     ascii_num(f, "Group ID", 6, 10, Num::Dec).emit()?;
     ascii_num(f, "Mode", 8, 8, Num::ModeOf(0o100_000)).emit()?;
-    ascii_num(f, "Size", 10, 10, Num::Dec)
-        .with(|&s, n| match s {
-            Some(s) => n.summary(fmt::size(s)),
-            None => n,
-        })
-        .emit()?;
+    ascii_num(f, "Size", 10, 10, Num::Size).emit()?;
     f.bytes("Terminator", 2)
         .check(|t| (t != b"`\n").then(|| Diagnostic::malformed("expected \"`\\n\"")))
         .emit()?;

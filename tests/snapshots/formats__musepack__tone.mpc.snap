@@ -2,9 +2,9 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tone.mpc — Musepack SV8, 44100 Hz, 2 ch, 0:01  [0x0+0xca]
+▾ tone.mpc — Musepack SV8, 44100 Hz, 2 ch, 1 s  [0x0+0xca]
     Magic  [0x0+0x4]
-  ▾ Stream header — 44100 Hz, 2 ch, 0:01  [0x4+0xe]
+  ▾ Stream header — 44100 Hz, 2 ch, 1 s  [0x4+0xe]
       Key: "SH"  [0x4+0x2]
       Size: 14  [0x6+0x1]
       CRC: 0x12345678 (CRC-32, not checked)  [0x7+0x4]

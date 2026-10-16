@@ -697,7 +697,7 @@ async fn mbdb_record(cx: Cx, span: Span) -> Result<()> {
     f.u32("Modified").timestamp().emit()?;
     f.u32("Accessed").timestamp().emit()?;
     f.u32("Changed").timestamp().emit()?;
-    f.u64("Length").with(|&v, n| n.summary(size(v))).emit()?;
+    f.u64("Length").size().emit()?;
     f.u8("Protection class")
         .enumeration(PROTECTION_CLASSES)
         .emit()?;

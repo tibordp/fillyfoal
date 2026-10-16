@@ -91,13 +91,7 @@ async fn aff(cx: Cx, input: Input) -> Result<()> {
             let raw = cx.read(data).await?;
             let v = u64_be(&raw, 0).unwrap_or(0);
             image = Some(v);
-            node = node
-                .value(Value::UInt {
-                    value: v,
-                    bits: 64,
-                    radix: Radix::Dec,
-                })
-                .summary(size(v));
+            node = node.value(Value::size(v));
         } else if data_len == 0 {
             node = node.value(Value::UInt {
                 value: arg.into(),

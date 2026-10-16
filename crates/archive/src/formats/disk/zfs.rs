@@ -376,7 +376,7 @@ record! {
     pub struct UberblockTail {
         software_version: u64 "Software version",
         mmp_magic: u64 "MMP magic" .hex(),
-        mmp_delay: u64 "MMP delay (ns)",
+        mmp_delay: u64 "MMP delay" .duration(1_000_000_000),
         mmp_config: u64 "MMP configuration" .hex(),
         checkpoint_txg: u64 "Checkpoint txg",
         raidz_reflow: u64 "RAID-Z expansion state" .hex(),

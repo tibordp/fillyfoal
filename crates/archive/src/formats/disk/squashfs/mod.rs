@@ -116,7 +116,7 @@ record! {
         magic: ascii[4] "Magic",
         inodes: u32 "Inode count",
         mtime: u32 "Modification time" .timestamp(),
-        block_size: u32 "Block size" .with(|&b, n| n.summary(fmt::size(b.into()))),
+        block_size: u32 "Block size" .size(),
         fragments: u32 "Fragment count",
         compressor: u16 "Compression" .enumeration(COMPRESSOR),
         block_log: u16 "Block size (log2)",
@@ -126,7 +126,7 @@ record! {
         minor: u16 "Minor version",
         root: u64 "Root inode reference" .hex()
             .with(|&r, n| n.summary(format!("block {:#x}, offset {:#x}", r >> 16, r & 0xffff))),
-        bytes_used: u64 "Bytes used" .with(|&b, n| n.summary(fmt::size(b))),
+        bytes_used: u64 "Bytes used" .size(),
         id_table: u64 "ID table" .hex(),
         xattr_table: u64 "Xattr ID table" .hex(),
         inode_table: u64 "Inode table" .hex(),
@@ -356,9 +356,7 @@ fn compressor_options(f: &mut Fields<'_>, compressor: &u16) -> Result<()> {
             f.u32("Compression level").emit()?;
         }
         4 => {
-            f.u32("Dictionary size")
-                .with(|&d, n| n.summary(fmt::size(d.into())))
-                .emit()?;
+            f.u32("Dictionary size").size().emit()?;
             f.u32("Executable filters").hex().emit()?;
         }
         5 => {
@@ -773,14 +771,11 @@ fn inode_layout(f: &mut Fields<'_>, ctx: &InodeCtx) -> Result<()> {
                     .with(|&v, n| if v == u32::MAX { n.summary("none") } else { n })
                     .emit()?;
                 f.u32("Offset in fragment").emit()?;
-                let size = f
-                    .u32("Size")
-                    .with(|&v, n| n.summary(fmt::size(v.into())))
-                    .emit()?;
+                let size = f.u32("Size").size().emit()?;
                 (u64::from(size), frag)
             } else {
                 f.u64("First block").hex().emit()?;
-                let size = f.u64("Size").with(|&v, n| n.summary(fmt::size(v))).emit()?;
+                let size = f.u64("Size").size().emit()?;
                 f.u64("Sparse bytes").emit()?;
                 f.u32("Links").emit()?;
                 let frag = f

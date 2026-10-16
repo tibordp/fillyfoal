@@ -92,7 +92,7 @@ record! {
     pub struct DiskHeader {
         magic: ascii[4] "Magic",
         kind: u32 "Compression type" .enumeration(TYPES),
-        size: u64 "Uncompressed size" .with(crate::formats::disk::size_summary),
+        size: u64 "Uncompressed size" .size(),
     }
 }
 

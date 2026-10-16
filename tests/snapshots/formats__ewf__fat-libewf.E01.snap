@@ -52,7 +52,7 @@ expression: "common::explore(&display_name(&path), &data)"
             First cluster (high word): 0  [#14:0x634+0x2]
             Modified: 2026-10-12 04:44:02 (local time)  [#14:0x636+0x4]
             First cluster (low word): 2  [#14:0x63a+0x2]
-            File size: 21 — 21 bytes  [#14:0x63c+0x4]
+            File size: 21 bytes  [#14:0x63c+0x4]
         ▾ Clusters — contiguous, 21 bytes
             Fragment 0 — file offset 0x0, 21 bytes  [#14:0x4600+0x15]
         ▾ Content — UTF-8 text, LF line endings, 1 line  [#14:0x4600+0x15]
@@ -271,7 +271,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 First cluster (high word): 0  [#17:0x634+0x2]
                 Modified: 2026-10-12 04:44:02 (local time)  [#17:0x636+0x4]
                 First cluster (low word): 2  [#17:0x63a+0x2]
-                File size: 21 — 21 bytes  [#17:0x63c+0x4]
+                File size: 21 bytes  [#17:0x63c+0x4]
             ▾ Clusters — contiguous, 0 bytes
                 Fragment 0 — file offset 0x0, 0 bytes  [#17:0x2000+0x0]
             ▾ Content — 0 bytes  [#17:0x2000+0x0]
@@ -369,7 +369,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 First cluster (high word): 0  [#17:0x634+0x2]
                 Modified: 2026-10-12 04:44:02 (local time)  [#17:0x636+0x4]
                 First cluster (low word): 2  [#17:0x63a+0x2]
-                File size: 21 — 21 bytes  [#17:0x63c+0x4]
+                File size: 21 bytes  [#17:0x63c+0x4]
             ▾ Clusters — contiguous, 0 bytes
                 Fragment 0 — file offset 0x0, 0 bytes  [#17:0x2000+0x0]
             ▾ Content — 0 bytes  [#17:0x2000+0x0]

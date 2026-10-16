@@ -431,9 +431,7 @@ fn volume_layout(f: &mut Fields<'_>, _: &()) -> Result<Volume> {
     both16(f, "Volume set size").emit()?;
     both16(f, "Volume sequence number").emit()?;
     let block_size = both16(f, "Logical block size").emit()?;
-    let path_table_size = both32(f, "Path table size")
-        .with(|&v, n| n.summary(fmt::size(v.into())))
-        .emit()?;
+    let path_table_size = both32(f, "Path table size").size().emit()?;
     let l = f.u32("L path table location").emit()?;
     let ol = f.u32("Optional L path table location").emit()?;
     let m = f
@@ -757,9 +755,7 @@ fn record_fields(f: &mut Fields<'_>, joliet: bool, ctx: Option<RecCtx>) -> Resul
     let len = f.u8("Record length").emit()?;
     f.u8("Extended attribute length").emit()?;
     both32(f, "Extent location").emit()?;
-    both32(f, "Data length")
-        .with(|&s, n| n.summary(fmt::size(s.into())))
-        .emit()?;
+    both32(f, "Data length").size().emit()?;
     f.bytes("Recording time", 7)
         .with(|b, n| match record_time(b) {
             Some(t) => n.value(Value::Timestamp(t)),
@@ -1443,9 +1439,7 @@ async fn zisofs_node(cx: Cx, (input, extent, z): (Input, Span, Zf)) -> Result<()
                 .then(|| Diagnostic::warning("not the zisofs magic"))
         })
         .emit()?;
-    f.u32("Uncompressed size")
-        .with(|&v, n| n.summary(fmt::size(v.into())))
-        .emit()?;
+    f.u32("Uncompressed size").size().emit()?;
     f.u8("Header size (4-byte units)").emit()?;
     f.u8("Block size (log2)").emit()?;
     f.bytes("Reserved", 2).emit()?;

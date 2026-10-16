@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tone.dsf — DSF, DSD64 (2.8224 MHz), 2 ch, 1 ms  [0x0+0x27a]
+▾ tone.dsf — DSF, DSD64 (2.8224 MHz), 2 ch, 725.624 µs  [0x0+0x27a]
   ▾ DSD chunk  [0x0+0x1c]
       Chunk ID: "DSD "  [0x0+0x4]
       Chunk size: 28  [0x4+0x8]
@@ -30,7 +30,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Major version: 3 — ID3v2.3  [0x25f+0x1]
         Revision: 0  [0x260+0x1]
         Flags: 0x0 []  [0x261+0x1]
-        Size: 20 — 20 bytes  [0x262+0x4]
+        Size: 20 bytes  [0x262+0x4]
     ▾ TIT2 — Title: Tone  [0x266+0x10]
         Frame ID: "TIT2"  [0x266+0x4]
         Size: 6  [0x26a+0x4]

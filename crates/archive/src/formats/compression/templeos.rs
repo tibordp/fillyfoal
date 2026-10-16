@@ -103,8 +103,8 @@ record! {
     pub struct ArcHeader {
         compressed_size: u64 "compressed_size"
             .desc("Size of the whole file, this header included")
-            .with(|&v, n| n.summary(fmt::size(v))),
-        expanded_size: u64 "expanded_size" .with(|&v, n| n.summary(fmt::size(v))),
+            .size(),
+        expanded_size: u64 "expanded_size" .size(),
         compression_type: u8 "compression_type" .enumeration(TYPES),
     }
 }

@@ -36,7 +36,7 @@ use crate::cx::Cx;
 use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields, parse, struct_node};
-use crate::formats::disk::{crc32c_update, size, size_summary, text, uuid_value};
+use crate::formats::disk::{crc32c_update, size, text, uuid_value};
 use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -228,11 +228,8 @@ fn rest_unused(f: &mut Fields<'_>, name: &'static str) {
 
 fn sb_layout(f: &mut Fields<'_>, computed: &Option<u32>) -> Result<Sb> {
     f.ascii("Magic", 4).emit()?;
-    let block = f.u32("Block size").with(size_summary).emit()?;
-    let dblocks = f
-        .u64("Data blocks")
-        .with(|&v, n| n.summary(size(v.saturating_mul(block.into()))))
-        .emit()?;
+    let block = f.u32("Block size").size().emit()?;
+    let dblocks = f.u64("Data blocks").size_in(block).emit()?;
     f.u64("Realtime blocks").emit()?;
     f.u64("Realtime extents").emit()?;
     f.bytes("UUID", 16).with(uuid_value).emit()?;
@@ -247,10 +244,7 @@ fn sb_layout(f: &mut Fields<'_>, computed: &Option<u32>) -> Result<Sb> {
     let ag_blocks = f.u32("Blocks per allocation group").emit()?;
     let ag_count = f.u32("Allocation groups").emit()?;
     f.u32("Realtime bitmap blocks").emit()?;
-    let log_blocks = f
-        .u32("Log blocks")
-        .with(|&v, n| n.summary(size(u64::from(v).saturating_mul(block.into()))))
-        .emit()?;
+    let log_blocks = f.u32("Log blocks").size_in(block).emit()?;
     let version = f.u16("Version and features").hex().flags(VERSION).emit()?;
     let sect_size = f.u16("Sector size").emit()?;
     let inode_size = f.u16("Inode size").emit()?;
@@ -266,10 +260,7 @@ fn sb_layout(f: &mut Fields<'_>, computed: &Option<u32>) -> Result<Sb> {
     f.u8("Maximum inode space (%)").emit()?;
     let icount = f.u64("Allocated inodes").emit()?;
     let ifree = f.u64("Free inodes").emit()?;
-    let fdblocks = f
-        .u64("Free data blocks")
-        .with(|&v, n| n.summary(size(v.saturating_mul(block.into()))))
-        .emit()?;
+    let fdblocks = f.u64("Free data blocks").size_in(block).emit()?;
     f.u64("Free realtime extents").emit()?;
     let uquot_ino = f.u64("User quota inode").with(ino_null).emit()?;
     let gquot_ino = f.u64("Group quota inode").with(ino_null).emit()?;

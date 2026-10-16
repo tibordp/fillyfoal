@@ -231,10 +231,7 @@ fn record_layout(f: &mut Fields<'_>, ctx: &RecCtx) -> Result<()> {
     match ctx.kind {
         Kind::Bno | Kind::Cnt => {
             let start = f.u32("Start block").emit()?;
-            let count = f
-                .u32("Block count")
-                .with(|&v, n| n.summary(size(u64::from(v).saturating_mul(fs.block))))
-                .emit()?;
+            let count = f.u32("Block count").size_in(fs.block).emit()?;
             let span = fs.agb_span(ag, start.into(), count.into());
             if ctx.kind == Kind::Bno {
                 f.node(
@@ -292,10 +289,8 @@ fn record_layout(f: &mut Fields<'_>, ctx: &RecCtx) -> Result<()> {
         Kind::Rmap => {
             let start = f.u32("Start block").emit()?;
             f.u32("Block count")
-                .with(|&v, n| {
-                    n.summary(size(u64::from(v).saturating_mul(fs.block)))
-                        .target(fs.agb_span(ag, start.into(), v.into()))
-                })
+                .size_in(fs.block)
+                .with(|&v, n| n.target(fs.agb_span(ag, start.into(), v.into())))
                 .emit()?;
             f.u64("Owner")
                 .with(|&v, n| n.summary(owner_text(v)))
@@ -597,8 +592,9 @@ async fn ext_fields(cx: Cx, (span, e, at, block): (Span, Ext, String, u64)) -> R
             .desc("Bits 72–21: the absolute filesystem block (AG number in the high bits)"),
     );
     cx.emit(
-        uint("Block count", span.sub(13, 3), e.count, 21)
-            .summary(size(e.count.saturating_mul(block)))
+        Node::new("Block count")
+            .span(span.sub(13, 3))
+            .value(Value::blocks(e.count, block).bits(21))
             .desc("Bits 20–0"),
     );
     Ok(())

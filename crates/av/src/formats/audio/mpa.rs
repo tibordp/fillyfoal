@@ -20,7 +20,7 @@ use crate::formats::audio::{ac3, adts, ape, dts, flac, musepack, tta, wavpack};
 use crate::formats::util::arcutil::human_size;
 use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{
-    Bits, CRC16_MPEG, FrameSyntax, bits_node, duration, junk_node, leaf, resync, tail_node,
+    Bits, CRC16_MPEG, FrameSyntax, bits_node, junk_node, leaf, resync, tail_node,
 };
 use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, HEAD_LEN, Head, Input, Probe, audio::id3};
@@ -940,7 +940,7 @@ fn xing(f: &mut Fields<'_>, ctx: &VbrCtx) -> Result<Vbr> {
         v.bytes = Some(
             f.u32("Bytes")
                 .desc("Length of the stream, this frame included")
-                .with(|&b, n| n.summary(human_size(b.into())))
+                .size()
                 .emit()?,
         );
     }
@@ -1143,7 +1143,7 @@ async fn expand_lame(cx: Cx, (span, frame): (Span, Span)) -> Result<()> {
         .emit()?;
     b.field("Music length", 32)
         .desc("Bytes from the start of this frame to the end of the last one")
-        .with(|v, n| n.summary(human_size(v)))
+        .size()
         .emit()?;
     b.field("Music CRC", 16)
         .desc("CRC-16 of the audio frames")
@@ -1170,11 +1170,7 @@ fn vbri(f: &mut Fields<'_>, _: &VbrCtx) -> Result<Vbr> {
     f.u16("Version").emit()?;
     f.u16("Delay").desc("Encoder delay, in samples").emit()?;
     let quality = f.u16("Quality").emit()?;
-    let bytes = f
-        .u32("Bytes")
-        .desc("Length of the stream")
-        .with(|&b, n| n.summary(human_size(b.into())))
-        .emit()?;
+    let bytes = f.u32("Bytes").desc("Length of the stream").size().emit()?;
     let frames = f.u32("Frames").emit()?;
     let entries = f.u16("TOC entries").emit()?;
     let scale = f.u16("TOC scale factor").emit()?;
@@ -1483,7 +1479,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         header.layer_name(),
         header.rate,
         header.mode_name(),
-        duration(seconds)
+        crate::formats::util::fmt::seconds(seconds)
     );
     if let Some(e) = vbr.and_then(|v| v.encoder()) {
         line.push_str(&format!(", {e}"));

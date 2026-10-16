@@ -542,6 +542,27 @@ impl<T: Prim> Field<'_, T> {
         self
     }
 
+    /// The number is a size in bytes (`698 bytes`, `1536 bytes (1.5
+    /// KiB)`). A negative signed number (often "unknown") stays a number.
+    pub fn size(self) -> Self {
+        self.size_in(1u64)
+    }
+
+    /// The number counts blocks (sectors, clusters, pages) of `block`
+    /// bytes: `8 × 512 bytes (4 KiB)`.
+    pub fn size_in(mut self, block: impl Into<u64>) -> Self {
+        self.node.value = self.node.value.map(|v| v.to_size(block));
+        self
+    }
+
+    /// The number is a span of time in ticks of `1/per_sec` second (1 for
+    /// seconds, 1000 for milliseconds, 90000 for MPEG clocks); signed
+    /// fields may be negative.
+    pub fn duration(mut self, per_sec: u64) -> Self {
+        self.node.value = self.node.value.map(|v| v.to_duration(per_sec));
+        self
+    }
+
     /// Windows FILETIME (100 ns ticks since 1601, UTC), to the tick; 0 is
     /// "not set" (no value).
     pub fn filetime(mut self) -> Self {

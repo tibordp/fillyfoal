@@ -11,7 +11,7 @@ expression: "common::explore(&display_name(&path), &data)"
       First data zone: 6  [0x40a+0x2]
       Zone size (log2 blocks): 0  [0x40c+0x2]
       Padding: 0  [0x40e+0x2]
-      Maximum file size: 2147483647 — 2.0 GiB  [0x410+0x4]
+      Maximum file size: 2147483647 bytes (2.0 GiB)  [0x410+0x4]
       Zones: 64  [0x414+0x4]
       Magic: 0x4d5a  [0x418+0x2]
       Padding: 0  [0x41a+0x2]

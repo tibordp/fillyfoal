@@ -859,13 +859,7 @@ async fn scalar(
     Ok(match ty {
         Ty::Time => node.value(Value::utc(i64::try_from(n).unwrap_or(i64::MAX))),
         Ty::Oct => node.value(crate::formats::util::val::oct(n, 64)),
-        Ty::Size => node
-            .value(Value::UInt {
-                value: n,
-                bits: 64,
-                radix: Radix::Dec,
-            })
-            .summary(crate::formats::util::fmt::size(n)),
+        Ty::Size => node.value(Value::size(n)),
         Ty::Match => node.value(crate::formats::util::val::flagsv(n, 32, DEP_MATCH)),
         _ => node.value(Value::UInt {
             value: n,

@@ -365,11 +365,7 @@ async fn check(cx: Cx, file: Span) -> Result<()> {
         return Ok(());
     };
     cx.emit(Node::new("Computed").value(hex(w.adler, 32)));
-    cx.emit(
-        Node::new("Decompressed size")
-            .value(uint(w.decoded, 64))
-            .summary(size(w.decoded)),
-    );
+    cx.emit(Node::new("Decompressed size").value(crate::formats::util::val::size(w.decoded, 64)));
     let end = w.trailer.saturating_add(4);
     let span = file.sub(w.trailer, 4);
     let node = checked(span, &cx.read_avail(span).await?, &w);

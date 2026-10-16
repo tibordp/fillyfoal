@@ -10,7 +10,7 @@ use crate::error::Result;
 use crate::fields::{Fields, parse};
 use crate::formats::audio::midi::note_name;
 use crate::formats::iff::{Chunk, Ctx, FourCc, find};
-use crate::formats::util::sound::{channels, duration, f80_be, fourcc, hz};
+use crate::formats::util::sound::{channels, f80_be, fourcc, hz};
 use crate::formats::util::val::text;
 use crate::node::Node;
 use crate::record;
@@ -149,7 +149,7 @@ impl Common {
         if self.rate > 0.0 {
             s.push_str(&format!(
                 ", {}",
-                duration(self.sample_frames() as f64 / self.rate)
+                crate::formats::util::fmt::seconds(self.sample_frames() as f64 / self.rate)
             ));
         }
         s
@@ -373,7 +373,10 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
                 let span = data.sub(start, quiet.pos().saturating_sub(start));
                 let mut summary = format!("frame {position}");
                 if rate > 0.0 {
-                    summary.push_str(&format!(" ({})", duration(f64::from(position) / rate)));
+                    summary.push_str(&format!(
+                        " ({})",
+                        crate::formats::util::fmt::seconds(f64::from(position) / rate)
+                    ));
                 }
                 cx.push(
                     Node::new(format!("Marker {id}"))

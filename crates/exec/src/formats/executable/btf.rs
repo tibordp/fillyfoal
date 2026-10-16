@@ -1077,9 +1077,7 @@ async fn type_fields(cx: Cx, (btf, span): (Btf, Span)) -> Result<()> {
     match kind {
         KIND_INT | KIND_STRUCT | KIND_UNION | KIND_ENUM | KIND_ENUM64 | KIND_DATASEC
         | KIND_FLOAT => {
-            f.u32("size")
-                .summary(plural(head.size_type, "byte"))
-                .emit()?;
+            f.u32("size").size().emit()?;
         }
         KIND_FWD | KIND_ARRAY => {
             f.u32("size").emit()?;
@@ -1506,8 +1504,7 @@ async fn ext_sections(cx: Cx, (shared, kind, block): (Arc<ExtCtx>, ExtKind, Span
         .ok_or_else(|| Diagnostic::truncated(block.sub(0, 4), to_u64(b.len())))?;
     let mut size_node = Node::new("Record Size")
         .span(block.sub(0, 4))
-        .value(uint(rec_size, 32))
-        .summary(plural(rec_size, "byte"));
+        .value(crate::formats::util::val::size(rec_size, 32));
     let short = rec_size < kind.min_len();
     if short {
         size_node = size_node.diag(Diagnostic::malformed(format!(

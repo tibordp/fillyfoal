@@ -290,7 +290,7 @@ async fn blf_objects(cx: &Cx, region: Span, path: Path) -> Result<()> {
             node = node.lazy(can_message, (span, header_size));
         } else if matches!(kind, 100 | 101) {
             if let Some(t) = seconds {
-                node = node.summary(format!("{t:.6} s"));
+                node = node.summary(crate::formats::util::fmt::seconds(t));
             }
         } else if kind == 65 {
             let b = cx.read(body.sub(0, 16)).await?;
@@ -298,7 +298,7 @@ async fn blf_objects(cx: &Cx, region: Span, path: Path) -> Result<()> {
             let t = cx.read(body.sub(16, len.min(4096))).await?;
             node = node.summary(crate::text::until_nul(&t));
         } else if let Some(t) = seconds {
-            node = node.summary(format!("{t:.6} s"));
+            node = node.summary(crate::formats::util::fmt::seconds(t));
         }
         cx.push(node).await;
     }
@@ -316,7 +316,9 @@ fn can_summary(b: &[u8], seconds: Option<f64>, max: usize) -> String {
         .map(|x| format!("{x:02X}"))
         .collect();
     let ext = if id & 0x8000_0000 != 0 { "x" } else { "" };
-    let t = seconds.map(|s| format!("{s:.6} s, ")).unwrap_or_default();
+    let t = seconds
+        .map(|s| format!("{}, ", crate::formats::util::fmt::seconds(s)))
+        .unwrap_or_default();
     format!(
         "{t}ch {channel}, ID {:#x}{ext} [{dlc}] {}",
         id & 0x1fff_ffff,

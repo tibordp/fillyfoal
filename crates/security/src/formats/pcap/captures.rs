@@ -430,14 +430,14 @@ async fn netmon_frame(cx: Cx, (nm, span, link, included): (Netmon, Span, u32, u3
 }
 
 fn netmon1_record(f: &mut Fields<'_>, _: &()) -> Result<()> {
-    f.u32("Time offset (ms)").emit()?;
+    f.u32("Time offset").duration(1000).emit()?;
     f.u16("Frame length").emit()?;
     f.u16("Captured length").emit()?;
     Ok(())
 }
 
 fn netmon2_record(f: &mut Fields<'_>, _: &()) -> Result<()> {
-    f.u64("Time offset (µs)").emit()?;
+    f.u64("Time offset").duration(1_000_000).emit()?;
     f.u32("Frame length").emit()?;
     f.u32("Captured length").emit()?;
     Ok(())

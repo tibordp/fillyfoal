@@ -4,8 +4,8 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ DateTime.HC.Z — TempleOS compressed file (LZW, 7-bit characters), 210 bytes → 257 bytes  [0x0+0xd2]
   ▾ Header  [0x0+0x11]
-      compressed_size: 210 — 210 bytes  [0x0+0x8]
-      expanded_size: 257 — 257 bytes  [0x8+0x8]
+      compressed_size: 210 bytes  [0x0+0x8]
+      expanded_size: 257 bytes  [0x8+0x8]
       compression_type: CT_7_BIT (0x2)  [0x10+0x1]
   ▾ Expanded — HolyC source (DolDoc), 0 commands  [0x0+0xd2]
       Text — 257 bytes, 0 commands  [#1:0x0+0x101]

@@ -49,7 +49,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Data — 52 bytes  [0x2d8+0x34]
     ▾ Packet 13 — 52 bytes  [0x30c+0x34]
         Data — 52 bytes  [0x30c+0x34]
-    ▾ Packet 14 — 52 bytes, ends at 0:00.250  [0x340+0x34]
+    ▾ Packet 14 — 52 bytes, ends at 250 ms  [0x340+0x34]
         Data — 52 bytes  [0x340+0x34]
   ▾ Pages — 1 stream, 884 bytes  [0x0+0x374]
     ▾ Page 0 — serial 0x1369c553, seq 0, granule 0, 1 packet, BOS (Speex)  [0x0+0x6c]

@@ -50,8 +50,8 @@ record! {
         blocks: u32 "Number of blocks",
         allocated: u32 "Number of allocated blocks",
         _unknown1: u32 "Unknown",
-        size_limit: u64 "Cache size limit" .with(|&v, n| n.summary(size(v))),
-        cache_size: u64 "Cache size" .with(|&v, n| n.summary(size(v))),
+        size_limit: u64 "Cache size limit" .size(),
+        cache_size: u64 "Cache size" .size(),
         _unknown2: u64 "Non-releasable cache size",
         directories: u32 "Number of cache directories",
     }
@@ -214,9 +214,7 @@ fn ie_url_layout(f: &mut Fields<'_>, _: &()) -> Result<String> {
         .with(|&v, n| n.value(fat_time(v)))
         .emit()?;
     f.u32("Unknown").emit()?;
-    f.u32("Cached file size")
-        .with(|&v, n| n.summary(size(v.into())))
-        .emit()?;
+    f.u32("Cached file size").size().emit()?;
     f.bytes("Unknown", 16).emit()?;
     let location = f.u32("Location offset").hex().emit()?;
     f.u8("Cache directory index").emit()?;
@@ -1630,10 +1628,7 @@ async fn chrome_simple_index(cx: Cx, input: Input) -> Result<()> {
     f.u64("Magic").hex().emit()?;
     let version = f.u32("Version").emit()?;
     let entries = f.u64("Number of entries").emit()?;
-    let bytes = f
-        .u64("Cache size")
-        .with(|&v, n| n.summary(size(v)))
-        .emit()?;
+    let bytes = f.u64("Cache size").size().emit()?;
     let mut at = 36u64;
     if version >= 7 {
         f.u32("Write reason").emit()?;

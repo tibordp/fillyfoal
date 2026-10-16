@@ -311,6 +311,6 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ Block 0 — compressed, 233 bytes, last  [0x7+0xec]
           Last block: true  [0x7+0x1]
           Block type: compressed (0x2)  [0x7+0x1]
-          Block size: 233 — 233 bytes  [0x7+0x3]
+          Block size: 233 bytes  [0x7+0x3]
           Compressed data  [0xa+0xe9]
       Content checksum: 0x83c5e441  [0xf3+0x4]

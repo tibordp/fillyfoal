@@ -9,13 +9,13 @@ expression: "common::explore(&display_name(&path), &data)"
       Minor version: 4  [0x7+0x1]
       Start header CRC: 0x12f69ab3 (CRC-32, valid)  [0x8+0x4]
       Next header offset: 0x84f  [0xc+0x8]
-      Next header size: 130 — 130 bytes  [0x14+0x8]
+      Next header size: 130 bytes  [0x14+0x8]
       Next header CRC: 0x92c93c2f (CRC-32, valid)  [0x1c+0x4]
   ▾ Files — 1 file  [0x86f+0x82]
     ▾ prog — 24.8 KiB  [0x20+0x84f]
         Modification time: 2024-01-02 03:04:00 UTC
         Attributes: 0x81ed8020 — -rwxr-xr-x
-        Size: 25408 — 24.8 KiB
+        Size: 25408 bytes (24.8 KiB)
         Folder: 0
       ▾ Content — Mach-O x86_64 executable, macOS 11.0, 1 dylib, PIE, 4 symbols  [0x20+0x84f]
           CRC32: 0xfa7d6965 (CRC-32, valid)
@@ -1124,14 +1124,14 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Folder 0 — LZMA + LZMA + LZMA2 + BCJ2, 2.1 KiB → 24.8 KiB, 1 stream  [0x20+0x84f]
       ▾ Coder 0: "LZMA" — 1 in, 1 out
           lc/lp/pb: "0/2/2" — literal context, literal position and position bits
-          Dictionary size: 32768 — 32 KiB
+          Dictionary size: 32768 bytes (32 KiB)
       ▾ Coder 1: "LZMA" — 1 in, 1 out
           lc/lp/pb: "0/2/2" — literal context, literal position and position bits
-          Dictionary size: 32768 — 32 KiB
+          Dictionary size: 32768 bytes (32 KiB)
       ▾ Coder 2: "LZMA2" — 1 in, 1 out
-          Dictionary size: 32768 — 32 KiB
+          Dictionary size: 32768 bytes (32 KiB)
         Coder 3: "BCJ2" — 4 in, 1 out
-        Unpacked size: 25408 — 24.8 KiB
+        Unpacked size: 25408 bytes (24.8 KiB)
         Streams: 1
       ▾ Data — Mach-O x86_64 executable, macOS 11.0, 1 dylib, PIE, 4 symbols  [0x20+0x84f]
         ▾ Mach Header — MH_EXECUTE, x86_64  [#2:0x0+0x20]

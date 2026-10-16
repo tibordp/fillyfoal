@@ -16,7 +16,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Entry 0 (manifest)  [0x20+0x1e]
         Name digest (MD5): 00000000000000000000000000000000 (MD5, not checked)  [0x20+0x10]
         First block: 0  [0x30+0x4]
-        Uncompressed size: 0 — 0 bytes  [0x34+0x5]
+        Uncompressed size: 0 bytes  [0x34+0x5]
         Offset: 0x0  [0x39+0x5]
     Block sizes — 0 blocks, 2-byte entries  [0x3e+0x0]
   ▾ Manifest — 0x0 bytes decompressed  [0x0+0x0]

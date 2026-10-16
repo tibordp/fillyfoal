@@ -53,7 +53,7 @@ record! {
         log_guid: guid "Log GUID" .desc("Identifies the valid log entries; zero if the log is empty"),
         log_version: u16 "Log version",
         version: u16 "Version",
-        log_length: u32 "Log length" .with(|&v, n| n.summary(size(v.into()))),
+        log_length: u32 "Log length" .size(),
         log_offset: u64 "Log offset" .hex(),
         _reserved: bytes[4016] "Reserved",
     }
@@ -110,7 +110,7 @@ record! {
     pub struct RegionEntry {
         id: guid "Region GUID" .with(|g, n| match guid_name(REGIONS, g) { Some(s) => n.summary(s), None => n }),
         offset: u64 "File offset" .hex(),
-        length: u32 "Length" .with(|&v, n| n.summary(size(v.into()))),
+        length: u32 "Length" .size(),
         required: u32 "Flags" .hex() .flags(REQUIRED),
     }
 }
@@ -137,7 +137,7 @@ record! {
     pub struct LogEntryHeader {
         signature: ascii[4] "Signature",
         checksum: u32 "Checksum" .checksum("CRC-32C"),
-        length: u32 "Entry length" .with(|&v, n| n.summary(size(v.into()))),
+        length: u32 "Entry length" .size(),
         tail: u32 "Tail" .hex() .desc("Offset in the log of the oldest entry still needed"),
         sequence: u64 "Sequence number",
         descriptors: u32 "Descriptor count",
@@ -507,13 +507,7 @@ async fn metadata(cx: Cx, (input, region): (Input, Span)) -> Result<()> {
         let node = match name {
             "File parameters" => struct_node(name, value, LE, (), file_params_layout)
                 .summary(plural(size(u32_le(&data, 0).unwrap_or(0).into()), "block")),
-            "Virtual disk size" => node
-                .value(Value::UInt {
-                    value: u64_le(&data, 0).unwrap_or(0),
-                    bits: 64,
-                    radix: crate::value::Radix::Dec,
-                })
-                .summary(size(u64_le(&data, 0).unwrap_or(0))),
+            "Virtual disk size" => node.value(Value::size(u64_le(&data, 0).unwrap_or(0))),
             "Logical sector size" | "Physical sector size" => node.value(Value::UInt {
                 value: u32_le(&data, 0).unwrap_or(0).into(),
                 bits: 32,
@@ -531,9 +525,7 @@ async fn metadata(cx: Cx, (input, region): (Input, Span)) -> Result<()> {
 }
 
 fn file_params_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
-    f.u32("Block size")
-        .with(|&v, n| n.summary(size(v.into())))
-        .emit()?;
+    f.u32("Block size").size().emit()?;
     f.u32("Flags").hex().flags(FILE_PARAMS).emit()?;
     Ok(())
 }
@@ -759,9 +751,7 @@ fn data_descriptor_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
 fn zero_descriptor_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.ascii("Signature", 4).emit()?;
     f.u32("Reserved").emit()?;
-    f.u64("Zero length")
-        .with(|&v, n| n.summary(size(v)))
-        .emit()?;
+    f.u64("Zero length").size().emit()?;
     f.u64("File offset").hex().emit()?;
     f.u64("Sequence number").emit()?;
     Ok(())

@@ -88,9 +88,9 @@ fn props_summary(props: u8) -> String {
 record! {
     pub struct LzmaHeader {
         props: u8 "Properties" .with(|&p, n| n.summary(props_summary(p))),
-        dict: u32 "Dictionary size" .with(|&d, n| n.summary(fmt::size(d.into()))),
+        dict: u32 "Dictionary size" .size(),
         size: u64 "Uncompressed size"
-            .with(|&s, n| n.summary(if s == u64::MAX { "unknown (end marker)".to_owned() } else { fmt::size(s) })),
+            .with(|&s, n| if s == u64::MAX { n.summary("unknown (end marker)") } else { n.as_size() }),
     }
 }
 
@@ -138,8 +138,8 @@ record! {
 record! {
     pub struct LzipTrailer {
         crc: u32 "CRC32" .checksum("CRC-32") .desc("CRC32 of the uncompressed data"),
-        data_size: u64 "Data size" .with(|&s, n| n.summary(fmt::size(s))) .desc("Uncompressed size"),
-        member_size: u64 "Member size" .with(|&s, n| n.summary(fmt::size(s))) .desc("Header, compressed data and trailer"),
+        data_size: u64 "Data size" .size() .desc("Uncompressed size"),
+        member_size: u64 "Member size" .size() .desc("Header, compressed data and trailer"),
     }
 }
 

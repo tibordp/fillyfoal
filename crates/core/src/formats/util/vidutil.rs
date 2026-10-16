@@ -50,36 +50,6 @@ pub use tables::{
 // ---------------------------------------------------------------------------
 // Presentation helpers
 
-/// `units` of `1/timescale` seconds as `hh:mm:ss.mmm`.
-pub fn duration(units: u64, timescale: u64) -> String {
-    if timescale == 0 {
-        return format!("{units} units");
-    }
-    let millis = u128::from(units)
-        .saturating_mul(1000)
-        .checked_div(u128::from(timescale))
-        .unwrap_or(0);
-    seconds_ms(u64::try_from(millis).unwrap_or(u64::MAX))
-}
-
-/// Milliseconds as `hh:mm:ss.mmm`.
-pub fn seconds_ms(millis: u64) -> String {
-    let ms = millis % 1000;
-    let s = millis / 1000;
-    format!("{:02}:{:02}:{:02}.{ms:03}", s / 3600, s / 60 % 60, s % 60)
-}
-
-/// Seconds (floating point) as `hh:mm:ss.mmm`.
-pub fn seconds_f64(seconds: f64) -> String {
-    if !seconds.is_finite() || seconds < 0.0 {
-        return format!("{seconds}");
-    }
-    // Saturating float-to-int conversion.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let millis = (seconds * 1000.0).round() as u64;
-    seconds_ms(millis)
-}
-
 pub use super::fmt::uuid;
 
 /// A four-character code, with non-printable bytes escaped, except that

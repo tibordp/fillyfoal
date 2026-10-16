@@ -16,7 +16,7 @@ use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::fmt::plural;
-use crate::formats::util::sound::{decode_text, duration, fourcc};
+use crate::formats::util::sound::{decode_text, fourcc};
 use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
@@ -410,7 +410,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let analysis = if file.len <= MAX_ANALYSIS {
         let a = analyse(&cx, &tracks).await?;
         if let Some(secs) = a.seconds(header.division) {
-            line.push_str(&format!(", {}", duration(secs)));
+            line.push_str(&format!(", {}", crate::formats::util::fmt::seconds(secs)));
         }
         if header.division & 0x8000 == 0 {
             line.push_str(&format!(", {}", a.tempo()));

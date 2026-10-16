@@ -572,12 +572,12 @@ async fn block_header(cx: Cx, span: Span) -> Result<()> {
     }
     cx.emit(node.value(hex(flags, 64)).summary(parts.join(", ")));
     if flags & 0x40 != 0 {
-        let (v, node) = r.varint("Compressed size").ok_or_else(bad)?;
-        cx.emit(node.summary(fmt::size(v)));
+        let (_, node) = r.varint("Compressed size").ok_or_else(bad)?;
+        cx.emit(node.as_size());
     }
     if flags & 0x80 != 0 {
-        let (v, node) = r.varint("Uncompressed size").ok_or_else(bad)?;
-        cx.emit(node.summary(fmt::size(v)));
+        let (_, node) = r.varint("Uncompressed size").ok_or_else(bad)?;
+        cx.emit(node.as_size());
     }
     for _ in 0..filters {
         let from = r.at;

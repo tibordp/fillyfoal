@@ -68,7 +68,7 @@ async fn nsv(cx: Cx, input: Input) -> Result<()> {
         f.ascii("Signature", 4).emit()?;
         let size = f.u32("Header size").emit()?;
         f.u32("File size").emit()?;
-        f.u32("Length (ms)").emit()?;
+        f.u32("Length").duration(1000).emit()?;
         let meta = f.u32("Metadata length").emit()?;
         f.u32("TOC allocated").emit()?;
         f.u32("TOC entries").emit()?;

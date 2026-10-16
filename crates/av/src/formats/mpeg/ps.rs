@@ -396,10 +396,10 @@ fn private_2(cx: &Cx, payload: Span, d: &[u8]) {
             w.x("vobu_cat", 16)?;
             w.x("reserved", 16)?;
             w.x("vobu_uop_ctl", 32)?;
-            let s = w.u("vobu_s_ptm", 32)?;
-            w.summary(|| seconds_90k(s));
-            let e = w.u("vobu_e_ptm", 32)?;
-            w.summary(|| seconds_90k(e));
+            w.u("vobu_s_ptm", 32)?;
+            w.with(|n| n.as_duration(90_000));
+            w.u("vobu_e_ptm", 32)?;
+            w.with(|n| n.as_duration(90_000));
         } else {
             w.x("nv_pck_lbn", 32)?;
             w.u("vobu_ea", 32)?;
@@ -422,7 +422,7 @@ fn pack_header(cx: &Cx, span: Span, d: &[u8]) {
     let mpeg2 = d.get(4).is_some_and(|b| b & 0xc0 == 0x40);
     if let Some((base, ext)) = scr(d) {
         let scr_span = span.sub(4, if mpeg2 { 6 } else { 5 });
-        cx.emit(uint("SCR base", scr_span, base, 33).summary(seconds_90k(base)));
+        cx.emit(uint("SCR base", scr_span, base, 33).as_duration(90_000));
         if let Some(e) = ext {
             cx.emit(uint("SCR extension", scr_span, e, 9).summary("27 MHz units"));
         }
@@ -814,7 +814,9 @@ async fn summary(cx: &Cx, file: Span) -> Result<(String, Vec<Stream>)> {
     if let (Some(a), Some(b)) = (first_scr, last)
         && b > a
     {
-        parts.push(vidutil::seconds_f64(b.saturating_sub(a) as f64 / 90_000.0));
+        parts.push(crate::formats::util::fmt::seconds(
+            b.saturating_sub(a) as f64 / 90_000.0,
+        ));
     }
     Ok((parts.join(", "), streams.into_values().collect()))
 }

@@ -572,16 +572,13 @@ async fn block(cx: Cx, span: Span) -> Result<()> {
             }),
     );
     let size = u64::from(h >> 3);
-    cx.emit(
-        Node::new("Block size")
-            .span(header)
-            .value(uint(size, 64))
-            .summary(if kind == 1 {
-                format!("{size} repetitions")
-            } else {
-                fmt::size(size)
-            }),
-    );
+    let node = Node::new("Block size").span(header);
+    cx.emit(if kind == 1 {
+        node.value(uint(size, 64))
+            .summary(format!("{size} repetitions"))
+    } else {
+        node.value(Value::size(size))
+    });
     let body = span.tail(3);
     match kind {
         0 => cx.emit(Node::new("Raw data").span(body)),

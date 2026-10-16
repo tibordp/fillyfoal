@@ -161,6 +161,16 @@ impl Ctx {
         let delta = i128::from(ts).saturating_sub(i128::from(self.sync));
         Some(delta as f64 / self.freq as f64)
     }
+
+    /// The span from the trace's sync time to `ts`, in clock ticks.
+    fn since_sync(&self, ts: u64) -> Option<Value> {
+        if self.freq == 0 {
+            return None;
+        }
+        let delta = i128::from(ts).saturating_sub(i128::from(self.sync));
+        let delta = i64::try_from(delta).unwrap_or(if delta < 0 { i64::MIN } else { i64::MAX });
+        Some(Value::duration(delta, self.freq))
+    }
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
@@ -433,7 +443,11 @@ async fn block_node(cx: &Cx, ctx: Ctx, blk: Blk) -> Result<Node> {
             if blk.kind == Kind::Event
                 && let (Some(a), Some(b)) = (ctx.seconds(min), ctx.seconds(max))
             {
-                s.push_str(&format!(", {a:.6}–{b:.6} s"));
+                s.push_str(&format!(
+                    ", {}–{}",
+                    crate::formats::util::fmt::seconds(a),
+                    crate::formats::util::fmt::seconds(b)
+                ));
             }
             if ctx.ver == Ver::Fs || blk.kind == Kind::Event {
                 s.push_str(if flags & 1 != 0 {
@@ -464,7 +478,11 @@ async fn block_node(cx: &Cx, ctx: Ctx, blk: Blk) -> Result<Node> {
                 Ver::V6 => u32_le(&h, 12).unwrap_or(0),
             };
             Some(match ctx.seconds(ts) {
-                Some(s) => format!("{s:.6} s, {}", plural(threads, "thread")),
+                Some(s) => format!(
+                    "{}, {}",
+                    crate::formats::util::fmt::seconds(s),
+                    plural(threads, "thread")
+                ),
                 None => plural(threads, "thread"),
             })
         }
@@ -1982,7 +2000,11 @@ async fn events(cx: Cx, (ctx, blk, start, compressed): EventsState) -> Result<()
                 None => format!("Event (metadata {})", h.meta),
             };
             let mut summary = match ctx.seconds(h.ts) {
-                Some(s) => format!("{s:.6} s, thread {}", h.thread),
+                Some(s) => format!(
+                    "{}, thread {}",
+                    crate::formats::util::fmt::seconds(s),
+                    h.thread
+                ),
                 None => format!("thread {}", h.thread),
             };
             if h.stack != 0 {
@@ -2113,11 +2135,11 @@ async fn event(cx: Cx, (ctx, blk, pos, prev, compressed): EventState) -> Result<
         }
     }
     parts.push(Node::new("IsSorted").value(Value::Bool(h.sorted)));
-    if let Some(s) = ctx.seconds(h.ts) {
+    if let Some(t) = ctx.since_sync(h.ts) {
         parts.push(
             Node::new("Time")
-                .value(Value::f64(s))
-                .summary("seconds from the trace's sync time"),
+                .value(t)
+                .desc("From the trace's sync time"),
         );
     }
     header = header.summary(format!("thread {}, sequence {}", h.thread, h.seq));

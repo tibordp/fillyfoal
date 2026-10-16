@@ -37,7 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Data — 38 bytes  [0xe1+0x26]
     ▾ Packet 3 — 38 bytes  [0x107+0x26]
         Data — 38 bytes  [0x107+0x26]
-    ▾ Packet 4 — 38 bytes, ends at 0:00.060  [0x12d+0x26]
+    ▾ Packet 4 — 38 bytes, ends at 60 ms  [0x12d+0x26]
         Data — 38 bytes  [0x12d+0x26]
   ▾ Pages — 1 stream, 339 bytes  [0x0+0x153]
     ▾ Page 0 — serial 0x5eed, seq 0, granule 0, 1 packet, BOS (Speex)  [0x0+0x6c]

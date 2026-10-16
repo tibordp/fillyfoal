@@ -27,7 +27,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Entry array offset: 0x99f8  [0xb0+0x8]
       Head entry realtime (µs): 1767225600000000  [0xb8+0x8]
       Tail entry realtime (µs): 1767225603000000  [0xc0+0x8]
-      Tail entry monotonic (µs): 4000000  [0xc8+0x8]
+      Tail entry monotonic: 4 s  [0xc8+0x8]
   ▾ Objects — 29 objects  [0x110+0x9d80]
       FIELD_HASH_TABLE — 5344 bytes  [0x110+0x14e0]
       DATA_HASH_TABLE — 32768 bytes  [0x15f0+0x8000]

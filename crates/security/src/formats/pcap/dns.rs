@@ -509,7 +509,7 @@ fn record(
     } else {
         class_field(b, r, base.saturating_add(2), class, flavor, false);
         b.num(r, "Time to live", base.saturating_add(4), 4);
-        b.tail(|n| n.summary(duration(ttl)));
+        b.tail(|n| n.as_duration(1));
     }
     b.num(r, "Data length", base.saturating_add(8), 2);
     if rend > msg.len() {
@@ -536,13 +536,7 @@ fn record(
 }
 
 fn duration(s: u32) -> String {
-    match s {
-        0..60 => format!("{s} s"),
-        60..3600 if s.is_multiple_of(60) => format!("{} min", s / 60),
-        3600..86400 if s.is_multiple_of(3600) => format!("{} h", s / 3600),
-        86400.. if s.is_multiple_of(86400) => format!("{} d", s / 86400),
-        _ => format!("{s} s"),
-    }
+    crate::formats::util::fmt::duration(s.into(), 1)
 }
 
 /// Decodes RDATA at `rd..rend`; returns a one-line rendering.
@@ -620,8 +614,8 @@ fn rdata(b: &mut Dec, r: Ix, mo: usize, msg: &[u8], rtype: u16, rd: usize, rend:
             .enumerate()
             {
                 let at = after.saturating_add(4).saturating_add(i.saturating_mul(4));
-                let v = b.num(r, label, abs(at), 4).unwrap_or(0);
-                b.tail(|n| n.summary(duration(u32::try_from(v).unwrap_or(0))));
+                b.num(r, label, abs(at), 4);
+                b.tail(|n| n.as_duration(1));
             }
             format!("{mname} {rname} serial {serial}")
         }

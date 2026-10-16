@@ -57,9 +57,9 @@ pub fn timestamp(d: &[u8]) -> Option<u64> {
     Some(((b(0)? >> 1) & 7) << 30 | b(1)? << 22 | (b(2)? >> 1) << 15 | b(3)? << 7 | b(4)? >> 1)
 }
 
-/// 90 kHz ticks as seconds.
+/// 90 kHz ticks as a duration, for summaries.
 pub fn seconds_90k(ticks: u64) -> String {
-    format!("{:.3} s", ticks as f64 / 90_000.0)
+    crate::formats::util::fmt::duration_of(ticks, 90_000)
 }
 
 /// PTS and DTS of a PES header (`d` starts at `00 00 01`).
@@ -167,10 +167,10 @@ pub fn pes_header(cx: &Cx, span: Span, d: &[u8]) -> (u64, u16) {
     ));
     let (pts, dts) = pes_times(d);
     if let Some(p) = pts {
-        cx.emit(uint("PTS", span.sub(9, 5), p, 33).summary(seconds_90k(p)));
+        cx.emit(uint("PTS", span.sub(9, 5), p, 33).as_duration(90_000));
     }
     if let Some(t) = dts {
-        cx.emit(uint("DTS", span.sub(14, 5), t, 33).summary(seconds_90k(t)));
+        cx.emit(uint("DTS", span.sub(14, 5), t, 33).as_duration(90_000));
     }
     let end = 9usize.saturating_add(header_len.into());
     let mut at = 9usize.saturating_add(if dts.is_some() {
@@ -366,21 +366,19 @@ fn mpeg1_header(cx: &Cx, span: Span, d: &[u8]) -> u64 {
     match b >> 4 {
         2 => {
             if let Some(p) = d.get(at..at.saturating_add(5)).and_then(timestamp) {
-                cx.emit(uint("PTS", span.sub(pos, 5), p, 33).summary(seconds_90k(p)));
+                cx.emit(uint("PTS", span.sub(pos, 5), p, 33).as_duration(90_000));
             }
             at = at.saturating_add(5);
         }
         3 => {
             if let Some(p) = d.get(at..at.saturating_add(5)).and_then(timestamp) {
-                cx.emit(uint("PTS", span.sub(pos, 5), p, 33).summary(seconds_90k(p)));
+                cx.emit(uint("PTS", span.sub(pos, 5), p, 33).as_duration(90_000));
             }
             if let Some(t) = d
                 .get(at.saturating_add(5)..at.saturating_add(10))
                 .and_then(timestamp)
             {
-                cx.emit(
-                    uint("DTS", span.sub(pos.saturating_add(5), 5), t, 33).summary(seconds_90k(t)),
-                );
+                cx.emit(uint("DTS", span.sub(pos.saturating_add(5), 5), t, 33).as_duration(90_000));
             }
             at = at.saturating_add(10);
         }

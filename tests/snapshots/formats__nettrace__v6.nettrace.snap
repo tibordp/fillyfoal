@@ -85,7 +85,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ Label list 1 — 2 labels  [0x12f+0x1d]
           ActivityId: "03020100-0504-0706-0809-0a0b0c0d0e0f"  [0x12f+0x11]
           request: "42"  [0x140+0xc]
-  ▾ EventBlock — 90 bytes, 0.000000–0.000000 s, compressed headers  [0x14c+0x5e]
+  ▾ EventBlock — 90 bytes, 100 ns–300 ns, compressed headers  [0x14c+0x5e]
     ▾ Block header  [0x14c+0x4]
         BlockSize and BlockKind: 0x200005a — Event, 90 bytes  [0x14c+0x4]
     ▾ Header  [0x150+0x14]
@@ -94,7 +94,7 @@ expression: "common::explore(&display_name(&path), &data)"
         MinTimestamp: 1000100  [0x154+0x8]
         MaxTimestamp: 1000300  [0x15c+0x8]
     ▾ Events  [0x164+0x46]
-      ▾ Fillyfoal-Demo/Hello — 0.000000 s, thread 1, stack 1; Name="fillyfoal" Count=1  [0x164+0x24]
+      ▾ Fillyfoal-Demo/Hello — 100 ns, thread 1, stack 1; Name="fillyfoal" Count=1  [0x164+0x24]
         ▾ Header — thread 1, sequence 1  [0x164+0xc]
             Flags: 0xdf [MetadataId | CaptureThreadAndSequence | ThreadIndex | StackId | LabelListId | Sorted | DataLength]  [0x164+0x1]
             MetadataId: 1  [0x165+0x1]
@@ -109,11 +109,11 @@ expression: "common::explore(&display_name(&path), &data)"
             SequenceNumber: 1
             TimeStamp: 1000100
             IsSorted: true
-            Time: 1e-7 — seconds from the trace's sync time
+            Time: 100 ns
         ▾ Payload — 2 fields  [0x170+0x18]
             Name: "fillyfoal"  [0x170+0x14]
             Count: 1  [0x184+0x4]
-      ▾ Fillyfoal-Demo/Hello — 0.000000 s, thread 1, stack 1; Name="fillyfoal" Count=2  [0x188+0x1a]
+      ▾ Fillyfoal-Demo/Hello — 200 ns, thread 1, stack 1; Name="fillyfoal" Count=2  [0x188+0x1a]
         ▾ Header — thread 1, sequence 2  [0x188+0x2]
             Flags: 0x0 []  [0x188+0x1]
             TimeStamp (delta): 100  [0x189+0x1]
@@ -123,11 +123,11 @@ expression: "common::explore(&display_name(&path), &data)"
             StackId: 1 — as the previous event
             PayloadSize: 24 — as the previous event
             IsSorted: false
-            Time: 2e-7 — seconds from the trace's sync time
+            Time: 200 ns
         ▾ Payload — 2 fields  [0x18a+0x18]
             Name: "fillyfoal"  [0x18a+0x14]
             Count: 2  [0x19e+0x4]
-      ▾ Fillyfoal-Demo/Tick — 0.000000 s, thread 1, stack 2; N=7 Delta=-3 Ok=true  [0x1a2+0x8]
+      ▾ Fillyfoal-Demo/Tick — 300 ns, thread 1, stack 2; N=7 Delta=-3 Ok=true  [0x1a2+0x8]
         ▾ Header — thread 1, sequence 3  [0x1a2+0x5]
             Flags: 0x89 [MetadataId | StackId | DataLength]  [0x1a2+0x1]
             MetadataId: 2  [0x1a3+0x1]
@@ -138,12 +138,12 @@ expression: "common::explore(&display_name(&path), &data)"
             TimeStamp: 1000300
             Thread: 1 — as the previous event
             IsSorted: false
-            Time: 3e-7 — seconds from the trace's sync time
+            Time: 300 ns
         ▾ Payload — 3 fields  [0x1a7+0x3]
             N: 7  [0x1a7+0x1]
             Delta: -3  [0x1a8+0x1]
             Ok: true  [0x1a9+0x1]
-  ▾ EventBlock — 80 bytes, 0.000000–0.000000 s, uncompressed headers  [0x1aa+0x54]
+  ▾ EventBlock — 80 bytes, 400 ns–400 ns, uncompressed headers  [0x1aa+0x54]
     ▾ Block header  [0x1aa+0x4]
         BlockSize and BlockKind: 0x2000050 — Event, 80 bytes  [0x1aa+0x4]
     ▾ Header  [0x1ae+0x14]
@@ -152,7 +152,7 @@ expression: "common::explore(&display_name(&path), &data)"
         MinTimestamp: 1000400  [0x1b2+0x8]
         MaxTimestamp: 1000400  [0x1ba+0x8]
     ▾ Events  [0x1c2+0x3c]
-      ▾ Fillyfoal-Demo/Hello — 0.000000 s, thread 1; Name="x" Count=9  [0x1c2+0x3c]
+      ▾ Fillyfoal-Demo/Hello — 400 ns, thread 1; Name="x" Count=9  [0x1c2+0x3c]
         ▾ Header — thread 1, sequence 4  [0x1c2+0x34]
             EventSize: 56  [0x1c2+0x4]
             MetadataId: 1  [0x1c6+0x4]
@@ -165,11 +165,11 @@ expression: "common::explore(&display_name(&path), &data)"
             LabelListId: 0  [0x1ee+0x4]
             PayloadSize: 8  [0x1f2+0x4]
             IsSorted: false
-            Time: 4e-7 — seconds from the trace's sync time
+            Time: 400 ns
         ▾ Payload — 2 fields  [0x1f6+0x8]
             Name: "x"  [0x1f6+0x4]
             Count: 9  [0x1fa+0x4]
-  ▾ SequencePointBlock — 0.000000 s, 1 thread  [0x1fe+0x16]
+  ▾ SequencePointBlock — 500 ns, 1 thread  [0x1fe+0x16]
     ▾ Block header  [0x1fe+0x4]
         BlockSize and BlockKind: 0x4000012 — SequencePoint, 18 bytes  [0x1fe+0x4]
     ▾ Sequence point  [0x202+0x12]

@@ -1154,9 +1154,7 @@ async fn record_node(
     let hspan = records.sub(pos, sa.rec_size);
     let block = cx.block(hspan).await?;
     let mut f = Fields::emitting(&cx, &block, sa.endian);
-    f.u64("uptime_cs")
-        .with(|&v, n| n.summary(format!("{}.{:02} s", v / 100, v % 100)))
-        .emit()?;
+    f.u64("uptime_cs").duration(100).emit()?;
     f.u64("ust_time").timestamp().emit()?;
     f.u32("extra_next").emit()?;
     let rtype = f.u8("record_type").enumeration(RECORD_TYPES).emit()?;

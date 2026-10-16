@@ -226,7 +226,7 @@ async fn fields(cx: Cx, (span, key, value): (Span, u64, u64)) -> Result<()> {
         let node = Node::new(*name).span(span.sub(off, 4));
         cx.emit(match *name {
             "Offset" => node.value(hex(w, 32)),
-            "Size" | "Compressed size" => node.value(uint(w, 32)).summary(size(u64::from(w))),
+            "Size" | "Compressed size" => node.value(crate::formats::util::val::size(w, 32)),
             _ => node.value(uint(w, 32)),
         });
     }

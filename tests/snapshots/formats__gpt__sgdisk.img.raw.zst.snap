@@ -13,7 +13,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Partition type: GPT protective (0xee)  [0x1c2+0x1]
         Last sector (CHS): 41 01 00  |A..| — C/H/S 0/65/1  [0x1c3+0x3]
         First sector (LBA): 1  [0x1c6+0x4]
-        Sectors: 4095 — 2.0 MiB  [0x1ca+0x4]
+        Sectors: 4095 × 512 bytes (2.0 MiB)  [0x1ca+0x4]
       Entry 2: unused (0x0) — all zeros  [0x1ce+0x10]
       Entry 3: unused (0x0) — all zeros  [0x1de+0x10]
       Entry 4: unused (0x0) — all zeros  [0x1ee+0x10]
@@ -88,7 +88,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 First cluster (high word): 0  [0x100a34+0x2]
                 Modified: 2023-11-14 22:13:20 (local time)  [0x100a36+0x4]
                 First cluster (low word): 2  [0x100a3a+0x2]
-                File size: 21 — 21 bytes  [0x100a3c+0x4]
+                File size: 21 bytes  [0x100a3c+0x4]
             ▾ Clusters — contiguous, 21 bytes
                 Fragment 0 — file offset 0x0, 21 bytes  [0x101800+0x15]
             ▾ Content — UTF-8 text, LF line endings, 1 line  [0x101800+0x15]

@@ -75,11 +75,6 @@ pub fn uuid_value(b: &Vec<u8>, node: Node) -> Node {
     node.value(Value::Text(uuid(b)))
 }
 
-/// Decorator showing a byte count in a human-readable way.
-pub fn size_summary<T: Copy + Into<u64>>(v: &T, node: Node) -> Node {
-    node.summary(size((*v).into()))
-}
-
 /// Text value of a NUL-padded byte string, decoded lossily.
 pub fn text(b: &[u8]) -> Value {
     Value::Text(crate::text::until_nul(b))

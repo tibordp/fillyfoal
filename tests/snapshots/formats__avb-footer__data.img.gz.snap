@@ -34,7 +34,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Tag: Hashtree (0x1)  [0x5100+0x8]
           Length: 216  [0x5108+0x8]
           dm-verity version: 1  [0x5110+0x4]
-          Image size: 16384 — 16 KiB  [0x5114+0x8]
+          Image size: 16384 bytes (16 KiB)  [0x5114+0x8]
           Tree offset: 0x4000  [0x511c+0x8]
           Tree size: 4096  [0x5124+0x8]
           Data block size: 4096  [0x512c+0x4]

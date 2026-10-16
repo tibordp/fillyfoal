@@ -6,7 +6,7 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::fmt::plural;
-use crate::formats::util::sound::{Bits, bits_node, duration};
+use crate::formats::util::sound::{Bits, bits_node};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -168,7 +168,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if wide { "AMR-WB" } else { "AMR-NB" },
         channels,
         if exact { "" } else { "≈" },
-        duration(frames as f64 * 0.02)
+        crate::formats::util::fmt::seconds(frames as f64 * 0.02)
     ));
     cx.emit(
         Node::new("Frames")

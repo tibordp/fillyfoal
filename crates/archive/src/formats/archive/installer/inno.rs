@@ -2004,8 +2004,7 @@ fn location_fields(s: &Setup, loc: &Location) -> Vec<Node> {
             .value(hex(loc.sub, 64)),
         Node::new("OriginalSize")
             .span(f(sub.saturating_add(8), 8))
-            .value(uint(loc.size, 64))
-            .summary(size(loc.size)),
+            .value(crate::formats::util::val::size(loc.size, 64)),
         Node::new("ChunkCompressedSize")
             .span(f(sub.saturating_add(16), 8))
             .value(uint(loc.packed, 64)),

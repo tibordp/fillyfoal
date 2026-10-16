@@ -9,7 +9,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Minor version: 4  [0x7+0x1]
       Start header CRC: 0x2f0166da (CRC-32, valid)  [0x8+0x4]
       Next header offset: 0x507  [0xc+0x8]
-      Next header size: 35 — 35 bytes  [0x14+0x8]
+      Next header size: 35 bytes  [0x14+0x8]
       Next header CRC: 0xb3bc1f07 (CRC-32, valid)  [0x1c+0x4]
   ▾ Encoded header — LZMA, 128 bytes → 142 bytes  [0x4a7+0x80]
     ▾ kEncodedHeader  [0x527+0x23]
@@ -23,7 +23,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ a.txt — 530 bytes  [0x20+0x487]
         Modification time: 2026-10-06 12:28:45.5517145 UTC
         Attributes: 0x81a48020 — -rw-r--r--
-        Size: 530 — 530 bytes
+        Size: 530 bytes
         Folder: 0
       ▾ Content — UTF-8 text, LF line endings, 60 lines  [0x20+0x487]
           CRC32: 0x7bdf5fb7 (CRC-32, valid)
@@ -93,7 +93,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ code-x86.bin — 2.9 KiB  [0x20+0x487]
         Modification time: 2026-10-06 12:28:45.5509144 UTC
         Attributes: 0x81a48020 — -rw-r--r--
-        Size: 3013 — 2.9 KiB
+        Size: 3013 bytes (2.9 KiB)
         Folder: 0
       ▾ Content — 0xbc5 bytes decompressed  [0x20+0x487]
           CRC32: 0x9d56378c (CRC-32, valid)
@@ -102,9 +102,9 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Folder 0 — LZMA + BCJ x86, 1.1 KiB → 3.5 KiB, 2 streams  [0x20+0x487]
       ▾ Coder 0: "LZMA" — 1 in, 1 out
           lc/lp/pb: "3/0/2" — literal context, literal position and position bits
-          Dictionary size: 4096 — 4 KiB
+          Dictionary size: 4096 bytes (4 KiB)
         Coder 1: "BCJ x86" — 1 in, 1 out
-        Unpacked size: 3543 — 3.5 KiB
+        Unpacked size: 3543 bytes (3.5 KiB)
         Streams: 2
       ▾ Data — 0xdd7 bytes decompressed  [0x20+0x487]
           Data  [#2:0x0+0xdd7]

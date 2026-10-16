@@ -930,10 +930,10 @@ static PAGEMAP_ENTRY: Msg = msg(
 static ITIMER_ENTRY: Msg = msg(
     "itimer_entry",
     &[
-        f(1, "isec", Ty::UInt),
-        f(2, "iusec", Ty::UInt),
-        f(3, "vsec", Ty::UInt),
-        f(4, "vusec", Ty::UInt),
+        f(1, "isec", Ty::Duration(1)),
+        f(2, "iusec", Ty::Duration(1_000_000)),
+        f(3, "vsec", Ty::Duration(1)),
+        f(4, "vusec", Ty::Duration(1_000_000)),
     ],
     &[],
 );
@@ -947,10 +947,10 @@ static POSIX_TIMER_ENTRY: Msg = msg(
         f(4, "it_sigev_notify", Ty::UInt),
         f(5, "sival_ptr", Ty::Hex),
         f(6, "overrun", Ty::UInt),
-        f(7, "isec", Ty::UInt),
-        f(8, "insec", Ty::UInt),
-        f(9, "vsec", Ty::UInt),
-        f(10, "vnsec", Ty::UInt),
+        f(7, "isec", Ty::Duration(1)),
+        f(8, "insec", Ty::Duration(1_000_000_000)),
+        f(9, "vsec", Ty::Duration(1)),
+        f(10, "vnsec", Ty::Duration(1_000_000_000)),
         f(11, "notify_thread_id", Ty::Int),
     ],
     &[1, 2],
@@ -1499,10 +1499,10 @@ static TIMERFD_ENTRY: Msg = msg(
         f(4, "clockid", Ty::UInt),
         f(5, "ticks", Ty::UInt),
         f(6, "settime_flags", Ty::Hex),
-        f(7, "vsec", Ty::UInt),
-        f(8, "vnsec", Ty::UInt),
-        f(9, "isec", Ty::UInt),
-        f(10, "insec", Ty::UInt),
+        f(7, "vsec", Ty::Duration(1)),
+        f(8, "vnsec", Ty::Duration(1_000_000_000)),
+        f(9, "isec", Ty::Duration(1)),
+        f(10, "insec", Ty::Duration(1_000_000_000)),
     ],
     &[4],
 );
@@ -1512,10 +1512,10 @@ static SK_OPTS: Msg = msg(
     &[
         f(1, "so_sndbuf", Ty::UInt),
         f(2, "so_rcvbuf", Ty::UInt),
-        f(3, "so_snd_tmo_sec", Ty::UInt),
-        f(4, "so_snd_tmo_usec", Ty::UInt),
-        f(5, "so_rcv_tmo_sec", Ty::UInt),
-        f(6, "so_rcv_tmo_usec", Ty::UInt),
+        f(3, "so_snd_tmo_sec", Ty::Duration(1)),
+        f(4, "so_snd_tmo_usec", Ty::Duration(1_000_000)),
+        f(5, "so_rcv_tmo_sec", Ty::Duration(1)),
+        f(6, "so_rcv_tmo_usec", Ty::Duration(1_000_000)),
         f(7, "reuseaddr", Ty::Bool),
         f(8, "so_priority", Ty::UInt),
         f(9, "so_rcvlowat", Ty::UInt),
@@ -1750,7 +1750,10 @@ static UTSNS_ENTRY: Msg = msg(
 
 static TIMESPEC: Msg = msg(
     "timespec",
-    &[f(1, "tv_sec", Ty::UInt), f(2, "tv_nsec", Ty::UInt)],
+    &[
+        f(1, "tv_sec", Ty::Duration(1)),
+        f(2, "tv_nsec", Ty::Duration(1_000_000_000)),
+    ],
     &[],
 );
 

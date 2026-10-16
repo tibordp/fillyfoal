@@ -682,9 +682,8 @@ fn ntp(b: &mut Dec, p: Ix, off: usize, end: usize) -> usize {
     });
     for (i, name) in ["Root delay", "Root dispersion"].into_iter().enumerate() {
         let at = off.saturating_add(4).saturating_add(i.saturating_mul(4));
-        let v = b.numx(ix, name, at, 4).unwrap_or(0);
-        let secs = v as f64 / 65536.0;
-        b.tail(|n| n.summary(format!("{secs:.6} s")));
+        b.num(ix, name, at, 4);
+        b.tail(|n| n.as_duration(65536).desc("16.16 fixed-point seconds"));
     }
     let rid = off.saturating_add(12);
     let refid = b.bytes(rid, 4).unwrap_or_default().to_vec();

@@ -926,13 +926,9 @@ fn fe_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u8("Record format").emit()?;
     f.u8("Record display attributes").emit()?;
     f.u32("Record length").emit()?;
-    f.u64("Information length")
-        .with(|&v, n| n.summary(fmt::size(v)))
-        .emit()?;
+    f.u64("Information length").size().emit()?;
     if efe {
-        f.u64("Object size")
-            .with(|&v, n| n.summary(fmt::size(v)))
-            .emit()?;
+        f.u64("Object size").size().emit()?;
     }
     f.u64("Logical blocks recorded").emit()?;
     time_field(f, "Access time")?;

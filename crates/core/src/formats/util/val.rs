@@ -30,6 +30,22 @@ pub fn oct(value: impl Into<u64>, bits: u8) -> Value {
     }
 }
 
+/// A size of `n` bytes stored `bits` wide: `1536 bytes (1.5 KiB)`.
+pub fn size(n: impl Into<u64>, bits: u8) -> Value {
+    Value::size(n.into()).bits(bits)
+}
+
+/// A size of `n` blocks of `block` bytes, `n` stored `bits` wide:
+/// `8 × 512 bytes (4 KiB)`.
+pub fn blocks(n: impl Into<u64>, block: impl Into<u64>, bits: u8) -> Value {
+    Value::blocks(n.into(), block).bits(bits)
+}
+
+/// A span of `ticks` of `1/per_sec` second.
+pub fn duration(ticks: impl Into<i64>, per_sec: u64) -> Value {
+    Value::duration(ticks.into(), per_sec)
+}
+
 /// A signed value.
 pub fn int(value: impl Into<i64>, bits: u8) -> Value {
     Value::Int {

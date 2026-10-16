@@ -5,7 +5,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ▾ mkcramfs.cramfs — CramFS "fillyfoal", 23 files, 8 KiB  [0x0+0x2000]
   ▾ Superblock — fillyfoal  [0x0+0x40]
       Magic: 0x28cd3d45  [0x0+0x4]
-      Size: 8192 — 8 KiB  [0x4+0x4]
+      Size: 8192 bytes (8 KiB)  [0x4+0x4]
       Flags: 0x3 [FSID_VERSION_2 | SORTED_DIRS]  [0x8+0x4]
       Reserved: 0  [0xc+0x4]
       Signature: "Compressed ROMFS"  [0x10+0x10]

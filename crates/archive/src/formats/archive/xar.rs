@@ -45,8 +45,8 @@ record! {
         magic: ascii[4] "Magic",
         size: u16 "Header size",
         version: u16 "Version",
-        toc_compressed: u64 "TOC compressed size" .with(|&s, n| n.summary(fmt::size(s))),
-        toc_uncompressed: u64 "TOC uncompressed size" .with(|&s, n| n.summary(fmt::size(s))),
+        toc_compressed: u64 "TOC compressed size" .size(),
+        toc_uncompressed: u64 "TOC uncompressed size" .size(),
         checksum: u32 "Checksum algorithm" .enumeration(CHECKSUM),
     }
 }

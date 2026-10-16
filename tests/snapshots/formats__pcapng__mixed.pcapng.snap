@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ mixed.pcapng — pcapng 1.0, little-endian; 1 section, 2 interfaces; 4 packets, 243 bytes over 0.001500 s; TCP 2, HTTP 1, ICMP 1  [0x0+0x2e0]
+▾ mixed.pcapng — pcapng 1.0, little-endian; 1 section, 2 interfaces; 4 packets, 243 bytes over 1.5 ms; TCP 2, HTTP 1, ICMP 1  [0x0+0x2e0]
   ▾ Section Header Block — section 1, version 1.0, little-endian  [0x0+0x5c]
       Block type: Section Header Block (0xa0d0d0a)  [0x0+0x4]
       Block total length: 92  [0x4+0x4]
@@ -41,7 +41,7 @@ expression: "common::explore(&display_name(&path), &data)"
         if_name: "tun0"  [0xd0+0x8]
         opt_endofopt  [0xd8+0x4]
       Block total length (trailer): 32  [0xdc+0x4]
-  ▾ Enhanced Packet Block — packet 0, +0.000000 s, 62 bytes, interface 0, 192.168.1.10 → 93.184.216.34, TCP 51000 → 80 [SYN] Seq=1000 Win=65535 Len=0  [0xe0+0x7c]
+  ▾ Enhanced Packet Block — packet 0, +0 s, 62 bytes, interface 0, 192.168.1.10 → 93.184.216.34, TCP 51000 → 80 [SYN] Seq=1000 Win=65535 Len=0  [0xe0+0x7c]
       Block type: Enhanced Packet Block (0x6)  [0xe0+0x4]
       Block total length: 124  [0xe4+0x4]
       Interface ID: 0  [0xe8+0x4]
@@ -93,7 +93,7 @@ expression: "common::explore(&display_name(&path), &data)"
         opt_comment: "first SYN"  [0x144+0x10]
         opt_endofopt  [0x154+0x4]
       Block total length (trailer): 124  [0x158+0x4]
-  ▾ Enhanced Packet Block — packet 1, +0.001500 s, 54 bytes, interface 0, 93.184.216.34 → 192.168.1.10, TCP 80 → 51000 [SYN, ACK] Seq=5000 Ack=1001 Win=65535 Len=0  [0x15c+0x58]
+  ▾ Enhanced Packet Block — packet 1, +1.5 ms, 54 bytes, interface 0, 93.184.216.34 → 192.168.1.10, TCP 80 → 51000 [SYN, ACK] Seq=5000 Ack=1001 Win=65535 Len=0  [0x15c+0x58]
       Block type: Enhanced Packet Block (0x6)  [0x15c+0x4]
       Block total length: 88  [0x160+0x4]
       Interface ID: 0  [0x164+0x4]
@@ -131,7 +131,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Urgent pointer: 0  [0x1ac+0x2]
       Padding  [0x1ae+0x2]
       Block total length (trailer): 88  [0x1b0+0x4]
-  ▾ Enhanced Packet Block — packet 2, -0.123414 s, 81 bytes, interface 1, 192.168.1.10 → 93.184.216.34, HTTP GET /  [0x1b4+0x74]
+  ▾ Enhanced Packet Block — packet 2, -123.414789 ms, 81 bytes, interface 1, 192.168.1.10 → 93.184.216.34, HTTP GET /  [0x1b4+0x74]
       Block type: Enhanced Packet Block (0x6)  [0x1b4+0x4]
       Block total length: 116  [0x1b8+0x4]
       Interface ID: 1  [0x1bc+0x4]

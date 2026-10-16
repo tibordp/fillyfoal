@@ -10,7 +10,7 @@ expression: "common::explore(&display_name(&path), &data)"
       bin_signature: "TOSB"  [0x4+0x4]
       org: 0x7fffffffffffffff — INVALID_PTR: relocatable  [0x8+0x8]
       patch_table_offset: 0x30  [0x10+0x8]
-      file_size: 96 — 96 bytes  [0x18+0x8]
+      file_size: 96 bytes  [0x18+0x8]
     Code — 16 bytes  [0x20+0x10]
   ▾ Patch table — 1 export, 0 imported symbols (0 references)  [0x30+0x30]
     ▾ Exports — 1 export

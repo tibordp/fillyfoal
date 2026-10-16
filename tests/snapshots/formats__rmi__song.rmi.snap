@@ -10,7 +10,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ data — 162 bytes  [0xc+0xaa]
       Chunk ID: "data"  [0xc+0x4]
       Chunk size: 162  [0x10+0x4]
-    ▾ MIDI file — MIDI format 1, 2 tracks, 0:01, 120 BPM, Acoustic Grand Piano  [0x14+0xa2]
+    ▾ MIDI file — MIDI format 1, 2 tracks, 1 s, 120 BPM, Acoustic Grand Piano  [0x14+0xa2]
       ▾ Header  [0x14+0xe]
           Chunk ID: "MThd"  [0x14+0x4]
           Length: 6  [0x18+0x4]

@@ -131,7 +131,7 @@ fn header_layout(f: &mut Fields<'_>, variant: &Variant) -> Result<Header> {
             hex("GID", Num::Dec).emit()?;
             hex("Links", Num::Dec).emit()?;
             hex("Modification time", Num::Time).emit()?;
-            let filesize = hex("File size", Num::Dec).emit()?.ok_or_else(missing)?;
+            let filesize = hex("File size", Num::Size).emit()?.ok_or_else(missing)?;
             hex("Device major", Num::Dec).emit()?;
             hex("Device minor", Num::Dec).emit()?;
             hex("Special device major", Num::Dec).emit()?;
@@ -165,7 +165,9 @@ fn header_layout(f: &mut Fields<'_>, variant: &Variant) -> Result<Header> {
             oct("Special device", 6, Num::Dec).emit()?;
             oct("Modification time", 11, Num::Time).emit()?;
             let namesize = oct("Name size", 6, Num::Dec).emit()?.ok_or_else(missing)?;
-            let filesize = oct("File size", 11, Num::Dec).emit()?.ok_or_else(missing)?;
+            let filesize = oct("File size", 11, Num::Size)
+                .emit()?
+                .ok_or_else(missing)?;
             Ok(Header {
                 mode,
                 namesize,
@@ -196,7 +198,7 @@ fn header_layout(f: &mut Fields<'_>, variant: &Variant) -> Result<Header> {
             f.node(
                 Node::new("File size")
                     .span(span_back(f, 4))
-                    .value(crate::formats::util::val::uint(filesize, 64)),
+                    .value(crate::formats::util::val::size(filesize, 64)),
             );
             Ok(Header {
                 mode: mode.into(),

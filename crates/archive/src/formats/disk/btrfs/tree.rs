@@ -210,10 +210,8 @@ fn timespec(f: &mut Fields<'_>, name: &'static str) -> Result<()> {
 fn inode_item(f: &mut Fields<'_>) -> Result<()> {
     f.u64("Generation").emit()?;
     f.u64("Transaction id").emit()?;
-    f.u64("Size").with(|&v, n| n.summary(size(v))).emit()?;
-    f.u64("Bytes allocated")
-        .with(|&v, n| n.summary(size(v)))
-        .emit()?;
+    f.u64("Size").size().emit()?;
+    f.u64("Bytes allocated").size().emit()?;
     f.u64("Block group (hint)").emit()?;
     f.u32("Links").emit()?;
     f.u32("Owner UID").emit()?;
@@ -235,10 +233,8 @@ fn inode_item(f: &mut Fields<'_>) -> Result<()> {
 
 fn dev_item(f: &mut Fields<'_>) -> Result<()> {
     f.u64("Device id").emit()?;
-    f.u64("Size").with(|&v, n| n.summary(size(v))).emit()?;
-    f.u64("Bytes used")
-        .with(|&v, n| n.summary(size(v)))
-        .emit()?;
+    f.u64("Size").size().emit()?;
+    f.u64("Bytes used").size().emit()?;
     f.u32("I/O alignment").emit()?;
     f.u32("I/O width").emit()?;
     f.u32("Sector size").emit()?;
@@ -255,7 +251,7 @@ fn dev_item(f: &mut Fields<'_>) -> Result<()> {
 
 /// `struct btrfs_chunk` and its stripes.
 pub(super) fn chunk_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
-    f.u64("Length").with(|&v, n| n.summary(size(v))).emit()?;
+    f.u64("Length").size().emit()?;
     f.u64("Owner").emit()?;
     f.u64("Stripe length").emit()?;
     f.u64("Type").hex().flags(CHUNK_TYPE).emit()?;
@@ -333,9 +329,7 @@ pub(super) fn item_layout(f: &mut Fields<'_>, ty: &u8) -> Result<()> {
         }
         108 => {
             f.u64("Generation").emit()?;
-            f.u64("Decoded size")
-                .with(|&v, n| n.summary(size(v)))
-                .emit()?;
+            f.u64("Decoded size").size().emit()?;
             f.u8("Compression").enumeration(COMPRESSION).emit()?;
             f.u8("Encryption").emit()?;
             f.u16("Other encoding").emit()?;
@@ -350,11 +344,9 @@ pub(super) fn item_layout(f: &mut Fields<'_>, ty: &u8) -> Result<()> {
                 f.skip(rest);
             } else {
                 f.u64("Disk address (logical)").hex().emit()?;
-                f.u64("Disk length")
-                    .with(|&v, n| n.summary(size(v)))
-                    .emit()?;
+                f.u64("Disk length").size().emit()?;
                 f.u64("Offset in extent").emit()?;
-                f.u64("Length").with(|&v, n| n.summary(size(v))).emit()?;
+                f.u64("Length").size().emit()?;
             }
         }
         128 => {
@@ -447,9 +439,7 @@ pub(super) fn item_layout(f: &mut Fields<'_>, ty: &u8) -> Result<()> {
             f.u32("Count").emit()?;
         }
         192 => {
-            f.u64("Bytes used")
-                .with(|&v, n| n.summary(size(v)))
-                .emit()?;
+            f.u64("Bytes used").size().emit()?;
             f.u64("Chunk object id").emit()?;
             f.u64("Flags").hex().flags(CHUNK_TYPE).emit()?;
         }
@@ -461,7 +451,7 @@ pub(super) fn item_layout(f: &mut Fields<'_>, ty: &u8) -> Result<()> {
             f.u64("Chunk tree").emit()?;
             f.u64("Chunk object id").emit()?;
             f.u64("Chunk offset (logical)").hex().emit()?;
-            f.u64("Length").with(|&v, n| n.summary(size(v))).emit()?;
+            f.u64("Length").size().emit()?;
             f.bytes("Chunk tree UUID", 16).with(uuid_value).emit()?;
         }
         216 => dev_item(f)?,

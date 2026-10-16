@@ -78,7 +78,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Required dump space: 752678  [0xfa0+0x8]
     System time: 2026-10-12 16:33:19.6734455 UTC  [0xfa8+0x8]
     Comment: "PAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGEPAGE" — not set (PAGE filler)  [0xfb0+0x80]
-    System up time: 1161209263 — 0:01:56.120  [0x1030+0x8]
+    System up time: 0:01:56.1209263  [0x1030+0x8]
     Minidump fields: 0xdff  [0x1038+0x4]
     Secondary data state: 0  [0x103c+0x4]
     Product type: workstation (0x1)  [0x1040+0x4]

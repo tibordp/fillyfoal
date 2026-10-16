@@ -557,7 +557,7 @@ async fn code_info(cx: Cx, (span, values): (Span, [u32; 7])) -> Result<()> {
             crate::formats::util::val::uint(v, 32)
         });
         let node = if *name == "packed_frame_size" {
-            node.summary(format!("{} bytes", u64::from(v).saturating_mul(16)))
+            node.as_blocks(16u32)
         } else {
             node
         };

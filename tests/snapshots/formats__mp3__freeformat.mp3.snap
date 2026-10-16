@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ freeformat.mp3 — MPEG-1 Layer III, free format 400 kbps, 44100 Hz, joint stereo, 131 ms  [0x0+0x1983]
+▾ freeformat.mp3 — MPEG-1 Layer III, free format 400 kbps, 44100 Hz, joint stereo, 130.612245 ms  [0x0+0x1983]
   ▾ Frames — 5 frames  [0x0+0x1983]
     ▾ Frame 0 — MPEG-1 Layer III, free format 400 kbps, 44100 Hz, joint stereo, 1306 bytes  [0x0+0x51a]
       ▾ Header  [0x0+0x4]

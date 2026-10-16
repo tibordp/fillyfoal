@@ -67,7 +67,7 @@ record! {
         heads: u16 "Heads",
         hidden: u32 "Hidden sectors",
         _unused2: bytes[8] "Unused",
-        total_sectors: u64 "Total sectors" .with(|&v, n| n.summary(size(v.saturating_mul(512)))),
+        total_sectors: u64 "Total sectors" .size_in(512u32),
         mft_lcn: u64 "$MFT cluster",
         mftmirr_lcn: u64 "$MFTMirr cluster",
         record_size: u8 "Clusters per MFT record (or 2^-n bytes)",
@@ -2171,7 +2171,7 @@ pub fn attribute_header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
             .emit()?;
         f.u32("Padding").emit()?;
         f.u64("Allocated size").emit()?;
-        f.u64("Data size").with(|&v, n| n.summary(size(v))).emit()?;
+        f.u64("Data size").size().emit()?;
         f.u64("Initialized size").emit()?;
         // Only compressed and sparse attributes have the field (a named
         // attribute's name may start right after the initialized size).

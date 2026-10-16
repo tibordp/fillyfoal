@@ -8,7 +8,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Banner end: 1a 00  |..|  [0x50+0x2]
       Version: 5  [0x52+0x1]
       Flags: 0x0  [0x53+0x1]
-      Total size: 1031 — 1.0 KiB  [0x54+0x4]
+      Total size: 1031 bytes (1.0 KiB)  [0x54+0x4]
       Unknown: 100  [0x58+0x4]
       Root entries: 2  [0x5c+0x2]
       First entry offset: 0x64  [0x5e+0x4]

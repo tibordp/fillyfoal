@@ -21,7 +21,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ Block 0 — compressed, 10 bytes  [0x15+0xd]
           Last block: false  [0x15+0x1]
           Block type: compressed (0x2)  [0x15+0x1]
-          Block size: 10 — 10 bytes  [0x15+0x3]
+          Block size: 10 bytes  [0x15+0x3]
           Compressed data  [0x18+0xa]
       ▾ Block 1 — RLE, 128 KiB  [0x22+0x4]
           Last block: false  [0x22+0x1]

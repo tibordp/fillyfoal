@@ -197,7 +197,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .saturating_mul(1000)
             .checked_div(n)
             .unwrap_or(0);
-        summary = format!("{summary}, {}", vidutil::seconds_ms(millis));
+        summary = format!(
+            "{summary}, {}",
+            crate::formats::util::fmt::duration_of(millis, 1000)
+        );
     }
     cx.annotate(summary);
     cx.emit(

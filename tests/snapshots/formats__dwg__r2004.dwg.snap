@@ -483,7 +483,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Last saved by: "fillyfoal"  [#14:0x45+0xc]
       Revision number: "3"  [#14:0x51+0x4]
       Hyperlink base: ""  [#14:0x55+0x3]
-      Total editing time: 0 — 0 days, 01:00:00  [#14:0x58+0x8]
+      Total editing time: 1:00:00  [#14:0x58+0x8]
       Created: 2023-02-24 12:00:00 UTC  [#14:0x60+0x8]
       Modified: 2023-02-25 00:00:00 UTC  [#14:0x68+0x8]
       Custom properties: 1  [#14:0x70+0x2]

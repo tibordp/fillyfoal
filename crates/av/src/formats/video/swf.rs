@@ -353,7 +353,7 @@ async fn tag(cx: Cx, (input, body, code, depth): (Input, Span, u16, u32)) -> Res
         }
         65 => {
             f.u16("Max recursion depth").emit()?;
-            f.u16("Script timeout (s)").emit()?;
+            f.u16("Script timeout").duration(1).emit()?;
         }
         56 | 76 => {
             let n = f.u16("Count").emit()?;

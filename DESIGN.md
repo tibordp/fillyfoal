@@ -200,7 +200,13 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
   (`Checksum(Box<Check { algo, stored, verdict }>)`: valid, a mismatch
   with what the data gives, not checked, or skipped and why; digests in
   full, never cut off like `Bytes`). A mismatch is also a diagnostic, so
-  it surfaces as a problem. `render::value`
+  it surfaces as a problem. A byte count is a `Size { n, unit: Bytes |
+  Blocks(block), bits }` (exact count first: `1536 bytes (1.5 KiB)`,
+  `8 × 512 bytes (4 KiB)`), and a span of time a `Duration { ticks,
+  per_sec }`: exact, rendered with integers in one style (`250 ms`,
+  `1.48 s`, `0:01:05.500`), with the ticks shown when a tick is not a
+  power-of-ten fraction of a second (`1.48 s (133200/90000 s)`).
+  Summaries use the same style (`fmt::duration`). `render::value`
   is the canonical text and never depends on the host (zone, locale); hosts
   may format the structured fields their own way. `Value` is
   `#[non_exhaustive]` and atoms are added over time, so every host keeps a

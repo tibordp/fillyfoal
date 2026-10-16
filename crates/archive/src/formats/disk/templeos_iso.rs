@@ -83,7 +83,7 @@ fn pri_desc_layout(f: &mut Fields<'_>, &root_clus: &u64) -> Result<(u32, u16)> {
     pad(f, 73, &mut zeros)?;
     let blocks = both32(f, "vol_space_size")
         .desc("Size of the ISO file in 2048-byte blocks (FSize / DVD_BLK_SIZE)")
-        .with(|&v, n| n.summary(fmt::size(u64::from(v).saturating_mul(SECTOR))))
+        .size_in(SECTOR)
         .emit()?;
     pad(f, 32, &mut zeros)?;
     both16(f, "vol_set_size").emit()?;

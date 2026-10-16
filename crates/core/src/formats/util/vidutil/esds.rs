@@ -272,7 +272,7 @@ async fn descriptor(cx: Cx, d: Descriptor) -> Result<()> {
             f.node(flag_node("Upstream", span, v & 2 != 0));
             f.node(uint("Reserved", span, (v & 1).into(), 1));
             crate::formats::util::sound::u24(&mut f, "Buffer size", Endian::Big)
-                .with(|&v, n| n.summary(format!("{v} bytes")))
+                .size()
                 .emit()?;
             f.u32("Max bitrate")
                 .with(|&v, n| n.summary(bitrate(v.into())))

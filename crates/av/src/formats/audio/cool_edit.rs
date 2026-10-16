@@ -176,9 +176,9 @@ async fn header(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     f.u32("Sample rate").emit()?;
     let rate = u32_le(&block.data, 0).unwrap_or(0);
     f.u32("Length (samples, inferred)")
-        .with(|&v, n| {
+        .with(|_, n| {
             if rate > 0 {
-                n.summary(format!("{:.3} s", f64::from(v) / f64::from(rate)))
+                n.as_duration(rate.into())
             } else {
                 n
             }

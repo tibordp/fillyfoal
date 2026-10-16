@@ -115,7 +115,9 @@ fn language_node(l: u16, n: Node) -> Node {
 }
 
 fn length_summary(length: u32, scale: u32, rate: u32) -> Option<String> {
-    (rate > 0).then(|| vidutil::seconds_f64(f64::from(length) * f64::from(scale) / f64::from(rate)))
+    (rate > 0).then(|| {
+        crate::formats::util::fmt::seconds(f64::from(length) * f64::from(scale) / f64::from(rate))
+    })
 }
 
 record! {
@@ -298,7 +300,7 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
                 ));
             }
             if let Some(secs) = h.seconds() {
-                s.push_str(&format!(" ({})", vidutil::seconds_f64(secs)));
+                s.push_str(&format!(" ({})", crate::formats::util::fmt::seconds(secs)));
             }
             Some(s)
         }
@@ -883,7 +885,7 @@ pub async fn describe(cx: &Cx, ctx: &Ctx, region: Span) -> Result<Option<String>
         .unwrap_or_else(|| f64::from(main.total_frames) * f64::from(main.usec_per_frame) / 1e6);
     let mut parts = vec![
         if odml { "AVI (OpenDML)" } else { "AVI" }.to_owned(),
-        vidutil::seconds_f64(seconds),
+        crate::formats::util::fmt::seconds(seconds),
     ];
     if !streams.is_empty() {
         parts.push(streams.join(" + "));

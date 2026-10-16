@@ -25,9 +25,9 @@ use crate::fields::{Endian, Fields};
 use crate::formats::audio::{caf, flac, ogg, vorbis};
 use crate::formats::iff::wav;
 use crate::formats::util::datakit::be_uint;
-use crate::formats::util::fmt::plural;
+use crate::formats::util::fmt::{self, plural};
 use crate::formats::util::sound;
-use crate::formats::util::vidutil::{self, detached, khz, nal, seconds_f64, uint};
+use crate::formats::util::vidutil::{self, detached, khz, nal, uint};
 use crate::formats::video::coded;
 use crate::formats::{Format, Head, Input, Probe, content, embedded};
 use crate::node::Node;
@@ -1171,14 +1171,6 @@ async fn binary_node(cx: &Cx, el: &Element, node: Node) -> Result<Node> {
     })
 }
 
-fn signed_seconds(s: f64) -> String {
-    if s < 0.0 {
-        format!("-{}", seconds_f64(-s))
-    } else {
-        seconds_f64(s)
-    }
-}
-
 fn leaf(node: Node, kind: Kind, d: &[u8], el: &Element) -> Node {
     let uint_value = |v: u64| Value::UInt {
         value: v,
@@ -1228,7 +1220,11 @@ fn leaf(node: Node, kind: Kind, d: &[u8], el: &Element) -> Node {
             Some(f) => {
                 let node = node.value(Value::f64(f));
                 match el.id {
-                    DURATION => node.summary(seconds_f64(f * el.ctx.scale as f64 / 1e9)),
+                    // A whole number of ticks is exact as a duration.
+                    DURATION if f.fract() == 0.0 && f.abs() < 9.0e15 => {
+                        node.value(scaled(f as i64, el.ctx.scale))
+                    }
+                    DURATION => node.summary(fmt::seconds(f * el.ctx.scale as f64 / 1e9)),
                     SAMPLING_FREQUENCY | OUTPUT_SAMPLING_FREQUENCY => node.summary(sound::hz(f)),
                     LUMINANCE_MAX | LUMINANCE_MIN => {
                         node.summary(format!("{} cd/m²", vidutil::num(f)))
@@ -1253,35 +1249,37 @@ fn leaf(node: Node, kind: Kind, d: &[u8], el: &Element) -> Node {
         }
         Kind::Ns => {
             let v = be_uint(d);
-            let node = node.value(uint_value(v));
+            let node = node.value(Value::duration(
+                i64::try_from(v).unwrap_or(i64::MAX),
+                1_000_000_000,
+            ));
             match el.id {
-                DEFAULT_DURATION | DEFAULT_FIELD_DURATION if v > 0 => node.summary(format!(
-                    "{} ms, {} fps",
-                    vidutil::num(v as f64 / 1e6),
-                    vidutil::num(1e9 / v as f64)
-                )),
-                CODEC_DELAY | SEEK_PRE_ROLL => {
-                    node.summary(format!("{} ms", vidutil::num(v as f64 / 1e6)))
+                DEFAULT_DURATION | DEFAULT_FIELD_DURATION if v > 0 => {
+                    node.summary(format!("{} fps", vidutil::num(1e9 / v as f64)))
                 }
-                _ => node.summary(seconds_f64(v as f64 / 1e9)),
+                _ => node,
             }
         }
-        Kind::SNs => {
-            let v = be_int(d);
-            node.value(Value::Int { value: v, bits: 64 })
-                .summary(format!("{} ms", vidutil::num(v as f64 / 1e6)))
-        }
-        Kind::Ticks => {
-            let v = be_uint(d);
-            node.value(uint_value(v))
-                .summary(seconds_f64(ticks(v, el.ctx.scale)))
-        }
-        Kind::STicks => {
-            let v = be_int(d);
-            node.value(Value::Int { value: v, bits: 64 })
-                .summary(signed_seconds(v as f64 * el.ctx.scale as f64 / 1e9))
-        }
+        Kind::SNs => node.value(Value::duration(be_int(d), 1_000_000_000)),
+        Kind::Ticks => node.value(scaled(
+            i64::try_from(be_uint(d)).unwrap_or(i64::MAX),
+            el.ctx.scale,
+        )),
+        Kind::STicks => node.value(scaled(be_int(d), el.ctx.scale)),
         _ => node,
+    }
+}
+
+/// `v` ticks of `scale` nanoseconds as a duration: in the ticks when
+/// `scale` divides a second (the default, 1 ms, does), else in
+/// nanoseconds.
+fn scaled(v: i64, scale: u64) -> Value {
+    match 1_000_000_000u64.checked_rem(scale) {
+        Some(0) => Value::duration(v, 1_000_000_000u64.checked_div(scale).unwrap_or(1)),
+        _ => Value::duration(
+            v.saturating_mul(i64::try_from(scale).unwrap_or(i64::MAX)),
+            1_000_000_000,
+        ),
     }
 }
 
@@ -1755,7 +1753,7 @@ async fn master_summary(cx: &Cx, el: &Element, tracks: Option<&[TrackBrief]>) ->
             let scale = child_uint(&d, TIMESTAMP_SCALE).unwrap_or(DEFAULT_SCALE);
             let mut parts = Vec::new();
             if let Some(f) = child(&d, DURATION).and_then(be_float) {
-                parts.push(seconds_f64(f * scale as f64 / 1e9));
+                parts.push(fmt::seconds(f * scale as f64 / 1e9));
             }
             if let Some(t) = child_text(&d, TITLE) {
                 parts.push(format!("\"{t}\""));
@@ -1765,9 +1763,8 @@ async fn master_summary(cx: &Cx, el: &Element, tracks: Option<&[TrackBrief]>) ->
             }
             (!parts.is_empty()).then(|| parts.join(", "))
         }
-        CLUSTER => {
-            child_uint(&d, TIMESTAMP).map(|v| format!("at {}", seconds_f64(ticks(v, el.ctx.scale))))
-        }
+        CLUSTER => child_uint(&d, TIMESTAMP)
+            .map(|v| format!("at {}", fmt::seconds(ticks(v, el.ctx.scale)))),
         TRACKS => {
             let list: Vec<String> = mem_children(&d)
                 .filter(|(i, _)| *i == TRACK_ENTRY)
@@ -1922,7 +1919,7 @@ async fn master_summary(cx: &Cx, el: &Element, tracks: Option<&[TrackBrief]>) ->
                 child(&d, CUE_TRACK_POSITIONS).and_then(|v| child_uint(v, CUE_CLUSTER_POSITION));
             let mut s = format!(
                 "{}: track {}",
-                seconds_f64(ticks(time, el.ctx.scale)),
+                fmt::seconds(ticks(time, el.ctx.scale)),
                 tracks.join(", ")
             );
             if let Some(pos) = cluster {
@@ -1989,9 +1986,9 @@ async fn master_summary(cx: &Cx, el: &Element, tracks: Option<&[TrackBrief]>) ->
         }
         CHAPTER_ATOM => {
             let start = child_uint(&d, CHAPTER_TIME_START)?;
-            let mut s = seconds_f64(start as f64 / 1e9);
+            let mut s = fmt::seconds(start as f64 / 1e9);
             if let Some(end) = child_uint(&d, CHAPTER_TIME_END) {
-                s.push_str(&format!("–{}", seconds_f64(end as f64 / 1e9)));
+                s.push_str(&format!("–{}", fmt::seconds(end as f64 / 1e9)));
             }
             if let Some(title) = child(&d, CHAPTER_DISPLAY).and_then(|v| child_text(v, CHAP_STRING))
             {
@@ -2108,7 +2105,7 @@ async fn group_summary(cx: &Cx, el: &Element, tracks: Option<&[TrackBrief]>) -> 
     let h = block_head(&head)?;
     let mut s = block_summary(&h, el, size, tracks);
     if let Some(d) = duration {
-        s.push_str(&format!(", lasts {}", seconds_f64(ticks(d, el.ctx.scale))));
+        s.push_str(&format!(", lasts {}", fmt::seconds(ticks(d, el.ctx.scale))));
     }
     if refs == 0 {
         s.push_str(", keyframe");
@@ -2189,7 +2186,7 @@ fn block_summary(
     let time = match el.ctx.cluster {
         Some(base) => {
             let t = i128::from(base).saturating_add(i128::from(h.timestamp));
-            signed_seconds(t as f64 * el.ctx.scale as f64 / 1e9)
+            fmt::seconds(t as f64 * el.ctx.scale as f64 / 1e9)
         }
         None => format!("{:+} ticks", h.timestamp),
     };
@@ -2341,20 +2338,15 @@ async fn block(cx: Cx, el: Element) -> Result<()> {
     cx.emit(track);
     let mut ts = Node::new("Timestamp")
         .span(data.sub(at, 2))
-        .value(Value::Int {
-            value: h.timestamp.into(),
-            bits: 16,
-        })
+        .value(scaled(h.timestamp.into(), el.ctx.scale))
         .desc("Relative to the cluster's timestamp, in ticks");
-    ts = match el.ctx.cluster {
-        Some(base) => {
-            let t = i128::from(base).saturating_add(i128::from(h.timestamp));
-            ts.summary(signed_seconds(t as f64 * el.ctx.scale as f64 / 1e9))
-        }
-        None => ts.summary(signed_seconds(
-            f64::from(h.timestamp) * el.ctx.scale as f64 / 1e9,
-        )),
-    };
+    if let Some(base) = el.ctx.cluster {
+        let t = i128::from(base).saturating_add(i128::from(h.timestamp));
+        ts = ts.summary(format!(
+            "at {}",
+            fmt::seconds(t as f64 * el.ctx.scale as f64 / 1e9)
+        ));
+    }
     cx.emit(ts);
     let fspan = data.sub(at.saturating_add(2), 1);
     let table = if el.id == SIMPLE_BLOCK {
@@ -2946,7 +2938,7 @@ async fn file_summary(cx: &Cx, file: Span) -> Option<String> {
                 let scale = child_uint(&d, TIMESTAMP_SCALE).unwrap_or(DEFAULT_SCALE);
                 duration = child(&d, DURATION)
                     .and_then(be_float)
-                    .map(|f| seconds_f64(f * scale as f64 / 1e9));
+                    .map(|f| fmt::seconds(f * scale as f64 / 1e9));
                 title = child_text(&d, TITLE).filter(|t| !t.is_empty());
             }
             TRACKS => {

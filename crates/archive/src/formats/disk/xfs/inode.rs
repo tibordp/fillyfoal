@@ -268,9 +268,9 @@ fn core_layout(f: &mut Fields<'_>, ctx: &CoreCtx) -> Result<()> {
     time_field(f, "Accessed", ctx.bigtime)?;
     time_field(f, "Modified", ctx.bigtime)?;
     time_field(f, "Changed", ctx.bigtime)?;
-    f.u64("Size").with(|&v, n| n.summary(size(v))).emit()?;
+    f.u64("Size").size().emit()?;
     f.u64("Blocks")
-        .with(|&v, n| n.summary(size(v.saturating_mul(ctx.block))))
+        .size_in(ctx.block)
         .desc("Blocks allocated, including extent map B+tree blocks")
         .emit()?;
     f.u32("Extent size hint (blocks)").emit()?;

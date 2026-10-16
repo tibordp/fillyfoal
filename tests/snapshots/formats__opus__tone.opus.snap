@@ -51,7 +51,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Stereo: false  [0xef+0x1]
         Frame count code: 0 — 1 frame  [0xef+0x1]
         Frames  [0xf0+0x11]
-    ▾ Packet 7 — 16 bytes, SILK NB 20 ms, mono, 1 frame, ends at 0:00.100  [0x101+0x10]
+    ▾ Packet 7 — 16 bytes, SILK NB 20 ms, mono, 1 frame, ends at 100 ms  [0x101+0x10]
         Configuration: 1 — SILK NB 20 ms  [0x101+0x1]
         Stereo: false  [0x101+0x1]
         Frame count code: 0 — 1 frame  [0x101+0x1]
