@@ -817,7 +817,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Extent 2: 43 — 100 bytes at block 43 of partition 0  [0x8f0f8+0x10]
       ▾ Extents — 3 fragments, 4.1 KiB
           Fragment 0 — file offset 0x0, 2 KiB  [0x9c800+0x800]
-          Fragment 1 — file offset 0x800, 2 KiB  [#4294967295:0x0+0x800]
+          Fragment 1 — file offset 0x800, 2 KiB, a hole (zeros)
           Fragment 2 — file offset 0x1000, 100 bytes  [0x9d800+0x64]
       ▾ Content — 4.1 KiB  [#1:0x0+0x1064]
           Data  [#1:0x0+0x1064]
