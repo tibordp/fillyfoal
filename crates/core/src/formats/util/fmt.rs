@@ -90,16 +90,31 @@ pub fn size(n: u64) -> String {
 }
 
 /// A span of `ticks` of `1/per_sec` second, for summaries, in the style
-/// of a [`Value::Duration`](crate::value::Value::Duration): `250 ms`,
-/// `1.48 s`, `0:03:25`, `1.48 s (133200/90000 s)`. A field holding the
-/// ticks is better a duration value (`.duration(per_sec)`).
+/// of a [`Value::Duration`](crate::value::Value::Duration) rounded to the
+/// millisecond from a second up: `250 ms`, `1.48 s`, `0:03:25.017`. A
+/// field holding the ticks is better a duration value
+/// (`.duration(per_sec)`).
 pub fn duration(ticks: i64, per_sec: u64) -> String {
-    crate::render::duration(ticks, per_sec)
+    crate::render::duration_short(ticks, per_sec)
 }
 
 /// [`duration`] of an unsigned count (a sample count, a 90 kHz clock).
 pub fn duration_of(count: u64, per_sec: u64) -> String {
     duration(i64::try_from(count).unwrap_or(i64::MAX), per_sec)
+}
+
+/// [`duration`] of a number of seconds held as a float (to the
+/// nanosecond); a value that is not finite as it prints.
+pub fn seconds(s: f64) -> String {
+    let ns = s * 1e9;
+    if ns.is_finite() && ns.abs() < 9.2e18 {
+        // In range: the conversion is exact up to rounding.
+        #[allow(clippy::cast_possible_truncation)]
+        let ns = ns.round() as i64;
+        duration(ns, 1_000_000_000)
+    } else {
+        format!("{s} s")
+    }
 }
 
 /// Text shortened to `max` characters, with an ellipsis if cut.

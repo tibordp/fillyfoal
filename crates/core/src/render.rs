@@ -174,17 +174,31 @@ fn power_of_ten(per_sec: u64) -> Option<u32> {
 ///   `2 days, 3:04:05`.
 ///
 /// Fractions are exact when a tick is a power-of-ten fraction of a second
-/// (seconds, ms, µs, 100 ns, ns) and leave out trailing zeros (in groups
-/// of three in `h:mm:ss`). Other ticks (90 kHz, a sample rate) are
+/// (seconds, ms, µs, 100 ns, ns) and leave out trailing zeros (keeping
+/// three digits in `h:mm:ss`). Other ticks (90 kHz, a sample rate) are
 /// rounded to three digits past a tick's first, and the ticks follow:
 /// `1.48 s (133200/90000 s)`, `22.7 µs (1/44100 s)`.
 pub fn duration(ticks: i64, per_sec: u64) -> String {
+    duration_text(ticks, per_sec, false)
+}
+
+/// [`duration`] for summaries: from a second up rounded to the
+/// millisecond, and without the ticks (`0:03:25.017`, not
+/// `0:03:25.0170068 (9041250/44100 s)`).
+pub fn duration_short(ticks: i64, per_sec: u64) -> String {
+    duration_text(ticks, per_sec, true)
+}
+
+fn duration_text(ticks: i64, per_sec: u64, short: bool) -> String {
     let per = per_sec.max(1);
     let exact = power_of_ten(per).filter(|&k| k <= 9);
     // Decimal digits of a second shown: exact ones, or three past a
     // tick's first, at most 9.
-    let digits =
+    let mut digits =
         exact.unwrap_or_else(|| per.checked_ilog10().unwrap_or(0).saturating_add(3).min(9));
+    if short && ticks.unsigned_abs() >= per {
+        digits = digits.min(3);
+    }
     let scale = 10u128.pow(digits);
     let a = u128::from(ticks.unsigned_abs());
     let per128 = u128::from(per);
@@ -198,8 +212,8 @@ pub fn duration(ticks: i64, per_sec: u64) -> String {
     if ticks < 0 && scaled != 0 {
         out.push('-');
     }
-    let whole = scaled / scale;
-    let frac = scaled % scale;
+    let whole = scaled.checked_div(scale).unwrap_or(0);
+    let frac = scaled.checked_rem(scale).unwrap_or(0);
     if whole >= 60 {
         let (days, rem) = (whole / 86_400, whole % 86_400);
         if days > 0 {
@@ -208,8 +222,7 @@ pub fn duration(ticks: i64, per_sec: u64) -> String {
         let _ = write!(out, "{}:{:02}:{:02}", rem / 3600, rem % 3600 / 60, rem % 60);
         let f = fraction(frac, digits);
         if !f.is_empty() {
-            let width = f.len().div_ceil(3).saturating_mul(3);
-            let _ = write!(out, ".{f:0<width$}");
+            let _ = write!(out, ".{f:0<3}");
         }
     } else if whole >= 1 || scaled == 0 {
         let _ = write!(out, "{whole}");
@@ -232,15 +245,18 @@ pub fn duration(ticks: i64, per_sec: u64) -> String {
             );
         } else {
             let div = 10u128.pow(digits.saturating_sub(u));
-            let _ = write!(out, "{}", scaled / div);
-            let f = fraction(scaled % div, digits.saturating_sub(u));
+            let _ = write!(out, "{}", scaled.checked_div(div).unwrap_or(0));
+            let f = fraction(
+                scaled.checked_rem(div).unwrap_or(0),
+                digits.saturating_sub(u),
+            );
             if !f.is_empty() {
                 let _ = write!(out, ".{f}");
             }
         }
         let _ = write!(out, " {name}");
     }
-    if exact.is_none() {
+    if exact.is_none() && !short && ticks != 0 {
         let _ = write!(out, " ({ticks}/{per} s)");
     }
     out
@@ -475,7 +491,10 @@ mod tests {
         assert_eq!(value(&Value::size(1536)), "1536 bytes (1.5 KiB)");
         assert_eq!(value(&Value::size(4096)), "4096 bytes (4 KiB)");
         assert_eq!(value(&Value::blocks(8, 512u32)), "8 × 512 bytes (4 KiB)");
-        assert_eq!(value(&Value::blocks(3, 128u32)), "3 × 128 bytes (384 bytes)");
+        assert_eq!(
+            value(&Value::blocks(3, 128u32)),
+            "3 × 128 bytes (384 bytes)"
+        );
         assert_eq!(value(&Value::blocks(3, 1u32)), "3 bytes");
         assert_eq!(
             value(&Value::blocks(u64::MAX, 4096u32)),
@@ -501,6 +520,7 @@ mod tests {
         assert_eq!(d(3723, 1), "1:02:03");
         assert_eq!(d(86_400, 1), "1 day, 0:00:00");
         assert_eq!(d(1_234_567, 10_000_000), "123.4567 ms");
+        assert_eq!(d(1_161_209_263, 10_000_000), "0:01:56.1209263");
         // Ticks that are not decimal fractions of a second keep the ticks.
         assert_eq!(d(133_200, 90_000), "1.48 s (133200/90000 s)");
         assert_eq!(d(3600, 90_000), "40 ms (3600/90000 s)");
@@ -508,8 +528,13 @@ mod tests {
         assert_eq!(d(1, 44_100), "22.7 µs (1/44100 s)");
         assert_eq!(d(441_000, 44_100), "10 s (441000/44100 s)");
         assert_eq!(d(1, 3), "333 ms (1/3 s)");
+        assert_eq!(d(0, 90_000), "0 s");
         assert!(d(i64::MIN, 1).starts_with('-'));
         assert_eq!(d(133_201, 90_000), "1.4800111 s (133201/90000 s)");
+        // Summaries round to the millisecond from a second up.
+        assert_eq!(duration_short(9_041_250, 44_100), "0:03:25.017");
+        assert_eq!(duration_short(1, 44_100), "22.7 µs");
+        assert_eq!(duration_short(1_234_567_891, 1_000_000_000), "1.235 s");
     }
 
     #[test]
