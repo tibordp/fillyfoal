@@ -424,7 +424,16 @@ impl<'a, T> Field<'a, T> {
             return self;
         }
         let stored = match self.node.value.take() {
-            Some(Value::UInt { value, bits, .. }) => Some(Digest::Int { value, bits }),
+            // Shown in hex unless the format writes it otherwise (octal).
+            Some(Value::UInt { value, bits, radix }) => Some(Digest::Int {
+                value,
+                bits,
+                radix: if radix == Radix::Dec {
+                    Radix::Hex
+                } else {
+                    radix
+                },
+            }),
             Some(Value::Bytes(b)) => Some(Digest::Bytes(b)),
             other => {
                 self.node.value = other;

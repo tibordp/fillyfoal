@@ -106,8 +106,11 @@ export type ValueData = {
     /// at its width).
     stored: string;
     /// The width in bits of an integer check (a CRC or sum, which `text`
-    /// shows as `0x…`); null for a byte-string digest.
+    /// shows as a number); null for a byte-string digest.
     bits: number | null;
+    /// How the format writes an integer check ("oct" for tar's); null for
+    /// a digest.
+    radix: "dec" | "hex" | "oct" | "bin" | null;
     /// "other": a verdict this frontend predates (use `text`).
     verdict: "valid" | "mismatch" | "not_checked" | "skipped" | "other";
     /// For "mismatch": what the data gives, as hex, when known.

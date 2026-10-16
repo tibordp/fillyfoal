@@ -400,12 +400,13 @@ impl fmt::Display for Time {
     }
 }
 
-/// A check value as stored: a small integer (CRCs, sums: shown `0x…` like
-/// any hex number) or a byte string (digests, MACs: shown in full, as
+/// A check value as stored: a small integer (CRCs, sums: shown in its
+/// radix like any number, `0x…` unless the format writes it otherwise, as
+/// tar's octal) or a byte string (digests, MACs: shown in full, as
 /// lowercase hex in stored order).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Digest {
-    Int { value: u64, bits: u8 },
+    Int { value: u64, bits: u8, radix: Radix },
     Bytes(Vec<u8>),
 }
 
@@ -413,7 +414,7 @@ impl Digest {
     /// The digest's bytes, an integer big-endian at its width.
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
-            Digest::Int { value, bits } => {
+            Digest::Int { value, bits, .. } => {
                 let len = usize::from(bits.div_ceil(8)).clamp(1, 8);
                 value
                     .to_be_bytes()
@@ -438,7 +439,12 @@ impl Digest {
 impl fmt::Display for Digest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Digest::Int { value, .. } => write!(f, "{value:#x}"),
+            Digest::Int { value, radix, .. } => match radix {
+                Radix::Dec => write!(f, "{value}"),
+                Radix::Hex => write!(f, "{value:#x}"),
+                Radix::Oct => write!(f, "{value:#o}"),
+                Radix::Bin => write!(f, "{value:#b}"),
+            },
             Digest::Bytes(b) => b.iter().try_for_each(|byte| write!(f, "{byte:02x}")),
         }
     }
@@ -448,7 +454,7 @@ macro_rules! digest_from_int {
     ($($t:ty),*) => {$(
         impl From<$t> for Digest {
             fn from(value: $t) -> Digest {
-                Digest::Int { value: u64::from(value), bits: <$t>::BITS as u8 }
+                Digest::Int { value: u64::from(value), bits: <$t>::BITS as u8, radix: Radix::Hex }
             }
         }
     )*};
@@ -526,8 +532,14 @@ impl Check {
     }
 
     /// Verified against `computed`: valid when it equals the stored value.
+    /// An integer computed value is shown in the stored one's radix.
     pub fn verify(mut self, computed: impl Into<Digest>) -> Check {
-        let computed = computed.into();
+        let mut computed = computed.into();
+        if let (Digest::Int { radix: shown, .. }, Digest::Int { radix, .. }) =
+            (&self.stored, &mut computed)
+        {
+            *radix = *shown;
+        }
         self.verdict = if self.stored.same(&computed) {
             Verdict::Valid
         } else {
@@ -562,6 +574,13 @@ impl Check {
     pub fn skipped(mut self, reason: impl Into<Cow<'static, str>>) -> Check {
         self.verdict = Verdict::Skipped(reason.into());
         self
+    }
+
+    /// A check of decoded data that the decoder verifies (and reports as a
+    /// diagnostic of the decoded stream) rather than the dissector:
+    /// `skipped: checked when decoded`.
+    pub fn on_decode(self) -> Check {
+        self.skipped("checked when decoded")
     }
 
     pub fn is_valid(&self) -> bool {

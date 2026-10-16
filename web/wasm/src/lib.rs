@@ -797,8 +797,11 @@ enum WireData {
         /// big-endian at its width).
         stored: String,
         /// The stored value's width in bits when it is an integer (a CRC,
-        /// a sum: `text` shows it as `0x…`); null for a byte-string digest.
+        /// a sum: `text` shows it as a number); null for a byte-string digest.
         bits: Option<u8>,
+        /// How the format writes an integer check ("hex", or "oct" for
+        /// tar's); null for a digest.
+        radix: Option<&'static str>,
         /// "valid", "mismatch", "not_checked" or "skipped"; "other" for a
         /// verdict this build predates.
         verdict: &'static str,
@@ -992,6 +995,10 @@ impl From<&Value> for WireValue {
                             Digest::Int { bits, .. } => Some(bits),
                             Digest::Bytes(_) => None,
                         },
+                        radix: match c.stored {
+                            Digest::Int { radix, .. } => Some(radix_name(radix)),
+                            Digest::Bytes(_) => None,
+                        },
                         verdict,
                         computed,
                         reason,
@@ -1138,7 +1145,7 @@ mod tests {
                     .verify(0x89abu16)
                     .into()
             ),
-            r#"{"kind":"checksum","text":"0x12 (CRC-16, mismatch: computed 0x89ab)","raw":null,"data":{"algo":"CRC-16","stored":"0012","bits":16,"verdict":"mismatch","computed":"89ab","reason":null}}"#
+            r#"{"kind":"checksum","text":"0x12 (CRC-16, mismatch: computed 0x89ab)","raw":null,"data":{"algo":"CRC-16","stored":"0012","bits":16,"radix":"hex","verdict":"mismatch","computed":"89ab","reason":null}}"#
         );
         let bytes = Value::Bytes((0..20).collect());
         assert!(wire(bytes).ends_with(
