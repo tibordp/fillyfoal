@@ -1,9 +1,10 @@
 //! Native executables, objects and debug data: ELF, Mach-O, PE (and MZ),
 //! `a.out`, COFF objects, XCOFF, 16-bit NE, LE/LX, OMF, Delphi compiled
-//! units, PEF, UEFI TE, CUDA fat binaries, TempleOS modules and PDB
-//! program databases.
+//! units, PEF, UEFI TE, CUDA fat binaries, TempleOS modules, PDB
+//! program databases and BPF Type Format (BTF) data.
 
 pub mod aout;
+pub mod btf;
 pub mod coff;
 mod coff_debug;
 pub mod dcu;

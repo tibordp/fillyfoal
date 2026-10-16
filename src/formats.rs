@@ -157,6 +157,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "exec")]
     &executable::elf::FORMAT,
     #[cfg(feature = "exec")]
+    &executable::btf::FORMAT,
+    #[cfg(feature = "exec")]
     &executable::macho::FORMAT,
     #[cfg(feature = "exec")]
     &executable::macho::fat::FORMAT,

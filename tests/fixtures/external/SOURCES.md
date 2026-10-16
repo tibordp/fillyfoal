@@ -1360,3 +1360,16 @@ the same way locally (`TEMPLEOS_Z_DIRS`).
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
 | `templeos-iso/templeos-redseaiso.iso.gz` | TempleOS V5.03 (the distribution ISO above, booted as a live CD in QEMU 10.0.13 `qemu-system-x86_64 -accel tcg`, Debian 13 aarch64, in Docker, `-rtc base=2026-01-01T00:00:00`) | `tests/data/redsea/qemu_redseaiso.py` (its docstring has the `docker run` line) types, over QMP, `DirMk`/`Copy` of `/Demo/DateTime.HC.Z` and `/Doc/FileLowLevel.DD.Z` from the CD into `B:/Src` on the RAM drive, then `RedSeaISO("B:/Out","B:/Src");`, saves the guest's memory and carves `B:/Out.ISO.C` (contiguous) out of the RAM drive. Not reproducible byte for byte (the volume's `unique_id` mixes in the TSC, and creation times vary by seconds; two runs differed in 20 bytes). Apart from the slack after each file's last block (TempleOS writes from an uninitialised buffer, so it holds stale heap bytes), it is byte for byte what `tests/data/redsea/make_image.py` builds for the same tree, times and ID. Stored with `gzip -9 -n`. Public domain (TempleOS) |
+
+## BPF Type Format: clang BPF objects
+
+Built by `tests/data/btf/make.sh` from `tests/data/btf/kinds.c` (a small BPF
+program whose types use every BTF kind) with Debian clang 19.1.7 and
+llvm-objcopy 19 in Docker `debian:trixie`; checked against
+`bpftool btf dump file ... format raw` (bpftool 7.5.0). Reproduced byte for byte.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `btf/kinds-bpfel.btf` | clang 19.1.7 `-g -O2 -target bpfel` | the object's `.BTF` section, `llvm-objcopy --dump-section .BTF=...`; unchanged |
+| `btf/kinds-bpfeb.btf` | clang 19.1.7 `-g -O2 -target bpfeb` | the same for the big-endian target; unchanged |
+| `elf/bpf-btf.o` | clang 19.1.7 `-g -O2 -target bpfel -ffile-prefix-map=/src=.` | the little-endian object itself (`.BTF`, `.BTF.ext`, DWARF); unchanged |
