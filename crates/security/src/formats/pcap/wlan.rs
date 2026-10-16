@@ -370,14 +370,10 @@ fn fcs_field(b: &mut Dec, p: Ix, start: usize, at: usize) {
     let stored = crate::bytes::u32_le(b.d, at);
     let computed = crate::codec::crc32(b.range(start, at));
     b.endian = Endian::Little;
-    b.numx(p, "Frame check sequence", at, 4);
+    b.sum(p, "Frame check sequence", "CRC-32", at, 4);
     b.endian = Endian::Big;
-    if let Some(s) = stored {
-        if s == computed {
-            b.tail(|n| n.summary("correct"));
-        } else if b.complete {
-            b.tail(|n| n.diag(Diagnostic::warning(format!("should be {computed:#010x}"))));
-        }
+    if stored.is_some() && (stored == Some(computed) || b.complete) {
+        b.tail(|n| n.with_check(|c| c.verify(computed)));
     }
 }
 

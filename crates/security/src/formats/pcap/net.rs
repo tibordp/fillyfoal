@@ -1129,7 +1129,7 @@ fn ipv4_inner(b: &mut Dec, p: Ix, off: usize, end: usize) -> usize {
     let proto = b.u8(off.saturating_add(9)).unwrap_or(0);
     b.enm(ix, "Protocol", off.saturating_add(9), 1, IP_PROTOCOLS);
     let stored = b.be16(off.saturating_add(10)).unwrap_or(0);
-    b.numx(ix, "Header checksum", off.saturating_add(10), 2);
+    b.sum(ix, "Header checksum", INET, off.saturating_add(10), 2);
     if ihl >= 20
         && let Some(hdr) = b.bytes(off, ihl)
     {
@@ -1137,15 +1137,14 @@ fn ipv4_inner(b: &mut Dec, p: Ix, off: usize, end: usize) -> usize {
             hdr.get(..10).unwrap_or_default(),
             hdr.get(12..).unwrap_or_default(),
         ]);
-        if computed == stored {
-            b.tail(|n| n.summary("correct"));
-        } else {
-            b.tail(|n| {
-                n.diag(Diagnostic::warning(format!(
-                    "should be {computed:#06x} (bad header, or computed by the NIC after capture)"
-                )))
-            });
-        }
+        b.tail(|n| {
+            let n = n.with_check(|c| c.verify(computed));
+            if computed == stored {
+                n
+            } else {
+                n.summary("a bad header, or one the NIC fills in after capture")
+            }
+        });
     }
     let src = b.ip4(ix, "Source", off.saturating_add(12));
     let dst = b.ip4(ix, "Destination", off.saturating_add(16));
@@ -1654,25 +1653,25 @@ fn verify(
     Some((stored, computed, partial))
 }
 
+/// The ones' complement sum of RFC 1071 (IPv4, ICMP, IGMP, TCP, UDP).
+const INET: &str = "Internet checksum";
+
 fn checksum_field(b: &mut Dec, ix: Ix, ip: &Ip, proto: u8, off: usize, end: usize, at: usize) {
-    b.numx(ix, "Checksum", at, 2);
+    b.sum(ix, "Checksum", INET, at, 2);
     let stored = b.be16(at).unwrap_or(0);
     if proto == 17 && stored == 0 && matches!(ip.pseudo, Pseudo::V4(..)) {
-        b.tail(|n| n.summary("none"));
+        b.tail(|n| n.with_check(|c| c.skipped("zero: none sent")));
         return;
     }
     match verify(b, ip, proto, off, end, at) {
-        Some((s, c, _)) if s == c => b.tail(|n| n.summary("correct")),
-        Some((s, c, Some(p))) if s == p => b.tail(|n| {
-            n.summary(format!(
-                "pseudo-header sum only (checksum offload: the NIC computes {c:#06x})"
-            ))
+        Some((s, c, Some(p))) if s == p && s != c => b.tail(|n| {
+            n.with_check(|ck| {
+                ck.skipped(format!(
+                    "offloaded, the NIC computes {c:#06x}; this is the pseudo-header sum"
+                ))
+            })
         }),
-        Some((_, c, _)) => b.tail(|n| {
-            n.diag(Diagnostic::warning(format!(
-                "incorrect, should be {c:#06x}"
-            )))
-        }),
+        Some((_, c, _)) => b.tail(|n| n.with_check(|ck| ck.verify(c))),
         None => {}
     }
 }
@@ -2386,7 +2385,7 @@ fn gre(b: &mut Dec, p: Ix, off: usize, end: usize) -> usize {
     b.enm(ix, "Protocol type", off.saturating_add(2), 2, ETHERTYPES);
     let mut at = off.saturating_add(4);
     if fl & 0x8000 != 0 {
-        b.numx(ix, "Checksum", at, 2);
+        b.sum(ix, "Checksum", INET, at, 2);
         b.num(ix, "Reserved", at.saturating_add(2), 2);
         at = at.saturating_add(4);
     }
@@ -2429,7 +2428,7 @@ fn sctp(b: &mut Dec, p: Ix, off: usize, end: usize) -> usize {
     let sp = port_field(b, ix, "Source port", off);
     let dp = port_field(b, ix, "Destination port", off.saturating_add(2));
     b.numx(ix, "Verification tag", off.saturating_add(4), 4);
-    b.numx(ix, "Checksum (CRC-32C)", off.saturating_add(8), 4);
+    b.sum(ix, "Checksum", "CRC-32C", off.saturating_add(8), 4);
     let mut at = off.saturating_add(12);
     let mut names = Vec::new();
     while end.saturating_sub(at) >= 4 {

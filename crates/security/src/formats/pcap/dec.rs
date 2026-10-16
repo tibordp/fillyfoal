@@ -18,7 +18,7 @@ use crate::formats::util::binutil::{Tree, get};
 use crate::formats::util::val::{enumv, hex, uint};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, decode_flags};
+use crate::value::{Check, Digest, EnumTable, FlagTable, Value, decode_flags};
 
 /// Bytes of a packet decoded on expansion; the rest is shown as data.
 pub const MAX_DECODE: u64 = 0x1_0000;
@@ -281,6 +281,30 @@ impl<'a> Dec<'a> {
     pub fn numx(&mut self, p: Ix, name: &'static str, off: usize, size: usize) -> Option<u64> {
         let v = self.uint(off, size);
         self.field(p, name, off, size, v, |v| hex(v, bits(size)))
+    }
+
+    /// A check value of `size` bytes, computed with `algo`, not yet
+    /// verified: `tail(|n| n.with_check(..))` gives it its verdict.
+    pub fn sum(
+        &mut self,
+        p: Ix,
+        name: &'static str,
+        algo: &'static str,
+        off: usize,
+        size: usize,
+    ) -> Option<u64> {
+        let v = self.uint(off, size);
+        self.field(p, name, off, size, v, |v| {
+            Check::new(
+                algo,
+                Digest::Int {
+                    value: v,
+                    bits: bits(size),
+                    radix: crate::value::Radix::Hex,
+                },
+            )
+            .into()
+        })
     }
 
     /// An enumerated field of `size` bytes.
