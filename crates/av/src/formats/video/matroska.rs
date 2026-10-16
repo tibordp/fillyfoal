@@ -1259,12 +1259,11 @@ fn leaf(node: Node, kind: Kind, d: &[u8], el: &Element) -> Node {
         Kind::Str | Kind::Utf8 => node.value(Value::Text(until_nul(d))),
         Kind::Date => {
             let ns = be_int(d);
-            node.value(Value::Timestamp {
-                unix_seconds: ns
-                    .checked_div_euclid(1_000_000_000)
+            node.value(Value::utc(
+                ns.checked_div_euclid(1_000_000_000)
                     .unwrap_or(0)
                     .saturating_add(978_307_200),
-            })
+            ))
         }
         Kind::Ns => {
             let v = be_uint(d);

@@ -209,7 +209,7 @@ record! {
 }
 
 fn ts64(v: &i64, node: Node) -> Node {
-    node.value(Value::Timestamp { unix_seconds: *v })
+    node.value(Value::utc(*v))
 }
 
 record! {

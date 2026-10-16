@@ -18,7 +18,7 @@ use crate::value::Value;
 use super::encoding::{decode_8bit, prepare_resuming};
 use super::piece::Piece;
 use super::scan::{LineBuf, Lines, Scanner};
-use super::{VALUE_CAP, parse_datetime, plural, probe, text_node};
+use super::{VALUE_CAP, parse_time, plural, probe, text_node};
 
 pub static FORMAT: Format = Format {
     name: "yaml",
@@ -110,7 +110,16 @@ fn plain_value(text: &str) -> Option<Value> {
         }
         let b = text.as_bytes();
         if b.len() >= 10 && b.get(4) == Some(&b'-') && b.get(7) == Some(&b'-') {
-            return parse_datetime(text).map(|t| Value::Timestamp { unix_seconds: t });
+            // A timestamp without a zone is UTC (YAML 1.1 timestamp type).
+            return parse_time(text).map(|t| {
+                Value::Timestamp(match t.zone {
+                    crate::value::Zone::Local => crate::value::Time {
+                        zone: crate::value::Zone::Utc,
+                        ..t
+                    },
+                    _ => t,
+                })
+            });
         }
     }
     Some(Value::Text(text.to_owned()))

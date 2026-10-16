@@ -614,8 +614,8 @@ async fn tlog(cx: Cx, input: Input) -> Result<()> {
             .map_or_else(|| format!("Message {id}"), str::to_owned);
         let secs = i64::try_from(stamp / 1_000_000).unwrap_or(0);
         let summary = format!(
-            "{} UTC, system {sys}/{comp}, v{}",
-            crate::render::value(&Value::Timestamp { unix_seconds: secs }).trim_end_matches(" UTC"),
+            "{}, system {sys}/{comp}, v{}",
+            crate::value::Time::utc(secs),
             if v2 { 2 } else { 1 }
         );
         cx.push(
@@ -644,9 +644,7 @@ async fn mavlink_packet(cx: Cx, (span, v2, id): (Span, bool, u32)) -> Result<()>
         leaf(
             "Timestamp",
             span.sub(0, 8),
-            Value::Timestamp {
-                unix_seconds: i64::try_from(stamp / 1_000_000).unwrap_or(0),
-            },
+            Value::utc(i64::try_from(stamp / 1_000_000).unwrap_or(0)),
         )
         .summary(format!("{stamp} µs")),
     );
@@ -1010,9 +1008,7 @@ fn ros_field_value(name: &str, v: &[u8]) -> Value {
         },
         ("time" | "start_time" | "end_time", 8) => {
             let s = u32_le(v, 0).unwrap_or(0);
-            Value::Timestamp {
-                unix_seconds: s.into(),
-            }
+            Value::utc(s.into())
         }
         (_, 8) if !v.iter().all(|b| b.is_ascii_graphic()) => uint(u64_le(v, 0).unwrap_or(0), 64),
         (_, 4) if !v.iter().all(|b| b.is_ascii_graphic()) => uint(u32_le(v, 0).unwrap_or(0), 32),

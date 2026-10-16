@@ -25,7 +25,6 @@ use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::binutil::{NodeExt, Reader, data_node};
-use crate::formats::util::civil::civil;
 use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::lines::flags;
 use crate::formats::util::val::{hex, int, text, uint};
@@ -810,22 +809,13 @@ fn short_type(name: &str) -> &str {
 }
 
 fn time_of_day(nanos: u64) -> String {
-    let secs = i64::try_from(nanos / 1_000_000_000).unwrap_or(0);
-    let (y, m, d) = civil(secs.div_euclid(86_400));
-    let t = secs.rem_euclid(86_400);
-    format!(
-        "{y:04}-{m:02}-{d:02} {:02}:{:02}:{:02}.{:09} UTC",
-        t / 3600,
-        t % 3600 / 60,
-        t % 60,
-        nanos % 1_000_000_000
-    )
+    crate::value::Time::unix_nanos(i64::try_from(nanos).unwrap_or(i64::MAX)).text_full()
 }
 
 fn timestamp(nanos: u64) -> Value {
-    Value::Timestamp {
-        unix_seconds: i64::try_from(nanos / 1_000_000_000).unwrap_or(0),
-    }
+    Value::Timestamp(crate::value::Time::unix_nanos(
+        i64::try_from(nanos).unwrap_or(i64::MAX),
+    ))
 }
 
 fn duration(nanos: u64) -> String {
@@ -1067,8 +1057,7 @@ async fn chunk_header(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Start time")
             .span(span.sub(32, 8))
-            .value(timestamp(h.start_nanos))
-            .summary(time_of_day(h.start_nanos)),
+            .value(timestamp(h.start_nanos)),
     );
     cx.emit(
         Node::new("Duration")

@@ -427,9 +427,7 @@ pub fn fixed_scalar(id: u16, ty: u16, raw: &[u8]) -> (Option<Value>, Option<Stri
             if wide == 0 || wide == 0x7fff_ffff_ffff_ffff {
                 return (Some(hex(wide, 64)), Some("not set".to_owned()));
             }
-            Value::Timestamp {
-                unix_seconds: crate::text::filetime_to_unix(wide),
-            }
+            Value::filetime(wide)
         }
         _ => return (None, None),
     };

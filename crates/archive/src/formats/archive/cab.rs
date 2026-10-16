@@ -18,7 +18,7 @@ use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::arcutil::{emit_nodes, unsupported};
 use crate::formats::util::fmt;
 use crate::formats::util::fmt::count;
-use crate::formats::util::val::{hex, text, uint};
+use crate::formats::util::val::{hex, uint};
 use crate::formats::{Codec, Format, Input, Probe, dissect_or_data, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -410,7 +410,7 @@ async fn file_entry(
     f.node(
         Node::new("Modification time (DOS)")
             .span(at)
-            .value(text(crate::text::dos_datetime(date, time))),
+            .value(crate::formats::util::val::dos(date, time)),
     );
     f.u16("Attributes").flags(ATTRIBUTES).emit()?;
     f.cstr("Name").emit()?;

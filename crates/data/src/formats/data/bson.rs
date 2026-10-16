@@ -429,9 +429,7 @@ fn object_id(node: Node, b: &[u8]) -> Node {
     let secs = b.get(..4).map_or(0, crate::formats::util::datakit::be_uint);
     node.value(Value::Text(hex_string(b))).summary(format!(
         "ObjectId, created {}",
-        crate::render::value(&Value::Timestamp {
-            unix_seconds: i64::try_from(secs).unwrap_or(0)
-        })
+        crate::render::value(&Value::utc(i64::try_from(secs).unwrap_or(0)))
     ))
 }
 
@@ -441,9 +439,7 @@ async fn object_id_fields(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Timestamp")
             .span(span.sub(0, 4))
-            .value(Value::Timestamp {
-                unix_seconds: i64::try_from(secs).unwrap_or(0),
-            }),
+            .value(Value::utc(i64::try_from(secs).unwrap_or(0))),
     );
     cx.emit(
         Node::new("Random value")
@@ -581,16 +577,8 @@ async fn element(
         }
         0x09 => {
             let ms = i64::from_le_bytes(r.le(at, 8).await?.to_le_bytes());
-            let secs = ms.div_euclid(1000);
-            let nanos = u32::try_from(ms.rem_euclid(1000))
-                .unwrap_or(0)
-                .saturating_mul(1_000_000);
-            node.value(Value::Timestamp { unix_seconds: secs })
-                .summary(if nanos == 0 {
-                    "UTC datetime".to_owned()
-                } else {
-                    format!("UTC datetime, {}", vt::datetime(secs, nanos))
-                })
+            node.value(Value::Timestamp(crate::value::Time::unix_millis(ms)))
+                .summary("UTC datetime")
         }
         0x0a => node.summary("null"),
         0x0b => {
@@ -634,13 +622,11 @@ async fn element(
         0x10 => node.value(vt::int(i64::from(i32_at(r, at).await?), 32)),
         0x11 => {
             let v = r.le(at, 8).await?;
-            node.value(Value::Timestamp {
-                unix_seconds: i64::try_from(v >> 32).unwrap_or(0),
-            })
-            .summary(format!(
-                "replication timestamp, increment {}",
-                v & 0xffff_ffff
-            ))
+            node.value(Value::utc(i64::try_from(v >> 32).unwrap_or(0)))
+                .summary(format!(
+                    "replication timestamp, increment {}",
+                    v & 0xffff_ffff
+                ))
         }
         0x12 => node.value(vt::int(
             i64::from_le_bytes(r.le(at, 8).await?.to_le_bytes()),

@@ -400,9 +400,7 @@ async fn uint_be(r: &mut ByteReader<'_>, seg: Seg) -> Result<u64> {
 }
 
 fn time_value(secs: u64) -> Value {
-    Value::Timestamp {
-        unix_seconds: i64::try_from(secs).unwrap_or(i64::MAX),
-    }
+    Value::utc(i64::try_from(secs).unwrap_or(i64::MAX))
 }
 
 async fn string(r: &mut ByteReader<'_>, seg: Seg) -> String {

@@ -9,9 +9,9 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ XMP Basic (xmp) — 3 properties
       xmp:Rating: "3"  [0x2c3+0xe]
       xmp:CreatorTool: "Adobe Lightroom Classic 13.2 (Macintosh)"  [0x2d6+0x3a]
-      xmp:CreateDate: "2024-05-01T12:00:00.25+02:00"  [0x315+0x2d]
+      xmp:CreateDate: 2024-05-01 12:00:00.25 UTC+02:00  [0x315+0x2d]
   ▾ Exif (exif) — 4 properties
-      exif:DateTimeOriginal: "2024-05-01T12:00:00.25+02:00"  [0x347+0x34]
+      exif:DateTimeOriginal: 2024-05-01 12:00:00.25 UTC+02:00  [0x347+0x34]
       exif:FNumber: "4/1"  [0x380+0x12]
       exif:ExposureTime: "1/250"  [0x397+0x19]
     ▾ exif:Flash — structure, 3 fields  [0x57d+0x97]

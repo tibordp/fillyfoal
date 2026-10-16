@@ -584,9 +584,9 @@ async fn header(cx: Cx, (h, signature): (Header, bool)) -> Result<()> {
 /// Interprets well-known numeric tags.
 fn present(tag: u32, v: Value, signature: bool) -> Value {
     match (tag, &v, signature) {
-        (1006 | 1008, Value::UInt { value, .. }, false) => Value::Timestamp {
-            unix_seconds: i64::try_from(*value).unwrap_or(0),
-        },
+        (1006 | 1008, Value::UInt { value, .. }, false) => {
+            Value::utc(i64::try_from(*value).unwrap_or(0))
+        }
         _ => v,
     }
 }

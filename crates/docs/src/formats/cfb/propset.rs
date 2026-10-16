@@ -462,7 +462,7 @@ fn decode(
         0x0007 => {
             let days = f64::from_bits(u64_le(data, at)?);
             let value = match crate::formats::util::civil::ole_date(days) {
-                Some(unix_seconds) => Value::Timestamp { unix_seconds },
+                Some(unix_seconds) => Value::utc(unix_seconds),
                 None => Value::f64(days),
             };
             Some(Decoded {
@@ -526,12 +526,7 @@ fn decode(
                     children: Vec::new(),
                 })
             } else {
-                simple(
-                    Some(Value::Timestamp {
-                        unix_seconds: crate::text::filetime_to_unix(t),
-                    }),
-                    8,
-                )
+                simple(Some(Value::filetime(t)), 8)
             }
         }
         0x0041 | 0x0046 => {

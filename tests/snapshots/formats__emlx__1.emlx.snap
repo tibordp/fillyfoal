@@ -9,7 +9,7 @@ expression: "common::explore(&display_name(&path), &data)"
         From: "a@example.com"  [0x4+0x13]
         To: "b@example.com"  [0x18+0x11]
         Subject: "Hi"  [0x2a+0xb]
-        Date: 2024-01-01 12:00:00 UTC — Mon, 1 Jan 2024 12:00:00 +0000  [0x36+0x24]
+        Date: 2024-01-01 12:00:00 UTC+00:00 — Mon, 1 Jan 2024 12:00:00 +0000  [0x36+0x24]
         Message-ID: "<1@example.com>"  [0x5b+0x1b]
     ▾ Body — UTF-8 text, LF line endings, 1 line  [0x78+0x7]
         Encoding: "UTF-8"

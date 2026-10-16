@@ -1111,11 +1111,7 @@ async fn srm(cx: Cx, input: Input) -> Result<()> {
     let date = i64::from(h.days)
         .saturating_sub(32_873)
         .saturating_mul(86_400);
-    cx.emit(leaf(
-        "Ride date",
-        file.sub(4, 2),
-        Value::Timestamp { unix_seconds: date },
-    ));
+    cx.emit(leaf("Ride date", file.sub(4, 2), Value::utc(date)));
     cx.annotate(format!(
         "SRM ride ({}), {}, {} markers, interval {}/{} s",
         h.magic,

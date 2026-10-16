@@ -17,7 +17,7 @@ expression: "common::explore(&display_name(&path), &data)"
       boot_blk: 0  [0x28+0x4]
       boot_patch_table_base: 0x0  [0x2c+0x4]
       sys_run_level: 0x0 []  [0x30+0x4]
-      compile_time (local time): 2017-12-12 22:36:47 UTC  [0x34+0x8]
+      compile_time: 2017-12-12 22:36:47 (local time)  [0x34+0x8]
     Code — 166.4 KiB  [0x20+0x299a0]
   ▾ Patch table — 931 exports, 14 imported symbols (19 references)  [0x299c0+0x4b80]
     ▾ Exports — 931 exports

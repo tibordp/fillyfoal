@@ -20,11 +20,10 @@ use std::fmt::Write as _;
 use crate::bytes::{sleb128, to_u64, uleb128};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::data::valuetree::datetime;
 use crate::formats::util::binutil::Tree;
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::{EnumTable, Time, Value, lookup};
 
 /// The id that ends an object.
 pub const END: u16 = 0xffff;
@@ -733,28 +732,16 @@ pub fn scalar(bs: &mut Bs<'_>, ty: &Ty, p: Phys) -> Result<(String, Option<Value
         Phys::Signed => {
             let v = bs.svar()?;
             // Dates count days, timestamps seconds to nanoseconds.
-            let unix = match ty.id {
-                15 => Some((v.saturating_mul(86_400), 0)),
-                17 => Some((v, 0)),
-                18 => Some((
-                    v.div_euclid(1000),
-                    v.rem_euclid(1000).saturating_mul(1_000_000),
-                )),
-                19 | 32 => Some((
-                    v.div_euclid(1_000_000),
-                    v.rem_euclid(1_000_000).saturating_mul(1000),
-                )),
-                20 => Some((v.div_euclid(1_000_000_000), v.rem_euclid(1_000_000_000))),
+            let time = match ty.id {
+                15 => Some(Time::utc(v.saturating_mul(86_400)).day()),
+                17 => Some(Time::utc(v)),
+                18 => Some(Time::unix_millis(v)),
+                19 | 32 => Some(Time::unix_micros(v)),
+                20 => Some(Time::unix_nanos(v)),
                 _ => None,
             };
-            match (unix, &ty.info) {
-                (Some((secs, nanos)), _) => {
-                    let mut shown = datetime(secs, u32::try_from(nanos).unwrap_or(0));
-                    if ty.id == 15 {
-                        shown.truncate(10);
-                    }
-                    (shown, Some(Value::Timestamp { unix_seconds: secs }))
-                }
+            match (time, &ty.info) {
+                (Some(t), _) => (t.to_string(), Some(Value::Timestamp(t))),
                 (None, Info::Decimal(_, scale)) => (
                     decimal(i128::from(v), *scale),
                     Some(Value::Int { value: v, bits: 64 }),

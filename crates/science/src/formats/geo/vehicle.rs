@@ -581,9 +581,7 @@ async fn candump_fields(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Timestamp")
             .span(stamp.span())
-            .value(Value::Timestamp {
-                unix_seconds: secs as i64,
-            })
+            .value(Value::utc(secs as i64))
             .summary(stamp.text()),
     );
     let mut words = rest.words();

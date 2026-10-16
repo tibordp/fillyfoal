@@ -72,9 +72,7 @@ async fn wer(cx: Cx, input: Input) -> Result<()> {
         let node = if k.ends_with("Time")
             && let Ok(t) = v.parse::<u64>()
         {
-            node.value(Value::Timestamp {
-                unix_seconds: crate::text::filetime_to_unix(t),
-            })
+            node.value(Value::filetime(t))
         } else {
             node.value(text(v.clone()))
         };

@@ -241,12 +241,7 @@ fn basic_header(r: &mut ByteReader<'_>, main: bool) -> Option<(u8, u32, usize)> 
         },
         LE,
     )?;
-    r.with(|n| {
-        n.value(hex(time, 64)).summary(crate::text::dos_datetime(
-            u16::try_from(time >> 16).unwrap_or(0),
-            u16::try_from(time & 0xffff).unwrap_or(0),
-        ))
-    });
+    r.with(|n| n.value(crate::formats::util::val::dos_stamp(time)));
     let compressed = r.u32(
         if main {
             "Archive size"

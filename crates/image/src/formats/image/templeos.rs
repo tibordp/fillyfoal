@@ -715,12 +715,12 @@ fn dc_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     // `DCSave` leaves a zero date when nothing set it.
     if time != 0 || date != 0 {
         f.node(
-            Node::new("Timestamp (local time)")
+            Node::new("Timestamp")
                 .span(f.peek_span(0))
-                .value(Value::Timestamp {
-                    unix_seconds: civil::templeos_cdate(time, date),
-                })
-                .desc("TempleOS local time"),
+                .value(Value::Timestamp(crate::value::Time::local(
+                    civil::templeos_cdate(time, date),
+                )))
+                .desc("TempleOS keeps local time"),
         );
     }
     f.i32("X origin").emit()?;

@@ -62,9 +62,7 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Generated")
             .span(cur.since(start))
-            .value(Value::Timestamp {
-                unix_seconds: i64::try_from(date).unwrap_or(i64::MAX),
-            }),
+            .value(Value::utc(i64::try_from(date).unwrap_or(i64::MAX))),
     );
     let start = cur.pos();
     let flags = cur.u64().await?;

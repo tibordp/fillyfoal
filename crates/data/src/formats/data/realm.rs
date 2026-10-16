@@ -993,9 +993,7 @@ async fn element(cx: &Cx, file: Span, c: &Column, a: &Arr, i: u64, in_list: bool
             } else {
                 Node::new(c.name.clone())
                     .span(secs.elem_span(i.saturating_add(1)))
-                    .value(Value::Timestamp {
-                        unix_seconds: s.unwrap_or(0),
-                    })
+                    .value(Value::utc(s.unwrap_or(0)))
             }
         }
         12 => {

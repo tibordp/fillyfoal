@@ -32,7 +32,7 @@ use crate::formats::util::fmt::clip;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::Value;
+use crate::value::{Time, Value};
 
 use super::valuetree as vt;
 
@@ -493,8 +493,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-/// Text of an Ion timestamp: `(display, UTC seconds)`.
-async fn timestamp(r: &mut ByteReader<'_>, body: u64, end: u64) -> Result<(String, Option<i64>)> {
+/// An Ion timestamp: `(its text form, the time)`, the time at the
+/// precision the timestamp has and with its offset (an unknown offset,
+/// `-00:00`, is UTC).
+async fn timestamp(r: &mut ByteReader<'_>, body: u64, end: u64) -> Result<(String, Option<Time>)> {
     let (off_neg, off_mag, n) = varint(r, body).await?;
     let mut pos = body.saturating_add(n);
     let unknown_offset = off_neg && off_mag == 0;
@@ -545,9 +547,7 @@ async fn timestamp(r: &mut ByteReader<'_>, body: u64, end: u64) -> Result<(Strin
         .unwrap_or(0),
     );
     // Fields are UTC; the text form shows local time and the offset.
-    let local = crate::render::value(&Value::Timestamp {
-        unix_seconds: utc.saturating_add(offset.saturating_mul(60)),
-    });
+    let local = crate::render::value(&Value::utc(utc.saturating_add(offset.saturating_mul(60))));
     let date = local.get(..10).unwrap_or_default();
     let time = local.get(11..19).unwrap_or_default();
     let off = if unknown_offset {
@@ -570,7 +570,23 @@ async fn timestamp(r: &mut ByteReader<'_>, body: u64, end: u64) -> Result<(Strin
         4 | 5 => format!("{date}T{}{off}", time.get(..5).unwrap_or_default()),
         _ => format!("{date}T{time}{frac}{off}"),
     };
-    Ok((text, Some(utc)))
+    let mut t = match i16::try_from(offset) {
+        Ok(m) if m != 0 && !unknown_offset => Time::offset(utc, m),
+        _ => Time::utc(utc),
+    };
+    t = match count {
+        0..=3 => t.day(),
+        4 | 5 => t.minute(),
+        _ => match frac.strip_prefix('.') {
+            Some(d) if !d.is_empty() => {
+                let kept = d.get(..9).unwrap_or(d);
+                let nanos = format!("{kept:0<9}").parse().unwrap_or(0);
+                t.frac(nanos, u8::try_from(kept.len()).unwrap_or(9))
+            }
+            _ => t,
+        },
+    };
+    Ok((text, Some(t)))
 }
 
 /// A node for the value at `at` with header `h`.
@@ -690,8 +706,8 @@ async fn plain_value(
         6 => {
             let (text, utc) = timestamp(r, body, end).await?;
             match utc {
-                Some(s) => (
-                    node.value(Value::Timestamp { unix_seconds: s }),
+                Some(t) => (
+                    node.value(Value::Timestamp(t)),
                     Some(format!("timestamp {text}")),
                 ),
                 None => (

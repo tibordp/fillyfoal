@@ -13,7 +13,7 @@ use crate::value::Value;
 use super::decode::{Transform, decoded_node, preview};
 use super::encoding::prepare;
 use super::xml::{self, Extent, Kind, Lexer, Mode, Tok};
-use super::{number, parse_datetime, plural, text_node};
+use super::{number, parse_time, plural, text_node};
 
 pub static FORMAT: Format = Format {
     name: "plist-xml",
@@ -123,10 +123,8 @@ async fn value_node(lex: &mut Lexer<'_>, c: &Child, name: String, input: Input) 
             .value(Value::Bool(c.name == b"true")),
         b"date" => {
             let text = text_of(lex, c).await?;
-            match parse_datetime(&text) {
-                Some(t) => Node::new(name)
-                    .span(span)
-                    .value(Value::Timestamp { unix_seconds: t }),
+            match parse_time(&text) {
+                Some(t) => Node::new(name).span(span).value(Value::Timestamp(t)),
                 None => text_node(name, span, &text).diag(Diagnostic::malformed("invalid date")),
             }
         }

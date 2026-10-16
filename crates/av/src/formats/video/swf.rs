@@ -408,11 +408,7 @@ async fn tag(cx: Cx, (input, body, code, depth): (Input, Span, u16, u32)) -> Res
             f.u8("Minor version").emit()?;
             f.u64("Build number").emit()?;
             f.u64("Compilation date")
-                .with(|&ms, n| {
-                    n.value(Value::Timestamp {
-                        unix_seconds: i64::try_from(ms / 1000).unwrap_or(0),
-                    })
-                })
+                .with(|&ms, n| n.value(Value::utc(i64::try_from(ms / 1000).unwrap_or(0))))
                 .emit()?;
         }
         39 => {

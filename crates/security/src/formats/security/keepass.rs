@@ -2190,7 +2190,7 @@ async fn kdb_fields(
             (_, 0xffff) => node,
             (true, 2) | (false, 4 | 5 | 6 | 8 | 13) => node.value(Value::Text(until_nul(&bytes))),
             (true, 3..=6) | (false, 9..=12) => match kdb_time(&bytes) {
-                Some(Some(t)) => node.value(Value::Timestamp { unix_seconds: t }),
+                Some(Some(t)) => node.value(Value::utc(t)),
                 Some(None) => node.summary("never"),
                 None => node.diag(Diagnostic::malformed("bad time")),
             },

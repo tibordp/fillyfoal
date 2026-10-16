@@ -17,7 +17,7 @@ use crate::value::Value;
 use super::decode::{self, Transform, decoded_text_node, decoded_text_node_as, preview};
 use super::encoding::{decode_8bit, prepare, prepare_resuming};
 use super::scan::Lines;
-use super::{parse_datetime, plural, probe, text_node};
+use super::{parse_time, plural, probe, text_node};
 
 pub static EML: Format = Format {
     name: "eml",
@@ -444,7 +444,7 @@ fn split_params(text: &str) -> Vec<String> {
 const MAX_PARAMS: usize = 256;
 
 /// Parses an RFC 5322 date (`Mon, 5 Oct 2026 10:00:00 +0200`).
-fn mail_date(text: &str) -> Option<i64> {
+fn mail_date(text: &str) -> Option<crate::value::Time> {
     const MONTHS: [&str; 12] = [
         "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
     ];
@@ -461,13 +461,13 @@ fn mail_date(text: &str) -> Option<i64> {
         year = year.saturating_add(if year < 50 { 2000 } else { 1900 });
     }
     let time = words.next().unwrap_or("00:00:00");
-    let zone = words.next().unwrap_or("+0000");
-    let zone = match zone {
-        "GMT" | "UT" | "UTC" | "Z" => "+0000",
-        z if z.starts_with(['+', '-']) => z,
-        _ => "+0000",
+    // RFC 5322: a numeric zone is the sender's offset; the obsolete names
+    // are UTC (or, for the US ones, taken as such).
+    let zone = match words.next() {
+        Some(z) if z.starts_with(['+', '-']) => z,
+        _ => "Z",
     };
-    parse_datetime(&format!("{year:04}-{month:02}-{day:02}T{time}{zone}"))
+    parse_time(&format!("{year:04}-{month:02}-{day:02}T{time}{zone}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -680,7 +680,7 @@ async fn header_nodes(cx: Cx, span: Span) -> Result<()> {
         {
             node = Node::new(f.name)
                 .span(f.span)
-                .value(Value::Timestamp { unix_seconds: t })
+                .value(Value::Timestamp(t))
                 .summary(f.value);
         }
         cx.push(node).await;
@@ -830,7 +830,7 @@ pub async fn dissect_mbox(cx: Cx, input: Input) -> Result<()> {
                     },
                 );
             if let Some(t) = get(&fields, "Date").and_then(|f| mail_date(&f.value)) {
-                node = node.value(Value::Timestamp { unix_seconds: t });
+                node = node.value(Value::Timestamp(t));
             }
             lines.progress();
             cx.push(node).await;

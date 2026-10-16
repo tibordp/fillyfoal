@@ -192,7 +192,11 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
 - **Values** (`value.rs`) are atoms that carry what a host can act on, not
   presentation: a float keeps its stored width (`Float { value, bits }`), an
   unsigned number its radix (dec, hex, oct for Unix modes, bin), an enum
-  its raw number and a name that may be computed (`Cow`). `render::value`
+  its raw number and a name that may be computed (`Cow`), a timestamp the
+  clock the file recorded it on (`Time { secs, nanos, zone, res }`: UTC, a
+  recorded offset, or a local wall clock in an unknown zone, which nobody
+  converts) and how precisely (a day, minute, second, or so many
+  fractional digits). `render::value`
   is the canonical text and never depends on the host (zone, locale); hosts
   may format the structured fields their own way. `Value` is
   `#[non_exhaustive]` and atoms are added over time, so every host keeps a

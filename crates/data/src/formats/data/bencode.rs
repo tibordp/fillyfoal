@@ -409,9 +409,7 @@ async fn item_node(
     let node = Node::new(name).span(span);
     Ok(match item.kind {
         Kind::Int(v) => match i64::try_from(v) {
-            Ok(v) if key == Some(b"creation date") => {
-                node.value(Value::Timestamp { unix_seconds: v })
-            }
+            Ok(v) if key == Some(b"creation date") => node.value(Value::utc(v)),
             Ok(v) => node.value(Value::Int { value: v, bits: 64 }),
             Err(_) => node.value(Value::Text(v.to_string())),
         },

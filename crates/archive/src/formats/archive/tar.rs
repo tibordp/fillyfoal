@@ -579,9 +579,7 @@ async fn pax_header(cx: Cx, span: Span) -> Result<()> {
                     .split('.')
                     .next()
                     .and_then(|s| s.parse::<i64>().ok())
-                    .map(|s| {
-                        crate::render::value(&crate::value::Value::Timestamp { unix_seconds: s })
-                    })
+                    .map(|s| crate::render::value(&crate::value::Value::utc(s)))
                     .unwrap_or_default(),
             ),
             "size" | "GNU.sparse.realsize" | "GNU.sparse.size" => node.summary(

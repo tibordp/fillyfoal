@@ -17,7 +17,7 @@ use crate::value::Value;
 use super::decode::{Transform, decoded_node, preview};
 use super::encoding::{decode_8bit, prepare};
 use super::scan::{LINE_CAP, Lines};
-use super::{parse_datetime, plural, probe, text_node};
+use super::{parse_time, plural, probe, text_node};
 
 pub static VCARD: Format = Format {
     name: "vcard",
@@ -294,18 +294,20 @@ fn property_node(p: &Property, line: &[u8], span: Span, input: Input) -> Node {
         unescape(&p.value)
     };
     let mut node = if DATES.contains(&base.as_str()) {
-        let utc = p.value.ends_with('Z') || !p.value.contains('T');
-        match parse_datetime(&p.value).filter(|_| utc) {
-            Some(t) => Node::new(p.name.clone())
-                .span(value_span)
-                .value(Value::Timestamp { unix_seconds: t }),
-            None => {
-                let mut n = text_node(p.name.clone(), value_span, &text);
-                if let Some(tz) = p.param("TZID") {
-                    n = n.summary(format!("local time in {tz}"));
+        // A time with no zone is floating, or local to its TZID.
+        match parse_time(&p.value) {
+            Some(t) => {
+                let n = Node::new(p.name.clone())
+                    .span(value_span)
+                    .value(Value::Timestamp(t));
+                match p.param("TZID") {
+                    Some(tz) if t.zone == crate::value::Zone::Local => {
+                        n.summary(format!("in {tz}"))
+                    }
+                    _ => n,
                 }
-                n
             }
+            None => text_node(p.name.clone(), value_span, &text),
         }
     } else {
         text_node(p.name.clone(), value_span, &text)
@@ -369,8 +371,8 @@ impl Summary {
             }
             "ACTION" if self.title.is_none() => self.title = Some(text()),
             "DTSTART" => {
-                self.when = Some(match parse_datetime(&p.value) {
-                    Some(t) => crate::render::value(&Value::Timestamp { unix_seconds: t }),
+                self.when = Some(match parse_time(&p.value) {
+                    Some(t) => t.to_string(),
                     None => preview(&p.value, 60),
                 });
             }

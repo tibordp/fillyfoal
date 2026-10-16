@@ -24,7 +24,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Postal code: "1000"
         Country: "Slovenia"
       NOTE: "Line one\nLine two, with comma and a long folded continuation."  [0xe2+0x42]
-      BDAY: 1990-04-01 00:00:00 UTC  [0x12b+0xa]
+      BDAY: 1990-04-01  [0x12b+0xa]
     ▾ PHOTO — 1×1, 8-bit RGBA  [0x151+0x63]
         Signature  [#1:0x0+0x8]
       ▾ IHDR — 1×1, 8-bit RGBA  [#1:0x8+0x19]

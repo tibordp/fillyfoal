@@ -253,11 +253,9 @@ const DRIVE_SIMPLE: i32 = 1;
 /// A time field: 0 means none.
 fn time_or_unset(v: &u32, n: Node) -> Node {
     if *v == 0 {
-        return n.summary("not set");
+        return n.not_set();
     }
-    n.value(Value::Timestamp {
-        unix_seconds: i64::from(*v),
-    })
+    n.value(Value::utc(i64::from(*v)))
 }
 
 /// A UUID field: all zeros means none.
@@ -1315,9 +1313,7 @@ async fn file_header_fields(cx: Cx, span: Span) -> Result<()> {
     let st = span.sub(16, 128);
     let u32_at = |o: u64| be_u32(&raw, crate::bytes::to_usize(o));
     let u64_at = |o: u64| be_u64(&raw, crate::bytes::to_usize(o));
-    let time = |o: u64| Value::Timestamp {
-        unix_seconds: i64::from(i32::from_be_bytes(u32_at(o).to_be_bytes())),
-    };
+    let time = |o: u64| Value::utc(i64::from(i32::from_be_bytes(u32_at(o).to_be_bytes())));
     let fields: Vec<Node> = vec![
         Node::new("Inode")
             .span(st.sub(0, 8))

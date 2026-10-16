@@ -857,9 +857,7 @@ async fn scalar(
         _ => node,
     };
     Ok(match ty {
-        Ty::Time => node.value(Value::Timestamp {
-            unix_seconds: i64::try_from(n).unwrap_or(i64::MAX),
-        }),
+        Ty::Time => node.value(Value::utc(i64::try_from(n).unwrap_or(i64::MAX))),
         Ty::Oct => node.value(crate::formats::util::val::oct(n, 64)),
         Ty::Size => node
             .value(Value::UInt {

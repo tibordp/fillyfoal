@@ -1297,11 +1297,11 @@ fn body(rd: &mut Rd<'_>, kind: u16, ctx: &Ctx, summary: &mut Option<String>) -> 
         0x12 => {
             rd.num("Version", 1)?;
             rd.reserved(3)?;
-            let t = rd.val("Seconds since the epoch", 4, |v| Value::Timestamp {
-                unix_seconds: i64::try_from(v).unwrap_or(0),
+            let t = rd.val("Seconds since the epoch", 4, |v| {
+                Value::utc(i64::try_from(v).unwrap_or(0))
             })?;
             let t = i64::try_from(t).unwrap_or(0);
-            *summary = Some(crate::render::value(&Value::Timestamp { unix_seconds: t }));
+            *summary = Some(crate::render::value(&Value::utc(t)));
             Info::None
         }
         0x13 => {

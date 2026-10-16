@@ -153,7 +153,7 @@ fn datetime(raw: i64) -> (Value, String) {
         .unwrap_or(0)
         .saturating_sub(62_135_596_800);
     (
-        Value::Timestamp { unix_seconds: unix },
+        Value::utc(unix),
         format!("{kind}, {ticks_tick}", ticks_tick = plural(ticks, "tick")),
     )
 }

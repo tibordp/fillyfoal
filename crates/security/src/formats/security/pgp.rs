@@ -648,9 +648,7 @@ impl<'a> Body<'a> {
         let (b, span) = self.take(4)?;
         let v = u32_be(b, 0)?;
         self.cx
-            .emit(Node::new(name).span(span).value(Value::Timestamp {
-                unix_seconds: v.into(),
-            }));
+            .emit(Node::new(name).span(span).value(Value::utc(v.into())));
         Some(v)
     }
 
@@ -1031,9 +1029,7 @@ async fn subpackets(cx: Cx, (span, data): (Span, Arc<Vec<u8>>)) -> Result<()> {
         let mut node = Node::new(name).span(span.sub(to_u64(start), to_u64(whole)));
         node = match kind {
             2 => match u32_be(body, 0) {
-                Some(t) => node.value(Value::Timestamp {
-                    unix_seconds: t.into(),
-                }),
+                Some(t) => node.value(Value::utc(t.into())),
                 None => node,
             },
             3 | 9 => match u32_be(body, 0) {

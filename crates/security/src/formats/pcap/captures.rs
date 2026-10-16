@@ -245,9 +245,7 @@ async fn netmon(cx: Cx, input: Input) -> Result<()> {
     f.node(if st.iter().all(|&w| w == 0) {
         node.summary("unset")
     } else {
-        node.value(Value::Timestamp {
-            unix_seconds: start,
-        })
+        node.value(Value::utc(start))
         .summary(format!(
             "{year:04}-{month:02}-{day:02} {hour:02}:{min:02}:{sec:02}.{ms:03} (SYSTEMTIME, no time zone)"
         ))

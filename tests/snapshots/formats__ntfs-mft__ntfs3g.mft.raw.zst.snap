@@ -35,10 +35,10 @@ expression: "common::explore(&display_name(&path), &data)"
           Indexed: 0  [#1:0x4e+0x1]
           Padding: 0  [#1:0x4f+0x1]
       ▾ Value  [#1:0x50+0x48]
-          Created: 1601-01-01 00:00:00 UTC  [#1:0x50+0x8]
-          Modified: 1601-01-01 00:00:00 UTC  [#1:0x58+0x8]
-          MFT record modified: 1601-01-01 00:00:00 UTC  [#1:0x60+0x8]
-          Accessed: 1601-01-01 00:00:00 UTC  [#1:0x68+0x8]
+          Created — not set  [#1:0x50+0x8]
+          Modified — not set  [#1:0x58+0x8]
+          MFT record modified — not set  [#1:0x60+0x8]
+          Accessed — not set  [#1:0x68+0x8]
           File attributes: 0x6 [HIDDEN | SYSTEM]  [#1:0x70+0x4]
           Maximum versions: 0  [#1:0x74+0x4]
           Version: 0  [#1:0x78+0x4]
@@ -569,7 +569,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Initialized size: 2560  [#5:0x1a8+0x8]
       ▾ Runs — 1 run  [#5:0x1b0+0x8]
           Run 0 — VCN 0: 1 cluster at LCN 70  [#5:0x1b0+0x3]
-  ▾ Record 5: 2026-10-11 20:54:42 UTC — . — directory  [0x1400+0x400]
+  ▾ Record 5: 2026-10-11 20:54:42.5432479 UTC — . — directory  [0x1400+0x400]
     ▾ Header  [#6:0x0+0x38]
         Magic: "FILE"  [#6:0x0+0x4]
         Update sequence offset: 0x30  [#6:0x4+0x2]
@@ -602,8 +602,8 @@ expression: "common::explore(&display_name(&path), &data)"
           Padding: 0  [#6:0x4f+0x1]
       ▾ Value  [#6:0x50+0x30]
           Created: 2026-10-11 20:54:42 UTC  [#6:0x50+0x8]
-          Modified: 2026-10-11 20:54:42 UTC  [#6:0x58+0x8]
-          MFT record modified: 2026-10-11 20:54:42 UTC  [#6:0x60+0x8]
+          Modified: 2026-10-11 20:54:42.5432479 UTC  [#6:0x58+0x8]
+          MFT record modified: 2026-10-11 20:54:42.5432479 UTC  [#6:0x60+0x8]
           Accessed: 2026-10-11 20:54:42 UTC  [#6:0x68+0x8]
           File attributes: 0x10000026 [HIDDEN | SYSTEM | ARCHIVE | DUP_FILE_NAME_INDEX_PRESENT]  [#6:0x70+0x4]
           Maximum versions: 0  [#6:0x74+0x4]
@@ -1540,11 +1540,11 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Record 24: 2026-10-11 20:54:42 UTC — $Quota — file  [0x6000+0x400]  (+165 nodes elided)
   ▾ Record 25: 2026-10-11 20:54:42 UTC — $ObjId — file  [0x6400+0x400]  (+112 nodes elided)
   ▾ Record 26: 2026-10-11 20:54:42 UTC — $Reparse — file  [0x6800+0x400]  (+120 nodes elided)
-  ▾ Record 27: 2026-10-11 20:54:42 UTC — hard_link_with_quite_a_long_name_number_5.txt — file  [0x6c00+0x400]  (+164 nodes elided)
+  ▾ Record 27: 2026-10-11 20:54:42.5388729 UTC — hard_link_with_quite_a_long_name_number_5.txt — file  [0x6c00+0x400]  (+164 nodes elided)
   ▾ Record 28 — hard_link_with_quite_a_long_name_number_7.txt — file  [0x7000+0x400]  (+192 nodes elided)
   ▾ Record 29 — hard_link_with_quite_a_long_name_number_12.txt — file  [0x7400+0x400]  (+145 nodes elided)
-  ▾ Record 30: 2026-10-11 20:54:42 UTC — relative-link — file  [0x7800+0x400]  (+106 nodes elided)
-  ▾ Record 31: 2026-10-11 20:54:42 UTC — absolute-link — file  [0x7c00+0x400]  (+106 nodes elided)
+  ▾ Record 30: 2026-10-11 20:54:42.5422479 UTC — relative-link — file  [0x7800+0x400]  (+106 nodes elided)
+  ▾ Record 31: 2026-10-11 20:54:42.5432479 UTC — absolute-link — file  [0x7c00+0x400]  (+106 nodes elided)
   ▾ Record 32 — deleted/unused  [0x8000+0x400]  (+17 nodes elided)
   ▾ Record 33 — deleted/unused  [0x8400+0x400]  (+17 nodes elided)
   ▾ Record 34 — deleted/unused  [0x8800+0x400]  (+17 nodes elided)
@@ -1577,6 +1577,6 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Record 61 — deleted/unused  [0xf400+0x400]  (+17 nodes elided)
   ▾ Record 62 — deleted/unused  [0xf800+0x400]  (+17 nodes elided)
   ▾ Record 63 — deleted/unused  [0xfc00+0x400]  (+17 nodes elided)
-  ▾ Record 64: 2026-10-11 20:54:42 UTC — ads.txt — file  [0x10000+0x400]  (+156 nodes elided)
-  ▾ Record 65: 2026-10-11 20:54:42 UTC — objid.txt — file  [0x10400+0x400]  (+133 nodes elided)
-  ▾ Record 66: 2026-10-11 20:54:42 UTC — target.txt — file  [0x10800+0x400]  (+118 nodes elided)
+  ▾ Record 64: 2026-10-11 20:54:42.5274029 UTC — ads.txt — file  [0x10000+0x400]  (+156 nodes elided)
+  ▾ Record 65: 2026-10-11 20:54:42.5274523 UTC — objid.txt — file  [0x10400+0x400]  (+133 nodes elided)
+  ▾ Record 66: 2026-10-11 20:54:42.5281186 UTC — target.txt — file  [0x10800+0x400]  (+118 nodes elided)

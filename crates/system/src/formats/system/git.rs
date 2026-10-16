@@ -845,7 +845,7 @@ fn commit_header(data: Span, key: String, value: &str, start: usize, end: usize)
         if let Some(s) = seconds {
             node = node.summary(format!(
                 "{} {}",
-                crate::render::value(&Value::Timestamp { unix_seconds: s }),
+                crate::render::value(&Value::utc(s)),
                 when.split_whitespace().nth(1).unwrap_or_default()
             ));
         }

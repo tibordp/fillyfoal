@@ -365,11 +365,7 @@ fn describe(node: Node, e: &Entry, bytes: &[u8], endian: Endian) -> Node {
             }
         }
         (0x180e, _) => match u32_at(bytes, 0, endian) {
-            Some(t) => node
-                .value(Value::Timestamp {
-                    unix_seconds: t.into(),
-                })
-                .summary("camera local time"),
+            Some(t) => node.value(Value::Timestamp(crate::value::Time::local(t.into()))),
             None => node,
         },
         (0x1818, _) => {

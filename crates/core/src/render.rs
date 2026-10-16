@@ -28,7 +28,7 @@ pub fn value(v: &Value) -> String {
             format!("{raw:#x} [{}]", parts.join(" | "))
         }
         Value::Float { value, bits } => float(*value, *bits),
-        Value::Timestamp { unix_seconds } => timestamp(*unix_seconds),
+        Value::Timestamp(t) => t.to_string(),
         Value::Text(s) => format!("{s:?}"),
         Value::Bytes(b) => bytes(b),
         Value::Guid(g) => g.to_string(),
@@ -60,18 +60,6 @@ fn bytes(b: &[u8]) -> String {
         .collect();
     let _ = write!(out, "  |{ascii}|");
     out
-}
-
-/// Formats seconds since the epoch as `YYYY-MM-DD hh:mm:ss UTC`.
-fn timestamp(unix_seconds: i64) -> String {
-    let (year, month, day) = crate::formats::util::civil::civil(unix_seconds.div_euclid(86_400));
-    let rem = unix_seconds.rem_euclid(86_400);
-    format!(
-        "{year:04}-{month:02}-{day:02} {:02}:{:02}:{:02} UTC",
-        rem / 3600,
-        rem % 3600 / 60,
-        rem % 60
-    )
 }
 
 /// One line describing a node: `name: value — summary [span] → target`.
@@ -220,6 +208,7 @@ fn to_half(x: f64) -> f64 {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::formats::util::floats::f16;
@@ -270,7 +259,65 @@ mod tests {
     }
 
     #[test]
+    fn timestamps_say_what_the_file_recorded() {
+        use crate::value::Time;
+        assert_eq!(value(&Value::utc(1_792_119_381)), "2026-10-16 02:56:21 UTC");
+        assert_eq!(value(&Value::utc(-1)), "1969-12-31 23:59:59 UTC");
+        let t = |t: Time| value(&Value::Timestamp(t));
+        assert_eq!(
+            t(Time::unix_millis(1_792_119_381_148)),
+            "2026-10-16 02:56:21.148 UTC"
+        );
+        assert_eq!(t(Time::unix_millis(-1)), "1969-12-31 23:59:59.999 UTC");
+        // A zero fraction is left out of the text, not out of the value.
+        assert_eq!(t(Time::unix_millis(1000)), "1970-01-01 00:00:01 UTC");
+        assert_eq!(
+            Time::unix_millis(1000).iso8601(),
+            "1970-01-01T00:00:01.000Z"
+        );
+        assert_eq!(
+            Time::unix_millis(1000).text_full(),
+            "1970-01-01 00:00:01.000 UTC"
+        );
+        assert_eq!(
+            t(Time::unix_micros(1_000_001)),
+            "1970-01-01 00:00:01.000001 UTC"
+        );
+        assert_eq!(t(Time::unix_nanos(5)), "1970-01-01 00:00:00.000000005 UTC");
+        // 2024-01-01 00:00:00.1234567 UTC as FILETIME ticks.
+        assert_eq!(
+            t(Time::filetime(133_485_408_001_234_567)),
+            "2024-01-01 00:00:00.1234567 UTC"
+        );
+        assert_eq!(t(Time::offset(0, 60)), "1970-01-01 01:00:00 UTC+01:00");
+        assert_eq!(t(Time::offset(0, -330)), "1969-12-31 18:30:00 UTC-05:30");
+        assert_eq!(
+            t(Time::offset_wall(3600, 60)),
+            "1970-01-01 01:00:00 UTC+01:00"
+        );
+        assert_eq!(Time::offset_wall(3600, 60).secs, 0);
+        assert_eq!(t(Time::local(0)), "1970-01-01 00:00:00 (local time)");
+        assert_eq!(t(Time::local(90).minute()), "1970-01-01 00:01 (local time)");
+        // 2024-01-01, 12:34:56.
+        let (date, time) = ((44 << 9) | (1 << 5) | 1, (12 << 11) | (34 << 5) | 28);
+        assert_eq!(
+            t(Time::dos(date, time).unwrap()),
+            "2024-01-01 12:34:56 (local time)"
+        );
+        assert_eq!(t(Time::dos_date(date).unwrap()), "2024-01-01");
+        assert_eq!(Time::dos_date(0), None);
+        assert_eq!(
+            Time::filetime(133_485_408_001_234_567).iso8601(),
+            "2024-01-01T00:00:00.1234567Z"
+        );
+        assert_eq!(Time::offset(0, -330).iso8601(), "1969-12-31T18:30:00-05:30");
+        assert_eq!(Time::local(0).minute().iso8601(), "1970-01-01T00:00");
+        assert_eq!(Time::utc(0).day().iso8601(), "1970-01-01");
+    }
+
+    #[test]
     fn value_stays_small() {
         assert!(std::mem::size_of::<Value>() <= 48);
+        assert!(std::mem::size_of::<crate::value::Time>() <= 24);
     }
 }

@@ -980,11 +980,7 @@ fn escape(s: &str, quotes: bool) -> String {
 
 /// `2026-10-09T23:05:53.4961830Z` for a FILETIME.
 pub fn filetime_text(ticks: u64) -> String {
-    let unix = crate::text::filetime_to_unix(ticks);
-    let frac = ticks.checked_rem(10_000_000).unwrap_or(0);
-    let base = crate::render::value(&Value::Timestamp { unix_seconds: unix });
-    let stem = base.strip_suffix(" UTC").unwrap_or(&base).replace(' ', "T");
-    format!("{stem}.{frac:07}Z")
+    crate::value::Time::filetime(ticks).iso8601()
 }
 
 /// `2026-10-09T23:05:53.496Z` for a SYSTEMTIME; out-of-range fields are
@@ -997,9 +993,9 @@ fn systemtime_text(b: &[u8]) -> String {
             "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z"
         );
     };
-    let base = crate::render::value(&Value::Timestamp { unix_seconds: unix });
-    let stem = base.strip_suffix(" UTC").unwrap_or(&base).replace(' ', "T");
-    format!("{stem}.{millis:03}Z")
+    crate::value::Time::utc(unix)
+        .millis(u32::from(millis))
+        .iso8601()
 }
 
 /// Size of one element of a fixed-size type (for arrays).
@@ -1129,9 +1125,17 @@ fn typed_value(kind: u8, b: &[u8]) -> Value {
         0x0d if sized(4) => Value::Bool(u32_le(b, 0).unwrap_or(0) != 0),
         0x0e => Value::Bytes(b.to_vec()),
         0x0f if sized(16) => Value::Guid(guid_le(b)),
-        0x11 if sized(8) => Value::Timestamp {
-            unix_seconds: crate::text::filetime_to_unix(u64_le(b, 0).unwrap_or(0)),
-        },
+        0x11 if sized(8) => Value::filetime(u64_le(b, 0).unwrap_or(0)),
+        0x12 if sized(16) => {
+            // SysTime: a SYSTEMTIME in UTC, to the millisecond.
+            let w: [u16; 8] = std::array::from_fn(|i| u16_le(b, i.saturating_mul(2)).unwrap_or(0));
+            match systemtime(w) {
+                Some(unix) => {
+                    Value::Timestamp(crate::value::Time::utc(unix).millis(u32::from(w[7])))
+                }
+                None => Value::Bytes(b.to_vec()),
+            }
+        }
         0x13 => match parse_sid(b) {
             Some((s, _)) => Value::Text(match sid_name(&s) {
                 Some(n) => format!("{s} ({n})"),

@@ -1045,12 +1045,11 @@ fn gdf_time(v: u64) -> Value {
     let frac = (v & 0xffff_ffff) as f64 / 4_294_967_296.0;
     #[allow(clippy::cast_possible_truncation)]
     let secs = (frac * 86400.0) as i64;
-    Value::Timestamp {
-        unix_seconds: days
-            .saturating_sub(719_529)
+    Value::utc(
+        days.saturating_sub(719_529)
             .saturating_mul(86400)
             .saturating_add(secs),
-    }
+    )
 }
 
 async fn gdf(cx: Cx, input: Input) -> Result<()> {
@@ -1607,9 +1606,7 @@ async fn tdms_value(cur: &mut Cursor<'_>, t: u32) -> Result<Value> {
             let _fraction = cur.u64().await?;
             let secs = cur.u64().await?.cast_signed();
             // Seconds since 1904-01-01 UTC.
-            Value::Timestamp {
-                unix_seconds: secs.saturating_sub(crate::text::MAC_EPOCH),
-            }
+            Value::utc(secs.saturating_sub(crate::text::MAC_EPOCH))
         }
         0x8_000c => {
             cur.skip(8);
@@ -2456,10 +2453,7 @@ mod tests {
 
     #[test]
     fn gdf_times() {
-        assert_eq!(
-            gdf_time(719_529u64 << 32),
-            Value::Timestamp { unix_seconds: 0 }
-        );
+        assert_eq!(gdf_time(719_529u64 << 32), Value::utc(0));
         assert_eq!(read_uint(&[1, 2], Endian::Little), 0x201);
         assert!(
             crate::formats::util::lines::head_lines(

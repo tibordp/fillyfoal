@@ -297,12 +297,7 @@ async fn record(cx: &Cx, store: &Store, span: Span, at: u64) -> Result<(Node, u6
         b"dutc" => {
             let v = cx.read(span.sub_exact(pos, 8)?).await?;
             let ticks = u64_be(&v, 0).unwrap_or(0);
-            (
-                Value::Timestamp {
-                    unix_seconds: crate::text::mac_to_unix(ticks >> 16),
-                },
-                8,
-            )
+            (Value::utc(crate::text::mac_to_unix(ticks >> 16)), 8)
         }
         b"ustr" => {
             let l = cx.read(span.sub_exact(pos, 4)?).await?;

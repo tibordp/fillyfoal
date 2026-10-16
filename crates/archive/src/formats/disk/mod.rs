@@ -65,7 +65,7 @@ use crate::error::{Diagnostic, Result};
 use crate::formats::{Codec, Input, content, embedded};
 use crate::node::{Count, Node};
 use crate::span::{Origin, SourceId, Span};
-use crate::value::Value;
+use crate::value::{Time, Value};
 
 pub use crate::formats::util::fmt::{size, uuid};
 
@@ -340,35 +340,47 @@ pub fn dos_to_unix(stamp: u32) -> i64 {
     )
 }
 
-/// Decorator for a combined DOS time/date `u32` field.
-pub fn dos_stamp(v: &u32, node: Node) -> Node {
-    if *v == 0 {
-        return node.summary("not set");
-    }
-    node.value(Value::Timestamp {
-        unix_seconds: dos_to_unix(*v),
-    })
+/// An MS-DOS date (high 16 bits) and time (low 16 bits) as a local time.
+pub fn dos_time(stamp: u32) -> Option<Time> {
+    Time::dos(
+        u16::try_from(stamp >> 16).unwrap_or(0),
+        u16::try_from(stamp & 0xffff).unwrap_or(0),
+    )
 }
 
-/// Decorator for a DOS date-only `u16` field.
+/// Decorator for a combined DOS time/date `u32` field (local time).
+pub fn dos_stamp(v: &u32, node: Node) -> Node {
+    if *v == 0 {
+        return node.not_set();
+    }
+    match dos_time(*v) {
+        Some(t) => node.value(Value::Timestamp(t)),
+        None => node
+            .value(crate::formats::util::val::hex(*v, 32))
+            .summary("not a valid date"),
+    }
+}
+
+/// Decorator for a DOS date-only `u16` field (a local date).
 pub fn dos_date(v: &u16, node: Node) -> Node {
     if *v == 0 {
-        return node.summary("not set");
+        return node.not_set();
     }
-    node.value(Value::Timestamp {
-        unix_seconds: dos_to_unix(u32::from(*v) << 16),
-    })
+    match Time::dos_date(*v) {
+        Some(t) => node.value(Value::Timestamp(t)),
+        None => node
+            .value(crate::formats::util::val::hex(*v, 16))
+            .summary("not a valid date"),
+    }
 }
 
 /// Decorator for a Unix-seconds field, keeping 0 as "not set".
 pub fn unix_time<T: Copy + Into<u64>>(v: &T, node: Node) -> Node {
     let v: u64 = (*v).into();
     if v == 0 {
-        return node.summary("not set");
+        return node.not_set();
     }
-    node.value(Value::Timestamp {
-        unix_seconds: i64::try_from(v).unwrap_or(i64::MAX),
-    })
+    node.value(Value::utc(i64::try_from(v).unwrap_or(i64::MAX)))
 }
 
 /// APFS's Fletcher-64 checksum of a block whose first 8 bytes hold the

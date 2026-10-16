@@ -393,9 +393,7 @@ fn decode_commit(b: &[u8], hash: usize) -> Option<Commit> {
 }
 
 fn timestamp(seconds: u64) -> Value {
-    Value::Timestamp {
-        unix_seconds: i64::try_from(seconds).unwrap_or(i64::MAX),
-    }
+    Value::utc(i64::try_from(seconds).unwrap_or(i64::MAX))
 }
 
 /// The corrected commit date offset of commit `index` (from `GDA2`, and

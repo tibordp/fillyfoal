@@ -757,9 +757,7 @@ impl<'a> ReqParser<'a> {
                     Some(parent),
                     Node::new("timestamp")
                         .span(self.at(start))
-                        .value(Value::Timestamp {
-                            unix_seconds: t.saturating_add(CF_EPOCH),
-                        }),
+                        .value(Value::utc(t.saturating_add(CF_EPOCH))),
                 );
                 let rel = match op {
                     9 => "=",

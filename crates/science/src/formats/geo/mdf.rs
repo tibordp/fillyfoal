@@ -409,9 +409,7 @@ async fn block(cx: Cx, (m, offset, path): (Mdf, u64, Path)) -> Result<()> {
                 leaf(
                     "Start time",
                     data.sub(0, 8),
-                    Value::Timestamp {
-                        unix_seconds: i64::try_from(ns / 1_000_000_000).unwrap_or(0),
-                    },
+                    Value::utc(i64::try_from(ns / 1_000_000_000).unwrap_or(0)),
                 )
                 .summary(format!("{ns} ns")),
             );

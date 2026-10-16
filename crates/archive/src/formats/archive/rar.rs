@@ -496,12 +496,7 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             let crc = r.u32("File CRC", LE).ok_or_else(bad)?;
             r.with(|n| n.value(hex(crc, 64)));
             let time = r.u32("Modification time (DOS)", LE).ok_or_else(bad)?;
-            r.with(|n| {
-                let date = u16::try_from(time >> 16).unwrap_or(0);
-                let t = u16::try_from(time & 0xffff).unwrap_or(0);
-                n.value(hex(time, 64))
-                    .summary(crate::text::dos_datetime(date, t))
-            });
+            r.with(|n| n.value(crate::formats::util::val::dos_stamp(time)));
             let ver = r.u8("Version needed").ok_or_else(bad)?;
             r.with(|n| n.summary(format!("{}.{}", ver / 10, ver % 10)));
             let method = r.u8("Method").ok_or_else(bad)?;
@@ -836,11 +831,7 @@ fn file_fields(r: &mut ByteReader<'_>) -> Option<FileFields> {
     r.with(|n| n.value(hex(attr, 64)));
     if flags & 0x02 != 0 {
         let t = r.u32("Modification time", LE)?;
-        r.with(|n| {
-            n.value(Value::Timestamp {
-                unix_seconds: t.into(),
-            })
-        });
+        r.with(|n| n.value(Value::utc(t.into())));
     }
     let mut crc = None;
     if flags & 0x04 != 0 {
@@ -1290,18 +1281,10 @@ fn time_record(r: &mut ByteReader<'_>) -> Option<()> {
         }
         if unix {
             let t = r.u32(name, LE)?;
-            r.with(|n| {
-                n.value(Value::Timestamp {
-                    unix_seconds: t.into(),
-                })
-            });
+            r.with(|n| n.value(Value::utc(t.into())));
         } else {
             let t = r.u64(name, LE)?;
-            r.with(|n| {
-                n.value(Value::Timestamp {
-                    unix_seconds: crate::text::filetime_to_unix(t),
-                })
-            });
+            r.with(|n| n.value(Value::filetime(t)));
         }
     }
     Some(())

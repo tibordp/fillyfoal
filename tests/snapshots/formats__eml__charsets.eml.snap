@@ -10,7 +10,7 @@ expression: "common::explore(&display_name(&path), &data)"
       To: "Иван Петров <ivan@example.ru>"  [0xab+0x33]
       Subject: "Ünïcödé süßjéct — ﬁnal résumé ✓ with €uro signs and more ünïcödé text"  [0xe0+0x9f]
       X-Split: "Žluťoučký kůň"  [0x181+0x5e]
-      Date: 2026-10-06 08:00:00 UTC — Tue, 06 Oct 2026 10:00:00 +0200  [0x1e1+0x25]
+      Date: 2026-10-06 10:00:00 UTC+02:00 — Tue, 06 Oct 2026 10:00:00 +0200  [0x1e1+0x25]
       Message-ID: "<charsets@example>"  [0x208+0x1e]
   ▾ Part 1 — text/plain, 0xbe bytes  [0x252+0xbe]
     ▾ Headers — 3 fields  [0x252+0x72]

@@ -888,9 +888,9 @@ async fn record(cx: Cx, rs: RecState) -> Result<()> {
             // (microseconds since 2000-01-01).
             if let Some(us) = b.get(to_usize(data_pos)..).and_then(|d| u64_le(d, 0)) {
                 let us = i64::from_le_bytes(us.to_le_bytes());
-                n = n.value(Value::Timestamp {
-                    unix_seconds: us.div_euclid(1_000_000).saturating_add(946_684_800),
-                });
+                n = n.value(Value::utc(
+                    us.div_euclid(1_000_000).saturating_add(946_684_800),
+                ));
             }
         }
         cx.emit(n);

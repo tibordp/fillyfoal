@@ -928,12 +928,11 @@ fn iam(cx: &Cx, span: Span, p: &[u8]) {
 fn datetime(p: &[u8], at: usize) -> Value {
     let ticks = i64::from(u32_le(p, at).unwrap_or(0));
     let days = i64::from(u32_le(p, at.saturating_add(4)).unwrap_or(0));
-    Value::Timestamp {
-        unix_seconds: days
-            .saturating_sub(25567)
+    Value::utc(
+        days.saturating_sub(25567)
             .saturating_mul(86400)
             .saturating_add(ticks / 300),
-    }
+    )
 }
 
 fn db_name(p: &[u8]) -> String {

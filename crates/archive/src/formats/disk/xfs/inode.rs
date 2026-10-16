@@ -225,7 +225,7 @@ fn time_field(f: &mut Fields<'_>, name: &'static str, bigtime: bool) -> Result<(
             } else {
                 (i64::from((v >> 32) as u32 as i32), v & 0xffff_ffff)
             };
-            let n = n.value(Value::Timestamp { unix_seconds: secs });
+            let n = n.value(Value::utc(secs));
             if ns == 0 {
                 n
             } else {

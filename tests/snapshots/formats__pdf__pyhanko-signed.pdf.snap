@@ -3640,7 +3640,7 @@ expression: "common::explore(&display_name(&path), &data)"
         /Length: 468  [0x3df7+0xb]
       ▾ Stream data — XMP metadata, 2 properties  [0x3e0d+0x1d4]
         ▾ XMP Basic (xmp) — 1 property
-            xmp:ModifyDate: "2026-10-09T21:26:41+01:00"  [0x3f5e+0x2a]
+            xmp:ModifyDate: 2026-10-09 21:26:41 UTC+01:00  [0x3f5e+0x2a]
         ▾ Adobe PDF (pdf) — 1 property
             pdf:Producer: "pyHanko 0.37.0"  [0x3f89+0x1d]
         ▾ XML — the packet as an XML tree  [0x3e0d+0x1d4]

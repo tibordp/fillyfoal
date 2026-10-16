@@ -533,7 +533,7 @@ fn utc_time(w: &mut Walker, name: &'static str) -> Option<i64> {
     let v = w.read(40)?;
     let t = mjd_time(v);
     match t {
-        Some(t) => w.record(name, start, Value::Timestamp { unix_seconds: t }),
+        Some(t) => w.record(name, start, Value::utc(t)),
         None => w.record(
             name,
             start,

@@ -112,14 +112,14 @@ record! {
 /// 1970. Zero means "never" (an unset backup date).
 fn palm_date(&raw: &u32, node: Node) -> Node {
     if raw == 0 {
-        return node.summary("not set");
+        return node.not_set();
     }
     let unix_seconds = if raw & 0x8000_0000 != 0 {
         crate::text::mac_to_unix(raw.into())
     } else {
         raw.into()
     };
-    node.value(Value::Timestamp { unix_seconds })
+    node.value(Value::utc(unix_seconds))
 }
 
 const PALMDOC_COMPRESSION: EnumTable = &[(1, "none"), (2, "PalmDOC (LZ77)"), (17480, "HUFF/CDIC")];

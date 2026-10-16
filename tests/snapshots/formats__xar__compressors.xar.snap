@@ -14,7 +14,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ bzip2.txt — 440 bytes  [0x2ab+0x6d]
         Type: "file"
         Mode: "0644" — -rw-r--r--
-        Modification time: "2024-01-02T03:04:00Z"
+        Modification time: 2024-01-02 03:04:00 UTC
         Heap offset: 20 → 0x2ab+0x6d
         Encoding: "application/x-bzip2"
       ▾ Content — bzip2, 900k blocks  [0x2ab+0x6d]
@@ -64,7 +64,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ xz.txt — 365 bytes  [0x318+0x84]
         Type: "file"
         Mode: "0644" — -rw-r--r--
-        Modification time: "2024-01-02T03:04:00Z"
+        Modification time: 2024-01-02 03:04:00 UTC
         Heap offset: 129 → 0x318+0x84
         Encoding: "application/x-xz"
       ▾ Content — xz, 1 block, 365 bytes uncompressed, CRC64  [0x318+0x84]
@@ -132,7 +132,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ lzma-xz.txt — 490 bytes  [0x39c+0x98]
         Type: "file"
         Mode: "0644" — -rw-r--r--
-        Modification time: "2024-01-02T03:04:00Z"
+        Modification time: 2024-01-02 03:04:00 UTC
         Heap offset: 261 → 0x39c+0x98
         Encoding: "application/x-lzma"
       ▾ Content — xz, 1 block, 490 bytes uncompressed, CRC64  [0x39c+0x98]
@@ -201,7 +201,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ lzma-alone.txt — 565 bytes  [0x434+0x69]
         Type: "file"
         Mode: "0644" — -rw-r--r--
-        Modification time: "2024-01-02T03:04:00Z"
+        Modification time: 2024-01-02 03:04:00 UTC
         Heap offset: 413 → 0x434+0x69
         Encoding: "application/x-lzma"
       ▾ Content — UTF-8 text, LF line endings, 25 lines  [0x434+0x69]

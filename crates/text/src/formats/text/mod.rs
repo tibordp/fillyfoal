@@ -22,7 +22,7 @@ use std::borrow::Cow;
 
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::Value;
+use crate::value::{Res, Time, Value, Zone};
 
 pub mod decode;
 pub mod encoding;
@@ -110,8 +110,16 @@ pub fn count(n: u64) -> String {
 /// Parses an ISO 8601 / RFC 3339 date or date-time (`2024-01-31`,
 /// `2024-01-31T12:00:00Z`, `2024-01-31 12:00:00.5+01:00`) or the basic form
 /// used by iCalendar (`20240131T120000Z`) into Unix seconds. Times without a
-/// zone are taken as UTC.
+/// zone are read as if UTC.
 pub fn parse_datetime(text: &str) -> Option<i64> {
+    parse_time(text).map(|t| t.secs)
+}
+
+/// [`parse_datetime`] as the text records it: a date alone is
+/// [`Res::Day`](crate::value::Res), a clock without seconds a minute, a
+/// fraction is kept (to nine digits); `Z` is UTC, `+hh:mm` an offset, and a
+/// time with no zone is a local (floating) time.
+pub fn parse_time(text: &str) -> Option<Time> {
     let t = text.trim();
     let digits = |s: &str| -> Option<i64> {
         (!s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
@@ -139,41 +147,56 @@ pub fn parse_datetime(text: &str) -> Option<i64> {
         return None;
     }
     // Split off the zone: `Z`, `+hh:mm`, `-hhmm`.
-    let (clock, offset) = match time.find(['Z', 'z', '+', '-']) {
+    let (clock, zone) = match time.find(['Z', 'z', '+', '-']) {
         Some(i) => {
             let zone = time.get(i..)?;
-            let sign = if zone.starts_with('-') { -1 } else { 1 };
             let z: String = zone.chars().filter(char::is_ascii_digit).collect();
             let hours = z.get(..2).and_then(digits).unwrap_or(0);
             let minutes = z.get(2..4).and_then(digits).unwrap_or(0);
             if hours > 23 || minutes > 59 {
                 return None;
             }
-            let offset = hours
-                .saturating_mul(3600)
-                .saturating_add(minutes.saturating_mul(60));
-            (time.get(..i)?, offset.saturating_mul(sign))
+            let east = i16::try_from(hours.saturating_mul(60).saturating_add(minutes)).ok()?;
+            let zone = if zone.starts_with(['Z', 'z']) {
+                Zone::Utc
+            } else if zone.starts_with('-') {
+                Zone::Offset(east.saturating_neg())
+            } else {
+                Zone::Offset(east)
+            };
+            (time.get(..i)?, zone)
         }
-        None => (time, 0),
+        None => (time, Zone::Local),
     };
-    let clock = clock.split('.').next().unwrap_or_default();
-    let (h, min, s) = if clock.is_empty() {
-        (0, 0, 0)
+    let (clock, frac) = match clock.split_once('.') {
+        Some((c, f)) => (c, Some(f)),
+        None => (clock, None),
+    };
+    let (h, min, s, res) = if clock.is_empty() {
+        (0, 0, 0, Res::Day)
     } else if !clock.contains(':') {
         let part = |a: usize, b: usize| clock.get(a..b).map_or(Some(0), digits);
-        (part(0, 2)?, part(2, 4)?, part(4, 6)?)
+        let res = if clock.len() <= 4 {
+            Res::Minute
+        } else {
+            Res::Second
+        };
+        (part(0, 2)?, part(2, 4)?, part(4, 6)?, res)
     } else {
         let mut parts = clock.split(':');
         let h = digits(parts.next()?)?;
         let min = parts.next().map_or(Some(0), digits)?;
-        let s = parts.next().map_or(Some(0), digits)?;
-        (h, min, s)
+        let (s, res) = match parts.next() {
+            Some(p) => (digits(p)?, Res::Second),
+            None => (0, Res::Minute),
+        };
+        (h, min, s, res)
     };
     if h > 24 || min > 59 || s > 60 {
         return None;
     }
     let u32_of = |v: i64| u32::try_from(v).ok();
-    let seconds = crate::formats::util::civil::civil_to_unix(
+    let wall = crate::formats::util::civil::civil_to_unix(
         y,
         u32_of(m)?,
         u32_of(d)?,
@@ -181,7 +204,21 @@ pub fn parse_datetime(text: &str) -> Option<i64> {
         u32_of(min)?,
         u32_of(s)?,
     );
-    Some(seconds.saturating_sub(offset))
+    let mut out = match zone {
+        Zone::Offset(minutes) => Time::offset_wall(wall, minutes),
+        Zone::Utc => Time::utc(wall),
+        _ => Time::local(wall),
+    };
+    out.res = res;
+    if let Some(f) = frac.filter(|f| !f.is_empty() && f.bytes().all(|b| b.is_ascii_digit())) {
+        let kept = f.get(..9).unwrap_or(f);
+        let width = u32::try_from(kept.len()).unwrap_or(9);
+        let nanos = u32::try_from(digits(kept)?)
+            .ok()?
+            .saturating_mul(10u32.checked_pow(9u32.saturating_sub(width)).unwrap_or(1));
+        out = out.frac(nanos, u8::try_from(width).unwrap_or(9));
+    }
+    Some(out)
 }
 
 /// `"1 line"` / `"3 lines"`, with thousands separators.

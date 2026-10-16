@@ -65,6 +65,15 @@ impl Node {
         self
     }
 
+    /// A field whose stored value is the format's "no value" sentinel (a
+    /// zero timestamp, an all-zero date): no value, summary "not set". The
+    /// raw bytes stay in the span.
+    pub fn not_set(mut self) -> Self {
+        self.value = None;
+        self.summary = Some("not set".to_owned());
+        self
+    }
+
     pub fn summary(mut self, summary: impl Into<String>) -> Self {
         self.summary = Some(summary.into());
         self

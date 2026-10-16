@@ -634,9 +634,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(summary);
     let mut node = struct_node("Logfile header", lf_span, LE, pointer, logfile_layout);
     if lf.clock.start > 0 {
-        node = node.value(Value::Timestamp {
-            unix_seconds: crate::text::filetime_to_unix(lf.clock.start),
-        });
+        node = node.value(Value::filetime(lf.clock.start));
     }
     if u64::from(lf.buffer_size) != size && !compressed {
         node = node.diag(Diagnostic::warning(format!(
@@ -994,7 +992,7 @@ async fn event_node(
         .summary(parts.join(", "))
         .lazy(expand_event, (span, clock, logfile));
     node = match clock.unix(h.timestamp) {
-        Some(t) => node.value(Value::Timestamp { unix_seconds: t }),
+        Some(t) => node.value(Value::utc(t)),
         None => node.value(uint(h.timestamp, 64)),
     };
     Ok(node)
@@ -1147,7 +1145,7 @@ async fn expand_event(cx: Cx, (span, clock, logfile): (Span, Clock, bool)) -> Re
     if let Some(t) = clock.unix(h.timestamp) {
         cx.emit(
             Node::new("Time")
-                .value(Value::Timestamp { unix_seconds: t })
+                .value(Value::utc(t))
                 .summary(format!("raw {}", h.timestamp)),
         );
     }
@@ -1560,16 +1558,14 @@ fn tl_scalar(in_type: u8, out_type: u8, b: &[u8]) -> Value {
         12 => Value::f64(f64::from_bits(u(8))),
         13 => Value::Bool(u(4) != 0),
         15 => Value::Guid(guid_le(b)),
-        17 => Value::Timestamp {
-            unix_seconds: crate::text::filetime_to_unix(u(8)),
-        },
+        17 => Value::filetime(u(8)),
         18 => {
             let mut w = [0u16; 8];
             for (i, dst) in w.iter_mut().enumerate() {
                 *dst = u16_le(b, i.saturating_mul(2)).unwrap_or(0);
             }
             match crate::formats::util::civil::systemtime(w) {
-                Some(t) => Value::Timestamp { unix_seconds: t },
+                Some(t) => Value::utc(t),
                 None => Value::Bytes(b.to_vec()),
             }
         }

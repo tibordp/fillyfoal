@@ -475,7 +475,7 @@ async fn block(cx: Cx, b: Block) -> Result<()> {
             f.node(
                 Node::new("Timestamp")
                     .span(ts_span)
-                    .value(Value::Timestamp { unix_seconds: secs })
+                    .value(Value::utc(secs))
                     .summary(ts_text(ts, b.iface))
                     .desc("From the high and low words, in the interface's resolution plus its offset"),
             );
@@ -532,7 +532,7 @@ async fn block(cx: Cx, b: Block) -> Result<()> {
             let (secs, text, note) = isb_time(ts, b.iface);
             let mut node = Node::new("Timestamp")
                 .span(ts_span)
-                .value(Value::Timestamp { unix_seconds: secs })
+                .value(Value::utc(secs))
                 .summary(text);
             if let Some(d) = note {
                 node = node.diag(d);
@@ -959,9 +959,7 @@ async fn options(
                     let low = u64::from(rd32(&bytes, 4).unwrap_or(0));
                     let ts = high << 32 | low;
                     let (secs, text, note) = isb_time(ts, iface);
-                    let node = node
-                        .value(Value::Timestamp { unix_seconds: secs })
-                        .summary(text);
+                    let node = node.value(Value::utc(secs)).summary(text);
                     match note {
                         Some(d) => node.diag(d),
                         None => node,

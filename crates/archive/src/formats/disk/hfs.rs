@@ -31,7 +31,7 @@ use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag};
+use crate::value::{EnumTable, FlagTable, Time, Value, flag};
 
 const BE: Endian = Endian::Big;
 const HEADER: u64 = 1024;
@@ -87,11 +87,20 @@ const ATTRIBUTES: FlagTable = &[
 
 fn hfs_time(v: &u32, node: Node) -> Node {
     if *v == 0 {
-        return node.summary("not set");
+        return node.not_set();
     }
-    node.value(Value::Timestamp {
-        unix_seconds: crate::text::mac_to_unix((*v).into()),
-    })
+    node.value(Value::utc(crate::text::mac_to_unix((*v).into())))
+}
+
+/// A local time in seconds since 1904: the HFS+ volume creation date and
+/// every classic HFS date (TN1150).
+fn hfs_local(v: &u32, node: Node) -> Node {
+    if *v == 0 {
+        return node.not_set();
+    }
+    node.value(Value::Timestamp(Time::local(crate::text::mac_to_unix(
+        (*v).into(),
+    ))))
 }
 
 record! {
@@ -102,7 +111,7 @@ record! {
         attributes: u32 "Attributes" .hex() .flags(ATTRIBUTES),
         last_mounted: ascii[4] "Last mounted version",
         journal_info: u32 "Journal info block",
-        created: u32 "Created (local time)" .with(hfs_time),
+        created: u32 "Created" .with(hfs_local),
         modified: u32 "Modified" .with(hfs_time),
         backup: u32 "Backed up" .with(hfs_time),
         checked: u32 "Checked" .with(hfs_time),
@@ -1294,8 +1303,8 @@ record! {
     /// Classic HFS master directory block (the fields that matter here).
     pub struct Mdb {
         signature: ascii[2] "Signature",
-        created: u32 "Created" .with(hfs_time),
-        modified: u32 "Modified" .with(hfs_time),
+        created: u32 "Created" .with(hfs_local),
+        modified: u32 "Modified" .with(hfs_local),
         attributes: u16 "Attributes" .hex(),
         root_files: u16 "Files in root",
         bitmap_start: u16 "Volume bitmap start",

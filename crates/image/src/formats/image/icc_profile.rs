@@ -361,16 +361,14 @@ fn header(f: &mut Fields<'_>, ctx: &HeaderCtx) -> Result<Header> {
     if year == 0 {
         node = node.value(Value::Text("not set".to_owned()));
     } else {
-        node = node.value(Value::Timestamp {
-            unix_seconds: crate::formats::util::civil::civil_to_unix(
-                year.into(),
-                month.into(),
-                day.into(),
-                hour.into(),
-                minute.into(),
-                second.into(),
-            ),
-        });
+        node = node.value(Value::utc(crate::formats::util::civil::civil_to_unix(
+            year.into(),
+            month.into(),
+            day.into(),
+            hour.into(),
+            minute.into(),
+            second.into(),
+        )));
     }
     f.node(node);
     f.ascii("Signature", 4)

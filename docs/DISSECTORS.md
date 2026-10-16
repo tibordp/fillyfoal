@@ -144,7 +144,7 @@ record! {
 
 Kinds: `u8 u16 u32 u64 i8 i16 i32 i64 f32 f64 ascii[N] utf16[N] bytes[N]
 guid`. Decorators (any `Field` method): `.hex()`, `.enumeration(TABLE)`,
-`.flags(TABLE)`, `.timestamp()`, `.filetime()`, `.mac_time()`,
+`.flags(TABLE)`, `.timestamp()`, `.unix_millis()` (`_micros`, `_nanos`), `.filetime()`, `.mac_time()`,
 `.desc("...")`, `.summary(...)`, `.target(span)`,
 `.with(|&v, node| node...)`, `.check(|&v| Option<Diagnostic>)`. Closures can
 use fields declared earlier (they are local variables).
@@ -527,7 +527,32 @@ human interpretation in `summary` ("640×480, 24-bit") and meaning in
 - **Enums:** a static table through `.enumeration(T)` or `val::enumv`.
   When the name is computed (a known-ID function, a name built from parts),
   use `Value::named(raw, bits, name)` rather than a hex value with the name
-  in the summary. Annotate the file node with `cx.annotate("PE32+ DLL, AMD64")`: that
+  in the summary.
+- **Timestamps:** `Value::Timestamp(Time)`, saying what the file recorded,
+  never a date in `Text` or a number with a date summary:
+  - *Zone:* `Time::utc(secs)` (or `Value::utc`) when the field is UTC;
+    `Time::offset(utc_secs, minutes)` / `Time::offset_wall(wall_secs,
+    minutes)` when the file records its offset (ISO 9660, UDF, exFAT, RFC
+    5322 dates, ISO 8601 text with `+hh:mm`); `Time::local(wall_secs)` for a
+    wall clock in an unrecorded zone (DOS dates, classic HFS and the HFS+
+    creation date, SYSTEMTIME in files, Word DTTM, camera clocks, SQL
+    DATETIME, TempleOS). Never convert a local time and never put
+    "(local time)" or "UTC" in a field name: the value says it.
+  - *Precision:* `.day()` for a date alone, `.minute()`, whole seconds by
+    default, and the fraction with the digits the format stores:
+    `.millis(ms)`, `.micros(us)`, `.nanos(ns)`, `.frac(nanos, digits)`;
+    epoch counts through `Time::unix_millis` / `unix_micros` / `unix_nanos`
+    (fields: `.unix_millis()` and friends), FILETIME through
+    `Value::filetime` (`.filetime()`), DOS stamps through `val::dos` /
+    `val::dos_stamp` (`Time::dos`, `Time::dos_date`). The text leaves out a
+    zero fraction; `Time::text_full` keeps it (listings), `Time::iso8601`
+    gives RFC 3339. ISO 8601 text parses with `formats::text::parse_time`.
+  - *Sentinels:* a zero or all-zero timestamp that means "none" is
+    `node.not_set()` (no value, summary "not set"); `.filetime()` does it
+    for 0. A raw number that is not a time (ticks of a clock that starts
+    at boot, a duration) stays a number with a summary.
+
+Annotate the file node with `cx.annotate("PE32+ DLL, AMD64")`: that
 summary is the first thing the user sees on F3.
 
 Helpers: `crate::bytes::{u16_le, u32_be, ..., uleb128}`,

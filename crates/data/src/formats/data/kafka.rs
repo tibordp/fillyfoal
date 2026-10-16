@@ -73,8 +73,6 @@ use crate::record;
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Value, field, flag};
 
-use super::valuetree as vt;
-
 const BE: Endian = Endian::Big;
 
 declare_format!(pub LOG = "kafka-log", "Apache Kafka log segment", ["log"],
@@ -349,17 +347,19 @@ fn ms_text(ms: i64) -> String {
     if ms < 0 {
         return "no timestamp".to_owned();
     }
-    let nanos = u32::try_from(ms.rem_euclid(1000))
-        .unwrap_or(0)
-        .saturating_mul(1_000_000);
-    vt::datetime(ms.div_euclid(1000), nanos)
+    crate::value::Time::unix_millis(ms).to_string()
+}
+
+/// A Kafka timestamp in milliseconds as a value (-1 is "no timestamp").
+fn ms_value(ms: i64, node: Node) -> Node {
+    if ms < 0 {
+        return node.value(val::int(ms, 64)).summary("no timestamp");
+    }
+    node.value(Value::Timestamp(crate::value::Time::unix_millis(ms)))
 }
 
 fn ms_node(name: &'static str, span: Span, ms: i64) -> Node {
-    Node::new(name)
-        .span(span)
-        .value(val::int(ms, 64))
-        .summary(ms_text(ms))
+    ms_value(ms, Node::new(name).span(span))
 }
 
 /// A zigzag varint (Kafka's `varint`/`varlong`) at `at`: value and length.
@@ -1389,7 +1389,7 @@ record! {
 record! {
     /// A time index entry.
     struct TimeIndexEntry {
-        timestamp: i64 "Timestamp" .with(|&v, node| node.summary(ms_text(v))),
+        timestamp: i64 "Timestamp" .with(|&v, node| ms_value(v, node)),
         relative: u32 "Relative offset" .desc("Offset minus the segment's base offset"),
     }
 }

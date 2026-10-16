@@ -13,7 +13,7 @@ expression: "common::explore(&display_name(&path), &data)"
     pi: 3.141592653589793  [0x43+0xc]
     enabled: true  [0x4f+0xa]
     missing — null  [0x59+0x9]
-    created: 2026-10-07 12:30:15 UTC — UTC datetime, 2026-10-07 12:30:15.250 UTC  [0x62+0x11]
+    created: 2026-10-07 12:30:15.250 UTC — UTC datetime  [0x62+0x11]
     ancient: 1900-01-01 00:00:00 UTC — UTC datetime  [0x73+0x11]
     price: "1234.5678" — decimal128, bits 0x30380000000000000000000000bc614e  [0x84+0x17]
     tiny: "-1.5E-30" — decimal128, bits 0xb002000000000000000000000000000f  [0x9b+0x16]

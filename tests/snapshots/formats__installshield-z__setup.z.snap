@@ -32,7 +32,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 65  [0x1b1+0x4]
         Compressed size: 47  [0x1b5+0x4]
         Data offset: 0xff  [0x1b9+0x4] → 0xff+0x2f
-        Modification time (DOS): "1996-07-14 12:30:00"  [0x1bd+0x4]
+        Modification time (DOS): 1996-07-14 12:30:00 (local time)  [0x1bd+0x4]
         Unknown  [0x1c1+0x4]
         Entry size: 40  [0x1c5+0x2]
         Unknown  [0x1c7+0x4]
@@ -50,7 +50,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 102  [0x1d9+0x4]
         Compressed size: 33  [0x1dd+0x4]
         Data offset: 0x12e  [0x1e1+0x4] → 0x12e+0x21
-        Modification time (DOS): "1996-07-14 12:30:00"  [0x1e5+0x4]
+        Modification time (DOS): 1996-07-14 12:30:00 (local time)  [0x1e5+0x4]
         Unknown  [0x1e9+0x4]
         Entry size: 40  [0x1ed+0x2]
         Unknown  [0x1ef+0x4]
@@ -68,7 +68,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 69  [0x201+0x4]
         Compressed size: 79  [0x205+0x4]
         Data offset: 0x14f  [0x209+0x4] → 0x14f+0x4f
-        Modification time (DOS): "1996-07-14 12:30:00"  [0x20d+0x4]
+        Modification time (DOS): 1996-07-14 12:30:00 (local time)  [0x20d+0x4]
         Unknown  [0x211+0x4]
         Entry size: 38  [0x215+0x2]
         Unknown  [0x217+0x4]

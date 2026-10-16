@@ -1556,9 +1556,7 @@ fn value(f: &Field, c: &[u8]) -> Value {
         (3, 4) => Value::f32(f32::from_le_bytes(c.try_into().unwrap_or([0; 4]))),
         (3, 8) => Value::f64(f64::from_le_bytes(c.try_into().unwrap_or([0; 8]))),
         (8, 4) => int(le(4).cast_signed().wrapping_shl(32).wrapping_shr(32), 32),
-        (10, 8) if f.unit == 0 => Value::Timestamp {
-            unix_seconds: le(8).cast_signed(),
-        },
+        (10, 8) if f.unit == 0 => Value::utc(le(8).cast_signed()),
         (10 | 18 | 8, 8) => int(le(8).cast_signed(), 64),
         _ => Value::Bytes(c.to_vec()),
     }

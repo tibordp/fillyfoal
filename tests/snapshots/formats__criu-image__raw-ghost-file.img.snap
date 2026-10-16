@@ -13,10 +13,10 @@ expression: "common::explore(&display_name(&path), &data)"
       dev: 0x3a  [0x14+0x2]
       ino: 16364447  [0x16+0x5]
     ▾ atim — timeval, 10 bytes  [0x1b+0xc]
-        tv_sec: 1792153917  [0x1d+0x6]
+        tv_sec: 2026-10-16 12:31:57 UTC  [0x1d+0x6]
         tv_usec: 795830  [0x23+0x4]
     ▾ mtim — timeval, 10 bytes  [0x27+0xc]
-        tv_sec: 1792153917  [0x29+0x6]
+        tv_sec: 2026-10-16 12:31:57 UTC  [0x29+0x6]
         tv_usec: 796356  [0x2f+0x4]
   ▾ File data — UTF-8 text, LF line endings, 4 lines  [0x33+0x50]
       Encoding: "UTF-8"

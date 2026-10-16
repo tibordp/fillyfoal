@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use fillyfoal::{
     ByteRequest, ChildState, Count, DiagKind, Diagnostic, Limits, NodeId, Progress, Radix,
-    ReadProgress, Secret, SecretRequest, Session, SourceId, Span, Value, Wait, formats,
+    ReadProgress, Res, Secret, SecretRequest, Session, SourceId, Span, Value, Wait, Zone, formats,
 };
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -756,8 +756,22 @@ enum WireData {
         bits: u8,
     },
     Time {
-        /// Seconds since the Unix epoch, UTC.
+        /// Seconds since 1970-01-01 00:00:00: the UTC instant for "utc" and
+        /// "offset", the wall clock read as if UTC for "local".
         secs: String,
+        /// Nanoseconds past `secs` (0 unless `res` is "sub").
+        nanos: u32,
+        /// "utc", "offset" (the file recorded its wall clock `offset`
+        /// minutes east of UTC) or "local" (a wall clock in an unrecorded
+        /// zone: never convert it).
+        zone: &'static str,
+        /// Minutes east of UTC, for "offset"; otherwise null.
+        offset: Option<i16>,
+        /// "day", "minute", "second" or "sub" (fractional seconds).
+        res: &'static str,
+        /// For "sub": the fractional digits the format records (3 for
+        /// milliseconds, 7 for FILETIME ticks...); otherwise null.
+        digits: Option<u8>,
     },
     Text {
         /// The text unescaped (`text` is escaped for display).
@@ -884,14 +898,34 @@ impl From<&Value> for WireValue {
                     bits: *bits,
                 },
             ),
-            Value::Timestamp { unix_seconds } => (
-                K::Time,
-                fillyfoal::render::value(value),
-                Some(unix_seconds.to_string()),
-                WireData::Time {
-                    secs: unix_seconds.to_string(),
-                },
-            ),
+            Value::Timestamp(t) => {
+                let (zone, offset) = match t.zone {
+                    Zone::Utc => ("utc", None),
+                    Zone::Offset(m) => ("offset", Some(m)),
+                    Zone::Local => ("local", None),
+                    _ => ("other", None),
+                };
+                let (res, digits) = match t.res {
+                    Res::Day => ("day", None),
+                    Res::Minute => ("minute", None),
+                    Res::Second => ("second", None),
+                    Res::Sub(d) => ("sub", Some(d)),
+                    _ => ("other", None),
+                };
+                (
+                    K::Time,
+                    t.to_string(),
+                    Some(t.secs.to_string()),
+                    WireData::Time {
+                        secs: t.secs.to_string(),
+                        nanos: t.nanos,
+                        zone,
+                        offset,
+                        res,
+                        digits,
+                    },
+                )
+            }
             Value::Text(s) => (
                 K::Text,
                 s.escape_debug().to_string(),

@@ -126,9 +126,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 }
 
 fn date(v: i32) -> Value {
-    Value::Timestamp {
-        unix_seconds: i64::from(v).saturating_add(EPOCH_2000),
-    }
+    Value::utc(i64::from(v).saturating_add(EPOCH_2000))
 }
 
 async fn entry(cx: Cx, (input, desc, span, id): (Input, Span, Span, u32)) -> Result<()> {

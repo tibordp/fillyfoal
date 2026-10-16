@@ -9,7 +9,7 @@ expression: "common::explore(&display_name(&path), &data)"
     port: 8080  [0x49+0x4]
     enabled: true  [0x57+0x4]
     nothing — null  [0x65+0x1]
-    released: 2026-10-05 00:00:00 UTC  [0x71+0xa]
+    released: 2026-10-05  [0x71+0xa]
     hex: 31  [0x81+0x4]
     quoted: "tab\tand é"  [0x8e+0x11]
     single: "it's"  [0xa8+0x7]

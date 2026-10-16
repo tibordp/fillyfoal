@@ -54,9 +54,7 @@ async fn bitcoin_blocks(cx: Cx, input: Input) -> Result<()> {
         cx.progress(cur.pos(), file.len);
         cx.push(
             BlockHeader::node(format!("Block {blocks}"), header_span, LE)
-                .value(Value::Timestamp {
-                    unix_seconds: header.time.into(),
-                })
+                .value(Value::utc(header.time.into()))
                 .summary(format!("{size} bytes"))
                 .target(cur.since(start)),
         )

@@ -143,11 +143,7 @@ fn nlist(f: &mut Fields<'_>, m: &Macho) -> Result<Nlist> {
     };
     let value = if stab && kind == N_OSO {
         f.uword("n_value", m.wide)
-            .with(|&v, n| {
-                n.value(Value::Timestamp {
-                    unix_seconds: i64::try_from(v).unwrap_or(0),
-                })
-            })
+            .with(|&v, n| n.value(Value::utc(i64::try_from(v).unwrap_or(0))))
             .desc("Modification time of the object file")
             .emit()?
     } else if kind & 0xe0 == 0 && kind & 0x0e == 0 && kind & 1 != 0 && value != 0 {
@@ -321,9 +317,7 @@ async fn symbols(cx: Cx, (m, first, n): (Macho, u32, u32)) -> Result<()> {
             }
         };
         let value = if sym.is_stab() && sym.kind == N_OSO {
-            Value::Timestamp {
-                unix_seconds: i64::try_from(sym.value).unwrap_or(0),
-            }
+            Value::utc(i64::try_from(sym.value).unwrap_or(0))
         } else {
             hex(sym.value, m.bits())
         };

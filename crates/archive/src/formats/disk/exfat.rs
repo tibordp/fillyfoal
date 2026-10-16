@@ -24,7 +24,7 @@ use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{FlagTable, Value, flag};
+use crate::value::{FlagTable, Time, Value, flag};
 
 const LE: Endian = Endian::Little;
 const ENTRY: u64 = 32;
@@ -131,19 +131,38 @@ record! {
     }
 }
 
+/// Minutes east of UTC of an exFAT UTC offset byte, if it is recorded.
+fn offset_minutes(o: u8) -> Option<i16> {
+    // Bit 7: valid; below it a seven-bit signed count of 15 minutes.
+    (o & 0x80 != 0).then(|| i16::from(i8::from_le_bytes([o << 1]) >> 1).saturating_mul(15))
+}
+
 fn utc_offset(o: u8) -> String {
-    if o & 0x80 == 0 {
+    let Some(minutes) = offset_minutes(o) else {
         return "not recorded".to_owned();
-    }
-    // Seven-bit signed count of 15-minute increments.
-    let quarters = i32::from(i8::from_le_bytes([o << 1]) >> 1);
-    let minutes = quarters.saturating_mul(15);
+    };
     format!(
         "UTC{}{:02}:{:02}",
         if minutes < 0 { '-' } else { '+' },
-        minutes.abs() / 60,
-        minutes.abs() % 60
+        minutes.unsigned_abs() / 60,
+        minutes.unsigned_abs() % 60
     )
+}
+
+/// An exFAT timestamp: the DOS stamp, its 10 ms increment (0..=199) and
+/// UTC offset, as the recorded time (local when no offset is recorded).
+fn exfat_time(stamp: u32, ten_ms: u8, utc: u8) -> Option<Time> {
+    let local = super::dos_time(stamp)?;
+    let extra = u32::from(ten_ms.min(199)).saturating_mul(10);
+    let t = match offset_minutes(utc) {
+        Some(m) => Time::offset_wall(local.secs, m),
+        None => local,
+    };
+    let t = Time {
+        secs: t.secs.saturating_add(i64::from(extra / 1000)),
+        ..t
+    };
+    Some(t.frac((extra % 1000).saturating_mul(1_000_000), 2))
 }
 
 #[derive(Debug)]
@@ -754,6 +773,8 @@ struct FileSet {
     name: String,
     attributes: u16,
     modified: u32,
+    modified_10ms: u8,
+    modified_utc: u8,
     stream: Option<[u8; 32]>,
     checksum_ok: bool,
 }
@@ -766,6 +787,8 @@ async fn file_set(cx: &Cx, it: &mut Entries, first: [u8; 32], span: Span) -> Res
         name: String::new(),
         attributes: u16_le(&first, 4).unwrap_or(0),
         modified: u32_le(&first, 12).unwrap_or(0),
+        modified_10ms: first[21],
+        modified_utc: first[23],
         stream: None,
         checksum_ok: true,
     };
@@ -811,9 +834,14 @@ async fn file_set(cx: &Cx, it: &mut Entries, first: [u8; 32], span: Span) -> Res
 }
 
 fn file_node(fs: &Vol, ancestors: &Arc<Vec<u32>>, set: FileSet) -> Node {
-    let when = crate::text::dos_datetime(
-        u16::try_from(set.modified >> 16).unwrap_or(0),
-        u16::try_from(set.modified & 0xffff).unwrap_or(0),
+    let when = exfat_time(set.modified, set.modified_10ms, set.modified_utc).map_or_else(
+        || {
+            crate::text::dos_datetime(
+                u16::try_from(set.modified >> 16).unwrap_or(0),
+                u16::try_from(set.modified & 0xffff).unwrap_or(0),
+            )
+        },
+        |t| t.to_string(),
     );
     let stream = set.stream.unwrap_or([0; 32]);
     let first = u32_le(&stream, 20).unwrap_or(0);

@@ -484,12 +484,12 @@ async fn journal(cx: Cx, input: Input) -> Result<()> {
             .lazy(journal_objects, (input, arena, compact)),
     );
     let state = lookup(JOURNAL_STATES, h.state.into()).unwrap_or("unknown");
-    let first = crate::render::value(&Value::Timestamp {
-        unix_seconds: i64::try_from(h.head_realtime / 1_000_000).unwrap_or(0),
-    });
-    let last = crate::render::value(&Value::Timestamp {
-        unix_seconds: i64::try_from(h.tail_realtime / 1_000_000).unwrap_or(0),
-    });
+    let first = crate::render::value(&Value::utc(
+        i64::try_from(h.head_realtime / 1_000_000).unwrap_or(0),
+    ));
+    let last = crate::render::value(&Value::utc(
+        i64::try_from(h.tail_realtime / 1_000_000).unwrap_or(0),
+    ));
     cx.annotate(format!(
         "{}, {state}, {first} – {last}",
         plural(h.entries, "entry")

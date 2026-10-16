@@ -389,9 +389,7 @@ fn field(b: &[u8], span: Span, name: &'static str, at: usize, f: F) -> Node {
         }),
         F::U64 => n.value(uint(u64_at, 64)),
         F::Lsn => n.value(hex(u64_at, 64)).summary(lsn(u64_at)),
-        F::Time => n.value(Value::Timestamp {
-            unix_seconds: i64::from_le_bytes(u64_at.to_le_bytes()),
-        }),
+        F::Time => n.value(Value::utc(i64::from_le_bytes(u64_at.to_le_bytes()))),
         F::Bool => n.value(Value::Bool(b.get(at).copied().unwrap_or(0) != 0)),
         F::Enum(t) => n.value(Value::Enum {
             raw: u32_at.into(),

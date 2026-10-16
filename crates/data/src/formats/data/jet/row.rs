@@ -382,7 +382,7 @@ pub fn value(col: &Column, b: &[u8], fmt: Fmt) -> Decoded {
             let days = f64::from_bits(x);
             match ole_date(days) {
                 Some(unix_seconds) => plain(
-                    Value::Timestamp { unix_seconds },
+                    Value::utc(unix_seconds),
                     crate::formats::util::civil::date(unix_seconds),
                 ),
                 None => plain(Value::f64(days), days.to_string()),

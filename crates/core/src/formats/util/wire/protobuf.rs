@@ -41,6 +41,8 @@ pub enum Ty {
     Enum(EnumTable),
     /// An unsigned varint shown in hexadecimal (addresses, masks).
     Hex,
+    /// An unsigned varint of seconds since the Unix epoch, UTC.
+    Time,
     /// An unsigned varint holding flags.
     Flags(FlagTable),
     /// An unsigned varint some of whose values have names (sentinels such
@@ -495,6 +497,7 @@ fn varint_value(ty: Option<Ty>, v: u64) -> Value {
             },
         },
         Some(Ty::UInt) => uint(v),
+        Some(Ty::Time) => Value::utc(i64::try_from(v).unwrap_or(i64::MAX)),
         _ => signed(v),
     }
 }

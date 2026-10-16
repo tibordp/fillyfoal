@@ -24,9 +24,7 @@ const BE: Endian = Endian::Big;
 
 /// Unix seconds as a timestamp value.
 pub(crate) fn unix_time(seconds: i64) -> Value {
-    Value::Timestamp {
-        unix_seconds: seconds,
-    }
+    Value::utc(seconds)
 }
 
 // ---------------------------------------------------------------------------

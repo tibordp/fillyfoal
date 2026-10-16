@@ -714,9 +714,9 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Adobe PDF (pdf) — 1 property
             pdf:Producer: "GPL Ghostscript 10.07.1"  [0x17ba+0x26]
         ▾ XMP Basic (xmp) — 4 properties
-            xmp:ModifyDate: "2026-10-09T21:26:40+01:00"  [0x182a+0x3a]
-            xmp:CreateDate: "2026-10-09T21:26:40+01:00"  [0x1865+0x3a]
-            xmp:MetadataDate: "2026-10-09T21:26:40+01:00"  [0x18a0+0x3e]
+            xmp:ModifyDate: 2026-10-09 21:26:40 UTC+01:00  [0x182a+0x3a]
+            xmp:CreateDate: 2026-10-09 21:26:40 UTC+01:00  [0x1865+0x3a]
+            xmp:MetadataDate: 2026-10-09 21:26:40 UTC+01:00  [0x18a0+0x3e]
             xmp:CreatorTool: "fillyfoal"  [0x18df+0x2c]
         ▾ XMP Media Management (xmpMM) — 3 properties
             xmpMM:DocumentID: "uuid:48c1df80-fc3c-11fc-0000-c15d7b694b88"  [0x196a+0x3c]

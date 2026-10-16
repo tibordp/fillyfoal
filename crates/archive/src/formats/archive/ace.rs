@@ -617,12 +617,7 @@ fn ace_comment(r: &mut ByteReader<'_>) -> Option<Node> {
 
 fn dos_time(r: &mut ByteReader<'_>, name: &'static str) -> Option<()> {
     let t = r.u32(name, LE)?;
-    r.with(|n| {
-        n.value(hex(t, 64)).summary(crate::text::dos_datetime(
-            u16::try_from(t >> 16).unwrap_or(0),
-            u16::try_from(t & 0xffff).unwrap_or(0),
-        ))
-    });
+    r.with(|n| n.value(crate::formats::util::val::dos_stamp(t)));
     Some(())
 }
 
