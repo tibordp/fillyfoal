@@ -700,8 +700,12 @@ enum ValueKind {
     Text,
     Bytes,
     Guid,
+    /// A value this build doesn't structure: `text` only, `data` is null.
+    Other,
 }
 
+/// A field's value. `kind` says which shape `data` has (`web/src/types.ts`
+/// mirrors this); a host that doesn't know a kind still has `text`.
 #[derive(Serialize)]
 struct WireValue {
     kind: ValueKind,
@@ -711,6 +715,65 @@ struct WireValue {
     /// The number underneath, in the other radix (or the raw integer of an
     /// enum, flags or timestamp).
     raw: Option<String>,
+    /// The value's structured fields, by `kind`; null for `other`.
+    data: Option<WireData>,
+}
+
+/// The structured payload of a [`WireValue`], one shape per kind. Integers
+/// that may exceed 2^53 travel as decimal strings, byte strings as
+/// lowercase hex. New atoms add a kind and a shape; existing shapes only
+/// gain fields.
+#[derive(Serialize)]
+#[serde(untagged)]
+enum WireData {
+    Bool {
+        value: bool,
+    },
+    Number {
+        /// The number in decimal.
+        value: String,
+        bits: u8,
+        signed: bool,
+        /// How the format presents it: "dec", "hex", "oct" or "bin".
+        radix: &'static str,
+    },
+    Enum {
+        raw: String,
+        bits: u8,
+        name: Option<String>,
+    },
+    Flags {
+        raw: String,
+        bits: u8,
+        set: Vec<&'static str>,
+        /// Bits no named flag accounts for.
+        unknown: String,
+    },
+    Float {
+        /// Null when not finite (`text` then says NaN or inf).
+        value: Option<f64>,
+        /// The stored width: 16, 32, 64 or 80.
+        bits: u8,
+    },
+    Time {
+        /// Seconds since the Unix epoch, UTC.
+        secs: String,
+    },
+    Text {
+        /// The text unescaped (`text` is escaped for display).
+        value: String,
+    },
+    Bytes {
+        /// All of the bytes (`text` shows the first 16).
+        hex: String,
+        len: usize,
+    },
+    Guid {
+        /// The 16 bytes in stored order.
+        hex: String,
+        /// "mixed": Microsoft's layout, the first three fields little-endian.
+        order: &'static str,
+    },
 }
 
 /// Bits of a signed value as an unsigned number of that width.
@@ -723,31 +786,73 @@ fn twos_complement(value: i64, bits: u8) -> u64 {
     value as u64 & mask
 }
 
+fn hex(bytes: &[u8]) -> String {
+    use std::fmt::Write;
+    bytes
+        .iter()
+        .fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
+            let _ = write!(s, "{b:02x}");
+            s
+        })
+}
+
+fn radix_name(radix: Radix) -> &'static str {
+    match radix {
+        Radix::Dec => "dec",
+        Radix::Hex => "hex",
+        Radix::Oct => "oct",
+        Radix::Bin => "bin",
+    }
+}
+
 impl From<&Value> for WireValue {
     fn from(value: &Value) -> Self {
         use ValueKind as K;
-        let (kind, text, raw) = match value {
-            Value::Bool(b) => (K::Bool, b.to_string(), None),
-            Value::UInt {
-                value,
-                radix: Radix::Hex,
-                ..
-            } => (K::Number, format!("{value:#x}"), Some(value.to_string())),
-            Value::UInt { value, .. } => {
-                (K::Number, value.to_string(), Some(format!("{value:#x}")))
+        let (kind, text, raw, data) = match value {
+            Value::Bool(b) => (K::Bool, b.to_string(), None, WireData::Bool { value: *b }),
+            Value::UInt { value, bits, radix } => {
+                let raw = match radix {
+                    Radix::Dec => format!("{value:#x}"),
+                    _ => value.to_string(),
+                };
+                (
+                    K::Number,
+                    fillyfoal::render::uint(*value, *radix),
+                    Some(raw),
+                    WireData::Number {
+                        value: value.to_string(),
+                        bits: *bits,
+                        signed: false,
+                        radix: radix_name(*radix),
+                    },
+                )
             }
             Value::Int { value, bits } => (
                 K::Number,
                 value.to_string(),
                 Some(format!("{:#x}", twos_complement(*value, *bits))),
+                WireData::Number {
+                    value: value.to_string(),
+                    bits: *bits,
+                    signed: true,
+                    radix: "dec",
+                },
             ),
-            Value::Enum { raw, name, .. } => (
+            Value::Enum { raw, bits, name } => (
                 K::Enum,
-                name.map_or_else(|| "unknown".to_string(), str::to_string),
+                name.as_deref().unwrap_or("unknown").to_string(),
                 Some(format!("{raw:#x}")),
+                WireData::Enum {
+                    raw: raw.to_string(),
+                    bits: *bits,
+                    name: name.as_ref().map(|n| n.to_string()),
+                },
             ),
             Value::Flags {
-                raw, set, unknown, ..
+                raw,
+                bits,
+                set,
+                unknown,
             } => {
                 let mut parts: Vec<String> = set.iter().map(|s| s.to_string()).collect();
                 if *unknown != 0 {
@@ -758,23 +863,75 @@ impl From<&Value> for WireValue {
                 } else {
                     parts.join(" | ")
                 };
-                (K::Flags, text, Some(format!("{raw:#x}")))
+                (
+                    K::Flags,
+                    text,
+                    Some(format!("{raw:#x}")),
+                    WireData::Flags {
+                        raw: raw.to_string(),
+                        bits: *bits,
+                        set: set.clone(),
+                        unknown: unknown.to_string(),
+                    },
+                )
             }
-            Value::Float(f) => (K::Float, f.to_string(), None),
+            Value::Float { value: f, bits } => (
+                K::Float,
+                fillyfoal::render::float(*f, *bits),
+                None,
+                WireData::Float {
+                    value: f.is_finite().then_some(*f),
+                    bits: *bits,
+                },
+            ),
             Value::Timestamp { unix_seconds } => (
                 K::Time,
                 fillyfoal::render::value(value),
                 Some(unix_seconds.to_string()),
+                WireData::Time {
+                    secs: unix_seconds.to_string(),
+                },
             ),
-            Value::Text(s) => (K::Text, s.escape_debug().to_string(), None),
+            Value::Text(s) => (
+                K::Text,
+                s.escape_debug().to_string(),
+                None,
+                WireData::Text { value: s.clone() },
+            ),
             Value::Bytes(b) => (
                 K::Bytes,
                 fillyfoal::render::value(value),
                 Some(format!("{} bytes", b.len())),
+                WireData::Bytes {
+                    hex: hex(b),
+                    len: b.len(),
+                },
             ),
-            Value::Guid(g) => (K::Guid, g.to_string(), None),
+            Value::Guid(g) => (
+                K::Guid,
+                g.to_string(),
+                None,
+                WireData::Guid {
+                    hex: hex(&g.to_le_bytes()),
+                    order: "mixed",
+                },
+            ),
+            // An atom newer than this match: its text, unstructured.
+            _ => {
+                return WireValue {
+                    kind: K::Other,
+                    text: fillyfoal::render::value(value),
+                    raw: None,
+                    data: None,
+                };
+            }
         };
-        WireValue { kind, text, raw }
+        WireValue {
+            kind,
+            text,
+            raw,
+            data: Some(data),
+        }
     }
 }
 
@@ -865,4 +1022,37 @@ struct WireSource {
 struct WireOrigin {
     parent: WireSpan,
     transform: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn wire(v: Value) -> String {
+        json(&WireValue::from(&v))
+    }
+
+    #[test]
+    fn values_carry_their_structured_data() {
+        assert_eq!(
+            wire(Value::f32(0.8)),
+            r#"{"kind":"float","text":"0.8","raw":null,"data":{"value":0.800000011920929,"bits":32}}"#
+        );
+        assert_eq!(
+            wire(Value::UInt {
+                value: 0o100644,
+                bits: 16,
+                radix: Radix::Oct
+            }),
+            r#"{"kind":"number","text":"0o100644","raw":"33188","data":{"value":"33188","bits":16,"signed":false,"radix":"oct"}}"#
+        );
+        assert_eq!(
+            wire(Value::named(7, 8, format!("type {}", 7))),
+            r#"{"kind":"enum","text":"type 7","raw":"0x7","data":{"raw":"7","bits":8,"name":"type 7"}}"#
+        );
+        let bytes = Value::Bytes((0..20).collect());
+        assert!(wire(bytes).ends_with(
+            r#""raw":"20 bytes","data":{"hex":"000102030405060708090a0b0c0d0e0f10111213","len":20}}"#
+        ));
+    }
 }

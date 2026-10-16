@@ -36,19 +36,61 @@ export type Diagnostic = {
   span: Span | null;
 };
 
-export type ValueKind =
-  | "bool"
-  | "number"
-  | "enum"
-  | "flags"
-  | "float"
-  | "time"
-  | "text"
-  | "bytes"
-  | "guid";
+/// The structured payload of each value kind (`WireData` in
+/// `web/wasm/src/lib.rs`). Integers that may exceed 2^53 are decimal
+/// strings; byte strings are lowercase hex. New atoms add a kind here, and
+/// existing shapes only gain fields, so code written against one keeps
+/// working. A kind the frontend doesn't handle can always fall back to
+/// `text`.
+export type ValueData = {
+  bool: { value: boolean };
+  number: {
+    /// The number in decimal.
+    value: string;
+    bits: number;
+    signed: boolean;
+    /// How the format presents it.
+    radix: "dec" | "hex" | "oct" | "bin";
+  };
+  enum: { raw: string; bits: number; name: string | null };
+  flags: {
+    raw: string;
+    bits: number;
+    set: string[];
+    /// Bits no named flag accounts for.
+    unknown: string;
+  };
+  float: {
+    /// Null when not finite (`text` then says NaN or inf).
+    value: number | null;
+    /// The width the file stores it in: 16, 32, 64 or 80.
+    bits: number;
+  };
+  time: {
+    /// Seconds since the Unix epoch, UTC.
+    secs: string;
+  };
+  text: {
+    /// The text unescaped (`FieldValue.text` is escaped for display).
+    value: string;
+  };
+  bytes: {
+    /// All of the bytes (`FieldValue.text` shows the first 16).
+    hex: string;
+    len: number;
+  };
+  guid: {
+    /// The 16 bytes in stored order.
+    hex: string;
+    /// "mixed": Microsoft's layout, the first three fields little-endian.
+    order: "mixed";
+  };
+};
 
-export type FieldValue = {
-  kind: ValueKind;
+/// A value this build doesn't structure: only `text` is meaningful.
+export type ValueKind = keyof ValueData | "other";
+
+type ValueCommon = {
   /// The value as read: a name for an enum, the set flags, the number in the
   /// radix the format gives it.
   text: string;
@@ -56,6 +98,13 @@ export type FieldValue = {
   /// enum, flags or timestamp).
   raw: string | null;
 };
+
+/// A field's value, discriminated by `kind`: narrowing on it types `data`.
+export type FieldValue =
+  | {
+      [K in keyof ValueData]: ValueCommon & { kind: K; data: ValueData[K] };
+    }[keyof ValueData]
+  | (ValueCommon & { kind: "other"; data: null });
 
 export type FieldNode = {
   key: number;
