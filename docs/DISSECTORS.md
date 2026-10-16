@@ -512,7 +512,22 @@ let key = match derive_key(b"") {
 Prefer typed values over formatted strings: `Value::UInt` (with radix),
 `Int`, `Float`, `Enum`, `Flags`, `Timestamp`, `Text`, `Bytes`, `Guid`. Put
 human interpretation in `summary` ("640×480, 24-bit") and meaning in
-`desc`. Annotate the file node with `cx.annotate("PE32+ DLL, AMD64")`: that
+`desc`. Which value to use:
+
+- **Floats:** construct with the width the file stores: `Value::f32(x)`
+  (never widen an `f32` to `f64` first, or it prints `0.800000011920929`),
+  `Value::f64`, `Value::f16` (already widened by `floats::f16`) and
+  `Value::f80`. `Fields::f32`/`f64` do this. A float computed from
+  integers (fixed point, a scale factor) is `Value::f64`. To print one in a
+  summary, use `render::float(value, bits)`.
+- **Radix:** `Radix::Hex` (`.hex()`, `val::hex`) for magic numbers, offsets
+  and bit patterns; `Radix::Oct` (`.oct()`, `val::oct`) for Unix modes,
+  with `unix_mode(..)` as the summary (`Mode: 0o100644 — -rw-r--r--`);
+  `Radix::Bin` for a small bit field whose pattern matters.
+- **Enums:** a static table through `.enumeration(T)` or `val::enumv`.
+  When the name is computed (a known-ID function, a name built from parts),
+  use `Value::named(raw, bits, name)` rather than a hex value with the name
+  in the summary. Annotate the file node with `cx.annotate("PE32+ DLL, AMD64")`: that
 summary is the first thing the user sees on F3.
 
 Helpers: `crate::bytes::{u16_le, u32_be, ..., uleb128}`,
