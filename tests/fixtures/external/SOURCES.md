@@ -1830,3 +1830,20 @@ byte-reproducible (timestamps, MVIDs).
 | `msbuild-binlog/tiny.binlog.gz` | MSBuild 17.11.48 | `dotnet msbuild tiny.proj -bl:tiny.binlog` of an SDK-less project (targets, a property, items, a warning; the project import archive embeds the project file). The file unchanged, renamed so the harness dissects the gzip-compressed record stream inside it |
 | `msbuild-binlog/build-noimports.binlog.gz` | MSBuild 17.11.48 | `dotnet build "-bl:build-noimports.binlog;ProjectImports=None"` of a console app (restore, evaluation, about 7,000 records of 20 kinds). Unchanged, renamed as above |
 | `gzip/tiny.binlog` | MSBuild 17.11.48 | the same file as `msbuild-binlog/tiny.binlog.gz`, under its own name: as a host sees it (gzip, then the record stream) |
+
+## BPF Type Format: split BTF from pahole
+
+Built by `tests/data/btf/split.sh` in Docker `debian:trixie` (host name
+`fillyfoal`) with gcc 14.2.0 (`-g -O2 -ffile-prefix-map=/src=. -fno-ident`)
+and pahole 1.30: `base.c`'s BTF (`pahole --btf_encode_detached`) stands in
+for vmlinux, and `module.c`'s is encoded split against it (`pahole
+--btf_base=base.btf --btf_encode_detached`), the way kernel module BTF is.
+No kernel data: both sources are ours (a `struct device`/`list_head` base,
+a `struct widget` module). Checked with `bpftool -B base.btf btf dump file
+module.btf format raw` (bpftool 7.5.0): IDs 14 to 27 continue the base's 13,
+and the names and references agree with the dissector's.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `btf/split-module.btf` | pahole 1.30 `--btf_base=base.btf --btf_encode_detached` | the module's raw split BTF; unchanged |
+| `elf/btf-split-module.o` | gcc 14.2.0, binutils `objcopy --strip-debug --add-section .BTF=module.btf` | `module.o` with its DWARF stripped and the split BTF added as `.BTF`, as in a `.ko`; unchanged |

@@ -20,12 +20,26 @@
 //! checked against `clang -target bpf`/`bpfel` and `bpfeb` output and
 //! `bpftool btf dump`.
 //!
-//! Split BTF (kernel modules) continues the numbering and the string offsets
-//! of a base BTF (vmlinux) that is not in the file: its IDs are shown as if
-//! it started at 1, and names whose offsets fall past its own strings are
-//! shown as offsets. The `.BTF.ext` section of BPF objects (function and
-//! line information, CO-RE relocations) is not decoded.
+//! Split BTF (`/sys/kernel/btf/<module>`, the `.BTF` of a `.ko`) continues
+//! the type numbering and the string offsets of a base BTF (vmlinux) that is
+//! not in the file. It is recognised by its string section, which does not
+//! start with the empty string (or is empty). Its own types are numbered
+//! `base+1`, `base+2`, ..., since the base's type count is not recorded;
+//! type references are shown as the raw IDs they are and never resolved,
+//! because without the base nothing tells a reference to the base from one
+//! to this file. Names are resolved when the base's string length can be
+//! inferred: it is the offset whose subtraction maps every name offset at
+//! or above it onto the start of a string of this file (checked against
+//! pahole split output and real module BTF); names below it are the
+//! base's, shown as offsets. The `.BTF.ext` section of BPF objects
+//! (function and line information, CO-RE relocations) is not decoded.
+//!
+//! Type references in summaries are spelled the way C would declare them
+//! (`const char *`, `u64[4][2]`, `int (*)(int, const void *)`), following
+//! modifier, pointer, array and prototype chains a bounded number of steps.
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize};
@@ -59,6 +73,14 @@ const MAX_HEADER_LEN: u32 = 256;
 const TYPE_LEN: u64 = 12;
 /// Longest name read.
 const MAX_NAME: u64 = 512;
+/// Most types one C spelling follows (modifiers, pointers, parameters).
+const SPELL_STEPS: u32 = 48;
+/// Parameters of a prototype spelled out before `…`.
+const SPELL_PARAMS: u64 = 8;
+/// Longest C spelling shown.
+const SPELL_MAX: usize = 240;
+/// Candidate base string lengths tried when inferring a split BTF's.
+const STR_BASE_TRIES: usize = 64;
 
 const KIND_INT: u8 = 1;
 const KIND_PTR: u8 = 2;
@@ -132,7 +154,6 @@ fn probe(h: &Head) -> bool {
         || !hdr_len.is_multiple_of(4)
         || !type_off.is_multiple_of(4)
         || !type_len.is_multiple_of(4)
-        || str_len == 0
     {
         return false;
     }
@@ -144,10 +165,22 @@ fn probe(h: &Head) -> bool {
     if h.len_known && (end(type_off, type_len) > h.len || end(str_off, str_len) > h.len) {
         return false;
     }
-    // The string section starts with the empty string.
+    // A split BTF's strings continue its base's, so they need not start
+    // with the empty string (and may be empty): accept that only when the
+    // header lays out the file exactly, the way the kernel and pahole
+    // write it (types first, strings right after, nothing else).
+    let exact = type_off == 0
+        && str_off == type_len
+        && h.len_known
+        && end(str_off, str_len) == h.len
+        && type_len > 0;
+    if str_len == 0 {
+        return exact;
+    }
+    // A standalone BTF's string section starts with the empty string.
     let strings = u64::from(hdr_len).saturating_add(u64::from(str_off));
     match h.data.get(to_usize(strings)) {
-        Some(&b) => b == 0,
+        Some(&b) => b == 0 || exact,
         None => true,
     }
 }
@@ -172,6 +205,9 @@ struct Btf {
     endian: Endian,
     types: Span,
     strings: Span,
+    /// Split BTF: the numbering and the strings continue a base BTF that is
+    /// not in the file.
+    split: bool,
 }
 
 /// The offset of each type (ID 1 first) in the type section.
@@ -179,6 +215,10 @@ struct Index {
     offsets: Vec<u32>,
     /// Why the walk stopped early, if it did.
     error: Option<Diagnostic>,
+    /// Split BTF: the length of the base's string section, the offset at
+    /// which this file's strings start (`None` when the names do not
+    /// settle it).
+    str_base: Option<u32>,
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
@@ -208,15 +248,30 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         base.saturating_add(u64::from(h.str_off)),
         u64::from(h.str_len),
     );
+    // A standalone BTF's strings start with the empty string; a split
+    // BTF's continue its base's.
+    let split = if strings.len == 0 {
+        types.len > 0
+    } else {
+        cx.read(strings.sub(0, 1)).await?.first() != Some(&0)
+    };
     let btf = Btf {
         endian,
         types,
         strings,
+        split,
     };
     let mut types_node = Node::new("Types")
         .span(types)
         .summary(size(types.len))
         .lazy(type_list, btf.clone());
+    if split {
+        types_node = types_node.diag(Diagnostic::note(
+            "split BTF: the types continue the numbering of a base BTF (vmlinux) \
+             that is not in this file, so they are numbered base+N and the type \
+             IDs they refer to are shown raw",
+        ));
+    }
     if types.len < u64::from(h.type_len) {
         types_node = types_node.diag(Diagnostic::truncated(
             file.sub(
@@ -242,7 +297,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Node::new("Trailing Data").span(file.tail(end)));
     }
     cx.annotate(format!(
-        "BTF v{}, {}-endian, {} of types, {} of strings",
+        "{}BTF v{}, {}-endian, {} of types, {} of strings",
+        if split { "split " } else { "" },
         h.version,
         match endian {
             Endian::Little => "little",
@@ -304,6 +360,7 @@ async fn index(cx: &Cx, btf: &Btf) -> Arc<Index> {
     }
     const WINDOW: u64 = 64 * 1024;
     let mut offsets = Vec::new();
+    let mut names: Vec<u32> = Vec::new();
     let mut error = None;
     let mut pos = 0u64;
     let mut win_start = 0u64;
@@ -346,6 +403,18 @@ async fn index(cx: &Cx, btf: &Btf) -> Arc<Index> {
         let Ok(off) = u32::try_from(pos) else {
             break;
         };
+        if btf.split {
+            let held = pos >= win_start
+                && pos.saturating_sub(win_start).saturating_add(len) <= to_u64(win.len());
+            if !held && let Ok(data) = cx.read(btf.types.sub(pos, len.max(WINDOW))).await {
+                win = data;
+                win_start = pos;
+            }
+            if let Some(b) = win.get(to_usize(pos.saturating_sub(win_start))..) {
+                collect_names(b, &head, btf.endian, &mut names);
+            }
+            cx.charge(u64::from(head.vlen) / 256).await;
+        }
         offsets.push(off);
         pos = pos.saturating_add(len);
         if offsets.len().is_multiple_of(256) {
@@ -357,9 +426,79 @@ async fn index(cx: &Cx, btf: &Btf) -> Arc<Index> {
             "the last type runs past the end of the type section",
         ));
     }
-    let index = Arc::new(Index { offsets, error });
+    let str_base = if btf.split {
+        infer_str_base(cx, btf, names).await
+    } else {
+        None
+    };
+    let index = Arc::new(Index {
+        offsets,
+        error,
+        str_base,
+    });
     cx.cache(btf.types, "btf-index", index.clone());
     index
+}
+
+/// The non-zero name offsets of one type (`b` starts at its head): its own
+/// and its members', values' and parameters'.
+fn collect_names(b: &[u8], head: &TypeHead, endian: Endian, names: &mut Vec<u32>) {
+    if head.name_off != 0 {
+        names.push(head.name_off);
+    }
+    let width: usize = match head.kind {
+        KIND_STRUCT | KIND_UNION | KIND_ENUM64 => 12,
+        KIND_ENUM | KIND_FUNC_PROTO => 8,
+        _ => return,
+    };
+    for i in 0..usize::from(head.vlen) {
+        let at = i.saturating_mul(width).saturating_add(12);
+        match get::<u32>(b, at, endian) {
+            Some(0) => {}
+            Some(n) => names.push(n),
+            None => break,
+        }
+    }
+}
+
+/// The length of a split BTF's base string section: the name offset `s`
+/// such that every name offset at or above it, less `s`, is the start of
+/// one of this file's strings (`s` itself naming the first). The base's
+/// strings are far longer than the file's, so `s` lies within the string
+/// section's length below the highest name offset; the lowest candidate
+/// there that fits wins.
+async fn infer_str_base(cx: &Cx, btf: &Btf, mut names: Vec<u32>) -> Option<u32> {
+    let len = u32::try_from(btf.strings.len).ok().filter(|&l| l > 0)?;
+    cx.charge(to_u64(names.len()) / 64).await;
+    names.sort_unstable();
+    names.dedup();
+    let max = *names.last()?;
+    let data = cx.read(btf.strings).await.ok()?;
+    cx.charge(to_u64(data.len()) / 1024).await;
+    // Where each of this file's strings starts.
+    let mut starts = vec![0u32];
+    for (i, &b) in data.iter().enumerate() {
+        if b == 0 {
+            match u32::try_from(i.saturating_add(1)) {
+                Ok(next) if next < len => starts.push(next),
+                _ => {}
+            }
+        }
+    }
+    let low = max.saturating_sub(len.saturating_sub(1));
+    let first = names.partition_point(|&n| n < low);
+    let candidates = names.get(first..)?;
+    for (i, &base) in candidates.iter().enumerate().take(STR_BASE_TRIES) {
+        let rest = candidates.get(i..).unwrap_or_default();
+        cx.charge(to_u64(rest.len()) / 64).await;
+        if rest
+            .iter()
+            .all(|&n| starts.binary_search(&n.saturating_sub(base)).is_ok())
+        {
+            return Some(base);
+        }
+    }
+    None
 }
 
 /// The span of type `id` (from 1), if it exists.
@@ -379,12 +518,18 @@ async fn read_head(cx: &Cx, btf: &Btf, span: Span) -> Result<TypeHead> {
 }
 
 /// A name from the string section; empty for offset 0, `None` if the offset
-/// is outside it (split BTF naming its base's strings).
-async fn name(cx: &Cx, btf: &Btf, off: u32) -> Option<String> {
+/// is outside it (or, in split BTF, in the base's strings or with the base
+/// not placed).
+async fn name(cx: &Cx, btf: &Btf, index: &Index, off: u32) -> Option<String> {
     if off == 0 {
         return Some(String::new());
     }
-    string_at(cx, btf.strings.sub(0, btf.strings.len), u64::from(off))
+    let local = if btf.split {
+        off.checked_sub(index.str_base?)?
+    } else {
+        off
+    };
+    string_at(cx, btf.strings.sub(0, btf.strings.len), u64::from(local))
         .await
         .ok()
         .map(|(s, _)| {
@@ -396,11 +541,34 @@ async fn name(cx: &Cx, btf: &Btf, off: u32) -> Option<String> {
         })
 }
 
-async fn name_or_offset(cx: &Cx, btf: &Btf, off: u32) -> String {
-    match name(cx, btf, off).await {
+async fn name_or_offset(cx: &Cx, btf: &Btf, index: &Index, off: u32) -> String {
+    match name(cx, btf, index, off).await {
         Some(s) if s.is_empty() => "(anon)".to_string(),
         Some(s) => s,
-        None => format!("(name at {off:#x})"),
+        None => match index.str_base {
+            Some(base) if btf.split && off < base => format!("(base name at {off:#x})"),
+            _ => format!("(name at {off:#x})"),
+        },
+    }
+}
+
+/// How type `id` (from 1, in file order) is numbered: split BTF continues
+/// its base's numbering, whose length is not recorded.
+fn id_label(btf: &Btf, id: u32) -> String {
+    if btf.split {
+        format!("base+{id}")
+    } else {
+        id.to_string()
+    }
+}
+
+/// The span of the type a reference names; none in split BTF, where a
+/// reference may name the base's types.
+fn ref_span(btf: &Btf, index: &Index, id: u32) -> Option<Span> {
+    if btf.split {
+        None
+    } else {
+        type_span(btf, index, id)
     }
 }
 
@@ -434,29 +602,154 @@ fn label(head: &TypeHead, name: &str) -> String {
     }
 }
 
-/// `[id] label` for a reference to type `id`.
+/// `[id] spelling` for a reference to type `id`: `[4] const char *`. Split
+/// BTF shows the raw ID only (it may be the base's).
 async fn type_ref(cx: &Cx, btf: &Btf, index: &Index, id: u32) -> String {
     if id == 0 {
         return "[0] void".to_string();
     }
-    let Some(span) = type_span(btf, index, id) else {
-        return format!("[{id}] (no such type)");
-    };
-    match read_head(cx, btf, span).await {
-        Ok(head) => {
-            let n = name(cx, btf, head.name_off).await.unwrap_or_default();
-            format!("[{id}] {}", label(&head, &n))
-        }
-        Err(_) => format!("[{id}]"),
+    if btf.split {
+        return format!("[{id}]");
     }
+    if type_span(btf, index, id).is_none() {
+        return format!("[{id}] (no such type)");
+    }
+    format!("[{id}] {}", c_type(cx, btf, index, id).await)
 }
 
 /// What a type ID field shows: the type it refers to, and where it is.
 async fn ref_value(cx: &Cx, btf: &Btf, index: &Index, id: u32) -> (String, Option<Span>) {
-    (
-        type_ref(cx, btf, index, id).await,
-        type_span(btf, index, id),
-    )
+    (type_ref(cx, btf, index, id).await, ref_span(btf, index, id))
+}
+
+/// The head of type `id`, if it is in the file (and the file is not split).
+async fn ref_head(cx: &Cx, btf: &Btf, index: &Index, id: u32) -> Option<(TypeHead, Span)> {
+    let span = ref_span(btf, index, id)?;
+    Some((read_head(cx, btf, span).await.ok()?, span))
+}
+
+/// Type `id` spelled the way C declares it: `const char *`, `u64[4][2]`,
+/// `int (*)(int, const void *)`.
+async fn c_type(cx: &Cx, btf: &Btf, index: &Index, id: u32) -> String {
+    let mut steps = SPELL_STEPS;
+    let s = spell(cx, btf, index, id, String::new(), &mut steps).await;
+    crate::formats::util::fmt::clip(&s, SPELL_MAX)
+}
+
+/// `base` followed by the declarator `decl` (`*`, `[4]`, `(*)(int)`).
+fn declare(base: &str, decl: &str) -> String {
+    if decl.is_empty() {
+        base.to_string()
+    } else if decl.starts_with('[') {
+        format!("{base}{decl}")
+    } else {
+        format!("{base} {decl}")
+    }
+}
+
+type Spelling<'a> = Pin<Box<dyn Future<Output = String> + Send + 'a>>;
+
+/// Type `id` around the declarator `decl`, following at most `steps` types.
+fn spell<'a>(
+    cx: &'a Cx,
+    btf: &'a Btf,
+    index: &'a Index,
+    id: u32,
+    decl: String,
+    steps: &'a mut u32,
+) -> Spelling<'a> {
+    Box::pin(async move {
+        if id == 0 {
+            return declare("void", &decl);
+        }
+        let Some(left) = steps.checked_sub(1) else {
+            return declare("…", &decl);
+        };
+        *steps = left;
+        let Some((head, span)) = ref_head(cx, btf, index, id).await else {
+            return declare(&format!("[{id}]"), &decl);
+        };
+        let target = head.size_type;
+        match head.kind {
+            KIND_PTR => {
+                let around = match ref_head(cx, btf, index, target).await {
+                    Some((t, _)) if matches!(t.kind, KIND_ARRAY | KIND_FUNC_PROTO) => {
+                        format!("(*{decl})")
+                    }
+                    _ => format!("*{decl}"),
+                };
+                spell(cx, btf, index, target, around, steps).await
+            }
+            KIND_CONST | KIND_VOLATILE | KIND_RESTRICT | KIND_TYPE_TAG => {
+                let q = match head.kind {
+                    KIND_CONST => "const".to_string(),
+                    KIND_VOLATILE => "volatile".to_string(),
+                    KIND_RESTRICT => "restrict".to_string(),
+                    _ => {
+                        let n = name(cx, btf, index, head.name_off)
+                            .await
+                            .unwrap_or_default();
+                        format!("btf_type_tag(\"{n}\")")
+                    }
+                };
+                // A qualified pointer is qualified after its `*`; anything
+                // else before its type.
+                let on_pointer = matches!(
+                    ref_head(cx, btf, index, target).await,
+                    Some((t, _)) if t.kind == KIND_PTR
+                );
+                if on_pointer || head.kind == KIND_TYPE_TAG {
+                    spell(cx, btf, index, target, declare(&q, &decl), steps).await
+                } else {
+                    let inner = spell(cx, btf, index, target, decl, steps).await;
+                    format!("{q} {inner}")
+                }
+            }
+            KIND_ARRAY => {
+                let b = cx.read(span.sub(TYPE_LEN, 12)).await.unwrap_or_default();
+                let elem = get::<u32>(&b, 0, btf.endian).unwrap_or(0);
+                let n = get::<u32>(&b, 8, btf.endian).unwrap_or(0);
+                spell(cx, btf, index, elem, format!("{decl}[{n}]"), steps).await
+            }
+            KIND_FUNC_PROTO => {
+                let count = u64::from(head.vlen);
+                let shown = count.min(SPELL_PARAMS);
+                let b = cx
+                    .read(span.sub(TYPE_LEN, shown.saturating_mul(8)))
+                    .await
+                    .unwrap_or_default();
+                let mut params = Vec::new();
+                for i in 0..shown {
+                    let ty = get::<u32>(
+                        &b,
+                        to_usize(i.saturating_mul(8).saturating_add(4)),
+                        btf.endian,
+                    )
+                    .unwrap_or(0);
+                    if ty == 0 && i.saturating_add(1) == count {
+                        params.push("...".to_string());
+                    } else {
+                        params.push(spell(cx, btf, index, ty, String::new(), steps).await);
+                    }
+                }
+                if count > shown {
+                    params.push("…".to_string());
+                }
+                let list = if params.is_empty() {
+                    "void".to_string()
+                } else {
+                    params.join(", ")
+                };
+                spell(cx, btf, index, target, format!("{decl}({list})"), steps).await
+            }
+            _ => {
+                let n = name(cx, btf, index, head.name_off)
+                    .await
+                    .unwrap_or_default();
+                declare(&label(&head, &n), &decl)
+            }
+        }
+    })
 }
 
 async fn type_list(cx: Cx, btf: Btf) -> Result<()> {
@@ -471,7 +764,7 @@ async fn type_list(cx: Cx, btf: Btf) -> Result<()> {
             break;
         };
         let node = if cx.skipping() {
-            Node::new(format!("[{id}]")).span(span)
+            Node::new(format!("[{}]", id_label(&btf, id))).span(span)
         } else {
             type_node(&cx, &btf, &index, id, span).await
         };
@@ -488,11 +781,15 @@ async fn type_list(cx: Cx, btf: Btf) -> Result<()> {
 async fn type_node(cx: &Cx, btf: &Btf, index: &Index, id: u32, span: Span) -> Node {
     let head = match read_head(cx, btf, span).await {
         Ok(h) => h,
-        Err(e) => return Node::new(format!("[{id}]")).span(span).diag(e),
+        Err(e) => {
+            return Node::new(format!("[{}]", id_label(btf, id)))
+                .span(span)
+                .diag(e);
+        }
     };
-    let n = name_or_offset(cx, btf, head.name_off).await;
+    let n = name_or_offset(cx, btf, index, head.name_off).await;
     let kind = kind_name(head.kind);
-    let title = format!("[{id}] {kind} {n}");
+    let title = format!("[{}] {kind} {n}", id_label(btf, id));
     let target = |cx: &Cx| {
         let (btf, index) = (btf.clone(), index);
         let cx = cx.clone();
@@ -562,6 +859,13 @@ async fn type_node(cx: &Cx, btf: &Btf, index: &Index, id: u32, span: Span) -> No
                 format!("on component {comp} of {on}")
             }
         }
+        KIND_PTR | KIND_CONST | KIND_VOLATILE | KIND_RESTRICT | KIND_TYPE_TAG if !btf.split => {
+            format!(
+                "{} → [{}]",
+                c_type(cx, btf, index, id).await,
+                head.size_type
+            )
+        }
         _ => format!("→ {}", target(cx).await),
     };
     Node::new(title)
@@ -598,7 +902,7 @@ fn type_id_field(f: &mut Fields<'_>, name: &'static str, r: (String, Option<Span
 async fn type_fields(cx: Cx, (btf, span): (Btf, Span)) -> Result<()> {
     let index = index(&cx, &btf).await;
     let head = read_head(&cx, &btf, span).await?;
-    let n = name_or_offset(&cx, &btf, head.name_off).await;
+    let n = name_or_offset(&cx, &btf, &index, head.name_off).await;
     let block = cx.block(span.sub(0, TYPE_LEN)).await?;
     let mut f = Fields::emitting(&cx, &block, btf.endian);
     f.u32("name_off").hex().summary(n).emit()?;
@@ -734,7 +1038,7 @@ async fn entries(cx: Cx, (btf, head, extra): (Btf, TypeHead, Span)) -> Result<()
         let w = |off: usize| get::<u32>(&b, off, btf.endian).unwrap_or(0);
         let node = match head.kind {
             KIND_STRUCT | KIND_UNION => {
-                let n = name_or_offset(&cx, &btf, w(0)).await;
+                let n = name_or_offset(&cx, &btf, &index, w(0)).await;
                 let ty = type_ref(&cx, &btf, &index, w(4)).await;
                 let off = w(8);
                 let place = if head.kind_flag && off >> 24 != 0 {
@@ -754,7 +1058,7 @@ async fn entries(cx: Cx, (btf, head, extra): (Btf, TypeHead, Span)) -> Result<()
                 Node::new(n).summary(format!("{ty}, {place}"))
             }
             KIND_ENUM => {
-                let n = name_or_offset(&cx, &btf, w(0)).await;
+                let n = name_or_offset(&cx, &btf, &index, w(0)).await;
                 let raw = w(4);
                 let value = if head.kind_flag {
                     int(i64::from(raw as i32), 32)
@@ -764,7 +1068,7 @@ async fn entries(cx: Cx, (btf, head, extra): (Btf, TypeHead, Span)) -> Result<()
                 Node::new(n).value(value)
             }
             KIND_ENUM64 => {
-                let n = name_or_offset(&cx, &btf, w(0)).await;
+                let n = name_or_offset(&cx, &btf, &index, w(0)).await;
                 let raw = u64::from(w(4)) | (u64::from(w(8)) << 32);
                 let value = if head.kind_flag {
                     int(raw as i64, 64)
@@ -778,7 +1082,7 @@ async fn entries(cx: Cx, (btf, head, extra): (Btf, TypeHead, Span)) -> Result<()
                 if name_off == 0 && ty == 0 && i.saturating_add(1) == count {
                     Node::new("...").summary("variable arguments")
                 } else {
-                    let n = name_or_offset(&cx, &btf, name_off).await;
+                    let n = name_or_offset(&cx, &btf, &index, name_off).await;
                     Node::new(n).summary(type_ref(&cx, &btf, &index, ty).await)
                 }
             }
@@ -805,7 +1109,7 @@ async fn entry_fields(cx: Cx, (btf, kind, kind_flag, span): (Btf, u8, bool, Span
     let block = cx.block(span).await?;
     match kind {
         KIND_STRUCT | KIND_UNION => {
-            let n = name_or_offset(&cx, &btf, w(0)).await;
+            let n = name_or_offset(&cx, &btf, &index, w(0)).await;
             let r = ref_value(&cx, &btf, &index, w(4)).await;
             let mut f = Fields::emitting(&cx, &block, btf.endian);
             f.u32("name_off").hex().summary(n).emit()?;
@@ -825,7 +1129,7 @@ async fn entry_fields(cx: Cx, (btf, kind, kind_flag, span): (Btf, u8, bool, Span
                 .emit()?;
         }
         KIND_ENUM => {
-            let n = name_or_offset(&cx, &btf, w(0)).await;
+            let n = name_or_offset(&cx, &btf, &index, w(0)).await;
             let mut f = Fields::emitting(&cx, &block, btf.endian);
             f.u32("name_off").hex().summary(n).emit()?;
             if kind_flag {
@@ -835,14 +1139,14 @@ async fn entry_fields(cx: Cx, (btf, kind, kind_flag, span): (Btf, u8, bool, Span
             }
         }
         KIND_ENUM64 => {
-            let n = name_or_offset(&cx, &btf, w(0)).await;
+            let n = name_or_offset(&cx, &btf, &index, w(0)).await;
             let mut f = Fields::emitting(&cx, &block, btf.endian);
             f.u32("name_off").hex().summary(n).emit()?;
             f.u32("val_lo32").hex().emit()?;
             f.u32("val_hi32").hex().emit()?;
         }
         KIND_FUNC_PROTO => {
-            let n = name_or_offset(&cx, &btf, w(0)).await;
+            let n = name_or_offset(&cx, &btf, &index, w(0)).await;
             let r = ref_value(&cx, &btf, &index, w(4)).await;
             let mut f = Fields::emitting(&cx, &block, btf.endian);
             f.u32("name_off").hex().summary(n).emit()?;
@@ -883,5 +1187,28 @@ mod tests {
         // A string section that does not start with the empty string.
         h[24] = b'a';
         assert!(!head(&h));
+    }
+
+    /// Split BTF: strings that continue a base's (not starting with the
+    /// empty string, or none at all) pass only with an exact layout.
+    #[test]
+    fn probe_accepts_exact_split_btf() {
+        // One FUNC type (12 bytes) named at base offset 0x203886, strings
+        // "crc16\0": a kernel module's /sys/kernel/btf file in miniature.
+        let mut h = vec![0x9f, 0xeb, 1, 0, 24, 0, 0, 0];
+        h.extend_from_slice(&[0, 0, 0, 0, 12, 0, 0, 0, 12, 0, 0, 0, 6, 0, 0, 0]);
+        h.extend_from_slice(&[0x86, 0x38, 0x20, 0, 0, 0, 0, 0x0c, 0x58, 0xa3, 0, 0]);
+        h.extend_from_slice(b"crc16\0");
+        assert!(head(&h));
+        // Anything after the strings: no longer exact.
+        let mut longer = h.clone();
+        longer.push(0);
+        assert!(!head(&longer));
+        // No strings at all: exact, with types.
+        let mut bare = h[..36].to_vec();
+        bare[20] = 0;
+        assert!(head(&bare));
+        // Neither types nor strings.
+        assert!(!head(&bare[..24]));
     }
 }
