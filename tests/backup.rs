@@ -199,6 +199,27 @@ fn borg_truncated_entry_shows_declared_size() {
     );
 }
 
+/// A PBS blob over 1 MiB has its CRC checked only when the CRC node is
+/// expanded: opening it reads the header, not the data.
+#[test]
+fn pbs_large_blob_crc_is_lazy() {
+    let mut data = vec![66, 171, 56, 7, 190, 131, 112, 161];
+    // zlib.crc32 of 2 MiB of zeros.
+    data.extend_from_slice(&0x8d89_877eu32.to_le_bytes());
+    data.resize(12 + (2 << 20), 0);
+    let mut host = Host::named("big.blob", data, Limits::default());
+    let root = host.root;
+    expand(&mut host, root);
+    let opened = host.session.work_done();
+    assert!(opened < 1_000, "opening took {opened} units");
+    let crc = host.child(root, "CRC32").unwrap();
+    expand(&mut host, crc);
+    let tree = host.render();
+    assert!(tree.contains("Computed: 0x8d89877e — valid"), "{tree}");
+    let crc_work = host.session.work_done() - opened;
+    assert!(crc_work > 500, "the CRC took {crc_work} units");
+}
+
 /// A PBS fixed index of 65,536 chunks (a 256 GiB image): opening it reads
 /// the header and defers the 2 MiB checksum, and a page of the chunk list
 /// costs work for that page, not for the whole list.
