@@ -1889,3 +1889,29 @@ the CPU the events land on). Checked by reading both traces back with
 | --- | --- | --- |
 | `ctf-packet/lttng-ust-32bit-stream` | LTTng-UST 2.13.9 (armhf) | the per-CPU stream file (`ust/uid/0/32-bit/ch_16`) holding the events: two 4 KiB packets, 32-bit `events_discarded`; unchanged |
 | `ctf-packet/babeltrace-clocked-stream` | babeltrace2 2.1.1 `sink.ctf.fs` | the converted stream file of the same CPU: two packets with timestamps, discarded count, sequence number and `cpu_id` in the context; unchanged |
+
+## BTF: CO-RE relocations and a distilled base
+
+`elf/bpf-core.o` is built by `tests/data/btf/core.sh` from
+`tests/data/btf/core.c` (a small BPF program whose field, type and enum
+accesses carry CO-RE relocations) with Debian clang 19.1.7 (`-g -O2 -target
+bpfel -ffile-prefix-map=/src=.`) in Docker `debian:trixie`, host name
+`fillyfoal`. Its `.BTF.ext` holds function and line information and six
+CO-RE relocations. Checked against `llvm-objdump -S` on a copy stripped of
+its DWARF (which prints the source lines from `.BTF.ext`), the source's
+accesses and `bpftool btf dump` (bpftool 7.5.0). Reproduced byte for byte.
+
+`elf/btf-distilled-module.o` is built by `tests/data/btf/distilled.sh` in
+Docker `debian:trixie` (host name `fillyfoal`) from the split fixture's
+`base.c` and `module.c` (ours, no kernel data) with gcc 14.2.0 and pahole
+1.30: `pahole -J --btf_base=base.btf --btf_features=distilled_base` adds the
+module's split `.BTF` and its distilled `.BTF.base` (6 types), as kernel
+module builds do since Linux 6.12; the DWARF is then stripped. Checked with
+`bpftool btf dump file module.o format raw` (bpftool 7.5.0, libbpf 1.5, which
+reads `.BTF.base`): IDs 7 to 24 follow the base's 6, and the names and
+references agree with the dissector's. Reproduced byte for byte.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `elf/bpf-core.o` | clang 19.1.7 `-g -O2 -target bpfel` | the object, with `.BTF`, `.BTF.ext` and DWARF; unchanged |
+| `elf/btf-distilled-module.o` | gcc 14.2.0, pahole 1.30 `-J --btf_features=distilled_base`, `objcopy --strip-debug` | the module object with `.BTF` and `.BTF.base`; unchanged |

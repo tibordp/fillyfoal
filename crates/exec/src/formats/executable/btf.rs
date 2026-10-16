@@ -31,8 +31,18 @@
 //! inferred: it is the offset whose subtraction maps every name offset at
 //! or above it onto the start of a string of this file (checked against
 //! pahole split output and real module BTF); names below it are the
-//! base's, shown as offsets. The `.BTF.ext` section of BPF objects
-//! (function and line information, CO-RE relocations) is not decoded.
+//! base's, shown as offsets. A kernel module built since Linux 6.12 carries
+//! its distilled base next to its `.BTF`, in a `.BTF.base` section (a
+//! standalone BTF of just the types the module refers to); the ELF
+//! dissector hands both over, and then the types are numbered after the
+//! base's and every reference and name is resolved, as `bpftool` shows them
+//! (checked against `pahole --btf_features=distilled_base` output).
+//!
+//! The `.BTF.ext` section of BPF objects is decoded too ([`ext`]): the
+//! function information (each BPF function's FUNC type), the line
+//! information (file, line, column and the source line's text per
+//! instruction) and the CO-RE relocations (relocation kind, root type and
+//! access string, spelled as the member path it selects), per code section.
 //!
 //! Type references in summaries are spelled the way C would declare them
 //! (`const char *`, `u64[4][2]`, `int (*)(int, const void *)`), following
@@ -46,7 +56,7 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
-use crate::fields::{Endian, Fields};
+use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::binutil::{cstrings, get, string_at};
 use crate::formats::util::fmt::{plural, size};
 use crate::formats::util::val::{int, uint};
@@ -205,9 +215,20 @@ struct Btf {
     endian: Endian,
     types: Span,
     strings: Span,
-    /// Split BTF: the numbering and the strings continue a base BTF that is
-    /// not in the file.
+    /// Split BTF: the numbering and the strings continue a base BTF.
     split: bool,
+    /// The base of a split BTF, when the container holds one (the
+    /// distilled `.BTF.base` of a kernel module): its types are numbered
+    /// first and its strings come first.
+    base: Option<Arc<Btf>>,
+}
+
+impl Btf {
+    /// Whether type references can be resolved: always, except in split BTF
+    /// whose base is not at hand.
+    fn resolvable(&self) -> bool {
+        !self.split || self.base.is_some()
+    }
 }
 
 /// The offset of each type (ID 1 first) in the type section.
@@ -216,36 +237,39 @@ struct Index {
     /// Why the walk stopped early, if it did.
     error: Option<Diagnostic>,
     /// Split BTF: the length of the base's string section, the offset at
-    /// which this file's strings start (`None` when the names do not
-    /// settle it).
+    /// which this file's strings start (`None` when the base is not at hand
+    /// and the names do not settle it).
     str_base: Option<u32>,
+    /// Split BTF on a base at hand: the base's index (its type count is the
+    /// number this file's types continue from).
+    base: Option<Arc<Index>>,
 }
 
-pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let magic = cx.read(file.sub(0, 2)).await?;
-    let endian = if magic == [0xeb, 0x9f] {
-        Endian::Big
-    } else {
-        Endian::Little
-    };
-    let hspan = file.sub(0, HEADER_LEN);
-    cx.emit(BtfHeader::node("Header", hspan, endian));
-    let h: BtfHeader = crate::dsl::read_record(&cx, hspan, endian).await?;
-    let base = u64::from(h.hdr_len);
-    if base > HEADER_LEN {
-        cx.emit(
-            Node::new("Header Extension")
-                .span(file.sub(HEADER_LEN, base.saturating_sub(HEADER_LEN)))
-                .desc("Header fields this version does not know"),
-        );
+impl Index {
+    /// How many types are numbered before this file's own.
+    fn base_count(&self) -> u32 {
+        self.base
+            .as_ref()
+            .map_or(0, |b| u32::try_from(b.offsets.len()).unwrap_or(u32::MAX))
     }
+}
+
+/// The header and the layout of the BTF in `file`.
+async fn open(cx: &Cx, file: Span) -> Result<(BtfHeader, Btf)> {
+    let magic = cx.read(file.sub(0, 2)).await?;
+    let endian = match magic.as_slice() {
+        [0xeb, 0x9f] => Endian::Big,
+        [0x9f, 0xeb] => Endian::Little,
+        _ => return Err(Diagnostic::malformed("no BTF magic (0xeB9F)")),
+    };
+    let h: BtfHeader = crate::dsl::read_record(cx, file.sub(0, HEADER_LEN), endian).await?;
+    let hdr_end = u64::from(h.hdr_len);
     let types = file.sub(
-        base.saturating_add(u64::from(h.type_off)),
+        hdr_end.saturating_add(u64::from(h.type_off)),
         u64::from(h.type_len),
     );
     let strings = file.sub(
-        base.saturating_add(u64::from(h.str_off)),
+        hdr_end.saturating_add(u64::from(h.str_off)),
         u64::from(h.str_len),
     );
     // A standalone BTF's strings start with the empty string; a split
@@ -260,12 +284,87 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         types,
         strings,
         split,
+        base: None,
     };
+    Ok((h, btf))
+}
+
+/// The BTF in `file`, split on the BTF in `base` when that is a standalone
+/// BTF of the same byte order; otherwise why the base is not used.
+async fn open_on(
+    cx: &Cx,
+    file: Span,
+    base: Option<Span>,
+) -> Result<(BtfHeader, Btf, Option<Diagnostic>)> {
+    let (h, mut btf) = open(cx, file).await?;
+    let Some(bspan) = base else {
+        return Ok((h, btf, None));
+    };
+    let problem = match open(cx, bspan).await {
+        Err(_) => Some("is not BTF"),
+        Ok((_, b)) if b.split => Some("is itself split"),
+        Ok((_, b)) if b.endian != btf.endian => Some("has the other byte order"),
+        Ok(_) if !btf.split => Some("is not needed: this BTF is not split"),
+        Ok((_, b)) => {
+            btf.base = Some(Arc::new(b));
+            None
+        }
+    };
+    let diag = problem
+        .map(|p| Diagnostic::warning(format!("the base BTF in .BTF.base {p}; it is not used")));
+    Ok((h, btf, diag))
+}
+
+pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
+    dissect_on(cx, input, None).await
+}
+
+/// The `.BTF` of an ELF object that also has a `.BTF.base` section (a
+/// kernel module's split BTF with its distilled base, Linux 6.12+): types
+/// and names are resolved through that base, as `bpftool` and libbpf do.
+pub async fn dissect_on_base(cx: Cx, (input, base): (Input, Span)) -> Result<()> {
+    dissect_on(cx, input, Some(base)).await
+}
+
+async fn dissect_on(cx: Cx, input: Input, base: Option<Span>) -> Result<()> {
+    let file = input.span;
+    let hspan = file.sub(0, HEADER_LEN);
+    let (h, btf, base_problem) = match open_on(&cx, file, base).await {
+        Ok(v) => v,
+        Err(e) => {
+            cx.emit(BtfHeader::node("Header", hspan, Endian::Little));
+            return Err(e);
+        }
+    };
+    cx.emit(BtfHeader::node("Header", hspan, btf.endian));
+    if let Some(d) = base_problem {
+        cx.diag(d);
+    }
+    let hdr_end = u64::from(h.hdr_len);
+    if hdr_end > HEADER_LEN {
+        cx.emit(
+            Node::new("Header Extension")
+                .span(file.sub(HEADER_LEN, hdr_end.saturating_sub(HEADER_LEN)))
+                .desc("Header fields this version does not know"),
+        );
+    }
+    let (endian, types, strings, split) = (btf.endian, btf.types, btf.strings, btf.split);
     let mut types_node = Node::new("Types")
         .span(types)
         .summary(size(types.len))
         .lazy(type_list, btf.clone());
-    if split {
+    let mut on_base = None;
+    if let Some(b) = &btf.base {
+        let n = index(&cx, b).await.offsets.len();
+        types_node = types_node.diag(Diagnostic::note(format!(
+            "split BTF on the base in .BTF.base: its {} are numbered first, so \
+             these start at {}, and names below offset {:#x} are the base's",
+            plural(n, "type"),
+            n.saturating_add(1),
+            b.strings.len
+        )));
+        on_base = Some(n);
+    } else if split {
         types_node = types_node.diag(Diagnostic::note(
             "split BTF: the types continue the numbering of a base BTF (vmlinux) \
              that is not in this file, so they are numbered base+N and the type \
@@ -297,9 +396,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Node::new("Trailing Data").span(file.tail(end)));
     }
     cx.annotate(format!(
-        "{}BTF v{}, {}-endian, {} of types, {} of strings",
+        "{}BTF v{}{}, {}-endian, {} of types, {} of strings",
         if split { "split " } else { "" },
         h.version,
+        match on_base {
+            Some(n) => format!(" on a base of {}", plural(n, "type")),
+            None => String::new(),
+        },
         match endian {
             Endian::Little => "little",
             Endian::Big => "big",
@@ -353,9 +456,41 @@ impl TypeHead {
     }
 }
 
-/// Walks the type section once, recording where each type starts.
+/// Walks the type section once, recording where each type starts (and, for
+/// split BTF on a base at hand, the base's index).
 async fn index(cx: &Cx, btf: &Btf) -> Arc<Index> {
-    if let Some(index) = cx.cached::<Index>(btf.types, "btf-index") {
+    let Some(base) = &btf.base else {
+        return walk_index(cx, btf, "btf-index").await;
+    };
+    // The same section indexed without the base differs, so it is cached
+    // under its own name.
+    if let Some(index) = cx.cached::<Index>(btf.types, "btf-index-on-base") {
+        return index;
+    }
+    let base_index = walk_index(cx, base, "btf-index").await;
+    let own = walk_index(
+        cx,
+        &Btf {
+            split: false,
+            ..btf.clone()
+        },
+        "btf-index-own",
+    )
+    .await;
+    let index = Arc::new(Index {
+        offsets: own.offsets.clone(),
+        error: own.error.clone(),
+        str_base: u32::try_from(base.strings.len).ok(),
+        base: Some(base_index),
+    });
+    cx.charge(to_u64(index.offsets.len()) / 256).await;
+    cx.cache(btf.types, "btf-index-on-base", index.clone());
+    index
+}
+
+/// The index of one type section on its own.
+async fn walk_index(cx: &Cx, btf: &Btf, kind: &'static str) -> Arc<Index> {
+    if let Some(index) = cx.cached::<Index>(btf.types, kind) {
         return index;
     }
     const WINDOW: u64 = 64 * 1024;
@@ -435,8 +570,9 @@ async fn index(cx: &Cx, btf: &Btf) -> Arc<Index> {
         offsets,
         error,
         str_base,
+        base: None,
     });
-    cx.cache(btf.types, "btf-index", index.clone());
+    cx.cache(btf.types, kind, index.clone());
     index
 }
 
@@ -501,8 +637,22 @@ async fn infer_str_base(cx: &Cx, btf: &Btf, mut names: Vec<u32>) -> Option<u32> 
     None
 }
 
-/// The span of type `id` (from 1), if it exists.
+/// The span of type `id`, numbered as references number it (after the
+/// base's types, in split BTF on a base at hand), if it exists.
 fn type_span(btf: &Btf, index: &Index, id: u32) -> Option<Span> {
+    if let (Some(base), Some(base_index)) = (&btf.base, &index.base) {
+        let count = index.base_count();
+        return if id <= count {
+            local_span(base, base_index, id)
+        } else {
+            local_span(btf, index, id.saturating_sub(count))
+        };
+    }
+    local_span(btf, index, id)
+}
+
+/// The span of this section's type `id` (its first is 1).
+fn local_span(btf: &Btf, index: &Index, id: u32) -> Option<Span> {
     let i = to_usize(u64::from(id.checked_sub(1)?));
     let start = u64::from(*index.offsets.get(i)?);
     let end = index
@@ -524,12 +674,16 @@ async fn name(cx: &Cx, btf: &Btf, index: &Index, off: u32) -> Option<String> {
     if off == 0 {
         return Some(String::new());
     }
-    let local = if btf.split {
-        off.checked_sub(index.str_base?)?
+    let (strings, local) = if btf.split {
+        match off.checked_sub(index.str_base?) {
+            Some(local) => (btf.strings, local),
+            // Below this file's strings: the base's, if it is at hand.
+            None => (btf.base.as_ref()?.strings, off),
+        }
     } else {
-        off
+        (btf.strings, off)
     };
-    string_at(cx, btf.strings.sub(0, btf.strings.len), u64::from(local))
+    string_at(cx, strings, u64::from(local))
         .await
         .ok()
         .map(|(s, _)| {
@@ -553,22 +707,24 @@ async fn name_or_offset(cx: &Cx, btf: &Btf, index: &Index, off: u32) -> String {
 }
 
 /// How type `id` (from 1, in file order) is numbered: split BTF continues
-/// its base's numbering, whose length is not recorded.
-fn id_label(btf: &Btf, id: u32) -> String {
-    if btf.split {
+/// its base's numbering, whose length is recorded only by the base.
+fn id_label(btf: &Btf, index: &Index, id: u32) -> String {
+    if btf.base.is_some() {
+        index.base_count().saturating_add(id).to_string()
+    } else if btf.split {
         format!("base+{id}")
     } else {
         id.to_string()
     }
 }
 
-/// The span of the type a reference names; none in split BTF, where a
-/// reference may name the base's types.
+/// The span of the type a reference names; none in split BTF without its
+/// base, where a reference may name the base's types.
 fn ref_span(btf: &Btf, index: &Index, id: u32) -> Option<Span> {
-    if btf.split {
-        None
-    } else {
+    if btf.resolvable() {
         type_span(btf, index, id)
+    } else {
+        None
     }
 }
 
@@ -608,7 +764,7 @@ async fn type_ref(cx: &Cx, btf: &Btf, index: &Index, id: u32) -> String {
     if id == 0 {
         return "[0] void".to_string();
     }
-    if btf.split {
+    if !btf.resolvable() {
         return format!("[{id}]");
     }
     if type_span(btf, index, id).is_none() {
@@ -760,11 +916,11 @@ async fn type_list(cx: Cx, btf: Btf) -> Result<()> {
     while u64::from(id) <= count {
         let at = id;
         cx.mark(move || at);
-        let Some(span) = type_span(&btf, &index, id) else {
+        let Some(span) = local_span(&btf, &index, id) else {
             break;
         };
         let node = if cx.skipping() {
-            Node::new(format!("[{}]", id_label(&btf, id))).span(span)
+            Node::new(format!("[{}]", id_label(&btf, &index, id))).span(span)
         } else {
             type_node(&cx, &btf, &index, id, span).await
         };
@@ -782,14 +938,14 @@ async fn type_node(cx: &Cx, btf: &Btf, index: &Index, id: u32, span: Span) -> No
     let head = match read_head(cx, btf, span).await {
         Ok(h) => h,
         Err(e) => {
-            return Node::new(format!("[{}]", id_label(btf, id)))
+            return Node::new(format!("[{}]", id_label(btf, index, id)))
                 .span(span)
                 .diag(e);
         }
     };
     let n = name_or_offset(cx, btf, index, head.name_off).await;
     let kind = kind_name(head.kind);
-    let title = format!("[{}] {kind} {n}", id_label(btf, id));
+    let title = format!("[{}] {kind} {n}", id_label(btf, index, id));
     let target = |cx: &Cx| {
         let (btf, index) = (btf.clone(), index);
         let cx = cx.clone();
@@ -859,10 +1015,12 @@ async fn type_node(cx: &Cx, btf: &Btf, index: &Index, id: u32, span: Span) -> No
                 format!("on component {comp} of {on}")
             }
         }
-        KIND_PTR | KIND_CONST | KIND_VOLATILE | KIND_RESTRICT | KIND_TYPE_TAG if !btf.split => {
+        KIND_PTR | KIND_CONST | KIND_VOLATILE | KIND_RESTRICT | KIND_TYPE_TAG
+            if btf.resolvable() =>
+        {
             format!(
                 "{} → [{}]",
-                c_type(cx, btf, index, id).await,
+                c_type(cx, btf, index, index.base_count().saturating_add(id)).await,
                 head.size_type
             )
         }
@@ -1161,6 +1319,491 @@ async fn entry_fields(cx: Cx, (btf, kind, kind_flag, span): (Btf, u8, bool, Span
         }
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// .BTF.ext
+
+/// `sizeof(struct btf_ext_header)` before CO-RE relocations were added.
+const EXT_HEADER_V1: u64 = 24;
+/// `sizeof(struct btf_ext_header)` with the CO-RE relocation fields.
+const EXT_HEADER_CORE: u64 = 32;
+/// Most accessors of a CO-RE access string followed.
+const ACCESS_STEPS: usize = 32;
+/// BPF instructions are 8 bytes; the `.BTF.ext` of an object counts bytes.
+const INSN_LEN: u32 = 8;
+
+const CORE_RELO_KINDS: EnumTable = &[
+    (0, "FIELD_BYTE_OFFSET"),
+    (1, "FIELD_BYTE_SIZE"),
+    (2, "FIELD_EXISTS"),
+    (3, "FIELD_SIGNED"),
+    (4, "FIELD_LSHIFT_U64"),
+    (5, "FIELD_RSHIFT_U64"),
+    (6, "TYPE_ID_LOCAL"),
+    (7, "TYPE_ID_TARGET"),
+    (8, "TYPE_EXISTS"),
+    (9, "TYPE_SIZE"),
+    (10, "ENUMVAL_EXISTS"),
+    (11, "ENUMVAL_VALUE"),
+    (12, "TYPE_MATCHES"),
+];
+
+/// Where the `.BTF.ext` section of an ELF object is, and what it refers to.
+#[derive(Clone)]
+pub struct Ext {
+    /// The `.BTF.ext` section.
+    pub ext: Span,
+    /// The `.BTF` section whose types and strings the records name.
+    pub btf: Option<Span>,
+    /// A `.BTF.base` section, if the `.BTF` is split on it.
+    pub base: Option<Span>,
+    /// The object's executable sections by name: the records' instruction
+    /// offsets count from the start of the section they name.
+    pub code: Arc<Vec<(String, Span)>>,
+}
+
+/// What the records of one `.BTF.ext` share.
+struct ExtCtx {
+    endian: Endian,
+    btf: Option<Btf>,
+    code: Arc<Vec<(String, Span)>>,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum ExtKind {
+    Func,
+    Line,
+    Core,
+}
+
+impl ExtKind {
+    /// The bytes of a record this decoder reads; records may be longer.
+    fn min_len(self) -> u32 {
+        match self {
+            ExtKind::Func => 8,
+            ExtKind::Line | ExtKind::Core => 16,
+        }
+    }
+
+    fn noun(self) -> &'static str {
+        match self {
+            ExtKind::Func => "function",
+            ExtKind::Line => "line",
+            ExtKind::Core => "relocation",
+        }
+    }
+}
+
+#[derive(Default)]
+struct ExtHeader {
+    blocks: [(u32, u32); 3],
+}
+
+/// `struct btf_ext_header`: the CO-RE relocation fields are present when
+/// `hdr_len` makes room for them.
+fn ext_header(f: &mut Fields<'_>, _: &()) -> Result<ExtHeader> {
+    f.u16("magic").hex().emit()?;
+    f.u8("version").emit()?;
+    f.u8("flags").hex().emit()?;
+    let hdr_len = f
+        .u32("hdr_len")
+        .desc("Length of this header; the offsets below count from its end")
+        .emit()?;
+    let mut h = ExtHeader::default();
+    h.blocks[0] = (
+        f.u32("func_info_off").hex().emit()?,
+        f.u32("func_info_len").emit()?,
+    );
+    h.blocks[1] = (
+        f.u32("line_info_off").hex().emit()?,
+        f.u32("line_info_len").emit()?,
+    );
+    if u64::from(hdr_len) >= EXT_HEADER_CORE {
+        h.blocks[2] = (
+            f.u32("core_relo_off").hex().emit()?,
+            f.u32("core_relo_len").emit()?,
+        );
+    }
+    Ok(h)
+}
+
+/// `.BTF.ext`: the function and line information and the CO-RE
+/// relocations of a BPF object, per code section, naming the types and
+/// strings of its `.BTF` section. Layout from libbpf's `btf_ext_header`
+/// and `btf_ext_info_sec` (`bpf_func_info`, `bpf_line_info`,
+/// `bpf_core_relo`), written from memory and checked against clang 19's
+/// output, `llvm-objdump -S` (which prints the line information) and the
+/// program's source.
+pub async fn ext(cx: Cx, ext: Ext) -> Result<()> {
+    let span = ext.ext;
+    let head = cx.read(span.sub(0, 8)).await?;
+    let endian = match head.get(..2) {
+        Some([0x9f, 0xeb]) => Endian::Little,
+        Some([0xeb, 0x9f]) => Endian::Big,
+        _ => return Err(Diagnostic::malformed("no BTF magic (0xeB9F)").at(span.sub(0, 2))),
+    };
+    let hdr_len = get::<u32>(&head, 4, endian)
+        .ok_or_else(|| Diagnostic::truncated(span.sub(0, 8), to_u64(head.len())))?;
+    if u64::from(hdr_len) < EXT_HEADER_V1 {
+        return Err(Diagnostic::malformed(format!(
+            "header length {hdr_len} is too short"
+        )));
+    }
+    let hspan = span.sub(0, u64::from(hdr_len).min(EXT_HEADER_CORE));
+    cx.emit(struct_node("Header", hspan, endian, (), ext_header));
+    let h = parse(&cx, hspan, endian, &(), ext_header).await?;
+    let btf = match ext.btf {
+        Some(b) => open_on(&cx, b, ext.base).await.ok().map(|(_, btf, _)| btf),
+        None => None,
+    };
+    if btf.is_none() {
+        cx.diag(Diagnostic::note(
+            "no usable .BTF section: names are shown as string offsets and types as IDs",
+        ));
+    }
+    let shared = Arc::new(ExtCtx {
+        endian,
+        btf,
+        code: ext.code,
+    });
+    let blocks = [
+        ("Function Information", ExtKind::Func),
+        ("Line Information", ExtKind::Line),
+        ("CO-RE Relocations", ExtKind::Core),
+    ];
+    let mut end = u64::from(hdr_len);
+    for ((title, kind), (off, len)) in blocks.into_iter().zip(h.blocks) {
+        if len == 0 {
+            continue;
+        }
+        let start = u64::from(hdr_len).saturating_add(u64::from(off));
+        let block = span.sub(start, u64::from(len));
+        end = end.max(block.end().saturating_sub(span.offset));
+        let mut node = Node::new(title)
+            .span(block)
+            .summary(size(block.len))
+            .lazy(ext_sections, (shared.clone(), kind, block));
+        if block.len < u64::from(len) {
+            node = node.diag(Diagnostic::truncated(
+                span.sub(start, u64::from(len)),
+                block.len,
+            ));
+        }
+        cx.emit(node);
+    }
+    if end < span.len {
+        cx.emit(Node::new("Trailing Data").span(span.tail(end)));
+    }
+    Ok(())
+}
+
+/// One block of `.BTF.ext`: the record size, then per code section its
+/// name, its record count and its records (`struct btf_ext_info_sec`).
+async fn ext_sections(cx: Cx, (shared, kind, block): (Arc<ExtCtx>, ExtKind, Span)) -> Result<()> {
+    let b = cx.read(block.sub(0, 4)).await?;
+    let rec_size = get::<u32>(&b, 0, shared.endian)
+        .ok_or_else(|| Diagnostic::truncated(block.sub(0, 4), to_u64(b.len())))?;
+    let mut size_node = Node::new("Record Size")
+        .span(block.sub(0, 4))
+        .value(uint(rec_size, 32))
+        .summary(plural(rec_size, "byte"));
+    let short = rec_size < kind.min_len();
+    if short {
+        size_node = size_node.diag(Diagnostic::malformed(format!(
+            "records are shorter than the {} bytes they hold",
+            kind.min_len()
+        )));
+    }
+    cx.emit(size_node);
+    if short {
+        return Ok(());
+    }
+    let index = match &shared.btf {
+        Some(btf) => Some(index(&cx, btf).await),
+        None => None,
+    };
+    let mut pos = 4u64;
+    while pos < block.len {
+        let hspan = block.sub(pos, 8);
+        let b = cx.read(hspan).await?;
+        let (Some(name_off), Some(count)) = (
+            get::<u32>(&b, 0, shared.endian),
+            get::<u32>(&b, 4, shared.endian),
+        ) else {
+            cx.diag(Diagnostic::truncated(hspan, to_u64(b.len())));
+            break;
+        };
+        let len = u64::from(count).saturating_mul(u64::from(rec_size));
+        let records = block.sub(pos.saturating_add(8), len);
+        let name = ext_name(&cx, &shared, index.as_deref(), name_off).await;
+        let mut node = Node::new(name.clone())
+            .span(block.sub(pos, len.saturating_add(8)))
+            .summary(plural(count, kind.noun()));
+        if records.len < len {
+            node = node.diag(Diagnostic::truncated(
+                block.sub(pos.saturating_add(8), len),
+                records.len,
+            ));
+        }
+        let code = shared
+            .code
+            .iter()
+            .find(|(n, _)| *n == name)
+            .map(|&(_, s)| s);
+        let state = ExtBlock {
+            shared: shared.clone(),
+            kind,
+            rec_size,
+            records,
+            code,
+        };
+        cx.push(node.lazy(ext_records, state)).await;
+        pos = pos.saturating_add(8).saturating_add(len);
+    }
+    Ok(())
+}
+
+/// The records of one code section.
+#[derive(Clone)]
+struct ExtBlock {
+    shared: Arc<ExtCtx>,
+    kind: ExtKind,
+    rec_size: u32,
+    records: Span,
+    /// The code section the records point into, if the object has it.
+    code: Option<Span>,
+}
+
+/// A name from the `.BTF` strings, or its offset.
+async fn ext_name(cx: &Cx, shared: &ExtCtx, index: Option<&Index>, off: u32) -> String {
+    match (&shared.btf, index) {
+        (Some(btf), Some(index)) => name_or_offset(cx, btf, index, off).await,
+        _ => format!("(name at {off:#x})"),
+    }
+}
+
+/// `[id] spelling` and where the type is, or the bare ID without `.BTF`.
+async fn ext_type(
+    cx: &Cx,
+    shared: &ExtCtx,
+    index: Option<&Index>,
+    id: u32,
+) -> (String, Option<Span>) {
+    match (&shared.btf, index) {
+        (Some(btf), Some(index)) => ref_value(cx, btf, index, id).await,
+        _ => (format!("[{id}]"), None),
+    }
+}
+
+fn insn_label(insn_off: u32) -> String {
+    if insn_off.is_multiple_of(INSN_LEN) {
+        format!("insn {}", insn_off / INSN_LEN)
+    } else {
+        format!("byte {insn_off:#x}")
+    }
+}
+
+async fn ext_records(cx: Cx, blk: ExtBlock) -> Result<()> {
+    let shared = &blk.shared;
+    let index = match &shared.btf {
+        Some(btf) => Some(index(&cx, btf).await),
+        None => None,
+    };
+    let index = index.as_deref();
+    let width = u64::from(blk.rec_size);
+    let count = blk.records.len.checked_div(width).unwrap_or(0);
+    cx.set_count(Count::Exact(count));
+    let mut i = cx.resume::<u64>().unwrap_or(0);
+    while i < count {
+        let at = i;
+        cx.mark(move || at);
+        let rspan = blk.records.sub_exact(i.saturating_mul(width), width)?;
+        let b = cx.read(rspan.sub(0, u64::from(blk.kind.min_len()))).await?;
+        let w = |off: usize| get::<u32>(&b, off, shared.endian).unwrap_or(0);
+        let insn = w(0);
+        let summary = match blk.kind {
+            ExtKind::Func => ext_type(&cx, shared, index, w(4)).await.0,
+            ExtKind::Line => {
+                let file = ext_name(&cx, shared, index, w(4)).await;
+                let line = ext_name(&cx, shared, index, w(8)).await;
+                let lc = w(12);
+                format!("{file}:{}:{}: {}", lc >> 10, lc & 0x3ff, line.trim())
+            }
+            ExtKind::Core => {
+                let kind = w(12);
+                let access = ext_name(&cx, shared, index, w(8)).await;
+                let what = core_target(&cx, shared, index, w(4), &access, kind).await;
+                format!(
+                    "{} {what} \"{access}\"",
+                    lookup(CORE_RELO_KINDS, kind.into()).unwrap_or("unknown kind")
+                )
+            }
+        };
+        let mut node = Node::new(insn_label(insn))
+            .span(rspan)
+            .summary(crate::formats::util::fmt::clip(&summary, SPELL_MAX))
+            .lazy(ext_record_fields, (blk.clone(), rspan));
+        if let Some(code) = blk.code {
+            node = node.target(code.sub(u64::from(insn), u64::from(INSN_LEN)));
+        }
+        cx.push(node).await;
+        i = i.saturating_add(1);
+    }
+    Ok(())
+}
+
+async fn ext_record_fields(cx: Cx, (blk, span): (ExtBlock, Span)) -> Result<()> {
+    let shared = &blk.shared;
+    let index = match &shared.btf {
+        Some(btf) => Some(index(&cx, btf).await),
+        None => None,
+    };
+    let index = index.as_deref();
+    let known = u64::from(blk.kind.min_len());
+    let b = cx.read(span.sub(0, known)).await?;
+    let w = |off: usize| get::<u32>(&b, off, shared.endian).unwrap_or(0);
+    let block = cx.block(span.sub(0, known)).await?;
+    let mut f = Fields::emitting(&cx, &block, shared.endian);
+    let mut insn = f.u32("insn_off").hex().summary(insn_label(w(0)));
+    if let Some(code) = blk.code {
+        insn = insn.target(code.sub(u64::from(w(0)), u64::from(INSN_LEN)));
+    }
+    insn.emit()?;
+    match blk.kind {
+        ExtKind::Func => {
+            let r = ext_type(&cx, shared, index, w(4)).await;
+            type_id_field(&mut f, "type_id", r)?;
+        }
+        ExtKind::Line => {
+            let file = ext_name(&cx, shared, index, w(4)).await;
+            let line = ext_name(&cx, shared, index, w(8)).await;
+            f.u32("file_name_off").hex().summary(file).emit()?;
+            f.u32("line_off").hex().summary(line).emit()?;
+            f.u32("line_col")
+                .hex()
+                .with(|&v, node| node.summary(format!("line {}, column {}", v >> 10, v & 0x3ff)))
+                .emit()?;
+        }
+        ExtKind::Core => {
+            let r = ext_type(&cx, shared, index, w(4)).await;
+            let access = ext_name(&cx, shared, index, w(8)).await;
+            type_id_field(&mut f, "type_id", r)?;
+            f.u32("access_str_off").hex().summary(access).emit()?;
+            f.u32("kind").enumeration(CORE_RELO_KINDS).emit()?;
+        }
+    }
+    if span.len > known {
+        cx.emit(
+            Node::new("Rest")
+                .span(span.tail(known))
+                .desc("Record fields this version does not know"),
+        );
+    }
+    Ok(())
+}
+
+/// The type, after typedefs and qualifiers, that type `id` names.
+async fn strip_type(cx: &Cx, btf: &Btf, index: &Index, mut id: u32) -> Option<(TypeHead, Span)> {
+    for _ in 0..SPELL_STEPS {
+        let (head, span) = ref_head(cx, btf, index, id).await?;
+        match head.kind {
+            KIND_TYPEDEF | KIND_CONST | KIND_VOLATILE | KIND_RESTRICT | KIND_TYPE_TAG => {
+                id = head.size_type;
+            }
+            _ => return Some((head, span)),
+        }
+    }
+    None
+}
+
+/// What a CO-RE relocation is about, from its root type and access string:
+/// `struct task.sched.flags`, `struct task`, `MODE_B of enum mode`.
+async fn core_target(
+    cx: &Cx,
+    shared: &ExtCtx,
+    index: Option<&Index>,
+    id: u32,
+    access: &str,
+    kind: u32,
+) -> String {
+    let (Some(btf), Some(index)) = (&shared.btf, index) else {
+        return format!("[{id}]");
+    };
+    let root = c_type(cx, btf, index, id).await;
+    let accessors: Option<Vec<u32>> = access
+        .split(':')
+        .take(ACCESS_STEPS)
+        .map(|a| a.parse().ok())
+        .collect();
+    let Some(accessors) = accessors else {
+        return root;
+    };
+    match kind {
+        // Type-based: the access string is "0".
+        6..=9 | 12 => root,
+        // Enumerator-based: the index of the value.
+        10 | 11 => {
+            let Some(&n) = accessors.first() else {
+                return root;
+            };
+            let value = match strip_type(cx, btf, index, id).await {
+                Some((head, span))
+                    if matches!(head.kind, KIND_ENUM | KIND_ENUM64) && n < u32::from(head.vlen) =>
+                {
+                    let width: u64 = if head.kind == KIND_ENUM { 8 } else { 12 };
+                    let at = TYPE_LEN.saturating_add(u64::from(n).saturating_mul(width));
+                    let b = cx.read(span.sub(at, 4)).await.unwrap_or_default();
+                    match get::<u32>(&b, 0, btf.endian) {
+                        Some(off) => Some(name_or_offset(cx, btf, index, off).await),
+                        None => None,
+                    }
+                }
+                _ => None,
+            };
+            match value {
+                Some(v) => format!("{v} of {root}"),
+                None => format!("value {n} of {root}"),
+            }
+        }
+        // Field-based: an index into the root pointer, then members and
+        // array elements.
+        _ => {
+            let mut s = root;
+            let mut rest = accessors.iter();
+            match rest.next() {
+                Some(&0) | None => {}
+                Some(&n) => s.push_str(&format!("[{n}]")),
+            }
+            let mut cur = id;
+            for &a in rest {
+                let Some((head, span)) = strip_type(cx, btf, index, cur).await else {
+                    break;
+                };
+                match head.kind {
+                    KIND_STRUCT | KIND_UNION if a < u32::from(head.vlen) => {
+                        let at = TYPE_LEN.saturating_add(u64::from(a).saturating_mul(12));
+                        let b = cx.read(span.sub(at, 8)).await.unwrap_or_default();
+                        let name_off = get::<u32>(&b, 0, btf.endian).unwrap_or(0);
+                        let n = name_or_offset(cx, btf, index, name_off).await;
+                        s.push('.');
+                        s.push_str(&n);
+                        cur = get::<u32>(&b, 4, btf.endian).unwrap_or(0);
+                    }
+                    KIND_ARRAY => {
+                        let b = cx.read(span.sub(TYPE_LEN, 4)).await.unwrap_or_default();
+                        s.push_str(&format!("[{a}]"));
+                        cur = get::<u32>(&b, 0, btf.endian).unwrap_or(0);
+                    }
+                    _ => {
+                        s.push_str(&format!(" (accessor {a} does not fit)"));
+                        break;
+                    }
+                }
+            }
+            s
+        }
+    }
 }
 
 #[cfg(test)]

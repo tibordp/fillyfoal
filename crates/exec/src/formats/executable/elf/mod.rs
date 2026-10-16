@@ -1057,6 +1057,17 @@ async fn section_node(cx: Cx, (elf, index): (Elf, usize)) -> Result<()> {
 }
 
 /// The node showing a section's contents, decoded according to its type.
+/// `SHF_EXECINSTR`: the section holds machine instructions.
+const SHF_EXECINSTR: u64 = 0x4;
+
+/// The contents of the first section named `name` that has any.
+fn section_data(elf: &Elf, name: &str) -> Option<Span> {
+    elf.sections
+        .iter()
+        .find(|s| s.name == name && s.has_data() && s.size > 0)
+        .map(|s| elf.data(s))
+}
+
 async fn section_contents(cx: &Cx, elf: &Elf, section: &Section) -> Result<Option<Node>> {
     if !section.has_data() || section.size == 0 {
         return Ok(None);
@@ -1112,10 +1123,37 @@ async fn section_contents(cx: &Cx, elf: &Elf, section: &Section) -> Result<Optio
                 lazy("Debug Alt Link").lazy(symbols::debuglink, (elf.class, data))
             }
             ".nv_fatbin" | "__nv_relfatbin" => embedded("Fat Binary", elf.input.nested(data)),
-            ".BTF" => embedded_as(
+            ".BTF" => match section_data(elf, ".BTF.base") {
+                // A kernel module's split BTF with its distilled base.
+                Some(base) => lazy("BPF Type Format").lazy(
+                    crate::formats::executable::btf::dissect_on_base,
+                    (elf.input.nested(data), base),
+                ),
+                None => embedded_as(
+                    "BPF Type Format",
+                    elf.input.nested(data),
+                    &crate::formats::executable::btf::FORMAT,
+                ),
+            },
+            ".BTF.base" => embedded_as(
                 "BPF Type Format",
                 elf.input.nested(data),
                 &crate::formats::executable::btf::FORMAT,
+            ),
+            ".BTF.ext" => lazy("BTF Extension").lazy(
+                crate::formats::executable::btf::ext,
+                crate::formats::executable::btf::Ext {
+                    ext: data,
+                    btf: section_data(elf, ".BTF"),
+                    base: section_data(elf, ".BTF.base"),
+                    code: Arc::new(
+                        elf.sections
+                            .iter()
+                            .filter(|s| s.has_data() && s.flags & SHF_EXECINSTR != 0)
+                            .map(|s| (s.name.clone(), elf.data(s)))
+                            .collect(),
+                    ),
+                },
             ),
             ".eh_frame" => lazy("Call Frame Information").lazy(eh_frame, (elf.clone(), index)),
             ".eh_frame_hdr" => lazy("Frame Index").lazy(eh_frame_hdr, (elf.clone(), index)),
