@@ -6,7 +6,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Magic: "zstd-compressed"  [0x0+0x8]
     CRC32: 0x55950e54 — valid  [0x8+0x4]
   ▾ Data — Proxmox file archive (format version 1)  [0xc+0x1037]
-    ▾ Root directory — directory drwxr-xr-x  [#1:0x0+0x245a]
+    ▾ Root directory — directory drwxr-xr-x, 2 entries  [#1:0x0+0x245a]
       ▾ ENTRY — directory drwxr-xr-x, uid 0, gid 0  [#1:0x0+0x38]
           Type: ENTRY (0xd5956474e588acef)  [#1:0x0+0x8]
           Size: 56  [#1:0x8+0x8]

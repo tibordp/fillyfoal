@@ -39,6 +39,12 @@
 //! against two backups written by proxmox-backup-client 3.4.9 to a Proxmox
 //! Backup Server.
 //!
+//! File capabilities (`FCAPS`, the `security.capability` value) are
+//! decoded to capability names, checked against `setcap cap_net_raw+ep`.
+//! The first format version's `ENTRY` (`Stat_V1`, before Proxmox Backup
+//! 1.0, with the modification time as one nanosecond count) is covered
+//! only by a hand-made archive, as no current tool writes it.
+//!
 //! The item types and structures are from the `pxar` crate's
 //! `format/mod.rs` and `format/acl.rs` and the entry flags from Proxmox
 //! Backup's `pbs-client/src/pxar/flags.rs` (AGPL-3.0), read for facts
@@ -55,7 +61,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::arcutil::{unix_kind, unix_mode};
 use crate::formats::util::fmt::{plural, size};
-use crate::formats::util::val::{enumv, hex, text, uint};
+use crate::formats::util::val::{enumv, flagsv, hex, text, uint};
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -135,6 +141,51 @@ const ENTRY_FLAGS: FlagTable = &[
     flag(0x800_0000, "SUBVOLUME_RO"),
 ];
 
+/// Linux capabilities by bit number (`linux/capability.h`).
+const CAPS: FlagTable = &[
+    flag(1 << 0, "cap_chown"),
+    flag(1 << 1, "cap_dac_override"),
+    flag(1 << 2, "cap_dac_read_search"),
+    flag(1 << 3, "cap_fowner"),
+    flag(1 << 4, "cap_fsetid"),
+    flag(1 << 5, "cap_kill"),
+    flag(1 << 6, "cap_setgid"),
+    flag(1 << 7, "cap_setuid"),
+    flag(1 << 8, "cap_setpcap"),
+    flag(1 << 9, "cap_linux_immutable"),
+    flag(1 << 10, "cap_net_bind_service"),
+    flag(1 << 11, "cap_net_broadcast"),
+    flag(1 << 12, "cap_net_admin"),
+    flag(1 << 13, "cap_net_raw"),
+    flag(1 << 14, "cap_ipc_lock"),
+    flag(1 << 15, "cap_ipc_owner"),
+    flag(1 << 16, "cap_sys_module"),
+    flag(1 << 17, "cap_sys_rawio"),
+    flag(1 << 18, "cap_sys_chroot"),
+    flag(1 << 19, "cap_sys_ptrace"),
+    flag(1 << 20, "cap_sys_pacct"),
+    flag(1 << 21, "cap_sys_admin"),
+    flag(1 << 22, "cap_sys_boot"),
+    flag(1 << 23, "cap_sys_nice"),
+    flag(1 << 24, "cap_sys_resource"),
+    flag(1 << 25, "cap_sys_time"),
+    flag(1 << 26, "cap_sys_tty_config"),
+    flag(1 << 27, "cap_mknod"),
+    flag(1 << 28, "cap_lease"),
+    flag(1 << 29, "cap_audit_write"),
+    flag(1 << 30, "cap_audit_control"),
+    flag(1 << 31, "cap_setfcap"),
+    flag(1 << 32, "cap_mac_override"),
+    flag(1 << 33, "cap_mac_admin"),
+    flag(1 << 34, "cap_syslog"),
+    flag(1 << 35, "cap_wake_alarm"),
+    flag(1 << 36, "cap_block_suspend"),
+    flag(1 << 37, "cap_audit_read"),
+    flag(1 << 38, "cap_perfmon"),
+    flag(1 << 39, "cap_bpf"),
+    flag(1 << 40, "cap_checkpoint_restore"),
+];
+
 pub static PXAR: Format = Format {
     name: "pxar",
     title: "Proxmox file archive",
@@ -200,7 +251,9 @@ record! {
         flags: u64 "Flags" .flags(ENTRY_FLAGS),
         uid: u32 "UID",
         gid: u32 "GID",
-        mtime: u64 "Modification time (ns)" .with(|&v, n| n.summary(format!("{}", v / 1_000_000_000))),
+        mtime: u64 "Modification time" .with(|&v, n| n
+            .value(Value::Timestamp { unix_seconds: i64::try_from(v / 1_000_000_000).unwrap_or(i64::MAX) })
+            .summary(format!("{v} ns"))),
     }
 }
 
@@ -226,16 +279,12 @@ impl Entry {
         self.mode.is_some_and(|m| m & 0o170_000 == 0o040_000)
     }
 
-    fn display_name(&self, root: bool) -> String {
-        let name = if root {
-            "/".to_owned()
-        } else {
-            self.name.as_deref().map_or_else(
-                || "?".to_owned(),
-                |n| String::from_utf8_lossy(n).into_owned(),
-            )
-        };
-        if self.is_dir() && !root {
+    fn display_name(&self) -> String {
+        let name = self.name.as_deref().map_or_else(
+            || "?".to_owned(),
+            |n| String::from_utf8_lossy(n).into_owned(),
+        );
+        if self.is_dir() {
             format!("{name}/")
         } else {
             name
@@ -382,9 +431,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     ));
     let root = parse_entry(&cx, file, pos, file.len).await?;
     let span = file.tail(pos);
-    let mut node = Node::new("Root directory")
-        .span(span)
-        .summary(root.summary());
+    let mut node = Node::new("Root directory").span(span).summary(with_count(
+        root.summary(),
+        dir_entries(&cx, file, file.len).await,
+    ));
     if !root.is_dir() {
         node = node.diag(Diagnostic::malformed(
             "the archive's first entry is not a directory",
@@ -401,11 +451,27 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 }
 
 /// An entry's node for its directory's listing.
-fn entry_node(input: Input, span: Span, e: &Entry, root: bool) -> Node {
-    Node::new(e.display_name(root))
+fn entry_node(input: Input, span: Span, e: &Entry, count: Option<u64>) -> Node {
+    Node::new(e.display_name())
         .span(span)
-        .summary(e.summary())
+        .summary(with_count(e.summary(), count))
         .lazy(entry_expand, (input, span))
+}
+
+fn with_count(summary: String, count: Option<u64>) -> String {
+    match count {
+        Some(n) => format!("{summary}, {}", plural(n, "entry")),
+        None => summary,
+    }
+}
+
+/// The number of entries of the directory ending at `end`, from the tail
+/// of its goodbye table (`None` if there is none).
+async fn dir_entries(cx: &Cx, file: Span, end: u64) -> Option<u64> {
+    let tail = cx.read(file.sub(end.checked_sub(24)?, 24)).await.ok()?;
+    let len = u64_le(&tail, 16)?;
+    (u64_le(&tail, 0)? == GOODBYE_TAIL && len >= 40 && len.saturating_sub(16) % 24 == 0)
+        .then(|| len.saturating_sub(40) / 24)
 }
 
 async fn entry_expand(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
@@ -470,7 +536,14 @@ async fn entry_expand(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             continue;
         }
         let mut node = match parse_entry(&cx, file, child, child_end).await {
-            Ok(ce) => entry_node(input, cspan, &ce, false),
+            Ok(ce) => {
+                let count = if ce.is_dir() {
+                    dir_entries(&cx, file, child_end).await
+                } else {
+                    None
+                };
+                entry_node(input, cspan, &ce, count)
+            }
             Err(err) => Node::new(format!("Entry {i}")).span(cspan).diag(err),
         };
         if !gb.split && len != cspan.len {
@@ -774,10 +847,69 @@ fn item_summary(kind: u64, len: u64, c: &[u8]) -> String {
             perms(u(3))
         ),
         QUOTA_PROJID => format!("project {}", u(0)),
+        FCAPS => fcaps(c.get(..crate::bytes::to_usize(content)).unwrap_or(c))
+            .map_or_else(|| size(content), |f| f.summary()),
         PAYLOAD_REF => format!("offset {:#x}, {}", u(0), size(u(1))),
         GOODBYE => plural(content.saturating_sub(24) / 24, "entry"),
         _ => size(content),
     }
+}
+
+/// A `security.capability` value (`struct vfs_cap_data`, or
+/// `vfs_ns_cap_data` for version 3): a little-endian revision word with the
+/// effective flag in bit 0, the permitted and inheritable sets (low 32
+/// bits, then from version 2 their high 32 bits) and for version 3 the
+/// namespace's root UID.
+struct Fcaps {
+    magic: u32,
+    effective: bool,
+    permitted: u64,
+    inheritable: u64,
+    rootid: Option<u32>,
+}
+
+impl Fcaps {
+    fn summary(&self) -> String {
+        let names = |set: u64| {
+            let v: Vec<&str> = CAPS
+                .iter()
+                .filter(|f| set & f.mask == f.value)
+                .map(|f| f.name)
+                .collect();
+            if v.is_empty() {
+                "none".to_owned()
+            } else {
+                v.join(",")
+            }
+        };
+        let mut out = names(self.permitted);
+        out.push_str(if self.effective { "+ep" } else { "+p" });
+        if self.inheritable != 0 {
+            out.push_str(&format!(", inheritable {}", names(self.inheritable)));
+        }
+        out
+    }
+}
+
+fn fcaps(b: &[u8]) -> Option<Fcaps> {
+    let magic = u32_le(b, 0)?;
+    let w = |i: usize| u32_le(b, i.saturating_mul(4)).map(u64::from);
+    let (hi_p, hi_i, rootid) = match (magic >> 24, b.len()) {
+        (1, 12) => (0, 0, None),
+        (2, 20) => (w(3)?, w(4)?, None),
+        (3, 24) => (w(3)?, w(4)?, u32_le(b, 20)),
+        _ => return None,
+    };
+    if magic & 0x00ff_fffe != 0 {
+        return None;
+    }
+    Some(Fcaps {
+        magic,
+        effective: magic & 1 != 0,
+        permitted: w(1)? | hi_p << 32,
+        inheritable: w(2)? | hi_i << 32,
+        rootid,
+    })
 }
 
 /// An item's node: its header and its content's fields when expanded.
@@ -932,7 +1064,57 @@ async fn item_expand(cx: Cx, (_input, kind, span): (Input, u64, Span)) -> Result
                 ));
             }
         }
-        FCAPS => cx.emit(Node::new("Capabilities").span(body).summary(size(body.len))),
+        FCAPS => {
+            let b = cx.read(body.sub(0, 64)).await?;
+            let Some(f) = fcaps(&b) else {
+                cx.emit(
+                    Node::new("Capabilities")
+                        .span(body)
+                        .summary(size(body.len))
+                        .diag(Diagnostic::malformed("not a vfs_cap_data structure")),
+                );
+                return Ok(());
+            };
+            cx.emit(
+                Node::new("Revision")
+                    .span(body.sub(0, 4))
+                    .value(hex(f.magic, 32))
+                    .summary(format!(
+                        "version {}{}",
+                        f.magic >> 24,
+                        if f.effective { ", effective" } else { "" }
+                    )),
+            );
+            let wide = f.magic >> 24 >= 2;
+            cx.emit(
+                Node::new("Permitted")
+                    .span(body.sub(4, 4))
+                    .value(flagsv(f.permitted, 64, CAPS))
+                    .desc(if wide {
+                        "Low 32 bits here, high 32 bits at offset 12"
+                    } else {
+                        "32 bits"
+                    }),
+            );
+            cx.emit(
+                Node::new("Inheritable")
+                    .span(body.sub(8, 4))
+                    .value(flagsv(f.inheritable, 64, CAPS))
+                    .desc(if wide {
+                        "Low 32 bits here, high 32 bits at offset 16"
+                    } else {
+                        "32 bits"
+                    }),
+            );
+            if let Some(root) = f.rootid {
+                cx.emit(
+                    Node::new("Root UID")
+                        .span(body.sub(20, 4))
+                        .value(uint(root, 32))
+                        .desc("The user namespace's root the capabilities apply to"),
+                );
+            }
+        }
         _ => {
             if !body.is_empty() {
                 cx.emit(Node::new("Content").span(body));
