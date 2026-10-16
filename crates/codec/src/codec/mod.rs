@@ -36,6 +36,7 @@ pub mod lznt1;
 pub mod lzo;
 pub mod lzx;
 pub mod meatpack;
+pub mod ntfsclone;
 pub mod palmdoc;
 pub mod pbz;
 pub mod pipeline;
@@ -330,6 +331,9 @@ pub enum Codec {
     ByteSwap {
         width: usize,
     },
+    /// An ntfsclone special image's command stream (after its header),
+    /// restored to the volume (see [`ntfsclone`]).
+    NtfsClone(ntfsclone::Image),
     /// Stages applied in order. `name` and `lazy_name` identify the chain
     /// for memoization (see `Origin`); they must be distinct.
     Chain {
@@ -448,6 +452,7 @@ impl Codec {
             Codec::Unshuffle { .. } => "unshuffle",
             Codec::Xor { .. } => "xor",
             Codec::ByteSwap { .. } => "byteswap",
+            Codec::NtfsClone(_) => "ntfsclone",
             Codec::Chain { name, .. } => name,
         }
     }
@@ -548,6 +553,7 @@ impl Codec {
             Codec::Unshuffle { .. } => "unshuffle (lazy)",
             Codec::Xor { .. } => "xor (lazy)",
             Codec::ByteSwap { .. } => "byteswap (lazy)",
+            Codec::NtfsClone(_) => "ntfsclone (lazy)",
             Codec::Chain { lazy_name, .. } => lazy_name,
         }
     }
@@ -632,6 +638,7 @@ impl Codec {
             | Codec::Xor { .. }
             | Codec::ByteSwap { .. } => "decoded",
             Codec::CapnpPacked => "unpacked",
+            Codec::NtfsClone(_) => "restored",
             Codec::Chain { .. } => "decoded",
         }
     }
@@ -739,6 +746,8 @@ impl Codec {
             // A 259-byte match costs a handful of bits; a solid member's
             // output is unrelated to the bytes before it, so no bound.
             Codec::Ace(p) if p.members.len() > 1 => u64::MAX,
+            // A 9-byte gap command stands for any number of empty clusters.
+            Codec::NtfsClone(_) => u64::MAX,
             Codec::Ace(_) => 1024,
             // Arsenic and RLE90 runs: a few bits for up to 255 bytes, in
             // blocks of up to 16 MiB.
@@ -887,6 +896,7 @@ impl Codec {
             Codec::ByteSwap { width } => Box::new(Streaming(filters::Bytes::new(
                 filters::ByteSwap::new(*width),
             ))),
+            Codec::NtfsClone(image) => Box::new(Streaming(ntfsclone::NtfsClone::new(*image))),
             Codec::Chain { stages, .. } => Box::new(pipeline::Chain::new(
                 stages.iter().filter_map(Codec::decoder).collect(),
             )),

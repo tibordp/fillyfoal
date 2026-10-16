@@ -430,9 +430,9 @@ work and output stay bounded (see `tests/data_bounds.rs`).
   that reaches it decodes on to check the stream ends there, reporting it
   on the node being expanded if it does not.
 - Content of unknown length reaches only the formats in `formats::STREAMING`
-  (tar, cpio, plain text) with its length unknown; every other format gets
-  the stream decoded to its end first and sees the real length, so ordinary
-  dissectors can rely on `input.span.len`. A streaming format must not
+  (tar, cpio, ntfsclone images, plain text) with its length unknown; every
+  other format gets the stream decoded to its end first and sees the real
+  length, so ordinary dissectors can rely on `input.span.len`. A streaming format must not
   count, estimate, size spans or look for trailers from the length while
   `cx.len_known(input.span.source)` is false. To add one, make
   `tests/unsized.rs` and a large unsized test pass. Probes see

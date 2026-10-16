@@ -7,8 +7,9 @@
 //! content is its extent if contiguous, or a piecewise source assembled from
 //! its fragments ([`Cx::add_pieces`]) otherwise.
 //!
-//! Also here: Apple disk images (`dmg`), ISO 9660 and SquashFS/CramFS, and
-//! TempleOS's RedSea (`redsea`) and its ISOs (`templeos_iso`).
+//! Also here: Apple disk images (`dmg`), ntfsclone images (`ntfsclone`),
+//! ISO 9660 and SquashFS/CramFS, and TempleOS's RedSea (`redsea`) and its
+//! ISOs (`templeos_iso`).
 
 pub mod acl;
 pub mod apfs;
@@ -35,6 +36,7 @@ pub mod mdraid;
 pub mod minix;
 pub mod nilfs;
 pub mod ntfs;
+pub mod ntfsclone;
 pub mod parallels;
 pub mod ptypes;
 pub mod qcow;
