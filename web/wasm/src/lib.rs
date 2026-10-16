@@ -12,8 +12,8 @@ use std::collections::HashMap;
 
 use fillyfoal::{
     ByteRequest, ChildState, Count, DiagKind, Diagnostic, Digest, Limits, NodeId, Progress, Radix,
-    ReadProgress, Res, Secret, SizeUnit, SecretRequest, Session, SourceId, Span, Value, Verdict, Wait, Zone,
-    formats,
+    ReadProgress, Res, Secret, SecretRequest, Session, SizeUnit, SourceId, Span, Value, Verdict,
+    Wait, Zone, formats,
 };
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
