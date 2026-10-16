@@ -445,8 +445,54 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Some(v) => format!("MSBuild {v}, "),
         None => String::new(),
     };
-    cx.annotate(format!("MSBuild binary log, {msbuild}format {version}"));
+    let result = match build_result(&cx, &ctx).await? {
+        Some(r) => format!("build {r}, "),
+        None => String::new(),
+    };
+    cx.annotate(format!(
+        "MSBuild binary log, {msbuild}{result}format {version}"
+    ));
     Ok(())
+}
+
+/// Logs whose records are walked for the build's result.
+const RESULT_SCAN: u64 = 64 << 20;
+
+/// Whether the build succeeded, from its BuildFinished record near the
+/// end: only for a log already decoded (or read from the host), so
+/// reaching the end does not decode the whole stream just for this.
+async fn build_result(cx: &Cx, ctx: &Ctx) -> Result<Option<&'static str>> {
+    let stream = ctx.input.span;
+    if stream.len > RESULT_SCAN || !cx.read_is_cheap(stream) {
+        return Ok(None);
+    }
+    let mut pos = 8u64;
+    let mut n = 0u32;
+    while pos < stream.len {
+        let Ok(rec) = read_record(cx, stream, pos).await else {
+            return Ok(None);
+        };
+        if rec.kind == 0 || rec.end <= pos {
+            return Ok(None);
+        }
+        if rec.kind == 2 {
+            let index = index_upto(cx, ctx, pos).await?;
+            let summary = event_summary(cx, ctx, &index, rec).await?;
+            return Ok(if summary.ends_with("(succeeded)") {
+                Some("succeeded")
+            } else if summary.ends_with("(failed)") {
+                Some("failed")
+            } else {
+                None
+            });
+        }
+        pos = rec.end;
+        n = n.wrapping_add(1);
+        if n.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+    }
+    Ok(None)
 }
 
 /// The MSBuild version the log names in its first records (the message

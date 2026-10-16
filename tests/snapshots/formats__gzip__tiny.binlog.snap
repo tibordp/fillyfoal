@@ -13,7 +13,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Trailer  [0xa94+0x8]
       CRC32: 0xa1de8fb1  [0xa94+0x4]
       ISIZE: 6298  [0xa98+0x4]
-  ▾ Content — MSBuild binary log, MSBuild 17.11.48, format 21  [0xa+0xa92]
+  ▾ Content — MSBuild binary log, MSBuild 17.11.48, build succeeded, format 21  [0xa+0xa92]
     ▾ Header  [#1:0x0+0x8]
         FileFormatVersion: 21  [#1:0x0+0x4]
         MinimumReaderVersion: 18  [#1:0x4+0x4]

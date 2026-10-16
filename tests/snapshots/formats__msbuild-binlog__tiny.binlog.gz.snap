@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tiny.binlog — MSBuild binary log, MSBuild 17.11.48, format 21  [0x0+0x189a]
+▾ tiny.binlog — MSBuild binary log, MSBuild 17.11.48, build succeeded, format 21  [0x0+0x189a]
   ▾ Header  [0x0+0x8]
       FileFormatVersion: 21  [0x0+0x4]
       MinimumReaderVersion: 18  [0x4+0x4]
