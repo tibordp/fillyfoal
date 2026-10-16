@@ -27,6 +27,7 @@ pub mod gvdb;
 pub mod hdf5;
 pub mod ion;
 pub mod jet;
+pub mod marshal;
 pub mod matlab;
 pub mod mongo_archive;
 pub mod msgpack;

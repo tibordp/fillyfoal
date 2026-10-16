@@ -3438,6 +3438,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "data")]
     &data::etf::FORMAT,
     #[cfg(feature = "data")]
+    &data::marshal::FORMAT,
+    #[cfg(feature = "data")]
     &data::msgpack::FORMAT,
     #[cfg(feature = "data")]
     &data::ubjson::FORMAT,

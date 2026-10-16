@@ -1455,3 +1455,15 @@ file gives the term back.
 | `erlang-etf/latin1.etf` | OTP 27 | `term_to_binary(List, [{minor_version, 1}])`: Latin-1 atoms; unchanged |
 | `erlang-etf/old-float.etf` | OTP 27 | `term_to_binary([2.5, -0.125], [{minor_version, 0}])`: floats as text; unchanged |
 | `erlang-etf/compressed.etf` | OTP 27 | `term_to_binary(List, [compressed])`: a zlib-compressed term; unchanged |
+
+## Ruby Marshal data
+
+Reproduced byte for byte by `sh tests/data/ruby-marshal/make.sh`:
+`Marshal.dump` in the official `ruby:3.4-alpine` image (Ruby 3.4.11, host
+name `fillyfoal`), running `tests/data/ruby-marshal/make.rb`.
+`Marshal.load` of each file gives the data back.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `ruby-marshal/objects.marshal` | Ruby 3.4.11 | a hash of nil/true/false, fixnums, bignums, floats (NaN, -Infinity), symbols and a symbol link, strings in UTF-8, US-ASCII, ISO-8859-1 and binary, arrays, an object link, hashes (one with a default), a struct, an object, `_dump` and `marshal_dump` objects, a regexp, a class, a module, a range and an extended String subclass; unchanged |
+| `ruby-marshal/array.marshal` | Ruby 3.4.11 | 600 `[i, "item i"]` pairs; unchanged |
