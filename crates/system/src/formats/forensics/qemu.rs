@@ -1752,15 +1752,28 @@ async fn libvirt(cx: Cx, input: Input) -> Result<()> {
         input.nested(xml),
         &crate::formats::text::xml::FORMAT,
     ));
+    let mut used = xml.len;
     if cookie > 0 {
         let c = u64::from(cookie);
         let rest = raw.get(crate::bytes::to_usize(c)..).unwrap_or_default();
         let len = rest.iter().position(|&b| b == 0).unwrap_or(rest.len());
+        let cookie = data.sub(c, to_u64(len));
+        used = used.max(c.saturating_add(cookie.len));
         cx.emit(embedded_as(
             "Migration cookie",
-            input.nested(data.sub(c, to_u64(len))),
+            input.nested(cookie),
             &crate::formats::text::xml::FORMAT,
         ));
+    }
+    // The rest of the data: the XML's terminating NUL and the zeros libvirt
+    // reserves for the XML to grow (64 KiB in the fixtures).
+    let padding = data.tail(used);
+    if padding.len > 0 {
+        cx.emit(
+            Node::new("Padding")
+                .span(padding)
+                .summary(plural(padding.len, "byte")),
+        );
     }
     if data.len < u64::from(data_len) {
         cx.diag(Diagnostic::truncated(

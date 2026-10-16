@@ -1397,6 +1397,8 @@ tables only; CRIU paths are the container's (`/usr/bin/sleep`, libc,
 | --- | --- | --- |
 | `qemu-vmstate/microvm.vmstate.raw.zst` | QEMU 10.0.13 | `sh tests/data/qemu-vmstate/make-external.sh` (`inner.sh microvm 2`): `qemu-system-x86_64 -nodefaults -machine microvm -accel tcg -m 2`, QMP `stop` then `migrate "exec:cat > ..."`; stored with `zstd -19` |
 | `libvirt-save/fillyfoal-xz.sav` | libvirt 11.3.0, QEMU 10.0.13, xz | `sh tests/data/libvirt-save/make-external.sh`: privileged container running `libvirtd` (`save_image_format = "xz"`, no cgroups), `virsh create` of a diskless 4 MiB `pc` domain named `fillyfoal`, then `virsh save`; unchanged |
+| `libvirt-save/fillyfoal-zstd.sav` | libvirt 11.3.0, QEMU 10.0.13, zstd | same script, `save_image_format = "zstd"`; unchanged |
+| `libvirt-save/fillyfoal-raw.sav.raw.zst` | libvirt 11.3.0, QEMU 10.0.13 | same script, `save_image_format = "raw"` (the default: the migration stream uncompressed); stored with `zstd -19` |
 | `criu-image/inventory.img` | CRIU 4.1.1 | `sh tests/data/criu-image/make-external.sh`: privileged container, `criu dump -t <pid> --shell-job` of `sleep 1000` (PID 7) started with an empty environment; unchanged |
 | `criu-image/pstree.img` | CRIU 4.1.1 | same dump; unchanged |
 | `criu-image/core-7.img` | CRIU 4.1.1 | same dump; unchanged |

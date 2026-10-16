@@ -75,6 +75,7 @@ expression: "common::explore(&display_name(&path), &data)"
             @policy: "require"  [0x45c+0x7]
             @name: "lahf_lm"  [0x46b+0x7]
         slirpHelper  [0x481+0xe]
+    Padding — 65537 bytes  [0x49a+0x10001]
   ▾ Migration stream — QEMU migration stream, 4.5 MiB RAM in 6 blocks, 31 sections  [0x1049b+0x1cd4c]
     ▾ Header  [#1:0x0+0x8]
         Magic: "QEVM"  [#1:0x0+0x4]
