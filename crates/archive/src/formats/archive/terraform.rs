@@ -12,13 +12,25 @@
 //! in the second probing phase. Message and field names, numbers and enum
 //! values are taken from Terraform's `internal/plans/planproto/planfile.proto`
 //! (facts only); the layout was checked against plans written by Terraform
-//! 1.16.6. Values (`DynamicValue`) are MessagePack-encoded `cty` values and
-//! are handed to the MessagePack dissector.
+//! 1.16.6. Values (`DynamicValue`) are MessagePack-encoded `cty` values,
+//! shown as go-cty's `msgpack` package reads them (facts from its
+//! `unknown.go`; the dynamic pair as Terraform 1.16.6 writes it): nil is
+//! null; an extension of at most a
+//! byte (Terraform writes type 0) is an unknown value, "known after
+//! apply"; extension 12 is an unknown with refinements (a map by key: 1
+//! not null, 2 a string prefix, 3 and 4 number bounds with their
+//! inclusiveness, 5 and 6 collection length bounds); and a value of a
+//! dynamic type is a pair of its type (JSON, as binary) and the value,
+//! shown as the value with its type. Lists, sets and tuples are arrays,
+//! maps and objects are maps. Values over 16 MiB go to the MessagePack
+//! dissector instead.
 
+use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::wire::protobuf::{self as pb, F, LEN, Msg, Payload, Ty, VARINT, f};
 use crate::formats::{DeepProbe, Format, Input, Probe, embedded_named};
 use crate::node::Node;
@@ -576,8 +588,7 @@ async fn delimited(
             }
         }
         Some(Ty::Bytes) if is_dynamic(parent) => {
-            embedded_named(label, input.nested(body), "msgpack")
-                .summary(format!("MessagePack value, {} bytes", body.len))
+            cty_value(cx, input, "value".to_owned(), body).await?
         }
         Some(Ty::Msg(m)) => {
             let summary = match title(cx, body, m).await? {
@@ -650,5 +661,410 @@ fn short(s: &str) -> String {
         s.chars().take(80).collect::<String>() + "…"
     } else {
         s.to_owned()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// cty values
+
+/// Largest value shown as a `cty` value; larger ones are handed to the
+/// MessagePack dissector, which reads them a piece at a time.
+const CTY_MAX: u64 = 16 << 20;
+
+/// A MessagePack item's header, as `cty` writes them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Mp {
+    Nil,
+    Bool(bool),
+    UInt(u64),
+    Int(i64),
+    Float(f64),
+    Str,
+    Bin,
+    Array,
+    Map,
+    Ext(i8),
+    /// 0xc1, never used.
+    Unused,
+}
+
+/// A header: its kind, length, and payload length (strings, binary,
+/// extensions) or element count (arrays; maps count pairs).
+#[derive(Clone, Copy, Debug)]
+struct Hd {
+    kind: Mp,
+    head: usize,
+    arg: u64,
+}
+
+fn hd(b: &[u8], at: usize) -> Option<Hd> {
+    let &t = b.get(at)?;
+    let be = |n: usize| -> Option<u64> {
+        let bytes = b.get(at.checked_add(1)?..at.checked_add(1)?.checked_add(n)?)?;
+        Some(bytes.iter().fold(0u64, |a, &x| (a << 8) | u64::from(x)))
+    };
+    let h = |kind, head, arg| Some(Hd { kind, head, arg });
+    let sized = |kind, n: usize| h(kind, n.saturating_add(1), be(n)?);
+    let ext = |n: usize| {
+        let len = be(n)?;
+        let ty = *b.get(at.checked_add(1)?.checked_add(n)?)?;
+        h(Mp::Ext(i8::from_le_bytes([ty])), n.saturating_add(2), len)
+    };
+    let fixext = |len: u64| {
+        let ty = *b.get(at.checked_add(1)?)?;
+        h(Mp::Ext(i8::from_le_bytes([ty])), 2, len)
+    };
+    let int = |n: usize, bits: u32| {
+        let v = be(n)?;
+        let shift = 64u32.saturating_sub(bits);
+        let v = (v.checked_shl(shift).unwrap_or(0) as i64)
+            .checked_shr(shift)
+            .unwrap_or(0);
+        h(Mp::Int(v), n.saturating_add(1), 0)
+    };
+    match t {
+        0x00..=0x7f => h(Mp::UInt(t.into()), 1, 0),
+        0x80..=0x8f => h(Mp::Map, 1, u64::from(t & 0x0f)),
+        0x90..=0x9f => h(Mp::Array, 1, u64::from(t & 0x0f)),
+        0xa0..=0xbf => h(Mp::Str, 1, u64::from(t & 0x1f)),
+        0xc0 => h(Mp::Nil, 1, 0),
+        0xc1 => h(Mp::Unused, 1, 0),
+        0xc2 | 0xc3 => h(Mp::Bool(t == 0xc3), 1, 0),
+        0xc4 => sized(Mp::Bin, 1),
+        0xc5 => sized(Mp::Bin, 2),
+        0xc6 => sized(Mp::Bin, 4),
+        0xc7 => ext(1),
+        0xc8 => ext(2),
+        0xc9 => ext(4),
+        0xca => h(
+            Mp::Float(f64::from(f32::from_bits(u32::try_from(be(4)?).ok()?))),
+            5,
+            0,
+        ),
+        0xcb => h(Mp::Float(f64::from_bits(be(8)?)), 9, 0),
+        0xcc => h(Mp::UInt(be(1)?), 2, 0),
+        0xcd => h(Mp::UInt(be(2)?), 3, 0),
+        0xce => h(Mp::UInt(be(4)?), 5, 0),
+        0xcf => h(Mp::UInt(be(8)?), 9, 0),
+        0xd0 => int(1, 8),
+        0xd1 => int(2, 16),
+        0xd2 => int(4, 32),
+        0xd3 => int(8, 64),
+        0xd4 => fixext(1),
+        0xd5 => fixext(2),
+        0xd6 => fixext(4),
+        0xd7 => fixext(8),
+        0xd8 => fixext(16),
+        0xd9 => sized(Mp::Str, 1),
+        0xda => sized(Mp::Str, 2),
+        0xdb => sized(Mp::Str, 4),
+        0xdc => sized(Mp::Array, 2),
+        0xdd => sized(Mp::Array, 4),
+        0xde => sized(Mp::Map, 2),
+        0xdf => sized(Mp::Map, 4),
+        0xe0..=0xff => h(Mp::Int(i64::from(i8::from_le_bytes([t]))), 1, 0),
+    }
+}
+
+/// Where the item at `at` ends, if it ends inside `b`. Iterative, with a
+/// suspension point every 1,024 items.
+async fn end_of(cx: &Cx, b: &[u8], at: usize) -> Option<usize> {
+    let mut pos = at;
+    let mut pending = 1u64;
+    let mut n = 0u32;
+    while pending > 0 {
+        let h = hd(b, pos)?;
+        pending = pending.saturating_sub(1);
+        pos = pos.checked_add(h.head)?;
+        match h.kind {
+            Mp::Str | Mp::Bin | Mp::Ext(_) => {
+                pos = pos.checked_add(usize::try_from(h.arg).ok()?)?;
+            }
+            Mp::Array => pending = pending.saturating_add(h.arg),
+            Mp::Map => pending = pending.saturating_add(h.arg.saturating_mul(2)),
+            _ => {}
+        }
+        // Every pending item takes at least a byte.
+        if pos > b.len() || pending > to_u64(b.len().saturating_sub(pos)) {
+            return None;
+        }
+        n = n.wrapping_add(1);
+        if n.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
+    }
+    Some(pos)
+}
+
+/// The payload of a string, binary or extension item at `at`.
+fn payload<'a>(b: &'a [u8], at: usize, h: &Hd) -> &'a [u8] {
+    whole(b, at, h).unwrap_or_default()
+}
+
+/// The payload of the item at `at`, if `b` holds all of it.
+fn whole<'a>(b: &'a [u8], at: usize, h: &Hd) -> Option<&'a [u8]> {
+    let start = at.saturating_add(h.head);
+    let end = start.saturating_add(usize::try_from(h.arg).unwrap_or(usize::MAX));
+    b.get(start..end)
+}
+
+/// What a refined unknown value is known to be (go-cty `msgpack`
+/// extension 12: a map of refinements by key): not null, a string
+/// prefix, number bounds, collection length bounds.
+fn refinements(b: &[u8]) -> Vec<String> {
+    let mut out = Vec::new();
+    let Some(m) = hd(b, 0).filter(|h| h.kind == Mp::Map) else {
+        return out;
+    };
+    let mut pos = m.head;
+    for _ in 0..m.arg.min(16) {
+        let Some(k) = hd(b, pos) else { break };
+        pos = pos.saturating_add(k.head);
+        let Some(v) = hd(b, pos) else { break };
+        let key = match k.kind {
+            Mp::UInt(k) => k,
+            _ => 0,
+        };
+        let scalar = |at: usize| -> Option<String> {
+            let h = hd(b, at)?;
+            Some(match h.kind {
+                Mp::UInt(n) => n.to_string(),
+                Mp::Int(n) => n.to_string(),
+                Mp::Float(f) => f.to_string(),
+                // Big numbers are written as their decimal text.
+                Mp::Str => String::from_utf8_lossy(payload(b, at, &h)).into_owned(),
+                _ => return None,
+            })
+        };
+        let bound = |at: usize, below: bool| -> Option<String> {
+            let a = hd(b, at).filter(|h| h.kind == Mp::Array && h.arg == 2)?;
+            let n_at = at.saturating_add(a.head);
+            let n = scalar(n_at)?;
+            let n_len = hd(b, n_at)?;
+            let skip = n_len.head.saturating_add(match n_len.kind {
+                Mp::Str => usize::try_from(n_len.arg).ok()?,
+                _ => 0,
+            });
+            let inclusive = matches!(hd(b, n_at.saturating_add(skip))?.kind, Mp::Bool(true));
+            Some(match (below, inclusive) {
+                (false, true) => format!("≥ {n}"),
+                (false, false) => format!("> {n}"),
+                (true, true) => format!("≤ {n}"),
+                (true, false) => format!("< {n}"),
+            })
+        };
+        let text = match (key, v.kind) {
+            (1, Mp::Bool(false)) => Some("not null".to_owned()),
+            (2, Mp::Str) => {
+                whole(b, pos, &v).map(|p| format!("starts with {:?}", String::from_utf8_lossy(p)))
+            }
+            (3, _) => bound(pos, false),
+            (4, _) => bound(pos, true),
+            (5, _) => scalar(pos).map(|n| format!("length ≥ {n}")),
+            (6, _) => scalar(pos).map(|n| format!("length ≤ {n}")),
+            _ => None,
+        };
+        out.extend(text);
+        // Skip the value (small: the extension is at most 1 KiB).
+        let mut end = pos;
+        let mut pending = 1u64;
+        while pending > 0 {
+            let Some(h) = hd(b, end) else { return out };
+            pending = pending.saturating_sub(1);
+            end = end.saturating_add(h.head);
+            match h.kind {
+                Mp::Str | Mp::Bin | Mp::Ext(_) => {
+                    end = end.saturating_add(usize::try_from(h.arg).unwrap_or(usize::MAX));
+                }
+                Mp::Array => pending = pending.saturating_add(h.arg),
+                Mp::Map => pending = pending.saturating_add(h.arg.saturating_mul(2)),
+                _ => {}
+            }
+            if end > b.len() || pending > to_u64(b.len()) {
+                return out;
+            }
+        }
+        pos = end;
+    }
+    out
+}
+
+/// The node of the cty value encoded in `b[start..end]` (at `span` of the
+/// source), named `name`. go-cty's `msgpack` encoding: an unknown value
+/// ("known after apply") is extension 0 (or any extension of at most one
+/// byte), or extension 12 with its refinements; a value of a dynamic type
+/// is a pair of its type (JSON, as binary) and the value; null is nil.
+fn cty_node(b: &[u8], start: usize, end: usize, span: Span, name: String, depth: u32) -> Node {
+    let b = b.get(..end).unwrap_or(b);
+    let node = Node::new(name).span(span);
+    let Some(h) = hd(b, start) else {
+        return node.diag(Diagnostic::malformed("invalid MessagePack value"));
+    };
+    match h.kind {
+        Mp::Nil => node.summary("null"),
+        Mp::Bool(v) => node.value(Value::Bool(v)),
+        Mp::UInt(v) => node.value(Value::UInt {
+            value: v,
+            bits: 64,
+            radix: Radix::Dec,
+        }),
+        Mp::Int(v) => node.value(Value::Int { value: v, bits: 64 }),
+        Mp::Float(v) => node.value(Value::Float(v)),
+        Mp::Str => {
+            let s = payload(b, start, &h);
+            let shown = s.get(..to_usize(TEXT_MAX)).unwrap_or(s);
+            let node = node.value(Value::Text(String::from_utf8_lossy(shown).into_owned()));
+            if to_u64(s.len()) > TEXT_MAX {
+                node.summary(format!("{} bytes", s.len()))
+            } else {
+                node
+            }
+        }
+        Mp::Ext(t) if h.arg <= 1 || t == 12 => {
+            let mut summary = "(known after apply)".to_owned();
+            if t == 12 {
+                let r = refinements(payload(b, start, &h));
+                if !r.is_empty() {
+                    summary = format!("{summary}, {}", r.join(", "));
+                }
+            }
+            node.summary(summary)
+        }
+        Mp::Array | Mp::Map if h.arg == 0 => node.summary(if h.kind == Mp::Map {
+            "map, empty"
+        } else {
+            "list, empty"
+        }),
+        Mp::Array | Mp::Map => {
+            if depth >= MAX_DEPTH {
+                return node.diag(Diagnostic::limit("value nested too deeply"));
+            }
+            let summary = if h.kind == Mp::Map {
+                format!("map, {}", plural(h.arg, "entry"))
+            } else {
+                format!("list, {}", plural(h.arg, "element"))
+            };
+            // A dynamic value: [type, value], the type as binary JSON.
+            if h.kind == Mp::Array && h.arg == 2 {
+                let first = start.saturating_add(h.head);
+                if let Some(t) = hd(b, first).filter(|t| t.kind == Mp::Bin) {
+                    let ty = String::from_utf8_lossy(payload(b, first, &t)).into_owned();
+                    let at = first
+                        .saturating_add(t.head)
+                        .saturating_add(usize::try_from(t.arg).unwrap_or(usize::MAX));
+                    let inner_span = span.sub(to_u64(at.saturating_sub(start)), span.len);
+                    let mut inner = cty_node(b, at, end, inner_span, node.name.to_string(), depth);
+                    // A primitive type is a JSON string: shown bare.
+                    let ty = ty
+                        .strip_prefix('"')
+                        .and_then(|t| t.strip_suffix('"'))
+                        .unwrap_or(&ty);
+                    let ty = format!("type {}", short(ty));
+                    inner.summary = Some(match inner.summary.take() {
+                        Some(s) => format!("{s} · {ty}"),
+                        None => ty,
+                    });
+                    return inner.span(span);
+                }
+            }
+            node.summary(summary).lazy(
+                crate::expander!(self::cty_members: (Span, u32)),
+                (span, depth),
+            )
+        }
+        Mp::Bin => node
+            .value(Value::Bytes(payload(b, start, &h).to_vec()))
+            .summary("binary"),
+        Mp::Ext(t) => node.summary(format!("MessagePack extension type {t}, {} bytes", h.arg)),
+        Mp::Unused => node.diag(Diagnostic::malformed("MessagePack type 0xc1")),
+    }
+}
+
+/// Expander: the members of the cty list or map at `span`.
+async fn cty_members(cx: Cx, (span, depth): (Span, u32)) -> Result<()> {
+    let b = cx.read(span).await?;
+    let h = hd(&b, 0).ok_or_else(|| Diagnostic::malformed("invalid MessagePack value"))?;
+    let is_map = h.kind == Mp::Map;
+    let mut pos = h.head;
+    for i in 0..h.arg {
+        let mut name = format!("[{i}]");
+        // A map member spans its key too.
+        let from = pos;
+        if is_map {
+            let k = hd(&b, pos).ok_or_else(|| Diagnostic::truncated(span, to_u64(b.len())))?;
+            let end = end_of(&cx, &b, pos)
+                .await
+                .ok_or_else(|| Diagnostic::malformed("invalid MessagePack map key"))?;
+            name = match k.kind {
+                Mp::Str => String::from_utf8_lossy(payload(&b, pos, &k)).into_owned(),
+                _ => name,
+            };
+            pos = end;
+        }
+        let end = end_of(&cx, &b, pos)
+            .await
+            .ok_or_else(|| Diagnostic::malformed("invalid MessagePack value"))?;
+        let sub = span.sub(to_u64(pos), to_u64(end.saturating_sub(pos)));
+        let node = cty_node(&b, pos, end, sub, name, depth.saturating_add(1));
+        let whole = span.sub(to_u64(from), to_u64(end.saturating_sub(from)));
+        cx.push(node.span(whole)).await;
+        pos = end;
+    }
+    Ok(())
+}
+
+/// The node of the cty value (a `DynamicValue`'s MessagePack) at `body`.
+async fn cty_value(cx: &Cx, input: &Input, label: String, body: Span) -> Result<Node> {
+    if body.len > CTY_MAX {
+        return Ok(embedded_named(label, input.nested(body), "msgpack")
+            .summary(format!("MessagePack value, {} bytes", body.len)));
+    }
+    let b = cx.read(body).await?;
+    cx.charge(to_u64(b.len()) / 256).await;
+    let end = match end_of(cx, &b, 0).await {
+        Some(end) => end,
+        None => {
+            return Ok(Node::new(label)
+                .span(body)
+                .diag(Diagnostic::malformed("invalid MessagePack value")));
+        }
+    };
+    let mut node = cty_node(&b, 0, end, body.sub(0, to_u64(end)), label, 0);
+    if end < b.len() {
+        node = node.diag(Diagnostic::malformed(format!(
+            "{} bytes after the value",
+            b.len().saturating_sub(end)
+        )));
+    }
+    Ok(node)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn refinements_are_described() {
+        // {1: false, 2: "ab", 3: [1, true], 4: [9.5, false], 5: 2, 6: 4}
+        let mut b = vec![
+            0x86, 0x01, 0xc2, 0x02, 0xa2, b'a', b'b', 0x03, 0x92, 0x01, 0xc3,
+        ];
+        b.extend([0x04, 0x92, 0xcb]);
+        b.extend(9.5f64.to_be_bytes());
+        b.extend([0xc2, 0x05, 0x02, 0x06, 0x04]);
+        assert_eq!(
+            refinements(&b),
+            [
+                "not null",
+                "starts with \"ab\"",
+                "≥ 1",
+                "< 9.5",
+                "length ≥ 2",
+                "length ≤ 4"
+            ]
+        );
+        // Truncated: what was read so far.
+        assert_eq!(refinements(&b[..5]), ["not null"]);
     }
 }
