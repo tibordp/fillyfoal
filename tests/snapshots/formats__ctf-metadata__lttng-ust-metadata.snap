@@ -6,7 +6,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Packets — 1 packet  [0x0+0x1000]
     ▾ Packet 0 — 3.0 KiB of text  [0x0+0x1000]
         magic: 0x75d11d57  [0x0+0x4]
-        uuid: "524341be-b491-40cb-9663-e81ed22d22e5"  [0x4+0x10]
+        uuid: 524341be-b491-40cb-9663-e81ed22d22e5  [0x4+0x10]
         checksum: 0x0  [0x14+0x4]
         content_size: 24648 — bits, 3081 bytes  [0x18+0x4]
         packet_size: 32768 — bits, 4096 bytes  [0x1c+0x4]

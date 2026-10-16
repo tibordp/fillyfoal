@@ -459,13 +459,7 @@ async fn object_id_fields(cx: Cx, span: Span) -> Result<()> {
 
 /// A UUID in RFC 4122 (big-endian) byte order.
 fn uuid(b: &[u8]) -> Option<Guid> {
-    let be = crate::formats::util::datakit::be_uint;
-    Some(Guid {
-        data1: u32::try_from(be(b.get(0..4)?)).ok()?,
-        data2: u16::try_from(be(b.get(4..6)?)).ok()?,
-        data3: u16::try_from(be(b.get(6..8)?)).ok()?,
-        data4: b.get(8..16)?.try_into().ok()?,
-    })
+    Guid::big_at(b)
 }
 
 /// Decimal128 (IEEE 754-2008, binary integer decimal encoding) as text.

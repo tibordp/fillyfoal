@@ -7,7 +7,7 @@ use crate::formats::util::floats::f16;
 use crate::formats::util::fmt::plural;
 use crate::formats::util::val;
 use crate::node::Node;
-use crate::value::{EnumTable, FlagTable, Radix, Value, flag, lookup};
+use crate::value::{EnumTable, FlagTable, Radix, Value, flag, lookup, number};
 
 use super::util::{Rd, limit_enc_size};
 
@@ -46,6 +46,7 @@ const FLOAT_BITS: FlagTable = &[
     flag(0x10, "mantissa MSB always set"),
     flag(0x20, "mantissa MSB implied"),
     flag(0x40, "byte order bit 1 (VAX)"),
+    number(0xff00, "sign bit position"),
 ];
 
 const PADDING: EnumTable = &[
@@ -268,17 +269,9 @@ pub fn parse(rd: &mut Rd<'_>, depth: u32) -> Option<Ty> {
         }
     };
     let flags = |table: FlagTable| {
-        let (set, unknown) = crate::value::decode_flags(table, bits & 0xff);
-        // Floating-point types keep the sign's bit position in bits 8-15.
-        let rest = if class == 1 { 0xff_ffff } else { 0xff };
         Node::new("Class bit field")
             .span(bspan)
-            .value(Value::Flags {
-                raw: bits,
-                bits: 24,
-                set,
-                unknown: unknown | (bits & !rest),
-            })
+            .value(Value::flags(bits, 24, table))
     };
     Some(match class {
         0 | 4 => {

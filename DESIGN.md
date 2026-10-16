@@ -206,7 +206,22 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
   per_sec }`: exact, rendered with integers in one style (`250 ms`,
   `1.48 s`, `0:01:05.500`), with the ticks shown when a tick is not a
   power-of-ten fraction of a second (`1.48 s (133200/90000 s)`).
-  Summaries use the same style (`fmt::duration`). `render::value`
+  Summaries use the same style (`fmt::duration`). A bit set is
+  `Flags { raw, bits, table }`: the table travels with the value, so a
+  host can draw every bit, set or not; a multi-bit field's entry for 0
+  (`DICT_64K`) is named like any other, and a `number(mask, name)` entry
+  accounts for bits that hold a number (an offset) rather than flags. A
+  GUID keeps its 16 bytes as stored and their order (`Guid { bytes, order:
+  Mixed | Big }`): Microsoft's mixed-endian layout is shown braced, RFC
+  4122 order unbraced, so "copy bytes" is always the file's bytes. A
+  network or hardware address is an `Addr` (IPv4, IPv6 as RFC 5952, MAC,
+  EUI-64), and a colour a `Color(Box<Color { model, components, depth,
+  alpha, space, name }>)` in the file's own model (RGB, gray, CMYK, Lab,
+  HSB), depth (bits, floats, or a packed number kept visible) and space;
+  its text follows CSS Color 4 (`#ff8800`, `color(srgb-linear 1 0.5 0)`,
+  `device-cmyk(…)`, `lab(…)`), and `Color::to_srgb8` gives hosts a swatch,
+  exact or flagged approximate (CMYK, Lab, device values). No colour
+  management happens in the core. `render::value`
   is the canonical text and never depends on the host (zone, locale); hosts
   may format the structured fields their own way. `Value` is
   `#[non_exhaustive]` and atoms are added over time, so every host keeps a

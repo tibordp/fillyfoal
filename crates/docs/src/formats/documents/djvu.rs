@@ -547,7 +547,7 @@ async fn palette(cx: Cx, (input, body): (Input, Span)) -> Result<()> {
         cx.push(
             Node::new(format!("Color {i}"))
                 .span(table.sub(to_u64(i).saturating_mul(3), 3))
-                .value(Value::Text(format!("#{r:02x}{g:02x}{b:02x}")))
+                .value(Value::color(crate::value::Color::rgb8(r, g, b)))
                 .desc("Stored blue, green, red"),
         )
         .await;

@@ -10,7 +10,7 @@ use super::dec::{Dec, Ix, ipv4, mac};
 use super::{dns, net, tls};
 use crate::error::Diagnostic;
 use crate::formats::util::fmt::{preview, size};
-use crate::value::{EnumTable, FlagTable, flag, lookup};
+use crate::value::{Addr, EnumTable, FlagTable, flag, lookup};
 
 /// Decodes a TCP payload; returns the end of what was accounted for.
 pub fn tcp(b: &mut Dec, p: Ix, sp: u16, dp: u16, off: usize, end: usize) -> usize {
@@ -537,14 +537,18 @@ fn dhcp_option(b: &mut Dec, o: Ix, code: u8, body: usize, len: usize) -> String 
             } else {
                 crate::text::hex_lower(rest)
             };
-            let shown = s.clone();
-            b.text(
-                o,
-                "Identifier",
-                body.saturating_add(1),
-                len.saturating_sub(1),
-                || shown,
-            );
+            if t == 1 && rest.len() == 6 {
+                b.addr(o, "Identifier", body.saturating_add(1), 6, Addr::mac_at);
+            } else {
+                let shown = s.clone();
+                b.text(
+                    o,
+                    "Identifier",
+                    body.saturating_add(1),
+                    len.saturating_sub(1),
+                    || shown,
+                );
+            }
             s
         }
         81 if len >= 3 => {
@@ -694,8 +698,12 @@ fn ntp(b: &mut Dec, p: Ix, off: usize, end: usize) -> usize {
     } else {
         ipv4(&refid)
     };
-    let shown = rtext.clone();
-    b.text(ix, "Reference ID", rid, 4, || shown);
+    if stratum <= 1 {
+        let shown = rtext.clone();
+        b.text(ix, "Reference ID", rid, 4, || shown);
+    } else {
+        b.addr(ix, "Reference ID", rid, 4, Addr::v4_at);
+    }
     for (i, name) in [
         "Reference timestamp",
         "Origin timestamp",

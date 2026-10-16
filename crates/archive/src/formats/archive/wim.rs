@@ -105,16 +105,10 @@ fn resource_layout(f: &mut Fields<'_>, in_solid: &bool) -> Result<()> {
             .span(span.sub(0, 7))
             .value(crate::formats::util::val::size(r.size, 64)),
     );
-    let (set, unknown) = crate::value::decode_flags(RESOURCE_FLAGS, r.flags.into());
     f.node(
         Node::new("Flags")
             .span(Span::new(span.source, span.offset.saturating_add(7), 1))
-            .value(Value::Flags {
-                raw: r.flags.into(),
-                bits: 8,
-                set,
-                unknown,
-            }),
+            .value(Value::flags(r.flags.into(), 8, RESOURCE_FLAGS)),
     );
     f.skip(8);
     if *in_solid {

@@ -1036,10 +1036,12 @@ async fn rle_records(cx: Cx, (span, bits): (Span, u8)) -> Result<()> {
             let what = match bits {
                 4 => format!("indices {} and {} alternating", code >> 4, code & 0x0f),
                 24 => format!(
-                    "color #{:02x}{:02x}{:02x}",
-                    value.get(2).copied().unwrap_or(0),
-                    value.get(1).copied().unwrap_or(0),
-                    value.first().copied().unwrap_or(0)
+                    "color {}",
+                    crate::value::Color::rgb8(
+                        value.get(2).copied().unwrap_or(0),
+                        value.get(1).copied().unwrap_or(0),
+                        value.first().copied().unwrap_or(0)
+                    )
                 ),
                 _ => format!("index {code}"),
             };

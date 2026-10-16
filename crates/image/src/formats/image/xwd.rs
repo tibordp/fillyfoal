@@ -133,7 +133,12 @@ async fn color_table(cx: Cx, span: Span) -> Result<()> {
         cx.push(
             Node::new(format!("[{i}]"))
                 .span(entry)
-                .value(text(format!("#{:04x}{:04x}{:04x}", get(4), get(6), get(8))))
+                .value(crate::value::Value::color(crate::value::Color::rgb_bits(
+                    16,
+                    get(4).into(),
+                    get(6).into(),
+                    get(8).into(),
+                )))
                 .summary(format!("pixel {pixel}")),
         )
         .await;

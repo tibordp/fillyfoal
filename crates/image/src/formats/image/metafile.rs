@@ -546,7 +546,7 @@ async fn wmf_records(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
 /// A COLORREF (red, green, blue, reserved) as `#rrggbb`.
 fn color(data: &[u8], at: usize) -> Option<String> {
     let [r, g, b] = crate::bytes::array::<3>(data, at)?;
-    Some(format!("#{r:02x}{g:02x}{b:02x}"))
+    Some(crate::value::Color::rgb8(r, g, b).to_string())
 }
 
 fn i16_at(data: &[u8], at: usize) -> Option<i16> {

@@ -186,7 +186,7 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
             data,
             e,
             "Color",
-            Some(|c| format!("#{:02x}{:02x}{:02x}", c.red, c.green, c.blue)),
+            Some(|c| crate::value::Color::rgb8(c.red, c.green, c.blue).to_string()),
         )),
         b"CAMG" => {
             let block = cx.block(data.sub(0, 4)).await?;

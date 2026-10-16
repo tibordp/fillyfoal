@@ -9,7 +9,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Data blocks: 8 × 4096 bytes (32 KiB)  [0x8+0x8]
       Realtime blocks: 0  [0x10+0x8]
       Realtime extents: 0  [0x18+0x8]
-      UUID: "aabbccdd-eeff-0011-2233-445566778899"  [0x20+0x10]
+      UUID: aabbccdd-eeff-0011-2233-445566778899  [0x20+0x10]
       Log start block: 0  [0x30+0x8]
       Root directory inode: 32  [0x38+0x8]
       Realtime bitmap inode: 33  [0x40+0x8]
@@ -58,7 +58,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Sparse inode chunk alignment (blocks): 0  [0xe4+0x4]
       Project quota inode: 0  [0xe8+0x8]
       Last write LSN: 0x0 — cycle 0, block 0  [0xf0+0x8]
-      Metadata UUID: "00000000-0000-0000-0000-000000000000"  [0xf8+0x10]
+      Metadata UUID: 00000000-0000-0000-0000-000000000000  [0xf8+0x10]
       Unused — 248 bytes  [0x108+0xf8]
   ▾ Allocation groups — 2 × 16 KiB
     ▾ AG 0 — 16 KiB, from block 0  [0x0+0x4000]
@@ -81,7 +81,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Free blocks: 1  [0x234+0x4]
           Longest free extent (blocks): 1  [0x238+0x4]
           B+tree blocks: 0  [0x23c+0x4]
-          UUID: "00000000-0000-0000-0000-000000000000"  [0x240+0x10]
+          UUID: 00000000-0000-0000-0000-000000000000  [0x240+0x10]
           Reverse mapping B+tree blocks: 0  [0x250+0x4]
           Reference count B+tree blocks: 0  [0x254+0x4]
           Reference count B+tree root: 0  [0x258+0x4]
@@ -169,7 +169,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Bucket 61: 0 — AG inode 0  [0x51c+0x4]
             Bucket 62: 0 — AG inode 0  [0x520+0x4]
             Bucket 63: 0 — AG inode 0  [0x524+0x4]
-          UUID: "00000000-0000-0000-0000-000000000000"  [0x528+0x10]
+          UUID: 00000000-0000-0000-0000-000000000000  [0x528+0x10]
           CRC: 0x0 (CRC-32C, mismatch: computed 0x3c5fa3d)  [0x538+0x4]
             ! warning: CRC-32C mismatch: stored 0x0, computed 0x3c5fa3d
           Padding: 0  [0x53c+0x4]
@@ -183,7 +183,7 @@ expression: "common::explore(&display_name(&path), &data)"
           ! malformed: bad AGFL magic
           Magic: ""  [0x600+0x4]
           AG number: 0  [0x604+0x4]
-          UUID: "00000000-0000-0000-0000-000000000000"  [0x608+0x10]
+          UUID: 00000000-0000-0000-0000-000000000000  [0x608+0x10]
           LSN: 0x0 — cycle 0, block 0  [0x618+0x8]
           CRC: 0x0 (CRC-32C, mismatch: computed 0x30fcedc0)  [0x620+0x4]
             ! warning: CRC-32C mismatch: stored 0x0, computed 0x30fcedc0
@@ -198,7 +198,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Right sibling: 0  [0x100c+0x4]
             Disk address (512-byte units): 0x0  [0x1010+0x8]
             LSN: 0x0 — cycle 0, block 0  [0x1018+0x8]
-            UUID: "00000000-0000-0000-0000-000000000000"  [0x1020+0x10]
+            UUID: 00000000-0000-0000-0000-000000000000  [0x1020+0x10]
             Owner (AG): 0  [0x1030+0x4]
             CRC: 0x0 (CRC-32C, mismatch: computed 0x98f94189)  [0x1034+0x4]
               ! warning: CRC-32C mismatch: stored 0x0, computed 0x98f94189
@@ -212,7 +212,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Right sibling: 0  [0x200c+0x4]
             Disk address (512-byte units): 0x0  [0x2010+0x8]
             LSN: 0x0 — cycle 0, block 0  [0x2018+0x8]
-            UUID: "00000000-0000-0000-0000-000000000000"  [0x2020+0x10]
+            UUID: 00000000-0000-0000-0000-000000000000  [0x2020+0x10]
             Owner (AG): 0  [0x2030+0x4]
             CRC: 0x0 (CRC-32C, mismatch: computed 0x98f94189)  [0x2034+0x4]
               ! warning: CRC-32C mismatch: stored 0x0, computed 0x98f94189
@@ -226,7 +226,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Right sibling: 0  [0x300c+0x4]
             Disk address (512-byte units): 0x0  [0x3010+0x8]
             LSN: 0x0 — cycle 0, block 0  [0x3018+0x8]
-            UUID: "00000000-0000-0000-0000-000000000000"  [0x3020+0x10]
+            UUID: 00000000-0000-0000-0000-000000000000  [0x3020+0x10]
             Owner (AG): 0  [0x3030+0x4]
             CRC: 0x0 (CRC-32C, mismatch: computed 0x98f94189)  [0x3034+0x4]
               ! warning: CRC-32C mismatch: stored 0x0, computed 0x98f94189
@@ -240,7 +240,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Data blocks: 0 × 50397184 bytes (0 bytes)  [0x4008+0x8]
           Realtime blocks: 12884901888  [0x4010+0x8]
           Realtime extents: 0  [0x4018+0x8]
-          UUID: "66475da6-0000-0000-6647-5da600000000"  [0x4020+0x10]
+          UUID: 66475da6-0000-0000-6647-5da600000000  [0x4020+0x10]
           Log start block: 7369962282761060352  [0x4030+0x8]
           Root directory inode: 22  [0x4038+0x8]
           Realtime bitmap inode: 0  [0x4040+0x8]
@@ -300,7 +300,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Free blocks: 1  [0x4234+0x4]
           Longest free extent (blocks): 1  [0x4238+0x4]
           B+tree blocks: 0  [0x423c+0x4]
-          UUID: "00000000-0000-0000-0000-000000000000"  [0x4240+0x10]
+          UUID: 00000000-0000-0000-0000-000000000000  [0x4240+0x10]
           Reverse mapping B+tree blocks: 0  [0x4250+0x4]
           Reference count B+tree blocks: 0  [0x4254+0x4]
           Reference count B+tree root: 0  [0x4258+0x4]
@@ -388,7 +388,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Bucket 61: 0 — AG inode 0  [0x451c+0x4]
             Bucket 62: 0 — AG inode 0  [0x4520+0x4]
             Bucket 63: 0 — AG inode 0  [0x4524+0x4]
-          UUID: "00000000-0000-0000-0000-000000000000"  [0x4528+0x10]
+          UUID: 00000000-0000-0000-0000-000000000000  [0x4528+0x10]
           CRC: 0x0 (CRC-32C, mismatch: computed 0x150ba9e6)  [0x4538+0x4]
             ! warning: CRC-32C mismatch: stored 0x0, computed 0x150ba9e6
           Padding: 0  [0x453c+0x4]
@@ -402,7 +402,7 @@ expression: "common::explore(&display_name(&path), &data)"
           ! malformed: bad AGFL magic
           Magic: ""  [0x4600+0x4]
           AG number: 0  [0x4604+0x4]
-          UUID: "00000000-0000-0000-0000-000000000000"  [0x4608+0x10]
+          UUID: 00000000-0000-0000-0000-000000000000  [0x4608+0x10]
           LSN: 0x0 — cycle 0, block 0  [0x4618+0x8]
           CRC: 0x0 (CRC-32C, mismatch: computed 0x30fcedc0)  [0x4620+0x4]
             ! warning: CRC-32C mismatch: stored 0x0, computed 0x30fcedc0
@@ -417,7 +417,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Right sibling: 0  [0x500c+0x4]
             Disk address (512-byte units): 0x0  [0x5010+0x8]
             LSN: 0x0 — cycle 0, block 0  [0x5018+0x8]
-            UUID: "00000000-0000-0000-0000-000000000000"  [0x5020+0x10]
+            UUID: 00000000-0000-0000-0000-000000000000  [0x5020+0x10]
             Owner (AG): 0  [0x5030+0x4]
             CRC: 0x0 (CRC-32C, mismatch: computed 0x98f94189)  [0x5034+0x4]
               ! warning: CRC-32C mismatch: stored 0x0, computed 0x98f94189
@@ -431,7 +431,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Right sibling: 0  [0x600c+0x4]
             Disk address (512-byte units): 0x0  [0x6010+0x8]
             LSN: 0x0 — cycle 0, block 0  [0x6018+0x8]
-            UUID: "00000000-0000-0000-0000-000000000000"  [0x6020+0x10]
+            UUID: 00000000-0000-0000-0000-000000000000  [0x6020+0x10]
             Owner (AG): 0  [0x6030+0x4]
             CRC: 0x0 (CRC-32C, mismatch: computed 0x98f94189)  [0x6034+0x4]
               ! warning: CRC-32C mismatch: stored 0x0, computed 0x98f94189
@@ -445,7 +445,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Right sibling: 0  [0x700c+0x4]
             Disk address (512-byte units): 0x0  [0x7010+0x8]
             LSN: 0x0 — cycle 0, block 0  [0x7018+0x8]
-            UUID: "00000000-0000-0000-0000-000000000000"  [0x7020+0x10]
+            UUID: 00000000-0000-0000-0000-000000000000  [0x7020+0x10]
             Owner (AG): 0  [0x7030+0x4]
             CRC: 0x0 (CRC-32C, mismatch: computed 0x98f94189)  [0x7034+0x4]
               ! warning: CRC-32C mismatch: stored 0x0, computed 0x98f94189
@@ -490,7 +490,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Padding: 00 00 00 00 00 00 00 00 00 00 00 00  |............|  [0x4084+0xc]
           Created: 1970-01-01 00:00:00 UTC  [0x4090+0x8]
           Inode number: 0  [0x4098+0x8]
-          UUID: "00000000-0000-0000-0000-000000000000"  [0x40a0+0x10]
+          UUID: 00000000-0000-0000-0000-000000000000  [0x40a0+0x10]
       ▾ Data fork — local (inline), 336 bytes  [0x40b0+0x150]
           Entries: 0  [0x40b0+0x1]
           Entries with 8-byte inode numbers: 0  [0x40b1+0x1]

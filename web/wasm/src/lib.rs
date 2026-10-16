@@ -11,9 +11,9 @@
 use std::collections::HashMap;
 
 use fillyfoal::{
-    ByteRequest, ChildState, Count, DiagKind, Diagnostic, Digest, Limits, NodeId, Progress, Radix,
-    ReadProgress, Res, Secret, SecretRequest, Session, SizeUnit, SourceId, Span, Value, Verdict,
-    Wait, Zone, formats,
+    Addr, ByteRequest, ChildState, Color, ColorDepth, ColorModel, ColorSpace, Count, DiagKind,
+    Diagnostic, Digest, Exactness, GuidOrder, Limits, NodeId, Progress, Radix, ReadProgress, Res,
+    Secret, SecretRequest, Session, SizeUnit, SourceId, Span, Value, Verdict, Wait, Zone, formats,
 };
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -704,6 +704,8 @@ enum ValueKind {
     Checksum,
     Size,
     Duration,
+    Addr,
+    Color,
     /// A value this build doesn't structure: `text` only, `data` is null.
     Other,
 }
@@ -752,6 +754,9 @@ enum WireData {
         set: Vec<&'static str>,
         /// Bits no named flag accounts for.
         unknown: String,
+        /// Every entry of the flag table, matched or not, so a host can
+        /// draw all the bits.
+        table: Vec<WireFlag>,
     },
     Float {
         /// Null when not finite (`text` then says NaN or inf).
@@ -789,8 +794,12 @@ enum WireData {
     Guid {
         /// The 16 bytes in stored order.
         hex: String,
-        /// "mixed": Microsoft's layout, the first three fields little-endian.
+        /// "mixed": Microsoft's layout, the first three fields little-endian
+        /// (`text` braced); "big": RFC 4122 order (`text` unbraced).
         order: &'static str,
+        /// The identifier as RFC 4122 text, lowercase, unbraced, whatever
+        /// the stored order.
+        uuid: String,
     },
     Checksum {
         /// "CRC-32", "SHA-256", "Adler-32", or the format's own name.
@@ -832,6 +841,55 @@ enum WireData {
         /// `ticks / per_sec`, rounded to a double (`text` is exact).
         seconds: f64,
     },
+    Addr {
+        /// "ipv4", "ipv6", "mac", "eui64", or "other" for a family this
+        /// build predates.
+        family: &'static str,
+        /// The address bytes in network order.
+        hex: String,
+    },
+    Color {
+        /// "rgb", "gray", "cmyk", "lab", "hsb" or "other".
+        model: &'static str,
+        /// The model's components, normalised to 0..1 (Lab in its own
+        /// ranges: L 0..100, a and b about ±128).
+        components: Vec<f64>,
+        /// "bits", "float", "packed" or "other": how the file stores them.
+        depth: &'static str,
+        /// For "bits" and "float": bits per component; for "packed": the
+        /// width of the packed number.
+        bits: Option<u8>,
+        /// For "packed": the packed number and its layout ("RGB565").
+        packed: Option<String>,
+        layout: Option<&'static str>,
+        /// 0..1, when the colour has alpha.
+        alpha: Option<f64>,
+        premultiplied: bool,
+        /// "srgb", "srgb-linear", "display-p3", "rec2020", "device" or
+        /// "other".
+        space: &'static str,
+        /// A spot colour's or swatch's name.
+        name: Option<String>,
+        /// A swatch to draw: 8-bit sRGB `rrggbbaa` (straight alpha), null
+        /// when there is none.
+        swatch: Option<String>,
+        /// Whether `swatch` is the colour (false for CMYK, Lab, device
+        /// values and clipped colours, which only approximate it).
+        exact: bool,
+    },
+}
+
+/// One entry of a flag table: it matches when `raw & mask == value`.
+#[derive(Serialize)]
+struct WireFlag {
+    mask: String,
+    value: String,
+    name: &'static str,
+    /// Whether it matches the value.
+    set: bool,
+    /// A multi-bit field holding a number (an offset, a count), not a flag:
+    /// it never matches; its value is `raw & mask`.
+    number: bool,
 }
 
 /// Bits of a signed value as an unsigned number of that width.
@@ -860,6 +918,50 @@ fn radix_name(radix: Radix) -> &'static str {
         Radix::Hex => "hex",
         Radix::Oct => "oct",
         Radix::Bin => "bin",
+    }
+}
+
+fn color_data(c: &Color) -> WireData {
+    let (depth, bits, packed, layout) = match c.depth {
+        ColorDepth::Bits(b) => ("bits", Some(b), None, None),
+        ColorDepth::Float(b) => ("float", Some(b), None, None),
+        ColorDepth::Packed { raw, bits, layout } => (
+            "packed",
+            Some(bits),
+            Some(format!("{raw:#x}")),
+            Some(layout),
+        ),
+        _ => ("other", None, None, None),
+    };
+    let (n, model) = match c.model {
+        ColorModel::Rgb => (3, "rgb"),
+        ColorModel::Gray => (1, "gray"),
+        ColorModel::Cmyk => (4, "cmyk"),
+        ColorModel::Lab => (3, "lab"),
+        ColorModel::Hsb => (3, "hsb"),
+        _ => (4, "other"),
+    };
+    let swatch = c.to_srgb8();
+    WireData::Color {
+        model,
+        components: c.components.iter().take(n).copied().collect(),
+        depth,
+        bits,
+        packed,
+        layout,
+        alpha: c.alpha.map(|a| a.value),
+        premultiplied: c.alpha.is_some_and(|a| a.premultiplied),
+        space: match c.space {
+            ColorSpace::Srgb => "srgb",
+            ColorSpace::LinearSrgb => "srgb-linear",
+            ColorSpace::DisplayP3 => "display-p3",
+            ColorSpace::Rec2020 => "rec2020",
+            ColorSpace::Device => "device",
+            _ => "other",
+        },
+        name: c.name.as_ref().map(|n| n.to_string()),
+        swatch: swatch.map(|(px, _)| hex(&px)),
+        exact: swatch.is_some_and(|(_, e)| e == Exactness::Exact),
     }
 }
 
@@ -906,14 +1008,10 @@ impl From<&Value> for WireValue {
                     name: name.as_ref().map(|n| n.to_string()),
                 },
             ),
-            Value::Flags {
-                raw,
-                bits,
-                set,
-                unknown,
-            } => {
+            Value::Flags { raw, bits, table } => {
+                let (set, unknown) = fillyfoal::value::decode_flags(table, *raw);
                 let mut parts: Vec<String> = set.iter().map(|s| s.to_string()).collect();
-                if *unknown != 0 {
+                if unknown != 0 {
                     parts.push(format!("{unknown:#x}"));
                 }
                 let text = if parts.is_empty() {
@@ -928,8 +1026,18 @@ impl From<&Value> for WireValue {
                     WireData::Flags {
                         raw: raw.to_string(),
                         bits: *bits,
-                        set: set.clone(),
+                        set,
                         unknown: unknown.to_string(),
+                        table: table
+                            .iter()
+                            .map(|d| WireFlag {
+                                mask: d.mask.to_string(),
+                                value: d.value.to_string(),
+                                name: d.name,
+                                set: d.matches(*raw),
+                                number: d.is_number(),
+                            })
+                            .collect(),
                     },
                 )
             }
@@ -990,8 +1098,13 @@ impl From<&Value> for WireValue {
                 g.to_string(),
                 None,
                 WireData::Guid {
-                    hex: hex(&g.to_le_bytes()),
-                    order: "mixed",
+                    hex: hex(&g.bytes),
+                    order: match g.order {
+                        GuidOrder::Mixed => "mixed",
+                        GuidOrder::Big => "big",
+                        _ => "other",
+                    },
+                    uuid: g.uuid_text(),
                 },
             ),
             Value::Checksum(c) => {
@@ -1056,6 +1169,22 @@ impl From<&Value> for WireValue {
                     seconds: *ticks as f64 / (*per_sec).max(1) as f64,
                 },
             ),
+            Value::Addr(a) => (
+                K::Addr,
+                a.to_string(),
+                None,
+                WireData::Addr {
+                    family: match a {
+                        Addr::V4(_) => "ipv4",
+                        Addr::V6(_) => "ipv6",
+                        Addr::Mac(_) => "mac",
+                        Addr::Eui64(_) => "eui64",
+                        _ => "other",
+                    },
+                    hex: hex(a.bytes()),
+                },
+            ),
+            Value::Color(c) => (K::Color, c.to_string(), None, color_data(c)),
             // An atom newer than this match: its text, unstructured.
             _ => {
                 return WireValue {
@@ -1210,5 +1339,41 @@ mod tests {
         assert!(wire(bytes).ends_with(
             r#""raw":"20 bytes","data":{"hex":"000102030405060708090a0b0c0d0e0f10111213","len":20}}"#
         ));
+        const T: fillyfoal::value::FlagTable = &[
+            fillyfoal::value::flag(0x80, "LONG"),
+            fillyfoal::value::field(0x60, 0, "DICT_64K"),
+            fillyfoal::value::number(0x0f00, "offset"),
+        ];
+        assert_eq!(
+            wire(Value::flags(0x180, 16, T)),
+            r#"{"kind":"flags","text":"LONG | DICT_64K","raw":"0x180","data":{"raw":"384","bits":16,"set":["LONG","DICT_64K"],"unknown":"0","table":[{"mask":"128","value":"128","name":"LONG","set":true,"number":false},{"mask":"96","value":"0","name":"DICT_64K","set":true,"number":false},{"mask":"3840","value":"18446744073709547775","name":"offset","set":false,"number":true}]}}"#
+        );
+        let stored: [u8; 16] = std::array::from_fn(|i| i as u8);
+        assert_eq!(
+            wire(Value::Guid(fillyfoal::Guid::big(stored))),
+            r#"{"kind":"guid","text":"00010203-0405-0607-0809-0a0b0c0d0e0f","raw":null,"data":{"hex":"000102030405060708090a0b0c0d0e0f","order":"big","uuid":"00010203-0405-0607-0809-0a0b0c0d0e0f"}}"#
+        );
+        assert_eq!(
+            wire(Value::Guid(fillyfoal::Guid::mixed(stored))),
+            r#"{"kind":"guid","text":"{03020100-0504-0706-0809-0a0b0c0d0e0f}","raw":null,"data":{"hex":"000102030405060708090a0b0c0d0e0f","order":"mixed","uuid":"03020100-0504-0706-0809-0a0b0c0d0e0f"}}"#
+        );
+        assert_eq!(
+            wire(Value::Addr(Addr::V4([192, 0, 2, 1]))),
+            r#"{"kind":"addr","text":"192.0.2.1","raw":null,"data":{"family":"ipv4","hex":"c0000201"}}"#
+        );
+        assert_eq!(
+            wire(Value::color(Color::rgba8(0xff, 0x88, 0, 0x80))),
+            r##"{"kind":"color","text":"#ff880080","raw":null,"data":{"model":"rgb","components":[1.0,0.5333333333333333,0.0],"depth":"bits","bits":8,"packed":null,"layout":null,"alpha":0.5019607843137255,"premultiplied":false,"space":"srgb","name":null,"swatch":"ff880080","exact":true}}"##
+        );
+        let cmyk = Color::cmyk(ColorDepth::Float(32), 0.0, 0.5, 1.0, 0.0).named("Orange");
+        assert_eq!(
+            wire(Value::color(cmyk)),
+            r#"{"kind":"color","text":"\"Orange\" (device-cmyk(0 0.5 1 0))","raw":null,"data":{"model":"cmyk","components":[0.0,0.5,1.0,0.0],"depth":"float","bits":32,"packed":null,"layout":null,"alpha":null,"premultiplied":false,"space":"device","name":"Orange","swatch":"ff8000ff","exact":false}}"#
+        );
+        let packed = Color::packed(0xf800, 16, "RGB565", (11, 5), (5, 6), (0, 5));
+        assert!(
+            wire(Value::color(packed))
+                .contains(r#""depth":"packed","bits":16,"packed":"0xf800","layout":"RGB565""#)
+        );
     }
 }

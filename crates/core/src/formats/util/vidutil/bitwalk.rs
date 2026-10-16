@@ -519,6 +519,12 @@ impl Walker {
         Some(out)
     }
 
+    /// Records the bits `start..pos` (already consumed) as a node with
+    /// `value`.
+    pub fn value(&mut self, name: impl Into<Cow<'static, str>>, start: usize, value: Value) {
+        self.record(name, start, value);
+    }
+
     /// Records the bits `start..pos` (already consumed) as a node with a
     /// text value.
     pub fn text(&mut self, name: impl Into<Cow<'static, str>>, start: usize, text: String) {

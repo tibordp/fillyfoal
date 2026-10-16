@@ -584,16 +584,10 @@ async fn credential(cx: Cx, (input, span, version): (Input, Span, u16)) -> Resul
     );
     let at = r.cur.pos();
     let flags = r.cur.u32().await?;
-    let (set, unknown) = crate::value::decode_flags(TICKET_FLAGS, flags.into());
     r.put(
         Node::new("Ticket flags")
             .span(r.cur.since(at))
-            .value(Value::Flags {
-                raw: flags.into(),
-                bits: 32,
-                set,
-                unknown,
-            }),
+            .value(Value::flags(flags.into(), 32, TICKET_FLAGS)),
     );
     for (name, table) in [
         ("Addresses", ADDRESS_TYPES),

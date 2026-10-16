@@ -164,7 +164,7 @@ pub async fn db_at(cx: &Cx, cfb: &CfbRef, storage: u32, transform: bool) -> Arc<
     let mut base = BTreeMap::new();
     if storage != 0
         && let Ok(root) = super::read_entry(cx, cfb, 0).await
-        && root.clsid.data1 == 0x000c_1084
+        && root.clsid.data1() == 0x000c_1084
     {
         base = package_db(cx, cfb, 0).await.tables.clone();
     }

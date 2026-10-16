@@ -18,7 +18,7 @@ use crate::formats::embedded_as;
 use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, decode_flags, field, flag, lookup};
+use crate::value::{EnumTable, FlagTable, Value, field, flag, lookup};
 
 /// Form fields walked.
 const MAX_FIELDS: usize = 10_000;
@@ -273,7 +273,6 @@ fn permissions(node: Node, item: &Item) -> Node {
     };
     // A 32-bit signed value: its bits as written.
     let raw = u64::try_from(p & 0xffff_ffff).unwrap_or(0);
-    let (set, unknown) = decode_flags(PERMISSIONS, raw);
     let denied: Vec<&str> = PERMISSIONS
         .iter()
         .filter(|f| f.mask == f.value && raw & f.mask == 0)
@@ -284,13 +283,8 @@ fn permissions(node: Node, item: &Item) -> Node {
     } else {
         format!("denies {}", denied.join(", "))
     };
-    node.value(Value::Flags {
-        raw,
-        bits: 32,
-        set,
-        unknown,
-    })
-    .summary(summary)
+    node.value(Value::flags(raw, 32, PERMISSIONS))
+        .summary(summary)
 }
 
 // ---------------------------------------------------------------------------

@@ -367,16 +367,10 @@ async fn vcdiff(cx: Cx, input: Input) -> Result<()> {
             .value(uint(version, 8)),
     );
     let indicator = cur.u8().await?;
-    let (set, unknown) = crate::value::decode_flags(VCD_HDR, indicator.into());
     cx.emit(
         Node::new("Header indicator")
             .span(file.sub(4, 1))
-            .value(Value::Flags {
-                raw: indicator.into(),
-                bits: 8,
-                set,
-                unknown,
-            }),
+            .value(Value::flags(indicator.into(), 8, VCD_HDR)),
     );
     if indicator & 1 != 0 {
         let at = cur.pos();
@@ -465,16 +459,10 @@ async fn vcdiff(cx: Cx, input: Input) -> Result<()> {
 async fn vcdiff_window(cx: Cx, span: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, BE);
     let win = cur.u8().await?;
-    let (set, unknown) = crate::value::decode_flags(VCD_WIN, win.into());
     cx.emit(
         Node::new("Window indicator")
             .span(span.sub(0, 1))
-            .value(Value::Flags {
-                raw: win.into(),
-                bits: 8,
-                set,
-                unknown,
-            }),
+            .value(Value::flags(win.into(), 8, VCD_WIN)),
     );
     if win & 3 != 0 {
         varint_field(&cx, &mut cur, Varint::Vcdiff, "Source segment length").await?;
@@ -484,16 +472,10 @@ async fn vcdiff_window(cx: Cx, span: Span) -> Result<()> {
     varint_field(&cx, &mut cur, Varint::Vcdiff, "Target window length").await?;
     let at = cur.pos();
     let delta = cur.u8().await?;
-    let (set, unknown) = crate::value::decode_flags(VCD_DELTA, delta.into());
     cx.emit(
         Node::new("Delta indicator")
             .span(cur.since(at))
-            .value(Value::Flags {
-                raw: delta.into(),
-                bits: 8,
-                set,
-                unknown,
-            }),
+            .value(Value::flags(delta.into(), 8, VCD_DELTA)),
     );
     let data = varint_field(&cx, &mut cur, Varint::Vcdiff, "Data section length").await?;
     let inst = varint_field(&cx, &mut cur, Varint::Vcdiff, "Instructions section length").await?;

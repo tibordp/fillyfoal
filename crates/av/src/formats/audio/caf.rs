@@ -512,7 +512,7 @@ async fn chunk(cx: Cx, st: ChunkState) -> Result<()> {
             let block = cx.block(data.sub(0, 16)).await?;
             Fields::emitting(&cx, &block, BE)
                 .bytes("UUID", 16)
-                .with(|b, n| n.summary(crate::formats::util::vidutil::uuid(b)))
+                .with(|b, n| n.value(crate::value::Value::uuid(b)))
                 .emit()?;
             cx.emit(Node::new("Data").span(data.tail(16)));
         }

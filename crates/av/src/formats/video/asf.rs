@@ -25,12 +25,7 @@ use crate::value::{EnumTable, FlagTable, Guid, Radix, Value, field, flag};
 const LE: Endian = Endian::Little;
 
 const fn guid(data1: u32, data2: u16, data3: u16, data4: [u8; 8]) -> Guid {
-    Guid {
-        data1,
-        data2,
-        data3,
-        data4,
-    }
+    Guid::new(data1, data2, data3, data4)
 }
 
 const A6D9: [u8; 8] = [0xa6, 0xd9, 0x00, 0xaa, 0x00, 0x62, 0xce, 0x6c];
@@ -481,12 +476,12 @@ const MAX_DEPTH: u32 = 8;
 fn read_guid(d: &[u8], at: usize) -> Option<Guid> {
     let b: [u8; 16] = crate::bytes::array(d, at)?;
     let data4: [u8; 8] = crate::bytes::array(&b, 8)?;
-    Some(Guid {
-        data1: u32_le(&b, 0)?,
-        data2: u16_le(&b, 4)?,
-        data3: u16_le(&b, 6)?,
+    Some(Guid::new(
+        u32_le(&b, 0)?,
+        u16_le(&b, 4)?,
+        u16_le(&b, 6)?,
         data4,
-    })
+    ))
 }
 
 /// Lists the objects in `region`.

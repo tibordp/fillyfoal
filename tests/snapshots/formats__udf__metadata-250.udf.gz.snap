@@ -406,7 +406,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Reserved: 0  [0x8c81a+0x1]
           File type: directory (0x4)  [0x8c81b+0x1]
           Parent ICB location: 0 — partition 0  [0x8c81c+0x6]
-          Flags: 0x0 []  [0x8c822+0x2]
+          Flags: 0x0 [SHORT_AD]  [0x8c822+0x2]
         Owner: 0  [0x8c824+0x4]
         Group: 0  [0x8c828+0x4]
         Permissions: 0x7ca5 — drwxr-xr-x, may delete  [0x8c82c+0x4]

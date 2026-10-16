@@ -38,7 +38,7 @@ expression: "common::explore(&display_name(&path), &data)"
       DAT entry size: 32  [0x492+0x2]
       Checkpoint size: 192  [0x494+0x2]
       Segment usage size: 16  [0x496+0x2]
-      UUID: "34343434-0000-4000-8000-000000000004"  [0x498+0x10]
+      UUID: 34343434-0000-4000-8000-000000000004  [0x498+0x10]
       Volume name: "nilfsvol"  [0x4a8+0x50]
     Latest partial segment — block 2  [0x2000+0x1000]
     Secondary superblock  [0x3000+0x400]

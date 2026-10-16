@@ -764,13 +764,7 @@ async fn push_tables(cx: &Cx, db: &D, cat: &C, system: bool) {
         let mut node = Node::new(t.name.clone());
         // Most tables have no flags; an empty flag set says nothing.
         if t.flags != 0 {
-            let (set, unknown) = decode_flags(TABLE_FLAGS, t.flags.into());
-            node = node.value(Value::Flags {
-                raw: t.flags.into(),
-                bits: 32,
-                set,
-                unknown,
-            });
+            node = node.value(Value::flags(t.flags.into(), 32, TABLE_FLAGS));
         }
         cx.push(
             node.summary(summary)
@@ -1240,15 +1234,9 @@ async fn record_fields(cx: Cx, (db, cat, table, at): (D, C, Option<usize>, At)) 
 }
 
 fn header_node(span: Span, header: u8) -> Node {
-    let (set, unknown) = decode_flags(TAGGED_FLAGS, header.into());
     Node::new("Tagged value header")
         .span(span)
-        .value(Value::Flags {
-            raw: header.into(),
-            bits: 8,
-            set,
-            unknown,
-        })
+        .value(Value::flags(header.into(), 8, TAGGED_FLAGS))
 }
 
 /// A separated long value: looked up by its ID in the table's long-value

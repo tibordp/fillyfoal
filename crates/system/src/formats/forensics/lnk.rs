@@ -335,12 +335,12 @@ fn guid_at(data: &[u8], at: usize) -> Option<Guid> {
     let b = data.get(at..at.checked_add(16)?)?;
     let mut data4 = [0u8; 8];
     data4.copy_from_slice(b.get(8..16)?);
-    Some(Guid {
-        data1: u32_le(b, 0)?,
-        data2: u16_le(b, 4)?,
-        data3: u16_le(b, 6)?,
+    Some(Guid::new(
+        u32_le(b, 0)?,
+        u16_le(b, 4)?,
+        u16_le(b, 6)?,
         data4,
-    })
+    ))
 }
 
 /// Decodes a shell item (without its size field).
@@ -860,15 +860,7 @@ fn console_block(f: &mut Fields<'_>, _: &()) -> Result<()> {
         "ColorTable 15",
     ] {
         f.u32(name)
-            .hex()
-            .with(|&v, n| {
-                n.summary(format!(
-                    "#{:02x}{:02x}{:02x}",
-                    v & 0xff,
-                    (v >> 8) & 0xff,
-                    (v >> 16) & 0xff
-                ))
-            })
+            .with(|&v, n| n.value(crate::value::Value::color(crate::value::Color::colorref(v))))
             .emit()?;
     }
     Ok(())

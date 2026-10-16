@@ -169,16 +169,10 @@ pub fn sps(w: &mut Walker) -> Option<SpsInfo> {
     let start = w.pos();
     let constraints = u8::try_from(w.read(8)?).ok()?;
     if w.emitting() {
-        let (set, unknown) = crate::value::decode_flags(CONSTRAINTS, constraints.into());
         w.record(
             "Constraint flags",
             start,
-            Value::Flags {
-                raw: constraints.into(),
-                bits: 8,
-                set,
-                unknown,
-            },
+            Value::flags(constraints.into(), 8, CONSTRAINTS),
         );
         w.summary(|| h264_profile_name(profile, constraints));
     }

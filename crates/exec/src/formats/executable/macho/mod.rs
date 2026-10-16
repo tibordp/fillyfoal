@@ -1698,7 +1698,7 @@ fn simple_command(f: &mut Fields<'_>, c: &Ctx, cmd: u32) -> Result<()> {
         }
         LC_UUID => {
             f.bytes("uuid", 16)
-                .with(|v, n| n.summary(uuid(v).to_uppercase()))
+                .with(|v, n| n.value(crate::value::Value::uuid(v)))
                 .emit()?;
         }
         LC_VERSION_MIN_MACOSX

@@ -2016,12 +2016,7 @@ async fn record(
             for _ in 0..n {
                 f.u32("Color")
                     .with(|&v, node| {
-                        node.summary(format!(
-                            "#{:02x}{:02x}{:02x}",
-                            v & 0xff,
-                            (v >> 8) & 0xff,
-                            (v >> 16) & 0xff
-                        ))
+                        node.value(crate::value::Value::color(crate::value::Color::colorref(v)))
                     })
                     .emit()?;
             }

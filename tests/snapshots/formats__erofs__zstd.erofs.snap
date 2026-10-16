@@ -17,7 +17,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Blocks: 6 × 4096 bytes (24 KiB)  [0x424+0x4]
       Metadata area block: 0  [0x428+0x4]
       Shared xattr area block: 0  [0x42c+0x4]
-      UUID: "00000000-0000-4000-8000-0000000000e0"  [0x430+0x10]
+      UUID: 00000000-0000-4000-8000-0000000000e0  [0x430+0x10]
       Volume name: "fillyfoal"  [0x440+0x10]
       Incompatible features: 0x3 [ZERO_PADDING | COMPR_CFGS/BIG_PCLUSTER]  [0x450+0x4]
       Compression algorithms: 0x8 [ZSTD]  [0x454+0x2]

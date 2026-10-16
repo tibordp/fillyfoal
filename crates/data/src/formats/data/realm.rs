@@ -38,7 +38,7 @@ use crate::formats::util::binutil::{dec, hex, text};
 use crate::formats::util::fmt::grouped_count;
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, decode_flags, flag, lookup};
+use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 
 const COOKIE: u64 = 0x3034_1252_37e5_26c8;
 const MAX_DEPTH: usize = 16;
@@ -686,7 +686,6 @@ async fn table_x(cx: Cx, (file, r, _name, keys): TableState) -> Result<()> {
     );
     let mut cols = Vec::new();
     for c in t.columns.iter() {
-        let (set, unknown) = decode_flags(ATTRS, c.attrs);
         let mut ty = lookup(COLUMN_TYPES, c.kind).unwrap_or("?").to_owned();
         if c.attrs & LIST != 0 {
             ty = format!("list of {ty}");
@@ -715,12 +714,7 @@ async fn table_x(cx: Cx, (file, r, _name, keys): TableState) -> Result<()> {
                 bits: 8,
                 name: lookup(COLUMN_TYPES, c.kind).map(Into::into),
             }),
-            Node::new("Attributes").value(Value::Flags {
-                raw: c.attrs,
-                bits: 16,
-                set,
-                unknown,
-            }),
+            Node::new("Attributes").value(Value::flags(c.attrs, 16, ATTRS)),
             Node::new("Column key")
                 .value(hex(c.key, 64))
                 .summary(format!("index {}, tag {}", c.key & 0xffff, c.key >> 30)),

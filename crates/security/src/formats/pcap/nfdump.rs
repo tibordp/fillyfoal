@@ -41,7 +41,7 @@
 
 use std::sync::Arc;
 
-use super::dec::{ipv4, ipv6, mac};
+use super::dec::ipv4;
 use super::net::{IP_PROTOCOLS, TCP_FLAGS};
 use super::time_text;
 use crate::bytes::{to_u64, to_usize};
@@ -57,7 +57,7 @@ use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{Addr, EnumTable, FlagTable, Value, flag, lookup};
 
 pub static FORMAT: Format = Format {
     name: "nfdump",
@@ -319,17 +319,20 @@ fn ip4_text(v: u32) -> String {
 }
 
 /// An IPv6 address stored as two host-order 64-bit words.
-fn ip6_text(b: &[u8], e: Endian) -> String {
+fn ip6_addr(b: &[u8], e: Endian) -> Addr {
     let hi = get::<u64>(b, 0, e).unwrap_or(0);
     let lo = get::<u64>(b, 8, e).unwrap_or(0);
-    let mut bytes = hi.to_be_bytes().to_vec();
-    bytes.extend_from_slice(&lo.to_be_bytes());
-    ipv6(&bytes)
+    Addr::V6((u128::from(hi) << 64 | u128::from(lo)).to_be_bytes())
+}
+
+fn ip6_text(b: &[u8], e: Endian) -> String {
+    ip6_addr(b, e).to_string()
 }
 
 /// A MAC address in the low 48 bits of a host-order word.
-fn mac_text(v: u64) -> String {
-    mac(v.to_be_bytes().get(2..).unwrap_or_default())
+fn mac_addr(v: u64) -> Addr {
+    let [_, _, a, b, c, d, e, f] = v.to_be_bytes();
+    Addr::Mac([a, b, c, d, e, f])
 }
 
 /// Milliseconds since the epoch, as text.
@@ -1314,20 +1317,20 @@ fn ms_field(f: &mut Fields<'_>, name: &'static str) -> Result<u64> {
 
 fn ip4_field(f: &mut Fields<'_>, name: &'static str) -> Result<u32> {
     f.u32(name)
-        .with(|&v, n| n.value(Value::Text(ip4_text(v))))
+        .with(|&v, n| n.value(Value::Addr(Addr::v4_u32(v))))
         .emit()
 }
 
 fn ip6_field(f: &mut Fields<'_>, name: &'static str, e: Endian) -> Result<()> {
     f.bytes(name, 16)
-        .with(move |b, n| n.value(Value::Text(ip6_text(b, e))))
+        .with(move |b, n| n.value(Value::Addr(ip6_addr(b, e))))
         .emit()?;
     Ok(())
 }
 
 fn mac_field(f: &mut Fields<'_>, name: &'static str) -> Result<u64> {
     f.u64(name)
-        .with(|&v, n| n.value(Value::Text(mac_text(v))))
+        .with(|&v, n| n.value(Value::Addr(mac_addr(v))))
         .emit()
 }
 

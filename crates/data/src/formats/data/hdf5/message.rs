@@ -587,10 +587,12 @@ pub fn dataspace(rd: &mut Rd<'_>) -> Option<Space> {
     let flags = rd.flags(
         "Flags",
         1,
-        &[
-            flag(1, "maximum dimensions present"),
-            flag(2, "permutation indices present"),
-        ],
+        const {
+            &[
+                flag(1, "maximum dimensions present"),
+                flag(2, "permutation indices present"),
+            ]
+        },
     )?;
     let kind = if version >= 2 {
         u8::try_from(rd.en("Type", 1, &[(0, "scalar"), (1, "simple"), (2, "null")])?).unwrap_or(1)
@@ -636,10 +638,12 @@ fn dense_info(rd: &mut Rd<'_>, attrs: bool) -> Option<Dense> {
     let flags = rd.flags(
         "Flags",
         1,
-        &[
-            flag(1, "creation order tracked"),
-            flag(2, "creation order indexed"),
-        ],
+        const {
+            &[
+                flag(1, "creation order tracked"),
+                flag(2, "creation order indexed"),
+            ]
+        },
     )?;
     if flags & 1 != 0 {
         rd.num("Maximum creation index", if attrs { 2 } else { 8 })?;
@@ -659,15 +663,17 @@ fn link(rd: &mut Rd<'_>) -> Option<Link> {
     let flags = rd.flags(
         "Flags",
         1,
-        &[
-            field(0x03, 0x00, "name length in 1 byte"),
-            field(0x03, 0x01, "name length in 2 bytes"),
-            field(0x03, 0x02, "name length in 4 bytes"),
-            field(0x03, 0x03, "name length in 8 bytes"),
-            flag(0x04, "creation order present"),
-            flag(0x08, "link type present"),
-            flag(0x10, "character set present"),
-        ],
+        const {
+            &[
+                field(0x03, 0x00, "name length in 1 byte"),
+                field(0x03, 0x01, "name length in 2 bytes"),
+                field(0x03, 0x02, "name length in 4 bytes"),
+                field(0x03, 0x03, "name length in 8 bytes"),
+                flag(0x04, "creation order present"),
+                flag(0x08, "link type present"),
+                flag(0x10, "character set present"),
+            ]
+        },
     )?;
     let kind = if flags & 0x08 != 0 {
         rd.en("Link type", 1, LINK_TYPES)?
@@ -793,10 +799,12 @@ fn layout(rd: &mut Rd<'_>) -> Option<Layout> {
             let flags = rd.flags(
                 "Flags",
                 1,
-                &[
-                    flag(1, "do not filter partial edge chunks"),
-                    flag(2, "single index with filter"),
-                ],
+                const {
+                    &[
+                        flag(1, "do not filter partial edge chunks"),
+                        flag(2, "single index with filter"),
+                    ]
+                },
             )?;
             let flags = u8::try_from(flags).unwrap_or(0);
             let rank = rd.num("Dimensionality", 1)?;
@@ -913,7 +921,7 @@ fn filter(rd: &mut Rd<'_>, version: u64) -> Option<Filter> {
     } else {
         0
     };
-    let flags = u16::try_from(rd.flags("Flags", 2, &[flag(1, "optional")])?).unwrap_or(0);
+    let flags = u16::try_from(rd.flags("Flags", 2, const { &[flag(1, "optional")] })?).unwrap_or(0);
     let nvalues = rd.num("Number of client data values", 2)?;
     let name = if name_len > 0 {
         let (bytes, span) = rd.slice(to_usize(name_len))?;
@@ -969,7 +977,7 @@ fn attribute(rd: &mut Rd<'_>, ctx: &Ctx) -> Option<Attr> {
         rd.flags(
             "Flags",
             1,
-            &[flag(1, "datatype shared"), flag(2, "dataspace shared")],
+            const { &[flag(1, "datatype shared"), flag(2, "dataspace shared")] },
         )?
     };
     let name_len = to_usize(rd.num("Name size", 2)?);
@@ -1206,10 +1214,12 @@ fn body(rd: &mut Rd<'_>, kind: u16, ctx: &Ctx, summary: &mut Option<String>) -> 
             let flags = rd.flags(
                 "Flags",
                 1,
-                &[
-                    flag(1, "link phase change values stored"),
-                    flag(2, "estimated entry information stored"),
-                ],
+                const {
+                    &[
+                        flag(1, "link phase change values stored"),
+                        flag(2, "estimated entry information stored"),
+                    ]
+                },
             )?;
             if flags & 1 != 0 {
                 rd.num("Maximum compact links", 2)?;
@@ -1422,13 +1432,7 @@ pub fn header_fields(h: &Header, m: &Msg) -> Vec<Node> {
         name: lookup(MESSAGES, m.kind.into()).map(Into::into),
     };
     let size = to_u64(m.len);
-    let (decoded_flags, unknown) = crate::value::decode_flags(MESSAGE_FLAGS, m.flags.into());
-    let flags = Value::Flags {
-        raw: m.flags.into(),
-        bits: 8,
-        set: decoded_flags,
-        unknown,
-    };
+    let flags = Value::flags(m.flags.into(), 8, MESSAGE_FLAGS);
     if v2 {
         out.push(Node::new("Type").span(whole.sub(0, 1)).value(enum_type));
         out.push(

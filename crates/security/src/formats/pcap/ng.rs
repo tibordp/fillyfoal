@@ -23,7 +23,7 @@ use crate::formats::util::val::{enumv, hex, int, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::{Addr, EnumTable, Value, lookup};
 
 pub static FORMAT: Format = Format {
     name: "pcapng",
@@ -872,7 +872,10 @@ async fn options(
                     ipv6(bytes.get(..16).unwrap_or_default()),
                     bytes.get(16).copied().unwrap_or(0)
                 ))),
-                (1, 6, 6) | (1, 7, 8) => node.value(Value::Text(mac(&bytes))),
+                (1, 6, 6) => node
+                    .value(Addr::mac_at(&bytes).map_or(Value::Bytes(bytes.clone()), Value::Addr)),
+                (1, 7, 8) => node
+                    .value(Addr::eui64_at(&bytes).map_or(Value::Bytes(bytes.clone()), Value::Addr)),
                 (1, 8 | 16 | 17, 8) => {
                     let bps = rd64(&bytes).unwrap_or(0);
                     node.value(uint(bps, 64)).summary(bit_rate(bps))
@@ -952,8 +955,12 @@ async fn options(
                     node.value(uint(pid, 32))
                         .summary(format!("process {pid}, thread {tid}"))
                 }
-                (4, 3, 4) => node.value(Value::Text(ipv4(&bytes))),
-                (4, 4, 16) => node.value(Value::Text(ipv6(&bytes))),
+                (4, 3, 4) => {
+                    node.value(Addr::v4_at(&bytes).map_or(Value::Bytes(bytes.clone()), Value::Addr))
+                }
+                (4, 4, 16) => {
+                    node.value(Addr::v6_at(&bytes).map_or(Value::Bytes(bytes.clone()), Value::Addr))
+                }
                 (5, 2 | 3, 8) => {
                     let high = u64::from(rd32(&bytes, 0).unwrap_or(0));
                     let low = u64::from(rd32(&bytes, 4).unwrap_or(0));

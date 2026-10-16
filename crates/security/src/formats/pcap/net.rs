@@ -13,7 +13,7 @@ use super::dec::{Dec, Ix, inet_sum, ipv4, ipv6, mac};
 use super::wlan;
 use crate::error::Diagnostic;
 use crate::formats::util::fmt::plural;
-use crate::value::{EnumTable, FlagTable, field, flag, lookup};
+use crate::value::{Addr, EnumTable, FlagTable, field, flag, lookup};
 
 pub const LINKTYPES: EnumTable = &[
     (0, "NULL (BSD loopback)"),
@@ -1041,8 +1041,22 @@ fn arp(b: &mut Dec, p: Ix, off: usize, end: usize) -> usize {
                 }
             })
             .unwrap_or_default();
-        let shown = s.clone();
-        b.text(ix, name, at, len, || shown);
+        let a = match (hw, len) {
+            (true, 6) => Some(Addr::mac_at as fn(&[u8]) -> Option<Addr>),
+            (true, 8) => Some(Addr::eui64_at as fn(&[u8]) -> Option<Addr>),
+            (false, 4) => Some(Addr::v4_at as fn(&[u8]) -> Option<Addr>),
+            (false, 16) => Some(Addr::v6_at as fn(&[u8]) -> Option<Addr>),
+            _ => None,
+        };
+        match a {
+            Some(read) => {
+                b.addr(ix, name, at, len, read);
+            }
+            None => {
+                let shown = s.clone();
+                b.text(ix, name, at, len, || shown);
+            }
+        }
         at = at.saturating_add(len);
         s
     };

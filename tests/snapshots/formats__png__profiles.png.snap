@@ -82,7 +82,7 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ 'jumd' description  [0x273+0x1e]
             Box length: 30  [0x273+0x4]
             Box type: "jumd"  [0x277+0x4]
-            Content type: 63 32 70 61 00 11 00 10 80 00 00 aa 00 38 9b 71  |c2pa.........8.q| — 'c2pa'  [0x27b+0x10]
+            Content type: 63327061-0011-0010-8000-00aa00389b71 — 'c2pa'  [0x27b+0x10]
             Toggles: 0x3 [REQUESTABLE | LABEL]  [0x28b+0x1]
             Label: "c2pa"  [0x28c+0x5]
         ▾ 'json' JSON — JSON object, 1 member  [0x299+0x7]

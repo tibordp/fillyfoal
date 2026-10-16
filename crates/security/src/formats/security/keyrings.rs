@@ -15,7 +15,7 @@ use crate::node::Node;
 use crate::secret::{MAX_ATTEMPTS, SecretRequest};
 use crate::span::{Origin, Span};
 use crate::text::hex_lower;
-use crate::value::{EnumTable, FlagTable, Value, decode_flags, flag, lookup};
+use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 
 const BE: Endian = Endian::Big;
 
@@ -445,16 +445,10 @@ async fn gk_secret_item(cx: Cx, span: Span) -> Result<()> {
         let (path, _) = kr_string(&mut cur).await?;
         kr_string(&mut cur).await?;
         cur.skip(4);
-        let (set, unknown) = decode_flags(ACCESS_TYPES, types.into());
         cx.emit(
             Node::new(format!("ACL {i}"))
                 .span(cur.since(start))
-                .value(Value::Flags {
-                    raw: types.into(),
-                    bits: 32,
-                    set,
-                    unknown,
-                })
+                .value(Value::flags(types.into(), 32, ACCESS_TYPES))
                 .summary(format!(
                     "{} ({})",
                     app.unwrap_or_default(),

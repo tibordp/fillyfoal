@@ -111,7 +111,7 @@ expression: "common::explore(&display_name(&path), &data)"
             w: 20  [#1:0x821+0x7]
             h: 15.5  [#1:0x828+0xb]
           code: 00 01 02 03 04  |.....| — binary (generic), 5 bytes  [#1:0x834+0x10]
-          ref: {01234567-89ab-cdef-0123-456789abcdef} — binary (UUID)  [#1:0x844+0x1a]
+          ref: 01234567-89ab-cdef-0123-456789abcdef — binary (UUID)  [#1:0x844+0x1a]
           cost: "9.99" — decimal128, bits 0x303c00000000000000000000000003e7  [#1:0x85e+0x16]
           pattern: "/^tea/i" — regular expression  [#1:0x874+0x10]
       ▾ Document 1 — document, 93 bytes, _id 650000000000000000000002  [#1:0x885+0x5d]

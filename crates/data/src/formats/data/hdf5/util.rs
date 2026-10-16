@@ -9,7 +9,7 @@ use crate::error::Result;
 use crate::formats::Input;
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagDef, Radix, Value, lookup};
+use crate::value::{EnumTable, FlagTable, Radix, Value, lookup};
 
 /// What every expansion needs: the file, where address 0 is, and the sizes
 /// of offsets and lengths.
@@ -244,23 +244,13 @@ impl<'a> Rd<'a> {
         Some(v)
     }
 
-    pub fn flags(&mut self, name: &'static str, n: usize, table: &[FlagDef]) -> Option<u64> {
+    pub fn flags(&mut self, name: &'static str, n: usize, table: FlagTable) -> Option<u64> {
         let (v, span) = self.take(n)?;
-        let mut covered = 0u64;
-        let mut set = Vec::new();
-        for def in table {
-            if def.mask != 0 && def.value != 0 && v & def.mask == def.value {
-                set.push(def.name);
-                covered |= def.mask;
-            }
-        }
-        let unknown = v & !covered;
-        self.push(Node::new(name).span(span).value(Value::Flags {
-            raw: v,
-            bits: bits_of(n),
-            set,
-            unknown,
-        }));
+        self.push(
+            Node::new(name)
+                .span(span)
+                .value(Value::flags(v, bits_of(n), table)),
+        );
         Some(v)
     }
 

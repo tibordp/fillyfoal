@@ -14,7 +14,27 @@ use crate::cx::Cx;
 use crate::formats::util::vidutil::{enumerated, flag_node, hex, uint};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Value};
+use crate::value::{EnumTable, FlagTable, Value, field, flag};
+
+const PES_FLAGS: FlagTable = &[
+    flag(0x80, "PTS"),
+    flag(0x40, "DTS"),
+    flag(0x20, "ESCR"),
+    flag(0x10, "ES_RATE"),
+    flag(0x08, "DSM_TRICK_MODE"),
+    flag(0x04, "ADDITIONAL_COPY_INFO"),
+    flag(0x02, "CRC"),
+    flag(0x01, "EXTENSION"),
+];
+
+const PES_EXTENSION_FLAGS: FlagTable = &[
+    flag(0x80, "PES_PRIVATE_DATA"),
+    flag(0x40, "PACK_HEADER"),
+    flag(0x20, "SEQUENCE_COUNTER"),
+    flag(0x10, "P_STD_BUFFER"),
+    flag(0x01, "EXTENSION_2"),
+    field(0x0e, 0x0e, "RESERVED"),
+];
 
 /// The name of a PES stream ID (the byte after `00 00 01`).
 pub fn stream_id_name(id: u8) -> String {
@@ -137,27 +157,11 @@ pub fn pes_header(cx: &Cx, span: Span, d: &[u8]) -> (u64, u16) {
     cx.emit(flag_node("Copyright", s6, b6 & 0x02 != 0));
     cx.emit(flag_node("Original", s6, b6 & 0x01 != 0));
     let b7 = d.get(7).copied().unwrap_or(0);
-    let mut set = Vec::new();
-    for (bit, name) in [
-        (0x80, "PTS"),
-        (0x40, "DTS"),
-        (0x20, "ESCR"),
-        (0x10, "ES_RATE"),
-        (0x08, "DSM_TRICK_MODE"),
-        (0x04, "ADDITIONAL_COPY_INFO"),
-        (0x02, "CRC"),
-        (0x01, "EXTENSION"),
-    ] {
-        if b7 & bit != 0 {
-            set.push(name);
-        }
-    }
-    cx.emit(Node::new("Flags").span(span.sub(7, 1)).value(Value::Flags {
-        raw: b7.into(),
-        bits: 8,
-        set,
-        unknown: 0,
-    }));
+    cx.emit(
+        Node::new("Flags")
+            .span(span.sub(7, 1))
+            .value(Value::flags(b7.into(), 8, PES_FLAGS)),
+    );
     let header_len = d.get(8).copied().unwrap_or(0);
     cx.emit(uint(
         "PES header data length",
@@ -259,27 +263,10 @@ const TRICK_MODES: EnumTable = &[
 fn pes_extension(cx: &Cx, span: Span, d: &[u8], start: usize, end: usize) -> usize {
     let pos = |a: usize| crate::bytes::to_u64(a);
     let flags = d.get(start).copied().unwrap_or(0);
-    let mut set = Vec::new();
-    for (bit, name) in [
-        (0x80, "PES_PRIVATE_DATA"),
-        (0x40, "PACK_HEADER"),
-        (0x20, "SEQUENCE_COUNTER"),
-        (0x10, "P_STD_BUFFER"),
-        (0x01, "EXTENSION_2"),
-    ] {
-        if flags & bit != 0 {
-            set.push(name);
-        }
-    }
     cx.emit(
         Node::new("PES extension flags")
             .span(span.sub(pos(start), 1))
-            .value(Value::Flags {
-                raw: flags.into(),
-                bits: 8,
-                set,
-                unknown: 0,
-            }),
+            .value(Value::flags(flags.into(), 8, PES_EXTENSION_FLAGS)),
     );
     let mut at = start.saturating_add(1);
     if flags & 0x80 != 0 {

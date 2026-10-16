@@ -23,7 +23,7 @@ use crate::cx::{Block, Cx};
 use crate::error::{Diagnostic, Result};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{Check, Digest, EnumTable, FlagTable, Guid, Radix, Value, decode_flags, lookup};
+use crate::value::{Check, Digest, EnumTable, FlagTable, Guid, Radix, Value, lookup};
 
 pub use crate::bytes::Endian;
 
@@ -344,17 +344,24 @@ impl<'a> Fields<'a> {
 
     /// A GUID in Microsoft mixed-endian layout.
     pub fn guid(&mut self, name: &'static str) -> Field<'a, Guid> {
+        self.guid_in(name, crate::value::GuidOrder::Mixed)
+    }
+
+    /// A UUID in RFC 4122 (big-endian) order.
+    pub fn uuid(&mut self, name: &'static str) -> Field<'a, Guid> {
+        self.guid_in(name, crate::value::GuidOrder::Big)
+    }
+
+    fn guid_in(&mut self, name: &'static str, order: crate::value::GuidOrder) -> Field<'a, Guid> {
         let (span, bytes) = self.take(16);
         let guid = bytes.map(|b| {
-            let get = |i: usize| b.get(i).copied().unwrap_or(0);
-            let u16le = |i: usize| u16::from_le_bytes([get(i), get(i.saturating_add(1))]);
-            let mut data4 = [0u8; 8];
-            data4.copy_from_slice(b.get(8..16).unwrap_or(&[0; 8]));
+            let mut stored = [0u8; 16];
+            for (d, s) in stored.iter_mut().zip(b) {
+                *d = *s;
+            }
             Guid {
-                data1: u32::from_le_bytes([get(0), get(1), get(2), get(3)]),
-                data2: u16le(4),
-                data3: u16le(6),
-                data4,
+                bytes: stored,
+                order,
             }
         });
         let mut field = self.field(name, span, guid);
@@ -531,13 +538,7 @@ impl<T: Prim> Field<'_, T> {
 
     pub fn flags(mut self, table: FlagTable) -> Self {
         if let Some((raw, bits)) = self.raw {
-            let (set, unknown) = decode_flags(table, raw);
-            self.node.value = Some(Value::Flags {
-                raw,
-                bits,
-                set,
-                unknown,
-            });
+            self.node.value = Some(Value::flags(raw, bits, table));
         }
         self
     }

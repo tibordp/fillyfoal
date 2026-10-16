@@ -16,7 +16,7 @@ use crate::formats::util::val::{hex, name_or, text};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{Value, decode_flags, lookup};
+use crate::value::{Value, lookup};
 
 /// Most bytes of a dynamic section we read at once.
 const MAX_DYNAMIC: u64 = 1 << 20;
@@ -505,13 +505,7 @@ pub(super) async fn dynamic(cx: Cx, (elf, span, link): (Elf, Span, Option<u32>))
             DT_POSFLAG_1 => Some(POSFLAGS_1),
             _ => None,
         } {
-            let (set, unknown) = decode_flags(table, val);
-            node = node.value(Value::Flags {
-                raw: val,
-                bits: elf.class.bits(),
-                set,
-                unknown,
-            });
+            node = node.value(Value::flags(val, elf.class.bits(), table));
         } else if DT_ADDRESSES.contains(&tag) {
             node = node.value(hex(val, elf.class.bits()));
             if let Some(at) = elf.vaddr_span(val, 0) {

@@ -50,6 +50,11 @@ pub enum Ty {
     Size,
     /// An unsigned varint holding flags.
     Flags(FlagTable),
+    /// A repeated `uint32` holding an internet address as the kernel
+    /// keeps it (`s_addr` words: network-order bytes read little-endian):
+    /// one element is an IPv4 address, four in a row an IPv6 one. Other
+    /// counts show as hexadecimal words.
+    InAddr,
     /// An unsigned varint some of whose values have names (sentinels such
     /// as `RLIM_INFINITY` or `SIG_DFL`); other values are shown in the
     /// radix.
@@ -475,19 +480,13 @@ fn varint_value(ty: Option<Ty>, v: u64) -> Value {
             bits: 32,
             name: lookup(table, v).map(Into::into),
         },
-        Some(Ty::Hex) => Value::UInt {
+        Some(Ty::Hex | Ty::InAddr) => Value::UInt {
             value: v,
             bits: 64,
             radix: Radix::Hex,
         },
         Some(Ty::Flags(table)) => {
-            let (set, unknown) = decode_flags(table, v);
-            Value::Flags {
-                raw: v,
-                bits: if v > u64::from(u32::MAX) { 64 } else { 32 },
-                set,
-                unknown,
-            }
+            Value::flags(v, if v > u64::from(u32::MAX) { 64 } else { 32 }, table)
         }
         Some(Ty::Named(table, radix)) => match lookup(table, v) {
             Some(name) => Value::Enum {
@@ -623,10 +622,36 @@ pub async fn message(cx: Cx, (span, msg, depth): State) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, Endian::Little);
     // Fields labelled by position: number, elements seen, last value.
     let mut seen: Vec<(u64, u64, u64)> = Vec::new();
+    // A run of `Ty::InAddr` words being gathered into one address.
+    let mut words: Option<InAddrRun> = None;
     while !cur.at_end() {
         let start = cur.pos();
         let (num, payload) = read_field(&mut cur).await?;
         let spec = msg.fields.iter().find(|f| f.num == num);
+        if let (Some(f), Payload::Varint(v)) = (spec, payload)
+            && matches!(f.ty, Ty::InAddr)
+            && let Ok(word) = u32::try_from(v)
+        {
+            let at = cur.since(start);
+            match &mut words {
+                Some(run) if run.spec.num == num && run.words.len() < 4 => {
+                    run.words.push((word, at));
+                }
+                _ => {
+                    if let Some(run) = words.take() {
+                        run.flush(&cx).await;
+                    }
+                    words = Some(InAddrRun {
+                        spec: f,
+                        words: vec![(word, at)],
+                    });
+                }
+            }
+            continue;
+        }
+        if let Some(run) = words.take() {
+            run.flush(&cx).await;
+        }
         let mut label: Cow<'static, str> = match spec {
             Some(f) => f.name.into(),
             None => format!("field {num}").into(),
@@ -680,7 +705,56 @@ pub async fn message(cx: Cx, (span, msg, depth): State) -> Result<()> {
         };
         cx.push(node.span(cur.since(start))).await;
     }
+    if let Some(run) = words.take() {
+        run.flush(&cx).await;
+    }
     Ok(())
+}
+
+/// Consecutive elements of a [`Ty::InAddr`] field.
+struct InAddrRun {
+    spec: &'static F,
+    words: Vec<(u32, Span)>,
+}
+
+impl InAddrRun {
+    /// One node with the address (one word: IPv4, four: IPv6), or the
+    /// words as numbers.
+    async fn flush(self, cx: &Cx) {
+        let bytes: Vec<u8> = self
+            .words
+            .iter()
+            .flat_map(|(w, _)| w.to_le_bytes())
+            .collect();
+        let addr = match bytes.len() {
+            4 => crate::value::Addr::v4_at(&bytes),
+            16 => crate::value::Addr::v6_at(&bytes),
+            _ => None,
+        };
+        let first = self.words.first().map(|(_, s)| *s);
+        let last = self.words.last().map(|(_, s)| *s);
+        match (addr, first, last) {
+            (Some(a), Some(first), Some(last)) => {
+                let span = Span::new(
+                    first.source,
+                    first.offset,
+                    last.end().saturating_sub(first.offset),
+                );
+                cx.push(Node::new(self.spec.name).span(span).value(Value::Addr(a)))
+                    .await;
+            }
+            _ => {
+                for (w, span) in self.words {
+                    cx.push(
+                        Node::new(self.spec.name)
+                            .span(span)
+                            .value(varint_value(Some(Ty::Hex), w.into())),
+                    )
+                    .await;
+                }
+            }
+        }
+    }
 }
 
 /// The position of the next element of field `num` and the value of the

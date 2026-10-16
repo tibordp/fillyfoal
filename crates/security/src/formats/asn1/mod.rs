@@ -27,7 +27,7 @@ use crate::error::{Diagnostic, Result};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::Value;
+use crate::value::{Addr, Value};
 
 /// Deepest nesting of constructed elements shown.
 const MAX_DEPTH: u32 = 64;
@@ -1221,12 +1221,16 @@ async fn special(
             node.value(bytes(64)),
             Some(format!("{}-byte key", span.len)),
         ),
-        Special::IpAddress => match x509::ip_address(&data) {
-            Some(ip) => (node.value(Value::Text(ip)), None),
-            None => (
-                node.value(bytes(PREVIEW_BYTES)),
-                Some(format!("{} bytes", span.len)),
-            ),
+        Special::IpAddress => match (data.len(), Addr::v4_at(&data), Addr::v6_at(&data)) {
+            (4, Some(a), _) | (16, _, Some(a)) => (node.value(Value::Addr(a)), None),
+            // An address and its mask (name constraints).
+            _ => match x509::ip_address(&data) {
+                Some(ip) => (node.value(Value::Text(ip)), None),
+                None => (
+                    node.value(bytes(PREVIEW_BYTES)),
+                    Some(format!("{} bytes", span.len)),
+                ),
+            },
         },
         Special::KeyId if complete && data.len() <= 64 => (
             node.value(Value::Text(x509::colon_hex(&data))),

@@ -636,13 +636,11 @@ async fn header_fields(cx: Cx, (span, flags): (Span, u8)) -> Result<()> {
             .value(vt::uint(u64::from(flags >> 4), 4)),
     );
     let raw = u64::from(flags & 0x0f);
-    let (set, unknown) = crate::value::decode_flags(FLAGS, raw);
-    cx.emit(Node::new("Flags").span(span.sub(3, 1)).value(Value::Flags {
-        raw,
-        bits: 4,
-        set,
-        unknown,
-    }));
+    cx.emit(
+        Node::new("Flags")
+            .span(span.sub(3, 1))
+            .value(Value::flags(raw, 4, FLAGS)),
+    );
     Ok(())
 }
 

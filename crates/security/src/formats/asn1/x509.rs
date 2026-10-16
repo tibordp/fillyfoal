@@ -19,7 +19,7 @@ use crate::formats::util::fmt::{clip, plural};
 use crate::formats::util::val;
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Value};
+use crate::value::{EnumTable, FlagTable, Value};
 
 /// Names listed in a summary before "…".
 const MAX_NAMES: usize = 6;
@@ -134,53 +134,42 @@ pub fn general_subtree(content: &[u8]) -> Option<String> {
     Some(out)
 }
 
-fn bit_names(content: &[u8], names: &[&str]) -> Vec<String> {
+/// A named-bit BIT STRING's value: bit `n` (from the first byte's top bit)
+/// as `1 << n`, and how many bits it holds.
+fn bits_raw(content: &[u8]) -> (u64, u8) {
     let body = content.get(1..).unwrap_or_default();
-    let mut out = Vec::new();
+    let mut raw = 0u64;
     for (i, &b) in body.iter().enumerate().take(8) {
         for bit in 0..8usize {
             if b & (0x80 >> bit) != 0 {
                 let n = i.saturating_mul(8).saturating_add(bit);
-                out.push(match names.get(n).filter(|s| !s.is_empty()) {
-                    Some(name) => (*name).to_owned(),
-                    None => format!("bit {n}"),
-                });
+                raw |= 1u64
+                    .checked_shl(u32::try_from(n).unwrap_or(64))
+                    .unwrap_or(0);
             }
+        }
+    }
+    let bits = u8::try_from(body.len().saturating_mul(8).clamp(8, 64)).unwrap_or(64);
+    (raw, bits)
+}
+
+fn bit_names(content: &[u8], names: FlagTable) -> Vec<String> {
+    let (raw, _) = bits_raw(content);
+    let (set, unknown) = crate::value::decode_flags(names, raw);
+    let mut out: Vec<String> = set.into_iter().map(str::to_owned).collect();
+    for n in 0..64u32 {
+        if unknown.checked_shr(n).unwrap_or(0) & 1 != 0 {
+            out.push(format!("bit {n}"));
         }
     }
     out
 }
 
-/// The value of a named-bit BIT STRING (bit `n` as `1 << n`) and the names
-/// of the bits set.
-pub fn bits_value(content: &[u8], names: &'static [&'static str]) -> Value {
-    let body = content.get(1..).unwrap_or_default();
-    let mut raw = 0u64;
-    let mut set = Vec::new();
-    let mut unknown = 0u64;
-    for (i, &b) in body.iter().enumerate().take(8) {
-        for bit in 0..8usize {
-            if b & (0x80 >> bit) == 0 {
-                continue;
-            }
-            let n = i.saturating_mul(8).saturating_add(bit);
-            let mask = 1u64
-                .checked_shl(u32::try_from(n).unwrap_or(64))
-                .unwrap_or(0);
-            raw |= mask;
-            match names.get(n).filter(|s| !s.is_empty()) {
-                Some(name) => set.push(*name),
-                None => unknown |= mask,
-            }
-        }
-    }
-    let bits = u8::try_from(body.len().saturating_mul(8).clamp(8, 64)).unwrap_or(64);
-    Value::Flags {
-        raw,
-        bits,
-        set,
-        unknown,
-    }
+/// The value of a named-bit BIT STRING (bit `n` as `1 << n`), named by
+/// `names`.
+pub fn bits_value(content: &[u8], names: FlagTable) -> Value {
+    let (raw, bits) = bits_raw(content);
+    Value::flags(raw, bits, names)
 }
 
 fn lookup(table: EnumTable, n: i64) -> String {

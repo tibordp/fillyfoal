@@ -114,7 +114,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Version: 1  [0x7400+0x4]
             Last page: 2  [0x7404+0x4]
             Bad pages: 0  [0x7408+0x4]
-            UUID: "8a7b6c5d-4e3f-4a2b-9c1d-0e1f2a3b4c5d"  [0x740c+0x10]
+            UUID: 8a7b6c5d-4e3f-4a2b-9c1d-0e1f2a3b4c5d  [0x740c+0x10]
             Label: "gptswap"  [0x741c+0x10]
           Signature: "SWAPSPACE2"  [0x7ff6+0xa]
           Swap pages — 8 KiB  [0x8000+0x2000]

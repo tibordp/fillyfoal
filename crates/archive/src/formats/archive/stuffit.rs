@@ -52,13 +52,7 @@ const MAX_PATH: usize = 4096;
 
 /// A Finder flags word as a flag set.
 fn finder_flags(v: u16) -> Value {
-    let (set, unknown) = crate::value::decode_flags(FINDER_FLAGS, v.into());
-    Value::Flags {
-        raw: v.into(),
-        bits: 16,
-        set,
-        unknown,
-    }
+    Value::flags(v.into(), 16, FINDER_FLAGS)
 }
 
 pub static FORMAT: Format = Format {

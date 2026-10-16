@@ -66,7 +66,7 @@ expression: "common::explore(&display_name(&path), &data)"
               ▾ Lines — 1 line  [0x387+0x1b]
                   Line 1: "0 0 1 rg 20 20 160 60 re f"  [0x387+0x1a]
             ▾ Operators
-                rg: "0 0 1" — set non-stroking RGB  [0x387+0x8]
+                rg: device-rgb(0 0 1) — set non-stroking RGB  [0x387+0x8]
                 re: "20 20 160 60" — rectangle  [0x390+0xf]
                 f — fill  [0x3a0+0x1]
           ▾ /PieceInfo — 1 entry  [0x317+0x23]
@@ -138,7 +138,7 @@ expression: "common::explore(&display_name(&path), &data)"
           ▾ Lines — 1 line  [0x387+0x1b]
               Line 1: "0 0 1 rg 20 20 160 60 re f"  [0x387+0x1a]
         ▾ Operators
-            rg: "0 0 1" — set non-stroking RGB  [0x387+0x8]
+            rg: device-rgb(0 0 1) — set non-stroking RGB  [0x387+0x8]
             re: "20 20 160 60" — rectangle  [0x390+0xf]
             f — fill  [0x3a0+0x1]
       ▾ /PieceInfo — 1 entry  [0x317+0x23]
@@ -246,7 +246,7 @@ expression: "common::explore(&display_name(&path), &data)"
             ▾ Lines — 1 line  [0x387+0x1b]
                 Line 1: "0 0 1 rg 20 20 160 60 re f"  [0x387+0x1a]
           ▾ Operators
-              rg: "0 0 1" — set non-stroking RGB  [0x387+0x8]
+              rg: device-rgb(0 0 1) — set non-stroking RGB  [0x387+0x8]
               re: "20 20 160 60" — rectangle  [0x390+0xf]
               f — fill  [0x3a0+0x1]
             End keywords: "endstream endobj"  [0x3a2+0x11]

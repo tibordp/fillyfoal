@@ -72,7 +72,7 @@ pub use crate::formats::util::fmt::{size, uuid};
 /// Decorator for `bytes[16]` record fields holding an RFC 4122 UUID.
 #[allow(clippy::ptr_arg)] // used as a `Field::with` decorator
 pub fn uuid_value(b: &Vec<u8>, node: Node) -> Node {
-    node.value(Value::Text(uuid(b)))
+    node.value(Value::uuid(b))
 }
 
 /// Text value of a NUL-padded byte string, decoded lossily.

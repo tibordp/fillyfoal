@@ -285,6 +285,16 @@ fn is_color(pid: u16) -> bool {
     )
 }
 
+/// A color (OfficeArtCOLORREF) as a value: an RGB colour, or the number
+/// when it names a scheme, system or palette colour.
+pub fn color_value(v: u32) -> crate::value::Value {
+    if v >> 24 & 0x19 == 0 {
+        crate::value::Value::color(crate::value::Color::colorref(v))
+    } else {
+        hex(v, 32)
+    }
+}
+
 /// A color (OfficeArtCOLORREF) as text.
 pub fn color(v: u32) -> String {
     let flags = v >> 24;
@@ -295,12 +305,7 @@ pub fn color(v: u32) -> String {
     } else if flags & 0x01 != 0 {
         format!("palette index {}", v & 0xffff)
     } else {
-        format!(
-            "#{:02x}{:02x}{:02x}",
-            v & 0xff,
-            (v >> 8) & 0xff,
-            (v >> 16) & 0xff
-        )
+        crate::value::Color::colorref(v).to_string()
     }
 }
 
@@ -661,7 +666,11 @@ fn fopt(f: &mut Fields<'_>, count: u16) -> Result<()> {
                 .value(uint(op, 32))
                 .summary(format!("picture {op} in the blip store"));
         } else if is_color(pid) {
-            node = node.value(hex(op, 32)).summary(color(op));
+            node = if op >> 24 & 0x19 == 0 {
+                node.value(color_value(op))
+            } else {
+                node.value(hex(op, 32)).summary(color(op))
+            };
         } else if matches!(pid, 0x01cb | 0x0081..=0x0084 | 0x0205 | 0x0206 | 0x0384..=0x0387) {
             node = node
                 .value(Value::Int {

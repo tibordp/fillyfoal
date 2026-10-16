@@ -46,7 +46,7 @@ use crate::formats::util::fmt::grouped_count;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::value::{Check, EnumTable, FlagTable, Value, decode_flags, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag, lookup};
 
 const MAGIC: u32 = 120_897;
 /// The allocation unit assumed for address cookies.
@@ -355,17 +355,11 @@ async fn page(cx: Cx, (input, file, pos): PageState) -> Result<()> {
             name: lookup(PAGE_TYPES, h.kind.into()).map(Into::into),
         }),
     ];
-    let (set, unknown) = decode_flags(PAGE_FLAGS, h.flags.into());
-    ph.push(
-        Node::new("Flags")
-            .span(span.sub(25, 1))
-            .value(Value::Flags {
-                raw: h.flags.into(),
-                bits: 8,
-                set,
-                unknown,
-            }),
-    );
+    ph.push(Node::new("Flags").span(span.sub(25, 1)).value(Value::flags(
+        h.flags.into(),
+        8,
+        PAGE_FLAGS,
+    )));
     ph.push(
         Node::new("Version")
             .span(span.sub(27, 1))

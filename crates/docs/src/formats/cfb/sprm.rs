@@ -455,12 +455,7 @@ pub fn describe(op: u16, data: &[u8], s: &Sprm) -> String {
             }
         }
         // COLORREF: red in the low byte.
-        0x6870 | 0x6877 => format!(
-            "{short}=#{:02x}{:02x}{:02x}",
-            v & 0xff,
-            (v >> 8) & 0xff,
-            (v >> 16) & 0xff
-        ),
+        0x6870 | 0x6877 => format!("{short}={}", crate::value::Color::colorref(v as u32)),
         _ => match signed(op, v) {
             Some(n) => format!("{short}={n}"),
             None => format!("{short}={v}"),

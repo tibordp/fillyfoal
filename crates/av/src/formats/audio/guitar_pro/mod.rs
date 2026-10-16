@@ -198,13 +198,20 @@ fn istr(f: &mut Fields<'_>, name: &'static str) -> Result<String> {
 }
 
 /// R, G, B and a padding byte.
-fn color(f: &mut Fields<'_>, name: &'static str) -> Result<String> {
+fn color(f: &mut Fields<'_>, name: &'static str) -> Result<()> {
     let start = f.pos();
     let rgb = f.bytes(name, 4).get()?;
     let get = |i: usize| rgb.get(i).copied().unwrap_or(0);
-    let value = format!("#{:02x}{:02x}{:02x}", get(0), get(1), get(2));
-    emit_text(f, name, start, &value);
-    Ok(value)
+    f.node(
+        Node::new(name)
+            .span(since(f, start))
+            .value(Value::color(crate::value::Color::rgb8(
+                get(0),
+                get(1),
+                get(2),
+            ))),
+    );
+    Ok(())
 }
 
 fn i8f(f: &mut Fields<'_>, name: &'static str) -> Result<i8> {

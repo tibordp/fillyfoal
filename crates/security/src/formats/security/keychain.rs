@@ -32,8 +32,8 @@ use crate::declare_format;
 use crate::dsl::{Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::fourcc;
 use crate::formats::util::fmt::plural;
-use crate::formats::util::fmt::{fourcc, uuid};
 use crate::formats::{Input, Probe, embedded_as};
 use crate::node::Node;
 use crate::record;
@@ -1078,7 +1078,7 @@ async fn key_blob(cx: Cx, data: Span) -> Result<()> {
     f.bytes("IV", 8).emit()?;
     f.u32("Header version").emit()?;
     f.bytes("CSP ID", 16)
-        .with(|v, node| node.value(Value::Text(uuid(v))))
+        .with(|v, node| node.value(Value::uuid(v)))
         .emit()?;
     f.u32("Blob type").emit()?;
     f.u32("Format").emit()?;

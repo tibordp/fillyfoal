@@ -441,9 +441,9 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
 }
 
 /// The `ANIM` background color, stored blue, green, red, alpha.
-fn bgra(b: &[u8]) -> String {
+fn bgra(b: &[u8]) -> crate::value::Color {
     let at = |i: usize| b.get(i).copied().unwrap_or(0);
-    format!("#{:02x}{:02x}{:02x}{:02x}", at(2), at(1), at(0), at(3))
+    crate::value::Color::rgba8(at(2), at(1), at(0), at(3))
 }
 
 pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
@@ -514,7 +514,7 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
             let block = cx.block(data.sub(0, 6)).await?;
             let mut f = Fields::emitting(cx, &block, e);
             f.bytes("Background color", 4)
-                .with(|b, n| n.summary(bgra(b)))
+                .with(|b, n| n.value(crate::value::Value::color(bgra(b))))
                 .desc("Blue, green, red, alpha; a hint, which viewers may ignore")
                 .emit()?;
             f.u16("Loop count")

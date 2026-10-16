@@ -403,8 +403,8 @@ fn config_subsection(f: &mut Fields<'_>, _: &()) -> Result<(String, ConfigSub)> 
             sub.summary = clip(&sub.caps.join(", "), 120);
         }
         "configuration/uuid" => {
-            let uuid = f.bytes("UUID", 16).emit()?;
-            sub.summary = crate::formats::util::fmt::uuid(&uuid);
+            let uuid = f.uuid("UUID").emit()?;
+            sub.summary = uuid.to_string();
         }
         _ => {
             return Err(Diagnostic::unsupported(format!(

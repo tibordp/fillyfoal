@@ -330,7 +330,9 @@ async fn ase_palette(cx: Cx, body: Span) -> Result<()> {
             .unwrap_or_default();
         cx.push(
             node.span(cur.since(start))
-                .value(text(format!("#{r:02x}{g:02x}{b:02x}{a:02x}"))),
+                .value(crate::value::Value::color(crate::value::Color::rgba8(
+                    r, g, b, a,
+                ))),
         )
         .await;
     }
@@ -1236,7 +1238,9 @@ async fn jasc(cx: Cx, input: Input) -> Result<()> {
                     .collect();
                 let node = Node::new(format!("[{n}]")).span(line.span);
                 cx.push(match c.as_slice() {
-                    [r, g, b, ..] => node.value(text(format!("#{r:02x}{g:02x}{b:02x}"))),
+                    [r, g, b, ..] => node.value(crate::value::Value::color(
+                        crate::value::Color::rgb8(*r, *g, *b),
+                    )),
                     _ => node
                         .value(text(t))
                         .diag(Diagnostic::malformed("expected three components")),
@@ -1295,14 +1299,9 @@ async fn ggr(cx: Cx, input: Input) -> Result<()> {
                         .and_then(|&c| GGR_COLOR.get(c as usize))
                         .copied()
                         .unwrap_or("RGB");
+                    let to8 = |c: f64| (c.clamp(0.0, 1.0) * 255.0).round() as u8;
                     let hexc = |r: f64, g: f64, b: f64, a: f64| {
-                        format!(
-                            "#{:02x}{:02x}{:02x}{:02x}",
-                            (r.clamp(0.0, 1.0) * 255.0).round() as u8,
-                            (g.clamp(0.0, 1.0) * 255.0).round() as u8,
-                            (b.clamp(0.0, 1.0) * 255.0).round() as u8,
-                            (a.clamp(0.0, 1.0) * 255.0).round() as u8
-                        )
+                        crate::value::Color::rgba8(to8(r), to8(g), to8(b), to8(a)).to_string()
                     };
                     node.value(text(format!(
                         "{l:.3}–{r:.3} (mid {m:.3}): {} → {}",

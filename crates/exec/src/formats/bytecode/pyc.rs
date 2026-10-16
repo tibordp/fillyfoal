@@ -19,7 +19,7 @@ use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{FlagTable, Value, decode_flags, flag};
+use crate::value::{FlagTable, Value, flag};
 
 const LE: Endian = Endian::Little;
 /// Largest marshal stream decoded.
@@ -567,13 +567,7 @@ impl Unmarshal<'_> {
         let v = self.i32()?;
         let value = if name == "co_flags" {
             let raw = u64::from(u32::from_le_bytes(v.to_le_bytes()));
-            let (set, unknown) = decode_flags(CO_FLAGS, raw);
-            Value::Flags {
-                raw,
-                bits: 32,
-                set,
-                unknown,
-            }
+            Value::flags(raw, 32, CO_FLAGS)
         } else {
             Value::Int {
                 value: v.into(),

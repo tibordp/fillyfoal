@@ -895,19 +895,10 @@ fn prop_node(
                     i64::try_from(*v).unwrap_or(0).saturating_add(TIME32_EPOCH),
                 )),
                 Kind::FileTime => node.value(Value::filetime(*v)),
-                Kind::Color => {
-                    let summary = if *v == 0xFFFF_FFFF {
-                        "automatic".to_owned()
-                    } else {
-                        format!(
-                            "#{:02x}{:02x}{:02x}",
-                            v & 0xFF,
-                            (v >> 8) & 0xFF,
-                            (v >> 16) & 0xFF
-                        )
-                    };
-                    node.value(hex(*v, bits)).summary(summary)
-                }
+                Kind::Color if *v == 0xFFFF_FFFF => node.value(hex(*v, bits)).summary("automatic"),
+                Kind::Color => node.value(Value::color(crate::value::Color::colorref(
+                    u32::try_from(*v & 0xff_ffff).unwrap_or(0),
+                ))),
                 _ => node.value(uint(*v, bits)),
             }
         }

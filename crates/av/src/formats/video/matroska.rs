@@ -1156,7 +1156,7 @@ async fn binary_node(cx: &Cx, el: &Element, node: Node) -> Result<Node> {
             let summary = match el.id {
                 SEEK_ID => Some(name_of(u32::try_from(be_uint(&d)).unwrap_or(0))),
                 0x73a4 | 0x3cb923 | 0x3eb923 | 0x4444 | 0x6e67 if d.len() == 16 => {
-                    Some(vidutil::uuid(&d))
+                    return Ok(node.value(Value::uuid(&d)));
                 }
                 0x2eb524 if d.len() == 4 => Some(vidutil::fourcc(&d)),
                 _ => None,
@@ -1204,13 +1204,7 @@ fn leaf(node: Node, kind: Kind, d: &[u8], el: &Element) -> Node {
         }
         Kind::Flags(table) => {
             let v = be_uint(d);
-            let (set, unknown) = crate::value::decode_flags(table, v);
-            node.value(Value::Flags {
-                raw: v,
-                bits: 8,
-                set,
-                unknown,
-            })
+            node.value(Value::flags(v, 8, table))
         }
         Kind::Int => node.value(Value::Int {
             value: be_int(d),
@@ -2354,13 +2348,11 @@ async fn block(cx: Cx, el: Element) -> Result<()> {
     } else {
         BLOCK_FLAGS
     };
-    let (set, unknown) = crate::value::decode_flags(table, h.flags.into());
-    cx.emit(Node::new("Flags").span(fspan).value(Value::Flags {
-        raw: h.flags.into(),
-        bits: 8,
-        set,
-        unknown,
-    }));
+    cx.emit(
+        Node::new("Flags")
+            .span(fspan)
+            .value(Value::flags(h.flags.into(), 8, table)),
+    );
     let head_len = h.header_len();
     let payload = data.tail(head_len);
     let input = el.input;

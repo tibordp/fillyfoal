@@ -1992,7 +1992,7 @@ fn cell_type(c: &Column) -> String {
 fn gtid(cx: &Cx, out: &Body<'_>) {
     out.emit(cx, "Flags", 0, 1, hex(out.byte(0), 8));
     let sid = out.slice(1, 16);
-    cx.emit(out.node("Server UUID", 1, 16).value(Value::Text(uuid(sid))));
+    cx.emit(out.node("Server UUID", 1, 16).value(Value::uuid(sid)));
     out.emit(cx, "GNO", 17, 8, uint(out.u64(17), 64));
     if out.len() <= 25 {
         return;

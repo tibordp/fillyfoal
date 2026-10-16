@@ -27,7 +27,7 @@ use crate::formats::{Codec, Format, Head, Input, Probe, dissect_or_data, embedde
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{EnumTable, FlagTable, Value, flag, lookup, number};
 
 const BE: Endian = Endian::Big;
 const MAGIC: &[u8] = b"QFI\xfb";
@@ -86,11 +86,22 @@ const EXTENSIONS: EnumTable = &[
 
 const FEATURE_TYPES: EnumTable = &[(0, "incompatible"), (1, "compatible"), (2, "autoclear")];
 
-const L1_FLAGS: FlagTable = &[flag(COPIED, "COPIED")];
+const L1_FLAGS: FlagTable = &[
+    flag(COPIED, "COPIED"),
+    number(OFFSET_MASK, "L2 table offset"),
+];
 const L2_FLAGS: FlagTable = &[
     flag(COPIED, "COPIED"),
     flag(COMPRESSED, "COMPRESSED"),
+    number(OFFSET_MASK, "host cluster offset"),
     flag(1, "ZERO"),
+];
+/// A compressed cluster's descriptor: below the two flags, its host offset
+/// and sector count.
+const L2_COMPRESSED_FLAGS: FlagTable = &[
+    flag(COPIED, "COPIED"),
+    flag(COMPRESSED, "COMPRESSED"),
+    number(!(COPIED | COMPRESSED), "compressed cluster descriptor"),
 ];
 const BITMAP_FLAGS: FlagTable = &[
     flag(1, "IN_USE"),
@@ -774,13 +785,7 @@ async fn l1_table(cx: Cx, (image, l1): (Arc<Image>, Span)) -> Result<()> {
         let value = if image.version == 1 {
             hex(entry, 64)
         } else {
-            let (set, unknown) = crate::value::decode_flags(L1_FLAGS, entry & !OFFSET_MASK);
-            Value::Flags {
-                raw: entry,
-                bits: 64,
-                set,
-                unknown,
-            }
+            Value::flags(entry, 64, L1_FLAGS)
         };
         cx.push(
             Node::new(format!("L1[{i}]"))
@@ -1026,22 +1031,17 @@ async fn l2_entry(cx: Cx, (image, span): (Arc<Image>, Span)) -> Result<()> {
     if image.version == 1 {
         cx.emit(Node::new("Descriptor").span(d8).value(hex(entry, 64)));
     } else {
-        let (set, unknown) = crate::value::decode_flags(
-            L2_FLAGS,
-            match mapping {
-                Mapping::Compressed(..) => entry & (COPIED | COMPRESSED),
-                _ => entry & !OFFSET_MASK,
-            },
-        );
         cx.emit(
             Node::new("Descriptor")
                 .span(d8)
-                .value(Value::Flags {
-                    raw: entry,
-                    bits: 64,
-                    set,
-                    unknown,
-                })
+                .value(Value::flags(
+                    entry,
+                    64,
+                    match mapping {
+                        Mapping::Compressed(..) => L2_COMPRESSED_FLAGS,
+                        _ => L2_FLAGS,
+                    },
+                ))
                 .desc("Bit 63: refcount is exactly one; bit 62: compressed; bits 9–55: host offset; bit 0: reads as zeros"),
         );
     }

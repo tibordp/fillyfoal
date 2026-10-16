@@ -17,7 +17,7 @@ use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{Addr, EnumTable, FlagTable, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -776,29 +776,20 @@ fn utmp_probe(h: &Head<'_>) -> bool {
 declare_format!(pub UTMP = "utmp", "Linux login records (utmp/wtmp/btmp)", ["utmp", "wtmp", "btmp"], "application/x-utmp",
     Probe::Custom(utmp_probe), utmp);
 
-fn utmp_address(r: &[u8]) -> String {
-    let words: Vec<u32> = (0..4usize)
-        .map(|i| u32_le(r, 348usize.saturating_add(i.saturating_mul(4))).unwrap_or(0))
-        .collect();
-    let bytes = r.get(348..364).unwrap_or_default();
-    if words.iter().all(|&w| w == 0) {
-        return String::new();
+/// The record's address (`ut_addr_v6`): IPv4 when only the first word is
+/// set, otherwise IPv6; `None` when unset.
+fn utmp_address(r: &[u8]) -> Option<Addr> {
+    let bytes = r.get(348..364)?;
+    if bytes.iter().all(|&b| b == 0) {
+        return None;
     }
-    if words.iter().skip(1).all(|&w| w == 0) {
-        return bytes
-            .iter()
-            .take(4)
-            .map(u8::to_string)
-            .collect::<Vec<_>>()
-            .join(".");
+    if bytes
+        .get(4..)
+        .is_some_and(|rest| rest.iter().all(|&b| b == 0))
+    {
+        return Addr::v4_at(bytes);
     }
-    bytes
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|c| format!("{:x}", u16::from_be_bytes(*c)))
-        .collect::<Vec<_>>()
-        .join(":")
+    Addr::v6_at(bytes)
 }
 
 fn utmp_layout(f: &mut Fields<'_>, _: &()) -> Result<(u16, String, String, String, u32)> {
@@ -816,12 +807,9 @@ fn utmp_layout(f: &mut Fields<'_>, _: &()) -> Result<(u16, String, String, Strin
     f.u32("Microseconds").emit()?;
     let addr = utmp_address(f.block().data.as_slice());
     f.bytes("Address", 16)
-        .with(|_, n| {
-            if addr.is_empty() {
-                n
-            } else {
-                n.summary(addr.clone())
-            }
+        .with(|_, n| match addr {
+            Some(a) => n.value(Value::Addr(a)),
+            None => n.not_set(),
         })
         .emit()?;
     f.bytes("Unused", 20).emit()?;

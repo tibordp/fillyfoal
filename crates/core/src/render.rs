@@ -18,11 +18,10 @@ pub fn value(v: &Value) -> String {
             Some(name) => format!("{name} ({raw:#x})"),
             None => format!("{raw:#x} (unknown)"),
         },
-        Value::Flags {
-            raw, set, unknown, ..
-        } => {
+        Value::Flags { raw, table, .. } => {
+            let (set, unknown) = crate::value::decode_flags(table, *raw);
             let mut parts: Vec<String> = set.iter().map(|s| (*s).to_owned()).collect();
-            if *unknown != 0 {
+            if unknown != 0 {
                 parts.push(format!("{unknown:#x}"));
             }
             format!("{raw:#x} [{}]", parts.join(" | "))
@@ -32,6 +31,8 @@ pub fn value(v: &Value) -> String {
         Value::Text(s) => format!("{s:?}"),
         Value::Bytes(b) => bytes(b),
         Value::Guid(g) => g.to_string(),
+        Value::Addr(a) => a.to_string(),
+        Value::Color(c) => c.to_string(),
         Value::Checksum(c) => c.to_string(),
         Value::Size { n, unit, .. } => size(*n, *unit),
         Value::Duration { ticks, per_sec } => duration(*ticks, *per_sec),
@@ -539,7 +540,163 @@ mod tests {
 
     #[test]
     fn value_stays_small() {
-        assert!(std::mem::size_of::<Value>() <= 48);
+        assert!(std::mem::size_of::<Value>() <= 40);
         assert!(std::mem::size_of::<crate::value::Time>() <= 24);
+    }
+
+    #[test]
+    fn flags_name_zero_fields_and_account_for_numbers() {
+        use crate::value::{FlagTable, field, flag, number};
+        const T: FlagTable = &[
+            flag(0x80, "LONG"),
+            field(0x60, 0x00, "DICT_64K"),
+            field(0x60, 0x20, "DICT_128K"),
+            number(0x0f00, "offset"),
+        ];
+        assert_eq!(value(&Value::flags(0x80, 16, T)), "0x80 [LONG | DICT_64K]");
+        assert_eq!(value(&Value::flags(0x20, 16, T)), "0x20 [DICT_128K]");
+        // A number field's bits are not unknown; other stray bits are.
+        assert_eq!(
+            value(&Value::flags(0x0b21, 16, T)),
+            "0xb21 [DICT_128K | 0x1]"
+        );
+        assert_eq!(
+            Value::flags(0x0b21, 16, T).flag_names(),
+            Some((vec!["DICT_128K"], 1))
+        );
+    }
+
+    #[test]
+    fn guids_keep_their_stored_order() {
+        use crate::value::{Guid, GuidOrder};
+        let stored: [u8; 16] = std::array::from_fn(|i| i as u8);
+        let mixed = Guid::mixed(stored);
+        let big = Guid::big(stored);
+        assert_eq!(mixed.to_string(), "{03020100-0504-0706-0809-0a0b0c0d0e0f}");
+        assert_eq!(big.to_string(), "00010203-0405-0607-0809-0a0b0c0d0e0f");
+        assert_eq!(mixed.bytes, stored);
+        assert_eq!(big.bytes, stored);
+        assert_eq!(mixed.data1(), 0x0302_0100);
+        assert_eq!(big.data1(), 0x0001_0203);
+        assert_eq!(mixed.to_le_bytes(), stored);
+        assert_eq!(Guid::mixed(big.to_le_bytes()).uuid(), big.uuid());
+        assert_eq!(
+            Guid::new(0x0302_0100, 0x0504, 0x0706, [8, 9, 10, 11, 12, 13, 14, 15]),
+            mixed
+        );
+        assert_eq!(big.order, GuidOrder::Big);
+        assert!(matches!(Value::uuid(&stored[..15]), Value::Bytes(_)));
+    }
+
+    #[test]
+    fn addresses() {
+        use crate::value::Addr;
+        let v = |a: Addr| value(&Value::Addr(a));
+        assert_eq!(v(Addr::V4([192, 0, 2, 1])), "192.0.2.1");
+        assert_eq!(v(Addr::v4_u32(0xc000_0201)), "192.0.2.1");
+        let mut six = [0u8; 16];
+        six[0] = 0x20;
+        six[1] = 0x01;
+        six[2] = 0x0d;
+        six[3] = 0xb8;
+        six[15] = 1;
+        assert_eq!(v(Addr::V6(six)), "2001:db8::1");
+        let mapped = Addr::v6_at(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 192, 0, 2, 1]);
+        assert_eq!(v(mapped.unwrap()), "::ffff:192.0.2.1");
+        // RFC 5952: a lone zero group is not compressed.
+        let one = Addr::v6_at(&[0x20, 1, 0x0d, 0xb8, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]);
+        assert_eq!(v(one.unwrap()), "2001:db8:0:1:1:1:1:1");
+        assert_eq!(
+            v(Addr::Mac([0, 0x1b, 0x63, 0x84, 0x45, 0xe6])),
+            "00:1b:63:84:45:e6"
+        );
+        assert_eq!(
+            v(Addr::Eui64([0, 0x1b, 0x63, 0xff, 0xfe, 0x84, 0x45, 0xe6])),
+            "00:1b:63:ff:fe:84:45:e6"
+        );
+    }
+
+    #[test]
+    fn colors() {
+        use crate::value::{Color, ColorDepth, ColorSpace, Exactness};
+        let c = |c: Color| value(&Value::color(c));
+        // 8-bit sRGB: today's text.
+        assert_eq!(c(Color::rgb8(0xff, 0x88, 0)), "#ff8800");
+        assert_eq!(c(Color::rgba8(0xff, 0x88, 0, 0x80)), "#ff880080");
+        assert_eq!(c(Color::colorref(0x0070_1fe0)), "#e01f70");
+        assert_eq!(c(Color::rgb24(0x00e0_1f70)), "#e01f70");
+        // Packed: bit replication, and the raw number stays visible.
+        let rgb565 = Color::packed(0xf800, 16, "RGB565", (11, 5), (5, 6), (0, 5));
+        assert_eq!(c(rgb565.clone()), "#ff0000 (RGB565 0xf800)");
+        let half = Color::packed(0x8410, 16, "RGB565", (11, 5), (5, 6), (0, 5));
+        assert_eq!(c(half), "#848284 (RGB565 0x8410)");
+        assert_eq!(
+            rgb565.to_srgb8(),
+            Some(([255, 0, 0, 255], Exactness::Exact))
+        );
+        // 16 bits: hex when they are exact 8-bit values, else decimals that
+        // read back to the stored integers.
+        assert_eq!(c(Color::rgb_bits(16, 0xffff, 0x8080, 0)), "#ff8000");
+        assert_eq!(
+            c(Color::rgb_bits(16, 0xb400, 0x9000, 0)),
+            "color(srgb 0.70314 0.56251 0)"
+        );
+        // Floats at their width; linear light; device and other models.
+        assert_eq!(
+            c(Color::rgb_float(32, 1.0, f64::from(0.5f32), 0.0).space(ColorSpace::LinearSrgb)),
+            "color(srgb-linear 1 0.5 0)"
+        );
+        assert_eq!(
+            c(Color::rgb_float(64, 0.8, 0.843, 1.0).space(ColorSpace::Device)),
+            "device-rgb(0.8 0.843 1)"
+        );
+        let cmyk = Color::cmyk(ColorDepth::Float(64), 0.0, 0.5, 1.0, 0.0);
+        assert_eq!(c(cmyk.clone()), "device-cmyk(0 0.5 1 0)");
+        assert_eq!(
+            c(cmyk.clone().named("PANTONE 1495 C")),
+            "\"PANTONE 1495 C\" (device-cmyk(0 0.5 1 0))"
+        );
+        assert_eq!(
+            cmyk.to_srgb8(),
+            Some(([255, 128, 0, 255], Exactness::Approximate))
+        );
+        assert_eq!(
+            c(Color::lab(ColorDepth::Bits(8), 50.196, 20.0, -30.0)),
+            "lab(50.2 20 -30)"
+        );
+        assert_eq!(
+            c(Color::hsb(ColorDepth::Bits(16), 2.0 / 3.0, 0.5, 1.0)),
+            "hsb(240 50% 100%)"
+        );
+        assert_eq!(
+            Color::hsb(ColorDepth::Bits(16), 2.0 / 3.0, 0.5, 1.0).to_srgb8(),
+            Some(([128, 128, 255, 255], Exactness::Exact))
+        );
+        assert_eq!(c(Color::gray_bits(8, 0x80)), "#808080");
+        assert_eq!(
+            c(Color::gray_float(64, 0.25).space(ColorSpace::Device)),
+            "device-gray(0.25)"
+        );
+        // Lab (D50) white and black preview as sRGB white and black.
+        let white = Color::lab(ColorDepth::Float(64), 100.0, 0.0, 0.0).to_srgb8();
+        assert_eq!(white, Some(([255, 255, 255, 255], Exactness::Approximate)));
+        let black = Color::lab(ColorDepth::Float(64), 0.0, 0.0, 0.0).to_srgb8();
+        assert_eq!(black, Some(([0, 0, 0, 255], Exactness::Approximate)));
+        // Linear 0.5 is sRGB 188; premultiplied alpha is undone.
+        let lin = Color::rgb_float(32, 0.5, 0.5, 0.5).space(ColorSpace::LinearSrgb);
+        assert_eq!(
+            lin.to_srgb8(),
+            Some(([188, 188, 188, 255], Exactness::Exact))
+        );
+        let pre = Color::rgb_float(32, 0.25, 0.25, 0.25).premultiplied(0.5);
+        assert_eq!(
+            pre.to_srgb8(),
+            Some(([128, 128, 128, 128], Exactness::Exact))
+        );
+        assert_eq!(c(pre), "color(srgb 0.25 0.25 0.25 / 0.5)");
+        // P3 red is outside sRGB: clipped, so approximate.
+        let p3 = Color::rgb_float(32, 1.0, 0.0, 0.0).space(ColorSpace::DisplayP3);
+        assert_eq!(p3.to_srgb8().map(|(_, e)| e), Some(Exactness::Approximate));
+        assert_eq!(Color::rgb_float(32, f64::NAN, 0.0, 0.0).to_srgb8(), None);
     }
 }

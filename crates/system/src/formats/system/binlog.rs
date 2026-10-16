@@ -1161,16 +1161,7 @@ async fn decode(cx: &Cx, ctx: &Ctx, index: &Index, kind: u64, body: &[u8]) -> Re
                 };
                 // System.Guid's byte layout: three little-endian fields,
                 // then eight bytes as they are.
-                let d1 = u32_le(g, 0).unwrap_or(0);
-                let d2 = crate::bytes::u16_le(g, 4).unwrap_or(0);
-                let d3 = crate::bytes::u16_le(g, 6).unwrap_or(0);
-                let tail: String = g.iter().skip(8).map(|b| format!("{b:02x}")).collect();
-                let (t1, t2) = tail.split_at(tail.len().min(4));
-                push!(
-                    name,
-                    s,
-                    Value::Text(format!("{d1:08x}-{d2:04x}-{d3:04x}-{t1}-{t2}"))
-                );
+                push!(name, s, Value::guid(g));
             }
             Ty::Items => {
                 let Some(n) = r.uleb() else {

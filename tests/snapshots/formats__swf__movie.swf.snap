@@ -23,7 +23,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Max recursion depth: 1000  [0xe9+0x2]
         Script timeout: 0:01:00  [0xeb+0x2]
     ▾ SetBackgroundColor — 3 bytes  [0xed+0x5]
-        Background colour: "#336699"  [0xef+0x3]
+        Background colour: #336699  [0xef+0x3]
     ▾ DefineBinaryData — 79 bytes  [0xf2+0x55]
         Character ID: 1  [0xf8+0x2]
         Reserved: 0  [0xfa+0x4]

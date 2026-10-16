@@ -38,10 +38,11 @@ use crate::fields::{Endian, Fields};
 use crate::formats::text::{json, plain};
 use crate::formats::util::binutil::get;
 use crate::formats::util::fmt::{plural, size, uuid};
-use crate::formats::util::val::{text, uint};
+use crate::formats::util::val::uint;
 use crate::formats::{Format, Head, Input, Probe, embedded_as};
 use crate::node::Node;
 use crate::span::{Origin, Span};
+use crate::value::Value;
 
 pub static PACKET: Format = Format {
     name: "ctf-packet",
@@ -506,7 +507,7 @@ async fn packet_fields(
                 let b = f.bytes(name, 16);
                 let s = b.span();
                 let v = b.get()?;
-                cx.emit(Node::new(name).span(s).value(text(uuid(&v))));
+                cx.emit(Node::new(name).span(s).value(Value::uuid(&v)));
             }
             (Magic, _) => {
                 f.u32(name).hex().emit()?;
@@ -677,7 +678,7 @@ async fn metadata_packet(cx: Cx, (span, e, content): (Span, Endian, u64)) -> Res
     let b = f.bytes("uuid", 16);
     let s = b.span();
     let v = b.get()?;
-    cx.emit(Node::new("uuid").span(s).value(text(uuid(&v))));
+    cx.emit(Node::new("uuid").span(s).value(Value::uuid(&v)));
     f.u32("checksum").hex().emit()?;
     f.u32("content_size")
         .with(|&v, n| n.summary(format!("bits, {}", plural(v / 8, "byte"))))

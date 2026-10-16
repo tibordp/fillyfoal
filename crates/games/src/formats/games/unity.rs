@@ -565,13 +565,11 @@ async fn directory_entry(
         radix: Radix::Hex,
     }));
     cx.emit(Node::new("Size").span(s).value(uint(size, 64)));
-    let (set, unknown) = crate::value::decode_flags(NODE_FLAGS, flags.into());
-    cx.emit(Node::new("Flags").span(fspan).value(Value::Flags {
-        raw: flags.into(),
-        bits: 32,
-        set,
-        unknown,
-    }));
+    cx.emit(
+        Node::new("Flags")
+            .span(fspan)
+            .value(Value::flags(flags.into(), 32, NODE_FLAGS)),
+    );
     cx.emit(Node::new("Path").span(pspan).value(Value::Text(path)));
     Ok(())
 }
