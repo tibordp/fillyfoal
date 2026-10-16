@@ -104,7 +104,8 @@ struct Section {
     /// Exact bytes (a pieces source when the section spans packets).
     span: Span,
     summary: Option<String>,
-    crc_ok: Option<bool>,
+    /// The section's CRC_32, checked.
+    crc: Option<crate::value::Check>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -769,7 +770,7 @@ fn take_section(
         table,
         span,
         summary: decoded.summary.clone(),
-        crc_ok: si::crc_ok(d),
+        crc: si::crc_check(d),
     };
     match table {
         0x00 if pid == 0 && psi.pat.is_none() => {
@@ -981,8 +982,8 @@ fn section_node(s: &Section) -> Node {
         summary = format!("{summary}, {t}");
     }
     node = node.summary(summary);
-    if s.crc_ok == Some(false) {
-        node = node.diag(Diagnostic::warning("CRC mismatch"));
+    if let Some(check) = &s.crc {
+        node = node.check_diag(check);
     }
     node
 }

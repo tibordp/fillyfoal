@@ -1257,25 +1257,20 @@ fn section_walk(w: &mut Walker, d: &[u8], out: &mut Decoded) -> Option<()> {
         let start = w.pos();
         let crc = u32::try_from(w.read(32)?).ok()?;
         let computed = crc32_mpeg(d.get(..body_end).unwrap_or_default());
-        let mut node = Node::new("CRC_32").span(w.since(start)).value(Value::UInt {
-            value: crc.into(),
-            bits: 32,
-            radix: crate::value::Radix::Hex,
-        });
-        node = if computed == crc {
-            node.summary("valid")
-        } else {
-            node.diag(crate::error::Diagnostic::warning(format!(
-                "CRC mismatch: computed {computed:#010x}"
-            )))
-        };
-        w.push(node);
+        w.push(
+            Node::new("CRC_32")
+                .span(w.since(start))
+                .checksum(crate::value::Check::new(CRC_MPEG, crc).verify(computed)),
+        );
     }
     Some(())
 }
 
-/// Whether the CRC of a section with syntax (or TOT/SCTE-35) checks out.
-pub fn crc_ok(d: &[u8]) -> Option<bool> {
+/// The CRC of MPEG sections: CRC-32 with no reflection or inversion.
+pub const CRC_MPEG: &str = "CRC-32/MPEG-2";
+
+/// The CRC of a section with syntax (or TOT/SCTE-35), checked.
+pub fn crc_check(d: &[u8]) -> Option<crate::value::Check> {
     let len = usize::from(u16_be(d, 1)? & 0x0fff).checked_add(3)?;
     let table = *d.first()?;
     let syntax = d.get(1)? & 0x80 != 0;
@@ -1284,7 +1279,7 @@ pub fn crc_ok(d: &[u8]) -> Option<bool> {
     }
     let end = len.checked_sub(4)?;
     let crc = u32_be(d, end)?;
-    Some(crc32_mpeg(d.get(..end)?) == crc)
+    Some(crate::value::Check::new(CRC_MPEG, crc).verify(crc32_mpeg(d.get(..end)?)))
 }
 
 fn time_text(t: i64) -> String {

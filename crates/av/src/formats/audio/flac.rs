@@ -18,12 +18,12 @@ use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{
     Bits, CRC16_BUYPASS, bits_node, channels, duration_of, image_info, leaf, parse_bits, table,
 };
-use crate::formats::util::val::{enumv, hex, text, uint};
+use crate::formats::util::val::{enumv, text, uint};
 use crate::formats::{Format, Input, Probe, audio::id3, audio::vorbis, embedded};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, lookup};
+use crate::value::{Check, EnumTable, lookup};
 
 const BE: Endian = Endian::Big;
 
@@ -986,11 +986,12 @@ async fn frame(cx: Cx, (span, header_len): (Span, usize)) -> Result<()> {
     // The CRC-16 covers the whole frame; with the CRC itself the remainder
     // is zero.
     let crc = cx.read(span.sub(crc_at, 2)).await?;
-    let mut crc_node = leaf(
-        "CRC-16",
-        span.sub(crc_at, 2),
-        hex(crate::bytes::u16_be(&crc, 0).unwrap_or(0), 16),
-    );
+    let mut crc_node = Node::new("CRC-16")
+        .span(span.sub(crc_at, 2))
+        .checksum(Check::new(
+            "CRC-16/BUYPASS",
+            crate::bytes::u16_be(&crc, 0).unwrap_or(0),
+        ));
     if span.len <= cx.limits().max_read {
         let data = cx.read_avail(span).await?;
         if to_u64(data.len()) == span.len {
@@ -999,11 +1000,8 @@ async fn frame(cx: Cx, (span, header_len): (Span, usize)) -> Result<()> {
                 reg = CRC16_BUYPASS.update(reg, chunk);
                 cx.checkpoint().await;
             }
-            crc_node = if reg == 0 {
-                crc_node.summary("valid")
-            } else {
-                crc_node.diag(Diagnostic::warning("CRC mismatch"))
-            };
+            // With the CRC itself the remainder is zero.
+            crc_node = crc_node.with_check(|c| c.verified(reg == 0));
         }
     }
     cx.emit(crc_node);
@@ -1097,9 +1095,9 @@ fn frame_fields(b: &mut Bits<'_>) -> Result<()> {
         }
         _ => {}
     }
+    // Frames are found by a header whose CRC-8 matches.
     b.field("CRC-8", 8)
-        .hex()
-        .with(|_, n| n.summary("valid"))
+        .with(|v, n| n.checksum(Check::new("CRC-8", u8::try_from(v).unwrap_or(0)).verified(true)))
         .emit()?;
     Ok(())
 }

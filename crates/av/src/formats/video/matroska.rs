@@ -33,7 +33,7 @@ use crate::formats::{Format, Head, Input, Probe, content, embedded};
 use crate::node::Node;
 use crate::span::Span;
 use crate::text::until_nul;
-use crate::value::{EnumTable, FlagTable, Radix, Value, field, flag};
+use crate::value::{Check, EnumTable, FlagTable, Radix, Value, field, flag};
 
 pub static MKV: Format = Format {
     name: "mkv",
@@ -1031,38 +1031,24 @@ async fn check_crc(cx: &Cx, node: Node, el: &Element, region: Span, pos: u64) ->
     let Some(stored) = u32_le(&raw, 0).filter(|_| data.len == 4) else {
         return node.diag(Diagnostic::malformed("a CRC-32 element holds 4 bytes").at(data));
     };
-    let node = node.value(Value::UInt {
-        value: stored.into(),
-        bits: 32,
-        radix: Radix::Hex,
-    });
+    let check = Check::new("CRC-32", stored);
     let before = region.sub(0, pos);
     let after = region.tail(pos.saturating_add(el.span.len));
     let covered = before.len.saturating_add(after.len);
     if covered > CRC_LIMIT {
-        return node.summary(format!("not checked: covers {covered} bytes"));
+        return node.checksum(check.skipped(format!("covers {covered} bytes")));
     }
     let mut crc = 0xffff_ffffu32;
     for part in [before, after] {
         let Ok(bytes) = cx.read_avail(part).await else {
-            return node;
+            return node.checksum(check);
         };
         crate::formats::util::datakit::feed_paced(cx, &bytes, |piece| {
             crc = crate::codec::crc::crc32_update(crc, piece);
         })
         .await;
     }
-    let crc = crc ^ 0xffff_ffff;
-    if crc == stored {
-        node.summary("matches")
-    } else {
-        node.summary("mismatch").diag(
-            Diagnostic::warning(format!(
-                "CRC-32 mismatch: stored {stored:#010x}, computed {crc:#010x}"
-            ))
-            .at(data),
-        )
-    }
+    node.checksum(check.verify(crc ^ 0xffff_ffff))
 }
 
 /// The node for one element: a value for leaves, a lazy expander for
