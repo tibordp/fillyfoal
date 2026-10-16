@@ -859,3 +859,7 @@ closely enough to credit:
 - .NET EventPipe traces (`crates/exec/src/formats/profile/nettrace.rs`): layouts from
   TraceEvent's `NetTraceFormat_v5.md` and `NetTraceFormat.md` (PerfView repository, MIT,
   Copyright (c) .NET Foundation and Contributors); no code copied.
+- MSBuild binary logs (`crates/system/src/formats/system/binlog.rs`): record kinds, framing and
+  event field layouts from MSBuild's `BinaryLogger`, `BuildEventArgsReader` and
+  `BinaryLogRecordKind` (dotnet/msbuild, MIT, Copyright (c) .NET Foundation and Contributors);
+  no code copied.

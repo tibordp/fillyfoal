@@ -4,11 +4,12 @@
 //! Android OTA payloads, Intel HEX and S-records (`hexfile`), terminfo,
 //! gettext catalogs (`mo`), Apple BOM stores, Windows compatibility
 //! databases (`shim_sdb`), .NET resources and BinaryFormatter streams
-//! (`dotnet`), developer artifacts (`devtools`, Delphi form
-//! streams in `delphi`), Git storage, OSTree objects and flatpak bundles
+//! (`dotnet`), MSBuild binary logs (`binlog`), developer artifacts
+//! (`devtools`, Delphi form streams in `delphi`),Git storage, OSTree objects and flatpak bundles
 //! (`ostree`) and Outlook PST/OST mail stores (`pst`).
 
 pub mod artifacts;
+pub mod binlog;
 pub mod bom;
 pub mod delphi;
 pub mod devices;

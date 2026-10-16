@@ -1427,3 +1427,17 @@ Each was checked against `apk adbdump --format yaml` of the same file.
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
 | `nettrace/demo.nettrace` | .NET 8.0.31 runtime (`mcr.microsoft.com/dotnet/sdk:8.0` image, SDK 8.0.425, linux-arm64) | `tests/data/nettrace/make.sh` (its header has the `docker run` line): a console app with an `EventSource` (`Fillyfoal-Demo`) run with `DOTNET_EnableEventPipe=1`, `DOTNET_EventPipeConfig='Fillyfoal-Demo:0xFFFFFFFF:5,Microsoft-Windows-DotNETRuntime:0x1:4'` and `DOTNET_EventPipeRundown=0` (no rundown: it would list every JIT-compiled method). NetTrace format 4 (`Trace` version 4): metadata, a stack block, compressed event headers, a sequence point. Holds container paths (`/usr/share/dotnet`, `/work/app`) and the container's process IDs. Unchanged; not byte-reproducible (timestamps, addresses) |
+
+## MSBuild binary logs
+
+Written by MSBuild 17.11.48 (.NET SDK 8.0.425, `mcr.microsoft.com/dotnet/sdk:8.0` image, linux-arm64)
+with `tests/data/msbuild-binlog/make.sh` (its header has the `docker run` line), with the
+environment cleared (`env -i`, so the logged environment is the container's minimal one). Binlog
+format 21. The logs hold container paths (`/work`, `/usr/share/dotnet`, `/tmp/home`). Not
+byte-reproducible (timestamps, MVIDs).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `msbuild-binlog/tiny.binlog.gz` | MSBuild 17.11.48 | `dotnet msbuild tiny.proj -bl:tiny.binlog` of an SDK-less project (targets, a property, items, a warning; the project import archive embeds the project file). The file unchanged, renamed so the harness dissects the gzip-compressed record stream inside it |
+| `msbuild-binlog/build-noimports.binlog.gz` | MSBuild 17.11.48 | `dotnet build "-bl:build-noimports.binlog;ProjectImports=None"` of a console app (restore, evaluation, about 7,000 records of 20 kinds). Unchanged, renamed as above |
+| `gzip/tiny.binlog` | MSBuild 17.11.48 | the same file as `msbuild-binlog/tiny.binlog.gz`, under its own name: as a host sees it (gzip, then the record stream) |

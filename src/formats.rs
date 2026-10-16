@@ -2052,6 +2052,8 @@ pub static FORMATS: &[&Format] = &[
     &system::dotnet::DOTNET_RESOURCES,
     #[cfg(feature = "system")]
     &system::dotnet::NRBF,
+    #[cfg(feature = "system")]
+    &system::binlog::FORMAT,
     #[cfg(feature = "security")]
     &pcap::snoop::SNOOP,
     #[cfg(feature = "system")]
