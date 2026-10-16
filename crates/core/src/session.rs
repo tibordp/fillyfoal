@@ -926,7 +926,9 @@ impl<C: Catalog> Session<C> {
             last_mark: from,
             resume,
             forced,
-            name: entry.node.name.clone(),
+            name: expander
+                .known_as()
+                .unwrap_or_else(|| entry.node.name.clone()),
             ..Output::default()
         }));
         let cx = Cx {

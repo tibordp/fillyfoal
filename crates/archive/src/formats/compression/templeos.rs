@@ -4,7 +4,9 @@
 //! A 17-byte header gives the compressed size (the whole file, header
 //! included), the expanded size and the compression type: stored, or LZW
 //! over 7-bit or 8-bit characters (see `codec::templeos`). The expanded
-//! data is decoded on demand and dissected in turn.
+//! data is decoded on demand and dissected in turn: as the format the
+//! file's name gives it, if any (see [`format_by_name`]), since HolyC and
+//! DolDoc text often has nothing that tells it from plain text.
 //!
 //! Not Unix `compress`, whose `.Z` starts with `1F 9D`: this one has no
 //! magic, so the probe asks for the first 64-bit field to be the file's
@@ -17,7 +19,7 @@ use crate::dsl::{Cursor, Record};
 use crate::error::Result;
 use crate::fields::Endian;
 use crate::formats::util::fmt;
-use crate::formats::{Format, Head, Input, Probe, content};
+use crate::formats::{Format, Head, Input, Probe, content, content_named};
 use crate::node::Node;
 use crate::record;
 use crate::value::EnumTable;
@@ -34,6 +36,29 @@ pub static FORMAT: Format = Format {
 /// TempleOS refuses to expand more than this (TOSZ's limit; the kernel's
 /// is the mapped address space).
 const MAX_EXPANDED: u64 = 0x2000_0000;
+
+/// The format TempleOS gives a file by its name, `.Z` aside: it compiles
+/// `.HC`, `.HH`, `.IN` and `.PRJ` files as HolyC (`Load`, `ExeFile`,
+/// `#include`) and reads `.DD` and `.MAP` files as DolDoc documents
+/// (`DocRead`). `name` may be a path.
+pub fn format_by_name(name: &str) -> Option<&'static str> {
+    let name = name.rsplit('/').next().unwrap_or(name);
+    let name = strip_z(name).unwrap_or(name);
+    let (_, ext) = name.rsplit_once('.')?;
+    let is = |e: &str| ext.eq_ignore_ascii_case(e);
+    if is("HC") || is("HH") || is("IN") || is("PRJ") {
+        Some("holyc")
+    } else if is("DD") || is("MAP") {
+        Some("doldoc")
+    } else {
+        None
+    }
+}
+
+/// `name` without its `.Z`, if it has one.
+fn strip_z(name: &str) -> Option<&str> {
+    name.strip_suffix(".Z").or_else(|| name.strip_suffix(".z"))
+}
 
 const TYPES: EnumTable = &[(1, "CT_NONE"), (2, "CT_7_BIT"), (3, "CT_8_BIT")];
 
@@ -96,16 +121,18 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         _ => "unknown compression type",
     };
     let size = header.compressed_size.min(file.len);
-    cx.emit(
-        content(
-            "Expanded",
-            input,
-            file.sub(0, size),
-            Codec::TempleOsZ,
-            Some(header.expanded_size),
-        )
-        .summary(fmt::size(header.expanded_size)),
-    );
+    // The file's name says what the expanded data is (`Foo.HC.Z`); a
+    // file system passes it on with `Node::known_as`.
+    let name = cx.node_name();
+    let (span, expected) = (file.sub(0, size), Some(header.expanded_size));
+    let mut expanded = match format_by_name(&name) {
+        Some(format) => content_named("Expanded", input, span, Codec::TempleOsZ, expected, format),
+        None => content("Expanded", input, span, Codec::TempleOsZ, expected),
+    };
+    if let Some(inner) = strip_z(&name) {
+        expanded = expanded.known_as(inner.to_owned());
+    }
+    cx.emit(expanded.summary(fmt::size(header.expanded_size)));
     cx.emit(
         Node::new(if header.compression_type == CT_NONE {
             "Stored data"

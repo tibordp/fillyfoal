@@ -102,6 +102,22 @@ impl Node {
         self
     }
 
+    /// The name the content is known by where it came from (a file's name
+    /// in a file system) when the node itself is named otherwise
+    /// ("Content"): what [`Cx::node_name`] returns while the node expands,
+    /// so its dissector and identification (`formats::Deep::name`) can take
+    /// it as a hint. Call it after [`Node::lazy`]; a node without an
+    /// expander is left as it is.
+    pub fn known_as(mut self, name: impl Into<Cow<'static, str>>) -> Self {
+        if let Some(inner) = self.expander.take() {
+            self.expander = Some(Arc::new(KnownAs {
+                name: name.into(),
+                inner,
+            }));
+        }
+        self
+    }
+
     pub fn has_children(&self) -> bool {
         self.expander.is_some()
     }
@@ -142,6 +158,27 @@ macro_rules! expander {
 
 pub(crate) trait Expand: Send + Sync {
     fn start(&self, cx: Cx) -> Expansion;
+
+    /// See [`Node::known_as`].
+    fn known_as(&self) -> Option<Cow<'static, str>> {
+        None
+    }
+}
+
+/// An expander whose node is known by another name ([`Node::known_as`]).
+struct KnownAs {
+    name: Cow<'static, str>,
+    inner: Arc<dyn Expand>,
+}
+
+impl Expand for KnownAs {
+    fn start(&self, cx: Cx) -> Expansion {
+        self.inner.start(cx)
+    }
+
+    fn known_as(&self) -> Option<Cow<'static, str>> {
+        Some(self.name.clone())
+    }
 }
 
 struct LazyFn<F, S> {

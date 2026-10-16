@@ -281,7 +281,9 @@ async fn read_element(cx: &Cx, data: Span, pos: u64) -> Result<Element> {
     if shape == Shape::Points2 && len >= 8 {
         // The summary shows the first point, which `SpriteElem2Summary`
         // reads just past the count (`&npu.x`): keep it with the fixed part.
-        hdr = cx.read(data.sub_exact(pos, base.saturating_add(8))?).await?;
+        hdr = cx
+            .read(data.sub_exact(pos, base.saturating_add(8))?)
+            .await?;
     }
     Ok(Element { span, t, hdr, text })
 }
