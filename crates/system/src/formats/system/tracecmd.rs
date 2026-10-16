@@ -10,8 +10,10 @@
 //!   `header_event`); the ftrace event format files; the other event format
 //!   files grouped by system; `/proc/kallsyms`; the `trace_printk` formats;
 //!   the saved command lines; the CPU count; options; then `flyrecord`
-//!   (an offset and size of each CPU's data, at page-aligned offsets) or
-//!   `latency` (text).
+//!   (an offset and size of each CPU's data, at page-aligned offsets, then
+//!   the trace clocks) or `latency` (text). Each instance (`trace-cmd
+//!   record -B`) has a `BUFFER` option with its name and the offset of its
+//!   own `flyrecord`, laid out the same way.
 //! - Version 7 adds a compression header (algorithm name and version) and
 //!   the offset of the first options section, then consists of sections,
 //!   each with a 16-byte header (ID, flags, description string ID, size)
@@ -61,6 +63,10 @@ const MAGIC: &[u8] = b"\x17\x08\x44tracing";
 const MAX_TEXT: u64 = 1 << 20;
 /// Largest page size accepted.
 const MAX_PAGE: u64 = 1 << 20;
+/// Most version 6 instances shown.
+const MAX_INSTANCES: usize = 256;
+/// The `BUFFER` option: an instance's data.
+const OPT_BUFFER: u16 = 3;
 
 fn probe(h: &Head) -> bool {
     if !h.starts_with(MAGIC) {
@@ -135,6 +141,8 @@ struct Trace {
     page: u64,
     codec: Option<Codec>,
     meta: Meta,
+    /// The CPU whose data is being read.
+    cpu: u32,
 }
 
 /// Where the metadata the CPU data needs to be read is.
@@ -180,6 +188,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         page: u64::from(page),
         codec: None,
         meta: Meta::default(),
+        cpu: 0,
     };
     if version >= 7 {
         let (name, nspan) = cx.cstr(file.sub(pos, 64)).await?;
@@ -328,6 +337,8 @@ async fn v6(cx: &Cx, mut trace: Trace, start: u64) -> Result<()> {
             .value(uint(cpus, 32))
             .desc("CPUs with trace data"),
     );
+    // Instances (`trace-cmd record -B`): name and where their flyrecord is.
+    let mut instances: Vec<(String, u64)> = Vec::new();
     loop {
         let at = cur.pos();
         let tag = cur.bytes(10).await?;
@@ -343,6 +354,15 @@ async fn v6(cx: &Cx, mut trace: Trace, start: u64) -> Result<()> {
                     if u64::from(n) > cur.remaining() {
                         return Err(Diagnostic::truncated(cur.span(n.into()), cur.remaining()));
                     }
+                    if id == OPT_BUFFER && instances.len() < MAX_INSTANCES {
+                        // Version 6: the offset of the instance's flyrecord
+                        // and its name.
+                        let b = cx.read(cur.span(n.into()).sub(0, 8 + 256)).await?;
+                        if let Some(off) = get::<u64>(&b, 0, trace.endian) {
+                            let name = crate::text::until_nul(b.get(8..).unwrap_or_default());
+                            instances.push((name.to_string(), off));
+                        }
+                    }
                     cur.skip(n.into());
                     cx.checkpoint().await;
                 }
@@ -354,27 +374,18 @@ async fn v6(cx: &Cx, mut trace: Trace, start: u64) -> Result<()> {
                 );
             }
             b"flyrecord\0" => {
-                let table = cur.since(at);
-                let n = u64::from(cpus).saturating_mul(16);
-                let table = file.sub(at, table.len.saturating_add(n));
-                let mut cpus_list = Vec::new();
-                for i in 0..cpus {
-                    let off = cur.u64().await?;
-                    let len = cur.u64().await?;
-                    cpus_list.push((i, file.sub(off, len)));
-                    cx.checkpoint().await;
-                }
-                cx.emit(
-                    Node::new("Flyrecord")
-                        .span(table)
-                        .summary(plural(cpus, "CPU"))
-                        .lazy(flyrecord_table, (table, trace.endian, cpus)),
-                );
-                for (i, span) in cpus_list {
-                    if span.len == 0 {
-                        continue;
+                flyrecord(cx, &trace, &mut cur, at, cpus).await?;
+                for (name, off) in instances {
+                    let mut node = Node::new(format!("Instance {name}"))
+                        .span(file.sub(off, u64::from(cpus).saturating_mul(16).saturating_add(10)))
+                        .desc("A second ftrace buffer (trace-cmd record -B), located by a BUFFER option")
+                        .lazy(v6_instance, (trace.clone(), off, cpus));
+                    if off >= file.len {
+                        node = node.diag(Diagnostic::malformed(
+                            "the instance's data lies past the end of the file",
+                        ));
                     }
-                    cx.emit(cpu_node(&trace, format!("CPU {i}"), span));
+                    cx.emit(node);
                 }
                 break;
             }
@@ -397,6 +408,73 @@ async fn v6(cx: &Cx, mut trace: Trace, start: u64) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Version 6's `flyrecord` (its tag at `at`, already read by `cur`): the
+/// offset and size of each CPU's data, then the trace clocks; emits the
+/// table, the clock and the CPUs with data.
+async fn flyrecord(cx: &Cx, trace: &Trace, cur: &mut Cursor<'_>, at: u64, cpus: u32) -> Result<()> {
+    let file = trace.input.span;
+    let n = u64::from(cpus).saturating_mul(16);
+    let table = file.sub(at, n.saturating_add(10));
+    let mut cpus_list = Vec::new();
+    for i in 0..cpus {
+        let off = cur.u64().await?;
+        let len = cur.u64().await?;
+        cpus_list.push((i, file.sub(off, len)));
+        cx.checkpoint().await;
+    }
+    cx.emit(
+        Node::new("Flyrecord")
+            .span(table)
+            .summary(plural(cpus, "CPU"))
+            .lazy(flyrecord_table, (table, trace.endian, cpus)),
+    );
+    // The trace clocks, as tracefs's trace_clock lists them (the one in use
+    // in brackets), with an 8-byte size.
+    let at = cur.pos();
+    if let Ok(len) = cur.u64().await
+        && len <= MAX_TEXT
+    {
+        let body = cur.span(len);
+        let b = cx.read(body).await?;
+        let s = String::from_utf8_lossy(&b);
+        let s = s.trim_end_matches('\0').trim();
+        let used = s
+            .split_whitespace()
+            .find_map(|c| c.strip_prefix('[').and_then(|c| c.strip_suffix(']')))
+            .unwrap_or(s);
+        cx.emit(
+            Node::new("Trace Clock")
+                .span(file.sub(at, len.saturating_add(8)))
+                .value(text(s.to_string()))
+                .summary(clip(used, 80))
+                .desc("The trace clocks, the one in use in brackets"),
+        );
+    }
+    for (i, span) in cpus_list {
+        if span.len == 0 {
+            continue;
+        }
+        cx.emit(cpu_node(trace, i, span));
+    }
+    Ok(())
+}
+
+/// A version 6 instance's data: its own `flyrecord` at `off`, CPUs as many
+/// as the top buffer's.
+async fn v6_instance(cx: Cx, (trace, off, cpus): (Trace, u64, u32)) -> Result<()> {
+    let file = trace.input.span;
+    let mut cur = Cursor::new(&cx, file, trace.endian);
+    cur.seek(off);
+    let tag = cur.bytes(10).await?;
+    if tag != b"flyrecord\0" {
+        return Err(
+            Diagnostic::malformed("no flyrecord where the BUFFER option points")
+                .at(file.sub(off, 10)),
+        );
+    }
+    flyrecord(&cx, &trace, &mut cur, off, cpus).await
 }
 
 async fn flyrecord_table(cx: Cx, (span, endian, cpus): (Span, Endian, u32)) -> Result<()> {
@@ -1084,13 +1162,13 @@ async fn section_node(
                 if compressed {
                     match chunked(&cx, &trace, span).await {
                         Ok(decoded) => cx.emit(
-                            cpu_node(&trace, name, decoded)
+                            cpu_node(&trace, c.cpu, decoded)
                                 .summary(format!("{} compressed", size(span.len))),
                         ),
                         Err(err) => cx.emit(Node::new(name).span(span).diag(err)),
                     }
                 } else {
-                    cx.emit(cpu_node(&trace, name, span));
+                    cx.emit(cpu_node(&trace, c.cpu, span));
                 }
             }
         }
@@ -1237,12 +1315,21 @@ async fn tsc2nsec(cx: Cx, (body, e): (Span, Endian)) -> Result<()> {
 // ---------------------------------------------------------------------------
 // CPU data: ring-buffer pages and events.
 
-fn cpu_node(trace: &Trace, name: String, span: Span) -> Node {
+fn cpu_node(trace: &Trace, cpu: u32, span: Span) -> Node {
     let pages = span.len.div_ceil(trace.page.max(1));
-    Node::new(name)
+    Node::new(format!("CPU {cpu}"))
         .span(span)
         .summary(plural(pages, "page"))
-        .lazy(cpu_pages, (trace.clone(), span))
+        .lazy(
+            cpu_pages,
+            (
+                Trace {
+                    cpu,
+                    ..trace.clone()
+                },
+                span,
+            ),
+        )
 }
 
 async fn cpu_pages(cx: Cx, (trace, span): (Trace, Span)) -> Result<()> {
@@ -1375,8 +1462,8 @@ async fn page_events(cx: Cx, (trace, page, data_off): (Trace, Span, u64)) -> Res
                 let summary = match &fmt {
                     Some(f) => {
                         let mut s = match task(f, &events, bytes, e) {
-                            Some(t) => format!("{t} {}", timestamp(ts)),
-                            None => timestamp(ts),
+                            Some(t) => format!("{t} [{:03}] {}", trace.cpu, timestamp(ts)),
+                            None => format!("[{:03}] {}", trace.cpu, timestamp(ts)),
                         };
                         let preview = field_preview(f, bytes, e);
                         if !preview.is_empty() {

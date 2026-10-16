@@ -1915,3 +1915,20 @@ references agree with the dissector's. Reproduced byte for byte.
 | --- | --- | --- |
 | `elf/bpf-core.o` | clang 19.1.7 `-g -O2 -target bpfel` | the object, with `.BTF`, `.BTF.ext` and DWARF; unchanged |
 | `elf/btf-distilled-module.o` | gcc 14.2.0, pahole 1.30 `-J --btf_features=distilled_base`, `objcopy --strip-debug` | the module object with `.BTF` and `.BTF.base`; unchanged |
+
+## trace-cmd: a version 6 file with an instance
+
+`tracecmd-dat/v6-instance.dat` is recorded by `tests/data/tracecmd-dat/make.sh`
+(`inside.sh`) like the other trace-cmd fixtures (trace-cmd 3.3.1, privileged
+`debian:trixie` container on the Docker VM's kernel, Linux 7.0.14 aarch64,
+18 CPUs, host name `fillyfoal`, the same kallsyms and saved_cmdlines
+replacements and `comm == "ffls"` filters): `trace-cmd record --file-version
+6 -e sched:sched_process_exec ... -B ffinst -e sched:sched_process_exit ...`,
+so the top buffer holds the two exec events and the instance "ffinst" the
+exit event, each on its own flyrecord located (for the instance) by a
+`BUFFER` option. Not reproducible byte for byte (times, PIDs). Checked
+against `trace-cmd report -t` and `trace-cmd dump --all`.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `tracecmd-dat/v6-instance.dat` | `trace-cmd record --file-version 6 ... -B ffinst ...` | 3 events, CPU 2 of each buffer; unchanged |

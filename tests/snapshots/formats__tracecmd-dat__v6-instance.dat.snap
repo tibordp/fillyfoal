@@ -1,0 +1,922 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ v6-instance.dat — trace-cmd trace, version 6, little-endian  [0x0+0x9000]
+  ▾ File Header  [0x0+0x12]
+      Magic: 17 08 44 74 72 61 63 69 6e 67  |..Dtracing|  [0x0+0xa]
+      Version: "6"  [0xa+0x2]
+      Endianness: little-endian (0x0)  [0xc+0x1]
+      Long size: 8  [0xd+0x1]
+      Page size: 4096  [0xe+0x4]
+  ▾ Header Info  [0x12+0x1c3]
+    ▾ header_page — 205 bytes  [0x12+0xe1]
+        Name: "header_page"  [0x12+0xc]
+        Size: 205  [0x1e+0x8]
+      ▾ Format — 205 bytes  [0x26+0xcd]
+        ▾ Fields — 4 fields
+            timestamp: "u64 timestamp" — offset 0, 8 bytes, unsigned
+            commit: "local_t commit" — offset 8, 8 bytes, signed
+            overwrite: "int overwrite" — offset 8, 1 byte, signed
+            data: "char data" — offset 16, 4080 bytes, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 4 lines  [0x26+0xcd]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 4 LF, 0 CRLF, 0 CR
+          ▾ Lines — 4 lines  [0x26+0xcd]
+              Line 1: "\tfield: u64 timestamp;\toffset:0;\tsize:8;\tsigned:0;"  [0x26+0x32]
+              Line 2: "\tfield: local_t commit;\toffset:8;\tsize:8;\tsigned:1;"  [0x59+0x33]
+              Line 3: "\tfield: int overwrite;\toffset:8;\tsize:1;\tsigned:1;"  [0x8d+0x32]
+              Line 4: "\tfield: char data;\toffset:16;\tsize:4080;\tsigned:0;"  [0xc0+0x32]
+    ▾ header_event — 205 bytes  [0xf3+0xe2]
+        Name: "header_event"  [0xf3+0xd]
+        Size: 205  [0x100+0x8]
+      ▾ Format — 205 bytes  [0x108+0xcd]
+        ▾ Text — UTF-8 text, LF line endings, 9 lines  [0x108+0xcd]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 9 LF, 0 CRLF, 0 CR
+          ▾ Lines — 9 lines  [0x108+0xcd]
+              Line 1: "# compressed entry header"  [0x108+0x19]
+              Line 2: "\ttype_len    :    5 bits"  [0x122+0x18]
+              Line 3: "\ttime_delta  :   27 bits"  [0x13b+0x18]
+              Line 4: "\tarray       :   32 bits"  [0x154+0x18]
+              Line 5: ""  [0x16d+0x0]
+              Line 6: "\tpadding     : type == 29"  [0x16e+0x19]
+              Line 7: "\ttime_extend : type == 30"  [0x188+0x19]
+              Line 8: "\ttime_stamp : type == 31"  [0x1a2+0x18]
+              Line 9: "\tdata max type_len  == 28"  [0x1bb+0x19]
+  ▾ Ftrace Event Formats — 18 formats  [0x1d5+0x2e94]
+    ▾ wakeup — ID 3  [0x1d9+0x35d]
+        Size: 853  [0x1d9+0x8]
+      ▾ Format — 853 bytes  [0x1e1+0x355]
+          Name: "wakeup"
+          ID: "3"
+          Print format: "\"%u:%u:%u  ==+ %u:%u:%u [%03u]\", REC->prev_pid, REC->prev_prio, REC->prev_state, REC->next_pid, REC->next_prio, REC->next_state, REC->next_cpu"
+        ▾ Fields — 11 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            prev_pid: "unsigned int prev_pid" — offset 8, 4 bytes, unsigned
+            next_pid: "unsigned int next_pid" — offset 12, 4 bytes, unsigned
+            next_cpu: "unsigned int next_cpu" — offset 16, 4 bytes, unsigned
+            prev_prio: "unsigned char prev_prio" — offset 20, 1 byte, unsigned
+            prev_state: "unsigned char prev_state" — offset 21, 1 byte, unsigned
+            next_prio: "unsigned char next_prio" — offset 22, 1 byte, unsigned
+            next_state: "unsigned char next_state" — offset 23, 1 byte, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 17 lines  [0x1e1+0x355]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 17 LF, 0 CRLF, 0 CR
+          ▾ Lines — 17 lines  [0x1e1+0x355]
+              Line 1: "name: wakeup"  [0x1e1+0xc]
+              Line 2: "ID: 3"  [0x1ee+0x5]
+              Line 3: "format:"  [0x1f4+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x1fc+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x23b+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x27a+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x2c1+0x32]
+              Line 8: ""  [0x2f4+0x0]
+              Line 9: "\tfield:unsigned int prev_pid;\toffset:8;\tsize:4;\tsigned:0;"  [0x2f5+0x39]
+              Line 10: "\tfield:unsigned int next_pid;\toffset:12;\tsize:4;\tsigned:0;"  [0x32f+0x3a]
+              Line 11: "\tfield:unsigned int next_cpu;\toffset:16;\tsize:4;\tsigned:0;"  [0x36a+0x3a]
+              Line 12: "\tfield:unsigned char prev_prio;\toffset:20;\tsize:1;\tsigned:0;"  [0x3a5+0x3c]
+              Line 13: "\tfield:unsigned char prev_state;\toffset:21;\tsize:1;\tsigned:0;"  [0x3e2+0x3d]
+              Line 14: "\tfield:unsigned char next_prio;\toffset:22;\tsize:1;\tsigned:0;"  [0x420+0x3c]
+              Line 15: "\tfield:unsigned char next_state;\toffset:23;\tsize:1;\tsigned:0;"  [0x45d+0x3d]
+              Line 16: ""  [0x49b+0x0]
+              Line 17: "print fmt: \"%u:%u:%u  ==+ %u:%u:%u [%03u]\", REC->prev_pid, REC->prev_prio, REC->prev_state, REC->next_pid, REC->next_prio, REC->next_state, REC->next_cpu"  [0x49c+0x99]
+    ▾ user_stack — ID 13  [0x536+0x2ba]
+        Size: 690  [0x536+0x8]
+      ▾ Format — 690 bytes  [0x53e+0x2b2]
+          Name: "user_stack"
+          ID: "13"
+          Print format: "\"\\t=> %ps\\n\\t=> %ps\\n\\t=> %ps\\n\" \"\\t=> %ps\\n\\t=> %ps\\n\\t=> %ps\\n\" \"\\t=> %ps\\n\\t=> %ps\\n\", (void *)REC->caller[0], (void *)REC->caller[1], (void *)REC->caller[2], (void *)REC->caller[3], (void *)REC->caller[4], (void *)REC->caller[5], (void *)REC->caller[6], (void *)REC->caller[7]"
+        ▾ Fields — 6 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            tgid: "unsigned int tgid" — offset 8, 4 bytes, unsigned
+            caller: "unsigned long caller[8]" — offset 16, 64 bytes, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 12 lines  [0x53e+0x2b2]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 12 LF, 0 CRLF, 0 CR
+          ▾ Lines — 12 lines  [0x53e+0x2b2]
+              Line 1: "name: user_stack"  [0x53e+0x10]
+              Line 2: "ID: 13"  [0x54f+0x6]
+              Line 3: "format:"  [0x556+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x55e+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x59d+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x5dc+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x623+0x32]
+              Line 8: ""  [0x656+0x0]
+              Line 9: "\tfield:unsigned int tgid;\toffset:8;\tsize:4;\tsigned:0;"  [0x657+0x35]
+              Line 10: "\tfield:unsigned long caller[8];\toffset:16;\tsize:64;\tsigned:0;"  [0x68d+0x3d]
+              Line 11: ""  [0x6cb+0x0]
+              Line 12: "print fmt: \"\\t=> %ps\\n\\t=> %ps\\n\\t=> %ps\\n\" \"\\t=> %ps\\n\\t=> %ps\\n\\t=> %ps\\n\" \"\\t=> %ps\\n\\t=> %ps\\n\", (void *)REC->caller[0], (void *)REC->caller[1], (void *)REC->caller[2], (void *)REC->caller[3], (void *)REC->caller[4], (void *)REC->caller[5], (void *)REC->caller[6], (void *)REC->caller[7]"  [0x6cc+0x123]
+    ▾ timerlat — ID 18  [0x7f0+0x225]
+        Size: 541  [0x7f0+0x8]
+      ▾ Format — 541 bytes  [0x7f8+0x21d]
+          Name: "timerlat"
+          ID: "18"
+          Print format: "\"seq:%u\\tcontext:%d\\ttimer_latency:%llu\\n\", REC->seqnum, REC->context, REC->timer_latency"
+        ▾ Fields — 7 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            seqnum: "unsigned int seqnum" — offset 8, 4 bytes, unsigned
+            context: "int context" — offset 12, 4 bytes, signed
+            timer_latency: "u64 timer_latency" — offset 16, 8 bytes, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 13 lines  [0x7f8+0x21d]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 13 LF, 0 CRLF, 0 CR
+          ▾ Lines — 13 lines  [0x7f8+0x21d]
+              Line 1: "name: timerlat"  [0x7f8+0xe]
+              Line 2: "ID: 18"  [0x807+0x6]
+              Line 3: "format:"  [0x80e+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x816+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x855+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x894+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x8db+0x32]
+              Line 8: ""  [0x90e+0x0]
+              Line 9: "\tfield:unsigned int seqnum;\toffset:8;\tsize:4;\tsigned:0;"  [0x90f+0x37]
+              Line 10: "\tfield:int context;\toffset:12;\tsize:4;\tsigned:1;"  [0x947+0x30]
+              Line 11: "\tfield:u64 timer_latency;\toffset:16;\tsize:8;\tsigned:0;"  [0x978+0x36]
+              Line 12: ""  [0x9af+0x0]
+              Line 13: "print fmt: \"seq:%u\\tcontext:%d\\ttimer_latency:%llu\\n\", REC->seqnum, REC->context, REC->timer_latency"  [0x9b0+0x64]
+    ▾ raw_data — ID 19  [0xa15+0x1b9]
+        Size: 433  [0xa15+0x8]
+      ▾ Format — 433 bytes  [0xa1d+0x1b1]
+          Name: "raw_data"
+          ID: "19"
+          Print format: "\"id:%04x %08x\", REC->id, (int)REC->buf[0]"
+        ▾ Fields — 6 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            id: "unsigned int id" — offset 8, 4 bytes, unsigned
+            buf: "char buf[]" — offset 12, 0 bytes, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 12 lines  [0xa1d+0x1b1]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 12 LF, 0 CRLF, 0 CR
+          ▾ Lines — 12 lines  [0xa1d+0x1b1]
+              Line 1: "name: raw_data"  [0xa1d+0xe]
+              Line 2: "ID: 19"  [0xa2c+0x6]
+              Line 3: "format:"  [0xa33+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0xa3b+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0xa7a+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0xab9+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0xb00+0x32]
+              Line 8: ""  [0xb33+0x0]
+              Line 9: "\tfield:unsigned int id;\toffset:8;\tsize:4;\tsigned:0;"  [0xb34+0x33]
+              Line 10: "\tfield:char buf[];\toffset:12;\tsize:0;\tsigned:0;"  [0xb68+0x2f]
+              Line 11: ""  [0xb98+0x0]
+              Line 12: "print fmt: \"id:%04x %08x\", REC->id, (int)REC->buf[0]"  [0xb99+0x34]
+    ▾ print — ID 5  [0xbce+0x1b1]
+        Size: 425  [0xbce+0x8]
+      ▾ Format — 425 bytes  [0xbd6+0x1a9]
+          Name: "print"
+          ID: "5"
+          Print format: "\"%ps: %s\", (void *)REC->ip, REC->buf"
+        ▾ Fields — 6 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            ip: "unsigned long ip" — offset 8, 8 bytes, unsigned
+            buf: "char buf[]" — offset 16, 0 bytes, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 12 lines  [0xbd6+0x1a9]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 12 LF, 0 CRLF, 0 CR
+          ▾ Lines — 12 lines  [0xbd6+0x1a9]
+              Line 1: "name: print"  [0xbd6+0xb]
+              Line 2: "ID: 5"  [0xbe2+0x5]
+              Line 3: "format:"  [0xbe8+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0xbf0+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0xc2f+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0xc6e+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0xcb5+0x32]
+              Line 8: ""  [0xce8+0x0]
+              Line 9: "\tfield:unsigned long ip;\toffset:8;\tsize:8;\tsigned:0;"  [0xce9+0x34]
+              Line 10: "\tfield:char buf[];\toffset:16;\tsize:0;\tsigned:0;"  [0xd1e+0x2f]
+              Line 11: ""  [0xd4e+0x0]
+              Line 12: "print fmt: \"%ps: %s\", (void *)REC->ip, REC->buf"  [0xd4f+0x2f]
+    ▾ osnoise — ID 17  [0xd7f+0x3b0]
+        Size: 936  [0xd7f+0x8]
+      ▾ Format — 936 bytes  [0xd87+0x3a8]
+          Name: "osnoise"
+          ID: "17"
+          Print format: "\"noise:%llu\\tmax_sample:%llu\\thw:%u\\tnmi:%u\\tirq:%u\\tsoftirq:%u\\tthread:%u\\n\", REC->noise, REC->max_sample, REC->hw_count, REC->nmi_count, REC->irq_count, REC->softirq_count, REC->thread_count"
+        ▾ Fields — 12 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            noise: "u64 noise" — offset 8, 8 bytes, unsigned
+            runtime: "u64 runtime" — offset 16, 8 bytes, unsigned
+            max_sample: "u64 max_sample" — offset 24, 8 bytes, unsigned
+            hw_count: "unsigned int hw_count" — offset 32, 4 bytes, unsigned
+            nmi_count: "unsigned int nmi_count" — offset 36, 4 bytes, unsigned
+            irq_count: "unsigned int irq_count" — offset 40, 4 bytes, unsigned
+            softirq_count: "unsigned int softirq_count" — offset 44, 4 bytes, unsigned
+            thread_count: "unsigned int thread_count" — offset 48, 4 bytes, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 18 lines  [0xd87+0x3a8]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 18 LF, 0 CRLF, 0 CR
+          ▾ Lines — 18 lines  [0xd87+0x3a8]
+              Line 1: "name: osnoise"  [0xd87+0xd]
+              Line 2: "ID: 17"  [0xd95+0x6]
+              Line 3: "format:"  [0xd9c+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0xda4+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0xde3+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0xe22+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0xe69+0x32]
+              Line 8: ""  [0xe9c+0x0]
+              Line 9: "\tfield:u64 noise;\toffset:8;\tsize:8;\tsigned:0;"  [0xe9d+0x2d]
+              Line 10: "\tfield:u64 runtime;\toffset:16;\tsize:8;\tsigned:0;"  [0xecb+0x30]
+              Line 11: "\tfield:u64 max_sample;\toffset:24;\tsize:8;\tsigned:0;"  [0xefc+0x33]
+              Line 12: "\tfield:unsigned int hw_count;\toffset:32;\tsize:4;\tsigned:0;"  [0xf30+0x3a]
+              Line 13: "\tfield:unsigned int nmi_count;\toffset:36;\tsize:4;\tsigned:0;"  [0xf6b+0x3b]
+              Line 14: "\tfield:unsigned int irq_count;\toffset:40;\tsize:4;\tsigned:0;"  [0xfa7+0x3b]
+              Line 15: "\tfield:unsigned int softirq_count;\toffset:44;\tsize:4;\tsigned:0;"  [0xfe3+0x3f]
+              Line 16: "\tfield:unsigned int thread_count;\toffset:48;\tsize:4;\tsigned:0;"  [0x1023+0x3e]
+              Line 17: ""  [0x1062+0x0]
+              Line 18: "print fmt: \"noise:%llu\\tmax_sample:%llu\\thw:%u\\tnmi:%u\\tirq:%u\\tsoftirq:%u\\tthread:%u\\n\", REC->noise, REC->max_sample, REC->hw_count, REC->nmi_count, REC->irq_count, REC->softirq_count, REC->thread_count"  [0x1063+0xcb]
+    ▾ mmiotrace_rw — ID 7  [0x112f+0x2e5]
+        Size: 733  [0x112f+0x8]
+      ▾ Format — 733 bytes  [0x1137+0x2dd]
+          Name: "mmiotrace_rw"
+          ID: "7"
+          Print format: "\"%lx %lx %lx %d %x %x\", (unsigned long)REC->phys, REC->value, REC->pc, REC->map_id, REC->opcode, REC->width"
+        ▾ Fields — 10 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            phys: "resource_size_t phys" — offset 8, 8 bytes, unsigned
+            value: "unsigned long value" — offset 16, 8 bytes, unsigned
+            pc: "unsigned long pc" — offset 24, 8 bytes, unsigned
+            map_id: "int map_id" — offset 32, 4 bytes, signed
+            opcode: "unsigned char opcode" — offset 36, 1 byte, unsigned
+            width: "unsigned char width" — offset 37, 1 byte, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 16 lines  [0x1137+0x2dd]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 16 LF, 0 CRLF, 0 CR
+          ▾ Lines — 16 lines  [0x1137+0x2dd]
+              Line 1: "name: mmiotrace_rw"  [0x1137+0x12]
+              Line 2: "ID: 7"  [0x114a+0x5]
+              Line 3: "format:"  [0x1150+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x1158+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x1197+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x11d6+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x121d+0x32]
+              Line 8: ""  [0x1250+0x0]
+              Line 9: "\tfield:resource_size_t phys;\toffset:8;\tsize:8;\tsigned:0;"  [0x1251+0x38]
+              Line 10: "\tfield:unsigned long value;\toffset:16;\tsize:8;\tsigned:0;"  [0x128a+0x38]
+              Line 11: "\tfield:unsigned long pc;\toffset:24;\tsize:8;\tsigned:0;"  [0x12c3+0x35]
+              Line 12: "\tfield:int map_id;\toffset:32;\tsize:4;\tsigned:1;"  [0x12f9+0x2f]
+              Line 13: "\tfield:unsigned char opcode;\toffset:36;\tsize:1;\tsigned:0;"  [0x1329+0x39]
+              Line 14: "\tfield:unsigned char width;\toffset:37;\tsize:1;\tsigned:0;"  [0x1363+0x38]
+              Line 15: ""  [0x139c+0x0]
+              Line 16: "print fmt: \"%lx %lx %lx %d %x %x\", (unsigned long)REC->phys, REC->value, REC->pc, REC->map_id, REC->opcode, REC->width"  [0x139d+0x76]
+    ▾ mmiotrace_map — ID 8  [0x1414+0x29e]
+        Size: 662  [0x1414+0x8]
+      ▾ Format — 662 bytes  [0x141c+0x296]
+          Name: "mmiotrace_map"
+          ID: "8"
+          Print format: "\"%lx %lx %lx %d %x\", (unsigned long)REC->phys, REC->virt, REC->len, REC->map_id, REC->opcode"
+        ▾ Fields — 9 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            phys: "resource_size_t phys" — offset 8, 8 bytes, unsigned
+            virt: "unsigned long virt" — offset 16, 8 bytes, unsigned
+            len: "unsigned long len" — offset 24, 8 bytes, unsigned
+            map_id: "int map_id" — offset 32, 4 bytes, signed
+            opcode: "unsigned char opcode" — offset 36, 1 byte, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 15 lines  [0x141c+0x296]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 15 LF, 0 CRLF, 0 CR
+          ▾ Lines — 15 lines  [0x141c+0x296]
+              Line 1: "name: mmiotrace_map"  [0x141c+0x13]
+              Line 2: "ID: 8"  [0x1430+0x5]
+              Line 3: "format:"  [0x1436+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x143e+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x147d+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x14bc+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x1503+0x32]
+              Line 8: ""  [0x1536+0x0]
+              Line 9: "\tfield:resource_size_t phys;\toffset:8;\tsize:8;\tsigned:0;"  [0x1537+0x38]
+              Line 10: "\tfield:unsigned long virt;\toffset:16;\tsize:8;\tsigned:0;"  [0x1570+0x37]
+              Line 11: "\tfield:unsigned long len;\toffset:24;\tsize:8;\tsigned:0;"  [0x15a8+0x36]
+              Line 12: "\tfield:int map_id;\toffset:32;\tsize:4;\tsigned:1;"  [0x15df+0x2f]
+              Line 13: "\tfield:unsigned char opcode;\toffset:36;\tsize:1;\tsigned:0;"  [0x160f+0x39]
+              Line 14: ""  [0x1649+0x0]
+              Line 15: "print fmt: \"%lx %lx %lx %d %x\", (unsigned long)REC->phys, REC->virt, REC->len, REC->map_id, REC->opcode"  [0x164a+0x67]
+    ▾ kernel_stack — ID 4  [0x16b2+0x2b2]
+        Size: 682  [0x16b2+0x8]
+      ▾ Format — 682 bytes  [0x16ba+0x2aa]
+          Name: "kernel_stack"
+          ID: "4"
+          Print format: "\"\\t=> %ps\\n\\t=> %ps\\n\\t=> %ps\\n\" \"\\t=> %ps\\n\\t=> %ps\\n\\t=> %ps\\n\" \"\\t=> %ps\\n\\t=> %ps\\n\", (void *)REC->caller[0], (void *)REC->caller[1], (void *)REC->caller[2], (void *)REC->caller[3], (void *)REC->caller[4], (void *)REC->caller[5], (void *)REC->caller[6], (void *)REC->caller[7]"
+        ▾ Fields — 6 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            size: "int size" — offset 8, 4 bytes, signed
+            caller: "unsigned long caller[8]" — offset 16, 64 bytes, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 12 lines  [0x16ba+0x2aa]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 12 LF, 0 CRLF, 0 CR
+          ▾ Lines — 12 lines  [0x16ba+0x2aa]
+              Line 1: "name: kernel_stack"  [0x16ba+0x12]
+              Line 2: "ID: 4"  [0x16cd+0x5]
+              Line 3: "format:"  [0x16d3+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x16db+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x171a+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x1759+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x17a0+0x32]
+              Line 8: ""  [0x17d3+0x0]
+              Line 9: "\tfield:int size;\toffset:8;\tsize:4;\tsigned:1;"  [0x17d4+0x2c]
+              Line 10: "\tfield:unsigned long caller[8];\toffset:16;\tsize:64;\tsigned:0;"  [0x1801+0x3d]
+              Line 11: ""  [0x183f+0x0]
+              Line 12: "print fmt: \"\\t=> %ps\\n\\t=> %ps\\n\\t=> %ps\\n\" \"\\t=> %ps\\n\\t=> %ps\\n\\t=> %ps\\n\" \"\\t=> %ps\\n\\t=> %ps\\n\", (void *)REC->caller[0], (void *)REC->caller[1], (void *)REC->caller[2], (void *)REC->caller[3], (void *)REC->caller[4], (void *)REC->caller[5], (void *)REC->caller[6], (void *)REC->caller[7]"  [0x1840+0x123]
+    ▾ hwlat — ID 16  [0x1964+0x3ac]
+        Size: 932  [0x1964+0x8]
+      ▾ Format — 932 bytes  [0x196c+0x3a4]
+          Name: "hwlat"
+          ID: "16"
+          Print format: "\"cnt:%u\\tts:%010llu.%010lu\\tinner:%llu\\touter:%llu\\tcount:%d\\tnmi-ts:%llu\\tnmi-count:%u\\n\", REC->seqnum, REC->tv_sec, REC->tv_nsec, REC->duration, REC->outer_duration, REC->count, REC->nmi_total_ts, REC->nmi_count"
+        ▾ Fields — 12 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            duration: "u64 duration" — offset 8, 8 bytes, unsigned
+            outer_duration: "u64 outer_duration" — offset 16, 8 bytes, unsigned
+            nmi_total_ts: "u64 nmi_total_ts" — offset 24, 8 bytes, unsigned
+            tv_sec: "s64 tv_sec" — offset 32, 8 bytes, signed
+            tv_nsec: "long tv_nsec" — offset 40, 8 bytes, signed
+            nmi_count: "unsigned int nmi_count" — offset 48, 4 bytes, unsigned
+            seqnum: "unsigned int seqnum" — offset 52, 4 bytes, unsigned
+            count: "unsigned int count" — offset 56, 4 bytes, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 18 lines  [0x196c+0x3a4]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 18 LF, 0 CRLF, 0 CR
+          ▾ Lines — 18 lines  [0x196c+0x3a4]
+              Line 1: "name: hwlat"  [0x196c+0xb]
+              Line 2: "ID: 16"  [0x1978+0x6]
+              Line 3: "format:"  [0x197f+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x1987+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x19c6+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x1a05+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x1a4c+0x32]
+              Line 8: ""  [0x1a7f+0x0]
+              Line 9: "\tfield:u64 duration;\toffset:8;\tsize:8;\tsigned:0;"  [0x1a80+0x30]
+              Line 10: "\tfield:u64 outer_duration;\toffset:16;\tsize:8;\tsigned:0;"  [0x1ab1+0x37]
+              Line 11: "\tfield:u64 nmi_total_ts;\toffset:24;\tsize:8;\tsigned:0;"  [0x1ae9+0x35]
+              Line 12: "\tfield:s64 tv_sec;\toffset:32;\tsize:8;\tsigned:1;"  [0x1b1f+0x2f]
+              Line 13: "\tfield:long tv_nsec;\toffset:40;\tsize:8;\tsigned:1;"  [0x1b4f+0x31]
+              Line 14: "\tfield:unsigned int nmi_count;\toffset:48;\tsize:4;\tsigned:0;"  [0x1b81+0x3b]
+              Line 15: "\tfield:unsigned int seqnum;\toffset:52;\tsize:4;\tsigned:0;"  [0x1bbd+0x38]
+              Line 16: "\tfield:unsigned int count;\toffset:56;\tsize:4;\tsigned:0;"  [0x1bf6+0x37]
+              Line 17: ""  [0x1c2e+0x0]
+              Line 18: "print fmt: \"cnt:%u\\tts:%010llu.%010lu\\tinner:%llu\\touter:%llu\\tcount:%d\\tnmi-ts:%llu\\tnmi-count:%u\\n\", REC->seqnum, REC->tv_sec, REC->tv_nsec, REC->duration, REC->outer_duration, REC->count, REC->nmi_total_ts, REC->nmi_count"  [0x1c2f+0xe0]
+    ▾ function — ID 1  [0x1d10+0x20e]
+        Size: 518  [0x1d10+0x8]
+      ▾ Format — 518 bytes  [0x1d18+0x206]
+          Name: "function"
+          ID: "1"
+          Print format: "\" %ps <-- %ps\", (void *)REC->ip, (void *)REC->parent_ip"
+        ▾ Fields — 7 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            ip: "unsigned long ip" — offset 8, 8 bytes, unsigned
+            parent_ip: "unsigned long parent_ip" — offset 16, 8 bytes, unsigned
+            args: "unsigned long args[]" — offset 24, 0 bytes, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 13 lines  [0x1d18+0x206]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 13 LF, 0 CRLF, 0 CR
+          ▾ Lines — 13 lines  [0x1d18+0x206]
+              Line 1: "name: function"  [0x1d18+0xe]
+              Line 2: "ID: 1"  [0x1d27+0x5]
+              Line 3: "format:"  [0x1d2d+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x1d35+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x1d74+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x1db3+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x1dfa+0x32]
+              Line 8: ""  [0x1e2d+0x0]
+              Line 9: "\tfield:unsigned long ip;\toffset:8;\tsize:8;\tsigned:0;"  [0x1e2e+0x34]
+              Line 10: "\tfield:unsigned long parent_ip;\toffset:16;\tsize:8;\tsigned:0;"  [0x1e63+0x3c]
+              Line 11: "\tfield:unsigned long args[];\toffset:24;\tsize:0;\tsigned:0;"  [0x1ea0+0x39]
+              Line 12: ""  [0x1eda+0x0]
+              Line 13: "print fmt: \" %ps <-- %ps\", (void *)REC->ip, (void *)REC->parent_ip"  [0x1edb+0x42]
+    ▾ funcgraph_exit — ID 10  [0x1f1e+0x2d4]
+        Size: 716  [0x1f1e+0x8]
+      ▾ Format — 716 bytes  [0x1f26+0x2cc]
+          Name: "funcgraph_exit"
+          ID: "10"
+          Print format: "\"<-- %ps (%u) (start: %llx  end: %llx) over: %u\", (void *)REC->func, REC->depth, REC->calltime, REC->rettime, REC->depth"
+        ▾ Fields — 9 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            func: "unsigned long func" — offset 8, 8 bytes, unsigned
+            depth: "unsigned int depth" — offset 16, 4 bytes, unsigned
+            overrun: "unsigned int overrun" — offset 20, 4 bytes, unsigned
+            calltime: "unsigned long long calltime" — offset 24, 8 bytes, unsigned
+            rettime: "unsigned long long rettime" — offset 32, 8 bytes, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 15 lines  [0x1f26+0x2cc]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 15 LF, 0 CRLF, 0 CR
+          ▾ Lines — 15 lines  [0x1f26+0x2cc]
+              Line 1: "name: funcgraph_exit"  [0x1f26+0x14]
+              Line 2: "ID: 10"  [0x1f3b+0x6]
+              Line 3: "format:"  [0x1f42+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x1f4a+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x1f89+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x1fc8+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x200f+0x32]
+              Line 8: ""  [0x2042+0x0]
+              Line 9: "\tfield:unsigned long func;\toffset:8;\tsize:8;\tsigned:0;"  [0x2043+0x36]
+              Line 10: "\tfield:unsigned int depth;\toffset:16;\tsize:4;\tsigned:0;"  [0x207a+0x37]
+              Line 11: "\tfield:unsigned int overrun;\toffset:20;\tsize:4;\tsigned:0;"  [0x20b2+0x39]
+              Line 12: "\tfield:unsigned long long calltime;\toffset:24;\tsize:8;\tsigned:0;"  [0x20ec+0x40]
+              Line 13: "\tfield:unsigned long long rettime;\toffset:32;\tsize:8;\tsigned:0;"  [0x212d+0x3f]
+              Line 14: ""  [0x216d+0x0]
+              Line 15: "print fmt: \"<-- %ps (%u) (start: %llx  end: %llx) over: %u\", (void *)REC->func, REC->depth, REC->calltime, REC->rettime, REC->depth"  [0x216e+0x83]
+    ▾ funcgraph_entry — ID 11  [0x21f2+0x20b]
+        Size: 515  [0x21f2+0x8]
+      ▾ Format — 515 bytes  [0x21fa+0x203]
+          Name: "funcgraph_entry"
+          ID: "11"
+          Print format: "\"--> %ps (%lu)\", (void *)REC->func, REC->depth"
+        ▾ Fields — 7 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            func: "unsigned long func" — offset 8, 8 bytes, unsigned
+            depth: "unsigned long depth" — offset 16, 8 bytes, unsigned
+            args: "unsigned long args[]" — offset 24, 0 bytes, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 13 lines  [0x21fa+0x203]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 13 LF, 0 CRLF, 0 CR
+          ▾ Lines — 13 lines  [0x21fa+0x203]
+              Line 1: "name: funcgraph_entry"  [0x21fa+0x15]
+              Line 2: "ID: 11"  [0x2210+0x6]
+              Line 3: "format:"  [0x2217+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x221f+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x225e+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x229d+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x22e4+0x32]
+              Line 8: ""  [0x2317+0x0]
+              Line 9: "\tfield:unsigned long func;\toffset:8;\tsize:8;\tsigned:0;"  [0x2318+0x36]
+              Line 10: "\tfield:unsigned long depth;\toffset:16;\tsize:8;\tsigned:0;"  [0x234f+0x38]
+              Line 11: "\tfield:unsigned long args[];\toffset:24;\tsize:0;\tsigned:0;"  [0x2388+0x39]
+              Line 12: ""  [0x23c2+0x0]
+              Line 13: "print fmt: \"--> %ps (%lu)\", (void *)REC->func, REC->depth"  [0x23c3+0x39]
+    ▾ func_repeats — ID 20  [0x23fd+0x2da]
+        Size: 722  [0x23fd+0x8]
+      ▾ Format — 722 bytes  [0x2405+0x2d2]
+          Name: "func_repeats"
+          ID: "20"
+          Print format: "\" %ps <-%ps\\t(repeats:%u  delta: -%llu)\", (void *)REC->ip, (void *)REC->parent_ip, REC->count, (((u64)(REC)->top_delta_ts << 32) | (REC)->bottom_delta_ts)"
+        ▾ Fields — 9 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            ip: "unsigned long ip" — offset 8, 8 bytes, unsigned
+            parent_ip: "unsigned long parent_ip" — offset 16, 8 bytes, unsigned
+            count: "u16 count" — offset 24, 2 bytes, unsigned
+            top_delta_ts: "u16 top_delta_ts" — offset 26, 2 bytes, unsigned
+            bottom_delta_ts: "u32 bottom_delta_ts" — offset 28, 4 bytes, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 15 lines  [0x2405+0x2d2]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 15 LF, 0 CRLF, 0 CR
+          ▾ Lines — 15 lines  [0x2405+0x2d2]
+              Line 1: "name: func_repeats"  [0x2405+0x12]
+              Line 2: "ID: 20"  [0x2418+0x6]
+              Line 3: "format:"  [0x241f+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x2427+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x2466+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x24a5+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x24ec+0x32]
+              Line 8: ""  [0x251f+0x0]
+              Line 9: "\tfield:unsigned long ip;\toffset:8;\tsize:8;\tsigned:0;"  [0x2520+0x34]
+              Line 10: "\tfield:unsigned long parent_ip;\toffset:16;\tsize:8;\tsigned:0;"  [0x2555+0x3c]
+              Line 11: "\tfield:u16 count;\toffset:24;\tsize:2;\tsigned:0;"  [0x2592+0x2e]
+              Line 12: "\tfield:u16 top_delta_ts;\toffset:26;\tsize:2;\tsigned:0;"  [0x25c1+0x35]
+              Line 13: "\tfield:u32 bottom_delta_ts;\toffset:28;\tsize:4;\tsigned:0;"  [0x25f7+0x38]
+              Line 14: ""  [0x2630+0x0]
+              Line 15: "print fmt: \" %ps <-%ps\\t(repeats:%u  delta: -%llu)\", (void *)REC->ip, (void *)REC->parent_ip, REC->count, (((u64)(REC)->top_delta_ts << 32) | (REC)->bottom_delta_ts)"  [0x2631+0xa5]
+    ▾ context_switch — ID 2  [0x26d7+0x365]
+        Size: 861  [0x26d7+0x8]
+      ▾ Format — 861 bytes  [0x26df+0x35d]
+          Name: "context_switch"
+          ID: "2"
+          Print format: "\"%u:%u:%u  ==> %u:%u:%u [%03u]\", REC->prev_pid, REC->prev_prio, REC->prev_state, REC->next_pid, REC->next_prio, REC->next_state, REC->next_cpu"
+        ▾ Fields — 11 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            prev_pid: "unsigned int prev_pid" — offset 8, 4 bytes, unsigned
+            next_pid: "unsigned int next_pid" — offset 12, 4 bytes, unsigned
+            next_cpu: "unsigned int next_cpu" — offset 16, 4 bytes, unsigned
+            prev_prio: "unsigned char prev_prio" — offset 20, 1 byte, unsigned
+            prev_state: "unsigned char prev_state" — offset 21, 1 byte, unsigned
+            next_prio: "unsigned char next_prio" — offset 22, 1 byte, unsigned
+            next_state: "unsigned char next_state" — offset 23, 1 byte, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 17 lines  [0x26df+0x35d]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 17 LF, 0 CRLF, 0 CR
+          ▾ Lines — 17 lines  [0x26df+0x35d]
+              Line 1: "name: context_switch"  [0x26df+0x14]
+              Line 2: "ID: 2"  [0x26f4+0x5]
+              Line 3: "format:"  [0x26fa+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x2702+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x2741+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x2780+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x27c7+0x32]
+              Line 8: ""  [0x27fa+0x0]
+              Line 9: "\tfield:unsigned int prev_pid;\toffset:8;\tsize:4;\tsigned:0;"  [0x27fb+0x39]
+              Line 10: "\tfield:unsigned int next_pid;\toffset:12;\tsize:4;\tsigned:0;"  [0x2835+0x3a]
+              Line 11: "\tfield:unsigned int next_cpu;\toffset:16;\tsize:4;\tsigned:0;"  [0x2870+0x3a]
+              Line 12: "\tfield:unsigned char prev_prio;\toffset:20;\tsize:1;\tsigned:0;"  [0x28ab+0x3c]
+              Line 13: "\tfield:unsigned char prev_state;\toffset:21;\tsize:1;\tsigned:0;"  [0x28e8+0x3d]
+              Line 14: "\tfield:unsigned char next_prio;\toffset:22;\tsize:1;\tsigned:0;"  [0x2926+0x3c]
+              Line 15: "\tfield:unsigned char next_state;\toffset:23;\tsize:1;\tsigned:0;"  [0x2963+0x3d]
+              Line 16: ""  [0x29a1+0x0]
+              Line 17: "print fmt: \"%u:%u:%u  ==> %u:%u:%u [%03u]\", REC->prev_pid, REC->prev_prio, REC->prev_state, REC->next_pid, REC->next_prio, REC->next_state, REC->next_cpu"  [0x29a2+0x99]
+    ▾ branch — ID 9  [0x2a3c+0x28e]
+        Size: 646  [0x2a3c+0x8]
+      ▾ Format — 646 bytes  [0x2a44+0x286]
+          Name: "branch"
+          ID: "9"
+          Print format: "\"%u:%s:%s (%u)%s\", REC->line, REC->func, REC->file, REC->correct, REC->constant ? \" CONSTANT\" : \"\""
+        ▾ Fields — 9 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            line: "unsigned int line" — offset 8, 4 bytes, unsigned
+            func: "char func[31]" — offset 12, 31 bytes, unsigned
+            file: "char file[21]" — offset 43, 21 bytes, unsigned
+            correct: "char correct" — offset 64, 1 byte, unsigned
+            constant: "char constant" — offset 65, 1 byte, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 15 lines  [0x2a44+0x286]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 15 LF, 0 CRLF, 0 CR
+          ▾ Lines — 15 lines  [0x2a44+0x286]
+              Line 1: "name: branch"  [0x2a44+0xc]
+              Line 2: "ID: 9"  [0x2a51+0x5]
+              Line 3: "format:"  [0x2a57+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x2a5f+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x2a9e+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x2add+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x2b24+0x32]
+              Line 8: ""  [0x2b57+0x0]
+              Line 9: "\tfield:unsigned int line;\toffset:8;\tsize:4;\tsigned:0;"  [0x2b58+0x35]
+              Line 10: "\tfield:char func[31];\toffset:12;\tsize:31;\tsigned:0;"  [0x2b8e+0x33]
+              Line 11: "\tfield:char file[21];\toffset:43;\tsize:21;\tsigned:0;"  [0x2bc2+0x33]
+              Line 12: "\tfield:char correct;\toffset:64;\tsize:1;\tsigned:0;"  [0x2bf6+0x31]
+              Line 13: "\tfield:char constant;\toffset:65;\tsize:1;\tsigned:0;"  [0x2c28+0x32]
+              Line 14: ""  [0x2c5b+0x0]
+              Line 15: "print fmt: \"%u:%s:%s (%u)%s\", REC->line, REC->func, REC->file, REC->correct, REC->constant ? \" CONSTANT\" : \"\""  [0x2c5c+0x6d]
+    ▾ bputs — ID 15  [0x2cca+0x1b8]
+        Size: 432  [0x2cca+0x8]
+      ▾ Format — 432 bytes  [0x2cd2+0x1b0]
+          Name: "bputs"
+          ID: "15"
+          Print format: "\"%ps: %s\", (void *)REC->ip, REC->str"
+        ▾ Fields — 6 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            ip: "unsigned long ip" — offset 8, 8 bytes, unsigned
+            str: "const char * str" — offset 16, 8 bytes, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 12 lines  [0x2cd2+0x1b0]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 12 LF, 0 CRLF, 0 CR
+          ▾ Lines — 12 lines  [0x2cd2+0x1b0]
+              Line 1: "name: bputs"  [0x2cd2+0xb]
+              Line 2: "ID: 15"  [0x2cde+0x6]
+              Line 3: "format:"  [0x2ce5+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x2ced+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x2d2c+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x2d6b+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x2db2+0x32]
+              Line 8: ""  [0x2de5+0x0]
+              Line 9: "\tfield:unsigned long ip;\toffset:8;\tsize:8;\tsigned:0;"  [0x2de6+0x34]
+              Line 10: "\tfield:const char * str;\toffset:16;\tsize:8;\tsigned:0;"  [0x2e1b+0x35]
+              Line 11: ""  [0x2e51+0x0]
+              Line 12: "print fmt: \"%ps: %s\", (void *)REC->ip, REC->str"  [0x2e52+0x2f]
+    ▾ bprint — ID 6  [0x2e82+0x1e7]
+        Size: 479  [0x2e82+0x8]
+      ▾ Format — 479 bytes  [0x2e8a+0x1df]
+          Name: "bprint"
+          ID: "6"
+          Print format: "\"%ps: %s\", (void *)REC->ip, REC->fmt"
+        ▾ Fields — 7 fields
+            common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+            common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+            common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+            common_pid: "int common_pid" — offset 4, 4 bytes, signed
+            ip: "unsigned long ip" — offset 8, 8 bytes, unsigned
+            fmt: "const char * fmt" — offset 16, 8 bytes, unsigned
+            buf: "u32 buf[]" — offset 24, 0 bytes, unsigned
+        ▾ Text — UTF-8 text, LF line endings, 13 lines  [0x2e8a+0x1df]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 13 LF, 0 CRLF, 0 CR
+          ▾ Lines — 13 lines  [0x2e8a+0x1df]
+              Line 1: "name: bprint"  [0x2e8a+0xc]
+              Line 2: "ID: 6"  [0x2e97+0x5]
+              Line 3: "format:"  [0x2e9d+0x7]
+              Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x2ea5+0x3e]
+              Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x2ee4+0x3e]
+              Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x2f23+0x46]
+              Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x2f6a+0x32]
+              Line 8: ""  [0x2f9d+0x0]
+              Line 9: "\tfield:unsigned long ip;\toffset:8;\tsize:8;\tsigned:0;"  [0x2f9e+0x34]
+              Line 10: "\tfield:const char * fmt;\toffset:16;\tsize:8;\tsigned:0;"  [0x2fd3+0x35]
+              Line 11: "\tfield:u32 buf[];\toffset:24;\tsize:0;\tsigned:0;"  [0x3009+0x2e]
+              Line 12: ""  [0x3038+0x0]
+              Line 13: "print fmt: \"%ps: %s\", (void *)REC->ip, REC->fmt"  [0x3039+0x2f]
+  ▾ Event Formats — 1 system  [0x3069+0x498]
+    ▾ sched — 2 events  [0x306d+0x494]
+      ▾ sched_process_exec — ID 239  [0x3077+0x224]
+          Size: 540  [0x3077+0x8]
+        ▾ Format — 540 bytes  [0x307f+0x21c]
+            Name: "sched_process_exec"
+            ID: "239"
+            Print format: "\"filename=%s pid=%d old_pid=%d\", __get_str(filename), REC->pid, REC->old_pid"
+          ▾ Fields — 7 fields
+              common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+              common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+              common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+              common_pid: "int common_pid" — offset 4, 4 bytes, signed
+              filename: "__data_loc char[] filename" — offset 8, 4 bytes, unsigned
+              pid: "pid_t pid" — offset 12, 4 bytes, signed
+              old_pid: "pid_t old_pid" — offset 16, 4 bytes, signed
+          ▾ Text — UTF-8 text, LF line endings, 13 lines  [0x307f+0x21c]
+              Encoding: "UTF-8"
+              Line endings: "LF" — 13 LF, 0 CRLF, 0 CR
+            ▾ Lines — 13 lines  [0x307f+0x21c]
+                Line 1: "name: sched_process_exec"  [0x307f+0x18]
+                Line 2: "ID: 239"  [0x3098+0x7]
+                Line 3: "format:"  [0x30a0+0x7]
+                Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x30a8+0x3e]
+                Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x30e7+0x3e]
+                Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x3126+0x46]
+                Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x316d+0x32]
+                Line 8: ""  [0x31a0+0x0]
+                Line 9: "\tfield:__data_loc char[] filename;\toffset:8;\tsize:4;\tsigned:0;"  [0x31a1+0x3e]
+                Line 10: "\tfield:pid_t pid;\toffset:12;\tsize:4;\tsigned:1;"  [0x31e0+0x2e]
+                Line 11: "\tfield:pid_t old_pid;\toffset:16;\tsize:4;\tsigned:1;"  [0x320f+0x32]
+                Line 12: ""  [0x3242+0x0]
+                Line 13: "print fmt: \"filename=%s pid=%d old_pid=%d\", __get_str(filename), REC->pid, REC->old_pid"  [0x3243+0x57]
+      ▾ sched_process_exit — ID 235  [0x329b+0x266]
+          Size: 606  [0x329b+0x8]
+        ▾ Format — 606 bytes  [0x32a3+0x25e]
+            Name: "sched_process_exit"
+            ID: "235"
+            Print format: "\"comm=%s pid=%d prio=%d group_dead=%s\", REC->comm, REC->pid, REC->prio, REC->group_dead ? \"true\" : \"false\""
+          ▾ Fields — 8 fields
+              common_type: "unsigned short common_type" — offset 0, 2 bytes, unsigned
+              common_flags: "unsigned char common_flags" — offset 2, 1 byte, unsigned
+              common_preempt_count: "unsigned char common_preempt_count" — offset 3, 1 byte, unsigned
+              common_pid: "int common_pid" — offset 4, 4 bytes, signed
+              comm: "char comm[16]" — offset 8, 16 bytes, unsigned
+              pid: "pid_t pid" — offset 24, 4 bytes, signed
+              prio: "int prio" — offset 28, 4 bytes, signed
+              group_dead: "bool group_dead" — offset 32, 1 byte, unsigned
+          ▾ Text — UTF-8 text, LF line endings, 14 lines  [0x32a3+0x25e]
+              Encoding: "UTF-8"
+              Line endings: "LF" — 14 LF, 0 CRLF, 0 CR
+            ▾ Lines — 14 lines  [0x32a3+0x25e]
+                Line 1: "name: sched_process_exit"  [0x32a3+0x18]
+                Line 2: "ID: 235"  [0x32bc+0x7]
+                Line 3: "format:"  [0x32c4+0x7]
+                Line 4: "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;"  [0x32cc+0x3e]
+                Line 5: "\tfield:unsigned char common_flags;\toffset:2;\tsize:1;\tsigned:0;"  [0x330b+0x3e]
+                Line 6: "\tfield:unsigned char common_preempt_count;\toffset:3;\tsize:1;\tsigned:0;"  [0x334a+0x46]
+                Line 7: "\tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;"  [0x3391+0x32]
+                Line 8: ""  [0x33c4+0x0]
+                Line 9: "\tfield:char comm[16];\toffset:8;\tsize:16;\tsigned:0;"  [0x33c5+0x32]
+                Line 10: "\tfield:pid_t pid;\toffset:24;\tsize:4;\tsigned:1;"  [0x33f8+0x2e]
+                Line 11: "\tfield:int prio;\toffset:28;\tsize:4;\tsigned:1;"  [0x3427+0x2d]
+                Line 12: "\tfield:bool group_dead;\toffset:32;\tsize:1;\tsigned:0;"  [0x3455+0x34]
+                Line 13: ""  [0x348a+0x0]
+                Line 14: "print fmt: \"comm=%s pid=%d prio=%d group_dead=%s\", REC->comm, REC->pid, REC->prio, REC->group_dead ? \"true\" : \"false\""  [0x348b+0x75]
+  ▾ Kallsyms — 208 bytes  [0x3501+0xd4]
+      Size: 208  [0x3501+0x4]
+    ▾ Text — UTF-8 text, LF line endings, 6 lines  [0x3505+0xd0]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 6 LF, 0 CRLF, 0 CR
+      ▾ Lines — 6 lines  [0x3505+0xd0]
+          Line 1: "ffffc0b9c2c10000 T _stext"  [0x3505+0x19]
+          Line 2: "ffffc0b9c36148f0 T __arm64_sys_write"  [0x351f+0x24]
+          Line 3: "ffffc0b9c3620308 T __arm64_sys_openat"  [0x3544+0x25]
+          Line 4: "ffffc0b9c3795f70 T do_exit"  [0x356a+0x1a]
+          Line 5: "ffffc0b9c3796938 T __arm64_sys_exit_group"  [0x3585+0x29]
+          Line 6: "ffffc0b9c37af528 T __arm64_sys_execve"  [0x35af+0x25]
+  ▾ Trace Printk Formats — 4.3 KiB  [0x35d5+0x1110]
+      Size: 4364  [0x35d5+0x4]
+    ▾ Text — UTF-8 text, LF line endings, 127 lines  [0x35d9+0x110c]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 127 LF, 0 CRLF, 0 CR
+      ▾ Lines — 127 lines  [0x35d9+0x110c]
+          Line 1: "0xffffc0b9c413248a : \"Rescheduling interrupts\""  [0x35d9+0x2e]
+          Line 2: "0xffffc0b9c41907ee : \"Function call interrupts\""  [0x3608+0x2f]
+          Line 3: "0xffffc0b9c41c4d7a : \"CPU stop interrupts\""  [0x3638+0x2a]
+          Line 4: "0xffffc0b9c4190807 : \"CPU stop NMIs\""  [0x3663+0x24]
+          Line 5: "0xffffc0b9c41324a2 : \"Timer broadcast interrupts\""  [0x3688+0x31]
+          Line 6: "0xffffc0b9c413dbc0 : \"IRQ work interrupts\""  [0x36ba+0x2a]
+          Line 7: "0xffffc0b9c41324bd : \"CPU backtrace interrupts\""  [0x36e5+0x2f]
+          Line 8: "0xffffc0b9c4196add : \"KGDB roundup interrupts\""  [0x3715+0x2e]
+          Line 9: "0xffffc0b9c41c5365 : \"thaw_processes\""  [0x3744+0x25]
+          Line 10: "0xffffc0b9c41c5365 : \"thaw_processes\""  [0x376a+0x25]
+          Line 11: "0xffffc0b9c4976500 : \"rcu_sched\""  [0x3790+0x20]
+          Line 12: "0xffffc0b9c416d319 : \"Start scheduler-tick\""  [0x37b1+0x2b]
+          Line 13: "0xffffc0b9c413e5e3 : \"End scheduler-tick\""  [0x37dd+0x29]
+          Line 14: "0xffffc0b9c4167ab7 : \"Begin\""  [0x3807+0x1c]
+          Line 15: "0xffffc0b9c41d0db6 : \"EarlyExit\""  [0x3824+0x20]
+          Line 16: "0xffffc0b9c416d32e : \"Inc1\""  [0x3845+0x1b]
+          Line 17: "0xffffc0b9c41ae7ef : \"NQ\""  [0x3861+0x19]
+          Line 18: "0xffffc0b9c4190fea : \"OfflineNoCBQ\""  [0x387b+0x23]
+          Line 19: "0xffffc0b9c412d408 : \"OnlineQ\""  [0x389f+0x1e]
+          Line 20: "0xffffc0b9c41279de : \"Inc2\""  [0x38be+0x1b]
+          Line 21: "0xffffc0b9c4184e40 : \"cpuonl\""  [0x38da+0x1d]
+          Line 22: "0xffffc0b9c412d428 : \"Start context switch\""  [0x38f8+0x2b]
+          Line 23: "0xffffc0b9c418ac53 : \"End context switch\""  [0x3924+0x29]
+          Line 24: "0xffffc0b9c417985f : \"FirstQ\""  [0x394e+0x1d]
+          Line 25: "0xffffc0b9c417985f : \"FirstQ\""  [0x396c+0x1d]
+          Line 26: "0xffffc0b9c418ac66 : \"FirstBQ\""  [0x398a+0x1e]
+          Line 27: "0xffffc0b9c415b7e3 : \"FirstBQwake\""  [0x39a9+0x22]
+          Line 28: "0xffffc0b9c41a8c9e : \"FirstBQnoWake\""  [0x39cc+0x24]
+          Line 29: "0xffffc0b9c417369c : \"SegCbPreAcc\""  [0x39f1+0x22]
+          Line 30: "0xffffc0b9c41bf8dc : \"AccWaitCB\""  [0x3a14+0x20]
+          Line 31: "0xffffc0b9c41b9a31 : \"AccReadyCB\""  [0x3a35+0x21]
+          Line 32: "0xffffc0b9c4184e75 : \"SegCbPostAcc\""  [0x3a57+0x23]
+          Line 33: "0xffffc0b9c416d425 : \"Startleaf\""  [0x3a7b+0x20]
+          Line 34: "0xffffc0b9c41b4472 : \"Prestarted\""  [0x3a9c+0x21]
+          Line 35: "0xffffc0b9c415b7ef : \"Startedleaf\""  [0x3abe+0x22]
+          Line 36: "0xffffc0b9c4161918 : \"Startedleafroot\""  [0x3ae1+0x26]
+          Line 37: "0xffffc0b9c41a2ca0 : \"Startedroot\""  [0x3b08+0x22]
+          Line 38: "0xffffc0b9c4121c17 : \"NoGPkthread\""  [0x3b2b+0x22]
+          Line 39: "0xffffc0b9c416d42f : \"newreq\""  [0x3b4e+0x1d]
+          Line 40: "0xffffc0b9c417f0a5 : \"SegCBQueued\""  [0x3b6c+0x22]
+          Line 41: "0xffffc0b9c4184e82 : \"WakeNotPoll\""  [0x3b8f+0x22]
+          Line 42: "0xffffc0b9c412d43d : \"WakeLazy\""  [0x3bb2+0x1f]
+          Line 43: "0xffffc0b9c41d6c80 : \"WakeEmpty\""  [0x3bd2+0x20]
+          Line 44: "0xffffc0b9c41c5470 : \"WakeEmptyIsDeferred\""  [0x3bf3+0x2a]
+          Line 45: "0xffffc0b9c4167afe : \"WakeNot\""  [0x3c1e+0x1e]
+          Line 46: "0xffffc0b9c41d6c8a : \"AlreadyAwake\""  [0x3c3d+0x23]
+          Line 47: "0xffffc0b9c414fdd4 : \"DoWake\""  [0x3c61+0x1d]
+          Line 48: "0xffffc0b9c41d0dc3 : \"cpuend\""  [0x3c7f+0x1d]
+          Line 49: "0xffffc0b9c414fddb : \"cpustart\""  [0x3c9d+0x1f]
+          Line 50: "0xffffc0b9c415b42e : \"request\""  [0x3cbd+0x1e]
+          Line 51: "0xffffc0b9c4121c23 : \"complete\""  [0x3cdc+0x1f]
+          Line 52: "0xffffc0b9c41381e7 : \"SelfDetected\""  [0x3cfc+0x23]
+          Line 53: "0xffffc0b9c4161989 : \"StallDetected\""  [0x3d20+0x24]
+          Line 54: "0xffffc0b9c4179052 : \"IRQ\""  [0x3d45+0x1a]
+          Line 55: "0xffffc0b9c4132b87 : \"IRQNQ\""  [0x3d60+0x1c]
+          Line 56: "0xffffc0b9c4121c6f : \"LastCB\""  [0x3d7d+0x1d]
+          Line 57: "0xffffc0b9c41381f4 : \"CB\""  [0x3d9b+0x19]
+          Line 58: "0xffffc0b9c41444a9 : \"reqwait\""  [0x3db5+0x1e]
+          Line 59: "0xffffc0b9c4155e75 : \"reqwaitsig\""  [0x3dd4+0x21]
+          Line 60: "0xffffc0b9c41213a3 : \"start\""  [0x3df6+0x1c]
+          Line 61: "0xffffc0b9c41cb634 : \"fqswait\""  [0x3e13+0x1e]
+          Line 62: "0xffffc0b9c41d0ddd : \"fqsstart\""  [0x3e32+0x1f]
+          Line 63: "0xffffc0b9c41381f7 : \"fqsend\""  [0x3e52+0x1d]
+          Line 64: "0xffffc0b9c416d436 : \"fqswaitsig\""  [0x3e70+0x21]
+          Line 65: "0xffffc0b9c41b447d : \"dti\""  [0x3e92+0x1a]
+          Line 66: "0xffffc0b9c41b447d : \"dti\""  [0x3ead+0x1a]
+          Line 67: "0xffffc0b9c41b9412 : \"end\""  [0x3ec8+0x1a]
+          Line 68: "0xffffc0b9c41b4481 : \"CleanupMore\""  [0x3ee3+0x22]
+          Line 69: "0xffffc0b9c416d42f : \"newreq\""  [0x3f06+0x1d]
+          Line 70: "0xffffc0b9c41b4481 : \"CleanupMore\""  [0x3f24+0x22]
+          Line 71: "0xffffc0b9c41736a8 : \"Cleanup\""  [0x3f47+0x1e]
+          Line 72: "0xffffc0b9c4167b09 : \"Start CPU kthread@rcu_run\""  [0x3f66+0x30]
+          Line 73: "0xffffc0b9c417f0b1 : \"End CPU kthread@rcu_wait\""  [0x3f97+0x2f]
+          Line 74: "0xffffc0b9c415b889 : \"Start CPU kthread@rcu_yield\""  [0x3fc7+0x32]
+          Line 75: "0xffffc0b9c41d6cd5 : \"End CPU kthread@rcu_yield\""  [0x3ffa+0x30]
+          Line 76: "0xffffc0b9c4161997 : \"Start RCU core\""  [0x402b+0x25]
+          Line 77: "0xffffc0b9c41381fe : \"End RCU core\""  [0x4051+0x23]
+          Line 78: "0xffffc0b9c4179866 : \"SegCbDequeued\""  [0x4075+0x24]
+          Line 79: "0xffffc0b9c414454e : \"Timer\""  [0x409a+0x1c]
+          Line 80: "0xffffc0b9c41d6d13 : \"DeferredWake\""  [0x40b7+0x23]
+          Line 81: "0xffffc0b9c41c5484 : \"snap\""  [0x40db+0x1b]
+          Line 82: "0xffffc0b9c416cc40 : \"wait\""  [0x40f7+0x1b]
+          Line 83: "0xffffc0b9c41d6d20 : \"nxtlvl\""  [0x4113+0x1d]
+          Line 84: "0xffffc0b9c41213a3 : \"start\""  [0x4131+0x1c]
+          Line 85: "0xffffc0b9c4179874 : \"reset\""  [0x414e+0x1c]
+          Line 86: "0xffffc0b9c419743e : \"select\""  [0x416b+0x1d]
+          Line 87: "0xffffc0b9c413e5f6 : \"selectofl\""  [0x4189+0x20]
+          Line 88: "0xffffc0b9c41b9412 : \"end\""  [0x41aa+0x1a]
+          Line 89: "0xffffc0b9c41c5489 : \"endwake\""  [0x41c5+0x1e]
+          Line 90: "0xffffc0b9c4144562 : \"startwait\""  [0x41e4+0x20]
+          Line 91: "0xffffc0b9c417f0ee : \"ExpeditedStall\""  [0x4205+0x25]
+          Line 92: "0xffffc0b9c41b448d : \"done\""  [0x422b+0x1b]
+          Line 93: "0xffffc0b9c41bf912 : \"Check\""  [0x4247+0x1c]
+          Line 94: "0xffffc0b9c41d6d99 : \"Lazy\""  [0x4264+0x1b]
+          Line 95: "0xffffc0b9c41619c0 : \"Bypass\""  [0x4280+0x1d]
+          Line 96: "0xffffc0b9c4138270 : \"NeedWaitGP\""  [0x429e+0x21]
+          Line 97: "0xffffc0b9c418ac86 : \"WakeLazyIsDeferred\""  [0x42c0+0x29]
+          Line 98: "0xffffc0b9c4127a8b : \"WakeBypassIsDeferred\""  [0x42ea+0x2b]
+          Line 99: "0xffffc0b9c417987a : \"Poll\""  [0x4316+0x1b]
+          Line 100: "0xffffc0b9c41cb64c : \"StartWait\""  [0x4332+0x20]
+          Line 101: "0xffffc0b9c413e619 : \"EndWait\""  [0x4353+0x1e]
+          Line 102: "0xffffc0b9c415b8ae : \"Sleep\""  [0x4372+0x1c]
+          Line 103: "0xffffc0b9c41619c7 : \"EndSleep\""  [0x438f+0x1f]
+          Line 104: "0xffffc0b9c416d4ef : \"WokeEmpty\""  [0x43af+0x20]
+          Line 105: "0xffffc0b9c4184efb : \"CBSleep\""  [0x43d0+0x1e]
+          Line 106: "0xffffc0b9c412d47e : \"rcu_sched\""  [0x43ef+0x20]
+          Line 107: "0xffffc0b9c41cb659 : \"cpuqs\""  [0x4410+0x1c]
+          Line 108: "0xffffc0b9c41c06ef : \"--=\""  [0x442d+0x1a]
+          Line 109: "0xffffc0b9c4122816 : \"Endirq\""  [0x4448+0x1d]
+          Line 110: "0xffffc0b9c41c06f3 : \"Startirq\""  [0x4466+0x1f]
+          Line 111: "0xffffc0b9c418bb0e : \"++=\""  [0x4486+0x1a]
+          Line 112: "0xffffc0b9c41c06fc : \"End\""  [0x44a1+0x1a]
+          Line 113: "0xffffc0b9c41d7a0e : \"Start\""  [0x44bc+0x1c]
+          Line 114: "0xffffc0b9c41670fb : \"mas_store\""  [0x44d9+0x20]
+          Line 115: "0xffffc0b9c4160f6d : \"mas_store_prealloc\""  [0x44fa+0x29]
+          Line 116: "0xffffc0b9c41494c8 : \"mtree_load\""  [0x4524+0x21]
+          Line 117: "0xffffc0b9c417e6f7 : \"mtree_store_range\""  [0x4546+0x28]
+          Line 118: "0xffffc0b9c415526f : \"mtree_erase\""  [0x456f+0x22]
+          Line 119: "0xffffc0b9c419695b : \"mt_find\""  [0x4592+0x1e]
+          Line 120: "0xffffc0b9c412cb09 : \"mas_is_span_wr\""  [0x45b1+0x25]
+          Line 121: "0xffffc0b9c41438d3 : \"mas_wr_append\""  [0x45d7+0x24]
+          Line 122: "0xffffc0b9c412cb18 : \"mas_wr_slot_store\""  [0x45fc+0x28]
+          Line 123: "0xffffc0b9c41378c6 : \"mas_wr_node_store\""  [0x4625+0x28]
+          Line 124: "0xffffc0b9c41b9175 : \"mas_wr_spanning_store\""  [0x464e+0x2c]
+          Line 125: "0xffffc0b9c419c614 : \"mas_wr_bnode\""  [0x467b+0x23]
+          Line 126: "0xffffc0b9c41cabfe : \"mas_rebalance\""  [0x469f+0x24]
+          Line 127: "0xffffc0b9c41a228e : \"mas_split\""  [0x46c4+0x20]
+  ▾ Saved Command Lines — 9 bytes  [0x46e5+0x11]
+      Size: 9  [0x46e5+0x8]
+    ▾ Text — UTF-8 text, LF line endings, 1 line  [0x46ed+0x9]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x46ed+0x9]
+          Line 1: "176 ffls"  [0x46ed+0x8]
+    CPUs: 18  [0x46f6+0x4]
+  ▾ Options  [0x46fa+0x15cf]
+      TRACECLOCK: "[local] global counter uptime perf mono mono_raw boot tai" — [local] global counter uptime perf mono mono_raw boot tai  [0x4704+0x41]
+      UNAME: "Linux fillyfoal 7.0.14-orbstack-00380-ga7e0a2dc9535 aarch64" — Linux fillyfoal 7.0.14-orbstack-00380-ga7e0a2dc9535 aarch64  [0x4745+0x42]
+      VERSION: "3.3.1 not-a-git-repo" — 3.3.1 not-a-git-repo  [0x4787+0x1b]
+      TRACEID: 0x748105be76f33a0d  [0x47a2+0xe]
+      CPUSTAT: "CPU: 0\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002686\ndropped events: 0\nread events: 0" — CPU: 0  [0x47b0+0x94]
+      CPUSTAT: "CPU: 1\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002697\ndropped events: 0\nread events: 0" — CPU: 1  [0x4844+0x94]
+      CPUSTAT: "CPU: 2\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts: 788541.001765\nnow ts: 788541.002701\ndropped events: 0\nread events: 2" — CPU: 2  [0x48d8+0x95]
+      CPUSTAT: "CPU: 3\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002704\ndropped events: 0\nread events: 0" — CPU: 3  [0x496d+0x94]
+      CPUSTAT: "CPU: 4\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002708\ndropped events: 0\nread events: 0" — CPU: 4  [0x4a01+0x94]
+      CPUSTAT: "CPU: 5\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002711\ndropped events: 0\nread events: 0" — CPU: 5  [0x4a95+0x94]
+      CPUSTAT: "CPU: 6\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts: 768146.383529\nnow ts: 788541.002714\ndropped events: 0\nread events: 0" — CPU: 6  [0x4b29+0x95]
+      CPUSTAT: "CPU: 7\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts: 767930.233205\nnow ts: 788541.002717\ndropped events: 0\nread events: 0" — CPU: 7  [0x4bbe+0x95]
+      CPUSTAT: "CPU: 8\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts: 788540.968029\nnow ts: 788541.002726\ndropped events: 0\nread events: 0" — CPU: 8  [0x4c53+0x95]
+      CPUSTAT: "CPU: 9\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts: 767930.232924\nnow ts: 788541.002730\ndropped events: 0\nread events: 0" — CPU: 9  [0x4ce8+0x95]
+      CPUSTAT: "CPU: 10\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002733\ndropped events: 0\nread events: 0" — CPU: 10  [0x4d7d+0x95]
+      CPUSTAT: "CPU: 11\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002737\ndropped events: 0\nread events: 0" — CPU: 11  [0x4e12+0x95]
+      CPUSTAT: "CPU: 12\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts: 768146.369843\nnow ts: 788541.002740\ndropped events: 0\nread events: 0" — CPU: 12  [0x4ea7+0x96]
+      CPUSTAT: "CPU: 13\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts: 768146.383154\nnow ts: 788541.002744\ndropped events: 0\nread events: 0" — CPU: 13  [0x4f3d+0x96]
+      CPUSTAT: "CPU: 14\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts: 767930.233115\nnow ts: 788541.002746\ndropped events: 0\nread events: 0" — CPU: 14  [0x4fd3+0x96]
+      CPUSTAT: "CPU: 15\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002751\ndropped events: 0\nread events: 0" — CPU: 15  [0x5069+0x95]
+      CPUSTAT: "CPU: 16\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002754\ndropped events: 0\nread events: 0" — CPU: 16  [0x50fe+0x95]
+      CPUSTAT: "CPU: 17\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002758\ndropped events: 0\nread events: 0" — CPU: 17  [0x5193+0x95]
+      CPUSTAT: "\nBuffer: ffinst" —   [0x5228+0x18]
+      CPUSTAT: "CPU: 0\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002764\ndropped events: 0\nread events: 0" — CPU: 0  [0x5240+0x94]
+      CPUSTAT: "CPU: 1\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002769\ndropped events: 0\nread events: 0" — CPU: 1  [0x52d4+0x94]
+      CPUSTAT: "CPU: 2\nentries: 1\noverrun: 0\ncommit overrun: 0\nbytes: 40\noldest event ts: 788541.002258\nnow ts: 788541.002772\ndropped events: 0\nread events: 0" — CPU: 2  [0x5368+0x96]
+      CPUSTAT: "CPU: 3\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002777\ndropped events: 0\nread events: 0" — CPU: 3  [0x53fe+0x94]
+      CPUSTAT: "CPU: 4\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002780\ndropped events: 0\nread events: 0" — CPU: 4  [0x5492+0x94]
+      CPUSTAT: "CPU: 5\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002784\ndropped events: 0\nread events: 0" — CPU: 5  [0x5526+0x94]
+      CPUSTAT: "CPU: 6\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002792\ndropped events: 0\nread events: 0" — CPU: 6  [0x55ba+0x94]
+      CPUSTAT: "CPU: 7\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002799\ndropped events: 0\nread events: 0" — CPU: 7  [0x564e+0x94]
+      CPUSTAT: "CPU: 8\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002802\ndropped events: 0\nread events: 0" — CPU: 8  [0x56e2+0x94]
+      CPUSTAT: "CPU: 9\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002809\ndropped events: 0\nread events: 0" — CPU: 9  [0x5776+0x94]
+      CPUSTAT: "CPU: 10\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002814\ndropped events: 0\nread events: 0" — CPU: 10  [0x580a+0x95]
+      CPUSTAT: "CPU: 11\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002819\ndropped events: 0\nread events: 0" — CPU: 11  [0x589f+0x95]
+      CPUSTAT: "CPU: 12\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002822\ndropped events: 0\nread events: 0" — CPU: 12  [0x5934+0x95]
+      CPUSTAT: "CPU: 13\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002834\ndropped events: 0\nread events: 0" — CPU: 13  [0x59c9+0x95]
+      CPUSTAT: "CPU: 14\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002899\ndropped events: 0\nread events: 0" — CPU: 14  [0x5a5e+0x95]
+      CPUSTAT: "CPU: 15\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002930\ndropped events: 0\nread events: 0" — CPU: 15  [0x5af3+0x95]
+      CPUSTAT: "CPU: 16\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002937\ndropped events: 0\nread events: 0" — CPU: 16  [0x5b88+0x95]
+      CPUSTAT: "CPU: 17\nentries: 0\noverrun: 0\ncommit overrun: 0\nbytes: 0\noldest event ts:     0.000000\nnow ts: 788541.002942\ndropped events: 0\nread events: 0" — CPU: 17  [0x5c1d+0x95]
+    ▾ BUFFER  [0x5cb2+0x15]
+        Offset: 0x7000  [0x5cb8+0x8]
+        Instance: "ffinst"  [0x5cc0+0x7]
+      End: 0  [0x5cc7+0x2]
+  ▾ Flyrecord — 18 CPUs  [0x5cc9+0x12a]  (+37 nodes elided)
+    Trace Clock: "[local]" — local  [0x5df3+0xf]
+  ▾ CPU 2 — 1 page  [0x6000+0x1000]  (+23 nodes elided)
+  ▾ Instance ffinst  [0x7000+0x12a]  (+54 nodes elided)
