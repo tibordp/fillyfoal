@@ -1613,7 +1613,7 @@ equal to the faked creation time.
 Reproduced byte-for-byte by `sh tests/data/zlib/make-external.sh` (Docker
 `debian:trixie-slim`, host name `fillyfoal`, running
 `tests/data/zlib/inner.sh`): Python 3.13.5 with zlib 1.3.1, pigz 2.8. All
-four compress the same 2,460 bytes of neutral text (60 numbered lines).
+six compress the same 2,460 bytes of neutral text (60 numbered lines).
 
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
@@ -1621,6 +1621,8 @@ four compress the same 2,460 bytes of neutral text (60 numbered lines).
 | `zlib/python-level9.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compress(data, 9)` |
 | `zlib/python-stored.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compress(data, 0)` (stored blocks) |
 | `zlib/pigz.zz` | pigz 2.8 | `pigz -z -11 -c lines.txt` (zopfli) |
+| `zlib/python-wbits9.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compressobj(9, zlib.DEFLATED, 9)` (CINFO 1, a 512-byte window) |
+| `zlib/python-zdict.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compressobj(9, zlib.DEFLATED, 15, zdict=b"fillyfoal line of the zlib fixture\n")` (FDICT, dictionary id 0xedac0ce3) |
 
 ## xfsdump archives (xfsdump)
 
