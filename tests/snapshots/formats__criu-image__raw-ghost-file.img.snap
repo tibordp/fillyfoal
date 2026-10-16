@@ -1,0 +1,28 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ raw-ghost-file.img — CRIU GHOST_FILE image (ghost (deleted) file)  [0x0+0x83]
+    Image class: IMG_COMMON (0x54564319)  [0x0+0x4]
+    Image type: GHOST_FILE (0x52583605) — ghost (deleted) file  [0x4+0x4]
+  ▾ ghost_file_entry [0] — 39 bytes  [0x8+0x2b]
+      Size: 39  [0x8+0x4]
+      uid: 0  [0xc+0x2]
+      gid: 0  [0xe+0x2]
+      mode: 0x81a4  [0x10+0x4]
+      dev: 0x4b  [0x14+0x2]
+      ino: 16281227  [0x16+0x5]
+    ▾ atim — timeval, 10 bytes  [0x1b+0xc]
+        tv_sec: 1792149420  [0x1d+0x6]
+        tv_usec: 375058  [0x23+0x4]
+    ▾ mtim — timeval, 10 bytes  [0x27+0xc]
+        tv_sec: 1792149420  [0x29+0x6]
+        tv_usec: 375930  [0x2f+0x4]
+  ▾ File data — UTF-8 text, LF line endings, 4 lines  [0x33+0x50]
+      Encoding: "UTF-8"
+      Line endings: "LF" — 4 LF, 0 CRLF, 0 CR
+    ▾ Lines — 4 lines  [0x33+0x50]
+        Line 1: "ghost file contents"  [0x33+0x13]
+        Line 2: "ghost file contents"  [0x47+0x13]
+        Line 3: "ghost file contents"  [0x5b+0x13]
+        Line 4: "ghost file contents"  [0x6f+0x13]

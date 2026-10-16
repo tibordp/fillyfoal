@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ raw-sk-queues.img — CRIU SK_QUEUES image (socket queues)  [0x0+0x3b]
+    Image class: IMG_COMMON (0x54564319)  [0x0+0x4]
+    Image type: SK_QUEUES (0x56264026) — socket queues  [0x4+0x4]
+  ▾ sk_packet_entry [0] — id_for=16 · length=18  [0x8+0x1a]
+      Size: 4  [0x8+0x4]
+      id_for: 16  [0xc+0x2]
+      length: 18  [0xe+0x2]
+    ▾ Data — UTF-8 text, 1 line  [0x10+0x12]
+        Encoding: "UTF-8"
+        Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x10+0x12]
+          Line 1: "unix queue: second"  [0x10+0x12]
+  ▾ sk_packet_entry [1] — id_for=17 · length=17  [0x22+0x19]
+      Size: 4  [0x22+0x4]
+      id_for: 17  [0x26+0x2]
+      length: 17  [0x28+0x2]
+    ▾ Data — UTF-8 text, 1 line  [0x2a+0x11]
+        Encoding: "UTF-8"
+        Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x2a+0x11]
+          Line 1: "unix queue: first"  [0x2a+0x11]

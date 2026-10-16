@@ -8,7 +8,9 @@
 //! magic. Entries follow, each a 32-bit size and a protocol buffers
 //! message of the image type's schema. Some types carry raw data after an
 //! entry: pipe and FIFO contents, socket queues, TCP stream queues, BPF map
-//! data, System V IPC contents, and the file data of ghost files; the
+//! data, System V IPC contents, and the file data of ghost files, each
+//! shown after the entry's fields as content that is identified on
+//! expansion (a message queue's messages one by one); the
 //! pagemap image starts with a `pagemap_head` and continues with
 //! `pagemap_entry` records. `pages-<n>.img` holds only raw page data (no
 //! magic, no entries; the pagemap says which pages it holds), so it is not
@@ -18,8 +20,12 @@
 //! follow CRIU's `images/*.proto` and the flag tables of `crit`
 //! (`pycriu`), read for these facts; the magic numbers are those of
 //! `criu/include/magic.h`. Types whose schema is not listed here are shown
-//! by wire type. Checked against images written by `criu dump` 4.1.1
-//! (external fixtures).
+//! by wire type. Repeated fields whose position means something are
+//! labelled by it: resource limits (`RLIMIT_*`), signal actions, AArch64
+//! registers, auxiliary vector pairs (`AT_*`), using the generic Linux
+//! numbering (MIPS numbers some limits and signals differently).
+//! Checked against images written by `criu dump` 4.1.1 and 4.2.1 (external
+//! fixtures, including pipe, socket, TCP, IPC and ghost file data).
 
 use crate::bytes::{u32_be, u32_le};
 use crate::cx::Cx;
@@ -27,12 +33,14 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::fmt::plural;
-use crate::formats::util::wire::protobuf::{self as proto, Elem, Msg, Ty, f, varint_in};
-use crate::formats::{Head, Input, Probe};
+use crate::formats::util::fmt::{plural, preview};
+use crate::formats::util::wire::protobuf::{self as proto, Elem, Index, Msg, Ty, f, varint_in};
+use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
+use crate::value::Radix;
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use std::borrow::Cow;
 
 const IMG_COMMON: u32 = 0x5456_4319;
 const IMG_SERVICE: u32 = 0x5510_5940;
@@ -53,8 +61,9 @@ enum Extra {
     None,
     /// Raw bytes after each entry, as many as varint field `n` says.
     Field(u64),
-    /// Two such fields added up.
-    Fields(u64, u64),
+    /// Two such fields: the data of the first, then of the second, with
+    /// their names.
+    Fields(u64, &'static str, u64, &'static str),
     /// System V shared memory: `size` rounded up to 4, unless the data is
     /// in the pagemap.
     Shm,
@@ -206,7 +215,7 @@ static TYPES: &[ImageType] = &[
         "TCP_STREAM",
         "TCP stream state",
         &TCP_STREAM_ENTRY,
-        Extra::Fields(1, 3),
+        Extra::Fields(1, "Receive queue", 3, "Send queue"),
     ),
     t(0x4452_3722, "EVENTFD_FILE", "eventfds", &EVENTFD_ENTRY),
     t(0x4502_3858, "EVENTPOLL_FILE", "epoll instances", U),
@@ -245,7 +254,7 @@ static TYPES: &[ImageType] = &[
         "BPFMAP_DATA",
         "BPF map data",
         &BPFMAP_DATA_ENTRY,
-        Extra::Fields(2, 3),
+        Extra::Fields(2, "Keys", 3, "Values"),
     ),
     t(0x5942_3047, "APPARMOR", "AppArmor policies", U),
     t(0x5443_5556, "PIDFD", "pidfds", U),
@@ -351,7 +360,8 @@ async fn criu(cx: Cx, input: Input) -> Result<()> {
         // Raw data that is the rest of a ghost file.
         if phase == Phase::GhostData {
             let rest = cur.span(cur.remaining());
-            cx.push(Node::new("File data").span(rest)).await;
+            cx.push(data_node(&cx, &input, "File data", rest).await?)
+                .await;
             break;
         }
         let size = u64::from(cur.u32().await?);
@@ -376,14 +386,17 @@ async fn criu(cx: Cx, input: Input) -> Result<()> {
         let entry_span = cur.since(start);
         let mut node = Node::new(format!("{label} [{index}]"))
             .span(entry_span)
-            .summary(title.unwrap_or_else(|| plural(size, "byte")))
-            .lazy(entry, (body, msg, endian));
+            .summary(title.unwrap_or_else(|| plural(size, "byte")));
         // Raw data after the entry.
+        let first = match ty.extra {
+            Extra::Fields(a, ..) => varint_in(&data, a).unwrap_or(0),
+            _ => 0,
+        };
         let extra = match (ty.extra, phase) {
             (Extra::Field(n), _) => varint_in(&data, n).unwrap_or(0),
-            (Extra::Fields(a, b), _) => varint_in(&data, a)
-                .unwrap_or(0)
-                .saturating_add(varint_in(&data, b).unwrap_or(0)),
+            (Extra::Fields(_, _, b, _), _) => {
+                first.saturating_add(varint_in(&data, b).unwrap_or(0))
+            }
             (Extra::Shm, _) => {
                 if varint_in(&data, 3).unwrap_or(0) != 0 {
                     0
@@ -395,6 +408,7 @@ async fn criu(cx: Cx, input: Input) -> Result<()> {
             (Extra::Ghost, Phase::GhostChunks) => varint_in(&data, 1).unwrap_or(0),
             _ => 0,
         };
+        let mut after = After::None;
         if extra > 0 {
             let raw = cur.span(extra);
             if raw.len < extra {
@@ -405,6 +419,14 @@ async fn criu(cx: Cx, input: Input) -> Result<()> {
             }
             cur.skip(extra);
             node = node.span(cur.since(start));
+            after = match ty.extra {
+                Extra::Fields(_, a, _, b) => After::Two(a, raw.sub(0, first), b, raw.tail(first)),
+                Extra::Sem => {
+                    let nsems = varint_in(&data, 2).unwrap_or(0);
+                    After::Sem(raw.sub(0, nsems.saturating_mul(2)))
+                }
+                _ => After::Data(raw),
+            };
         }
         if ty.extra == Extra::Msg {
             // The queue's messages follow its entry.
@@ -422,8 +444,10 @@ async fn criu(cx: Cx, input: Input) -> Result<()> {
             }
             if cur.pos() > mstart {
                 node = node.span(cur.since(start));
+                after = After::Msgs(cur.since(mstart), qnum);
             }
         }
+        let node = node.lazy(entry, (input, body, msg, endian, after));
         phase = match (ty.extra, phase) {
             (Extra::Pagemap, _) => Phase::Rest,
             (Extra::Ghost, Phase::First) => {
@@ -464,22 +488,52 @@ fn enum32(raw: u32, table: EnumTable) -> Value {
     }
 }
 
-/// An entry: its size, then its message's fields.
-async fn entry(cx: Cx, (body, msg, endian): (Span, &'static Msg, Endian)) -> Result<()> {
-    let size_span = Span::new(body.source, body.offset.saturating_sub(4), 4);
-    let raw = cx.read(size_span).await?;
-    let size = match endian {
-        Endian::Little => u32_le(&raw, 0),
-        Endian::Big => u32_be(&raw, 0),
+/// Raw data after an entry.
+#[derive(Clone, Copy, Debug)]
+enum After {
+    None,
+    /// Pipe or FIFO contents, a socket packet, a ghost file chunk, shared
+    /// memory.
+    Data(Span),
+    /// Two runs of data (TCP receive and send queues; BPF map keys and
+    /// values).
+    Two(&'static str, Span, &'static str, Span),
+    /// Semaphore values (16-bit, in the image's byte order).
+    Sem(Span),
+    /// A message queue's messages: where they are and how many.
+    Msgs(Span, u64),
+}
+
+type EntryState = (Input, Span, &'static Msg, Endian, After);
+
+/// An entry: its size, its message's fields, then the raw data after it.
+async fn entry(cx: Cx, (input, body, msg, endian, after): EntryState) -> Result<()> {
+    cx.push(size_node(&cx, body, endian).await?).await;
+    // The data is located by the walk, not by these fields: show it even
+    // if they do not parse.
+    let fields = proto::message(cx.clone(), (body, msg, 0u32)).await;
+    match after {
+        After::None => {}
+        After::Data(span) => cx.push(data_node(&cx, &input, "Data", span).await?).await,
+        After::Two(a, first, b, second) => {
+            for (name, span) in [(a, first), (b, second)] {
+                if span.len > 0 {
+                    cx.push(data_node(&cx, &input, name, span).await?).await;
+                }
+            }
+        }
+        After::Sem(span) => {
+            cx.push(
+                Node::new("Values")
+                    .span(span)
+                    .summary(plural(span.len / 2, "semaphore"))
+                    .lazy(semaphores, (span, endian)),
+            )
+            .await;
+        }
+        After::Msgs(span, qnum) => messages(&cx, input, span, qnum, endian).await?,
     }
-    .unwrap_or(0);
-    cx.push(Node::new("Size").span(size_span).value(Value::UInt {
-        value: size.into(),
-        bits: 32,
-        radix: crate::value::Radix::Dec,
-    }))
-    .await;
-    proto::message(cx, (body, msg, 0u32)).await
+    fields
 }
 
 /// A summary of an entry from its schema's title fields: the protobuf
@@ -493,6 +547,108 @@ fn entry_title(data: &[u8], msg: &'static Msg) -> Option<String> {
         return proto::title_of(data, msg).map(|v| format!("{}={v}", spec.name));
     }
     proto::title_of(data, msg)
+}
+
+/// The 32-bit size before a message whose body is `body`.
+async fn size_node(cx: &Cx, body: Span, endian: Endian) -> Result<Node> {
+    let span = Span::new(body.source, body.offset.saturating_sub(4), 4);
+    let raw = cx.read(span).await?;
+    let size = match endian {
+        Endian::Little => u32_le(&raw, 0),
+        Endian::Big => u32_be(&raw, 0),
+    }
+    .unwrap_or(0);
+    Ok(Node::new("Size").span(span).value(Value::UInt {
+        value: size.into(),
+        bits: 32,
+        radix: crate::value::Radix::Dec,
+    }))
+}
+
+/// The size of raw data, with a preview if it is text.
+async fn data_summary(cx: &Cx, span: Span) -> Result<String> {
+    let head = cx.read(span.sub(0, 256)).await?;
+    let size = plural(span.len, "byte");
+    if crate::text::looks_like_text(&head) {
+        let text = preview(&String::from_utf8_lossy(&head), 60);
+        if !text.is_empty() {
+            return Ok(format!("{size}: “{text}”"));
+        }
+    }
+    Ok(size)
+}
+
+/// Raw data, identified and dissected on expansion.
+async fn data_node(cx: &Cx, input: &Input, name: &'static str, span: Span) -> Result<Node> {
+    let summary = data_summary(cx, span).await?;
+    Ok(embedded(name, input.nested(span)).summary(summary))
+}
+
+/// Semaphore values, one node each.
+async fn semaphores(cx: Cx, (span, endian): (Span, Endian)) -> Result<()> {
+    let mut cur = Cursor::new(&cx, span, endian);
+    let mut i = 0u64;
+    while cur.remaining() >= 2 {
+        let at = cur.pos();
+        let v = cur.u16().await?;
+        cx.push(
+            Node::new(format!("[{i}]"))
+                .span(cur.since(at))
+                .value(Value::UInt {
+                    value: v.into(),
+                    bits: 16,
+                    radix: crate::value::Radix::Dec,
+                }),
+        )
+        .await;
+        i = i.saturating_add(1);
+    }
+    Ok(())
+}
+
+static IPC_MSG: Msg = msg(
+    "ipc_msg",
+    &[f(1, "mtype", Ty::UInt), f(2, "msize", Ty::UInt)],
+    &[1, 2],
+);
+
+/// The messages of a System V message queue: each a sized `ipc_msg`,
+/// then its text padded to 8 bytes.
+async fn messages(cx: &Cx, input: Input, span: Span, qnum: u64, endian: Endian) -> Result<()> {
+    let mut cur = Cursor::new(cx, span, endian);
+    let mut i = 0u64;
+    while i < qnum && !cur.at_end() {
+        let start = cur.pos();
+        let n = u64::from(cur.u32().await?);
+        let body = cur.span(n);
+        cur.skip(n);
+        let m = cx.read(body.sub(0, TITLE_MAX)).await?;
+        let msize = varint_in(&m, 2).unwrap_or(0);
+        let text = cur.span(msize);
+        cur.skip(round_up(msize, 8));
+        let size = data_summary(cx, text).await?;
+        let summary = match varint_in(&m, 1) {
+            Some(t) => format!("mtype {t}, {size}"),
+            None => size,
+        };
+        cx.push(
+            Node::new(format!("message [{i}]"))
+                .span(cur.since(start))
+                .summary(summary)
+                .lazy(message, (input, body, text, endian)),
+        )
+        .await;
+        i = i.saturating_add(1);
+    }
+    Ok(())
+}
+
+/// One queued message: its size, its `ipc_msg` fields and its text.
+async fn message(cx: Cx, (input, body, text, endian): (Input, Span, Span, Endian)) -> Result<()> {
+    cx.push(size_node(&cx, body, endian).await?).await;
+    let fields = proto::message(cx.clone(), (body, &IPC_MSG, 0u32)).await;
+    cx.push(data_node(&cx, &input, "Text", text).await?).await;
+    fields
 }
 
 // ---------------------------------------------------------------------------
@@ -743,17 +899,109 @@ static TASK_TIMERS: Msg = msg(
     &[],
 );
 
+/// `RLIM_INFINITY` (CRIU stores limits as 64-bit numbers).
+const RLIM: EnumTable = &[(u64::MAX, "unlimited")];
+
 static RLIMIT_ENTRY: Msg = msg(
     "rlimit_entry",
-    &[f(1, "cur", Ty::UInt), f(2, "max", Ty::UInt)],
-    &[],
+    &[
+        f(1, "cur", Ty::Named(RLIM, Radix::Dec)),
+        f(2, "max", Ty::Named(RLIM, Radix::Dec)),
+    ],
+    &[1, 2],
 );
+
+/// Resources in `RLIMIT_*` order: CRIU writes one limit per resource,
+/// from 0 (`dump_task_rlimits`). This is the generic Linux numbering
+/// (x86, Arm, PowerPC, s390, RISC-V, LoongArch); MIPS numbers some of
+/// them differently.
+const RLIMITS: &[&str] = &[
+    "RLIMIT_CPU",
+    "RLIMIT_FSIZE",
+    "RLIMIT_DATA",
+    "RLIMIT_STACK",
+    "RLIMIT_CORE",
+    "RLIMIT_RSS",
+    "RLIMIT_NPROC",
+    "RLIMIT_NOFILE",
+    "RLIMIT_MEMLOCK",
+    "RLIMIT_AS",
+    "RLIMIT_LOCKS",
+    "RLIMIT_SIGPENDING",
+    "RLIMIT_MSGQUEUE",
+    "RLIMIT_NICE",
+    "RLIMIT_RTPRIO",
+    "RLIMIT_RTTIME",
+];
+
+fn rlimit_label(i: u64) -> Cow<'static, str> {
+    match usize::try_from(i).ok().and_then(|i| RLIMITS.get(i)) {
+        Some(name) => Cow::Borrowed(*name),
+        None => format!("rlimits[{i}]").into(),
+    }
+}
 
 static TASK_RLIMITS: Msg = msg(
     "task_rlimits_entry",
-    &[f(1, "rlimits", Ty::Msg(&RLIMIT_ENTRY))],
+    &[f(1, "rlimits", Ty::Msg(&RLIMIT_ENTRY)).indexed(Index::Label(rlimit_label))],
     &[],
 );
+
+/// Signals 1 to 31 (the generic Linux numbering; MIPS and others differ).
+const SIGNALS: &[&str] = &[
+    "SIGHUP",
+    "SIGINT",
+    "SIGQUIT",
+    "SIGILL",
+    "SIGTRAP",
+    "SIGABRT",
+    "SIGBUS",
+    "SIGFPE",
+    "SIGKILL",
+    "SIGUSR1",
+    "SIGSEGV",
+    "SIGUSR2",
+    "SIGPIPE",
+    "SIGALRM",
+    "SIGTERM",
+    "SIGSTKFLT",
+    "SIGCHLD",
+    "SIGCONT",
+    "SIGSTOP",
+    "SIGTSTP",
+    "SIGTTIN",
+    "SIGTTOU",
+    "SIGURG",
+    "SIGXCPU",
+    "SIGXFSZ",
+    "SIGVTALRM",
+    "SIGPROF",
+    "SIGWINCH",
+    "SIGIO",
+    "SIGPWR",
+    "SIGSYS",
+];
+
+/// The signal of the `i`th sigaction: CRIU writes one per signal from 1
+/// to 64, skipping SIGKILL and SIGSTOP (`parasite_dump_sigacts_seized`).
+fn sigaction_label(i: u64) -> Cow<'static, str> {
+    let mut sig = i.saturating_add(1);
+    for skipped in [9, 19] {
+        if sig >= skipped {
+            sig = sig.saturating_add(1);
+        }
+    }
+    let name = usize::try_from(sig.saturating_sub(1))
+        .ok()
+        .and_then(|at| SIGNALS.get(at));
+    match name {
+        Some(name) => format!("sigactions[{name}]").into(),
+        None => format!("sigactions[{sig}]").into(),
+    }
+}
+
+/// Handler values with names.
+const SIG_HANDLERS: EnumTable = &[(0, "SIG_DFL"), (1, "SIG_IGN")];
 
 static SIGINFO: Msg = msg("siginfo_entry", &[f(1, "siginfo", Ty::Bytes)], &[]);
 static SIGNAL_QUEUE: Msg = msg(
@@ -765,7 +1013,7 @@ static SIGNAL_QUEUE: Msg = msg(
 static SA_ENTRY: Msg = msg(
     "sa_entry",
     &[
-        f(1, "sigaction", Ty::Hex),
+        f(1, "sigaction", Ty::Named(SIG_HANDLERS, Radix::Hex)),
         f(2, "flags", Ty::Hex),
         f(3, "restorer", Ty::Hex),
         f(4, "mask", Ty::Hex),
@@ -792,7 +1040,7 @@ static TASK_CORE: Msg = msg(
         f(12, "old_seccomp_filter", Ty::UInt),
         f(13, "loginuid", Ty::UInt),
         f(14, "oom_score_adj", Ty::Int),
-        f(15, "sigactions", Ty::Msg(&SA_ENTRY)),
+        f(15, "sigactions", Ty::Msg(&SA_ENTRY)).indexed(Index::Label(sigaction_label)),
         f(18, "child_subreaper", Ty::Bool),
         f(20, "blk_sigset_extended", Ty::Hex),
         f(21, "stop_signo", Ty::UInt),
@@ -917,10 +1165,21 @@ static THREAD_INFO_X86: Msg = msg(
     &[],
 );
 
+/// General registers x0 to x30, in order (`save_task_regs`).
+fn x_label(i: u64) -> Cow<'static, str> {
+    format!("x{i}").into()
+}
+
+/// FP/SIMD registers v0 to v31, each as its low then its high 64 bits.
+fn v_label(i: u64) -> Cow<'static, str> {
+    let half = if i.is_multiple_of(2) { "lo" } else { "hi" };
+    format!("v{}.{half}", i / 2).into()
+}
+
 static AARCH64_REGS: Msg = msg(
     "user_aarch64_regs_entry",
     &[
-        f(1, "regs", Ty::Hex),
+        f(1, "regs", Ty::Hex).indexed(Index::Label(x_label)),
         f(2, "sp", Ty::Hex),
         f(3, "pc", Ty::Hex),
         f(4, "pstate", Ty::Hex),
@@ -931,7 +1190,7 @@ static AARCH64_REGS: Msg = msg(
 static AARCH64_FPSIMD: Msg = msg(
     "user_aarch64_fpsimd_context_entry",
     &[
-        f(1, "vregs", Ty::Hex),
+        f(1, "vregs", Ty::Hex).indexed(Index::Label(v_label)),
         f(2, "fpsr", Ty::Hex),
         f(3, "fpcr", Ty::Hex),
     ],
@@ -998,6 +1257,45 @@ static AIO_RING: Msg = msg(
     &[],
 );
 
+/// The auxiliary vector's keys (`AT_*`, `linux/auxvec.h` and the
+/// architectures' `asm/auxvec.h`); CRIU saves `/proc/<pid>/auxv` as
+/// type/value pairs up to `AT_NULL` (`get_task_auxv`).
+const AUXV: EnumTable = &[
+    (0, "AT_NULL"),
+    (1, "AT_IGNORE"),
+    (2, "AT_EXECFD"),
+    (3, "AT_PHDR"),
+    (4, "AT_PHENT"),
+    (5, "AT_PHNUM"),
+    (6, "AT_PAGESZ"),
+    (7, "AT_BASE"),
+    (8, "AT_FLAGS"),
+    (9, "AT_ENTRY"),
+    (10, "AT_NOTELF"),
+    (11, "AT_UID"),
+    (12, "AT_EUID"),
+    (13, "AT_GID"),
+    (14, "AT_EGID"),
+    (15, "AT_PLATFORM"),
+    (16, "AT_HWCAP"),
+    (17, "AT_CLKTCK"),
+    (23, "AT_SECURE"),
+    (24, "AT_BASE_PLATFORM"),
+    (25, "AT_RANDOM"),
+    (26, "AT_HWCAP2"),
+    (27, "AT_RSEQ_FEATURE_SIZE"),
+    (28, "AT_RSEQ_ALIGN"),
+    (29, "AT_HWCAP3"),
+    (30, "AT_HWCAP4"),
+    (31, "AT_EXECFN"),
+    (32, "AT_SYSINFO"),
+    (33, "AT_SYSINFO_EHDR"),
+    (51, "AT_MINSIGSTKSZ"),
+];
+/// Keys whose values are counts, sizes or IDs rather than addresses or
+/// masks.
+const AUXV_DECIMAL: &[u64] = &[2, 4, 5, 6, 11, 12, 13, 14, 17, 23, 27, 28, 51];
+
 static MM_ENTRY: Msg = msg(
     "mm_entry",
     &[
@@ -1013,7 +1311,11 @@ static MM_ENTRY: Msg = msg(
         f(10, "mm_env_start", Ty::Hex),
         f(11, "mm_env_end", Ty::Hex),
         f(12, "exe_file_id", Ty::UInt),
-        f(13, "mm_saved_auxv", Ty::Packed(Elem::Varint)),
+        f(13, "mm_saved_auxv", Ty::Packed(Elem::Varint)).indexed(Index::Pairs {
+            key: "a_type",
+            keys: AUXV,
+            decimal: AUXV_DECIMAL,
+        }),
         f(14, "vmas", Ty::Msg(&VMA_ENTRY)),
         f(15, "dumpable", Ty::Int),
         f(16, "aios", Ty::Msg(&AIO_RING)),
@@ -1220,13 +1522,48 @@ static INET_SK_ENTRY: Msg = msg(
         f(13, "fown", Ty::Msg(&FOWN_ENTRY)),
         f(14, "opts", Ty::Msg(&SK_OPTS)),
         f(15, "v6only", Ty::Bool),
-        f(16, "ip_opts", Ty::Msg(U)),
+        f(16, "ip_opts", Ty::Msg(&IP_OPTS)),
         f(17, "ifname", Ty::Str),
         f(18, "ns_id", Ty::UInt),
         f(19, "shutdown", Ty::Enum(SK_SHUTDOWN)),
-        f(20, "tcp_opts", Ty::Msg(U)),
+        f(20, "tcp_opts", Ty::Msg(&TCP_OPTS)),
     ],
     &[3, 4, 7, 8],
+);
+
+static IP_OPTS_RAW: Msg = msg(
+    "ip_opts_raw_entry",
+    &[
+        f(1, "hdrincl", Ty::Bool),
+        f(2, "nodefrag", Ty::Bool),
+        f(3, "checksum", Ty::Bool),
+        f(4, "icmpv_filter", Ty::Hex),
+    ],
+    &[],
+);
+
+static IP_OPTS: Msg = msg(
+    "ip_opts_entry",
+    &[
+        f(1, "freebind", Ty::Bool),
+        f(4, "raw", Ty::Msg(&IP_OPTS_RAW)),
+        f(5, "pktinfo", Ty::Bool),
+        f(6, "tos", Ty::UInt),
+        f(7, "ttl", Ty::UInt),
+    ],
+    &[],
+);
+
+static TCP_OPTS: Msg = msg(
+    "tcp_opts_entry",
+    &[
+        f(1, "cork", Ty::Bool),
+        f(2, "nodelay", Ty::Bool),
+        f(3, "keepcnt", Ty::UInt),
+        f(4, "keepidle", Ty::UInt),
+        f(5, "keepintvl", Ty::UInt),
+    ],
+    &[],
 );
 
 static TTY_FILE_ENTRY: Msg = msg(
@@ -1414,7 +1751,7 @@ static IPC_DESC: Msg = msg(
         f(6, "mode", Ty::Hex),
         f(7, "id", Ty::UInt),
     ],
-    &[],
+    &[1, 7],
 );
 
 static IPC_SHM_ENTRY: Msg = msg(

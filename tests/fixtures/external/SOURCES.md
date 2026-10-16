@@ -1412,6 +1412,14 @@ tables only; CRIU paths are the container's (`/usr/bin/sleep`, libc,
 | `criu-image/stopped-core-7.img` | CRIU 4.1.1 | `sh tests/data/criu-image/make-task-states.sh` (`inner-task-states.sh`): `criu dump --shell-job` of a `sleep 1000` stopped with `kill -STOP` (PID 7, `task_state` 3); `core-7.img` renamed |
 | `criu-image/zombie-core-20.img` | CRIU 4.1.1 | same script, second dump: `sh -c 'sleep 0 & exec sleep 1000'`, whose child is a zombie (PID 20, `task_state` 2); `core-20.img` renamed |
 | `criu-image/zombie-pstree.img` | CRIU 4.1.1 | same dump as `zombie-core-20.img`; `pstree.img` renamed |
+| `criu-image/raw-pipes-data.img` | CRIU 4.2.1 (Debian sid) | `sh tests/data/criu-image/make-raw.sh` (`Dockerfile`, `inner-raw.sh`): `criu dump --shell-job --tcp-established --network-lock skip` of a Python process (in its own IPC namespace) holding a pipe with 25 unread bytes, a Unix datagram socket pair with a message queued each way, a loopback TCP connection with unread data both ways, a System V message queue (two messages) and semaphore set (3, one set to 7), and a deleted open file; `pipes-data.img` renamed |
+| `criu-image/raw-sk-queues.img` | CRIU 4.2.1 | same dump; `sk-queues.img` renamed |
+| `criu-image/raw-tcp-stream-client.img` | CRIU 4.2.1 | same dump; the client socket's `tcp-stream-<inode>.img` renamed |
+| `criu-image/raw-tcp-stream-server.img` | CRIU 4.2.1 | same dump; the accepted socket's `tcp-stream-<inode>.img` renamed |
+| `criu-image/raw-ipcns-msg.img` | CRIU 4.2.1 | same dump; `ipcns-msg-<id>.img` renamed |
+| `criu-image/raw-ipcns-sem.img` | CRIU 4.2.1 | same dump; `ipcns-sem-<id>.img` renamed |
+| `criu-image/raw-ghost-file.img` | CRIU 4.2.1 | same dump; `ghost-file-1.img` renamed (whole-file data, no chunks) |
+| `criu-image/raw-files.img` | CRIU 4.2.1 | same dump; `files.img` renamed (the pipe, socket and ghost file entries) |
 ## BorgBackup 1.2.4: repository segments
 
 Segment files (`<repo>/data/0/<n>`) copied unchanged out of repositories
