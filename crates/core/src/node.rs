@@ -107,6 +107,24 @@ impl Node {
         }
     }
 
+    /// The node's number is a size in bytes ([`Value::to_size`]).
+    pub fn as_size(self) -> Self {
+        self.as_blocks(1u64)
+    }
+
+    /// The node's number counts blocks of `block` bytes.
+    pub fn as_blocks(mut self, block: impl Into<u64>) -> Self {
+        self.value = self.value.map(|v| v.to_size(block));
+        self
+    }
+
+    /// The node's number is a span of ticks of `1/per_sec` second
+    /// ([`Value::to_duration`]).
+    pub fn as_duration(mut self, per_sec: u64) -> Self {
+        self.value = self.value.map(|v| v.to_duration(per_sec));
+        self
+    }
+
     pub fn summary(mut self, summary: impl Into<String>) -> Self {
         self.summary = Some(summary.into());
         self

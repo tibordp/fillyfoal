@@ -183,12 +183,8 @@ pub fn duration(ticks: i64, per_sec: u64) -> String {
     let exact = power_of_ten(per).filter(|&k| k <= 9);
     // Decimal digits of a second shown: exact ones, or three past a
     // tick's first, at most 9.
-    let digits = exact.unwrap_or_else(|| {
-        per.checked_ilog10()
-            .unwrap_or(0)
-            .saturating_add(3)
-            .min(9)
-    });
+    let digits =
+        exact.unwrap_or_else(|| per.checked_ilog10().unwrap_or(0).saturating_add(3).min(9));
     let scale = 10u128.pow(digits);
     let a = u128::from(ticks.unsigned_abs());
     let per128 = u128::from(per);
@@ -229,7 +225,11 @@ pub fn duration(ticks: i64, per_sec: u64) -> String {
             .find(|&(u, _)| u >= digits || scaled >= 10u128.pow(digits.saturating_sub(u)))
             .unwrap_or((9, "ns"));
         if u >= digits {
-            let _ = write!(out, "{}", scaled.saturating_mul(10u128.pow(u.saturating_sub(digits))));
+            let _ = write!(
+                out,
+                "{}",
+                scaled.saturating_mul(10u128.pow(u.saturating_sub(digits)))
+            );
         } else {
             let div = 10u128.pow(digits.saturating_sub(u));
             let _ = write!(out, "{}", scaled / div);
@@ -474,14 +474,14 @@ mod tests {
         assert_eq!(value(&Value::size(698)), "698 bytes");
         assert_eq!(value(&Value::size(1536)), "1536 bytes (1.5 KiB)");
         assert_eq!(value(&Value::size(4096)), "4096 bytes (4 KiB)");
-        assert_eq!(value(&Value::blocks(8, 512)), "8 × 512 bytes (4 KiB)");
-        assert_eq!(value(&Value::blocks(3, 128)), "3 × 128 bytes (384 bytes)");
-        assert_eq!(value(&Value::blocks(3, 1)), "3 bytes");
+        assert_eq!(value(&Value::blocks(8, 512u32)), "8 × 512 bytes (4 KiB)");
+        assert_eq!(value(&Value::blocks(3, 128u32)), "3 × 128 bytes (384 bytes)");
+        assert_eq!(value(&Value::blocks(3, 1u32)), "3 bytes");
         assert_eq!(
-            value(&Value::blocks(u64::MAX, 4096)),
+            value(&Value::blocks(u64::MAX, 4096u32)),
             "18446744073709551615 × 4096 bytes"
         );
-        assert_eq!(Value::blocks(8, 512).size_bytes(), Some(4096));
+        assert_eq!(Value::blocks(8, 512u32).size_bytes(), Some(4096));
     }
 
     #[test]

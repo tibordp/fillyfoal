@@ -120,6 +120,8 @@ pub enum Num {
     ModeOf(u64),
     /// Seconds since the Unix epoch.
     Time,
+    /// A size in bytes.
+    Size,
 }
 
 /// A text-encoded number (`radix` 8, 10 or 16; 8 also accepts tar's
@@ -161,6 +163,7 @@ pub fn present(node: Node, v: u64, show: Num) -> Node {
             node.value(super::val::oct(v, 64)).summary(unix_mode(full))
         }
         Num::Time => node.value(Value::utc(i64::try_from(v).unwrap_or(i64::MAX))),
+        Num::Size => node.value(super::val::size(v, 64)),
     }
 }
 

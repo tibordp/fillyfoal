@@ -37,7 +37,7 @@ pub fn size(n: impl Into<u64>, bits: u8) -> Value {
 
 /// A size of `n` blocks of `block` bytes, `n` stored `bits` wide:
 /// `8 × 512 bytes (4 KiB)`.
-pub fn blocks(n: impl Into<u64>, block: u32, bits: u8) -> Value {
+pub fn blocks(n: impl Into<u64>, block: impl Into<u64>, bits: u8) -> Value {
     Value::blocks(n.into(), block).bits(bits)
 }
 

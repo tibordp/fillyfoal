@@ -156,16 +156,17 @@ impl Value {
     }
 
     /// A size of `n` blocks of `block` bytes (a block of 1 byte is a size
-    /// in bytes).
-    pub const fn blocks(n: u64, block: u32) -> Value {
-        Value::Size {
-            n,
-            unit: if block == 1 {
-                SizeUnit::Bytes
-            } else {
-                SizeUnit::Blocks(block)
+    /// in bytes; one over 4 GiB, which no format has, is the product).
+    pub fn blocks(n: u64, block: impl Into<u64>) -> Value {
+        let block = block.into();
+        match u32::try_from(block) {
+            Ok(1) => Value::size(n),
+            Ok(block) => Value::Size {
+                n,
+                unit: SizeUnit::Blocks(block),
+                bits: 64,
             },
-            bits: 64,
+            Err(_) => Value::size(n.saturating_mul(block)),
         }
     }
 
@@ -188,6 +189,32 @@ impl Value {
     /// A span of whole seconds.
     pub const fn secs(secs: i64) -> Value {
         Value::duration(secs, 1)
+    }
+
+    /// This number (unsigned, or signed and not negative) as a size of
+    /// `block`-byte blocks, at its width; anything else unchanged.
+    pub fn to_size(self, block: impl Into<u64>) -> Value {
+        let n = match &self {
+            Value::UInt { value, bits, .. } => Some((*value, *bits)),
+            Value::Int { value, bits } => u64::try_from(*value).ok().map(|v| (v, *bits)),
+            _ => None,
+        };
+        match n {
+            Some((n, bits)) => Value::blocks(n, block).bits(bits),
+            None => self,
+        }
+    }
+
+    /// This number (signed or unsigned) as a span of ticks of `1/per_sec`
+    /// second; anything else unchanged.
+    pub fn to_duration(self, per_sec: u64) -> Value {
+        match self {
+            Value::Int { value, .. } => Value::duration(value, per_sec),
+            Value::UInt { value, .. } => {
+                Value::duration(i64::try_from(value).unwrap_or(i64::MAX), per_sec)
+            }
+            other => other,
+        }
     }
 
     /// The size in bytes (blocks times their size; `None` on overflow) of

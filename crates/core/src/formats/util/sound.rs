@@ -366,6 +366,18 @@ impl BitField<'_> {
         self
     }
 
+    /// The number is a size in bytes.
+    pub fn size(mut self) -> Self {
+        self.node = self.node.as_size();
+        self
+    }
+
+    /// The number is a span of ticks of `1/per_sec` second.
+    pub fn duration(mut self, per_sec: u64) -> Self {
+        self.node = self.node.as_duration(per_sec);
+        self
+    }
+
     pub fn with(mut self, f: impl FnOnce(u64, Node) -> Node) -> Self {
         if let Ok(v) = self.value {
             self.node = f(v, self.node);

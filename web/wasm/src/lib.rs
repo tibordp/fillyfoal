@@ -1199,7 +1199,7 @@ mod tests {
             r#"{"kind":"checksum","text":"0x12 (CRC-16, mismatch: computed 0x89ab)","raw":null,"data":{"algo":"CRC-16","stored":"0012","bits":16,"radix":"hex","verdict":"mismatch","computed":"89ab","reason":null}}"#
         );
         assert_eq!(
-            wire(Value::blocks(8, 512).bits(32)),
+            wire(Value::blocks(8, 512u32).bits(32)),
             r#"{"kind":"size","text":"8 × 512 bytes (4 KiB)","raw":"0x8","data":{"n":"8","unit":"blocks","block":512,"bytes":"4096","bits":32}}"#
         );
         assert_eq!(
