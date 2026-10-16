@@ -58,6 +58,24 @@ fn deep_probe(d: &crate::formats::Deep<'_>) -> bool {
     named && looks_like_plan(d.head.data)
 }
 
+/// The format of content given as a plan that does not look like one, if
+/// the first phase of identification recognises it.
+async fn not_a_plan(cx: &Cx, span: Span) -> Result<Option<&'static Format>> {
+    let (data, tail) = crate::formats::head(cx, span).await?;
+    if looks_like_plan(&data) {
+        return Ok(None);
+    }
+    let (found, units) = cx.registry().identify_costed(&crate::formats::Head {
+        data: &data,
+        tail: &tail,
+        len: span.len,
+        len_known: cx.len_known(span.source),
+    });
+    // Probes run synchronously over the head; charge them.
+    cx.charge(units).await;
+    Ok(found.filter(|f| !std::ptr::eq(*f, &TFPLAN)))
+}
+
 fn looks_like_plan(data: &[u8]) -> bool {
     let mut at = 0usize;
     let Some(first) = pb::field(data, &mut at) else {
@@ -388,6 +406,14 @@ static PLAN: Msg = Msg {
 // Dissection
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
+    // A ZIP member named `tfplan` is taken for a plan by its name alone;
+    // in a CI artifact it is often a whole saved plan (a ZIP) instead.
+    // What the probes recognise is handed to them.
+    if let Some(format) = not_a_plan(&cx, input.span).await?
+        && cx.hand_off(&input, format)
+    {
+        return (format.dissect)(cx, input).await;
+    }
     let head = cx.read(input.span.sub(0, 64 * 1024)).await?;
     let whole = crate::bytes::to_u64(head.len()) == input.span.len;
     let mut version = None;

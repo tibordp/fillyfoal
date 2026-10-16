@@ -1778,6 +1778,7 @@ PIDs). Checked by reading the traces back with `babeltrace2`.
 | --- | --- | --- |
 | `terraform-plan/create.tfplan` | Terraform v1.16.6 (`hashicorp/terraform:latest` image, linux_arm64) | `tests/data/terraform-plan/make.sh` (its header has the `docker run` line): `terraform plan -out=create.tfplan` of a configuration using only `terraform_data`, a variable, locals and outputs (no provider download), against an empty state. Unchanged; not byte-reproducible (resource IDs, ZIP timestamps) |
 | `terraform-plan/update.tfplan` | same | the same script, after `terraform apply` of the first plan: `terraform plan -var greeting=hi -out=update.tfplan` (updates, a replacement via `triggers_replace`, unknown values, non-empty `tfstate-prev`). Unchanged |
+| `zip/tfplan-artifact.zip` | Python 3.14 `zipfile` around Terraform v1.16.6 output | reproduced byte-for-byte by `tests/data/terraform-plan/make_artifact.py`: a deflated member `tfplan` holding `terraform-plan/create.tfplan` unchanged (a saved plan inside a CI artifact), mtime 2024-01-02 03:04 |
 
 ## HotSpot class data sharing archives
 
