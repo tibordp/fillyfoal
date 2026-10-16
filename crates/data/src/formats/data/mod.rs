@@ -5,7 +5,7 @@
 //! plists, Berkeley DB, Access (Jet), ESE, LevelDB/RocksDB tables, embedded
 //! databases (`embedded_db`; DuckDB in `duckdb`, Realm in `realm`, WiredTiger
 //! B-tree and turtle files in `wiredtiger`), backups and database dumps (`dumps`), R and
-//! ASDF data (`rdata`), Bitcoin block files, GVariant data and GVDB files (GResource bundles,
+//! ASDF data (`rdata`), Bitcoin block files, Kafka log segments (`kafka`), GVariant data and GVDB files (GResource bundles,
 //! dconf databases; `gvariant`, `gvdb`), and schemaless wire encodings
 //! (`wire`: protobuf, FlatBuffers, Thrift, Cap'n Proto).
 
@@ -27,6 +27,7 @@ pub mod gvdb;
 pub mod hdf5;
 pub mod ion;
 pub mod jet;
+pub mod kafka;
 pub mod marshal;
 pub mod matlab;
 pub mod mongo_archive;

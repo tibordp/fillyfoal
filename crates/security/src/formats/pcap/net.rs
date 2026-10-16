@@ -207,7 +207,7 @@ const ROUTING_TYPES: EnumTable = &[
     (4, "Segment routing (SRH)"),
 ];
 
-const TCP_FLAGS: FlagTable = &[
+pub const TCP_FLAGS: FlagTable = &[
     flag(0x001, "FIN"),
     flag(0x002, "SYN"),
     flag(0x004, "RST"),

@@ -642,6 +642,8 @@ pub static FORMATS: &[&Format] = &[
     &pcap::FORMAT,
     #[cfg(feature = "security")]
     &pcap::ng::FORMAT,
+    #[cfg(feature = "security")]
+    &pcap::nfdump::FORMAT,
     #[cfg(feature = "system")]
     &forensics::lnk::FORMAT,
     #[cfg(feature = "system")]
@@ -865,6 +867,12 @@ pub static FORMATS: &[&Format] = &[
     &data::arrow::FORMAT,
     #[cfg(feature = "data")]
     &data::arrow::STREAM,
+    #[cfg(feature = "data")]
+    &data::kafka::LOG,
+    #[cfg(feature = "data")]
+    &data::kafka::INDEX,
+    #[cfg(feature = "data")]
+    &data::kafka::TIMEINDEX,
     // Schemaless wire encodings: by extension or "inspect as" only.
     #[cfg(feature = "data")]
     &data::wire::protobuf::FORMAT,

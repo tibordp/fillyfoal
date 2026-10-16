@@ -1,7 +1,7 @@
 //! Packet captures: classic libpcap files (both byte orders, microsecond
 //! and nanosecond timestamps, Kuznetzov's modified format), pcapng (see
 //! [`ng`]), Solaris snoop ([`snoop`]) and Bluetooth btsnoop and Network
-//! Monitor ([`captures`]).
+//! Monitor ([`captures`]), and nfdump NetFlow files ([`nfdump`]).
 //!
 //! A classic capture is a 24-byte global header followed by records, each a
 //! 16-byte header and the captured bytes. Records are listed in pages with
@@ -17,6 +17,7 @@ pub mod dec;
 pub mod dns;
 pub mod hci;
 pub mod net;
+pub mod nfdump;
 pub mod ng;
 pub mod snoop;
 pub mod tls;

@@ -852,3 +852,5 @@ closely enough to credit:
   `qemu_saveimage.c` (LGPL-2.1-or-later), and CRIU's `images/*.proto`, `magic.h` and `crit`
   flag tables (GPL-2.0): field numbers, names, magic numbers and flag values.
 - Backup storage formats (`crates/archive/src/formats/archive/backup/`): layouts read for facts only, no code taken, from BorgBackup 1.2's `repository.py` and `crypto/key.py` (BSD-3-Clause), the `pxar` crate and Proxmox Backup's `pbs-datastore` and `docs/file-formats.rst` (AGPL-3.0), and `vma_spec.txt` from Proxmox's pve-qemu.
+- nfdump file layouts (`crates/security/src/formats/pcap/nfdump.rs`): the structure
+  definitions in Peter Haag's nfdump headers, 1.6.22 to 1.7.5 (BSD-3-Clause).

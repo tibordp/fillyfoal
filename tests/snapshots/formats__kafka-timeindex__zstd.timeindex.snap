@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ zstd.timeindex — Kafka time index, 1 entry  [0x0+0xc]
+  ▾ Entry 0 — 2026-10-16 02:24:50.272 UTC at relative offset 5  [0x0+0xc]
+      Timestamp: 1792117490272 — 2026-10-16 02:24:50.272 UTC  [0x0+0x8]
+      Relative offset: 5  [0x8+0x4]

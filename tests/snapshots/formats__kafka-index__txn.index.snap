@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ txn.index — Kafka offset index, 1 entry  [0x0+0x8]
+  ▾ Entry 0 — relative offset 3 at byte 133  [0x0+0x8]
+      Relative offset: 3  [0x0+0x4]
+      Position: 133  [0x4+0x4]

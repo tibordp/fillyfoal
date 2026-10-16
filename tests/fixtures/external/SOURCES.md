@@ -1623,3 +1623,62 @@ faked clock, finds every inode changed).
 | --- | --- | --- |
 | `xfsdump/level0.xfsdump.raw.zst` | xfsdump 3.2.0 | `faketime -f '2024-01-02 00:00:00' xfsdump -l 0 -L fillyfoal -M fillyfoal -f level0.xfsdump /mnt/fillyfoal`, stored with `zstd -19` |
 | `xfsdump/level1.xfsdump.raw.zst` | xfsdump 3.2.0 | `faketime -f '2024-01-04 00:00:00' xfsdump -l 1 -L fillyfoal-1 -M fillyfoal-1 -f level1.xfsdump /mnt/fillyfoal` after adding a file, stored with `zstd -19` |
+## Apache Kafka 3.9.1: log segments and indexes
+
+Written by a real broker: the `apache/kafka:3.9.1` image (KRaft, single
+node, `--hostname fillyfoal`), driven by `tests/data/kafka-log/make_kafka.sh`
+(its comment has the `docker run` line). One topic per codec, each with a
+4-record batch (keys, headers, a null key, a JSON value) from
+`kafka-console-producer.sh --compression-codec <codec>` and a 2-record one;
+`txn` is from `kafka-producer-perf-test.sh` with a transactional id (three
+records, then the COMMIT control batch). `index.interval.bytes=1`; the
+segments were copied after a clean `kafka-server-stop.sh`, so the indexes
+are trimmed. Checked against `kafka-dump-log.sh --deep-iteration` (offsets,
+timestamps, keys, values, headers, CRCs, index entries). Timestamps are the
+Docker VM's clock at the time; not reproducible byte for byte. The legacy
+file is the client library's encoder, not a broker's (Kafka 3.x no longer
+writes magic 0/1).
+
+| Fixture | Producer | Evidence |
+| --- | --- | --- |
+| `kafka-log/none.log` | Kafka 3.9.1 broker | `make_kafka.sh`, segment `00000000000000000000.log` of `demo-none-0` (uncompressed) |
+| `kafka-log/gzip.log` | Kafka 3.9.1 broker | the same for `demo-gzip-0` |
+| `kafka-log/snappy.log` | Kafka 3.9.1 broker | the same for `demo-snappy-0` (snappy-java framing) |
+| `kafka-log/lz4.log` | Kafka 3.9.1 broker | the same for `demo-lz4-0` |
+| `kafka-log/zstd.log` | Kafka 3.9.1 broker | the same for `demo-zstd-0` |
+| `kafka-log/txn.log` | Kafka 3.9.1 broker | the same for `demo-txn-0`: a transactional batch, then the COMMIT control batch |
+| `kafka-index/zstd.index` | Kafka 3.9.1 broker | `make_kafka.sh`, the offset index of `demo-zstd-0` (one entry) |
+| `kafka-index/txn.index` | Kafka 3.9.1 broker | the offset index of `demo-txn-0` (one entry) |
+| `kafka-timeindex/zstd.timeindex` | Kafka 3.9.1 broker | `make_kafka.sh`, the time index of `demo-zstd-0` (one entry) |
+| `kafka-timeindex/txn.timeindex` | Kafka 3.9.1 broker | the time index of `demo-txn-0` (one entry) |
+| `kafka-log/legacy.log` | kafka-python 3.0.11 `LegacyRecordBatchBuilder` | `uv run --with kafka-python==3.0.11 python -I tests/data/kafka-log/make_legacy.py <dir>`: v0 and v1 message sets and a gzip-compressed v1 wrapper, concatenated; the gzip header's mtime varies |
+
+## nfdump 1.7.5 and 1.6.22: NetFlow capture files
+
+Flows from the neutral capture `tests/data/nfdump/flows_pcap.py` writes
+(documentation addresses 192.0.2.0/24, 198.51.100.0/24, 2001:db8::/32,
+locally administered MACs, timestamps from 2024-01-01 12:00 UTC): a TCP
+connection, a DNS-shaped UDP exchange, ICMP echoes, UDP over IPv6.
+Layout 2 files from Debian trixie's nfdump 1.7.5 (`debian:trixie`,
+`tests/data/nfdump/make_nfdump.sh`, its comment has the `docker run`
+line); layout 1 files from Debian bullseye's nfdump 1.6.22
+(`debian:bullseye-slim` with archive.debian.org,
+`tests/data/nfdump/make_nfdump16.sh`), whose nfcapd received the same
+IPv4 flows as one NetFlow v5 packet from `tests/data/nfdump/netflow_v5.py`
+over the loopback. The "received" times and file creation times are the
+Docker VM's clock; not reproducible byte for byte. Checked against
+`nfdump -o raw`, `-E` and `-I` listings of each file.
+
+| Fixture | Producer | Evidence |
+| --- | --- | --- |
+| `nfdump/plain.nfcapd` | nfpcapd 1.7.5 | `nfpcapd -r flows.pcap -w <dir> -I fillyfoal`: V3 records (generic flow, IPv4/IPv6), appendix with ident and statistics |
+| `nfdump/fat.nfcapd` | nfpcapd 1.7.5 | the same with `-o fat` (MAC addresses, latency, IP info elements) |
+| `nfdump/lzo.nfcapd` | nfdump 1.7.5 | `nfdump -r plain.nfcapd -z=lzo -w lzo.nfcapd` |
+| `nfdump/bz2.nfcapd` | nfdump 1.7.5 | the same with `-z=bz2` |
+| `nfdump/lz4.nfcapd` | nfdump 1.7.5 | the same with `-z=lz4` |
+| `nfdump/zstd.nfcapd` | nfdump 1.7.5 | the same with `-z=zstd` |
+| `nfdump/nfcapd.nfcapd` | nfcapd 1.7.5 | `nfreplay -r plain.nfcapd -v 9` to nfcapd on 127.0.0.1: exporter info, exporter statistics, V3 records with the received-from element |
+| `nfdump/v1.nfcapd` | nfcapd 1.6.22 | `nfcapd -T all` receiving `netflow_v5.py`'s packet: layout 1, extension map, exporter and sampler records, common records with every v5 extension |
+| `nfdump/v1-lzo.nfcapd` | nfdump 1.6.22 | `nfdump -r v1.nfcapd -z -w v1-lzo.nfcapd` |
+| `nfdump/v1-bz2.nfcapd` | nfdump 1.6.22 | the same with `-j` |
+| `nfdump/v1-lz4.nfcapd` | nfdump 1.6.22 | the same with `-y` |
