@@ -3436,6 +3436,8 @@ pub static FORMATS: &[&Format] = &[
     // Magic-less binary value encodings: only whole small files that parse
     // exactly to their end as one record (see each module).
     #[cfg(feature = "data")]
+    &data::etf::FORMAT,
+    #[cfg(feature = "data")]
     &data::msgpack::FORMAT,
     #[cfg(feature = "data")]
     &data::ubjson::FORMAT,

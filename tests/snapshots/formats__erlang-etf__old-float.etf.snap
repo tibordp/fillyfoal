@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ old-float.etf — Erlang term, list, 2 elements  [0x0+0x47]
+    Version: 131  [0x0+0x1]
+    [0]: 2.5 — float as text "2.50000000000000000000e+00"  [0x6+0x20]
+    [1]: -0.125 — float as text "-1.25000000000000000000e-01"  [0x26+0x20]

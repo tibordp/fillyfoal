@@ -21,6 +21,7 @@ pub mod duckdb;
 pub mod dumps;
 pub mod embedded_db;
 pub mod ese;
+pub mod etf;
 pub mod gvariant;
 pub mod gvdb;
 pub mod hdf5;

@@ -1438,3 +1438,20 @@ the MariaDB files, with `mariadb-binlog -vv --base64-output=decode-rows`
 | `mysql-binlog/mysql-nochecksum.bin` | MySQL 9.7.1 | `binlog_checksum=NONE`; unchanged |
 | `mysql-binlog/mariadb-rows.bin` | MariaDB 10.5.29 | the workload: MariaDB GTIDs, GTID list, binlog checkpoints, annotate-rows, rows v1; CRC32 checksums; unchanged |
 | `mysql-binlog/mariadb-compressed.bin` | MariaDB 10.5.29 | `log_bin_compress=ON`, `log_bin_compress_min_len=10`: a zlib-compressed rows event and query event; unchanged |
+
+## Erlang external term format
+
+Made by `sh tests/data/erlang-etf/make.sh`: `term_to_binary/2` in the
+official `erlang:27-alpine` image (OTP 27, host name `fillyfoal`, not
+distributed, so node names are `nonode@nohost`), running
+`tests/data/erlang-etf/make.escript`. The pid, port, reference and local
+fun differ between runs (creation numbers, the escript's generated module
+name); everything else is the same every time. `binary_to_term/1` of each
+file gives the term back.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `erlang-etf/terms.etf` | OTP 27 | `term_to_binary(Map)`: a map with small, 32-bit and big integers (positive and a 2100-bit negative), a float, UTF-8 atoms, nil, a string, lists (one improper), small and large tuples, nested maps, binaries, a bit binary, a pid, a port, a reference, an export fun and a local fun; unchanged |
+| `erlang-etf/latin1.etf` | OTP 27 | `term_to_binary(List, [{minor_version, 1}])`: Latin-1 atoms; unchanged |
+| `erlang-etf/old-float.etf` | OTP 27 | `term_to_binary([2.5, -0.125], [{minor_version, 0}])`: floats as text; unchanged |
+| `erlang-etf/compressed.etf` | OTP 27 | `term_to_binary(List, [compressed])`: a zlib-compressed term; unchanged |
