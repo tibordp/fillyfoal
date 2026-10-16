@@ -7,7 +7,7 @@
 //! (`dotnet`), developer artifacts (`devtools`, Delphi form
 //! streams in `delphi`), Git storage, OSTree objects and flatpak bundles
 //! (`ostree`), Outlook PST/OST mail stores (`pst`) and Linux tracing and
-//! monitoring data (`tracecmd`).
+//! monitoring data (`tracecmd`, `sysstat`).
 
 pub mod artifacts;
 pub mod bom;
@@ -25,5 +25,6 @@ pub mod ota;
 pub mod platform;
 pub mod pst;
 pub mod shim_sdb;
+pub mod sysstat;
 pub mod terminfo;
 pub mod tracecmd;

@@ -2207,6 +2207,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "system")]
     &system::tracecmd::FORMAT,
     #[cfg(feature = "system")]
+    &system::sysstat::FORMAT,
+    #[cfg(feature = "system")]
     &system::platform::LDSO_CACHE,
     #[cfg(feature = "system")]
     &system::platform::SELINUX,

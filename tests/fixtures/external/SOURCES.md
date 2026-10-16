@@ -1395,3 +1395,20 @@ and `trace-cmd dump --all`. The `UNAME` option names the VM kernel's release
 | --- | --- | --- |
 | `tracecmd-dat/v6.dat` | `trace-cmd record --file-version 6` | 319 events on CPUs 12 and 13; uncompressed; unchanged |
 | `tracecmd-dat/v7-zstd.dat` | `trace-cmd record --file-version 7 --compression zstd` | the same command recorded again: sections, zstd-compressed metadata and chunked CPU data (CPUs 6 and 13); unchanged |
+
+## sysstat: sadc activity files
+
+Written by `tests/data/sysstat-sa/make.sh` with sysstat 12.7.5 (Debian
+trixie `sysstat 12.7.5-2+b2`, `/usr/libexec/sysstat/sadc`) in a
+`debian:trixie` container on the Docker VM (Linux 7.0.14 aarch64, 18 CPUs),
+host name `fillyfoal`, `TZ=UTC`. The statistics are the VM's (CPU, memory,
+paging, the VM's block devices by number, the container's `lo` and `eth0`
+counters); no addresses, no process names. The file header names the VM
+kernel's release (`7.0.14-orbstack-...`). Not reproducible byte for byte
+(times and counters). Checked against `sadf -H` and `sar -f` (CPU, memory,
+disks, interfaces, restart and comment records).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `sysstat-sa/sa-all.sa` | `sadc -S ALL 1 2`, `sadc -C "fillyfoal test comment"`, `sadc -S ALL` (restart mark), `sadc -S ALL 1 1`, all appending to one file | 30 activities; statistics, comment and restart records; unchanged |
+| `sysstat-sa/sa-default.sa` | `sadc 1 3` | the default activities, three samples; unchanged |
