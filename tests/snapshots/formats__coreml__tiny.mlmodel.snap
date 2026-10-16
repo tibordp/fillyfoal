@@ -9,7 +9,7 @@ expression: "common::explore(&display_name(&path), &data)"
         name: "image"  [0x6+0x7]
         shortDescription: "Input image"  [0xd+0xd]
       ▾ type — FeatureType, 8 bytes  [0x1a+0xa]
-        ▾ imageType — 32 · 32 · RGB  [0x1c+0x8]
+        ▾ imageType — width=32 · height=32 · RGB  [0x1c+0x8]
             width: 32  [0x1e+0x2]
             height: 32  [0x20+0x2]
             colorSpace: RGB (0x14)  [0x22+0x2]

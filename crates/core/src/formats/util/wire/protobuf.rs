@@ -32,6 +32,8 @@ const TEXT_MAX: u64 = 256;
 pub enum Ty {
     /// A varint, shown as signed if the top bit is set (`int32`/`int64`).
     Int,
+    /// An unsigned varint (`uint32`/`uint64`), shown in decimal.
+    UInt,
     /// A zig-zag varint (`sint32`/`sint64`).
     SInt,
     Bool,
@@ -72,8 +74,8 @@ pub const fn f(num: u64, name: &'static str, ty: Ty) -> F {
 pub struct Msg {
     pub name: &'static str,
     pub fields: &'static [F],
-    /// String fields that, joined, summarise an instance (e.g. a node's
-    /// name and operator).
+    /// Fields that, joined, summarise an instance (e.g. a node's name and
+    /// operator); see [`title_of`].
     pub title: &'static [u64],
 }
 
@@ -385,11 +387,12 @@ fn varint_value(ty: Option<Ty>, v: u64) -> Value {
             let (set, unknown) = decode_flags(table, v);
             Value::Flags {
                 raw: v,
-                bits: 32,
+                bits: if v > u64::from(u32::MAX) { 64 } else { 32 },
                 set,
                 unknown,
             }
         }
+        Some(Ty::UInt) => uint(v),
         _ => signed(v),
     }
 }
@@ -424,27 +427,66 @@ async fn title(cx: &Cx, body: Span, msg: &'static Msg) -> Result<Option<String>>
         return Ok(None);
     }
     let data = cx.read(body).await?;
-    let parts: Vec<String> = msg
-        .title
-        .iter()
-        .filter_map(
-            |&n| match msg.fields.iter().find(|f| f.num == n).map(|f| f.ty) {
-                Some(Ty::Int | Ty::Enum(_)) => {
-                    let v = varint_in(&data, n)?;
-                    Some(match msg.fields.iter().find(|f| f.num == n).map(|f| f.ty) {
-                        Some(Ty::Enum(t)) => {
-                            lookup(t, v).map_or_else(|| v.to_string(), str::to_owned)
-                        }
-                        _ => v.to_string(),
-                    })
+    Ok(title_of(&data, msg))
+}
+
+/// A summary of a message held in memory (or a prefix of one) from its
+/// schema's title fields, joined by " · ": strings, enum names and set
+/// flags as they are; hexadecimal numbers ([`Ty::Hex`]) as `name=0x…`;
+/// decimal ones as `name=value`, or bare when they are the whole title (a
+/// dimension, a count); booleans as their name when true. `None` if no
+/// title field is present.
+pub fn title_of(data: &[u8], msg: &'static Msg) -> Option<String> {
+    // (text, decimal number's field name)
+    let mut parts: Vec<(String, Option<&str>)> = Vec::new();
+    for &num in msg.title {
+        let Some(spec) = msg.fields.iter().find(|f| f.num == num) else {
+            continue;
+        };
+        if let Ty::Int | Ty::UInt | Ty::SInt = spec.ty {
+            if let Some(v) = varint_in(data, num) {
+                parts.push((show(&varint_value(Some(spec.ty), v)), Some(spec.name)));
+            }
+            continue;
+        }
+        let part = match spec.ty {
+            Ty::Hex => varint_in(data, num).map(|v| format!("{}={v:#x}", spec.name)),
+            Ty::Bool => varint_in(data, num)
+                .filter(|&v| v != 0)
+                .map(|_| spec.name.to_owned()),
+            Ty::Enum(table) => varint_in(data, num)
+                .map(|v| lookup(table, v).map_or_else(|| v.to_string(), str::to_owned)),
+            Ty::Flags(table) => varint_in(data, num).map(|v| {
+                let (set, unknown) = decode_flags(table, v);
+                let mut s = set.join("|");
+                if unknown != 0 || s.is_empty() {
+                    if !s.is_empty() {
+                        s.push('|');
+                    }
+                    s.push_str(&format!("{unknown:#x}"));
                 }
-                _ => string_in(&data, n)
-                    .filter(|s| !s.is_empty())
-                    .map(|s| short(s.as_bytes())),
-            },
-        )
-        .collect();
-    Ok((!parts.is_empty()).then(|| parts.join(" · ")))
+                s
+            }),
+            _ => string_in(data, num).map(|s| short(s.as_bytes())),
+        };
+        if let Some(p) = part.filter(|p| !p.is_empty()) {
+            parts.push((p, None));
+        }
+    }
+    match parts.as_slice() {
+        [] => None,
+        [(only, _)] => Some(only.clone()),
+        _ => Some(
+            parts
+                .iter()
+                .map(|(text, name)| match name {
+                    Some(name) => format!("{name}={text}"),
+                    None => text.clone(),
+                })
+                .collect::<Vec<_>>()
+                .join(" · "),
+        ),
+    }
 }
 
 /// State of a lazy message node.

@@ -55,7 +55,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ opset_import — 17  [0xc1+0x6]
       domain: ""  [0xc3+0x2]
       version: 17  [0xc5+0x2]
-  ▾ opset_import — ai.onnx.ml · 3  [0xc7+0x10]
+  ▾ opset_import — ai.onnx.ml · version=3  [0xc7+0x10]
       domain: "ai.onnx.ml"  [0xc9+0xc]
       version: 3  [0xd5+0x2]
   ▾ metadata_props — license · CC0-1.0  [0xd7+0x14]
