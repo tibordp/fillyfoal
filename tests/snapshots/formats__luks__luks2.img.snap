@@ -7,7 +7,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ! warning: SHA-256 mismatch: stored 0000000000000000000000000000000000000000000000000000000000000000, computed 132419fe23ae996dc30f2afc24bfb831e75a32a563e3780f0eb1ebc0f81e02cc
       Magic: 4c 55 4b 53 ba be  |LUKS..|  [0x0+0x6]
       Version: 2  [0x6+0x2]
-      Header size (binary + JSON): 16384 — 16 KiB  [0x8+0x8]
+      Header size (binary + JSON): 16384 bytes (16 KiB)  [0x8+0x8]
       Sequence id: 3  [0x10+0x8]
       Label: "fixture"  [0x18+0x30]
       Checksum algorithm: "sha256"  [0x48+0x20]
@@ -68,7 +68,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ! warning: SHA-256 mismatch: stored 0000000000000000000000000000000000000000000000000000000000000000, computed a22a674acb234955c89cccc9a864bd760b6b50c4a913e05dc3a9f67a210a80a9
       Magic: 53 4b 55 4c ba be  |SKUL..|  [0x4000+0x6]
       Version: 2  [0x4006+0x2]
-      Header size (binary + JSON): 16384 — 16 KiB  [0x4008+0x8]
+      Header size (binary + JSON): 16384 bytes (16 KiB)  [0x4008+0x8]
       Sequence id: 3  [0x4010+0x8]
       Label: "fixture"  [0x4018+0x30]
       Checksum algorithm: "sha256"  [0x4048+0x20]

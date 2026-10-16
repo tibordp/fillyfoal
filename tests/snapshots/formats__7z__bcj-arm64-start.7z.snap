@@ -9,13 +9,13 @@ expression: "common::explore(&display_name(&path), &data)"
       Minor version: 4  [0x7+0x1]
       Start header CRC: 0x438af6d1 (CRC-32, valid)  [0x8+0x4]
       Next header offset: 0x146e  [0xc+0x8]
-      Next header size: 106 — 106 bytes  [0x14+0x8]
+      Next header size: 106 bytes  [0x14+0x8]
       Next header CRC: 0x843e5fef (CRC-32, valid)  [0x1c+0x4]
   ▾ Files — 1 file  [0x148e+0x6a]
     ▾ code.bin — 8 KiB  [0x20+0x146e]
         Modification time: 2024-01-02 03:04:00 UTC
         Attributes: 0x81a48020 — -rw-r--r--
-        Size: 8192 — 8 KiB
+        Size: 8192 bytes (8 KiB)
         Folder: 0
       ▾ Content — 0x2000 bytes decompressed  [0x20+0x146e]
           CRC32: 0x308f5345 (CRC-32, valid)
@@ -23,10 +23,10 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Folders — 1 folder  [0x20+0x146e]
     ▾ Folder 0 — LZMA2 + BCJ ARM64, 5.1 KiB → 8 KiB, 1 stream  [0x20+0x146e]
       ▾ Coder 0: "LZMA2" — 1 in, 1 out
-          Dictionary size: 8192 — 8 KiB
+          Dictionary size: 8192 bytes (8 KiB)
       ▾ Coder 1: "BCJ ARM64" — 1 in, 1 out
           Start offset: 0x1000
-        Unpacked size: 8192 — 8 KiB
+        Unpacked size: 8192 bytes (8 KiB)
         Streams: 1
       ▾ Data — 0x2000 bytes decompressed  [0x20+0x146e]
           Data  [#1:0x0+0x2000]

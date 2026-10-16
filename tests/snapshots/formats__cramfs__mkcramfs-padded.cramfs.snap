@@ -6,7 +6,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Boot block — zeros (padding)  [0x0+0x200]
   ▾ Superblock — fillyfoal  [0x200+0x40]
       Magic: 0x28cd3d45  [0x200+0x4]
-      Size: 12288 — 12 KiB  [0x204+0x4]
+      Size: 12288 bytes (12 KiB)  [0x204+0x4]
       Flags: 0x3 [FSID_VERSION_2 | SORTED_DIRS]  [0x208+0x4]
       Reserved: 0  [0x20c+0x4]
       Signature: "Compressed ROMFS"  [0x210+0x10]

@@ -410,7 +410,7 @@ expression: "common::explore(&display_name(&path), &data)"
           ▾ decmpfs header — LZVN, resource fork, 171.9 KiB  [0x5c76c+0x10]
               Magic: "fpmc"  [0x5c76c+0x4]
               Compression type: LZVN, resource fork (0x8)  [0x5c770+0x4]
-              Uncompressed size: 176030 — 171.9 KiB  [0x5c774+0x8]
+              Uncompressed size: 176030 bytes (171.9 KiB)  [0x5c774+0x8]
           ▾ Content — 171.9 KiB, decompressed (LZVN, resource fork)  [#5:0x0+0x2af9e]
               Data  [#5:0x0+0x2af9e]
           ▾ Extended attributes — 3 attributes

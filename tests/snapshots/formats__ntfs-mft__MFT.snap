@@ -88,7 +88,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Compression unit: 0  [#1:0x122+0x2]
           Padding: 0  [#1:0x124+0x4]
           Allocated size: 327680  [#1:0x128+0x8]
-          Data size: 262144 — 256 KiB  [#1:0x130+0x8]
+          Data size: 262144 bytes (256 KiB)  [#1:0x130+0x8]
           Initialized size: 262144  [#1:0x138+0x8]
       ▾ Runs — 2 runs  [#1:0x140+0x10]
           Run 0 — VCN 0: 64 clusters at LCN 16384  [#1:0x140+0x4]

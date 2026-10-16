@@ -307,7 +307,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Frame descriptor — content 5.0 KiB  [0x4+0xb]
         FLG: 0x7c [VERSION_01 | BLOCK_INDEPENDENT | BLOCK_CHECKSUM | CONTENT_SIZE | CONTENT_CHECKSUM]  [0x4+0x1]
         BD: 64 — block maximum 64 KiB  [0x5+0x1]
-        Content size: 5130 — 5.0 KiB  [0x6+0x8]
+        Content size: 5130 bytes (5.0 KiB)  [0x6+0x8]
         Header checksum: 0x55 (XXH32 (second byte), valid)  [0xe+0x1]
     ▾ Block 0 — compressed, 1005 bytes  [0xf+0x3f5]
         Block size: 0x3ed — 1005 bytes, compressed  [0xf+0x4]

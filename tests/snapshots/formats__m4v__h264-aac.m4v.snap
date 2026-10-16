@@ -479,7 +479,7 @@ expression: "common::explore(&display_name(&path), &data)"
                         Stream type: Audio (0x5)  [0xa3c+0x1]
                         Upstream: false  [0xa3c+0x1]
                         Reserved: 1  [0xa3c+0x1]
-                        Buffer size: 0 — 0 bytes  [0xa3d+0x3]
+                        Buffer size: 0 bytes  [0xa3d+0x3]
                         Max bitrate: 13317 — 13.3 kb/s  [0xa40+0x4]
                         Average bitrate: 13317 — 13.3 kb/s  [0xa44+0x4]
                       ▾ DecoderSpecificInfo — AAC-LC, 8000 Hz, mono  [0xa48+0xa]

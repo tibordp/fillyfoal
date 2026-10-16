@@ -8,7 +8,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Major version: 2 — ID3v2.2  [0x3+0x1]
       Revision: 0  [0x4+0x1]
       Flags: 0x0 []  [0x5+0x1]
-      Size: 191 — 191 bytes  [0x6+0x4]
+      Size: 191 bytes  [0x6+0x4]
   ▾ TT2 — Title: Old title  [0xa+0x11]
       Frame ID: "TT2"  [0xa+0x3]
       Size: 11  [0xd+0x3]

@@ -9,7 +9,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Minor version: 4  [0x7+0x1]
       Start header CRC: 0x7d5579c6 (CRC-32, valid)  [0x8+0x4]
       Next header offset: 0x13d  [0xc+0x8]
-      Next header size: 34 — 34 bytes  [0x14+0x8]
+      Next header size: 34 bytes  [0x14+0x8]
       Next header CRC: 0x53476021 (CRC-32, valid)  [0x1c+0x4]
   ▾ Encoded header — LZMA, 106 bytes → 146 bytes  [0xf3+0x6a]
     ▾ kEncodedHeader  [0x15d+0x22]
@@ -23,7 +23,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ a.txt — 530 bytes  [0x20+0xd3]
         Modification time: 2026-10-06 12:28:45.5517145 UTC
         Attributes: 0x81a48020 — -rw-r--r--
-        Size: 530 — 530 bytes
+        Size: 530 bytes
         Folder: 0
       ▾ Content — UTF-8 text, LF line endings, 60 lines  [0x20+0xd3]
           CRC32: 0x7bdf5fb7 (CRC-32, valid)
@@ -93,7 +93,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ b.txt — 530 bytes  [0x20+0xd3]
         Modification time: 2026-10-06 12:28:45.5517922 UTC
         Attributes: 0x81a48020 — -rw-r--r--
-        Size: 530 — 530 bytes
+        Size: 530 bytes
         Folder: 0
       ▾ Content — UTF-8 text, LF line endings, 60 lines  [0x20+0xd3]
           CRC32: 0x278fd362 (CRC-32, valid)
@@ -163,7 +163,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ c.txt — 24 bytes  [0x20+0xd3]
         Modification time: 2026-10-06 12:28:45.5518477 UTC
         Attributes: 0x81a48020 — -rw-r--r--
-        Size: 24 — 24 bytes
+        Size: 24 bytes
         Folder: 0
       ▾ Content — UTF-8 text, LF line endings, 3 lines  [0x20+0xd3]
           CRC32: 0x5f18fcb1 (CRC-32, valid)
@@ -176,7 +176,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Folders — 1 folder  [0x20+0x13d]
     ▾ Folder 0 — BZip2, 211 bytes → 1.1 KiB, 3 streams  [0x20+0xd3]
         Coder 0: "BZip2" — 1 in, 1 out
-        Unpacked size: 1084 — 1.1 KiB
+        Unpacked size: 1084 bytes (1.1 KiB)
         Streams: 3
       ▾ Data — UTF-8 text, LF line endings, 123 lines  [0x20+0xd3]
           Encoding: "UTF-8"

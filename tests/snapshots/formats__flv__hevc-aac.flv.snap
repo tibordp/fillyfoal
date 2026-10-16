@@ -27,7 +27,7 @@ expression: "common::explore(&display_name(&path), &data)"
         audiosamplesize: 16 — bits  [0xe4+0x9]
         stereo: false  [0xf5+0x2]
         audiocodecid: 10 — AAC  [0x105+0x9]
-        filesize: 3812 — 3.7 KiB  [0x118+0x9]
+        filesize: 3812 bytes (3.7 KiB)  [0x118+0x9]
         Object end  [0x121+0x3]
       Previous tag size: 279  [0x124+0x4]
   ▾ Video — 00:00:00.000, hvc1, keyframe, sequence start, 2438 bytes  [0x128+0x995]

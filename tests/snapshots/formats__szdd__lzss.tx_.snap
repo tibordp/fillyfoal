@@ -7,7 +7,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Magic: 53 5a 44 44 88 f0 27 33  |SZDD..'3|  [0x0+0x8]
       Compression mode: "A"  [0x8+0x1]
       Missing last character: "t"  [0x9+0x1]
-      Uncompressed size: 3000 — 2.9 KiB  [0xa+0x4]
+      Uncompressed size: 3000 bytes (2.9 KiB)  [0xa+0x4]
   ▾ Content — UTF-8 text, CRLF line endings, 40 lines  [0xe+0x3da]
       Encoding: "UTF-8"
       Line endings: "CRLF" — 0 LF, 39 CRLF, 0 CR

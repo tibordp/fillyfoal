@@ -83,7 +83,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Frame type: 0 — key frame  [0x140+0x1]
           Version: bilinear reconstruction, no loop filter (0x2)  [0x140+0x1]
           Show frame: true  [0x140+0x1]
-          First partition size: 28 — 28 bytes  [0x140+0x3]
+          First partition size: 28 bytes  [0x140+0x3]
           Start code: 0x2a019d — 9d 01 2a  [0x143+0x3]
           Width: 16  [0x146+0x2]
           Horizontal scale: none (0x0)  [0x147+0x1]

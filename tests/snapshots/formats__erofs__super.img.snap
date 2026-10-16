@@ -14,7 +14,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Inodes: 7  [0x410+0x8]
       Build time: 2024-05-17 13:37:42 UTC  [0x418+0x8]
       Build time (ns): 0  [0x420+0x4]
-      Blocks: 2 — 8 KiB  [0x424+0x4]
+      Blocks: 2 × 4096 bytes (8 KiB)  [0x424+0x4]
       Metadata area block: 1  [0x428+0x4]
       Shared xattr area block: 0  [0x42c+0x4]
       UUID: "e0f5e1e2-0000-4000-8000-000000000002"  [0x430+0x10]

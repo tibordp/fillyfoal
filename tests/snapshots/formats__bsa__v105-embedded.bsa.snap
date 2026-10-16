@@ -31,11 +31,11 @@ expression: "common::explore(&display_name(&path), &data)"
         Data offset: 0xb8  [0x66+0x4]
     ▾ docs\readme.txt  [0x6a+0x10]
         Hash: 0xc7eddcea72066d65  [0x6a+0x8]
-        Size: 104 — 104 bytes  [0x72+0x4]
+        Size: 104 bytes  [0x72+0x4]
         Data offset: 0x446  [0x76+0x4]
     ▾ meshes\clutter\notes.txt  [0x8a+0x10]
         Hash: 0x963fc2876e056573  [0x8a+0x8]
-        Size: 72 — 72 bytes  [0x92+0x4]
+        Size: 72 bytes  [0x92+0x4]
         Data offset: 0x4ae  [0x96+0x4]
     File names  [0x9a+0x1e]
   ▾ Folders — 3 files

@@ -267,7 +267,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Owner UID: 0  [0x1000004+0x4]
         Group GID: 0  [0x1000008+0x4]
         Links: 2  [0x100000c+0x4]
-        Size: 4096 — 4 KiB  [0x1000010+0x8]
+        Size: 4096 bytes (4 KiB)  [0x1000010+0x8]
         Blocks: 2  [0x1000018+0x8]
         Accessed: 2024-01-01 00:00:00 UTC  [0x1000020+0x8]
         Changed: 2024-01-01 00:00:00 UTC  [0x1000028+0x8]

@@ -31,7 +31,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Frame type: 0 — key frame  [0x130+0x1]
         Version: bicubic reconstruction, normal loop filter (0x0)  [0x130+0x1]
         Show frame: true  [0x130+0x1]
-        First partition size: 16 — 16 bytes  [0x130+0x3]
+        First partition size: 16 bytes  [0x130+0x3]
         Start code: 0x2a019d — 9d 01 2a  [0x133+0x3]
         Width: 16  [0x136+0x2]
         Horizontal scale: none (0x0)  [0x137+0x1]

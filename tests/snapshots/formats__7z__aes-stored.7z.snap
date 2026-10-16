@@ -9,13 +9,13 @@ expression: "common::explore(&display_name(&path), &data)"
       Minor version: 4  [0x7+0x1]
       Start header CRC: 0x73ab5694 (CRC-32, valid)  [0x8+0x4]
       Next header offset: 0x10040  [0xc+0x8]
-      Next header size: 122 — 122 bytes  [0x14+0x8]
+      Next header size: 122 bytes  [0x14+0x8]
       Next header CRC: 0x6eb7b7d4 (CRC-32, valid)  [0x1c+0x4]
   ▾ Files — 1 file  [0x10060+0x7a]
     ▾ big.txt — 64.1 KiB  [0x20+0x10040]
         Modification time: 2024-01-02 03:04:00 UTC
         Attributes: 0x81a48020 — -rw-r--r--
-        Size: 65600 — 64.1 KiB
+        Size: 65600 bytes (64.1 KiB)
         Folder: 0
       ▾ Content — UTF-8 text, LF line endings, 919 lines  [0x20+0x10040]
           CRC32: 0x5fb22c21 (CRC-32, valid)
@@ -863,7 +863,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Salt — (none)
           IV: 8b 69 eb f7 9c 7c 1d 99 0b e8 11 ef c8 0b 49 42  |.i...|........IB|
         Coder 1: "Copy" — 1 in, 1 out
-        Unpacked size: 65600 — 64.1 KiB
+        Unpacked size: 65600 bytes (64.1 KiB)
         Streams: 1
       ▾ Data — UTF-8 text, LF line endings, 919 lines  [0x20+0x10040]
           Encoding: "UTF-8"

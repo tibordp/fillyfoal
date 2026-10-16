@@ -4,8 +4,8 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ StadiumBG.GR.Z — TempleOS compressed file (stored), 4.6 KiB → 4.6 KiB  [0x0+0x1273]
   ▾ Header  [0x0+0x11]
-      compressed_size: 4723 — 4.6 KiB  [0x0+0x8]
-      expanded_size: 4706 — 4.6 KiB  [0x8+0x8]
+      compressed_size: 4723 bytes (4.6 KiB)  [0x0+0x8]
+      expanded_size: 4706 bytes (4.6 KiB)  [0x8+0x8]
       compression_type: CT_NONE (0x1)  [0x10+0x1]
   ▾ Expanded — TempleOS GR, 641×473, compressed  [0x0+0x1273]
     ▾ Device context  [#1:0x0+0x20]

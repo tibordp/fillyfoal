@@ -4,8 +4,8 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ FileSysRedSea.HC.Z — TempleOS compressed file (LZW, 7-bit characters), 6.3 KiB → 15.0 KiB  [0x0+0x1966]
   ▾ Header  [0x0+0x11]
-      compressed_size: 6502 — 6.3 KiB  [0x0+0x8]
-      expanded_size: 15382 — 15.0 KiB  [0x8+0x8]
+      compressed_size: 6502 bytes (6.3 KiB)  [0x0+0x8]
+      expanded_size: 15382 bytes (15.0 KiB)  [0x8+0x8]
       compression_type: CT_7_BIT (0x2)  [0x10+0x1]
   ▾ Expanded — HolyC source (DolDoc), 3 commands, 3 links  [0x0+0x1966]
       Text — 15382 bytes, 3 commands  [#1:0x0+0x3c16]

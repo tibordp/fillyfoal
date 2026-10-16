@@ -72,7 +72,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Frame type: 0 — key frame  [0xdc+0x1]
           Version: bicubic reconstruction, normal loop filter (0x0)  [0xdc+0x1]
           Show frame: true  [0xdc+0x1]
-          First partition size: 20 — 20 bytes  [0xdc+0x3]
+          First partition size: 20 bytes  [0xdc+0x3]
           Start code: 0x2a019d — 9d 01 2a  [0xdf+0x3]
           Width: 16  [0xe2+0x2]
           Horizontal scale: none (0x0)  [0xe3+0x1]

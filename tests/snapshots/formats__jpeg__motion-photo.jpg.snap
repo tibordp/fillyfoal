@@ -523,7 +523,7 @@ expression: "common::explore(&display_name(&path), &data)"
                           Stream type: Visual (0x4)  [0x86e+0x1]
                           Upstream: false  [0x86e+0x1]
                           Reserved: 1  [0x86e+0x1]
-                          Buffer size: 0 — 0 bytes  [0x86f+0x3]
+                          Buffer size: 0 bytes  [0x86f+0x3]
                           Max bitrate: 200000 — 200 kb/s  [0x872+0x4]
                           Average bitrate: 1656 — 1.7 kb/s  [0x876+0x4]
                       ▾ SLConfigDescriptor — MP4 (reserved for ISO files)  [0x87a+0x6]

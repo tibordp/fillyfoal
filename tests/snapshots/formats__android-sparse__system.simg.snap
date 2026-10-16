@@ -9,7 +9,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Minor version: 0  [0x6+0x2]
       File header size: 28  [0x8+0x2]
       Chunk header size: 12  [0xa+0x2]
-      Block size: 4096 — 4 KiB  [0xc+0x4]
+      Block size: 4096 bytes (4 KiB)  [0xc+0x4]
       Total blocks: 8  [0x10+0x4]
       Total chunks: 4  [0x14+0x4]
       Image checksum: 0x0  [0x18+0x4]

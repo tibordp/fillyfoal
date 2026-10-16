@@ -1384,7 +1384,7 @@ expression: "common::explore(&display_name(&path), &data)"
                         Stream type: Audio (0x5)  [0x272c+0x1]
                         Upstream: false  [0x272c+0x1]
                         Reserved: 1  [0x272c+0x1]
-                        Buffer size: 0 — 0 bytes  [0x272d+0x3]
+                        Buffer size: 0 bytes  [0x272d+0x3]
                         Max bitrate: 32000 — 32 kb/s  [0x2730+0x4]
                         Average bitrate: 30318 — 30.3 kb/s  [0x2734+0x4]
                       ▾ DecoderSpecificInfo — HE-AACv2, 44100 Hz (core 22050 Hz), stereo (parametric)  [0x2738+0xc]

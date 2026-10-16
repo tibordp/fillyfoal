@@ -200,7 +200,7 @@ expression: "common::explore(&display_name(&path), &data)"
                         Stream type: Visual (0x4)  [0x3d2+0x1]
                         Upstream: false  [0x3d2+0x1]
                         Reserved: 1  [0x3d2+0x1]
-                        Buffer size: 0 — 0 bytes  [0x3d3+0x3]
+                        Buffer size: 0 bytes  [0x3d3+0x3]
                         Max bitrate: 200000 — 200 kb/s  [0x3d6+0x4]
                         Average bitrate: 15240 — 15.2 kb/s  [0x3da+0x4]
                       ▾ DecoderSpecificInfo  [0x3de+0x34]

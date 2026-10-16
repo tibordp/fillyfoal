@@ -9,7 +9,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Minor version: 4  [0x7+0x1]
       Start header CRC: 0x9e6fbc97 (CRC-32, valid)  [0x8+0x4]
       Next header offset: 0x5d  [0xc+0x8]
-      Next header size: 398 — 398 bytes  [0x14+0x8]
+      Next header size: 398 bytes  [0x14+0x8]
       Next header CRC: 0x551de430 (CRC-32, valid)  [0x1c+0x4]
   ▾ Files — 4 files  [0x7d+0x18e]
     ▾ sub — directory
@@ -18,7 +18,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ hello.txt — 10 bytes  [0x20+0xf]
         Modification time: 2024-01-02 03:04:00 UTC
         Attributes: 0x81a48020 — -rw-r--r--
-        Size: 10 — 10 bytes
+        Size: 10 bytes
         Folder: 0
       ▾ Content — UTF-8 text, LF line endings, 1 line  [0x20+0xf]
           CRC32: 0x94eb8d41 (CRC-32, valid)
@@ -29,7 +29,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ sub/a-very-long-file-name-that-does-not-fit-into-the-one-hundred-byte-name-field-of-a-classic-tar-header.txt — 1 byte  [0x2f+0x6]
         Modification time: 2024-01-02 03:04:00 UTC
         Attributes: 0x81a48020 — -rw-r--r--
-        Size: 1 — 1 byte
+        Size: 1 byte
         Folder: 1
       ▾ Content — 0x1 bytes decompressed  [0x2f+0x6]
           CRC32: 0x8cdc1683 (CRC-32, valid)
@@ -37,7 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ sub/pixel.png — 67 bytes  [0x35+0x48]
         Modification time: 2024-01-02 03:04:00 UTC
         Attributes: 0x81a48020 — -rw-r--r--
-        Size: 67 — 67 bytes
+        Size: 67 bytes
         Folder: 2
       ▾ Content — 1×1, 8-bit Grayscale  [0x35+0x48]
           CRC32: 0x44dc90b4 (CRC-32, valid)
@@ -71,7 +71,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Folders — 3 folders  [0x20+0x5d]
     ▾ Folder 0 — Deflate, 15 bytes → 10 bytes, 1 stream  [0x20+0xf]
         Coder 0: "Deflate" — 1 in, 1 out
-        Unpacked size: 10 — 10 bytes
+        Unpacked size: 10 bytes
         Streams: 1
       ▾ Data — UTF-8 text, LF line endings, 1 line  [0x20+0xf]
           Encoding: "UTF-8"
@@ -80,13 +80,13 @@ expression: "common::explore(&display_name(&path), &data)"
             Line 1: "hello tar"  [#1:0x0+0x9]
     ▾ Folder 1 — Deflate, 6 bytes → 1 byte, 1 stream  [0x2f+0x6]
         Coder 0: "Deflate" — 1 in, 1 out
-        Unpacked size: 1 — 1 byte
+        Unpacked size: 1 byte
         Streams: 1
       ▾ Data — 0x1 bytes decompressed  [0x2f+0x6]
           Data  [#2:0x0+0x1]
     ▾ Folder 2 — Deflate, 72 bytes → 67 bytes, 1 stream  [0x35+0x48]
         Coder 0: "Deflate" — 1 in, 1 out
-        Unpacked size: 67 — 67 bytes
+        Unpacked size: 67 bytes
         Streams: 1
       ▾ Data — 1×1, 8-bit Grayscale  [0x35+0x48]
           Signature  [#3:0x0+0x8]
