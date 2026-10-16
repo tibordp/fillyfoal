@@ -847,3 +847,4 @@ closely enough to credit:
   dictionary (`crates/docs/src/formats/documents/doldoc.rs`, `templeos_ac.rs`), sprites and GR
   (`crates/image/src/formats/image/templeos.rs`). Test fixtures come from its distribution ISO
   (public domain).
+- Backup storage formats (`crates/archive/src/formats/archive/backup/`): layouts read for facts only, no code taken, from BorgBackup 1.2's `repository.py` and `crypto/key.py` (BSD-3-Clause), the `pxar` crate and Proxmox Backup's `pbs-datastore` and `docs/file-formats.rst` (AGPL-3.0), and `vma_spec.txt` from Proxmox's pve-qemu.

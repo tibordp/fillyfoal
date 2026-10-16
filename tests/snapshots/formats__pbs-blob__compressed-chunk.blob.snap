@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ compressed-chunk.blob — Proxmox Backup data blob, zstd-compressed, 147 bytes  [0x0+0x9f]
+    Magic: "zstd-compressed"  [0x0+0x8]
+    CRC32: 0x120d89b9 — valid  [0x8+0x4]
+  ▾ Data — 0x400000 bytes decompressed  [0xc+0x93]
+      Data  [#1:0x0+0x400000]

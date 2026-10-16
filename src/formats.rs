@@ -1031,6 +1031,16 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "archive")]
     &archive::backup::borg::FORMAT,
     #[cfg(feature = "archive")]
+    &archive::backup::pxar::PXAR,
+    #[cfg(feature = "archive")]
+    &archive::backup::pxar::PXAR_META,
+    #[cfg(feature = "archive")]
+    &archive::backup::pxar::PXAR_PAYLOAD,
+    #[cfg(feature = "archive")]
+    &archive::backup::vma::FORMAT,
+    #[cfg(feature = "archive")]
+    &archive::backup::pbs::FORMAT,
+    #[cfg(feature = "archive")]
     &disk::templeos_iso::FORMAT,
     #[cfg(feature = "archive")]
     &disk::iso9660::FORMAT,
