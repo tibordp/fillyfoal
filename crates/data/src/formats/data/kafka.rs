@@ -40,8 +40,12 @@
 //! The offset index holds 8-byte entries (offset relative to the segment's
 //! base offset, byte position in the `.log`), the time index 12-byte ones
 //! (timestamp in milliseconds, relative offset); both are preallocated
-//! with zeros while their segment is active. Neither has a signature, so
-//! they are offered by extension only.
+//! with zeros while their segment is active. The transaction index
+//! (`.txnindex`, beside them in a partition that saw an aborted
+//! transaction) holds a 34-byte `AbortedTxn` per aborted transaction:
+//! version, producer ID, first and last offset and the last stable
+//! offset (checked against `kafka-dump-log.sh`). None has a signature,
+//! so they are offered by extension only.
 //!
 //! The probe wants a non-negative offset, a known magic and sane fields;
 //! for a v2 batch inside the head its CRC-32C must match (a larger one
@@ -79,6 +83,8 @@ declare_format!(pub INDEX = "kafka-index", "Apache Kafka offset index", ["index"
     "application/x-kafka-index", Probe::Never, dissect_index);
 declare_format!(pub TIMEINDEX = "kafka-timeindex", "Apache Kafka time index", ["timeindex"],
     "application/x-kafka-timeindex", Probe::Never, dissect_timeindex);
+declare_format!(pub TXNINDEX = "kafka-txnindex", "Apache Kafka transaction index", ["txnindex"],
+    "application/x-kafka-txnindex", Probe::Never, dissect_txnindex);
 
 /// Bytes of a v2 batch header, and the least its length field can say.
 const BATCH_HEADER: u64 = 61;
@@ -1396,6 +1402,22 @@ async fn dissect_timeindex(cx: Cx, input: Input) -> Result<()> {
     index_entries(cx, input, TimeIndexEntry::SIZE).await
 }
 
+record! {
+    /// A transaction index entry (`AbortedTxn`): an aborted transaction.
+    struct TxnIndexEntry {
+        version: i16 "Version",
+        producer: i64 "Producer ID",
+        first: i64 "First offset" .desc("The transaction's first offset"),
+        last: i64 "Last offset" .desc("The offset of its ABORT marker"),
+        stable: i64 "Last stable offset"
+            .desc("The log's last stable offset when the transaction was aborted"),
+    }
+}
+
+async fn dissect_txnindex(cx: Cx, input: Input) -> Result<()> {
+    index_entries(cx, input, TxnIndexEntry::SIZE).await
+}
+
 /// Lists an index's entries, up to the zeros of its preallocated tail.
 async fn index_entries(cx: Cx, input: Input, size: u64) -> Result<()> {
     let file = input.span;
@@ -1422,6 +1444,13 @@ async fn index_entries(cx: Cx, input: Input, size: u64) -> Result<()> {
             let position = u32_be(&e, 4).unwrap_or(0);
             IndexEntry::node(name, span, BE)
                 .summary(format!("relative offset {rel} at byte {position}"))
+        } else if size == TxnIndexEntry::SIZE {
+            let producer = i64_be(&e, 2).unwrap_or(-1);
+            let first = i64_be(&e, 10).unwrap_or(-1);
+            let last = i64_be(&e, 18).unwrap_or(-1);
+            TxnIndexEntry::node(name, span, BE).summary(format!(
+                "producer {producer}, aborted offsets {first}–{last}"
+            ))
         } else {
             let ts = i64_be(&e, 0).unwrap_or(-1);
             let rel = u32_be(&e, 8).unwrap_or(0);
@@ -1443,11 +1472,13 @@ async fn index_entries(cx: Cx, input: Input, size: u64) -> Result<()> {
         )
         .await;
     }
-    let kind = if offsets {
-        "offset index"
+    let (kind, what) = if offsets {
+        ("offset index", "entry")
+    } else if size == TxnIndexEntry::SIZE {
+        ("transaction index", "aborted transaction")
     } else {
-        "time index"
+        ("time index", "entry")
     };
-    cx.annotate(format!("Kafka {kind}, {}", plural(index, "entry")));
+    cx.annotate(format!("Kafka {kind}, {}", plural(index, what)));
     Ok(())
 }

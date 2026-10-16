@@ -1676,6 +1676,8 @@ is a KRaft broker's own `__cluster_metadata` segment
 | `kafka-timeindex/txn.timeindex` | Kafka 3.9.1 broker | the time index of `demo-txn-0` (one entry) |
 | `kafka-log/legacy.log` | Kafka 3.9.1 broker, ZooKeeper mode | `make_legacy.sh`, segment `00000000000000000000.log` of `legacy-0`: topic format 0.9.0 (magic 0, an uncompressed set and a gzip wrapper), then switched to 0.10.2 (magic 1, the same); checked against `kafka-dump-log.sh --deep-iteration` |
 | `kafka-log/cluster-metadata.log` | Kafka 3.9.1 broker, KRaft | `make_metadata.sh`, segment `00000000000000000000.log` of `__cluster_metadata-0`: a LEADER_CHANGE control batch, then metadata records; checked against `kafka-dump-log.sh --cluster-metadata-decoder` |
+| `kafka-log/aborted.log` | Kafka 3.9.1 broker, KRaft | `tests/data/kafka-txnindex/make_txnindex.sh` (run as in its header): segment `00000000000000000000.log` of `demo-aborted-0`; two transactional producers killed with a transaction open, each aborted by the next one's `initTransactions` (ABORT control batches), then a committed transaction; checked against `kafka-dump-log.sh` |
+| `kafka-txnindex/aborted.txnindex` | Kafka 3.9.1 broker, KRaft | the same partition's `00000000000000000000.txnindex`: the two aborted transactions; checked against `kafka-dump-log.sh` |
 
 ## nfdump 1.7.5 and 1.6.22: NetFlow capture files
 

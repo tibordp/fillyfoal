@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ aborted.txnindex — Kafka transaction index, 2 aborted transactions  [0x0+0x44]
+  ▾ Entry 0 — producer 0, aborted offsets 0–12  [0x0+0x22]
+      Version: 0  [0x0+0x2]
+      Producer ID: 0  [0x2+0x8]
+      First offset: 0  [0xa+0x8]
+      Last offset: 12  [0x12+0x8]
+      Last stable offset: 13  [0x1a+0x8]
+  ▾ Entry 1 — producer 0, aborted offsets 13–25  [0x22+0x22]
+      Version: 0  [0x22+0x2]
+      Producer ID: 0  [0x24+0x8]
+      First offset: 13  [0x2c+0x8]
+      Last offset: 25  [0x34+0x8]
+      Last stable offset: 26  [0x3c+0x8]
