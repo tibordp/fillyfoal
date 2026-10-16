@@ -119,8 +119,17 @@ fn probe(h: &Head<'_>) -> bool {
                     return false;
                 }
             }
-            // The record runs past the probe window (or the file).
-            None => return to_u64(d.len()) < h.len || records > 1,
+            // The record runs past the probe window (or the file). With
+            // the length unknown, `h.len` is only an upper bound: a head
+            // shorter than the window is all there is.
+            None => {
+                let more = if h.len_known {
+                    to_u64(d.len()) < h.len
+                } else {
+                    to_u64(d.len()) >= crate::formats::HEAD_LEN
+                };
+                return more || records > 1;
+            }
         }
         records = records.saturating_add(1);
     }
@@ -1344,5 +1353,27 @@ mod tests {
             "2026-10-16 08:25:10.482 (unspecified time zone)"
         );
         assert_eq!(timestamp(0, 1), "0001-01-01 00:00:00.000 UTC");
+    }
+
+    /// A first record that runs past the end of a short stream is no
+    /// evidence when the stream's length is only an upper bound.
+    #[test]
+    fn an_unknown_length_does_not_make_a_record_fit() {
+        // Version 21, minimum 18, the string "hi", then a record claiming
+        // 100 bytes of which 2 are there.
+        let mut d = vec![21, 0, 0, 0, 18, 0, 0, 0, 24, 2, b'h', b'i', 9, 100, 1, 2];
+        let head = |data: &[u8], len_known| {
+            probe(&Head {
+                data,
+                tail: data,
+                len: 1 << 20,
+                len_known,
+            })
+        };
+        assert!(head(&d, true));
+        assert!(!head(&d, false));
+        // A full window: the record may well go on.
+        d.resize(crate::formats::HEAD_LEN as usize, 0);
+        assert!(head(&d, false));
     }
 }
