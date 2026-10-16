@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ polyline.spr — TempleOS sprite, 2 elements: 1 Color, 1 PolyLine  [0x0+0x20]
+  ▾ [0] Color — RED  [0x0+0x2]
+      Type: 1 — Color  [0x0+0x1]
+      Color: RED (0x4)  [0x1+0x1]
+  ▾ [1] PolyLine — 3 (3,4)  [0x2+0x1d]
+      Type: 11 — PolyLine  [0x2+0x1]
+      Count: 3  [0x3+0x4]
+    ▾ Points — 3 points  [0x7+0x18]
+        [0]: "(3, 4)"  [0x7+0x8]
+        [1]: "(10, 20)"  [0xf+0x8]
+        [2]: "(-5, 7)"  [0x17+0x8]
+    [2] End  [0x1f+0x1]

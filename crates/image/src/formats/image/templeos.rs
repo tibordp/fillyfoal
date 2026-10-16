@@ -266,7 +266,7 @@ async fn read_element(cx: &Cx, data: Span, pos: u64) -> Result<Element> {
         ))
         .at(data.sub(pos, 1)));
     };
-    let hdr = cx.read(data.sub_exact(pos, base)?).await?;
+    let mut hdr = cx.read(data.sub_exact(pos, base)?).await?;
     let mut text = String::new();
     let len = if shape == Shape::Text {
         let (bytes, len) = cstring(cx, data.tail(pos.saturating_add(base))).await?;
@@ -278,6 +278,11 @@ async fn read_element(cx: &Cx, data: Span, pos: u64) -> Result<Element> {
         })?
     };
     let span = data.sub_exact(pos, base.saturating_add(len))?;
+    if shape == Shape::Points2 && len >= 8 {
+        // The summary shows the first point, which `SpriteElem2Summary`
+        // reads just past the count (`&npu.x`): keep it with the fixed part.
+        hdr = cx.read(data.sub_exact(pos, base.saturating_add(8))?).await?;
+    }
     Ok(Element { span, t, hdr, text })
 }
 
