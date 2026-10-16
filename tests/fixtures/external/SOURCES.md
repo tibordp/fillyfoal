@@ -1396,6 +1396,10 @@ tables only; CRIU paths are the container's (`/usr/bin/sleep`, libc,
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
 | `qemu-vmstate/microvm.vmstate.raw.zst` | QEMU 10.0.13 | `sh tests/data/qemu-vmstate/make-external.sh` (`inner.sh microvm 2`): `qemu-system-x86_64 -nodefaults -machine microvm -accel tcg -m 2`, QMP `stop` then `migrate "exec:cat > ..."`; stored with `zstd -19` |
+| `qemu-vmstate/q35-virtio.vmstate.raw.zst` | QEMU 10.0.13 | same script (`inner-ext.sh`): `-machine q35 -m 16` with `virtio-net-pci` (user networking, `romfile=`, MAC 52:54:00:00:00:01) and `virtio-blk-pci` on a `null-co://` drive; stored with `zstd -19` |
+| `qemu-vmstate/virt-aarch64.vmstate.raw.zst` | QEMU 10.0.13 | same script: `qemu-system-aarch64 -machine virt -cpu max -m 8`; stored with `zstd -19` |
+| `qemu-vmstate/microvm-nofooter.vmstate.raw.zst` | QEMU 10.0.13 | same script: `-machine microvm -m 2 -global migration.send-section-footer=off`; stored with `zstd -19` |
+| `qemu-vmstate/microvm-postcopy.vmstate.raw.zst` | QEMU 10.0.13 | same script (`inner-postcopy.sh`): running `microvm`, `postcopy-ram` capability, `max-bandwidth` 8192 and `downtime-limit` 1, `migrate "tcp:127.0.0.1:4444"` to `socat -u TCP-LISTEN:4444 OPEN:<file>`, then `migrate-start-postcopy`; QEMU killed once the stream (ending with `QEMU_VM_EOF`) was written; stored with `zstd -19` |
 | `libvirt-save/fillyfoal-xz.sav` | libvirt 11.3.0, QEMU 10.0.13, xz | `sh tests/data/libvirt-save/make-external.sh`: privileged container running `libvirtd` (`save_image_format = "xz"`, no cgroups), `virsh create` of a diskless 4 MiB `pc` domain named `fillyfoal`, then `virsh save`; unchanged |
 | `libvirt-save/fillyfoal-zstd.sav` | libvirt 11.3.0, QEMU 10.0.13, zstd | same script, `save_image_format = "zstd"`; unchanged |
 | `libvirt-save/fillyfoal-raw.sav.raw.zst` | libvirt 11.3.0, QEMU 10.0.13 | same script, `save_image_format = "raw"` (the default: the migration stream uncompressed); stored with `zstd -19` |

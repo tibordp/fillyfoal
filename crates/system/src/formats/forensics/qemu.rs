@@ -150,6 +150,9 @@ struct Stream {
     names: BTreeMap<u32, String>,
     /// Whether sections end with footers (seen after the RAM setup).
     footers: bool,
+    /// The RAM block of the last page record: a page record that
+    /// continues it may start the next RAM part.
+    block: String,
     sections: u64,
     ram_total: u64,
     ram_blocks: u64,
@@ -162,6 +165,7 @@ impl Stream {
             caps: Vec::new(),
             names: BTreeMap::new(),
             footers: true,
+            block: String::new(),
             sections: 0,
             ram_total: 0,
             ram_blocks: 0,
@@ -190,6 +194,9 @@ struct Walk {
     region: Span,
     header: bool,
     depth: u32,
+    /// For a packaged stream: what the outer stream had set up (page
+    /// size, capabilities, footers, the last RAM block).
+    outer: Option<Arc<Stream>>,
 }
 
 async fn qemu(cx: Cx, input: Input) -> Result<()> {
@@ -202,6 +209,7 @@ async fn qemu(cx: Cx, input: Input) -> Result<()> {
             region: span,
             header: true,
             depth: 0,
+            outer: None,
         },
     )
     .await
@@ -219,7 +227,16 @@ fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
 async fn walk(cx: Cx, w: Walk) -> Result<()> {
     let region = w.region;
     let mut cur = Cursor::new(&cx, region, BE);
-    let mut st = Stream::new();
+    let mut st = match &w.outer {
+        Some(outer) => Stream {
+            page: outer.page,
+            caps: outer.caps.clone(),
+            footers: outer.footers,
+            block: outer.block.clone(),
+            ..Stream::new()
+        },
+        None => Stream::new(),
+    };
     if let Some((pos, saved)) = cx.resume::<(u64, Stream)>() {
         cur.seek(pos);
         st = saved;
@@ -235,6 +252,11 @@ async fn walk(cx: Cx, w: Walk) -> Result<()> {
     }
     loop {
         if cur.at_end() {
+            if !w.header {
+                // A packaged stream ends with its package (after
+                // MIG_CMD_POSTCOPY_RUN), not with QEMU_VM_EOF.
+                break;
+            }
             cx.diag(
                 Diagnostic::new(DiagKind::Truncated, "the stream ends before QEMU_VM_EOF")
                     .at(region.sub(cur.pos(), 0)),
@@ -249,7 +271,7 @@ async fn walk(cx: Cx, w: Walk) -> Result<()> {
             T_CONFIG => config_section(&cx, &mut cur, &mut st).await,
             T_START | T_FULL => start_section(&cx, &w, &mut cur, &mut st, ty).await,
             T_PART | T_END => part_section(&cx, &w, &mut cur, &mut st, ty).await,
-            T_COMMAND => command(&w, &mut cur).await,
+            T_COMMAND => command(&w, &mut cur, &st).await,
             T_EOF => {
                 eof(&cx, &w, &mut cur).await?;
                 break;
@@ -428,6 +450,8 @@ struct Section {
     ram: RamCtx,
     /// Page counts, for a RAM part's pages node.
     counts: Counts,
+    /// The RAM block of the page record before the section.
+    block: String,
 }
 
 impl Section {
@@ -481,6 +505,7 @@ async fn start_section(
         footer: false,
         ram: st.ram_ctx(),
         counts: Counts::default(),
+        block: st.block.clone(),
     };
     let kind = if ty == T_START { "start" } else { "full" };
     let mut summary = format!("{kind}, instance {instance}, version {version}");
@@ -542,10 +567,11 @@ async fn part_section(
         footer: false,
         ram: st.ram_ctx(),
         counts: Counts::default(),
+        block: st.block.clone(),
     };
     let kind = if ty == T_PART { "part" } else { "end" };
     let summary = if idstr == "ram" {
-        let counts = ram_count(cx, cur, &sec.ram).await?;
+        let counts = ram_count(cx, cur, &sec.ram, &mut st.block).await?;
         sec.payload_end = cur.pos();
         sec.counts = counts.clone();
         format!("{kind}: {}", counts.describe())
@@ -678,7 +704,7 @@ fn follows_section(buf: &[u8], q: usize, at_end: bool, names: &BTreeMap<u32, Str
     }
 }
 
-async fn command(w: &Walk, cur: &mut Cursor<'_>) -> Result<Node> {
+async fn command(w: &Walk, cur: &mut Cursor<'_>, st: &Stream) -> Result<Node> {
     let start = cur.pos().saturating_sub(1);
     let cmd = cur.u16().await?;
     let len = cur.u16().await?;
@@ -704,6 +730,7 @@ async fn command(w: &Walk, cur: &mut Cursor<'_>) -> Result<Node> {
             region: inner,
             header: false,
             depth: w.depth.saturating_add(1),
+            outer: Some(Arc::new(st.clone())),
         };
         if sub.depth > 4 {
             node = node.diag(Diagnostic::limit("packaged streams nested too deeply").at(inner));
@@ -1083,17 +1110,21 @@ async fn ram_record(cur: &mut Cursor<'_>, ctx: &RamCtx, block: &mut String) -> R
 }
 
 /// Counts a RAM part's pages, leaving the cursor after its end flags.
-async fn ram_count(cx: &Cx, cur: &mut Cursor<'_>, ctx: &RamCtx) -> Result<Counts> {
+async fn ram_count(
+    cx: &Cx,
+    cur: &mut Cursor<'_>,
+    ctx: &RamCtx,
+    block: &mut String,
+) -> Result<Counts> {
     let region = cur.region();
     let mut counts = Counts::default();
-    let mut block = String::new();
     let mut n = 0u32;
     loop {
         n = n.wrapping_add(1);
         if n.is_multiple_of(4096) {
             cx.progress_in(region, region.offset.saturating_add(cur.pos()));
         }
-        match ram_record(cur, ctx, &mut block).await? {
+        match ram_record(cur, ctx, block).await? {
             Rec::Eos => break,
             Rec::Flush => {}
             Rec::Page { kind, .. } => {
@@ -1127,7 +1158,7 @@ async fn page_runs(cx: Cx, sec: Section) -> Result<()> {
     let mut cur = Cursor::new(&cx, region, BE);
     let (pos, mut block) = cx
         .resume::<(u64, String)>()
-        .unwrap_or((sec.payload, String::new()));
+        .unwrap_or_else(|| (sec.payload, sec.block.clone()));
     cur.seek(pos);
     let page = sec.ram.page;
     let mut run: Option<Run> = None;
