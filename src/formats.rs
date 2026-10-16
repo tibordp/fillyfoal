@@ -126,6 +126,8 @@ pub static DEEP: &[&DeepProbe] = &[
     &system::ostree::SUMMARY_DEEP,
     #[cfg(feature = "system")]
     &system::ostree::DELTA_DEEP,
+    #[cfg(feature = "archive")]
+    &archive::terraform::TFPLAN_DEEP,
 ];
 
 /// Every format.
@@ -175,6 +177,8 @@ pub static FORMATS: &[&Format] = &[
     &java::serialization::FORMAT,
     #[cfg(feature = "exec")]
     &java::keystore::FORMAT,
+    #[cfg(feature = "exec")]
+    &java::cds::FORMAT,
     #[cfg(feature = "exec")]
     &bytecode::wasm::FORMAT,
     #[cfg(feature = "exec")]
@@ -255,6 +259,8 @@ pub static FORMATS: &[&Format] = &[
     &profile::llvm::PROFRAW,
     #[cfg(feature = "exec")]
     &profile::llvm::PROFDATA,
+    #[cfg(feature = "exec")]
+    &profile::nettrace::FORMAT,
     // Weaker probes (sizes and machine numbers rather than long magics).
     #[cfg(feature = "exec")]
     &executable::coff::FORMAT,
@@ -1036,6 +1042,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "archive")]
     &archive::rpm::FORMAT,
     #[cfg(feature = "archive")]
+    &archive::alpine::FORMAT,
+    #[cfg(feature = "archive")]
     &archive::sevenzip::FORMAT,
     #[cfg(feature = "archive")]
     &archive::rar::FORMAT,
@@ -1114,6 +1122,10 @@ pub static FORMATS: &[&Format] = &[
     &archive::zip::BUGREPORT,
     #[cfg(feature = "archive")]
     &archive::zip::IPSW,
+    #[cfg(feature = "archive")]
+    &archive::zip::TERRAFORM_PLAN,
+    #[cfg(feature = "archive")]
+    &archive::terraform::TFPLAN,
     // (end ml)
     #[cfg(feature = "archive")]
     &archive::zip::AAR,
@@ -2075,6 +2087,8 @@ pub static FORMATS: &[&Format] = &[
     &system::dotnet::DOTNET_RESOURCES,
     #[cfg(feature = "system")]
     &system::dotnet::NRBF,
+    #[cfg(feature = "system")]
+    &system::binlog::FORMAT,
     #[cfg(feature = "security")]
     &pcap::snoop::SNOOP,
     #[cfg(feature = "system")]

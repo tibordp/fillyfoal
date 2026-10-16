@@ -4,12 +4,14 @@
 //! AppleSingle/AppleDouble, Chrome extensions (`crx`), WARC web archives,
 //! application packages (`packaging`: AppImage, Solaris datastreams, Haiku
 //! packages, Electron ASAR), Windows installers (`installer`: NSIS, Inno
-//! Setup, InstallShield), less common archivers (`minor`: ALZip, EGG, KGB)
-//! and legacy archivers (`legacy`: HA, UHARC,
-//! YZ1, GCA, PAQ8, Amiga XPK and LZX, PackIt); backup tools' storage
-//! formats (`backup`).
+//! Setup, InstallShield), less common archivers (`minor`: ALZip, EGG, KGB),
+//! legacy archivers (`legacy`: HA, UHARC, YZ1, GCA, PAQ8, Amiga XPK and LZX,
+//! PackIt), backup tools' storage formats (`backup`), the plan inside
+//! Terraform saved plans (`terraform`) and Alpine APK v3 packages and
+//! indexes (`alpine`).
 
 pub mod ace;
+pub mod alpine;
 pub mod applesingle;
 pub mod ar;
 pub mod arj;
@@ -28,6 +30,7 @@ pub mod rpm;
 pub mod sevenzip;
 pub mod stuffit;
 pub mod tar;
+pub mod terraform;
 pub mod warc;
 pub mod wim;
 pub mod xar;

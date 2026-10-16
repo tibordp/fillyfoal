@@ -1770,3 +1770,63 @@ PIDs). Checked by reading the traces back with `babeltrace2`.
 | `ctf-packet/babeltrace-ctf18-stream` | babeltrace2 2.1.1 `sink.ctf.fs`, `ctf-version="1"` | the data stream (one packet); unchanged |
 | `ctf-metadata/babeltrace-ctf18-metadata` | as above | the TSDL metadata file; unchanged |
 | `ctf-metadata/babeltrace-ctf2-metadata` | babeltrace2 2.1.1 `sink.ctf.fs`, `ctf-version="2"` | the CTF 2 JSON text sequence metadata; unchanged |
+## Terraform saved plans
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `terraform-plan/create.tfplan` | Terraform v1.16.6 (`hashicorp/terraform:latest` image, linux_arm64) | `tests/data/terraform-plan/make.sh` (its header has the `docker run` line): `terraform plan -out=create.tfplan` of a configuration using only `terraform_data`, a variable, locals and outputs (no provider download), against an empty state. Unchanged; not byte-reproducible (resource IDs, ZIP timestamps) |
+| `terraform-plan/update.tfplan` | same | the same script, after `terraform apply` of the first plan: `terraform plan -var greeting=hi -out=update.tfplan` (updates, a replacement via `triggers_replace`, unknown values, non-empty `tfstate-prev`). Unchanged |
+
+## HotSpot class data sharing archives
+
+Written by Eclipse Temurin JDKs in Docker (`eclipse-temurin:{17,21,25}-jdk`, linux-aarch64) with
+`tests/data/jvm-cds/make.sh` (its header has the commands): a one-class `Hello` app, a static
+archive dumped from a three-class list, a dynamic archive over the JDK's default archive and one
+over that static archive. Stored with `zstd -19` (the harness decompresses `.raw.zst`). Not
+byte-reproducible (addresses and CRCs vary with the build); the archives hold only JDK classes,
+`Hello` and container paths (`/opt/java/openjdk`, `/work`).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `jvm-cds/jdk17-dynamic.jsa.raw.zst` | Temurin 17.0.20.1+1 | `-XX:ArchiveClassesAtExit`, version 11; unchanged |
+| `jvm-cds/jdk21-dynamic.jsa.raw.zst` | Temurin 21.0.12.1+1 | `-XX:ArchiveClassesAtExit`, version 18; unchanged |
+| `jvm-cds/jdk25-dynamic.jsa.raw.zst` | Temurin 25.0.4.1+1 | `-XX:ArchiveClassesAtExit`, version 19; unchanged |
+| `jvm-cds/jdk21-dynamic-on-static.jsa.raw.zst` | Temurin 21.0.12.1+1 | `-XX:SharedArchiveFile=static.jsa -XX:ArchiveClassesAtExit`: records the base archive's name; unchanged |
+| `jvm-cds/jdk21-static-prefix.jsa.raw.zst` | Temurin 21.0.12.1+1 | `-Xshare:dump` (9,109,504 bytes), cut to its first 73,728 bytes: the header, region table and the start of the `rw` region |
+| `jvm-cds/jdk17-static-prefix.jsa.raw.zst` | Temurin 17.0.20.1+1 | `-Xshare:dump` (6,488,064 bytes), cut to its first 73,728 bytes, as above |
+
+## Alpine APK v3 packages and index
+
+Written by apk-tools 3.0.7 (`alpine:edge` image, aarch64) with `tests/data/alpine-apk-v3/make.sh`
+(its header has the `docker run` line): a package of a shell script, a symlink and a text file
+with a post-install script, built in the container from a tree dated 2024-01-01. Not
+byte-reproducible (the signature key is generated per run; index hashes follow the package).
+Each was checked against `apk adbdump --format yaml` of the same file.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `alpine-apk-v3/hello-plain.apk` | apk-tools 3.0.7 | `apk mkpkg --compression none`: `ADB.pckg`, an ADB block and two DATA blocks; unchanged |
+| `alpine-apk-v3/hello.apk` | apk-tools 3.0.7 | `apk mkpkg` (default compression): `ADBd` and raw DEFLATE; unchanged |
+| `alpine-apk-v3/hello-deflate9.apk` | apk-tools 3.0.7 | `apk mkpkg --compression deflate:9`: `ADBc` with algorithm and level; unchanged |
+| `alpine-apk-v3/hello-signed.apk` | apk-tools 3.0.7 | `apk mkpkg --compression none --sign-key` with a throwaway RSA key: a SIG block (v0, SHA-512); unchanged |
+| `alpine-apk-v3/index.adb` | apk-tools 3.0.7 | `apk mkndx -d "fillyfoal demo"` over `hello.apk`: `indx` schema, `ADBd`-compressed; unchanged |
+
+## .NET EventPipe trace
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `nettrace/demo.nettrace` | .NET 8.0.31 runtime (`mcr.microsoft.com/dotnet/sdk:8.0` image, SDK 8.0.425, linux-arm64) | `tests/data/nettrace/make.sh` (its header has the `docker run` line): a console app with an `EventSource` (`Fillyfoal-Demo`) run with `DOTNET_EnableEventPipe=1`, `DOTNET_EventPipeConfig='Fillyfoal-Demo:0xFFFFFFFF:5,Microsoft-Windows-DotNETRuntime:0x1:4'` and `DOTNET_EventPipeRundown=0` (no rundown: it would list every JIT-compiled method). NetTrace format 4 (`Trace` version 4): metadata, a stack block, compressed event headers, a sequence point. Holds container paths (`/usr/share/dotnet`, `/work/app`) and the container's process IDs. Unchanged; not byte-reproducible (timestamps, addresses) |
+
+## MSBuild binary logs
+
+Written by MSBuild 17.11.48 (.NET SDK 8.0.425, `mcr.microsoft.com/dotnet/sdk:8.0` image, linux-arm64)
+with `tests/data/msbuild-binlog/make.sh` (its header has the `docker run` line), with the
+environment cleared (`env -i`, so the logged environment is the container's minimal one). Binlog
+format 21. The logs hold container paths (`/work`, `/usr/share/dotnet`, `/tmp/home`). Not
+byte-reproducible (timestamps, MVIDs).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `msbuild-binlog/tiny.binlog.gz` | MSBuild 17.11.48 | `dotnet msbuild tiny.proj -bl:tiny.binlog` of an SDK-less project (targets, a property, items, a warning; the project import archive embeds the project file). The file unchanged, renamed so the harness dissects the gzip-compressed record stream inside it |
+| `msbuild-binlog/build-noimports.binlog.gz` | MSBuild 17.11.48 | `dotnet build "-bl:build-noimports.binlog;ProjectImports=None"` of a console app (restore, evaluation, about 7,000 records of 20 kinds). Unchanged, renamed as above |
+| `gzip/tiny.binlog` | MSBuild 17.11.48 | the same file as `msbuild-binlog/tiny.binlog.gz`, under its own name: as a host sees it (gzip, then the record stream) |
