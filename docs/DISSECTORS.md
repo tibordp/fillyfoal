@@ -511,7 +511,7 @@ let key = match derive_key(b"") {
 
 Prefer typed values over formatted strings: `Value::UInt` (with radix),
 `Int`, `Float`, `Enum`, `Flags`, `Timestamp`, `Text`, `Bytes`, `Guid`,
-`Checksum`, `Size`, `Duration`. Put
+`Checksum`, `Size`, `Duration`, `Addr`, `Color`. Put
 human interpretation in `summary` ("640×480, 24-bit") and meaning in
 `desc`. Which value to use:
 
@@ -608,6 +608,38 @@ human interpretation in `summary` ("640×480, 24-bit") and meaning in
   incidental may stay a count with a duration summary. Summaries use
   `fmt::duration(ticks, per_sec)` / `fmt::duration_of` /
   `fmt::seconds(f64)`; never write another duration formatter.
+
+- **Flags:** a `FlagTable` through `.flags(T)`, `val::flagsv` or
+  `Value::flags(raw, bits, T)`; the value keeps the table, so the table is
+  the place for every name: `flag(bit, name)`, `field(mask, value, name)`
+  for each value of a multi-bit field (value 0 included: it is named
+  too), and `number(mask, name)` for bits that hold a number (an offset,
+  a sign position) so they don't show as unknown. Never build the set of
+  names by hand, and don't mask the raw value: the host shows `raw`.
+- **GUIDs and UUIDs:** a `Guid` in the order the file stores it, never
+  `fmt::uuid` text. Microsoft's mixed-endian layout (Windows, COM, .NET,
+  UEFI, GPT): `.guid()`, `Value::guid(bytes)`, `Guid::new(d1, d2, d3, d4)`
+  for tables of known GUIDs. RFC 4122 order (Linux file systems, Apple,
+  ISO BMFF, MySQL, QEMU, most of the rest): `.uuid()` (DSL `uuid`),
+  `Value::uuid(bytes)`. Compare known GUIDs with `==` against values read
+  the same way, or by `Guid::uuid()`. A UUID written as text in the file
+  stays `Text`. A known GUID's name goes in the summary.
+- **Addresses:** `Value::Addr` for IPv4 (`Addr::v4_at`, or `v4_u32` for an
+  address held as a number), IPv6, MAC and EUI-64 addresses, never text;
+  pcap's `Dec::ip4`/`ip6`/`mac`/`addr` do it. An address with a mask or
+  prefix (`192.0.2.0/24`) stays text.
+- **Colours:** `Value::color(Color::…)` for a colour the file stores,
+  never `#rrggbb` text or a number with a hex summary. Normalise the byte
+  order in the dissector: `Color::rgb8`/`rgba8`, `Color::colorref` for a
+  Windows COLORREF, `rgb24` for `0xrrggbb`, `rgb_bits(16, …)` for 48-bit,
+  `rgb_float(bits, …)` (with `.space(ColorSpace::LinearSrgb)` for
+  scene-linear floats), `gray_bits`/`gray_float`, `cmyk`, `lab`, `hsb`;
+  `Color::packed(raw, bits, "RGB565", r, g, b)` for bit fields (widened
+  by bit replication; the raw number stays in the text), `.named(..)` for
+  a spot colour or swatch name, `.space(ColorSpace::Device)` for device
+  values (PDF `rg`/`k`, ink percentages). Palette indices stay numbers.
+  In a summary that describes a record, use the colour's text
+  (`Color::rgb8(r, g, b).to_string()`).
 
 Annotate the file node with `cx.annotate("PE32+ DLL, AMD64")`: that
 summary is the first thing the user sees on F3.
