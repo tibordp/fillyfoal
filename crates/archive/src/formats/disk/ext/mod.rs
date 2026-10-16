@@ -62,7 +62,7 @@ const OS: EnumTable = &[
     (4, "Lites"),
 ];
 
-const COMPAT: FlagTable = &[
+pub(crate) const COMPAT: FlagTable = &[
     flag(0x1, "DIR_PREALLOC"),
     flag(0x2, "IMAGIC_INODES"),
     flag(0x4, "HAS_JOURNAL"),
@@ -78,7 +78,7 @@ const COMPAT: FlagTable = &[
     flag(0x1000, "ORPHAN_FILE"),
 ];
 
-const INCOMPAT: FlagTable = &[
+pub(crate) const INCOMPAT: FlagTable = &[
     flag(0x1, "COMPRESSION"),
     flag(0x2, "FILETYPE"),
     flag(0x4, "RECOVER"),
@@ -97,7 +97,7 @@ const INCOMPAT: FlagTable = &[
     flag(0x20000, "CASEFOLD"),
 ];
 
-const RO_COMPAT: FlagTable = &[
+pub(crate) const RO_COMPAT: FlagTable = &[
     flag(0x1, "SPARSE_SUPER"),
     flag(0x2, "LARGE_FILE"),
     flag(0x4, "BTREE_DIR"),

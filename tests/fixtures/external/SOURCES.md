@@ -1589,6 +1589,9 @@ equal to the faked creation time.
 | `fsarchiver/xz.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -z 7 xz.fsa tree` (xz streams) |
 | `fsarchiver/blowfish.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -Z 3 -c fillyfoal blowfish.fsa tree` (Blowfish) |
 | `fsarchiver/savefs-ext2.fsa` | fsarchiver 0.8.8 | `fsarchiver savefs -Z 3 savefs-ext2.fsa /dev/loopN` of a 4 MiB ext2 filesystem |
+| `fsarchiver/split.fsa.raw.zst` | fsarchiver 0.8.8 | `sh tests/data/fsarchiver/make-more.sh` (privileged, `inner-more.sh`): `fsarchiver savedir -z 1 -s 1 split.fsa tree` under `faketime -f '2024-01-01 00:00:00'`, a 1.1 MB file (a 49,153-byte perl `srand(1)` run repeated, which LZO cannot shorten) whose blocks straddle the two 1 MiB volumes, and a 10-byte file: the first volume, stored with `zstd -19` |
+| `fsarchiver/split.f01.raw.zst` | fsarchiver 0.8.8 | the second, last volume of the same archive, stored with `zstd -19` |
+| `fsarchiver/two.fsa` | fsarchiver 0.8.8 | `make-more.sh` as above: `fsarchiver savefs -Z 3 two.fsa /dev/loopA /dev/loopB` of an empty 16 MiB ext4 (`mkfs.ext4 -b 4096 -I 256`) and an empty 8 MiB ext2 (`mkfs.ext2 -b 1024 -I 128`), e2fsprogs 1.47.2-3+b12, fixed UUIDs |
 
 ## zlib streams (zlib)
 
