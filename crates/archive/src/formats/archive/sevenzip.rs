@@ -2105,7 +2105,15 @@ async fn folder_spans(cx: &Cx, archive: &Archive, file: Span, pack_base: u64) ->
 }
 
 async fn list_folders(cx: Cx, (input, header): (Input, Arc<Header>)) -> Result<()> {
-    let (archive, pack_base, _) = header.open(&cx, input.span).await?;
+    let (archive, pack_base, decrypted) = header.open(&cx, input.span).await?;
+    if decrypted.is_some() {
+        // Counted once the encrypted header is open.
+        cx.annotate(count(
+            to_u64(archive.streams.folders.len()),
+            "folder",
+            "folders",
+        ));
+    }
     let spans = folder_spans(&cx, &archive, input.span, pack_base).await;
     let verifier = verifier(&cx, &archive, input.span, &spans).await;
     cx.set_count(Count::Exact(to_u64(archive.streams.folders.len())));
@@ -2260,7 +2268,10 @@ fn first_of(archive: &Archive, i: usize) -> Option<(u64, Option<u32>)> {
 
 async fn list_files(cx: Cx, (input, header): (Input, Arc<Header>)) -> Result<()> {
     let file = input.span;
-    let (archive, pack_base, _) = header.open(&cx, file).await?;
+    let (archive, pack_base, decrypted) = header.open(&cx, file).await?;
+    if decrypted.is_some() {
+        cx.annotate(count(archive.files.count, "file", "files"));
+    }
     cx.set_count(Count::Exact(archive.files.count));
     let spans = folder_spans(&cx, &archive, file, pack_base).await;
     let verifier = verifier(&cx, &archive, file, &spans).await;
