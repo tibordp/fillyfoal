@@ -8,4 +8,4 @@ expression: "common::explore(&display_name(&path), &data)"
       _crc: 0xaaa86c15  [0x4+0x4]
       _version: 2  [0x8+0x4]
     Header data
-      ! unsupported: the header layout of CDS archive version 2 is not known (versions 11, 18 and 19 are)
+      ! unsupported: the header layout of CDS archive version 2 is not known (versions 5, 11, 18 and 19 are)
