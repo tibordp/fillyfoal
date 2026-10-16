@@ -118,3 +118,24 @@ fn vma_sparse_device_is_bounded() {
     };
     assert_eq!(&bytes[..9], b"far block");
 }
+
+/// A truncated Borg segment entry shows the size its header declares, not
+/// what is left of the file (the truncation is a diagnostic of its own).
+#[test]
+fn borg_truncated_entry_shows_declared_size() {
+    let data = std::fs::read("tests/fixtures/external/borg-segment/lz4").unwrap();
+    // Find the last entry: CRC u32, size u32 (LE), tag.
+    let mut pos = 8;
+    let mut last = (pos, 0);
+    while pos + 9 <= data.len() {
+        let len = u32::from_le_bytes(data[pos + 4..pos + 8].try_into().unwrap()) as usize;
+        last = (pos, len);
+        pos += len;
+    }
+    let (start, len) = last;
+    let tree = common::explore("lz4", &data[..start + len - 10]);
+    assert!(
+        tree.contains(&format!("Size: {len}  ")),
+        "no declared size {len} in:\n{tree}"
+    );
+}
