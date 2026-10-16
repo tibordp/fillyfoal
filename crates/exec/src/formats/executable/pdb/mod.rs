@@ -547,7 +547,7 @@ async fn pdb_info(cx: Cx, span: Span) -> Result<()> {
                 .value(Value::Enum {
                     raw: v.into(),
                     bits: 32,
-                    name: lookup(FEATURES, v.into()),
+                    name: lookup(FEATURES, v.into()).map(Into::into),
                 }),
         );
     }

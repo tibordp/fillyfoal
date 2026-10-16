@@ -172,7 +172,7 @@ async fn gnome_keyring(cx: Cx, input: Input) -> Result<()> {
                 .value(Value::Enum {
                     raw: kind.into(),
                     bits: 32,
-                    name: lookup(ITEM_TYPES, kind.into()),
+                    name: lookup(ITEM_TYPES, kind.into()).map(Into::into),
                 })
                 .summary(format!("hashed attributes: {}", names.join(", ")))
                 .lazy(crate::expander!(self::gk_item: Span), span),
@@ -221,7 +221,7 @@ async fn gk_item(cx: Cx, span: Span) -> Result<()> {
     cx.emit(Node::new("Type").span(cur.since(at)).value(Value::Enum {
         raw: kind.into(),
         bits: 32,
-        name: lookup(ITEM_TYPES, kind.into()),
+        name: lookup(ITEM_TYPES, kind.into()).map(Into::into),
     }));
     let at = cur.pos();
     let n = cur.u32().await?;

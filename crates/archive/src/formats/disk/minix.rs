@@ -100,7 +100,7 @@ record! {
 record! {
     /// Version 1 inode (32 bytes).
     pub struct Inode1 {
-        mode: u16 "Mode" .hex() .with(|&m, n| n.summary(unix_mode(m.into()))),
+        mode: u16 "Mode" .oct().with(|&m, n| n.summary(unix_mode(m.into()))),
         uid: u16 "Owner",
         size: u32 "Size",
         mtime: u32 "Modified" .with(unix_time),
@@ -113,7 +113,7 @@ record! {
 record! {
     /// Version 2 and 3 inode (64 bytes).
     pub struct Inode2 {
-        mode: u16 "Mode" .hex() .with(|&m, n| n.summary(unix_mode(m.into()))),
+        mode: u16 "Mode" .oct().with(|&m, n| n.summary(unix_mode(m.into()))),
         links: u16 "Links",
         uid: u16 "Owner",
         gid: u16 "Group",

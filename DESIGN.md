@@ -189,6 +189,17 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
   optional *expander*: a plain-data state plus an `async fn` that emits the
   children. Expanders are re-runnable (determinism), which is what makes
   eviction possible.
+- **Values** (`value.rs`) are atoms that carry what a host can act on, not
+  presentation: a float keeps its stored width (`Float { value, bits }`), an
+  unsigned number its radix (dec, hex, oct for Unix modes, bin), an enum
+  its raw number and a name that may be computed (`Cow`). `render::value`
+  is the canonical text and never depends on the host (zone, locale); hosts
+  may format the structured fields their own way. `Value` is
+  `#[non_exhaustive]` and atoms are added over time, so every host keeps a
+  `_ => render::value(v)` fallback. The web frontend gets each value as
+  `{kind, text, raw, data}`, where `data` is the variant's fields typed by
+  `kind` (`WireData` in `web/wasm`, `ValueData` in `web/src/types.ts`); a
+  new atom adds a kind there, and existing shapes only gain fields.
 - **Spans** are `(source, offset, len)`. Sources are host-provided or
   derived: decoded streams (`Cx::add_derived`, `codec::decode_span`, lazily
   `Cx::decode_lazy`) and piece lists over other sources (`Cx::add_pieces`),

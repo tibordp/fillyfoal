@@ -1897,7 +1897,7 @@ fn sample(bs: &mut Bs<'_>, t: &mut Tree, g: usize) -> Result<()> {
                             }
                             101 => {
                                 let v = bs.f64()?;
-                                leaf(t, b, bs, at, "Min weight threshold", Value::Float(v));
+                                leaf(t, b, bs, at, "Min weight threshold", Value::f64(v));
                             }
                             105 => {
                                 let n = bs.list(|bs, _| {

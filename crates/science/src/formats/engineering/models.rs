@@ -293,8 +293,8 @@ async fn fbx_node(
                 value: i64::from(cur.int::<i32>().await?),
                 bits: 32,
             }),
-            b'F' => Node::new(name).value(Value::Float(f64::from(cur.int::<f32>().await?))),
-            b'D' => Node::new(name).value(Value::Float(cur.int::<f64>().await?)),
+            b'F' => Node::new(name).value(Value::f32(cur.int::<f32>().await?)),
+            b'D' => Node::new(name).value(Value::f64(cur.int::<f64>().await?)),
             b'L' => Node::new(name).value(Value::Int {
                 value: cur.int::<i64>().await?,
                 bits: 64,

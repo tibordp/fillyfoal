@@ -766,7 +766,7 @@ async fn meta_fields(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Heap tuples at last cleanup")
             .span(at(56, 8))
-            .value(Value::Float(f64::from_bits(u64_le(&p, 56).unwrap_or(0)))),
+            .value(Value::f64(f64::from_bits(u64_le(&p, 56).unwrap_or(0)))),
     );
     cx.emit(
         Node::new("All equal image")

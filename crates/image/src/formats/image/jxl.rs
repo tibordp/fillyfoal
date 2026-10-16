@@ -218,7 +218,7 @@ impl<'a> Jx<'a> {
         let start = self.pos();
         let raw = u16::try_from(self.b.read(16)?).ok()?;
         let v = half(raw);
-        self.show(name, start, Value::Float(v));
+        self.show(name, start, Value::f16(v));
         Some(v)
     }
 
@@ -519,7 +519,7 @@ fn customxy(j: &mut Jx<'_>, x: &'static str, y: &'static str) -> Option<()> {
                 .checked_add(1)?
                 .checked_neg()?
         };
-        j.show(name, start, Value::Float(v as f64 / 1e6));
+        j.show(name, start, Value::f64(v as f64 / 1e6));
     }
     Some(())
 }
@@ -561,7 +561,7 @@ fn colour_encoding(j: &mut Jx<'_>) -> Option<String> {
         if j.bool("Has gamma")? {
             let start = j.pos();
             let g = j.b.read(24)?;
-            j.show("Gamma", start, Value::Float(g as f64 / 1e7));
+            j.show("Gamma", start, Value::f64(g as f64 / 1e7));
             parts.push(format!("gamma {}", g as f64 / 1e7));
         } else {
             let tf = j.enumeration("Transfer function", TRANSFER)?;

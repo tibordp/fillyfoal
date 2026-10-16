@@ -260,7 +260,8 @@ async fn folders(cx: Cx, (input, l): (Input, Layout)) -> Result<()> {
                 .value(Value::Enum {
                     raw: f.kind.into(),
                     bits: 16,
-                    name: crate::value::lookup(COMPRESSION, u64::from(f.kind & 0x0f)),
+                    name: crate::value::lookup(COMPRESSION, u64::from(f.kind & 0x0f))
+                        .map(Into::into),
                 })
                 .summary(compression_name(f.kind)),
             Node::new("Data")

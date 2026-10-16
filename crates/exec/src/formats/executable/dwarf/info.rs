@@ -1072,7 +1072,7 @@ fn interpret(at: u64, form: u64, v: u64) -> Value {
         return Value::Enum {
             raw: v,
             bits: 16,
-            name: lookup(table, v),
+            name: lookup(table, v).map(Into::into),
         };
     }
     match form {

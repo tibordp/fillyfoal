@@ -166,7 +166,7 @@ fn i64_node(num: u64, v: u64) -> Node {
         })
         .summary(format!("I64, sfixed64; fixed64 {v:#x}"))
     } else if plausible_f64(v) {
-        node.value(Value::Float(f64::from_bits(v)))
+        node.value(Value::f64(f64::from_bits(v)))
             .summary(format!("I64, double; fixed64 {v:#x}"))
     } else if v < 1 << 53 {
         node.value(uint(v, 64)).summary("I64, fixed64")
@@ -191,7 +191,7 @@ fn i32_node(num: u64, v: u32) -> Node {
         })
         .summary(format!("I32, sfixed32; fixed32 {v:#x}"))
     } else if plausible_f32(v) {
-        node.value(Value::Float(widen(f32::from_bits(v))))
+        node.value(Value::f32(f32::from_bits(v)))
             .summary(format!("I32, float; fixed32 {v:#x}"))
     } else if v < 1 << 24 {
         node.value(uint(v, 32)).summary("I32, fixed32")
@@ -382,8 +382,8 @@ async fn packed(cx: Cx, (body, kind): (Span, Packed)) -> Result<()> {
         let start = cur.pos();
         let value = match kind {
             Packed::Varint => uint(cur.uleb128().await?, 64),
-            Packed::Float => Value::Float(widen(f32::from_bits(cur.u32().await?))),
-            Packed::Double => Value::Float(f64::from_bits(cur.u64().await?)),
+            Packed::Float => Value::f32(f32::from_bits(cur.u32().await?)),
+            Packed::Double => Value::f64(f64::from_bits(cur.u64().await?)),
         };
         cx.push(
             Node::new(format!("[{i}]"))

@@ -762,7 +762,7 @@ async fn value_node(
                 t => t.parse::<f64>().ok(),
             };
             match v {
-                Some(f) => node.value(Value::Float(f)).summary("float"),
+                Some(f) => node.value(Value::f64(f)).summary("float"),
                 None => node
                     .value(Value::Text(text))
                     .diag(Diagnostic::malformed("float text does not parse")),

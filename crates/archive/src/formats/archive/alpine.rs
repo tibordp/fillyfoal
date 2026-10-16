@@ -860,7 +860,7 @@ async fn scalar(
         Ty::Time => node.value(Value::Timestamp {
             unix_seconds: i64::try_from(n).unwrap_or(i64::MAX),
         }),
-        Ty::Oct => node.value(Value::Text(format!("0{n:o}"))),
+        Ty::Oct => node.value(crate::formats::util::val::oct(n, 64)),
         Ty::Size => node
             .value(Value::UInt {
                 value: n,

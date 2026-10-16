@@ -490,7 +490,7 @@ async fn koala(cx: Cx, input: Input) -> Result<()> {
             .value(Value::Enum {
                 raw: bg.into(),
                 bits: 8,
-                name: lookup(C64_COLOURS, u64::from(bg & 15)),
+                name: lookup(C64_COLOURS, u64::from(bg & 15)).map(Into::into),
             }),
     );
     cx.annotate(format!(

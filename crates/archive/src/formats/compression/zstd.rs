@@ -568,7 +568,7 @@ async fn block(cx: Cx, span: Span) -> Result<()> {
             .value(Value::Enum {
                 raw: kind.into(),
                 bits: 2,
-                name: crate::value::lookup(BLOCK_TYPE, kind.into()),
+                name: crate::value::lookup(BLOCK_TYPE, kind.into()).map(Into::into),
             }),
     );
     let size = u64::from(h >> 3);

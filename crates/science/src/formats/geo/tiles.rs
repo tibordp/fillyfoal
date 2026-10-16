@@ -609,8 +609,8 @@ fn properties(buf: &[u8], columns: &Columns) -> Vec<(String, Value, (usize, usiz
             let bits = u8::try_from(width.saturating_mul(8)).unwrap_or(64);
             match ty {
                 2 => Value::Bool(raw != 0),
-                9 => Value::Float(f32::from_bits(u32::try_from(raw).unwrap_or(0)).into()),
-                10 => Value::Float(f64::from_bits(raw)),
+                9 => Value::f32(f32::from_bits(u32::try_from(raw).unwrap_or(0))),
+                10 => Value::f64(f64::from_bits(raw)),
                 0 | 3 | 5 | 7 => {
                     let shift = 64u32.saturating_sub(u32::from(bits));
                     Value::Int {
@@ -798,8 +798,8 @@ async fn mvt_value(pace: &mut Pace<'_>, v: &[u8]) -> Value {
     };
     match (f.number, f.wire) {
         (1, 2) => Value::Text(String::from_utf8_lossy(f.payload(v)).into_owned()),
-        (2, 5) => Value::Float(f32::from_bits(u32::try_from(f.value).unwrap_or(0)).into()),
-        (3, 1) => Value::Float(f64::from_bits(f.value)),
+        (2, 5) => Value::f32(f32::from_bits(u32::try_from(f.value).unwrap_or(0))),
+        (3, 1) => Value::f64(f64::from_bits(f.value)),
         (4, 0) => Value::Int {
             value: f.value.cast_signed(),
             bits: 64,

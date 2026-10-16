@@ -1019,7 +1019,7 @@ fn local2(f: &mut Fields<'_>, _: &()) -> Result<()> {
 
 fn latitude(f: &mut Fields<'_>, name: &'static str, unit: f64) -> Result<()> {
     f.u32(name)
-        .with(|&v, n| n.value(Value::Float(signed(v.into(), 32) as f64 * unit)))
+        .with(|&v, n| n.value(Value::f64(signed(v.into(), 32) as f64 * unit)))
         .emit()?;
     Ok(())
 }
@@ -1084,11 +1084,11 @@ fn grid_definition2(f: &mut Fields<'_>, _: &()) -> Result<()> {
             latitude(f, "La2 (last latitude, °)", unit)?;
             longitude(f, "Lo2 (last longitude, °)", unit)?;
             f.u32("Di (i increment, °)")
-                .with(|&v, n| n.value(Value::Float(f64::from(v) * unit)))
+                .with(|&v, n| n.value(Value::f64(f64::from(v) * unit)))
                 .emit()?;
             if template == 0 || template == 1 {
                 f.u32("Dj (j increment, °)")
-                    .with(|&v, n| n.value(Value::Float(f64::from(v) * unit)))
+                    .with(|&v, n| n.value(Value::f64(f64::from(v) * unit)))
                     .emit()?;
             } else {
                 f.u32("N (parallels between a pole and the equator)")
@@ -1445,7 +1445,7 @@ fn s24(f: &mut Fields<'_>, name: &'static str, scale: f64) -> Result<()> {
     f.bytes(name, 3)
         .with(|b, n| {
             let v = signed(crate::formats::util::datakit::be_uint(b), 24);
-            n.value(Value::Float(v as f64 / scale))
+            n.value(Value::f64(v as f64 / scale))
         })
         .emit()?;
     Ok(())
@@ -1542,14 +1542,14 @@ fn gds1(f: &mut Fields<'_>, _: &()) -> Result<()> {
         s24(f, "La2 (last latitude, °)", 1000.0)?;
         s24(f, "Lo2 (last longitude, °)", 1000.0)?;
         f.u16("Di (i increment, °)")
-            .with(|&v, n| n.value(Value::Float(f64::from(v) / 1000.0)))
+            .with(|&v, n| n.value(Value::f64(f64::from(v) / 1000.0)))
             .emit()?;
         if kind == 4 {
             f.u16("N (parallels between a pole and the equator)")
                 .emit()?;
         } else {
             f.u16("Dj (j increment, °)")
-                .with(|&v, n| n.value(Value::Float(f64::from(v) / 1000.0)))
+                .with(|&v, n| n.value(Value::f64(f64::from(v) / 1000.0)))
                 .emit()?;
         }
         f.u8("Scanning mode").flags(SCANNING_FLAGS).emit()?;
@@ -1605,7 +1605,7 @@ fn bds1(f: &mut Fields<'_>, _: &()) -> Result<()> {
         .emit()?;
     f.u32("Reference value (R)")
         .with(|&v, n| {
-            n.value(Value::Float(ibm(&v.to_be_bytes()).unwrap_or(0.0)))
+            n.value(Value::f64(ibm(&v.to_be_bytes()).unwrap_or(0.0)))
                 .summary("IBM single precision")
         })
         .emit()?;
@@ -1777,7 +1777,7 @@ async fn values(cx: Cx, v: Values) -> Result<()> {
                     }
                 };
                 match value {
-                    Some(x) => node = node.value(Value::Float(x)),
+                    Some(x) => node = node.value(Value::f64(x)),
                     None => {
                         node = node.diag(Diagnostic::truncated(v.data.sub(at, width), 0));
                     }

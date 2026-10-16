@@ -211,7 +211,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.emit(Node::new("Theme").span(theme_span).value(Value::Enum {
                 raw: theme.into(),
                 bits: 32,
-                name: lookup(THEMES, theme.into()),
+                name: lookup(THEMES, theme.into()).map(Into::into),
             }));
         }
         if span.len > SINGLE {
@@ -436,7 +436,7 @@ async fn row_cells(cx: Cx, (row, y): (Span, u64)) -> Result<()> {
             .value(Value::Enum {
                 raw: code.into(),
                 bits: 8,
-                name: lookup(CELLS, code.into()),
+                name: lookup(CELLS, code.into()).map(Into::into),
             });
         if lookup(CELLS, code.into()).is_none() {
             node = node.diag(Diagnostic::malformed(format!("unknown tile code {code}")));
@@ -478,7 +478,7 @@ async fn slot_fields(cx: Cx, (span, item): (Span, u32)) -> Result<()> {
         cx.emit(Node::new("Type").span(span.sub(0, 4)).value(Value::Enum {
             raw: t.into(),
             bits: 32,
-            name: lookup(ITEMS, t.into()),
+            name: lookup(ITEMS, t.into()).map(Into::into),
         }));
     }
     if let Some(v) = u32_le(&data, 4) {

@@ -167,7 +167,7 @@ async fn acis_sab(cx: Cx, input: Input) -> Result<()> {
         values.get(i).map(|v| match v {
             crate::value::Value::Text(t) => t.clone(),
             crate::value::Value::Int { value, .. } => value.to_string(),
-            crate::value::Value::Float(f) => f.to_string(),
+            crate::value::Value::Float { value, bits } => crate::render::float(*value, *bits),
             _ => String::new(),
         })
     };

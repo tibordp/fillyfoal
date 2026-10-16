@@ -396,11 +396,11 @@ fn field(b: &[u8], span: Span, name: &'static str, at: usize, f: F) -> Node {
         F::Enum(t) => n.value(Value::Enum {
             raw: u32_at.into(),
             bits: 32,
-            name: lookup(t, u32_at.into()),
+            name: lookup(t, u32_at.into()).map(Into::into),
         }),
         F::Float => {
             let v = f64::from_bits(u64_at);
-            let n = n.value(Value::Float(v));
+            let n = n.value(Value::f64(v));
             if v == 1_234_567.0 {
                 n.summary("1234567.0: IEEE doubles, this byte order")
             } else {

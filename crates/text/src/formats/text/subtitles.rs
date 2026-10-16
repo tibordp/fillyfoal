@@ -168,7 +168,7 @@ fn time_node(name: &'static str, piece: Piece<'_>) -> Node {
     match clock(&text) {
         Some(s) => Node::new(name)
             .span(piece.span())
-            .value(Value::Float(s))
+            .value(Value::f64(s))
             .summary(format!("{text} (seconds)")),
         None => text_node(name, piece.span(), &text).diag(Diagnostic::malformed("invalid time")),
     }
@@ -448,7 +448,7 @@ pub async fn dissect_microdvd(cx: Cx, input: Input) -> Result<()> {
             cx.push(
                 Node::new("Frame rate")
                     .span(text.span())
-                    .value(Value::Float(rate)),
+                    .value(Value::f64(rate)),
             )
             .await;
             continue;

@@ -212,7 +212,7 @@ fn test_number(
     };
     let node = Node::new(name).span(span);
     f.node(match value {
-        Some(v) => node.value(Value::Float(v)).desc(desc),
+        Some(v) => node.value(Value::f64(v)).desc(desc),
         None => node.value(Value::Bytes(bytes)),
     });
     Ok(())
@@ -397,8 +397,8 @@ impl Parser<'_> {
     fn number(&mut self) -> Step<Value> {
         let e = self.s.endian;
         Some(match self.s.number {
-            8 => Value::Float(f64::from_bits(self.r.int::<u64>(e)?)),
-            4 => Value::Float(f64::from(f32::from_bits(self.r.int::<u32>(e)?))),
+            8 => Value::f64(f64::from_bits(self.r.int::<u64>(e)?)),
+            4 => Value::f32(f32::from_bits(self.r.int::<u32>(e)?)),
             n => Value::Bytes(self.r.bytes(n.into())?.to_vec()),
         })
     }
@@ -1055,8 +1055,8 @@ fn constant_text(version: u8, kind: &str, value: &Value) -> String {
         Value::Text(s) if kind.ends_with("string") => format!("\"{}\"", clip(s, 40)),
         Value::Text(s) => s.clone(),
         // LUA_NUMBER_FMT before 5.3.
-        Value::Float(f) if version <= 0x52 => fmt_g14(*f),
-        Value::Float(f) => format!("{f:?}"),
+        Value::Float { value: f, .. } if version <= 0x52 => fmt_g14(*f),
+        Value::Float { value: f, .. } => format!("{f:?}"),
         Value::Int { value, .. } => value.to_string(),
         _ => "?".to_owned(),
     }

@@ -549,11 +549,11 @@ pub fn value(c: &Column, b: &[u8]) -> (Value, String) {
         1 | 2 | 9 | 3 | 8 => int_value(c, b),
         4 => {
             let v = f32_le(b, 0).unwrap_or(0.0);
-            (Value::Float(v.into()), v.to_string())
+            (Value::f32(v), v.to_string())
         }
         5 => {
             let v = f64_le(b, 0).unwrap_or(0.0);
-            (Value::Float(v), v.to_string())
+            (Value::f64(v), v.to_string())
         }
         246 => shown(
             decimal(b, (c.meta >> 8).into(), (c.meta & 0xff).into())

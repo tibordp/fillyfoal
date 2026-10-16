@@ -815,7 +815,7 @@ async fn relocation_block(cx: Cx, (pe, span, page): (Pe, Span, u32)) -> Result<(
         .value(Value::Enum {
             raw: kind.into(),
             bits: 4,
-            name: relocation_type(pe.machine, kind),
+            name: relocation_type(pe.machine, kind).map(Into::into),
         });
         if kind == 0 {
             node = node.desc("ABSOLUTE entries pad the block to a multiple of 4 bytes");

@@ -355,7 +355,7 @@ async fn record_fields(cx: Cx, (span, flavor, r): (Span, Flavor, Arc<Rec>)) -> R
                     .value(Value::Enum {
                         raw: r.kind.into(),
                         bits: 8,
-                        name: crate::value::lookup(IHEX_TYPE, r.kind.into()),
+                        name: crate::value::lookup(IHEX_TYPE, r.kind.into()).map(Into::into),
                     }),
             );
             nodes.push(
@@ -373,7 +373,7 @@ async fn record_fields(cx: Cx, (span, flavor, r): (Span, Flavor, Arc<Rec>)) -> R
                     .value(Value::Enum {
                         raw: r.kind.into(),
                         bits: 8,
-                        name: crate::value::lookup(SREC_TYPE, r.kind.into()),
+                        name: crate::value::lookup(SREC_TYPE, r.kind.into()).map(Into::into),
                     }),
             );
             let count = r

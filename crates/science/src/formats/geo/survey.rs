@@ -159,7 +159,7 @@ const MULTIPATCH_PARTS: EnumTable = &[
 ];
 
 fn num(v: f64) -> String {
-    crate::render::value(&Value::Float(v))
+    crate::render::value(&Value::f64(v))
 }
 
 fn m_text(v: f64) -> String {
@@ -248,7 +248,7 @@ async fn shp_records(cx: Cx, span: Span) -> Result<()> {
 async fn shp_f64(cx: &Cx, cur: &mut Cursor<'_>, name: &'static str) -> Result<f64> {
     let span = cur.span(8);
     let v = f64::from_bits(cur.u64().await?);
-    cx.emit(Node::new(name).span(span).value(Value::Float(v)));
+    cx.emit(Node::new(name).span(span).value(Value::f64(v)));
     Ok(v)
 }
 
@@ -354,12 +354,10 @@ async fn shp_list(cx: Cx, (span, kind): (Span, ShpArray)) -> Result<()> {
                         .summary(format!("({}, {})", num(f(0)), num(f(8)))),
                     ShpArray::Z => Node::new(format!("Z {i}"))
                         .span(espan)
-                        .value(Value::Float(f(0))),
+                        .value(Value::f64(f(0))),
                     ShpArray::M => {
                         let v = f(0);
-                        let node = Node::new(format!("M {i}"))
-                            .span(espan)
-                            .value(Value::Float(v));
+                        let node = Node::new(format!("M {i}")).span(espan).value(Value::f64(v));
                         if v < SHP_NO_DATA {
                             node.summary("no data")
                         } else {
@@ -388,7 +386,7 @@ async fn shp_list(cx: Cx, (span, kind): (Span, ShpArray)) -> Result<()> {
                             .value(Value::Enum {
                                 raw: t.into(),
                                 bits: 32,
-                                name: lookup(MULTIPATCH_PARTS, t.into()),
+                                name: lookup(MULTIPATCH_PARTS, t.into()).map(Into::into),
                             })
                     }
                 };
@@ -409,7 +407,7 @@ async fn shp_record(cx: Cx, (record, content): (Span, Span)) -> Result<()> {
     cx.emit(Node::new("Shape type").span(span).value(Value::Enum {
         raw: kind.into(),
         bits: 32,
-        name: lookup(SHAPE_TYPES, kind.into()),
+        name: lookup(SHAPE_TYPES, kind.into()).map(Into::into),
     }));
     let Some(base) = shape_base(kind) else {
         return Err(Diagnostic::unsupported(format!("shape type {kind}")).at(span));
@@ -428,7 +426,7 @@ async fn shp_record(cx: Cx, (record, content): (Span, Span)) -> Result<()> {
             if m || (z && cur.remaining() >= 8) {
                 let span = cur.span(8);
                 let v = f64::from_bits(cur.u64().await?);
-                let node = Node::new("M").span(span).value(Value::Float(v));
+                let node = Node::new("M").span(span).value(Value::f64(v));
                 cx.emit(if v < SHP_NO_DATA {
                     node.summary("no data")
                 } else {

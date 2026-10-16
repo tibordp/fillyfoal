@@ -137,7 +137,7 @@ async fn custom_destinations(cx: Cx, input: Input) -> Result<()> {
             .value(Value::Enum {
                 raw: kind.into(),
                 bits: 32,
-                name: lookup(CATEGORY_TYPES, kind.into()),
+                name: lookup(CATEGORY_TYPES, kind.into()).map(Into::into),
             })
             .summary(plural(lnks.len(), "link"))
             .lazy(destination_entries, (input, lnks));

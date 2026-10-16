@@ -969,11 +969,11 @@ pub fn value(f: &Field, b: &[u8]) -> (Value, String) {
         }
         Ty::Float => {
             let v = crate::bytes::f32_le(b, 0).unwrap_or(0.0);
-            shown(Value::Float(v.into()), v.to_string())
+            shown(Value::f32(v), v.to_string())
         }
         Ty::Double => {
             let v = crate::bytes::f64_le(b, 0).unwrap_or(0.0);
-            shown(Value::Float(v), v.to_string())
+            shown(Value::f64(v), v.to_string())
         }
         Ty::Decimal { precision, scale } => {
             let s = decimal(b, *precision, *scale).unwrap_or_else(|| "?".to_owned());
@@ -1151,7 +1151,7 @@ async fn sdi_object(cx: Cx, (input, o, page_span): (Input, SdiObject, Span)) -> 
     cx.emit(Node::new("Type").value(Value::Enum {
         raw: o.kind.into(),
         bits: 32,
-        name: kind,
+        name: kind.map(Into::into),
     }));
     cx.emit(Node::new("ID").value(uint(o.id, 64)));
     cx.emit(

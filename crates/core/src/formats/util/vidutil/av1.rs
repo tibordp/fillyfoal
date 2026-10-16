@@ -412,7 +412,7 @@ pub fn metadata(w: &mut Walker) -> Option<String> {
         n.value(crate::value::Value::Enum {
             raw: t,
             bits: 32,
-            name: crate::value::lookup(METADATA_TYPES, t),
+            name: crate::value::lookup(METADATA_TYPES, t).map(Into::into),
         })
     });
     match t {

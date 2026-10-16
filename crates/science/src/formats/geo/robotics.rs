@@ -85,8 +85,8 @@ fn ulog_value(ty: &str, b: &[u8]) -> Value {
             bits: 64,
         },
         "uint64_t" => uint(n(8), 64),
-        "float" => Value::Float(f32::from_bits(n(4) as u32).into()),
-        "double" => Value::Float(f64::from_bits(n(8))),
+        "float" => Value::f32(f32::from_bits(n(4) as u32)),
+        "double" => Value::f64(f64::from_bits(n(8))),
         _ => Value::Bytes(b.to_vec()),
     }
 }
@@ -278,8 +278,8 @@ fn df_value(c: char, b: &[u8]) -> (Value, Option<String>) {
             None,
         ),
         'Q' => (uint(n(8), 64), None),
-        'f' => (Value::Float(f32::from_bits(n(4) as u32).into()), None),
-        'd' => (Value::Float(f64::from_bits(n(8))), None),
+        'f' => (Value::f32(f32::from_bits(n(4) as u32)), None),
+        'd' => (Value::f64(f64::from_bits(n(8))), None),
         'c' => (
             Value::Int {
                 value: i(2),
@@ -699,7 +699,7 @@ async fn mavlink_packet(cx: Cx, (span, v2, id): (Span, bool, u32)) -> Result<()>
         Value::Enum {
             raw: id.into(),
             bits: 24,
-            name: lookup(MAVLINK_MESSAGES, id.into()),
+            name: lookup(MAVLINK_MESSAGES, id.into()).map(Into::into),
         },
     ));
     let pstart = 8u64.saturating_add(header);
@@ -1006,7 +1006,7 @@ fn ros_field_value(name: &str, v: &[u8]) -> Value {
         ("op", 1) => Value::Enum {
             raw: v.first().copied().unwrap_or(0).into(),
             bits: 8,
-            name: lookup(ROS_OPS, v.first().copied().unwrap_or(0).into()),
+            name: lookup(ROS_OPS, v.first().copied().unwrap_or(0).into()).map(Into::into),
         },
         ("time" | "start_time" | "end_time", 8) => {
             let s = u32_le(v, 0).unwrap_or(0);

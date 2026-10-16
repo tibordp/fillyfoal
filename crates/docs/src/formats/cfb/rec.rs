@@ -134,10 +134,7 @@ pub fn field(f: &mut Fields<'_>, name: &'static str, kind: K) -> Result<()> {
         }
         K::Rk => {
             f.u32(name)
-                .with(|&v, n| {
-                    n.value(Value::Float(rk(v)))
-                        .summary(format!("RK {v:#010x}"))
-                })
+                .with(|&v, n| n.value(Value::f64(rk(v))).summary(format!("RK {v:#010x}")))
                 .emit()?;
         }
         K::Row => {

@@ -1727,7 +1727,7 @@ async fn pointer_map(cx: &Cx, page: &PageState) -> Result<()> {
             .value(Value::Enum {
                 raw: kind.into(),
                 bits: 8,
-                name: crate::value::lookup(PTRMAP_TYPES, kind.into()),
+                name: crate::value::lookup(PTRMAP_TYPES, kind.into()).map(Into::into),
             });
         node = match kind {
             1 | 2 if parent == 0 => node,

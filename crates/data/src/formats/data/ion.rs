@@ -672,7 +672,7 @@ async fn plain_value(
                 4 => f64::from(f32::from_bits(u32::try_from(be_uint(&b)).unwrap_or(0))),
                 _ => f64::from_bits(be_uint(&b)),
             };
-            (node.value(Value::Float(v)), None)
+            (node.value(Value::f64(v)), None)
         }
         5 => {
             if h.len == 0 {

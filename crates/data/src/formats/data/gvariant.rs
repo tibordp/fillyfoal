@@ -474,7 +474,7 @@ fn scalar(c: u8, data: &[u8], endian: Endian) -> (Value, Option<&'static str>) {
         b'h' => (val::int(v as u32 as i32, 32), Some("handle index")),
         b'x' => (val::int(v as i64, 64), None),
         b't' => (val::uint(v, 64), None),
-        b'd' => (Value::Float(f64::from_bits(v)), None),
+        b'd' => (Value::f64(f64::from_bits(v)), None),
         _ => (val::uint(v, 64), None),
     }
 }

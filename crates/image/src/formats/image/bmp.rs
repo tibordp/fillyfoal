@@ -362,7 +362,7 @@ fn fourcc_compression(&v: &u32, n: Node) -> Node {
         return n.value(crate::value::Value::Enum {
             raw: v.into(),
             bits: 32,
-            name: lookup(COMPRESSION, v.into()),
+            name: lookup(COMPRESSION, v.into()).map(Into::into),
         });
     }
     let bytes = v.to_le_bytes();

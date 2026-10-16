@@ -502,7 +502,7 @@ async fn walk(cx: Cx, (input, span, msg, depth): State) -> Result<()> {
                 Some(Ty::Enum(table)) => Value::Enum {
                     raw: v,
                     bits: 32,
-                    name: lookup(table, v),
+                    name: lookup(table, v).map(Into::into),
                 },
                 _ => match i64::try_from(v) {
                     Ok(_) => Value::UInt {
@@ -909,7 +909,7 @@ fn cty_node(b: &[u8], start: usize, end: usize, span: Span, name: String, depth:
             radix: Radix::Dec,
         }),
         Mp::Int(v) => node.value(Value::Int { value: v, bits: 64 }),
-        Mp::Float(v) => node.value(Value::Float(v)),
+        Mp::Float(v) => node.value(Value::f64(v)),
         Mp::Str => {
             let s = payload(b, start, &h);
             let shown = s.get(..to_usize(TEXT_MAX)).unwrap_or(s);

@@ -1324,7 +1324,7 @@ async fn file_header_fields(cx: Cx, span: Span) -> Result<()> {
             .value(uint(u64_at(16), 64)),
         Node::new("Mode")
             .span(st.sub(8, 4))
-            .value(text(format!("{:o}", u32_at(24))))
+            .value(crate::formats::util::val::oct(u32_at(24), 32))
             .summary(unix_mode(u32_at(24).into())),
         Node::new("Links")
             .span(st.sub(12, 4))

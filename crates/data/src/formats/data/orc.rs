@@ -120,7 +120,7 @@ async fn message(cx: Cx, state: MsgState) -> Result<()> {
             (0, Kind::Enum(table)) => node.value(Value::Enum {
                 raw: fd.value,
                 bits: 32,
-                name: lookup(table, fd.value),
+                name: lookup(table, fd.value).map(Into::into),
             }),
             (0, Kind::Signed) => node.value(Value::Int {
                 value: pb::zigzag(fd.value),
@@ -131,7 +131,7 @@ async fn message(cx: Cx, state: MsgState) -> Result<()> {
                 bits: 64,
                 radix: Radix::Dec,
             }),
-            (1, Kind::Double) => node.value(Value::Float(f64::from_bits(fd.value))),
+            (1, Kind::Double) => node.value(Value::f64(f64::from_bits(fd.value))),
             (1, _) => node.value(Value::UInt {
                 value: fd.value,
                 bits: 64,

@@ -243,7 +243,7 @@ async fn body_fields(cx: &Cx, input: Input, body: Span) -> Result<String> {
     cx.emit(
         Node::new("Frame rate")
             .span(body.sub(rect_len, 2))
-            .value(Value::Float(f64::from(rate) / 256.0))
+            .value(Value::f64(f64::from(rate) / 256.0))
             .summary("8.8 fixed point, frames per second"),
     );
     cx.emit(

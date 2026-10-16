@@ -1020,7 +1020,7 @@ async fn record_fields(cx: Cx, rs: RecordState) -> Result<()> {
                 .value(Value::Enum {
                     raw: rec.status.into(),
                     bits: 3,
-                    name: crate::value::lookup(RECORD_STATUS, rec.status.into()),
+                    name: crate::value::lookup(RECORD_STATUS, rec.status.into()).map(Into::into),
                 }),
         );
     } else if let Some((_, len, short)) = rec.offsets {

@@ -721,7 +721,7 @@ async fn atomic(rd: &mut Rd<'_>, ty: u32) -> Result<Value> {
             if v.to_bits() == NA_REAL {
                 na()
             } else {
-                Value::Float(v)
+                Value::f64(v)
             }
         }
         15 => {

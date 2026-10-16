@@ -174,7 +174,7 @@ async fn ncz_sections(cx: Cx, table: Span) -> Result<()> {
                 .value(Value::Enum {
                     raw: crypto,
                     bits: 64,
-                    name: lookup(NCZ_CRYPTO, crypto),
+                    name: lookup(NCZ_CRYPTO, crypto).map(Into::into),
                 })
                 .summary(format!("{} at NCA offset {offset:#x}", size(len))),
         )

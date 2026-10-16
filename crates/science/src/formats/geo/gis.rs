@@ -547,7 +547,7 @@ fn ntv2_value(label: &str, v: &[u8], endian: Endian) -> Value {
     match label {
         "NUM_OREC" | "NUM_SREC" | "NUM_FILE" | "GS_COUNT" => uint(i, 32),
         "MAJOR_F" | "MINOR_F" | "MAJOR_T" | "MINOR_T" | "S_LAT" | "N_LAT" | "E_LONG" | "W_LONG"
-        | "LAT_INC" | "LONG_INC" => Value::Float(d),
+        | "LAT_INC" | "LONG_INC" => Value::f64(d),
         _ => text(fixed(v)),
     }
 }
@@ -590,7 +590,7 @@ fn get_float(records: &[(String, Value, Span)], label: &str) -> f64 {
         .iter()
         .find(|r| r.0 == label)
         .and_then(|r| match r.1 {
-            Value::Float(f) => Some(f),
+            Value::Float { value: f, .. } => Some(f),
             _ => None,
         })
         .unwrap_or(0.0)

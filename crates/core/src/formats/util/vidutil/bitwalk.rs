@@ -421,7 +421,7 @@ impl Walker {
             Value::Enum {
                 raw: v,
                 bits: u8::try_from(n).unwrap_or(64),
-                name: crate::value::lookup(table, v),
+                name: crate::value::lookup(table, v).map(Into::into),
             },
         );
         Some(v)
@@ -452,7 +452,7 @@ impl Walker {
             Value::Enum {
                 raw: v,
                 bits: 32,
-                name: crate::value::lookup(table, v),
+                name: crate::value::lookup(table, v).map(Into::into),
             },
         );
         Some(v)

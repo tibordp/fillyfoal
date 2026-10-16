@@ -1908,7 +1908,7 @@ async fn record(
     cx.emit(Node::new("Type").span(span.sub(0, 2)).value(Value::Enum {
         raw: kind.into(),
         bits: 16,
-        name: record_name(kind, &book),
+        name: record_name(kind, &book).map(Into::into),
     }));
     cx.emit(
         Node::new("Length")
@@ -1995,7 +1995,7 @@ async fn record(
                 f.node(
                     Node::new(format!("Cell {}", column_name(col)))
                         .span(f.peek_span(6))
-                        .value(Value::Float(rec::rk(v)))
+                        .value(Value::f64(rec::rk(v)))
                         .summary(format!("XF {}", u16_le(&block.data, at).unwrap_or(0))),
                 );
                 f.skip(6);

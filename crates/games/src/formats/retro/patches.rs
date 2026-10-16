@@ -381,7 +381,7 @@ async fn vcdiff(cx: Cx, input: Input) -> Result<()> {
                 .value(Value::Enum {
                     raw: id.into(),
                     bits: 8,
-                    name: lookup(VCD_COMPRESSORS, id.into()),
+                    name: lookup(VCD_COMPRESSORS, id.into()).map(Into::into),
                 }),
         );
     }
@@ -1094,7 +1094,7 @@ async fn rup(cx: Cx, input: Input) -> Result<()> {
                         .value(Value::Enum {
                             raw: kind.into(),
                             bits: 8,
-                            name: lookup(RUP_ROM_TYPES, kind.into()),
+                            name: lookup(RUP_ROM_TYPES, kind.into()).map(Into::into),
                         })
                         .summary(format!("{} → {}{overflow}", size(source), size(target))),
                 )

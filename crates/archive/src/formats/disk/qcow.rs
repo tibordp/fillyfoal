@@ -557,7 +557,7 @@ fn ext_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
             n.value(Value::Enum {
                 raw: v.into(),
                 bits: 32,
-                name: lookup(EXTENSIONS, v.into()),
+                name: lookup(EXTENSIONS, v.into()).map(Into::into),
             })
         })
         .emit()?;
@@ -733,7 +733,7 @@ fn unallocated_run(prefix: &str, first: u64, last: u64, span: Span, what: &'stat
     Node::new(name).span(span).value(Value::Enum {
         raw: 0,
         bits: 64,
-        name: Some(what),
+        name: Some(what.into()),
     })
 }
 

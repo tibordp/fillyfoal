@@ -1092,7 +1092,7 @@ pub(super) async fn rebase_opcodes(cx: Cx, (m, span): (Macho, Span)) -> Result<(
                 value = Some(Value::Enum {
                     raw: imm.into(),
                     bits: 4,
-                    name: lookup(REBASE_TYPE, imm.into()),
+                    name: lookup(REBASE_TYPE, imm.into()).map(Into::into),
                 });
             }
             0x20 => {
@@ -1249,7 +1249,7 @@ pub(super) async fn bind_opcodes(cx: Cx, (m, span): (Macho, Span)) -> Result<()>
                 value = Some(Value::Enum {
                     raw: imm.into(),
                     bits: 4,
-                    name: lookup(BIND_TYPE, imm.into()),
+                    name: lookup(BIND_TYPE, imm.into()).map(Into::into),
                 });
             }
             0x60 => {

@@ -232,10 +232,11 @@ async fn ase_cel(cx: Cx, (body, sprite): (Span, Sprite)) -> Result<()> {
             .value(Value::Enum {
                 raw: kind.into(),
                 bits: 16,
-                name: CEL_TYPES
+                name: (CEL_TYPES
                     .iter()
                     .find(|(k, _)| *k == u64::from(kind))
-                    .map(|(_, v)| *v),
+                    .map(|(_, v)| *v))
+                .map(Into::into),
             }),
     );
     cx.emit(
@@ -1176,13 +1177,13 @@ async fn pict_header(cx: Cx, span: Span) -> Result<()> {
         cx.emit(
             Node::new("Horizontal resolution")
                 .span(span.sub(4, 4))
-                .value(Value::Float(fixed(4)))
+                .value(Value::f64(fixed(4)))
                 .summary("dpi"),
         );
         cx.emit(
             Node::new("Vertical resolution")
                 .span(span.sub(8, 4))
-                .value(Value::Float(fixed(8)))
+                .value(Value::f64(fixed(8)))
                 .summary("dpi"),
         );
         let s = |i: usize| u16_be(&d, i).unwrap_or(0);

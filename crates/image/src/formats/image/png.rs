@@ -1915,7 +1915,7 @@ async fn rows(cx: Cx, r: Rows) -> Result<()> {
             .value(Value::Enum {
                 raw: filter.into(),
                 bits: 8,
-                name: lookup(FILTER_TYPE, filter.into()),
+                name: lookup(FILTER_TYPE, filter.into()).map(Into::into),
             });
         if filter > 4 {
             node = node.diag(Diagnostic::warning("filter type must be 0 to 4"));

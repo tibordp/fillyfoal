@@ -109,7 +109,7 @@ async fn value_node(lex: &mut Lexer<'_>, c: &Child, name: String, input: Input) 
         b"integer" | b"real" => {
             let text = text_of(lex, c).await?;
             let value = if c.name == b"real" {
-                text.trim().parse::<f64>().ok().map(Value::Float)
+                text.trim().parse::<f64>().ok().map(Value::f64)
             } else {
                 number(&text)
             };

@@ -1633,7 +1633,7 @@ fn boot_entry_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
             let n = n.value(Value::Enum {
                 raw: media.into(),
                 bits: 8,
-                name: lookup(MEDIA, (media & 0x0f).into()),
+                name: lookup(MEDIA, (media & 0x0f).into()).map(Into::into),
             });
             if set.is_empty() && unknown == 0 {
                 n

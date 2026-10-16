@@ -896,7 +896,7 @@ async fn dd_fields(cx: Cx, (file, dd): (Span, Dd)) -> Result<()> {
     cx.emit(Node::new("Tag").span(at(0, 2)).value(Value::Enum {
         raw: (dd.tag & !SPECIAL).into(),
         bits: 16,
-        name: lookup(TAGS, (dd.tag & !SPECIAL).into()),
+        name: lookup(TAGS, (dd.tag & !SPECIAL).into()).map(Into::into),
     }));
     if dd.tag & SPECIAL != 0 {
         cx.emit(
@@ -941,7 +941,7 @@ async fn special_header(cx: Cx, span: Span) -> Result<()> {
         Value::Enum {
             raw: code.into(),
             bits: 16,
-            name: lookup(SPECIALS, code.into()),
+            name: lookup(SPECIALS, code.into()).map(Into::into),
         },
     );
     let w = |o: usize| u64::from(u16_be(&b, o).unwrap_or(0));
@@ -959,7 +959,7 @@ async fn special_header(cx: Cx, span: Span) -> Result<()> {
                 Value::Enum {
                     raw: w(12),
                     bits: 16,
-                    name: lookup(CODERS, w(12)),
+                    name: lookup(CODERS, w(12)).map(Into::into),
                 },
             );
             if span.len > 14 {
@@ -1201,7 +1201,7 @@ async fn sds(cx: Cx, (file, reference, with_dims): (Span, u16, bool)) -> Result<
                             .value(Value::Enum {
                                 raw: kind.into(),
                                 bits: 8,
-                                name: lookup(NUMBER_TYPES, kind.into()),
+                                name: lookup(NUMBER_TYPES, kind.into()).map(Into::into),
                             })
                             .summary(format!(
                                 "version {}, {} bits, class {}{}",
@@ -1587,14 +1587,17 @@ async fn vdata_detail(cx: Cx, (file, reference): (Span, u16)) -> Result<()> {
         .ok_or_else(|| Diagnostic::internal("vdata vanished"))?;
     let data = cx.read_avail(v.span).await?;
     let at = |o: usize, len: usize| v.span.sub(to_u64(o), to_u64(len));
-    cx.emit(Node::new("Interlace").span(at(0, 2)).value(Value::Enum {
-        raw: v.interlace.into(),
-        bits: 16,
-        name: lookup(
-            &[(0, "full (by record)"), (1, "none (by field)")],
-            v.interlace.into(),
-        ),
-    }));
+    cx.emit(
+        Node::new("Interlace").span(at(0, 2)).value(Value::Enum {
+            raw: v.interlace.into(),
+            bits: 16,
+            name: lookup(
+                &[(0, "full (by record)"), (1, "none (by field)")],
+                v.interlace.into(),
+            )
+            .map(Into::into),
+        }),
+    );
     cx.emit(
         Node::new("Number of records")
             .span(at(2, 4))
@@ -1984,7 +1987,7 @@ async fn image_dims(cx: Cx, span: Span) -> Result<()> {
     cx.emit(Node::new("Interlace").span(at(14, 2)).value(Value::Enum {
         raw: il.into(),
         bits: 16,
-        name: lookup(INTERLACES, il.into()),
+        name: lookup(INTERLACES, il.into()).map(Into::into),
     }));
     cx.emit(
         Node::new("Compression")

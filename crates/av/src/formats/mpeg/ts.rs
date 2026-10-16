@@ -1021,7 +1021,7 @@ async fn program(cx: Cx, (ts, index): (Ts, usize)) -> Result<()> {
             .value(Value::Enum {
                 raw: s.kind.into(),
                 bits: 8,
-                name: crate::value::lookup(STREAM_TYPES, s.kind.into()),
+                name: crate::value::lookup(STREAM_TYPES, s.kind.into()).map(Into::into),
             })
             .summary(summary);
         if let Some(span) = s.span {

@@ -432,7 +432,7 @@ fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
                 .value(Value::Enum {
                     raw: 0,
                     bits: 32,
-                    name: Some("unused"),
+                    name: Some("unused".into()),
                 })
                 .summary("all zeros")
         } else {

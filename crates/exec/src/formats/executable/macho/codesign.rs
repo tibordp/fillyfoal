@@ -729,7 +729,7 @@ impl<'a> ReqParser<'a> {
             Node::new("match").span(self.at(start)).value(Value::Enum {
                 raw: op.into(),
                 bits: 32,
-                name: lookup(MATCH_OP, op.into()),
+                name: lookup(MATCH_OP, op.into()).map(Into::into),
             }),
         );
         Ok(match op {
@@ -793,7 +793,7 @@ impl<'a> ReqParser<'a> {
             Node::new("op").span(self.at(start)).value(Value::Enum {
                 raw: raw.into(),
                 bits: 32,
-                name: lookup(EXPR_OP, op.into()),
+                name: lookup(EXPR_OP, op.into()).map(Into::into),
             }),
         );
         let mut or = false;

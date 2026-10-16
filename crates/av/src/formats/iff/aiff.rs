@@ -190,7 +190,7 @@ fn comm(f: &mut Fields<'_>, aifc: &bool) -> Result<Common> {
         .bytes("Sample rate", 10)
         .map(|b| f80_be(&b).unwrap_or(0.0))
         .with(|&r, n| {
-            n.value(Value::Float(r))
+            n.value(Value::f80(r))
                 .desc("80-bit IEEE 754 extended precision")
         })
         .emit()?;

@@ -275,7 +275,7 @@ async fn chd_metadata(cx: Cx, (file, entries): (Span, Vec<u64>)) -> Result<()> {
             .value(Value::Enum {
                 raw: tag.into(),
                 bits: 32,
-                name: lookup(CHD_META, tag.into()),
+                name: lookup(CHD_META, tag.into()).map(Into::into),
             });
         if !printable.is_empty() && is_ascii_text(printable) {
             node = node.summary(String::from_utf8_lossy(printable).into_owned());
@@ -1079,7 +1079,7 @@ async fn nrg(cx: Cx, input: Input) -> Result<()> {
             .value(Value::Enum {
                 raw: id.into(),
                 bits: 32,
-                name: lookup(NRG_CHUNKS, id.into()),
+                name: lookup(NRG_CHUNKS, id.into()).map(Into::into),
             });
         match &tag[..] {
             "DAOX" | "DAOI" => {

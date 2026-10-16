@@ -1767,7 +1767,7 @@ async fn item_fields(cx: Cx, (dex, kind, offset): (Dex, u16, u32)) -> Result<()>
                     .value(Value::Enum {
                         raw: vis.into(),
                         bits: 8,
-                        name: lookup(VISIBILITY, vis.into()),
+                        name: lookup(VISIBILITY, vis.into()).map(Into::into),
                     }),
             );
             annotation_body(&cx, &dex, span, data, 1).await;

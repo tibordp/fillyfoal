@@ -313,7 +313,7 @@ async fn describe(cx: &Cx, kind: &str, span: Span) -> (Option<Value>, Option<Str
         v.first().map(|&raw| Value::Enum {
             raw: raw.into(),
             bits: 8,
-            name: lookup(table, raw.into()),
+            name: lookup(table, raw.into()).map(Into::into),
         })
     };
     match kind {
@@ -324,9 +324,9 @@ async fn describe(cx: &Cx, kind: &str, span: Span) -> (Option<Value>, Option<Str
             }),
             None,
         ),
-        "float" => (f32_at(0).map(|x| Value::Float(x.into())), None),
+        "float" => (f32_at(0).map(Value::f32), None),
         "double" => (
-            crate::bytes::array::<8>(&v, 0).map(|b| Value::Float(f64::from_le_bytes(b))),
+            crate::bytes::array::<8>(&v, 0).map(|b| Value::f64(f64::from_le_bytes(b))),
             None,
         ),
         "string" => (Some(text(String::from_utf8_lossy(&v))), None),

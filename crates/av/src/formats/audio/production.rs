@@ -171,8 +171,8 @@ async fn power_tab(cx: Cx, input: Input) -> Result<()> {
                 raw: kind.into(),
                 bits: 8,
                 name: match kind {
-                    0 => Some("song"),
-                    1 => Some("lesson"),
+                    0 => Some("song".into()),
+                    1 => Some("lesson".into()),
                     _ => None,
                 },
             }),

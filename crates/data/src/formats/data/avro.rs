@@ -691,12 +691,12 @@ fn scalar(o: &Objects, pos: usize, ty: usize) -> Result<Option<(Value, Option<St
         Ty::Float => {
             let b = le(4)?;
             let v = f32::from_le_bytes(b.try_into().unwrap_or([0; 4]));
-            (Value::Float(v.into()), None)
+            (Value::f32(v), None)
         }
         Ty::Double => {
             let b = le(8)?;
             (
-                Value::Float(f64::from_le_bytes(b.try_into().unwrap_or([0; 8]))),
+                Value::f64(f64::from_le_bytes(b.try_into().unwrap_or([0; 8]))),
                 None,
             )
         }

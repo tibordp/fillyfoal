@@ -1583,7 +1583,7 @@ fn parse_meta_fs(payload: &[u8], items: &mut Vec<Item>) -> Option<(u32, Meta)> {
         Value::Enum {
             raw: m.level.into(),
             bits: 32,
-            name: crate::value::lookup(LEVEL, m.level.into()),
+            name: crate::value::lookup(LEVEL, m.level.into()).map(Into::into),
         },
         0,
     ));
@@ -1775,7 +1775,7 @@ fn parse_meta_v6(row: &[u8], items: &mut Vec<Item>) -> Option<(u32, Meta)> {
                     Value::Enum {
                         raw: m.level.into(),
                         bits: 8,
-                        name: crate::value::lookup(LEVEL, m.level.into()),
+                        name: crate::value::lookup(LEVEL, m.level.into()).map(Into::into),
                     },
                 )
             }
@@ -2023,7 +2023,7 @@ fn short_value(v: &Value) -> String {
         Value::Text(s) => format!("{s:?}"),
         Value::UInt { value, .. } => value.to_string(),
         Value::Int { value, .. } => value.to_string(),
-        Value::Float(f) => format!("{f}"),
+        Value::Float { value, bits } => crate::render::float(*value, *bits),
         Value::Bool(b) => b.to_string(),
         _ => "…".to_owned(),
     }
@@ -2116,7 +2116,7 @@ async fn event(cx: Cx, (ctx, blk, pos, prev, compressed): EventState) -> Result<
     if let Some(s) = ctx.seconds(h.ts) {
         parts.push(
             Node::new("Time")
-                .value(Value::Float(s))
+                .value(Value::f64(s))
                 .summary("seconds from the trace's sync time"),
         );
     }
@@ -2229,8 +2229,8 @@ fn decode_payload(bytes: &[u8], fields: &[FieldDesc], ver: Ver) -> Vec<Item> {
             10 => r.int::<u32>(LE).map(|v| uint(v.into(), 32)),
             11 => r.int::<i64>(LE).map(|v| Value::Int { value: v, bits: 64 }),
             12 => r.int::<u64>(LE).map(|v| uint(v, 64)),
-            13 => r.int::<f32>(LE).map(|v| Value::Float(f64::from(v))),
-            14 => r.int::<f64>(LE).map(Value::Float),
+            13 => r.int::<f32>(LE).map(Value::f32),
+            14 => r.int::<f64>(LE).map(Value::f64),
             17 => r.bytes(16).map(|b| {
                 let mut g = [0u8; 16];
                 g.copy_from_slice(b);

@@ -671,7 +671,7 @@ fn fopt(f: &mut Fields<'_>, count: u16) -> Result<()> {
                 .summary(format!("{:.2} pt", f64::from(op.cast_signed()) / 12700.0));
         } else if pid == 0x0004 {
             node = node
-                .value(Value::Float(f64::from(op.cast_signed()) / 65536.0))
+                .value(Value::f64(f64::from(op.cast_signed()) / 65536.0))
                 .summary("degrees");
         } else {
             node = node.value(hex(op, 32));

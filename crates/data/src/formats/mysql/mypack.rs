@@ -446,7 +446,7 @@ async fn columns(cx: Cx, (area_span, trees, n): (Span, u32, usize)) -> Result<()
         .value(Value::Enum {
             raw: f.base.into(),
             bits: 5,
-            name: lookup(FIELD_TYPES, f.base.into()),
+            name: lookup(FIELD_TYPES, f.base.into()).map(Into::into),
         });
         cx.push(node).await;
     }

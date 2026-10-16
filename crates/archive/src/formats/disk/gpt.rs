@@ -448,7 +448,7 @@ async fn partitions(cx: Cx, gpt: Gpt) -> Result<()> {
         Some(Node::new(name).span(span).value(Value::Enum {
             raw: 0,
             bits: 8,
-            name: Some("unused"),
+            name: Some("unused".into()),
         }))
     };
     for index in 0..count {

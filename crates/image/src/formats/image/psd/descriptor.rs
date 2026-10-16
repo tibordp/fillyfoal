@@ -366,10 +366,10 @@ fn leaf(r: &mut Rd<'_>, t: &[u8; 4], depth: u32) -> Option<Val> {
         return None;
     }
     Some(match t {
-        b"doub" => Val::Leaf(Value::Float(r.f64()?), None),
+        b"doub" => Val::Leaf(Value::f64(r.f64()?), None),
         b"UntF" => {
             let u = r.fourcc()?;
-            Val::Leaf(Value::Float(r.f64()?), Some(unit_name(&u)))
+            Val::Leaf(Value::f64(r.f64()?), Some(unit_name(&u)))
         }
         b"UnFl" => {
             let u = r.fourcc()?;
@@ -584,7 +584,7 @@ async fn pattern(cx: &Cx, cur: &mut Cursor<'_>, on: bool) -> Result<Pattern> {
             .value(Value::Enum {
                 raw: mode.into(),
                 bits: 32,
-                name: Some(mode_name(mode)),
+                name: Some(mode_name(mode).into()),
             }),
     );
     let at = cur.pos();

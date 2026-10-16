@@ -352,7 +352,7 @@ async fn page(cx: Cx, (input, file, pos): PageState) -> Result<()> {
         Node::new("Type").span(span.sub(24, 1)).value(Value::Enum {
             raw: h.kind.into(),
             bits: 8,
-            name: lookup(PAGE_TYPES, h.kind.into()),
+            name: lookup(PAGE_TYPES, h.kind.into()).map(Into::into),
         }),
     ];
     let (set, unknown) = decode_flags(PAGE_FLAGS, h.flags.into());

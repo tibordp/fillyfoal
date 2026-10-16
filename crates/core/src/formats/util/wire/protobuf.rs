@@ -127,7 +127,7 @@ fn element(spec: &F, i: u64, key: u64, value: Value) -> (Cow<'static, str>, Valu
                 let named = Value::Enum {
                     raw,
                     bits: 64,
-                    name: lookup(keys, raw),
+                    name: lookup(keys, raw).map(Into::into),
                 };
                 return (key_label.into(), named);
             }
@@ -466,7 +466,7 @@ fn varint_value(ty: Option<Ty>, v: u64) -> Value {
         Some(Ty::Enum(table)) => Value::Enum {
             raw: v,
             bits: 32,
-            name: lookup(table, v),
+            name: lookup(table, v).map(Into::into),
         },
         Some(Ty::Hex) => Value::UInt {
             value: v,
@@ -486,7 +486,7 @@ fn varint_value(ty: Option<Ty>, v: u64) -> Value {
             Some(name) => Value::Enum {
                 raw: v,
                 bits: 64,
-                name: Some(name),
+                name: Some(name.into()),
             },
             None => Value::UInt {
                 value: v,
@@ -647,7 +647,7 @@ pub async fn message(cx: Cx, (span, msg, depth): State) -> Result<()> {
             },
             Payload::I64(v) => match ty {
                 Some(Ty::Double | Ty::Packed(Elem::Double)) => {
-                    Node::new(label).value(Value::Float(f64::from_bits(v)))
+                    Node::new(label).value(Value::f64(f64::from_bits(v)))
                 }
                 _ => Node::new(label).value(Value::UInt {
                     value: v,
@@ -657,7 +657,7 @@ pub async fn message(cx: Cx, (span, msg, depth): State) -> Result<()> {
             },
             Payload::I32(v) => match ty {
                 Some(Ty::Float | Ty::Packed(Elem::Float)) => {
-                    Node::new(label).value(Value::Float(widen(f32::from_bits(v))))
+                    Node::new(label).value(Value::f32(f32::from_bits(v)))
                 }
                 _ => Node::new(label).value(Value::UInt {
                     value: v.into(),
@@ -753,11 +753,11 @@ fn elem_values(data: &[u8], elem: Elem) -> Vec<(Value, usize, usize)> {
                 None => break,
             },
             Elem::Float => match crate::bytes::u32_le(rest, 0) {
-                Some(v) => (Value::Float(widen(f32::from_bits(v))), 4),
+                Some(v) => (Value::f32(f32::from_bits(v)), 4),
                 None => break,
             },
             Elem::Double => match crate::bytes::u64_le(rest, 0) {
-                Some(v) => (Value::Float(f64::from_bits(v)), 8),
+                Some(v) => (Value::f64(f64::from_bits(v)), 8),
                 None => break,
             },
         };
@@ -771,10 +771,10 @@ fn show(v: &Value) -> String {
     match v {
         Value::UInt { value, .. } => value.to_string(),
         Value::Int { value, .. } => value.to_string(),
-        Value::Float(x) => format!("{x}"),
+        Value::Float { value, bits } => crate::render::float(*value, *bits),
         Value::Enum {
             name: Some(name), ..
-        } => (*name).to_owned(),
+        } => name.to_string(),
         _ => String::new(),
     }
 }

@@ -327,7 +327,7 @@ fn dinode_layout(f: &mut Fields<'_>, names: &EnumTable) -> Result<()> {
     f.u32("Group GID").emit()?;
     let mode = f
         .u32("Mode")
-        .hex()
+        .oct()
         .with(|&m, n| n.summary(unix_mode((m & 0xffff).into())))
         .desc("Unix mode in the low 16 bits; JFS flags above")
         .emit()?;

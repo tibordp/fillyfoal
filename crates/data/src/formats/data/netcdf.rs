@@ -245,7 +245,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Magic").span(file.sub(0, 4)).value(Value::Enum {
         raw: version.into(),
         bits: 8,
-        name: lookup(VERSIONS, version.into()),
+        name: lookup(VERSIONS, version.into()).map(Into::into),
     }));
     let mut r = Reader {
         cur: Cursor::new(&cx, file, BE),
@@ -508,7 +508,7 @@ impl<'a> Fr<'a> {
             .push(Node::new("Type").span(span).value(Value::Enum {
                 raw: v,
                 bits: 32,
-                name: lookup(TYPES, v),
+                name: lookup(TYPES, v).map(Into::into),
             }));
         u32::try_from(v).ok()
     }
@@ -620,11 +620,11 @@ fn number(kind: u32, c: &[u8]) -> Value {
         5 => arr(4)
             .try_into()
             .ok()
-            .map(|b| Value::Float(f32::from_be_bytes(b).into())),
+            .map(|b| Value::f32(f32::from_be_bytes(b))),
         6 => arr(8)
             .try_into()
             .ok()
-            .map(|b| Value::Float(f64::from_be_bytes(b))),
+            .map(|b| Value::f64(f64::from_be_bytes(b))),
         10 => arr(8).try_into().ok().map(|b| Value::Int {
             value: i64::from_be_bytes(b),
             bits: 64,

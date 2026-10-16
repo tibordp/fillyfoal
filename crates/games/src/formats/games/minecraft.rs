@@ -187,10 +187,8 @@ async fn nbt_value(
             value: int(8),
             bits: 64,
         }),
-        5 => node.value(Value::Float(
-            f32::from_bits(u32_be(&b, 0).unwrap_or(0)).into(),
-        )),
-        6 => node.value(Value::Float(f64::from_bits(u64::from_be_bytes(
+        5 => node.value(Value::f32(f32::from_bits(u32_be(&b, 0).unwrap_or(0)))),
+        6 => node.value(Value::f64(f64::from_bits(u64::from_be_bytes(
             b.get(..8).and_then(|s| s.try_into().ok()).unwrap_or([0; 8]),
         )))),
         8 => {

@@ -154,8 +154,8 @@ async fn master_fields(cx: Cx, span: Span) -> Result<()> {
                 raw: endian.into(),
                 bits: 8,
                 name: match endian {
-                    1 => Some("little-endian"),
-                    2 => Some("big-endian"),
+                    1 => Some("little-endian".into()),
+                    2 => Some("big-endian".into()),
                     _ => None,
                 },
             }),

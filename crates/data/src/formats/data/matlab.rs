@@ -329,7 +329,7 @@ async fn element(cx: &Cx, level: &Level, node: Node, kind: u32, data: Span) -> R
             let node = typed.value(Value::Enum {
                 raw: class.into(),
                 bits: 8,
-                name: lookup(CLASSES, class.into()),
+                name: lookup(CLASSES, class.into()).map(Into::into),
             });
             Ok(if set.is_empty() {
                 node

@@ -142,7 +142,7 @@ async fn sms(cx: Cx, input: Input) -> Result<()> {
             .value(Value::Enum {
                 raw: region.into(),
                 bits: 4,
-                name: lookup(TMR_REGIONS, region.into()),
+                name: lookup(TMR_REGIONS, region.into()).map(Into::into),
             }),
     );
     f.node(
@@ -151,7 +151,7 @@ async fn sms(cx: Cx, input: Input) -> Result<()> {
             .value(Value::Enum {
                 raw: size_code.into(),
                 bits: 4,
-                name: rom.map(|r| r.2),
+                name: rom.map(|r| r.2.into()),
             }),
     );
     let sdsc = file.sub(at.saturating_sub(16), 16);
@@ -489,7 +489,7 @@ async fn unif(cx: Cx, input: Input) -> Result<()> {
                 node = node.value(Value::Enum {
                     raw: b.into(),
                     bits: 8,
-                    name: lookup(UNIF_MIRRORING, b.into()),
+                    name: lookup(UNIF_MIRRORING, b.into()).map(Into::into),
                 });
             }
             "TVC" => {
@@ -502,7 +502,7 @@ async fn unif(cx: Cx, input: Input) -> Result<()> {
                 node = node.value(Value::Enum {
                     raw: b.into(),
                     bits: 8,
-                    name: lookup(&[(0, "NTSC"), (1, "PAL"), (2, "both")], b.into()),
+                    name: lookup(&[(0, "NTSC"), (1, "PAL"), (2, "both")], b.into()).map(Into::into),
                 });
             }
             "PCK" | "CCK" => {

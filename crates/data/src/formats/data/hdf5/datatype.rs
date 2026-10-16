@@ -246,7 +246,7 @@ pub fn parse(rd: &mut Rd<'_>, depth: u32) -> Option<Ty> {
             .value(Value::Enum {
                 raw: class.into(),
                 bits: 4,
-                name: lookup(CLASSES, class.into()),
+                name: lookup(CLASSES, class.into()).map(Into::into),
             })
             .summary(format!("version {version}")),
     );
@@ -601,16 +601,15 @@ fn int(bytes: &[u8], be: bool, signed: bool) -> Option<Value> {
 }
 
 fn float(bytes: &[u8], be: bool) -> Option<Value> {
-    let f = match (bytes.len(), be) {
-        (2, false) => f16(u16::from_le_bytes(bytes.try_into().ok()?)),
-        (2, true) => f16(u16::from_be_bytes(bytes.try_into().ok()?)),
-        (4, false) => f64::from(f32::from_le_bytes(bytes.try_into().ok()?)),
-        (4, true) => f64::from(f32::from_be_bytes(bytes.try_into().ok()?)),
-        (8, false) => f64::from_le_bytes(bytes.try_into().ok()?),
-        (8, true) => f64::from_be_bytes(bytes.try_into().ok()?),
+    Some(match (bytes.len(), be) {
+        (2, false) => Value::f16(f16(u16::from_le_bytes(bytes.try_into().ok()?))),
+        (2, true) => Value::f16(f16(u16::from_be_bytes(bytes.try_into().ok()?))),
+        (4, false) => Value::f32(f32::from_le_bytes(bytes.try_into().ok()?)),
+        (4, true) => Value::f32(f32::from_be_bytes(bytes.try_into().ok()?)),
+        (8, false) => Value::f64(f64::from_le_bytes(bytes.try_into().ok()?)),
+        (8, true) => Value::f64(f64::from_be_bytes(bytes.try_into().ok()?)),
         _ => return None,
-    };
-    Some(Value::Float(f))
+    })
 }
 
 /// Fixed-length string bytes, cut as the padding says.

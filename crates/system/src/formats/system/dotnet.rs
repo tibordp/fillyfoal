@@ -698,7 +698,7 @@ async fn decode_value(
                 .value(Value::Enum {
                     raw: code.into(),
                     bits: 32,
-                    name: lookup(TYPE_CODES, code.into()),
+                    name: lookup(TYPE_CODES, code.into()).map(Into::into),
                 })
                 .maybe_summary(name.as_deref().map(short_type).unwrap_or_default()),
         );
@@ -787,11 +787,11 @@ async fn decode_value(
             "UInt64".into(),
         ),
         0x0c => (
-            Some(Value::Float(r.int::<f32>(LE).ok_or_else(short)?.into())),
+            Some(Value::f32(r.int::<f32>(LE).ok_or_else(short)?)),
             "Single".into(),
         ),
         0x0d => (
-            Some(Value::Float(r.int::<f64>(LE).ok_or_else(short)?)),
+            Some(Value::f64(r.int::<f64>(LE).ok_or_else(short)?)),
             "Double".into(),
         ),
         0x0e => {
@@ -861,7 +861,7 @@ async fn decode_value(
                             .value(Value::Enum {
                                 raw: format.into(),
                                 bits: 32,
-                                name: lookup(SERIALIZATION_FORMATS, format.into()),
+                                name: lookup(SERIALIZATION_FORMATS, format.into()).map(Into::into),
                             }),
                     );
                     children.push(
@@ -1180,7 +1180,7 @@ impl<'a> Nrbf<'a> {
             Value::Enum {
                 raw: v.into(),
                 bits: 8,
-                name: lookup(table, v.into()),
+                name: lookup(table, v.into()).map(Into::into),
             },
         );
         Ok(v)
@@ -1205,7 +1205,7 @@ impl<'a> Nrbf<'a> {
                     .map(|b| text(String::from_utf8_lossy(b).into_owned()))
             }
             5 => reader_string(r).map(text),
-            6 => r.int::<f64>(LE).map(Value::Float),
+            6 => r.int::<f64>(LE).map(Value::f64),
             7 => r.int::<i16>(LE).map(|v| Value::Int {
                 value: v.into(),
                 bits: 16,
@@ -1219,7 +1219,7 @@ impl<'a> Nrbf<'a> {
                 value: i64::from(v as i8),
                 bits: 8,
             }),
-            11 => r.int::<f32>(LE).map(|v| Value::Float(v.into())),
+            11 => r.int::<f32>(LE).map(Value::f32),
             12 => r.int::<i64>(LE).map(|v| text(timespan(v))),
             13 => r.int::<i64>(LE).map(|v| datetime(v).0),
             14 => r.int::<u16>(LE).map(|v| dec(v.into(), 16)),
@@ -1313,7 +1313,7 @@ impl<'a> Nrbf<'a> {
                 Value::Enum {
                     raw: kind.into(),
                     bits: 8,
-                    name: Some(kind_name),
+                    name: Some(kind_name.into()),
                 },
             );
         };
@@ -1339,7 +1339,7 @@ impl<'a> Nrbf<'a> {
                     Value::Enum {
                         raw: kind.into(),
                         bits: 8,
-                        name: Some(kind_name),
+                        name: Some(kind_name.into()),
                     },
                 );
                 let (id, meta) = if kind == 1 {
@@ -1408,7 +1408,7 @@ impl<'a> Nrbf<'a> {
                                 Node::new(m.clone()).span(span).value(Value::Enum {
                                     raw: t.into(),
                                     bits: 8,
-                                    name: lookup(BINARY_TYPES, t.into()),
+                                    name: lookup(BINARY_TYPES, t.into()).map(Into::into),
                                 }),
                             );
                             kinds.push(t);

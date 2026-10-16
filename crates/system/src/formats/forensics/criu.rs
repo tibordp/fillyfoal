@@ -369,7 +369,7 @@ async fn criu(cx: Cx, input: Input) -> Result<()> {
                     .value(Value::Enum {
                         raw: u64::from(ty.magic),
                         bits: 32,
-                        name: Some(ty.name),
+                        name: Some(ty.name.into()),
                     })
                     .summary(ty.title),
             );
@@ -550,7 +550,7 @@ fn enum32(raw: u32, table: EnumTable) -> Value {
     Value::Enum {
         raw: raw.into(),
         bits: 32,
-        name: lookup(table, raw.into()),
+        name: lookup(table, raw.into()).map(Into::into),
     }
 }
 

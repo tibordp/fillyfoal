@@ -289,7 +289,7 @@ async fn footer_fields(cx: Cx, (input, flavor): (Input, Flavor)) -> Result<()> {
                 .value(Value::Enum {
                     raw: c.into(),
                     bits: 8,
-                    name: lookup(CHECKSUMS, c.into()),
+                    name: lookup(CHECKSUMS, c.into()).map(Into::into),
                 }),
         );
         at = 1;
@@ -838,7 +838,7 @@ async fn block(
             .value(Value::Enum {
                 raw: compression.into(),
                 bits: 8,
-                name: lookup(COMPRESSION, compression.into()),
+                name: lookup(COMPRESSION, compression.into()).map(Into::into),
             }),
     );
     Ok(())

@@ -970,7 +970,7 @@ async fn pages(cx: Cx, (_input, l): (Input, Layout)) -> Result<()> {
             Node::new("Kind").value(Value::Enum {
                 raw: kind.into(),
                 bits: 32,
-                name: lookup(PAGE_KINDS, kind.into()),
+                name: lookup(PAGE_KINDS, kind.into()).map(Into::into),
             }),
         ];
         for (k, func) in [
@@ -1145,7 +1145,7 @@ async fn entries(cx: Cx, (_input, l): (Input, Layout)) -> Result<()> {
         let mut fields = vec![Node::new("Opcode").span(span.sub(0, 4)).value(Value::Enum {
             raw: op.into(),
             bits: 32,
-            name: s.opcode_name(op),
+            name: s.opcode_name(op).map(Into::into),
         })];
         for (k, &v) in p.iter().enumerate() {
             let at = span.sub(to_u64(k).saturating_add(1).saturating_mul(4), 4);
@@ -1327,7 +1327,7 @@ async fn files(cx: Cx, (input, l): (Input, Layout)) -> Result<()> {
             Node::new("Overwrite").value(Value::Enum {
                 raw: overwrite.into(),
                 bits: 32,
-                name: lookup(OVERWRITE, (overwrite & 7).into()),
+                name: lookup(OVERWRITE, (overwrite & 7).into()).map(Into::into),
             }),
         ];
         children.extend(filetime(

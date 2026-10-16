@@ -268,8 +268,8 @@ fn read_class(
             raw: item.into(),
             bits: 16,
             name: match item {
-                0x1f2 => Some("entity"),
-                0x1f3 => Some("object"),
+                0x1f2 => Some("entity".into()),
+                0x1f3 => Some("object".into()),
                 _ => None,
             },
         },

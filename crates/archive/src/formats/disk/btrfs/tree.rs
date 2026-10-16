@@ -219,7 +219,7 @@ fn inode_item(f: &mut Fields<'_>) -> Result<()> {
     f.u32("Owner UID").emit()?;
     f.u32("Group GID").emit()?;
     f.u32("Mode")
-        .hex()
+        .oct()
         .with(|&m, n| n.summary(unix_mode(m.into())))
         .emit()?;
     f.u64("Device").emit()?;

@@ -383,7 +383,7 @@ async fn object(cx: Cx, o: Object) -> Result<()> {
         f.node(Node::new("Type").value(Value::Enum {
             raw: ((first >> 4) & 7).into(),
             bits: 3,
-            name: lookup(OBJECT_TYPES, ((first >> 4) & 7).into()),
+            name: lookup(OBJECT_TYPES, ((first >> 4) & 7).into()).map(Into::into),
         }));
         f.node(Node::new("Size").value(Value::UInt {
             value: o.header.size,
@@ -452,7 +452,7 @@ async fn resolved(cx: Cx, (pack, pos): (Pack, u64)) -> Result<()> {
             .value(Value::Enum {
                 raw: kind.into(),
                 bits: 3,
-                name: lookup(OBJECT_TYPES, kind.into()),
+                name: lookup(OBJECT_TYPES, kind.into()).map(Into::into),
             })
             .summary(size(data.len)),
     );
@@ -1226,7 +1226,7 @@ async fn entry_fields(cx: Cx, (span, version, hash_len): (Span, u32, u64)) -> Re
     f.u32("mtime (nanoseconds)").emit()?;
     f.u32("Device").emit()?;
     f.u32("Inode").emit()?;
-    f.u32("Mode").with(|&m, n| n.summary(mode_text(m))).emit()?;
+    f.u32("Mode").oct().emit()?;
     f.u32("UID").emit()?;
     f.u32("GID").emit()?;
     f.u32("File size").emit()?;

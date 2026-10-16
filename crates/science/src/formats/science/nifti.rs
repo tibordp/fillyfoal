@@ -758,7 +758,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .value(Value::Enum {
             raw: h.datatype,
             bits: 16,
-            name: lookup(DATATYPES, h.datatype),
+            name: lookup(DATATYPES, h.datatype).map(Into::into),
         })
         .summary(format!("{} bits per voxel", h.bitpix));
     if elem(h.datatype)
@@ -778,7 +778,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .value(Value::Enum {
                     raw: h.intent_code,
                     bits: 16,
-                    name: lookup(INTENTS, h.intent_code),
+                    name: lookup(INTENTS, h.intent_code).map(Into::into),
                 })
                 .summary(format!(
                     "parameters {}{}",
@@ -818,7 +818,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .value(Value::Enum {
                     raw: h.slice_code,
                     bits: 8,
-                    name: lookup(SLICE_CODES, h.slice_code),
+                    name: lookup(SLICE_CODES, h.slice_code).map(Into::into),
                 })
                 .summary(format!(
                     "slices {}–{}, {} {} each{}",
@@ -838,7 +838,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Time offset")
                 .span(at(l.toffset))
-                .value(Value::Float(h.toffset)),
+                .value(Value::f64(h.toffset)),
         );
     }
     for (name, code, code_span, matrix, matrix_span) in [
@@ -858,7 +858,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let mut node = Node::new(name).span(at(code_span)).value(Value::Enum {
             raw: code,
             bits: 16,
-            name: lookup(XFORMS, code),
+            name: lookup(XFORMS, code).map(Into::into),
         });
         if code != 0 {
             let rows: Vec<String> = matrix.iter().map(|r| matrix_row(r)).collect();
@@ -1061,7 +1061,7 @@ async fn extension_list(cx: Cx, (input, span, endian): (Input, Span, Endian)) ->
             .value(Value::Enum {
                 raw: ecode,
                 bits: 32,
-                name: lookup(EXTENSIONS, ecode),
+                name: lookup(EXTENSIONS, ecode).map(Into::into),
             })
             .summary(format!("{esize} bytes"));
         if ext.len < esize {
@@ -1098,7 +1098,7 @@ async fn extension(cx: Cx, (input, data, ecode, esize): (Input, Span, u64, u64))
             .value(Value::Enum {
                 raw: ecode,
                 bits: 32,
-                name: lookup(EXTENSIONS, ecode),
+                name: lookup(EXTENSIONS, ecode).map(Into::into),
             }),
     );
     // Text payloads (comments, AFNI and CIFTI XML, XCEDE, MATLAB/eval

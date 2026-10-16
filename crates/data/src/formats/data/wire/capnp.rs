@@ -32,9 +32,7 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::{Value, lookup};
 
-use super::{
-    hex, plausible_f32, plausible_f64, plural, prefix, printable, short_text, uint, widen,
-};
+use super::{hex, plausible_f32, plausible_f64, plural, prefix, printable, short_text, uint};
 
 declare_format!(pub FORMAT = "capnp", "Cap'n Proto message",
     ["bin", "capnp-bin"], "application/x-capnp", Probe::Custom(probe), dissect);
@@ -589,7 +587,7 @@ fn scalar_node(node: Node, raw: &[u8]) -> Node {
                     bits: 32,
                 })
             } else if plausible_f32(v) {
-                node.value(Value::Float(widen(f32::from_bits(v))))
+                node.value(Value::f32(f32::from_bits(v)))
                     .summary(format!("float?; 32-bit {v:#x}"))
             } else {
                 node.value(uint(v, 32))
@@ -601,7 +599,7 @@ fn scalar_node(node: Node, raw: &[u8]) -> Node {
             if s < 0 && s > -(1 << 48) {
                 node.value(Value::Int { value: s, bits: 64 })
             } else if plausible_f64(v) {
-                node.value(Value::Float(f64::from_bits(v)))
+                node.value(Value::f64(f64::from_bits(v)))
                     .summary(format!("double?; 64-bit {v:#x}"))
             } else {
                 node.value(uint(v, 64))

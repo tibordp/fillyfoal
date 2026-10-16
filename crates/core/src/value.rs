@@ -3,15 +3,26 @@
 //! Values carry interpretation (enum names, decoded flags) next to the raw
 //! number. The raw bytes themselves are available through the node's span.
 
+use std::borrow::Cow;
 use std::fmt;
 
+/// How an unsigned number is shown.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Radix {
     Dec,
     Hex,
+    /// Octal, `0o…`: Unix permission bits and other octal-natured fields.
+    Oct,
+    /// Binary, `0b…`: small bit fields where the pattern is the point.
+    Bin,
 }
 
+/// A field's interpreted value.
+///
+/// Hosts keep a fallback arm (`_ => render::value(v)`): atoms are added over
+/// time, and a host that predates one still shows it as text.
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum Value {
     Bool(bool),
     UInt {
@@ -23,11 +34,12 @@ pub enum Value {
         value: i64,
         bits: u8,
     },
-    /// A number with a symbolic name, if known.
+    /// A number with a symbolic name, if known. The name usually comes from
+    /// a static table ([`lookup`]); a computed one is `Cow::Owned`.
     Enum {
         raw: u64,
         bits: u8,
-        name: Option<&'static str>,
+        name: Option<Cow<'static, str>>,
     },
     /// A bit set: the names of matched flags, and bits no flag accounts for.
     Flags {
@@ -36,13 +48,55 @@ pub enum Value {
         set: Vec<&'static str>,
         unknown: u64,
     },
-    Float(f64),
+    /// A floating-point number. `bits` is the width the file stores it in
+    /// (16, 32, 64 or 80). `value` is exact for every width but 80 (the
+    /// nearest `f64`); text renderings use the shortest decimal that reads
+    /// back to the stored width (`0.8`, not `0.800000011920929`, for an
+    /// `f32`). Construct with [`Value::f32`], [`Value::f64`] and friends.
+    Float {
+        value: f64,
+        bits: u8,
+    },
     Timestamp {
         unix_seconds: i64,
     },
     Text(String),
     Bytes(Vec<u8>),
     Guid(Guid),
+}
+
+impl Value {
+    /// A 64-bit float.
+    pub const fn f64(value: f64) -> Value {
+        Value::Float { value, bits: 64 }
+    }
+
+    /// A 32-bit float, kept exact and rendered in its shortest `f32` form.
+    pub fn f32(value: f32) -> Value {
+        Value::Float {
+            value: f64::from(value),
+            bits: 32,
+        }
+    }
+
+    /// A 16-bit (half-precision) float, already widened to `f64`.
+    pub const fn f16(value: f64) -> Value {
+        Value::Float { value, bits: 16 }
+    }
+
+    /// An 80-bit x87 extended float, as the nearest `f64`.
+    pub const fn f80(value: f64) -> Value {
+        Value::Float { value, bits: 80 }
+    }
+
+    /// An enum value with a computed name (one no static table holds).
+    pub fn named(raw: u64, bits: u8, name: impl Into<Cow<'static, str>>) -> Value {
+        Value::Enum {
+            raw,
+            bits,
+            name: Some(name.into()),
+        }
+    }
 }
 
 /// `(raw value, name)` pairs.

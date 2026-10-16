@@ -174,7 +174,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Node::new("Magic").span(meta.sub(12, 4)).value(Value::Enum {
             raw: magic.into(),
             bits: 32,
-            name: lookup(MAGICS, magic.into()),
+            name: lookup(MAGICS, magic.into()).map(Into::into),
         }),
         num("Version", 16, Radix::Dec),
         num("Page size", 20, Radix::Dec),
@@ -183,14 +183,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .value(Value::Enum {
                 raw: encrypt_alg.into(),
                 bits: 8,
-                name: lookup(ENCRYPT_ALGS, encrypt_alg.into()),
+                name: lookup(ENCRYPT_ALGS, encrypt_alg.into()).map(Into::into),
             }),
         Node::new("Page type")
             .span(meta.sub(25, 1))
             .value(Value::Enum {
                 raw: head.get(25).copied().unwrap_or(0).into(),
                 bits: 8,
-                name: lookup(PAGE_TYPES, head.get(25).copied().unwrap_or(0).into()),
+                name: lookup(PAGE_TYPES, head.get(25).copied().unwrap_or(0).into()).map(Into::into),
             }),
         Node::new("Metadata flags").span(meta.sub(26, 1)).value({
             let (set, unknown) = decode_flags(META_FLAGS, metaflags.into());
@@ -645,7 +645,7 @@ async fn page_contents(cx: Cx, (db, no): (DbRef, u32)) -> Result<()> {
     cx.emit(Node::new("Type").span(h.sub(25, 1)).value(Value::Enum {
         raw: page.kind.into(),
         bits: 8,
-        name: lookup(PAGE_TYPES, page.kind.into()),
+        name: lookup(PAGE_TYPES, page.kind.into()).map(Into::into),
     }));
     if db.encrypted {
         cx.emit(Node::new("MAC").span(h.sub(HEADER.saturating_add(2), 20)));

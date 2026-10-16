@@ -1743,17 +1743,17 @@ async fn header_fields(cx: Cx, (l, ver, unicode): (Layout, Version, bool)) -> Re
             ("CompressMethod", _) => node.value(Value::Enum {
                 raw: le(bytes),
                 bits: 8,
-                name: lookup(COMPRESSION, le(bytes)),
+                name: lookup(COMPRESSION, le(bytes)).map(Into::into),
             }),
             ("PrivilegesRequired", _) => node.value(Value::Enum {
                 raw: le(bytes),
                 bits: 8,
-                name: lookup(PRIVILEGES, le(bytes)),
+                name: lookup(PRIVILEGES, le(bytes)).map(Into::into),
             }),
             ("DisableDirPage" | "DisableProgramGroupPage", _) => node.value(Value::Enum {
                 raw: le(bytes),
                 bits: 8,
-                name: lookup(YES_NO_AUTO, le(bytes)),
+                name: lookup(YES_NO_AUTO, le(bytes)).map(Into::into),
             }),
             ("MinVersion" | "OnlyBelowVersion", _) => node.summary(winver(bytes)),
             ("CompiledCodeVersion", _) => {
@@ -1779,12 +1779,13 @@ async fn header_fields(cx: Cx, (l, ver, unicode): (Layout, Version, bool)) -> Re
             ("WizardDarkStyle", _) => node.value(Value::Enum {
                 raw: le(bytes),
                 bits: 8,
-                name: lookup(&[(0, "light"), (1, "dark"), (2, "dynamic")], le(bytes)),
+                name: lookup(&[(0, "light"), (1, "dark"), (2, "dynamic")], le(bytes))
+                    .map(Into::into),
             }),
             ("WizardStyle", _) => node.value(Value::Enum {
                 raw: le(bytes),
                 bits: 8,
-                name: lookup(&[(0, "classic"), (1, "modern")], le(bytes)),
+                name: lookup(&[(0, "classic"), (1, "modern")], le(bytes)).map(Into::into),
             }),
             (_, 1 | 4 | 8) => node.value(uint(le(bytes), 64)),
             _ => node.value(Value::Bytes(bytes.to_vec())),
@@ -1895,7 +1896,8 @@ fn file_fields(s: &Setup, e: &Entry) -> Vec<Node> {
                 .value(Value::Enum {
                     raw: typ.into(),
                     bits: 8,
-                    name: lookup(&[(0, "none"), (1, "hash"), (2, "ISSig")], typ.into()),
+                    name: lookup(&[(0, "none"), (1, "hash"), (2, "ISSig")], typ.into())
+                        .map(Into::into),
                 }),
         );
     }
@@ -1948,7 +1950,8 @@ fn file_fields(s: &Setup, e: &Entry) -> Vec<Node> {
                             (4, "current process"),
                         ],
                         raw.into(),
-                    ),
+                    )
+                    .map(Into::into),
                 }),
         );
         o = o.saturating_add(1);
@@ -1969,14 +1972,17 @@ fn file_fields(s: &Setup, e: &Entry) -> Vec<Node> {
         ),
     ));
     let ft = at(o.saturating_add(opts));
-    out.push(Node::new("FileType").span(s.sub(ft, 1)).value(Value::Enum {
-        raw: d.get(ft).copied().unwrap_or(0).into(),
-        bits: 8,
-        name: lookup(
-            &[(0, "UserFile"), (1, "UninstExe")],
-            d.get(ft).copied().unwrap_or(0).into(),
-        ),
-    }));
+    out.push(
+        Node::new("FileType").span(s.sub(ft, 1)).value(Value::Enum {
+            raw: d.get(ft).copied().unwrap_or(0).into(),
+            bits: 8,
+            name: lookup(
+                &[(0, "UserFile"), (1, "UninstExe")],
+                d.get(ft).copied().unwrap_or(0).into(),
+            )
+            .map(Into::into),
+        }),
+    );
     out
 }
 

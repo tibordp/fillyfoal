@@ -229,7 +229,7 @@ async fn res_header(cx: Cx, span: Span) -> Result<()> {
                 .value(Value::Enum {
                     raw: id.into(),
                     bits: 16,
-                    name: lookup(RES_TYPES, id.into()),
+                    name: lookup(RES_TYPES, id.into()).map(Into::into),
                 })
                 .desc("0xFFFF, then an ordinal"),
             Some(id) => node

@@ -912,7 +912,7 @@ pub async fn dissect_gcode(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Nozzle temperature")
                 .span(line)
-                .value(Value::Float(v))
+                .value(Value::f64(v))
                 .summary("°C, first M104/M109"),
         );
     }
@@ -927,7 +927,7 @@ pub async fn dissect_gcode(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Bed temperature")
                 .span(line)
-                .value(Value::Float(v))
+                .value(Value::f64(v))
                 .summary("°C, first M140/M190"),
         );
     }
@@ -1162,7 +1162,7 @@ fn segment_node(
         .summary(parts.join(", "))
         .lazy(lines, (sub, seg.first_line));
     if let Some(z) = z.filter(|_| seg.layer) {
-        node = node.value(Value::Float(z)).desc("Z height (mm)");
+        node = node.value(Value::f64(z)).desc("Z height (mm)");
     }
     node
 }
@@ -1246,7 +1246,7 @@ async fn words(cx: Cx, span: Span) -> Result<()> {
         let mut node = Node::new(char::from(w.letter).to_string()).span(at(w.start, w.end));
         node = match (number.parse::<i64>(), w.value(&bytes)) {
             (Ok(i), _) if !number.contains('.') => node.value(Value::Int { value: i, bits: 64 }),
-            (_, Some(v)) => node.value(Value::Float(v)),
+            (_, Some(v)) => node.value(Value::f64(v)),
             _ => node,
         };
         if let Some(m) = letter_meaning(w.letter) {

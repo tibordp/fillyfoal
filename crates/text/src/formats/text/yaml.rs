@@ -88,9 +88,9 @@ fn plain_value(text: &str) -> Option<Value> {
         "" | "~" | "null" | "Null" | "NULL" => return None,
         "true" | "True" | "TRUE" => return Some(Value::Bool(true)),
         "false" | "False" | "FALSE" => return Some(Value::Bool(false)),
-        ".inf" | ".Inf" | ".INF" | "+.inf" => return Some(Value::Float(f64::INFINITY)),
-        "-.inf" | "-.Inf" | "-.INF" => return Some(Value::Float(f64::NEG_INFINITY)),
-        ".nan" | ".NaN" | ".NAN" => return Some(Value::Float(f64::NAN)),
+        ".inf" | ".Inf" | ".INF" | "+.inf" => return Some(Value::f64(f64::INFINITY)),
+        "-.inf" | "-.Inf" | "-.INF" => return Some(Value::f64(f64::NEG_INFINITY)),
+        ".nan" | ".NaN" | ".NAN" => return Some(Value::f64(f64::NAN)),
         _ => {}
     }
     if let Some(hex) = text.strip_prefix("0x") {

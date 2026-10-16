@@ -136,7 +136,7 @@ async fn tag_fields(cx: Cx, span: Span) -> Result<()> {
             cx.emit(match duration.text().parse::<f64>() {
                 Ok(d) => Node::new("Duration")
                     .span(duration.span())
-                    .value(Value::Float(d))
+                    .value(Value::f64(d))
                     .summary("seconds"),
                 Err(_) => text_node("Duration", duration.span(), &duration.text()),
             });
@@ -464,7 +464,7 @@ fn command(line: &LineBuf) -> Node {
             match msf(&time.text()) {
                 Some(s) => Node::new(label)
                     .span(time.span())
-                    .value(Value::Float(s))
+                    .value(Value::f64(s))
                     .summary(format!("{} (mm:ss:ff), seconds", time.text())),
                 None => text_node(label, time.span(), &time.text()),
             }

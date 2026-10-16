@@ -436,7 +436,7 @@ async fn patch_table(cx: Cx, (code, table): (Span, Span)) -> Result<()> {
             cx.push(Node::new("End").span(span).value(Value::Enum {
                 raw: 0,
                 bits: 8,
-                name: Some("IET_END"),
+                name: Some("IET_END".into()),
             }))
             .await;
             let pad = table.tail(cur.pos());

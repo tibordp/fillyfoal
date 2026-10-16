@@ -1076,7 +1076,9 @@ fn item_node(magic: &[u8; 4], item: &Item) -> Node {
             Show::Time => node.value(Value::Timestamp {
                 unix_seconds: i64::try_from(v).unwrap_or(i64::MAX),
             }),
-            Show::Mode => node.value(text(format!("{v:o}"))).summary(unix_mode(v)),
+            Show::Mode => node
+                .value(crate::formats::util::val::oct(v, 64))
+                .summary(unix_mode(v)),
             Show::Size => node.value(uint(v, bits)).summary(size(v)),
             Show::Enum(t) => node.value(enumv(v, bits, t)),
             Show::Flags(t) => node.value(flagsv(v, bits, t)),

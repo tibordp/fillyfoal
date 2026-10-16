@@ -431,9 +431,9 @@ async fn header_block(cx: Cx, (file, format): (Span, u32)) -> Result<()> {
         raw: format.into(),
         bits: 32,
         name: Some(if format == FORMAT_10_8 {
-            "MariaDB 10.8 (\"Phys\")"
+            "MariaDB 10.8 (\"Phys\")".into()
         } else {
-            "MariaDB 10.8, encrypted"
+            "MariaDB 10.8, encrypted".into()
         }),
     }));
     cx.emit(

@@ -1129,7 +1129,7 @@ async fn dm_tag(
             let mut vals = Vec::new();
             for &ft in &types {
                 vals.push(match dm_simple(&mut dcur, ft).await? {
-                    Value::Float(f) => f.to_string(),
+                    Value::Float { value, bits } => crate::render::float(value, bits),
                     Value::Int { value, .. } => value.to_string(),
                     Value::UInt { value, .. } => value.to_string(),
                     Value::Bool(b) => b.to_string(),

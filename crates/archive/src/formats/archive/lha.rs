@@ -341,7 +341,7 @@ fn os_id(r: &mut ByteReader<'_>) -> Option<u8> {
         n.value(Value::Enum {
             raw: os.into(),
             bits: 8,
-            name: crate::value::lookup(OS_ID, os.into()),
+            name: crate::value::lookup(OS_ID, os.into()).map(Into::into),
         })
     });
     Some(os)

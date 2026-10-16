@@ -494,10 +494,10 @@ fn number(text: &str) -> Option<Value> {
         });
     }
     match text {
-        "NaN" => Some(Value::Float(f64::NAN)),
-        "Infinity" | "+Infinity" => Some(Value::Float(f64::INFINITY)),
-        "-Infinity" => Some(Value::Float(f64::NEG_INFINITY)),
-        _ => text.parse::<f64>().ok().map(Value::Float),
+        "NaN" => Some(Value::f64(f64::NAN)),
+        "Infinity" | "+Infinity" => Some(Value::f64(f64::INFINITY)),
+        "-Infinity" => Some(Value::f64(f64::NEG_INFINITY)),
+        _ => text.parse::<f64>().ok().map(Value::f64),
     }
 }
 

@@ -424,7 +424,7 @@ async fn ace_block(
         n.value(Value::Enum {
             raw: kind.into(),
             bits: 8,
-            name: crate::value::lookup(ACE_TYPE, kind.into()),
+            name: crate::value::lookup(ACE_TYPE, kind.into()).map(Into::into),
         })
     });
     let flags = r.u16("Flags", LE).ok_or_else(bad)?;
@@ -456,7 +456,7 @@ async fn ace_block(
                 n.value(Value::Enum {
                     raw: host.into(),
                     bits: 8,
-                    name: crate::value::lookup(ACE_HOST, host.into()),
+                    name: crate::value::lookup(ACE_HOST, host.into()).map(Into::into),
                 })
             });
             r.u8("Volume number").ok_or_else(bad)?;
@@ -497,7 +497,7 @@ async fn ace_block(
                 n.value(Value::Enum {
                     raw: comp.into(),
                     bits: 8,
-                    name: crate::value::lookup(ACE_COMP, comp.into()),
+                    name: crate::value::lookup(ACE_COMP, comp.into()).map(Into::into),
                 })
             });
             let quality = r.u8("Compression quality").ok_or_else(bad)?;
@@ -505,7 +505,7 @@ async fn ace_block(
                 n.value(Value::Enum {
                     raw: quality.into(),
                     bits: 8,
-                    name: crate::value::lookup(ACE_QUALITY, quality.into()),
+                    name: crate::value::lookup(ACE_QUALITY, quality.into()).map(Into::into),
                 })
             });
             let params = r.u16("Compression parameters", LE).ok_or_else(bad)?;
@@ -726,7 +726,7 @@ async fn arc_entry(cx: Cx, (input, span, header_len): (Input, Span, u64)) -> Res
         n.value(Value::Enum {
             raw: method.into(),
             bits: 8,
-            name: crate::value::lookup(ARC_METHOD, method.into()),
+            name: crate::value::lookup(ARC_METHOD, method.into()).map(Into::into),
         })
     });
     let raw = r.bytes("Name", 13).ok_or_else(bad)?;

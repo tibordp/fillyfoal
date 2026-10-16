@@ -159,8 +159,8 @@ fn typed(phys: i64, bytes: &[u8]) -> Value {
             bits: 64,
         }),
         (3, 12) => int96(bytes).map(|(unix_seconds, _)| Value::Timestamp { unix_seconds }),
-        (4, 4) => le(4).map(|b| Value::Float(f32::from_le_bytes([b[0], b[1], b[2], b[3]]).into())),
-        (5, 8) => le(8).map(|b| Value::Float(f64::from_le_bytes(b))),
+        (4, 4) => le(4).map(|b| Value::f32(f32::from_le_bytes([b[0], b[1], b[2], b[3]]))),
+        (5, 8) => le(8).map(|b| Value::f64(f64::from_le_bytes(b))),
         (6, _) => std::str::from_utf8(bytes)
             .ok()
             .filter(|s| !s.chars().any(char::is_control))
@@ -198,12 +198,12 @@ fn scalar(data: &[u8], at: usize, t: u8, kind: Kind, phys: Option<i64>) -> Optio
                 Kind::Enum(table) => Value::Enum {
                     raw: v.cast_unsigned(),
                     bits: 32,
-                    name: lookup(table, v.cast_unsigned()),
+                    name: lookup(table, v.cast_unsigned()).map(Into::into),
                 },
                 _ => Value::Int { value: v, bits: 64 },
             }
         }
-        7 => Value::Float(f64::from_le_bytes(crate::bytes::array(data, at)?)),
+        7 => Value::f64(f64::from_le_bytes(crate::bytes::array(data, at)?)),
         8 => {
             let (len, e) = varint(data, at)?;
             let bytes = data.get(e..e.checked_add(to_usize(len))?)?;

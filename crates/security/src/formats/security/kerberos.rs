@@ -187,7 +187,7 @@ async fn keytab_entry(cx: Cx, (entry, endian): (Span, Endian)) -> Result<()> {
             .value(Value::Enum {
                 raw: etype.into(),
                 bits: 16,
-                name: Some(enctype(etype)),
+                name: Some(enctype(etype).into()),
             }),
     );
     let at = e.pos();
@@ -390,7 +390,7 @@ async fn principal_fields(cx: Cx, (span, version, endian): (Span, u16, Endian)) 
                 .value(Value::Enum {
                     raw: kind.into(),
                     bits: 32,
-                    name: lookup(NAME_TYPES, kind.into()),
+                    name: lookup(NAME_TYPES, kind.into()).map(Into::into),
                 }),
         );
     }
@@ -569,7 +569,7 @@ async fn credential(cx: Cx, (input, span, version): (Input, Span, u16)) -> Resul
             .value(Value::Enum {
                 raw: etype.into(),
                 bits: 16,
-                name: Some(enctype(etype)),
+                name: Some(enctype(etype).into()),
             })
             .summary(format!("{} bytes", key.len)),
     );

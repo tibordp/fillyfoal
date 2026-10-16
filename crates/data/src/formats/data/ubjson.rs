@@ -534,10 +534,10 @@ async fn item_node(
                 node.value(vt::uint(h.arg, bits))
             }
         }
-        Kind::Float32 => node.value(Value::Float(f64::from(f32::from_bits(
+        Kind::Float32 => node.value(Value::f32(f32::from_bits(
             u32::try_from(h.arg).unwrap_or(0),
-        )))),
-        Kind::Float64 => node.value(Value::Float(f64::from_bits(h.arg))),
+        ))),
+        Kind::Float64 => node.value(Value::f64(f64::from_bits(h.arg))),
         Kind::Char => {
             let c = u8::try_from(h.arg).unwrap_or(0);
             let node = node

@@ -526,7 +526,7 @@ async fn item_node(
                 .summary(format!("big integer, {} bytes", it.payload))
         }
         70 => node
-            .value(Value::Float(f64::from_bits(
+            .value(Value::f64(f64::from_bits(
                 r.be(start.saturating_add(1), 8).await?,
             )))
             .summary("float"),
@@ -536,7 +536,7 @@ async fn item_node(
                 .into_owned();
             match text.trim().parse::<f64>() {
                 Ok(f) => node
-                    .value(Value::Float(f))
+                    .value(Value::f64(f))
                     .summary(format!("float as text {text:?}")),
                 Err(_) => node
                     .value(Value::Text(text))

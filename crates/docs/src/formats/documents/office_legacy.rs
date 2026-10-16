@@ -41,7 +41,7 @@ fn cell_name(col: u32, row: u32) -> String {
 }
 
 fn float(v: f64) -> Value {
-    Value::Float(v)
+    Value::f64(v)
 }
 
 /// An 80-bit x87 extended float (Lotus WK3+ numbers).
@@ -320,7 +320,8 @@ async fn lotus(cx: Cx, input: Input) -> Result<()> {
                     node = node.value(Value::Enum {
                         raw: u16_le(&data, 0).unwrap_or(0).into(),
                         bits: 16,
-                        name: lookup(versions, u16_le(&data, 0).unwrap_or(0).into()),
+                        name: lookup(versions, u16_le(&data, 0).unwrap_or(0).into())
+                            .map(Into::into),
                     })
                 }
                 (0x06, false) => {

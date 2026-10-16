@@ -81,7 +81,7 @@ macro_rules! prim_signed {
 prim_unsigned!(u8, u16, u32, u64);
 
 macro_rules! prim_float {
-    ($($t:ty => $u:ty),*) => {$(
+    ($($t:ty => $u:ty as $ctor:ident),*) => {$(
         impl Prim for $t {
             const SIZE: usize = std::mem::size_of::<$t>();
             fn decode(bytes: &[u8], endian: Endian) -> Option<Self> {
@@ -95,13 +95,13 @@ macro_rules! prim_float {
                 u64::from(self.to_bits())
             }
             fn value(self, _radix: Radix) -> Value {
-                Value::Float(f64::from(self))
+                Value::$ctor(self)
             }
         }
     )*};
 }
 
-prim_float!(f32 => u32, f64 => u64);
+prim_float!(f32 => u32 as f32, f64 => u64 as f64);
 prim_signed!(i8 => u8, i16 => u16, i32 => u32, i64 => u64);
 
 /// A cursor over a block that decodes fields and, optionally, emits them.
@@ -430,12 +430,20 @@ impl<T: Prim> Field<'_, T> {
         self
     }
 
+    /// Shows the number in octal (Unix modes).
+    pub fn oct(mut self) -> Self {
+        if let Some(Value::UInt { radix, .. }) = &mut self.node.value {
+            *radix = Radix::Oct;
+        }
+        self
+    }
+
     pub fn enumeration(mut self, table: EnumTable) -> Self {
         if let Some((raw, bits)) = self.raw {
             self.node.value = Some(Value::Enum {
                 raw,
                 bits,
-                name: lookup(table, raw),
+                name: lookup(table, raw).map(Into::into),
             });
         }
         self

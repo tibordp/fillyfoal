@@ -340,7 +340,10 @@ impl Scalar {
                 raw,
                 u8::try_from(n.saturating_mul(8)).unwrap_or(64),
             )),
-            ('f', _) => self.float(b).map(Value::Float),
+            ('f', n) => self.float(b).map(|value| Value::Float {
+                value,
+                bits: u8::try_from(n.saturating_mul(8)).unwrap_or(64),
+            }),
             ('c', 8 | 16) => {
                 let half = b.len() / 2;
                 let re = self.float(b.get(..half).unwrap_or_default());

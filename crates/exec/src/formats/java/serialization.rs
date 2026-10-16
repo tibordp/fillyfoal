@@ -415,8 +415,8 @@ impl Parser<'_> {
                 let c = self.int::<u16>()?;
                 text(char::from_u32(c.into()).map_or_else(|| format!("\\u{c:04x}"), String::from))
             }
-            b'D' => Value::Float(self.int::<f64>()?),
-            b'F' => Value::Float(self.int::<f32>()?.into()),
+            b'D' => Value::f64(self.int::<f64>()?),
+            b'F' => Value::f32(self.int::<f32>()?),
             b'I' => Value::Int {
                 value: self.int::<i32>()?.into(),
                 bits: 32,

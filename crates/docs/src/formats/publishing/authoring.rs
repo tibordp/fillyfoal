@@ -646,7 +646,7 @@ async fn moc3(cx: Cx, input: Input) -> Result<()> {
             .value(Value::Enum {
                 raw: version.into(),
                 bits: 8,
-                name,
+                name: name.map(Into::into),
             }),
     );
     cx.emit(

@@ -1152,7 +1152,7 @@ async fn type_fields(cx: Cx, (btf, span): (Btf, Span)) -> Result<()> {
                     .value(Value::Enum {
                         raw: head.vlen.into(),
                         bits: 16,
-                        name: lookup(FUNC_LINKAGE, head.vlen.into()),
+                        name: lookup(FUNC_LINKAGE, head.vlen.into()).map(Into::into),
                     })
                     .desc("Kept in vlen"),
             );

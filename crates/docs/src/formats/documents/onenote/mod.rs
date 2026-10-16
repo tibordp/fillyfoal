@@ -647,23 +647,23 @@ async fn file_node_view(cx: Cx, st: NodeState) -> Result<()> {
     cx.emit(Node::new("FileNodeID").span(hspan).value(Value::Enum {
         raw: hdr.id.into(),
         bits: 10,
-        name: lookup(tables::FILE_NODE_IDS, hdr.id.into()),
+        name: lookup(tables::FILE_NODE_IDS, hdr.id.into()).map(Into::into),
     }));
     cx.emit(Node::new("Size").span(hspan).value(uint(hdr.size, 13)));
     cx.emit(Node::new("StpFormat").span(hspan).value(Value::Enum {
         raw: hdr.stp_format.into(),
         bits: 2,
-        name: lookup(tables::STP_FORMATS, hdr.stp_format.into()),
+        name: lookup(tables::STP_FORMATS, hdr.stp_format.into()).map(Into::into),
     }));
     cx.emit(Node::new("CbFormat").span(hspan).value(Value::Enum {
         raw: hdr.cb_format.into(),
         bits: 2,
-        name: lookup(tables::CB_FORMATS, hdr.cb_format.into()),
+        name: lookup(tables::CB_FORMATS, hdr.cb_format.into()).map(Into::into),
     }));
     cx.emit(Node::new("BaseType").span(hspan).value(Value::Enum {
         raw: hdr.base_type.into(),
         bits: 4,
-        name: lookup(tables::BASE_TYPES, hdr.base_type.into()),
+        name: lookup(tables::BASE_TYPES, hdr.base_type.into()).map(Into::into),
     }));
     let mut reserved = Node::new("Reserved")
         .span(hspan)
@@ -887,9 +887,7 @@ fn prop_node(
         PValue::Int(v, width) => {
             let bits = width.saturating_mul(8);
             match kind {
-                Kind::Float if *width == 4 => {
-                    node.value(Value::Float(f64::from(f32::from_bits(*v as u32))))
-                }
+                Kind::Float if *width == 4 => node.value(Value::f32(f32::from_bits(*v as u32))),
                 Kind::Time32 => node.value(Value::Timestamp {
                     unix_seconds: i64::try_from(*v).unwrap_or(0).saturating_add(TIME32_EPOCH),
                 }),

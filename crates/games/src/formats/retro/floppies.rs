@@ -608,7 +608,7 @@ async fn imd(cx: Cx, input: Input) -> Result<()> {
                 .value(Value::Enum {
                     raw: mode.into(),
                     bits: 8,
-                    name: lookup(IMD_MODES, mode.into()),
+                    name: lookup(IMD_MODES, mode.into()).map(Into::into),
                 })
                 .summary(format!(
                     "{count_sector} of {bytes} bytes",

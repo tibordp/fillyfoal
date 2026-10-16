@@ -173,7 +173,7 @@ async fn heap_block(
             .value(Value::Enum {
                 raw: client.into(),
                 bits: 8,
-                name: crate::value::lookup(CLIENT_SIGS, client.into()),
+                name: crate::value::lookup(CLIENT_SIGS, client.into()).map(Into::into),
             })
             .summary(format!(
                 "page map at {ib:#x}, signature {sig:#04x}, user root {root:#x}"

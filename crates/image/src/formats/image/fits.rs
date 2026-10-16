@@ -107,7 +107,7 @@ fn typed(value: &str) -> Value {
     if real.chars().any(|c| c.is_ascii_digit())
         && let Ok(f) = real.parse::<f64>()
     {
-        return Value::Float(f);
+        return Value::f64(f);
     }
     text(value)
 }

@@ -260,7 +260,7 @@ pub fn int(value: i64) -> crate::value::Value {
 }
 
 pub fn float(value: f64) -> crate::value::Value {
-    crate::value::Value::Float(value)
+    crate::value::Value::f64(value)
 }
 
 /// [`super::val::enumv`] with the table first.
@@ -313,10 +313,10 @@ pub fn summarize(node: crate::node::Node, s: impl Into<String>) -> crate::node::
     if s.is_empty() { node } else { node.summary(s) }
 }
 
-/// A single-precision float, widened without binary noise (0.05, not
+/// A single-precision float, kept at its width (it prints as 0.05, not
 /// 0.05000000074505806).
 pub fn float32(v: f32) -> crate::value::Value {
-    crate::value::Value::Float(v.to_string().parse().unwrap_or(f64::from(v)))
+    crate::value::Value::f32(v)
 }
 
 #[cfg(test)]

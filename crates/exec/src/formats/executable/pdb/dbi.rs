@@ -310,7 +310,7 @@ async fn contributions(cx: Cx, span: Span) -> Result<()> {
             .value(crate::value::Value::Enum {
                 raw: version.into(),
                 bits: 32,
-                name: crate::value::lookup(CONTRIBUTION_VERSIONS, version.into()),
+                name: crate::value::lookup(CONTRIBUTION_VERSIONS, version.into()).map(Into::into),
             }),
     );
     let size: u32 = if version == 0xf131_51e4 { 32 } else { 28 };

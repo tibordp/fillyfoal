@@ -907,7 +907,7 @@ fn value_node(a: &Attribute, v: AttrValue) -> Node {
             node.value(Value::Enum {
                 raw: raw.into(),
                 bits: 32,
-                name: lookup(table, raw.into()),
+                name: lookup(table, raw.into()).map(Into::into),
             })
         }
         2 => {
@@ -921,7 +921,7 @@ fn value_node(a: &Attribute, v: AttrValue) -> Node {
                 }),
             }
         }
-        4 => node.value(Value::Float(f64::from_bits(
+        4 => node.value(Value::f64(f64::from_bits(
             crate::bytes::u64_be(&v.raw, 0).unwrap_or(0),
         ))),
         5 => {

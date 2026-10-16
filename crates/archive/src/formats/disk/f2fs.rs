@@ -709,7 +709,7 @@ struct InodeCtx {
 
 fn inode_layout(f: &mut Fields<'_>, ctx: &InodeCtx) -> Result<()> {
     f.u16("Mode")
-        .hex()
+        .oct()
         .with(|&m, n| n.summary(unix_mode(m.into())))
         .emit()?;
     f.u8("Advice").hex().emit()?;

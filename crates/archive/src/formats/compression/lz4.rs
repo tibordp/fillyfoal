@@ -502,7 +502,7 @@ async fn snappy_chunk(cx: Cx, (span, kind): (Span, u8)) -> Result<()> {
             .value(crate::value::Value::Enum {
                 raw: kind.into(),
                 bits: 8,
-                name: crate::value::lookup(SNAPPY_CHUNK, kind.into()),
+                name: crate::value::lookup(SNAPPY_CHUNK, kind.into()).map(Into::into),
             }),
     );
     cx.emit(
