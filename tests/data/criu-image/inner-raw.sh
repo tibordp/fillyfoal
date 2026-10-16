@@ -40,6 +40,18 @@ for t, text in ((1, b"first message"), (2, b"second, longer message text")):
 s = libc.semget(0x5678, 3, IPC_CREAT | 0o600)
 SETVAL = 16
 libc.semctl(s, 1, SETVAL, 7)
+# An epoll instance watching the pipe, an inotify watch, a pseudo-terminal
+# pair, and a lock held with flock.
+import fcntl, select
+ep = select.epoll()
+ep.register(r, select.EPOLLIN | select.EPOLLET)
+IN_MODIFY, IN_CREATE = 0x2, 0x100
+ino = libc.inotify_init1(0)
+os.makedirs("/dev/shm/watched", exist_ok=True)
+libc.inotify_add_watch(ino, b"/dev/shm/watched", IN_MODIFY | IN_CREATE)
+master, slave = os.openpty()
+locked = open("/tmp/work/locked.txt", "w")
+fcntl.flock(locked, fcntl.LOCK_EX)
 # A deleted file that is still open: a ghost file.
 f = open("/tmp/work/ghost.txt", "w+b")
 f.write(b"ghost file contents\n" * 4)
@@ -54,7 +66,7 @@ env -i HOME=/ PATH=/bin:/usr/bin TCP="${TCP:-}" setsid unshare --ipc python3 /tm
 sleep 3
 cat /tmp/work/out.txt
 pid=$!
-criu dump -t "$pid" -D /tmp/dump --shell-job --tcp-established --network-lock skip -v1 \
+criu dump -t "$pid" -D /tmp/dump --shell-job --tcp-established --file-locks --network-lock skip -v1 \
     || { tail -30 /tmp/dump/*.log 2>/dev/null; exit 1; }
 cp /tmp/dump/* /out/
 ls -l /out

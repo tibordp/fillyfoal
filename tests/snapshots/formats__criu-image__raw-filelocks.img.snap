@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ raw-filelocks.img — CRIU FILE_LOCKS image (file locks)  [0x0+0x18]
+    Image class: IMG_COMMON (0x54564319)  [0x0+0x4]
+    Image type: FILE_LOCKS (0x54323616) — file locks  [0x4+0x4]
+  ▾ file_lock_entry [0] — FL_FLOCK · F_WRLCK  [0x8+0x10]
+      Size: 12  [0x8+0x4]
+      flag: 0x2 [FL_FLOCK]  [0xc+0x2]
+      type: F_WRLCK (0x1)  [0xe+0x2]
+      pid: 8  [0x10+0x2]
+      fd: 14  [0x12+0x2]
+      start: 0  [0x14+0x2]
+      len: 0  [0x16+0x2]

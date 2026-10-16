@@ -218,21 +218,46 @@ static TYPES: &[ImageType] = &[
         Extra::Fields(1, "Receive queue", 3, "Send queue"),
     ),
     t(0x4452_3722, "EVENTFD_FILE", "eventfds", &EVENTFD_ENTRY),
-    t(0x4502_3858, "EVENTPOLL_FILE", "epoll instances", U),
-    t(0x4443_3746, "EVENTPOLL_TFD", "epoll targets", U),
+    t(
+        0x4502_3858,
+        "EVENTPOLL_FILE",
+        "epoll instances",
+        &EVENTPOLL_FILE,
+    ),
+    t(
+        0x4443_3746,
+        "EVENTPOLL_TFD",
+        "epoll targets",
+        &EVENTPOLL_TFD,
+    ),
     t(0x5732_3820, "SIGNALFD", "signalfds", &SIGNALFD_ENTRY),
-    t(0x4842_4431, "INOTIFY_FILE", "inotify instances", U),
-    t(0x5456_2009, "INOTIFY_WD", "inotify watches", U),
+    t(
+        0x4842_4431,
+        "INOTIFY_FILE",
+        "inotify instances",
+        &INOTIFY_FILE,
+    ),
+    t(0x5456_2009, "INOTIFY_WD", "inotify watches", &INOTIFY_WD),
     t(0x5556_3928, "MNTS", "mount points", &MNT_ENTRY),
     t(0x5737_3951, "NETDEV", "network devices", U),
     t(0x5593_3752, "NETNS", "network namespace", U),
     t(0x5943_3025, "TTY_FILES", "terminals", &TTY_FILE_ENTRY),
-    t(0x5945_3036, "TTY_INFO", "terminal settings", U),
-    t(0x5941_3026, "TTY_DATA", "terminal buffers", U),
-    t(0x5432_3616, "FILE_LOCKS", "file locks", U),
+    t(0x5945_3036, "TTY_INFO", "terminal settings", &TTY_INFO),
+    t(0x5941_3026, "TTY_DATA", "terminal buffers", &TTY_DATA),
+    t(0x5432_3616, "FILE_LOCKS", "file locks", &FILE_LOCK),
     t(0x5711_3925, "RLIMIT", "resource limits", &RLIMIT_ENTRY),
-    t(0x5509_6122, "FANOTIFY_FILE", "fanotify instances", U),
-    t(0x5650_6035, "FANOTIFY_MARK", "fanotify marks", U),
+    t(
+        0x5509_6122,
+        "FANOTIFY_FILE",
+        "fanotify instances",
+        &FANOTIFY_FILE,
+    ),
+    t(
+        0x5650_6035,
+        "FANOTIFY_MARK",
+        "fanotify marks",
+        &FANOTIFY_MARK,
+    ),
     t(0x5925_5647, "SIGNAL", "pending signals", U),
     t(0x5800_5614, "NETLINK_SK", "netlink sockets", U),
     t(0x6139_4011, "NS_FILES", "namespace files", &NS_FILE_ENTRY),
@@ -813,9 +838,10 @@ static INVENTORY_ENTRY: Msg = msg(
         f(8, "dump_uptime", Ty::UInt),
         f(9, "pre_dump_mode", Ty::UInt),
         f(10, "tcp_close", Ty::Bool),
-        f(11, "network_lock_method", Ty::UInt),
+        f(11, "network_lock_method", Ty::Enum(NETWORK_LOCK)),
         f(12, "plugins_entry", Ty::Msg(&PLUGINS_ENTRY)),
         f(13, "dump_criu_run_id", Ty::Str),
+        f(14, "allow_uprobes", Ty::Bool),
     ],
     &[1, 6],
 );
@@ -1159,8 +1185,8 @@ static THREAD_INFO_X86: Msg = msg(
     &[
         f(1, "clear_tid_addr", Ty::Hex),
         f(2, "gpregs", Ty::Msg(&X86_REGS)),
-        f(3, "fpregs", Ty::Msg(U)),
-        f(4, "tls", Ty::Msg(U)),
+        f(3, "fpregs", Ty::Msg(&X86_FPREGS)),
+        f(4, "tls", Ty::Msg(&USER_DESC)),
     ],
     &[],
 );
@@ -1589,12 +1615,12 @@ static FILE_ENTRY: Msg = msg(
         f(6, "psk", Ty::Msg(U)),
         f(7, "nlsk", Ty::Msg(U)),
         f(8, "efd", Ty::Msg(&EVENTFD_ENTRY)),
-        f(9, "epfd", Ty::Msg(U)),
+        f(9, "epfd", Ty::Msg(&EVENTPOLL_FILE)),
         f(10, "sgfd", Ty::Msg(&SIGNALFD_ENTRY)),
         f(11, "tunf", Ty::Msg(U)),
         f(12, "tfd", Ty::Msg(&TIMERFD_ENTRY)),
-        f(13, "ify", Ty::Msg(U)),
-        f(14, "ffy", Ty::Msg(U)),
+        f(13, "ify", Ty::Msg(&INOTIFY_FILE)),
+        f(14, "ffy", Ty::Msg(&FANOTIFY_FILE)),
         f(15, "ext", Ty::Msg(U)),
         f(16, "usk", Ty::Msg(&UNIX_SK_ENTRY)),
         f(17, "fifo", Ty::Msg(&FIFO_ENTRY)),
@@ -1916,4 +1942,313 @@ static STATS_ENTRY: Msg = msg(
         f(2, "restore", Ty::Msg(&RESTORE_STATS)),
     ],
     &[],
+);
+
+// --- event and notification files, terminals, locks ---------------------------
+
+/// CRIU's own `NETWORK_LOCK_METHOD` (`criu/include/cr_options.h`, from 0;
+/// not `rpc.proto`'s, from 1): a `--network-lock skip` dump records 2.
+const NETWORK_LOCK: EnumTable = &[(0, "IPTABLES"), (1, "NFTABLES"), (2, "SKIP")];
+
+const EPOLL_EVENTS: FlagTable = &[
+    flag(0x1, "EPOLLIN"),
+    flag(0x2, "EPOLLPRI"),
+    flag(0x4, "EPOLLOUT"),
+    flag(0x8, "EPOLLERR"),
+    flag(0x10, "EPOLLHUP"),
+    flag(0x40, "EPOLLRDNORM"),
+    flag(0x80, "EPOLLRDBAND"),
+    flag(0x100, "EPOLLWRNORM"),
+    flag(0x200, "EPOLLWRBAND"),
+    flag(0x400, "EPOLLMSG"),
+    flag(0x2000, "EPOLLRDHUP"),
+    flag(1 << 28, "EPOLLEXCLUSIVE"),
+    flag(1 << 29, "EPOLLWAKEUP"),
+    flag(1 << 30, "EPOLLONESHOT"),
+    flag(1 << 31, "EPOLLET"),
+];
+
+static EVENTPOLL_TFD: Msg = msg(
+    "eventpoll_tfd_entry",
+    &[
+        f(1, "id", Ty::UInt),
+        f(2, "tfd", Ty::UInt),
+        f(3, "events", Ty::Flags(EPOLL_EVENTS)),
+        f(4, "data", Ty::Hex),
+        f(5, "dev", Ty::Hex),
+        f(6, "inode", Ty::UInt),
+        f(7, "pos", Ty::UInt),
+    ],
+    &[2, 3],
+);
+
+static EVENTPOLL_FILE: Msg = msg(
+    "eventpoll_file_entry",
+    &[
+        f(1, "id", Ty::UInt),
+        f(2, "flags", Ty::Flags(OPEN_FLAGS)),
+        f(3, "fown", Ty::Msg(&FOWN_ENTRY)),
+        f(4, "tfd", Ty::Msg(&EVENTPOLL_TFD)),
+    ],
+    &[1],
+);
+
+const INOTIFY_MASK: FlagTable = &[
+    flag(0x1, "IN_ACCESS"),
+    flag(0x2, "IN_MODIFY"),
+    flag(0x4, "IN_ATTRIB"),
+    flag(0x8, "IN_CLOSE_WRITE"),
+    flag(0x10, "IN_CLOSE_NOWRITE"),
+    flag(0x20, "IN_OPEN"),
+    flag(0x40, "IN_MOVED_FROM"),
+    flag(0x80, "IN_MOVED_TO"),
+    flag(0x100, "IN_CREATE"),
+    flag(0x200, "IN_DELETE"),
+    flag(0x400, "IN_DELETE_SELF"),
+    flag(0x800, "IN_MOVE_SELF"),
+    flag(0x2000, "IN_UNMOUNT"),
+    flag(0x4000, "IN_Q_OVERFLOW"),
+    flag(0x8000, "IN_IGNORED"),
+    flag(0x100_0000, "IN_ONLYDIR"),
+    flag(0x200_0000, "IN_DONT_FOLLOW"),
+    flag(0x400_0000, "IN_EXCL_UNLINK"),
+    flag(0x1000_0000, "IN_MASK_CREATE"),
+    flag(0x2000_0000, "IN_MASK_ADD"),
+    flag(0x4000_0000, "IN_ISDIR"),
+    flag(0x8000_0000, "IN_ONESHOT"),
+];
+
+/// A file handle (`images/fh.proto`).
+static FH_ENTRY: Msg = msg(
+    "fh_entry",
+    &[
+        f(1, "bytes", Ty::UInt),
+        f(2, "type", Ty::UInt),
+        f(3, "handle", Ty::Hex),
+        f(4, "path", Ty::Str),
+        f(5, "mnt_id", Ty::UInt),
+    ],
+    &[4],
+);
+
+static INOTIFY_WD: Msg = msg(
+    "inotify_wd_entry",
+    &[
+        f(1, "id", Ty::UInt),
+        f(2, "i_ino", Ty::UInt),
+        f(3, "mask", Ty::Flags(INOTIFY_MASK)),
+        f(4, "ignored_mask", Ty::Flags(INOTIFY_MASK)),
+        f(5, "s_dev", Ty::Hex),
+        f(6, "wd", Ty::UInt),
+        f(7, "f_handle", Ty::Msg(&FH_ENTRY)),
+    ],
+    &[6, 3],
+);
+
+static INOTIFY_FILE: Msg = msg(
+    "inotify_file_entry",
+    &[
+        f(1, "id", Ty::UInt),
+        f(2, "flags", Ty::Flags(OPEN_FLAGS)),
+        f(4, "fown", Ty::Msg(&FOWN_ENTRY)),
+        f(5, "wd", Ty::Msg(&INOTIFY_WD)),
+    ],
+    &[1],
+);
+
+static FANOTIFY_INODE_MARK: Msg = msg(
+    "fanotify_inode_mark_entry",
+    &[
+        f(1, "i_ino", Ty::UInt),
+        f(2, "f_handle", Ty::Msg(&FH_ENTRY)),
+    ],
+    &[],
+);
+
+static FANOTIFY_MOUNT_MARK: Msg = msg(
+    "fanotify_mount_mark_entry",
+    &[f(1, "mnt_id", Ty::UInt), f(2, "path", Ty::Str)],
+    &[2],
+);
+
+static FANOTIFY_MARK: Msg = msg(
+    "fanotify_mark_entry",
+    &[
+        f(1, "id", Ty::UInt),
+        f(2, "type", Ty::Enum(&[(1, "INODE"), (2, "MOUNT")])),
+        f(3, "mflags", Ty::Hex),
+        f(4, "mask", Ty::Hex),
+        f(5, "ignored_mask", Ty::Hex),
+        f(6, "s_dev", Ty::Hex),
+        f(7, "ie", Ty::Msg(&FANOTIFY_INODE_MARK)),
+        f(8, "me", Ty::Msg(&FANOTIFY_MOUNT_MARK)),
+    ],
+    &[2],
+);
+
+static FANOTIFY_FILE: Msg = msg(
+    "fanotify_file_entry",
+    &[
+        f(1, "id", Ty::UInt),
+        f(2, "flags", Ty::Flags(OPEN_FLAGS)),
+        f(3, "fown", Ty::Msg(&FOWN_ENTRY)),
+        f(4, "faflags", Ty::Hex),
+        f(5, "evflags", Ty::Hex),
+        f(6, "mark", Ty::Msg(&FANOTIFY_MARK)),
+    ],
+    &[1],
+);
+
+const TTY_TYPE: EnumTable = &[
+    (0, "UNKNOWN"),
+    (1, "PTY"),
+    (2, "CONSOLE"),
+    (3, "VT"),
+    (4, "CTTY"),
+    (5, "EXT_TTY"),
+    (6, "SERIAL"),
+];
+
+static WINSIZE: Msg = msg(
+    "winsize_entry",
+    &[
+        f(1, "ws_row", Ty::UInt),
+        f(2, "ws_col", Ty::UInt),
+        f(3, "ws_xpixel", Ty::UInt),
+        f(4, "ws_ypixel", Ty::UInt),
+    ],
+    &[1, 2],
+);
+
+/// `c_cc` holds the termios control characters packed four to an element
+/// (little-endian); CRIU 4.2.1 fills the elements past the kernel's
+/// `NCCS` bytes with whatever was in memory (external fixture).
+static TERMIOS: Msg = msg(
+    "termios_entry",
+    &[
+        f(1, "c_iflag", Ty::Hex),
+        f(2, "c_oflag", Ty::Hex),
+        f(3, "c_cflag", Ty::Hex),
+        f(4, "c_lflag", Ty::Hex),
+        f(5, "c_line", Ty::UInt),
+        f(6, "c_ispeed", Ty::UInt),
+        f(7, "c_ospeed", Ty::UInt),
+        f(8, "c_cc", Ty::Hex),
+    ],
+    &[],
+);
+
+static TTY_PTY: Msg = msg("tty_pty_entry", &[f(1, "index", Ty::UInt)], &[1]);
+
+static TTY_INFO: Msg = msg(
+    "tty_info_entry",
+    &[
+        f(1, "id", Ty::UInt),
+        f(2, "type", Ty::Enum(TTY_TYPE)),
+        f(3, "locked", Ty::Bool),
+        f(4, "exclusive", Ty::Bool),
+        f(5, "packet_mode", Ty::Bool),
+        f(6, "sid", Ty::UInt),
+        f(7, "pgrp", Ty::UInt),
+        f(8, "rdev", Ty::Hex),
+        f(9, "termios", Ty::Msg(&TERMIOS)),
+        f(10, "termios_locked", Ty::Msg(&TERMIOS)),
+        f(11, "winsize", Ty::Msg(&WINSIZE)),
+        f(12, "pty", Ty::Msg(&TTY_PTY)),
+        f(13, "dev", Ty::Hex),
+        f(14, "uid", Ty::UInt),
+        f(15, "gid", Ty::UInt),
+    ],
+    &[2, 1],
+);
+
+static TTY_DATA: Msg = msg(
+    "tty_data_entry",
+    &[f(1, "tty_id", Ty::UInt), f(2, "data", Ty::Bytes)],
+    &[1],
+);
+
+/// Lock kinds: the kernel's `fl_flags` bits CRIU records.
+const LOCK_FLAGS: FlagTable = &[
+    flag(1, "FL_POSIX"),
+    flag(2, "FL_FLOCK"),
+    flag(32, "FL_LEASE"),
+    flag(1024, "FL_OFDLCK"),
+];
+
+static FILE_LOCK: Msg = msg(
+    "file_lock_entry",
+    &[
+        f(1, "flag", Ty::Flags(LOCK_FLAGS)),
+        f(
+            2,
+            "type",
+            Ty::Enum(&[(0, "F_RDLCK"), (1, "F_WRLCK"), (2, "F_UNLCK")]),
+        ),
+        f(3, "pid", Ty::Int),
+        f(4, "fd", Ty::Int),
+        f(5, "start", Ty::Int),
+        f(6, "len", Ty::Int),
+    ],
+    &[1, 2],
+);
+
+// --- x86 FPU state and TLS ----------------------------------------------------
+
+static X86_CET: Msg = msg(
+    "user_x86_cet_entry",
+    &[f(1, "cet", Ty::Hex), f(2, "ssp", Ty::Hex)],
+    &[],
+);
+
+static X86_XSAVE: Msg = msg(
+    "user_x86_xsave_entry",
+    &[
+        f(1, "xstate_bv", Ty::Hex),
+        f(2, "ymmh_space", Ty::Hex),
+        f(3, "bndreg_state", Ty::Hex),
+        f(4, "bndcsr_state", Ty::Hex),
+        f(5, "opmask_reg", Ty::Hex),
+        f(6, "zmm_upper", Ty::Hex),
+        f(7, "hi16_zmm", Ty::Hex),
+        f(8, "pkru", Ty::Hex),
+        f(9, "cet", Ty::Msg(&X86_CET)),
+    ],
+    &[],
+);
+
+static X86_FPREGS: Msg = msg(
+    "user_x86_fpregs_entry",
+    &[
+        f(1, "cwd", Ty::Hex),
+        f(2, "swd", Ty::Hex),
+        f(3, "twd", Ty::Hex),
+        f(4, "fop", Ty::Hex),
+        f(5, "rip", Ty::Hex),
+        f(6, "rdp", Ty::Hex),
+        f(7, "mxcsr", Ty::Hex),
+        f(8, "mxcsr_mask", Ty::Hex),
+        f(9, "st_space", Ty::Hex),
+        f(10, "xmm_space", Ty::Hex),
+        f(11, "padding", Ty::Hex),
+        f(13, "xsave", Ty::Msg(&X86_XSAVE)),
+    ],
+    &[],
+);
+
+static USER_DESC: Msg = msg(
+    "user_desc_t",
+    &[
+        f(1, "entry_number", Ty::UInt),
+        f(2, "base_addr", Ty::Hex),
+        f(3, "limit", Ty::Hex),
+        f(4, "seg_32bit", Ty::Bool),
+        f(5, "contents_h", Ty::Bool),
+        f(6, "contents_l", Ty::Bool),
+        f(7, "read_exec_only", Ty::Bool),
+        f(8, "limit_in_pages", Ty::Bool),
+        f(9, "seg_not_present", Ty::Bool),
+        f(10, "usable", Ty::Bool),
+    ],
+    &[1],
 );

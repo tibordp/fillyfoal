@@ -4,9 +4,11 @@
 # privileged Docker container, host name "fillyfoal") writes for a Python
 # process holding a pipe with unread data, a Unix datagram socket pair with
 # queued messages, a loopback TCP connection with unread data both ways, a
-# System V message queue and semaphore set in its own IPC namespace, and a
-# deleted open file (see inner-raw.sh). Only the images with raw data after
-# their entries, and files.img for the objects they belong to, are kept; the
+# System V message queue and semaphore set in its own IPC namespace, an
+# epoll instance, an inotify watch, a pseudo-terminal pair, an flock()ed
+# file, and a deleted open file (see inner-raw.sh). Only the images with
+# raw data after their entries, files.img for the objects they belong to,
+# the file lock and terminal images and the inventory are kept; the
 # names of the TCP stream images (socket inode numbers) and of the IPC
 # namespace images (namespace IDs) depend on the run, so they are renamed.
 #
@@ -28,6 +30,9 @@ cp "$out/files.img" "$dst/raw-files.img"
 cp "$out"/ghost-file-*.img "$dst/raw-ghost-file.img"
 cp "$out"/ipcns-msg-*.img "$dst/raw-ipcns-msg.img"
 cp "$out"/ipcns-sem-*.img "$dst/raw-ipcns-sem.img"
+cp "$out/filelocks.img" "$dst/raw-filelocks.img"
+cp "$out/tty-info.img" "$dst/raw-tty-info.img"
+cp "$out/inventory.img" "$dst/raw-inventory.img"
 # The client's stream (it sent 31 bytes) and the server's (17 bytes).
 for f in "$out"/tcp-stream-*.img; do
   if grep -q "server to client" "$f"; then

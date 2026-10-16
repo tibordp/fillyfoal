@@ -24,6 +24,6 @@ expression: "common::explore(&display_name(&path), &data)"
       ns_per_id: true  [0x26+0x2]
       root_cg_set: 1  [0x28+0x2]
       lsmtype: NO_LSM (0x0)  [0x2a+0x2]
-      network_lock_method: 0  [0x2c+0x2]
+      network_lock_method: IPTABLES (0x0)  [0x2c+0x2]
     ▾ plugins_entry — plugins_entry, 0 bytes  [0x2e+0x2]
       dump_criu_run_id: "1cbd18b6-4105-46c2-a275-502aa5119a7d"  [0x30+0x26]
