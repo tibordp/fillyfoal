@@ -174,6 +174,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "exec")]
     &java::keystore::FORMAT,
     #[cfg(feature = "exec")]
+    &java::cds::FORMAT,
+    #[cfg(feature = "exec")]
     &bytecode::wasm::FORMAT,
     #[cfg(feature = "exec")]
     &android::dex::FORMAT,

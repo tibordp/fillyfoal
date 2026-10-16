@@ -1387,3 +1387,21 @@ the same way locally (`TEMPLEOS_Z_DIRS`).
 | --- | --- | --- |
 | `terraform-plan/create.tfplan` | Terraform v1.16.6 (`hashicorp/terraform:latest` image, linux_arm64) | `tests/data/terraform-plan/make.sh` (its header has the `docker run` line): `terraform plan -out=create.tfplan` of a configuration using only `terraform_data`, a variable, locals and outputs (no provider download), against an empty state. Unchanged; not byte-reproducible (resource IDs, ZIP timestamps) |
 | `terraform-plan/update.tfplan` | same | the same script, after `terraform apply` of the first plan: `terraform plan -var greeting=hi -out=update.tfplan` (updates, a replacement via `triggers_replace`, unknown values, non-empty `tfstate-prev`). Unchanged |
+
+## HotSpot class data sharing archives
+
+Written by Eclipse Temurin JDKs in Docker (`eclipse-temurin:{17,21,25}-jdk`, linux-aarch64) with
+`tests/data/jvm-cds/make.sh` (its header has the commands): a one-class `Hello` app, a static
+archive dumped from a three-class list, a dynamic archive over the JDK's default archive and one
+over that static archive. Stored with `zstd -19` (the harness decompresses `.raw.zst`). Not
+byte-reproducible (addresses and CRCs vary with the build); the archives hold only JDK classes,
+`Hello` and container paths (`/opt/java/openjdk`, `/work`).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `jvm-cds/jdk17-dynamic.jsa.raw.zst` | Temurin 17.0.20.1+1 | `-XX:ArchiveClassesAtExit`, version 11; unchanged |
+| `jvm-cds/jdk21-dynamic.jsa.raw.zst` | Temurin 21.0.12.1+1 | `-XX:ArchiveClassesAtExit`, version 18; unchanged |
+| `jvm-cds/jdk25-dynamic.jsa.raw.zst` | Temurin 25.0.4.1+1 | `-XX:ArchiveClassesAtExit`, version 19; unchanged |
+| `jvm-cds/jdk21-dynamic-on-static.jsa.raw.zst` | Temurin 21.0.12.1+1 | `-XX:SharedArchiveFile=static.jsa -XX:ArchiveClassesAtExit`: records the base archive's name; unchanged |
+| `jvm-cds/jdk21-static-prefix.jsa.raw.zst` | Temurin 21.0.12.1+1 | `-Xshare:dump` (9,109,504 bytes), cut to its first 73,728 bytes: the header, region table and the start of the `rw` region |
+| `jvm-cds/jdk17-static-prefix.jsa.raw.zst` | Temurin 17.0.20.1+1 | `-Xshare:dump` (6,488,064 bytes), cut to its first 73,728 bytes, as above |

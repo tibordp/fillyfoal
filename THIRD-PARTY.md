@@ -850,3 +850,6 @@ closely enough to credit:
 - Terraform saved plans (`crates/archive/src/formats/archive/terraform.rs`): message and field
   names, numbers and enum values from Terraform's `internal/plans/planproto/planfile.proto`
   (MPL-2.0; facts only, no code copied).
+- HotSpot CDS archives (`crates/exec/src/formats/java/cds.rs`): header and region layouts from
+  OpenJDK 17, 21 and 25 (`include/cds.h`, `cds/filemap.hpp`, `cds/dynamicArchive.hpp`;
+  GPL-2.0 with the Classpath exception; facts only, no code copied).
