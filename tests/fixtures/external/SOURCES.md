@@ -1626,6 +1626,7 @@ faked clock, finds every inode changed).
 | --- | --- | --- |
 | `xfsdump/level0.xfsdump.raw.zst` | xfsdump 3.2.0 | `faketime -f '2024-01-02 00:00:00' xfsdump -l 0 -L fillyfoal -M fillyfoal -f level0.xfsdump /mnt/fillyfoal`, stored with `zstd -19` |
 | `xfsdump/level1.xfsdump.raw.zst` | xfsdump 3.2.0 | `faketime -f '2024-01-04 00:00:00' xfsdump -l 1 -L fillyfoal-1 -M fillyfoal-1 -f level1.xfsdump /mnt/fillyfoal` after adding a file, stored with `zstd -19` |
+| `xfsdump/groups.xfsdump.raw.zst` | xfsdump 3.2.0 | `sh tests/data/xfsdump/make-groups.sh` (`inner-groups.sh`, same container and filesystem as above): a 16 MiB + 8 KiB file of four bytes repeated (written as two extent groups) and a small text file, `faketime -f '2024-01-02 00:00:00' xfsdump -l 0 -L fillyfoal -M fillyfoal -f groups.xfsdump /mnt/fillyfoal`, stored with `zstd -19` |
 ## Apache Kafka 3.9.1: log segments and indexes
 
 Written by a real broker: the `apache/kafka:3.9.1` image (KRaft, single

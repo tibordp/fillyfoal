@@ -11,7 +11,10 @@
 //! then directory entries: inode, generation, name, ending with a null
 //! entry), and the other inodes (a file header, then extent headers: data
 //! followed by its bytes, holes, alignment padding, and a last one; a
-//! symbolic link has one data extent holding its target). An inode with
+//! symbolic link has one data extent holding its target). A regular file
+//! is dumped in extent groups of up to 16 MiB of data, each a file header
+//! (whose offset is where the group starts in the file) and its extents;
+//! the listing shows the groups of one inode as one file. An inode with
 //! extended attributes is followed by a second file header flagged so,
 //! then attribute records ending with a null one. A file header flagged
 //! as the end closes the dump. Everything is big-endian.
@@ -22,7 +25,9 @@
 //!
 //! The listing names directories and files by their paths, from the
 //! directory entries (read once and cached); a file's content is its data
-//! extents and holes as a piecewise source.
+//! extents and holes as a piecewise source. Checksum mismatches are
+//! warnings; directory entries are checked only when the dump attributes
+//! say they carry checksums, extents when their own flag does.
 //!
 //! Written from xfsdump 3.2.0's headers (`common/global.h`, `drive.h`,
 //! `media.h`, `content.h`, `content_inode.h`, `dump/inomap.h`; read for
@@ -76,6 +81,8 @@ const EXT_ALIGN: u32 = 1;
 const EXT_DATA: u32 = 4;
 const EXT_HOLE: u32 = 8;
 const ATTR_NULL: u16 = 2;
+/// Dump attribute: directory entries carry checksums.
+const DIRENT_CHECKSUMS: u32 = 1 << 10;
 
 const MEDIA_FILE_TYPES: EnumTable = &[(0, "data"), (1, "inventory"), (2, "index")];
 const DUMP_ATTRS: FlagTable = &[
@@ -100,6 +107,26 @@ const FILE_FLAGS: FlagTable = &[
     flag(1 << 1, "CHECKSUM"),
     flag(1 << 2, "END"),
     flag(1 << 3, "EXTATTR"),
+];
+/// The extended flags of a `bstat` (FS_XFLAG_* of `linux/fs.h`).
+const XFLAGS: FlagTable = &[
+    flag(0x1, "REALTIME"),
+    flag(0x2, "PREALLOC"),
+    flag(0x8, "IMMUTABLE"),
+    flag(0x10, "APPEND"),
+    flag(0x20, "SYNC"),
+    flag(0x40, "NOATIME"),
+    flag(0x80, "NODUMP"),
+    flag(0x100, "RTINHERIT"),
+    flag(0x200, "PROJINHERIT"),
+    flag(0x400, "NOSYMLINKS"),
+    flag(0x800, "EXTSIZE"),
+    flag(0x1000, "EXTSZINHERIT"),
+    flag(0x2000, "NODEFRAG"),
+    flag(0x4000, "FILESTREAM"),
+    flag(0x8000, "DAX"),
+    flag(0x10000, "COWEXTSIZE"),
+    flag(0x8000_0000, "HASATTR"),
 ];
 const EXTENT_TYPES: EnumTable = &[(0, "last"), (1, "align"), (4, "data"), (8, "hole")];
 const ATTR_FLAGS: FlagTable = &[
@@ -296,6 +323,8 @@ fn be_u16(raw: &[u8], at: usize) -> u16 {
 #[derive(Clone, Debug)]
 struct FileHdr {
     span: Span,
+    /// Where the extent group the header starts begins in the file.
+    offset: u64,
     flags: u32,
     ino: u64,
     mode: u32,
@@ -315,6 +344,7 @@ async fn file_hdr(cx: &Cx, stream: Span, pos: u64) -> Result<FileHdr> {
     let raw = cx.read(span).await?;
     Ok(FileHdr {
         span,
+        offset: be_u64(&raw, 0),
         flags: be_u32(&raw, 8),
         ino: be_u64(&raw, 16),
         mode: be_u32(&raw, 24),
@@ -330,8 +360,10 @@ async fn file_hdr(cx: &Cx, stream: Span, pos: u64) -> Result<FileHdr> {
 enum Rec {
     Dir {
         hdr: FileHdr,
-        /// Entries: inode, name, span.
-        entries: Vec<(u64, String, Span)>,
+        entries: Vec<Dirent>,
+        /// Entries, the null one ending them included, whose checksums
+        /// do not match.
+        bad: u64,
     },
     File {
         hdr: FileHdr,
@@ -345,6 +377,14 @@ enum Rec {
     End {
         hdr: FileHdr,
     },
+}
+
+#[derive(Clone, Debug)]
+struct Dirent {
+    ino: u64,
+    name: String,
+    span: Span,
+    checksum_ok: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -421,6 +461,7 @@ async fn record_at(cx: &Cx, stream: Span, pos: u64) -> Result<(Rec, u64)> {
     match hdr.kind() {
         0o040000 => {
             let mut entries = Vec::new();
+            let mut bad = 0u64;
             loop {
                 cx.checkpoint().await;
                 let span = stream.sub_exact(at, DIRENTHDR)?;
@@ -434,17 +475,24 @@ async fn record_at(cx: &Cx, stream: Span, pos: u64) -> Result<(Rec, u64)> {
                 }
                 let whole = stream.sub_exact(at, len)?;
                 let body = cx.read(whole).await?;
-                if !checksum_ok(&raw, DIRENT_INTS) {
-                    return Err(Diagnostic::malformed("directory entry checksum mismatch").at(span));
+                // Checked by the caller, if the dump has entry checksums.
+                let ok = checksum_ok(&raw, DIRENT_INTS);
+                if !ok {
+                    bad = bad.saturating_add(1);
                 }
                 at = at.saturating_add(len);
                 if ino == 0 {
                     break;
                 }
                 let name = crate::text::until_nul(body.get(18..).unwrap_or_default());
-                entries.push((ino, name, whole));
+                entries.push(Dirent {
+                    ino,
+                    name,
+                    span: whole,
+                    checksum_ok: ok,
+                });
             }
-            Ok((Rec::Dir { hdr, entries }, at))
+            Ok((Rec::Dir { hdr, entries, bad }, at))
         }
         0o100000 | 0o120000 => {
             let link = hdr.kind() == 0o120000;
@@ -501,6 +549,8 @@ struct State {
     /// The records, from after the inode map to the end of the input.
     stream: Span,
     root: u64,
+    /// Whether directory entries carry checksums (dump attribute 10).
+    dirent_checksums: bool,
 }
 
 /// The directory entries, read once: each inode's parent and name, and
@@ -542,10 +592,10 @@ async fn names(cx: &Cx, state: &State) -> Result<Arc<Names>> {
             break;
         };
         match rec {
-            Rec::Dir { hdr, entries } => {
-                for (ino, name, _) in entries {
-                    if name != "." && name != ".." {
-                        parent.insert(ino, (hdr.ino, name));
+            Rec::Dir { hdr, entries, .. } => {
+                for e in entries {
+                    if e.name != "." && e.name != ".." {
+                        parent.insert(e.ino, (hdr.ino, e.name));
                     }
                 }
             }
@@ -650,6 +700,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         input,
         stream: file.tail(PAGE.saturating_add(map_len)),
         root: ih.root,
+        dirent_checksums: ih.attrs & DIRENT_CHECKSUMS != 0,
     });
     cx.emit(
         Node::new("Directories")
@@ -752,14 +803,23 @@ async fn directories(cx: Cx, state: Arc<State>) -> Result<()> {
                 plural(entries.len(), "entry")
             ));
         }
-        node = record_diags(node, &rec, attrs.as_ref());
+        let groups = Arc::new(vec![Group { rec, span }]);
+        node = record_diags(node, &state, &groups, attrs.as_ref());
         cx.mark(move || mark);
-        cx.push(node.lazy(record_children, (state.clone(), rec, attrs)))
+        cx.push(node.lazy(record_children, (state.clone(), groups, attrs)))
             .await;
         index = index.saturating_add(1);
         pos = after.max(pos.saturating_add(1));
     }
     Ok(())
+}
+
+/// One record of an inode with its span: a regular file is dumped as
+/// extent groups, each a record of its own.
+#[derive(Clone, Debug)]
+struct Group {
+    rec: Rec,
+    span: Span,
 }
 
 /// The other inodes' records, named by path.
@@ -806,12 +866,36 @@ async fn files(cx: Cx, state: Arc<State>) -> Result<()> {
             }
             break;
         }
-        let (attrs, after) = match record_at(&cx, state.stream, next).await {
-            Ok((a @ Rec::Attrs { .. }, n)) if a.hdr().ino == rec.hdr().ino => (Some(a), n),
-            _ => (None, next),
-        };
+        // A regular file's later extent groups, then its attributes.
+        let hdr = rec.hdr().clone();
+        let ino = hdr.ino;
+        let regular = hdr.kind() == 0o100000;
+        let mut groups = vec![Group {
+            span: state.stream.sub(pos, next.saturating_sub(pos)),
+            rec,
+        }];
+        let mut after = next;
+        let mut attrs = None;
+        loop {
+            match record_at(&cx, state.stream, after).await {
+                Ok((a @ Rec::Attrs { .. }, n)) if a.hdr().ino == ino => {
+                    attrs = Some(a);
+                    after = n;
+                    break;
+                }
+                Ok((r @ Rec::File { .. }, n))
+                    if regular && r.hdr().ino == ino && r.hdr().kind() == 0o100000 =>
+                {
+                    groups.push(Group {
+                        span: state.stream.sub(after, n.saturating_sub(after)),
+                        rec: r,
+                    });
+                    after = n.max(after.saturating_add(1));
+                }
+                _ => break,
+            }
+        }
         let span = state.stream.sub(pos, after.saturating_sub(pos));
-        let hdr = rec.hdr();
         let kind = match hdr.kind() {
             0o100000 => "file",
             0o120000 => "symbolic link",
@@ -835,9 +919,10 @@ async fn files(cx: Cx, state: Arc<State>) -> Result<()> {
                 unix_seconds: hdr.mtime.into(),
             });
         }
-        node = record_diags(node, &rec, attrs.as_ref());
+        let groups = Arc::new(groups);
+        node = record_diags(node, &state, &groups, attrs.as_ref());
         cx.mark(move || mark);
-        cx.push(node.lazy(record_children, (state.clone(), rec, attrs)))
+        cx.push(node.lazy(record_children, (state.clone(), groups, attrs)))
             .await;
         index = index.saturating_add(1);
         pos = after.max(pos.saturating_add(1));
@@ -846,8 +931,8 @@ async fn files(cx: Cx, state: Arc<State>) -> Result<()> {
 }
 
 /// Checksum problems of a record, on its node.
-fn record_diags(mut node: Node, rec: &Rec, attrs: Option<&Rec>) -> Node {
-    for r in std::iter::once(rec).chain(attrs) {
+fn record_diags(mut node: Node, state: &State, groups: &[Group], attrs: Option<&Rec>) -> Node {
+    for r in groups.iter().map(|g| &g.rec).chain(attrs) {
         if !r.hdr().checksum_ok {
             node = node.diag(Diagnostic::warning(format!(
                 "file header checksum mismatch at {:#x}",
@@ -855,10 +940,24 @@ fn record_diags(mut node: Node, rec: &Rec, attrs: Option<&Rec>) -> Node {
             )));
         }
     }
-    if let Rec::File { extents, .. } = rec
-        && extents.iter().any(|e| !e.checksum_ok)
-    {
+    // Extents say whether they carry a checksum (flag 1).
+    if groups.iter().any(|g| {
+        matches!(&g.rec, Rec::File { extents, .. }
+            if extents.iter().any(|e| e.flags & 1 != 0 && !e.checksum_ok))
+    }) {
         node = node.diag(Diagnostic::warning("extent header checksum mismatch"));
+    }
+    if state.dirent_checksums {
+        for g in groups {
+            if let Rec::Dir { bad, .. } = &g.rec
+                && *bad > 0
+            {
+                node = node.diag(Diagnostic::warning(format!(
+                    "{} with a checksum mismatch",
+                    plural(*bad, "directory entry")
+                )));
+            }
+        }
     }
     if let Some(Rec::Attrs { attrs, .. }) = attrs
         && attrs.iter().any(|a| !a.checksum_ok)
@@ -869,71 +968,55 @@ fn record_diags(mut node: Node, rec: &Rec, attrs: Option<&Rec>) -> Node {
 }
 
 /// A record's parts: the file header, entries or extents, attributes,
-/// and a file's content.
+/// and a file's content. A file of several extent groups lists each.
 async fn record_children(
     cx: Cx,
-    (state, rec, attrs): (Arc<State>, Rec, Option<Rec>),
+    (state, groups, attrs): (Arc<State>, Arc<Vec<Group>>, Option<Rec>),
 ) -> Result<()> {
-    let hdr = rec.hdr().clone();
-    cx.emit(
-        Node::new("File header")
-            .span(hdr.span)
-            .lazy(file_header_fields, hdr.span),
-    );
-    match &rec {
-        Rec::Dir { entries, .. } => {
-            for (ino, name, span) in entries {
-                cx.push(
-                    Node::new(name.clone())
-                        .span(*span)
-                        .summary(format!("inode {ino}"))
-                        .lazy(dirent_fields, *span),
-                )
-                .await;
-            }
-        }
-        Rec::File { extents, .. } => {
-            for e in extents {
-                let name = crate::formats::util::val::name_or(EXTENT_TYPES, e.kind.into(), "type ");
-                let mut node = Node::new(format!("Extent: {name}"))
-                    .span(Span::new(
-                        e.header.source,
-                        e.header.offset,
-                        e.data.end().saturating_sub(e.header.offset),
+    let Some(first) = groups.first() else {
+        return Ok(());
+    };
+    let hdr = first.rec.hdr().clone();
+    if let [one] = groups.as_slice() {
+        group_parts(&cx, &state, &one.rec).await?;
+    } else {
+        for (i, g) in groups.iter().enumerate() {
+            let n = match &g.rec {
+                Rec::File { extents, .. } => extents.len(),
+                _ => 0,
+            };
+            cx.push(
+                Node::new(format!("Extent group {i}"))
+                    .span(g.span)
+                    .summary(format!(
+                        "from offset {:#x}, {}",
+                        g.rec.hdr().offset,
+                        plural(n, "extent header")
                     ))
-                    .lazy(extent_fields, e.header);
-                node = match e.kind {
-                    EXT_DATA | EXT_HOLE => {
-                        node.summary(format!("{} at offset {:#x}", size(e.len), e.offset))
-                    }
-                    EXT_ALIGN => node.summary(format!("{} of padding", size(e.len))),
-                    _ => node,
-                };
-                if e.flags & 1 != 0 && !e.checksum_ok {
-                    node = node.diag(Diagnostic::warning("extent header checksum mismatch"));
-                }
-                cx.push(node).await;
-            }
-            if hdr.kind() == 0o120000 {
-                if let Some(e) = extents.first() {
-                    let raw = cx.read(e.data).await?;
-                    cx.push(
-                        Node::new("Link target")
-                            .span(e.data)
-                            .value(text(crate::text::until_nul(&raw))),
-                    )
-                    .await;
-                }
-            } else if hdr.kind() == 0o100000 {
+                    .lazy(group_children, (state.clone(), g.rec.clone())),
+            )
+            .await;
+        }
+    }
+    if let Rec::File { extents, .. } = &first.rec {
+        if hdr.kind() == 0o120000 {
+            if let Some(e) = extents.first() {
+                let raw = cx.read(e.data).await?;
                 cx.push(
-                    Node::new("Content")
-                        .summary(size(hdr.size))
-                        .lazy(content, (state.clone(), rec.clone())),
+                    Node::new("Link target")
+                        .span(e.data)
+                        .value(text(crate::text::until_nul(&raw))),
                 )
                 .await;
             }
+        } else if hdr.kind() == 0o100000 {
+            cx.push(
+                Node::new("Content")
+                    .summary(size(hdr.size))
+                    .lazy(content, (state.clone(), groups.clone())),
+            )
+            .await;
         }
-        Rec::Attrs { .. } | Rec::End { .. } => {}
     }
     if let Some(Rec::Attrs { hdr, attrs }) = &attrs {
         cx.push(
@@ -967,18 +1050,79 @@ async fn record_children(
     Ok(())
 }
 
+async fn group_children(cx: Cx, (state, rec): (Arc<State>, Rec)) -> Result<()> {
+    group_parts(&cx, &state, &rec).await
+}
+
+/// A record's file header, then its directory entries or extent headers.
+async fn group_parts(cx: &Cx, state: &State, rec: &Rec) -> Result<()> {
+    let hdr = rec.hdr();
+    cx.emit(
+        Node::new("File header")
+            .span(hdr.span)
+            .lazy(file_header_fields, hdr.span),
+    );
+    match rec {
+        Rec::Dir { entries, .. } => {
+            for e in entries {
+                let mut node = Node::new(e.name.clone())
+                    .span(e.span)
+                    .summary(format!("inode {}", e.ino))
+                    .lazy(dirent_fields, (e.span, state.dirent_checksums));
+                if state.dirent_checksums && !e.checksum_ok {
+                    node = node.diag(Diagnostic::warning("directory entry checksum mismatch"));
+                }
+                cx.push(node).await;
+            }
+        }
+        Rec::File { extents, .. } => {
+            for e in extents {
+                let name = crate::formats::util::val::name_or(EXTENT_TYPES, e.kind.into(), "type ");
+                let mut node = Node::new(format!("Extent: {name}"))
+                    .span(Span::new(
+                        e.header.source,
+                        e.header.offset,
+                        e.data.end().saturating_sub(e.header.offset),
+                    ))
+                    .lazy(extent_fields, e.header);
+                node = match e.kind {
+                    EXT_DATA | EXT_HOLE => {
+                        node.summary(format!("{} at offset {:#x}", size(e.len), e.offset))
+                    }
+                    EXT_ALIGN => node.summary(format!("{} of padding", size(e.len))),
+                    _ => node,
+                };
+                if e.flags & 1 != 0 && !e.checksum_ok {
+                    node = node.diag(Diagnostic::warning("extent header checksum mismatch"));
+                }
+                cx.push(node).await;
+            }
+        }
+        Rec::Attrs { .. } | Rec::End { .. } => {}
+    }
+    Ok(())
+}
+
 /// A regular file's content: its data extents and holes, clipped to its
 /// size.
-async fn content(cx: Cx, (state, rec): (Arc<State>, Rec)) -> Result<()> {
-    let Rec::File { hdr, extents } = &rec else {
+async fn content(cx: Cx, (state, groups): (Arc<State>, Arc<Vec<Group>>)) -> Result<()> {
+    let Some(Group {
+        rec: Rec::File { hdr, .. },
+        ..
+    }) = groups.first()
+    else {
         return Ok(());
     };
+    let extents = groups.iter().flat_map(|g| match &g.rec {
+        Rec::File { extents, .. } => extents.as_slice(),
+        _ => &[],
+    });
     let mut list = PieceList::new(hdr.span);
-    for (i, e) in extents.iter().enumerate() {
+    for (i, e) in extents.enumerate() {
         if i % 1024 == 0 {
             cx.checkpoint().await;
         }
-        if e.offset > list.len() {
+        if e.offset > list.len() && matches!(e.kind, EXT_DATA | EXT_HOLE) {
             list.hole(&cx, e.offset.saturating_sub(list.len()))?;
         }
         let left = hdr.size.saturating_sub(list.len());
@@ -1011,7 +1155,7 @@ async fn file_header_fields(cx: Cx, span: Span) -> Result<()> {
     let mut f = Node::new("Offset")
         .span(span.sub(0, 8))
         .value(uint(be_u64(&raw, 0), 64));
-    f = f.desc("Where a resumed dump starts in the file");
+    f = f.desc("Where the extent group this header starts begins in the file (a large file is dumped as several)");
     cx.emit(f);
     let flags = be_u32(&raw, 8);
     cx.emit(
@@ -1070,7 +1214,7 @@ async fn file_header_fields(cx: Cx, span: Span) -> Result<()> {
             .value(uint(u64_at(80), 64)),
         Node::new("Extended flags")
             .span(st.sub(72, 4))
-            .value(hex(u32_at(88), 32)),
+            .value(crate::formats::util::val::flagsv(u32_at(88), 32, XFLAGS)),
         Node::new("Extent size hint")
             .span(st.sub(76, 4))
             .value(uint(u32_at(92), 32)),
@@ -1136,7 +1280,7 @@ async fn extent_fields(cx: Cx, span: Span) -> Result<()> {
     Ok(())
 }
 
-async fn dirent_fields(cx: Cx, span: Span) -> Result<()> {
+async fn dirent_fields(cx: Cx, (span, checked): (Span, bool)) -> Result<()> {
     let raw = cx.read(span).await?;
     cx.emit(
         Node::new("Inode")
@@ -1151,7 +1295,7 @@ async fn dirent_fields(cx: Cx, span: Span) -> Result<()> {
     let mut ck = Node::new("Checksum")
         .span(span.sub(12, 4))
         .value(hex(be_u32(&raw, 12), 32));
-    if !checksum_ok(raw.get(..24).unwrap_or_default(), DIRENT_INTS) {
+    if checked && !checksum_ok(raw.get(..24).unwrap_or_default(), DIRENT_INTS) {
         ck = ck.diag(Diagnostic::warning("mismatch"));
     }
     cx.emit(ck);
