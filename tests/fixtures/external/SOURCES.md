@@ -1380,3 +1380,16 @@ the same way locally (`TEMPLEOS_Z_DIRS`).
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
 | `templeos-iso/templeos-redseaiso.iso.gz` | TempleOS V5.03 (the distribution ISO above, booted as a live CD in QEMU 10.0.13 `qemu-system-x86_64 -accel tcg`, Debian 13 aarch64, in Docker, `-rtc base=2026-01-01T00:00:00`) | `tests/data/redsea/qemu_redseaiso.py` (its docstring has the `docker run` line) types, over QMP, `DirMk`/`Copy` of `/Demo/DateTime.HC.Z` and `/Doc/FileLowLevel.DD.Z` from the CD into `B:/Src` on the RAM drive, then `RedSeaISO("B:/Out","B:/Src");`, saves the guest's memory and carves `B:/Out.ISO.C` (contiguous) out of the RAM drive. Not reproducible byte for byte (the volume's `unique_id` mixes in the TSC, and creation times vary by seconds; two runs differed in 20 bytes). Apart from the slack after each file's last block (TempleOS writes from an uninitialised buffer, so it holds stale heap bytes), it is byte for byte what `tests/data/redsea/make_image.py` builds for the same tree, times and ID. Stored with `gzip -9 -n`. Public domain (TempleOS) |
+
+## QEMU migration streams and libvirt save images (Debian 13 in Docker)
+
+Made with the image built from `tests/data/qemu-vmstate/Dockerfile`
+(Debian 13 `trixie-slim`, aarch64: QEMU 10.0.13 `qemu-system-x86_64` under
+TCG, libvirt 11.3.0, xz-utils, zstd), host name `fillyfoal`.
+None is byte-for-byte reproducible (guest clocks, firmware progress).
+Contents checked: guest memory is SeaBIOS/qboot and ACPI tables only.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `qemu-vmstate/microvm.vmstate.raw.zst` | QEMU 10.0.13 | `sh tests/data/qemu-vmstate/make-external.sh` (`inner.sh microvm 2`): `qemu-system-x86_64 -nodefaults -machine microvm -accel tcg -m 2`, QMP `stop` then `migrate "exec:cat > ..."`; stored with `zstd -19` |
+| `libvirt-save/fillyfoal-xz.sav` | libvirt 11.3.0, QEMU 10.0.13, xz | `sh tests/data/libvirt-save/make-external.sh`: privileged container running `libvirtd` (`save_image_format = "xz"`, no cgroups), `virsh create` of a diskless 4 MiB `pc` domain named `fillyfoal`, then `virsh save`; unchanged |
