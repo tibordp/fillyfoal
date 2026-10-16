@@ -590,10 +590,8 @@ async fn zip_body(cx: &Cx, state: &PageState, span: Span) -> Result<()> {
             plural(z.from_stream, "record")
         ))
         .lazy(zip_stream, (state.clone(), span));
-    if !z.adler_ok {
-        node = node.diag(Diagnostic::malformed(
-            "the stream's Adler-32 does not match",
-        ));
+    if let Some(message) = z.adler.mismatch_text() {
+        node = node.diag(Diagnostic::warning(message));
     }
     cx.emit(node);
     let log_start = PAGE_DATA.saturating_add(z.stream);
@@ -721,15 +719,11 @@ async fn zip_stream(cx: Cx, (state, span): (PageState, Span)) -> Result<()> {
         Codec::Zlib,
         Some(z.inflated),
     ));
-    let mut adler = Node::new("Adler-32").span(stream.sub(z.stream.saturating_sub(4), 4));
-    adler = if z.adler_ok {
-        adler.summary("valid")
-    } else {
-        adler.diag(Diagnostic::malformed(
-            "the stream's Adler-32 does not match",
-        ))
-    };
-    cx.emit(adler);
+    cx.emit(
+        Node::new("Adler-32")
+            .span(stream.sub(z.stream.saturating_sub(4), 4))
+            .checksum(z.adler.clone()),
+    );
     Ok(())
 }
 

@@ -26,7 +26,7 @@ use crate::formats::util::val::{enumv, flagsv, hex, text, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag, lookup};
 
 const PAGE: u64 = 8192;
 const HEADER: u64 = 96;
@@ -88,6 +88,9 @@ fn checksum_ok(page: &[u8]) -> Option<bool> {
     }
     Some(compute_checksum(page)? == u32_le(page, 60)?)
 }
+
+/// SQL Server's page checksum (PAGE_VERIFY CHECKSUM).
+const MSSQL_SUM: &str = "page checksum";
 
 fn compute_checksum(page: &[u8]) -> Option<u32> {
     if page.len() != to_usize(PAGE) {
@@ -351,7 +354,11 @@ async fn page_node(cx: Cx, (f, n): (File, u64)) -> Result<()> {
         .span(span.sub(0, HEADER))
         .lazy(header_fields, span);
     if checksum_ok(&p) == Some(false) {
-        hn = hn.diag(Diagnostic::warning("page checksum mismatch"));
+        let check = Check::new(MSSQL_SUM, u32_le(&p, 60).unwrap_or(0));
+        hn = hn.check_diag(&match compute_checksum(&p) {
+            Some(c) => check.verify(c),
+            None => check.verified(false),
+        });
     }
     if u64::from(u32_le(&p, 32).unwrap_or(0)) != n {
         hn = hn.diag(Diagnostic::malformed(format!(
@@ -509,20 +516,14 @@ async fn header_fields(cx: Cx, span: Span) -> Result<()> {
             .value(uint(u16_le(&b, 58).unwrap_or(0), 16)),
     );
     let stored = u32_le(&b, 60).unwrap_or(0);
-    let mut ck = Node::new("Checksum or torn bits")
-        .span(at(60, 4))
-        .value(hex(stored, 32));
+    let ck = Node::new("Checksum or torn bits").span(at(60, 4));
     let full = cx.read(span).await?;
-    match (checksum_ok(&full), compute_checksum(&full)) {
-        (Some(true), _) => ck = ck.summary("checksum, valid"),
-        (Some(false), Some(c)) => {
-            ck = ck.diag(Diagnostic::warning(format!(
-                "checksum mismatch (computed {c:#010x})"
-            )));
-        }
-        _ => ck = ck.summary("torn-page bits or none"),
-    }
-    cx.emit(ck);
+    let check = Check::new(MSSQL_SUM, stored);
+    cx.emit(match (checksum_ok(&full), compute_checksum(&full)) {
+        (Some(true), _) => ck.checksum(check.verified(true)),
+        (Some(false), Some(c)) => ck.checksum(check.verify(c)),
+        _ => ck.value(hex(stored, 32)).summary("torn-page bits or none"),
+    });
     cx.emit(Node::new("Reserved").span(at(64, 32)));
     Ok(())
 }

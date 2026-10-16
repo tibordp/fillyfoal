@@ -17,7 +17,7 @@ use crate::formats::util::fmt::{grouped_count, plural, size};
 use crate::formats::util::val::{hex, text, uint};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::{Check, EnumTable, Value, lookup};
 
 pub const ALLOCATED: u16 = 0;
 pub const UNDO_LOG: u16 = 2;
@@ -199,11 +199,13 @@ pub fn page_ref(name: &'static str, space: &Space, no: u32, at: Span) -> Node {
 }
 
 /// The result of checking a page's checksum.
-pub enum Check {
+pub enum PageSum {
+    /// Valid, by this algorithm.
     Valid(&'static str),
     /// The "none" algorithm's magic.
     NoChecksum,
     Empty,
+    /// The CRC-32C the page should have.
     Mismatch(u32),
 }
 
@@ -226,9 +228,9 @@ pub fn zip_checksum(page: &[u8]) -> u32 {
 }
 
 /// Checks a whole page's checksum.
-pub fn verify(space: &Space, page: &[u8]) -> Check {
+pub fn verify(space: &Space, page: &[u8]) -> PageSum {
     if page.iter().all(|&b| b == 0) {
-        return Check::Empty;
+        return PageSum::Empty;
     }
     let len = page.len();
     let range = |a: usize, b: usize| page.get(a..b).unwrap_or_default();
@@ -237,38 +239,38 @@ pub fn verify(space: &Space, page: &[u8]) -> Check {
             let stored = u32_be(page, len.saturating_sub(4)).unwrap_or(0);
             let crc = crc32c(range(0, len.saturating_sub(4)));
             if crc == stored {
-                Check::Valid("CRC-32C (full_crc32)")
+                PageSum::Valid("CRC-32C")
             } else {
-                Check::Mismatch(crc)
+                PageSum::Mismatch(crc)
             }
         }
         Sum::Zip => {
             let stored = u32_be(page, 0).unwrap_or(0);
             if stored == 0xdead_beef {
-                return Check::NoChecksum;
+                return PageSum::NoChecksum;
             }
             let crc = zip_checksum(page);
             if crc == stored {
-                Check::Valid("CRC-32C (compressed page)")
+                PageSum::Valid("CRC-32C")
             } else {
-                Check::Mismatch(crc)
+                PageSum::Mismatch(crc)
             }
         }
         Sum::Classic => {
             let stored = u32_be(page, 0).unwrap_or(0);
             if stored == 0xdead_beef {
-                return Check::NoChecksum;
+                return PageSum::NoChecksum;
             }
             let end = len.saturating_sub(8);
             let crc = crc32c(range(4, 26)) ^ crc32c(range(38, end));
             if crc == stored {
-                return Check::Valid("CRC-32C");
+                return PageSum::Valid("CRC-32C");
             }
             let legacy = fold(range(4, 26)).wrapping_add(fold(range(38, end))) & 0xffff_ffff;
             if legacy == u64::from(stored) {
-                return Check::Valid("InnoDB legacy");
+                return PageSum::Valid("InnoDB legacy");
             }
-            Check::Mismatch(crc)
+            PageSum::Mismatch(crc)
         }
     }
 }
@@ -323,10 +325,17 @@ fn fil_header(cx: &Cx, state: &PageState, span: Span, page: &[u8]) {
     let mut node = Node::new("FIL header")
         .span(at(0, FIL_HEADER))
         .lazy(fil_fields, state.clone());
-    if let Check::Mismatch(computed) = verify(space, page) {
-        node = node.diag(Diagnostic::warning(format!(
-            "checksum mismatch (computed {computed:#010x})"
-        )));
+    if let PageSum::Mismatch(computed) = verify(space, page) {
+        let stored = match space.geo.sum {
+            Sum::FullCrc32 => u32_at(page.len().saturating_sub(4)),
+            _ => u32_at(0),
+        };
+        if let Some(message) = Check::new("CRC-32C", stored)
+            .verify(computed)
+            .mismatch_text()
+        {
+            node = node.diag(Diagnostic::warning(message));
+        }
     }
     if u32_at(4) != state.no && !page.iter().all(|&b| b == 0) {
         node = node.diag(Diagnostic::malformed(format!(
@@ -352,16 +361,18 @@ async fn fil_fields(cx: Cx, state: PageState) -> Result<()> {
     } else {
         "Checksum"
     })
-    .span(at(0, 4))
-    .value(hex(stored, 32));
+    .span(at(0, 4));
+    let kind = if space.geo.sum == Sum::Zip {
+        "CRC-32C of a compressed page"
+    } else {
+        "CRC-32C, or InnoDB's legacy fold"
+    };
     cx.emit(match (space.geo.sum, verify(space, &page)) {
-        (Sum::FullCrc32, _) => checksum.desc("With full_crc32 the checksum is at the end of the page; this field holds the encryption key version"),
-        (_, Check::Valid(algorithm)) => checksum.summary(format!("{algorithm}, valid")),
-        (_, Check::NoChecksum) => checksum.summary("no checksum (innodb_checksum_algorithm=none)"),
-        (_, Check::Empty) => checksum.summary("empty page"),
-        (_, Check::Mismatch(c)) => checksum.diag(Diagnostic::warning(format!(
-            "checksum mismatch (CRC-32C would be {c:#010x})"
-        ))),
+        (Sum::FullCrc32, _) => checksum.value(hex(stored, 32)).desc("With full_crc32 the checksum is at the end of the page; this field holds the encryption key version"),
+        (_, PageSum::Valid(algorithm)) => checksum.checksum(Check::new(algorithm, stored).verified(true)).desc(kind),
+        (_, PageSum::NoChecksum) => checksum.value(hex(stored, 32)).summary("no checksum (innodb_checksum_algorithm=none)"),
+        (_, PageSum::Empty) => checksum.checksum(Check::new("CRC-32C", stored).skipped("empty page")),
+        (_, PageSum::Mismatch(c)) => checksum.checksum(Check::new("CRC-32C", stored).verify(c)).desc(kind),
     });
     let mut no = Node::new("Page number")
         .span(at(4, 4))
@@ -465,19 +476,16 @@ fn fil_trailer(cx: &Cx, space: &Space, span: Span, page: &[u8]) {
         Sum::FullCrc32 => {
             cx.emit(low_at(len.saturating_sub(8)));
             let stored = u32_be(page, to_usize(len.saturating_sub(4))).unwrap_or(0);
-            let mut n = Node::new("Checksum (CRC-32C)")
-                .span(span.sub(len.saturating_sub(4), 4))
-                .value(hex(stored, 32));
-            match verify(space, page) {
-                Check::Valid(_) => n = n.summary("valid"),
-                Check::Mismatch(c) => {
-                    n = n.diag(Diagnostic::warning(format!(
-                        "checksum mismatch (computed {c:#010x})"
-                    )));
-                }
-                _ => {}
-            }
-            cx.emit(n);
+            let check = Check::new("CRC-32C", stored);
+            cx.emit(
+                Node::new("Checksum")
+                    .span(span.sub(len.saturating_sub(4), 4))
+                    .checksum(match verify(space, page) {
+                        PageSum::Valid(_) => check.verified(true),
+                        PageSum::Mismatch(c) => check.verify(c),
+                        _ => check,
+                    }),
+            );
         }
     }
 }

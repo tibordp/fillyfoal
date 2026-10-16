@@ -25,7 +25,7 @@ use crate::formats::util::wire::thrift::{Memo, Skip};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::{Check, EnumTable, Radix, Value, lookup};
 
 /// Nesting of Thrift structures followed.
 const MAX_DEPTH: u32 = 32;
@@ -1566,18 +1566,11 @@ async fn page(
     {
         let data = cx.read(body).await?;
         let computed = crate::formats::util::datakit::crc32_paced(&cx, &data).await;
-        let node = Node::new("CRC check").value(Value::UInt {
-            value: computed.into(),
-            bits: 32,
-            radix: Radix::Hex,
-        });
-        cx.emit(if computed == crc {
-            node.summary("CRC-32 of the page data matches the header")
-        } else {
-            node.diag(Diagnostic::warning(format!(
-                "page CRC mismatch: the header says {crc:#010x}"
-            )))
-        });
+        cx.emit(
+            Node::new("CRC check")
+                .checksum(Check::new("CRC-32", crc).verify(computed))
+                .desc("The page header's CRC-32, checked against the page data"),
+        );
     }
     let v2 = info.kind == 3;
     let levels = info.rep_len.saturating_add(info.def_len);

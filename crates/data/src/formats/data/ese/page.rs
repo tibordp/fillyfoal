@@ -9,7 +9,7 @@ use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::span::Span;
-use crate::value::{FlagTable, flag};
+use crate::value::{Check, FlagTable, flag};
 
 use super::Db;
 
@@ -247,40 +247,21 @@ pub fn ecc32(page: &[u8]) -> u32 {
     (high & 0xffff).wrapping_shl(16) | (positions & 0xffff)
 }
 
-/// What a page's checksum says.
-pub struct Check {
-    pub scheme: &'static str,
-    pub stored: u64,
-    /// `None` when we cannot compute it (large pages).
-    pub computed: Option<u64>,
-}
-
+/// A page's checksum, checked: ECC + XOR (the ECC in the high half) on
+/// newer pages, an XOR of the page's dwords on older ones.
 pub fn check(page: &Page) -> Check {
     let data = &page.data;
     if page.flags & NEW_CHECKSUM != 0 {
+        let check = Check::new("ESE ECC + XOR", page.checksum);
         if !page.small {
-            return Check {
-                scheme: "ECC + XOR per 8 KiB block (not verified)",
-                stored: page.checksum,
-                computed: None,
-            };
+            return check.skipped("large pages: one per 8 KiB block, not computed");
         }
         let xor = xor32(data.get(8..).unwrap_or_default(), 0) ^ page.pgno;
         let ecc = ecc32(data);
-        return Check {
-            scheme: "ECC + XOR",
-            stored: page.checksum,
-            computed: Some(u64::from(ecc).wrapping_shl(32) | u64::from(xor)),
-        };
+        return check.verify(u64::from(ecc).wrapping_shl(32) | u64::from(xor));
     }
-    Check {
-        scheme: "XOR",
-        stored: u64::from(u32_le(data, 0).unwrap_or(0)),
-        computed: Some(u64::from(xor32(
-            data.get(4..).unwrap_or_default(),
-            XOR_SEED,
-        ))),
-    }
+    Check::new("ESE XOR", u32_le(data, 0).unwrap_or(0))
+        .verify(xor32(data.get(4..).unwrap_or_default(), XOR_SEED))
 }
 
 /// Leaves of the B-tree rooted at `root`, in key order: descends to the

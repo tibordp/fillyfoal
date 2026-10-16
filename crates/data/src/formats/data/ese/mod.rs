@@ -28,7 +28,7 @@ use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, Value, decode_flags, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, decode_flags, flag, lookup};
 
 use page::{LeafWalk, Page, load};
 use record::{COLUMN_FLAGS, COLUMN_TYPES, ColDef, TAGGED_FLAGS};
@@ -158,16 +158,13 @@ async fn ese(cx: Cx, input: Input) -> Result<()> {
     let mut header = Node::new("Database header")
         .span(file.sub(0, page_size))
         .lazy(header_fields, (file.sub(0, page_size), page_size));
-    match header_check {
-        Some((stored, computed)) if stored == computed => {
-            header = header.summary("checksum valid");
-        }
-        Some((stored, computed)) => {
-            header = header.diag(Diagnostic::warning(format!(
-                "checksum {stored:#010x}, computed {computed:#010x}"
-            )));
-        }
-        None => {}
+    // The checksum is the first of the header's fields (shown unchecked
+    // there); its verdict is the header's summary.
+    if let Some((stored, computed)) = header_check {
+        let check = Check::new("ESE XOR", stored).verify(computed);
+        header = header
+            .summary(format!("checksum {}", check.verdict_text()))
+            .check_diag(&check);
     }
     if !valid {
         header = header.diag(Diagnostic::malformed(format!(
@@ -1519,7 +1516,7 @@ async fn space_view(cx: Cx, (db, fdp): (D, u32)) -> Result<()> {
 
 record! {
     pub struct PageHeader {
-        checksum: u64 "Checksum" .hex(),
+        checksum: u64 "Checksum" .checksum("ESE checksum"),
         dbtime: u64 "Database time" .desc("When the page was last modified"),
         prev: u32 "Previous page",
         next: u32 "Next page",
@@ -1570,14 +1567,7 @@ async fn pages_view(cx: Cx, db: D) -> Result<()> {
         ));
         let c = page::check(&page);
         charge_check(&cx, &page).await;
-        if let Some(computed) = c.computed
-            && computed != c.stored
-        {
-            node = node.diag(Diagnostic::warning(format!(
-                "{} checksum {:#x}, computed {computed:#x}",
-                c.scheme, c.stored
-            )));
-        }
+        node = node.check_diag(&c);
         cx.push(node.lazy(page_view, (db.clone(), pgno))).await;
     }
     Ok(())
@@ -1594,18 +1584,12 @@ async fn charge_check(cx: &Cx, page: &Page) {
 async fn page_view(cx: Cx, (db, pgno): (D, u32)) -> Result<()> {
     let span = db.page_span(pgno)?;
     let page = load(&cx, &db, pgno).await?;
-    let mut header = PageHeader::node("Header", span.sub(0, PageHeader::SIZE), LE);
     let c = page::check(&page);
     charge_check(&cx, &page).await;
-    header = match c.computed {
-        Some(x) if x == c.stored => header.summary(format!("{} checksum valid", c.scheme)),
-        Some(x) => header.diag(Diagnostic::warning(format!(
-            "{} checksum {:#x}, computed {x:#x}",
-            c.scheme, c.stored
-        ))),
-        None => header.summary(c.scheme),
-    };
-    cx.emit(header);
+    cx.emit(
+        PageHeader::checked_node("Header", span.sub(0, PageHeader::SIZE), LE, c.at(0))
+            .check_diag(&c),
+    );
     if !page.small {
         let block = cx.block(span.sub(40, 40)).await?;
         let mut f = Fields::emitting(&cx, &block, LE);

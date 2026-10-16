@@ -48,7 +48,7 @@ use crate::formats::util::fmt;
 use crate::formats::util::fmt::{grouped_count, plural};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, Value};
+use crate::value::{Check, EnumTable, Value};
 
 const HEADER: u64 = 4096;
 const BLOCKS_AT: u64 = 3 * HEADER;
@@ -141,19 +141,9 @@ fn checksum(data: &[u8]) -> u64 {
 }
 
 fn checksum_node(stored: u64, payload: &[u8], at: Span) -> Node {
-    let computed = checksum(payload);
-    let node = Node::new("Checksum").span(at).value(Value::UInt {
-        value: stored,
-        bits: 64,
-        radix: crate::value::Radix::Hex,
-    });
-    if stored == computed {
-        node.summary("valid")
-    } else {
-        node.diag(Diagnostic::warning(format!(
-            "checksum mismatch (computed {computed:#018x})"
-        )))
-    }
+    Node::new("Checksum")
+        .span(at)
+        .checksum(Check::new("DuckDB block hash", stored).verify(checksum(payload)))
 }
 
 #[derive(Clone, Copy, Debug, Default)]

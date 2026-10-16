@@ -21,7 +21,6 @@ use crate::formats::util::{fmt as ufmt, val};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::Value;
 
 const VERSION: u32 = 3_007_000;
 const HDR: u64 = 48;
@@ -186,21 +185,15 @@ fn header_layout(f: &mut Fields<'_>, &(_, s1, s2): &(Endian, u32, u32)) -> Resul
         .hex()
         .desc("aSalt: copied from the WAL header")
         .emit()?;
-    let c1 = f.u32("Checksum-1").hex().emit()?;
-    let c2 = f
-        .u32("Checksum-2")
-        .hex()
+    f.u32("Checksum-1")
+        .checksum("WAL checksum")
+        .verify(Some(s1))
+        .emit()?;
+    f.u32("Checksum-2")
+        .checksum("WAL checksum")
+        .verify(Some(s2))
         .desc("aCksum: over the 40 bytes before it, in the index's byte order")
         .emit()?;
-    let node = Node::new("Checksum check");
-    f.node(if (s1, s2) == (c1, c2) {
-        node.value(Value::Bool(true)).summary("matches")
-    } else {
-        node.value(Value::Bool(false))
-            .diag(Diagnostic::warning(format!(
-                "computed {s1:#010x} {s2:#010x}"
-            )))
-    });
     Ok(())
 }
 

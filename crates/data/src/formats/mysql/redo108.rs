@@ -25,7 +25,7 @@ use crate::formats::util::fmt::{clip, grouped_count, plural, size};
 use crate::formats::util::val::{hex, text, uint};
 use crate::node::Node;
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::{Check, EnumTable, Value, lookup};
 
 /// The first checkpoint block, the second, and the log.
 const CHECKPOINT_1: u64 = 4096;
@@ -467,18 +467,13 @@ async fn header_block(cx: Cx, (file, format): (Span, u32)) -> Result<()> {
 
 fn crc_node(b: &[u8], span: Span, at: usize) -> Node {
     let stored = u32_be(b, at).unwrap_or(0);
-    let n = Node::new("Checksum")
-        .span(span.sub(to_u64(at), 4))
-        .value(hex(stored, 32));
+    let n = Node::new("Checksum").span(span.sub(to_u64(at), 4));
     let crc = crc32c(b.get(..at).unwrap_or_default());
-    if crc == stored {
-        n.summary("CRC-32C, valid")
-    } else if b.iter().all(|&x| x == 0) {
-        n.summary("empty")
+    let check = Check::new("CRC-32C", stored);
+    if crc != stored && b.iter().all(|&x| x == 0) {
+        n.checksum(check.skipped("empty block"))
     } else {
-        n.diag(Diagnostic::warning(format!(
-            "checksum mismatch (computed {crc:#010x})"
-        )))
+        n.checksum(check.verify(crc))
     }
 }
 
@@ -641,17 +636,12 @@ async fn mtr(cx: Cx, (span, lsn): (Span, u64)) -> Result<()> {
     let at = end.saturating_add(1);
     let stored = u32_be(&b, at).unwrap_or(0);
     let crc = crc32c(b.get(..end).unwrap_or_default());
-    let node = Node::new("Checksum")
-        .span(span.sub(to_u64(at), 4))
-        .value(hex(stored, 32))
-        .desc("CRC-32C of the records");
-    cx.emit(if crc == stored {
-        node.summary("CRC-32C, valid")
-    } else {
-        node.diag(Diagnostic::warning(format!(
-            "checksum mismatch (computed {crc:#010x})"
-        )))
-    });
+    cx.emit(
+        Node::new("Checksum")
+            .span(span.sub(to_u64(at), 4))
+            .checksum(Check::new("CRC-32C", stored).verify(crc))
+            .desc("CRC-32C of the records"),
+    );
     Ok(())
 }
 

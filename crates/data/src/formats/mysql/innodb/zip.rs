@@ -82,7 +82,8 @@ pub struct Zip {
     pub inflated: u64,
     /// Bytes of the zlib stream from `PAGE_DATA` (header to checksum).
     pub stream: u64,
-    pub adler_ok: bool,
+    /// The zlib stream's Adler-32, checked against the inflated data.
+    pub adler: crate::value::Check,
     /// The modification log's terminating zero byte (page offset).
     pub log_end: u64,
     pub entries: Vec<LogEntry>,
@@ -452,7 +453,8 @@ pub fn decompress(zp: &[u8], logical: usize, index_id: u64) -> Result<Zip> {
     let fields_len = fields_len.unwrap_or(out.len());
     let consumed = inflater.consumed();
     let adler_at = consumed.saturating_add(2);
-    let adler_ok = u32_be(body, adler_at) == Some(crate::codec::adler32(&out));
+    let adler = crate::value::Check::new("Adler-32", u32_be(body, adler_at).unwrap_or(0))
+        .verify(crate::codec::adler32(&out));
     let stream = adler_at.saturating_add(4);
     let (cols, last) =
         decode_fields(out.get(..fields_len).unwrap_or_default()).ok_or_else(|| {
@@ -494,7 +496,7 @@ pub fn decompress(zp: &[u8], logical: usize, index_id: u64) -> Result<Zip> {
         fields_len: to_u64(fields_len),
         inflated: to_u64(out.len()),
         stream: to_u64(stream),
-        adler_ok,
+        adler,
         log_end: to_u64(PAGE_DATA.saturating_add(stream)),
         entries: Vec::new(),
         n_dense: to_u64(setup.n_dense),

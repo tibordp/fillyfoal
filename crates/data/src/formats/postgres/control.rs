@@ -16,7 +16,7 @@ use crate::formats::util::val::{hex, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::{Check, EnumTable, Value, lookup};
 
 pub static FORMAT: Format = Format {
     name: "pg-control",
@@ -454,17 +454,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     );
     let stored = u32_le(&b, crc).unwrap_or(0);
     let computed = crc32c(b.get(..crc).unwrap_or_default());
-    let mut n = Node::new("CRC")
-        .span(file.sub(crate::bytes::to_u64(crc), 4))
-        .value(hex(stored, 32));
-    n = if stored == computed {
-        n.summary("CRC-32C, valid")
-    } else {
-        n.diag(Diagnostic::warning(format!(
-            "CRC mismatch (computed {computed:#010x})"
-        )))
-    };
-    cx.emit(n);
+    cx.emit(
+        Node::new("CRC")
+            .span(file.sub(crate::bytes::to_u64(crc), 4))
+            .checksum(Check::new("CRC-32C", stored).verify(computed)),
+    );
     let end = crate::bytes::to_u64(crc).saturating_add(4);
     cx.emit(
         Node::new("Padding")

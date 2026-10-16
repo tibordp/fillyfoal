@@ -22,7 +22,7 @@ use crate::formats::util::val::{hex, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, decode_flags, flag};
+use crate::value::{Check, EnumTable, FlagTable, Value, decode_flags, flag};
 
 pub static FORMAT: Format = Format {
     name: "pg-relation",
@@ -32,6 +32,9 @@ pub static FORMAT: Format = Format {
     probe: Probe::Custom(probe),
     dissect: crate::expander!(dissect: Input),
 };
+
+/// PostgreSQL's data page checksum (`pg_checksum_page`, FNV-1a based).
+const PG_SUM: &str = "page checksum";
 
 /// A page image from a WAL record (its checksum is not maintained there).
 pub static IMAGE: Format = Format {
@@ -372,9 +375,11 @@ async fn page(cx: Cx, (rel, n): (Rel, u64)) -> Result<()> {
         (span, u32::try_from(n).unwrap_or(0), rel.verify),
     );
     let stored = u16_at(8);
-    if rel.verify && stored != 0 && page_checksum(&p, u32::try_from(n).unwrap_or(0)) != Some(stored)
+    if rel.verify
+        && stored != 0
+        && let Some(c) = page_checksum(&p, u32::try_from(n).unwrap_or(0))
     {
-        header = header.diag(Diagnostic::warning("data checksum mismatch"));
+        header = header.check_diag(&Check::new(PG_SUM, stored).verify(c));
     }
     if !page_ok(&p) {
         header = header.diag(Diagnostic::malformed("page bounds do not nest"));
@@ -437,21 +442,16 @@ async fn header_fields(cx: Cx, (span, block, verify): (Span, u32, bool)) -> Resu
             .desc("The end of the last WAL record that changed the page"),
     );
     let stored = u16_le(&p, 8).unwrap_or(0);
-    let mut ck = Node::new("Checksum").span(at(8, 2)).value(hex(stored, 16));
-    ck = if stored == 0 {
-        ck.summary("none (data checksums off)")
+    let ck = Node::new("Checksum").span(at(8, 2));
+    let check = Check::new(PG_SUM, stored);
+    cx.emit(if stored == 0 {
+        ck.value(hex(stored, 16)).summary("none (data checksums off)")
     } else if !verify {
-        ck.summary("not maintained in page images")
+        ck.checksum(check.skipped("not maintained in page images"))
     } else {
-        match page_checksum(&p, block) {
-            Some(c) if c == stored => ck.summary("valid"),
-            Some(c) => ck.diag(Diagnostic::warning(format!(
-                "checksum mismatch (computed {c:#06x} for block {block}; blocks of later segment files are numbered from the relation's start)"
-            ))),
-            None => ck,
-        }
-    };
-    cx.emit(ck);
+        ck.checksum(check.verify_opt(page_checksum(&p, block)))
+            .desc(format!("Computed for block {block}: blocks of later segment files are numbered from the relation's start"))
+    });
     let flags = u16_le(&p, 10).unwrap_or(0);
     cx.emit(
         Node::new("Flags")
