@@ -902,7 +902,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Version ID: 1  [0x251cb+0x4]
     ▾ State — globalstate version 1  [0x251cf+0x68]
         size: 7  [0x251cf+0x4]
-        runstate — buffer, 32 bytes  [0x251d3+0x20]
+        runstate: "paused" — buffer  [0x251d3+0x20]
         has_vm_was_suspended: 1  [0x251f3+0x1]
         vm_was_suspended: 0  [0x251f4+0x1]
         unused — buffer, 66 bytes  [0x251f5+0x42]

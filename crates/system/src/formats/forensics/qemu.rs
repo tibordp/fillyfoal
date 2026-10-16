@@ -58,7 +58,7 @@ use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::far;
 use crate::formats::util::fmt::{clip, plural, size};
 use crate::formats::util::json::{self, Json};
-use crate::formats::util::val::{int, uint};
+use crate::formats::util::val::{int, text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
@@ -1613,6 +1613,14 @@ async fn field_node(cx: &Cx, f: &FDesc, name: String, span: Span) -> Result<Node
     if ty == "unused_buffer" {
         return Ok(node.summary(format!("unused, {}", plural(f.size, "byte"))));
     }
+    // Buffers that hold a NUL-padded string (`globalstate.runstate`,
+    // `configuration.name`) are shown as text.
+    if ty == "buffer" && f.size <= BUFFER_TEXT_MAX {
+        let raw = cx.read(span).await?;
+        if let Some(s) = padded_text(&raw) {
+            return Ok(node.value(text(s)).summary(ty.to_owned()));
+        }
+    }
     if f.size > 16 {
         return Ok(node.summary(format!("{ty}, {}", size(f.size))));
     }
@@ -1651,6 +1659,18 @@ async fn field_node(cx: &Cx, f: &FDesc, name: String, span: Span) -> Result<Node
     } else {
         node.value(Value::Bytes(raw)).summary(ty.to_owned())
     })
+}
+
+/// Largest `buffer` field checked for a string.
+const BUFFER_TEXT_MAX: u64 = 256;
+
+/// The string in a NUL-padded buffer: printable ASCII up to the first NUL,
+/// only NULs after it.
+fn padded_text(raw: &[u8]) -> Option<String> {
+    let end = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
+    let (s, rest) = raw.split_at_checked(end)?;
+    (!s.is_empty() && s.iter().all(|&b| (0x20..0x7f).contains(&b)) && rest.iter().all(|&b| b == 0))
+        .then(|| String::from_utf8_lossy(s).into_owned())
 }
 
 // ---------------------------------------------------------------------------
