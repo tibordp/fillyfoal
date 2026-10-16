@@ -4,7 +4,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ templeos.img — RedSea file system (TempleOS), 32 KiB, 11% used  [0x0+0x8000]
   ▾ Boot sector  [0x0+0x200]
-      jump_and_nop: 00 00 00  |...|  [0x0+0x3]
+      jump_and_nop: 00 00 00  |...| — none  [0x0+0x3]
       signature: 0x88  [0x3+0x1]
       reserved: 00 00 00 00  |....|  [0x4+0x4]
       drv_offset: 0  [0x8+0x8]
@@ -12,7 +12,7 @@ expression: "common::explore(&display_name(&path), &data)"
       root_clus: 2  [0x18+0x8]
       bitmap_sects: 1  [0x20+0x8]
       unique_id: 0x7e3d5ea000000001  [0x28+0x8]
-      code: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x30+0x1ce]
+      code: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................| — empty: no boot loader installed  [0x30+0x1ce]
       signature2: 0xaa55  [0x1fe+0x2]
   ▾ Allocation bitmap — 7 blocks of 63 blocks in use  [0x200+0x200]
       Blocks 8–63 — free, 28 KiB  [0x1000+0x7000]

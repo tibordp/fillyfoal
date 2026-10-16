@@ -11,12 +11,15 @@
 //! at sector 20 and the stage-1 loader (the no-emulation boot image) at
 //! sector 21. The primary and supplementary descriptors are TempleOS's
 //! `CISOPriDesc` (`Kernel/KernelA.HH`): only the sizes, the root block of
-//! the RedSea volume and the publisher are filled in. There are no ISO
-//! 9660 directories; the files are in the RedSea volume.
+//! the RedSea volume and the publisher are filled in (the zero padding
+//! between them is one node). There are no ISO 9660 directories; the files
+//! are in the RedSea volume. The boot image is `BootDVD`'s stage-1 loader,
+//! with the place and length of its stage 2 (the kernel) patched in, when
+//! `RedSeaISO` found the stage-2 file; otherwise it is zeros.
 
 use std::sync::Arc;
 
-use crate::bytes::to_u64;
+use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
@@ -72,19 +75,21 @@ fn probe(h: &Head<'_>) -> bool {
 /// `CISOPriDesc`, as `RedSeaISO9660` fills it; `root_clus` is the RedSea
 /// boot sector's, which `root_dir_record` should repeat.
 fn pri_desc_layout(f: &mut Fields<'_>, &root_clus: &u64) -> Result<(u32, u16)> {
+    // Zero padding: bytes and runs, listed as one node.
+    let mut zeros = (0u64, 0u64);
     f.u8("type").enumeration(DESCRIPTOR_TYPE).emit()?;
     f.ascii("id", 5).emit()?;
     f.u8("version").emit()?;
-    unused(f, "pad", 73)?;
+    pad(f, 73, &mut zeros)?;
     let blocks = both32(f, "vol_space_size")
         .desc("Size of the ISO file in 2048-byte blocks (FSize / DVD_BLK_SIZE)")
         .with(|&v, n| n.summary(fmt::size(u64::from(v).saturating_mul(SECTOR))))
         .emit()?;
-    unused(f, "pad", 32)?;
+    pad(f, 32, &mut zeros)?;
     both16(f, "vol_set_size").emit()?;
     both16(f, "vol_seq_num").emit()?;
     let block_size = both16(f, "log_block_size").emit()?;
-    unused(f, "pad", 20)?;
+    pad(f, 20, &mut zeros)?;
     both32(f, "root_dir_record")
         .desc(
             "The RedSea root directory's block (dv->root_clus), stored as a both-endian \
@@ -100,17 +105,41 @@ fn pri_desc_layout(f: &mut Fields<'_>, &root_clus: &u64) -> Result<(u32, u16)> {
             }
         })
         .emit()?;
-    unused(f, "pad", 26)?;
-    unused(f, "pad", 128)?;
+    pad(f, 26, &mut zeros)?;
+    pad(f, 128, &mut zeros)?;
     f.bytes("publisher_id", 128)
         .with(|b, n| n.value(Value::Text(until_nul(b))))
         .emit()?;
-    unused(f, "pad", 435)?;
+    pad(f, 435, &mut zeros)?;
     f.u8("file_structure_version").emit()?;
-    unused(f, "pad", 1166)?;
+    pad(f, 1166, &mut zeros)?;
     // `CISOPriDesc` is 2044 bytes; the rest of the block stays zero.
-    unused(f, "Unused", 4)?;
+    pad(f, 4, &mut zeros)?;
+    if zeros.1 > 0 {
+        f.node(
+            Node::new("Padding")
+                .summary(format!(
+                    "zeros: {} in {} runs between the fields",
+                    fmt::size(zeros.0),
+                    zeros.1
+                ))
+                .desc("The parts of CISOPriDesc that RedSeaISO9660 leaves zero"),
+        );
+    }
     Ok((blocks, block_size))
+}
+
+/// `len` bytes of padding: counted in `zeros` if they are zero (as
+/// `RedSeaISO9660` leaves them), otherwise shown.
+fn pad(f: &mut Fields<'_>, len: u64, zeros: &mut (u64, u64)) -> Result<()> {
+    let start = f.pos();
+    if f.bytes("pad", len).get()?.iter().all(|&b| b == 0) {
+        zeros.0 = zeros.0.saturating_add(len);
+        zeros.1 = zeros.1.saturating_add(1);
+        return Ok(());
+    }
+    f.seek(start);
+    unused(f, "pad", len)
 }
 
 fn until_nul(b: &[u8]) -> String {
@@ -284,10 +313,93 @@ async fn boot_image_content(cx: Cx, input: Input) -> Result<()> {
         );
         return Ok(());
     }
+    let Some(f) = boot_dvd(&data) else {
+        cx.annotate(format!(
+            "boot code, {} (not TempleOS V5.03's BootDVD)",
+            fmt::size(input.span.len)
+        ));
+        cx.emit(Node::new("Code").span(input.span));
+        return Ok(());
+    };
+    let stage2 = u64::from(f.blk)
+        .saturating_mul(4)
+        .saturating_add(f.shift.into());
     cx.annotate(format!(
-        "BootDVD stage-1 loader, {} (real-mode code, not disassembled)",
-        fmt::size(input.span.len)
+        "BootDVD stage-1 loader: loads {} of 2 KiB from block {} (the stage 2 at 512-byte block {stage2})",
+        fmt::plural(f.cnt, "block"),
+        f.blk
     ));
-    cx.emit(Node::new("Code").span(input.span));
+    let end = data
+        .iter()
+        .rposition(|&c| c != 0)
+        .map_or(0, |i| i.saturating_add(1));
+    let at = |off: u64, len: u64| input.span.sub(off, len);
+    cx.emit(
+        Node::new("Loader")
+            .span(at(0, to_u64(end)))
+            .summary("real-mode code (Adam/Opt/Boot/BootDVD.HC), not disassembled"),
+    );
+    let uint = |value: u64, bits: u8| Value::UInt {
+        value,
+        bits,
+        radix: crate::value::Radix::Dec,
+    };
+    // The loader sits at 2048-byte block 21 of the ISO (`RedSeaISO9660Stage1`
+    // writes it there), so the stage 2's block is found from its place.
+    let iso = input.span.offset.checked_sub(21 * SECTOR);
+    let mut blk = Node::new("BDVD_BLK")
+        .span(at(BDVD_BLK, 4))
+        .value(uint(f.blk.into(), 32))
+        .desc("First 2048-byte block the loader reads: the stage-2 file's first 512-byte block >> 2 (BDVD_BLK_LO and BDVD_BLK_HI)");
+    if let Some(off) = iso.and_then(|i| i.checked_add(stage2.checked_mul(BLK)?)) {
+        let len = u64::from(f.cnt)
+            .saturating_mul(SECTOR)
+            .saturating_sub(u64::from(f.shift).saturating_mul(BLK))
+            .min(cx.source_len(input.span.source).saturating_sub(off));
+        if off < cx.source_len(input.span.source) {
+            blk = blk.target(Span::new(input.span.source, off, len));
+        }
+    }
+    cx.emit(blk);
+    cx.emit(
+        Node::new("BDVD_BLK_CNT")
+            .span(at(BDVD_BLK_CNT, 2))
+            .value(uint(f.cnt.into(), 16))
+            .summary(fmt::size(u64::from(f.cnt).saturating_mul(SECTOR)))
+            .desc("2048-byte blocks the loader reads: the stage-2 file's size, rounded up, one more if it is not aligned"),
+    );
+    cx.emit(
+        Node::new("BDVD_SHIFT_BLKS")
+            .span(at(BDVD_SHIFT_BLKS, 2))
+            .value(uint(f.shift.into(), 16))
+            .desc("512-byte blocks the stage 2 starts into the first block read (its block & 3); the loader shifts it back"),
+    );
     Ok(())
+}
+
+/// Offsets in V5.03's `BootDVD` as assembled (checked against the
+/// distribution ISO): its far `JMP` to `BDVD_MAIN` (at 0xB0), and the
+/// fields `RedSeaISO9660Stage1` patches: `BDVD_BLK_LO`/`HI` (written as
+/// one U32), `BDVD_BLK_CNT` and `BDVD_SHIFT_BLKS` (U16s).
+const BDVD_JMP: usize = 0x30;
+const BDVD_BLK: u64 = 0x88;
+const BDVD_BLK_CNT: u64 = 0x8c;
+const BDVD_SHIFT_BLKS: u64 = 0x8e;
+
+struct BootDvd {
+    blk: u32,
+    cnt: u16,
+    shift: u16,
+}
+
+fn boot_dvd(b: &[u8]) -> Option<BootDvd> {
+    (b.first() == Some(&0xfc)
+        && b.get(BDVD_JMP..BDVD_JMP.saturating_add(3)) == Some(&[0xea, 0xb0, 0x00]))
+    .then_some(())?;
+    let at = |o: u64| usize::try_from(o).ok();
+    Some(BootDvd {
+        blk: u32_le(b, at(BDVD_BLK)?)?,
+        cnt: u16_le(b, at(BDVD_BLK_CNT)?)?,
+        shift: u16_le(b, at(BDVD_SHIFT_BLKS)?)?,
+    })
 }
