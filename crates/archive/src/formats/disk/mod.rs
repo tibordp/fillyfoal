@@ -64,7 +64,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::{Codec, Input, content, embedded};
 use crate::node::{Count, Node};
-use crate::span::{Origin, Span};
+use crate::span::{Origin, SourceId, Span};
 use crate::value::Value;
 
 pub use crate::formats::util::fmt::{size, uuid};
@@ -178,7 +178,9 @@ pub async fn assemble(
 ) -> Result<Span> {
     match pieces {
         [] => Ok(Span::new(anchor.source, anchor.offset, 0)),
-        [one] => Ok(*one),
+        // A lone hole still gets a source of its own: the zeros sentinel is
+        // no place to point a node at.
+        [one] if one.source != SourceId::ZEROS => Ok(*one),
         _ => {
             cx.add_pieces_stepped(
                 Origin {

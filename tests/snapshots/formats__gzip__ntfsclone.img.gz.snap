@@ -2602,8 +2602,8 @@ expression: "common::explore(&display_name(&path), &data)"
                 Run 0 — VCN 0: 512 sparse clusters  [#11:0x168+0x3]
             ▾ Clusters — contiguous, 2 MiB
                 Fragment 0 — file offset 0x0, 2 MiB  [#4294967295:0x0+0x200000]
-            ▾ Content — 2 MiB  [#4294967295:0x0+0x200000]
-                Data  [#4294967295:0x0+0x200000]
+            ▾ Content — 2 MiB  [#74:0x0+0x200000]
+                Data  [#74:0x0+0x200000]
           ▾ Content — 0 bytes  [#11:0x120+0x0]
               Data  [#11:0x120+0x0]
         ▾ $Bitmap — 64 bytes, record 6  [#73:0x120+0x50]
