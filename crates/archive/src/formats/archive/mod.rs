@@ -5,12 +5,14 @@
 //! packages, Electron ASAR), Windows installers (`installer`: NSIS, Inno
 //! Setup, InstallShield), less common archivers (`minor`: ALZip, EGG, KGB)
 //! and legacy archivers (`legacy`: HA, UHARC,
-//! YZ1, GCA, PAQ8, Amiga XPK and LZX, PackIt).
+//! YZ1, GCA, PAQ8, Amiga XPK and LZX, PackIt); backup tools' storage
+//! formats (`backup`).
 
 pub mod ace;
 pub mod applesingle;
 pub mod ar;
 pub mod arj;
+pub mod backup;
 pub mod cab;
 pub mod cpio;
 pub mod crx;

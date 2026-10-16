@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ uncompressed-chunk.blob — Proxmox Backup data blob, uncompressed, 75 bytes  [0x0+0x57]
+    Magic: "uncompressed"  [0x0+0x8]
+    CRC32: 0xac71285c — valid  [0x8+0x4]
+  ▾ Data — 75 bytes  [0xc+0x4b]
+      ! unsupported: unrecognized format [0xc+0x4b]

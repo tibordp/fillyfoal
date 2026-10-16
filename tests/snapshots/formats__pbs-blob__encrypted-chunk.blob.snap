@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ encrypted-chunk.blob — Proxmox Backup data blob, encrypted, 75 bytes  [0x0+0x77]
+    Magic: "encrypted"  [0x0+0x8]
+    CRC32: 0x75b2a97b — valid  [0x8+0x4]
+    IV  [0xc+0x10]
+    Tag  [0x1c+0x10]
+    Ciphertext — 75 bytes  [0x2c+0x4b]
+      ! unsupported: AES-256-GCM with the key from the backup client's key file (not in the datastore)

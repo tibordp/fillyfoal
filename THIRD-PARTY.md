@@ -851,3 +851,4 @@ closely enough to credit:
   read (facts only, no code) from QEMU's migration code and docs (GPL-2.0-or-later), libvirt's
   `qemu_saveimage.c` (LGPL-2.1-or-later), and CRIU's `images/*.proto`, `magic.h` and `crit`
   flag tables (GPL-2.0): field numbers, names, magic numbers and flag values.
+- Backup storage formats (`crates/archive/src/formats/archive/backup/`): layouts read for facts only, no code taken, from BorgBackup 1.2's `repository.py` and `crypto/key.py` (BSD-3-Clause), the `pxar` crate and Proxmox Backup's `pbs-datastore` and `docs/file-formats.rst` (AGPL-3.0), and `vma_spec.txt` from Proxmox's pve-qemu.

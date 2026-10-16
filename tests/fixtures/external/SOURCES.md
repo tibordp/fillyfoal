@@ -1407,3 +1407,47 @@ tables only; CRIU paths are the container's (`/usr/bin/sleep`, libc,
 | `criu-image/seccomp.img` | CRIU 4.1.1 | same dump; unchanged |
 | `criu-image/timens-0.img` | CRIU 4.1.1 | same dump; unchanged |
 | `criu-image/stats-dump` | CRIU 4.1.1 | same dump; unchanged |
+## BorgBackup 1.2.4: repository segments
+
+Segment files (`<repo>/data/0/<n>`) copied unchanged out of repositories
+that `borg` 1.2.4 (Debian bookworm's `borgbackup` package, arm64) wrote in
+a `debian:bookworm-slim` container with host name `fillyfoal`:
+`tests/data/borg-segment/make-external.sh` runs `inner.sh`, which backs up
+three neutral text files (`borg init`, `borg create --compression <c>`,
+`borg delete`). Not reproducible byte for byte (IDs, nonces, timestamps and
+padding vary per run).
+
+| Fixture | Repository and step | Contents |
+| --- | --- | --- |
+| `borg-segment/lz4` | `--encryption=none`, `create --compression lz4` | 4 PUTs: a stored chunk (too small to compress), an LZ4 file chunk, item and archive metadata |
+| `borg-segment/zstd` | the same repository, one more file, `create --compression zstd,3` | 3 PUTs: file chunk, items, archive |
+| `borg-segment/zlib` | the same repository, one more file, `create --compression zlib,6` | 3 PUTs: file chunk, items, archive |
+| `borg-segment/lzma` | the same repository, one more file, `create --compression lzma,6` | 3 PUTs: file chunk, items, archive |
+| `borg-segment/none` | the same repository, one more file, `create --compression none` | 3 PUTs: file chunk, items, archive |
+| `borg-segment/obfuscate` | the same, `--compression obfuscate,1,lz4` | 3 PUTs with size obfuscation (wrapped LZ4, padding) |
+| `borg-segment/delete` | the same, `borg delete plain::lz4` | 2 DELETEs |
+| `borg-segment/manifest` | the same, the segment before the last | the manifest (all-zero ID) |
+| `borg-segment/commit` | the same, the last segment | a lone COMMIT |
+| `borg-segment/repokey` | `--encryption=repokey`, `create --compression zlib,6` | 4 encrypted PUTs (AES-CTR, HMAC-SHA256) |
+| `borg-segment/authenticated` | `--encryption=authenticated`, `create --compression lz4` | 4 PUTs, plaintext with key type 7 |
+
+## Proxmox tools: pxar archives, a VMA archive and PBS data blobs
+
+Written by Proxmox's own tools from its Debian bookworm repositories
+(proxmox-backup-client 3.4.9-1, proxmox-backup-server 3.4.9-2,
+pve-qemu-kvm 9.2.0-8; amd64, emulated) in the `fillyfoal-proxmox:bookworm`
+image (`tests/data/proxmox/Dockerfile`), host name `fillyfoal`, from
+neutral files owned by root.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `pxar/archive.pxar` | `pxar create` | `tests/data/pxar/make-external.sh`: a tree with a subdirectory, symlink, hard link, FIFO, character device, empty file, an xattr, an access ACL and a default ACL, mtimes fixed. Reproducible. Unchanged |
+| `pxar-meta/split.mpxar` | `pxar create --payload-output` | the same tree as a split archive (format version 2): metadata. Unchanged |
+| `pxar-payload/split.ppxar` | `pxar create --payload-output` | the payloads of the same split archive. Unchanged |
+| `proxmox-vma/vm.vma` | `vma create` | `tests/data/proxmox-vma/make-external.sh`: a VM config and two raw disks (a 4 MiB FAT12 volume with one file; 1 MiB, zero but for one sector), two extents. Reassembled byte for byte against the source disks (`tests/backup.rs` checks their content). UUID and time vary per run. Unchanged |
+| `pbs-blob/index.json.blob` | Proxmox Backup Server via `proxmox-backup-client backup` | `tests/data/pbs-blob/make-external.sh` runs a throwaway server in the container and backs up a directory and a 4 KiB random image: the snapshot manifest (zstd-compressed). Unchanged |
+| `pbs-blob/pxar-chunk.blob` | the same | the chunk holding the whole `files.pxar` (zstd-compressed) |
+| `pbs-blob/compressed-chunk.blob` | the same | the smallest zstd-compressed chunk |
+| `pbs-blob/uncompressed-chunk.blob` | the same | the smallest uncompressed chunk (a catalog) |
+| `pbs-blob/encrypted-chunk.blob` | the same, `--keyfile` (a fresh key, `--kdf none`) | the smallest encrypted, uncompressed chunk |
+| `pbs-blob/encrypted-compressed-chunk.blob` | the same, `--keyfile` | the smallest encrypted, compressed chunk |
