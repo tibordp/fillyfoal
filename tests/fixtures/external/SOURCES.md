@@ -1947,3 +1947,9 @@ against `sar -I ALL` on a two-sample run of the same command.
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
 | `sysstat-sa/sa-irq.sa` | `sadc -S INT 1 1` (privileged) | one sample; unchanged |
+
+## nfdump: a block the header does not count
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `nfdump/uncounted.nfcapd` | nfpcapd 1.7.5 | `nfdump/plain.nfcapd` with the header's block count (`NumBlocks`, offset 36) set from 1 to 0, as in a file whose writer stopped before updating it; `nfdump -r` then prints no flows and `nfdump -v` reports the block as extra data after the counted ones |
