@@ -11,8 +11,9 @@
 #                    marshal_dump ('U') objects, a regexp, a class, a
 #                    module, a range and an extended String subclass
 #   array.marshal    600 two-element arrays (paging)
+#   regexps.marshal  regexps with a fixed encoding, /n and /imx
 #
-# Both are the same on every run.
+# All are the same on every run.
 #
 #   sh tests/data/ruby-marshal/make.sh [fixtures directory]
 set -eu
@@ -24,6 +25,6 @@ mkdir -p "$B"
 docker run --rm --hostname fillyfoal -v "$B:/out" -v "$SRC:/scripts:ro" \
   ruby:3.4-alpine ruby /scripts/make.rb /out
 mkdir -p "$FIX/ruby-marshal"
-for f in objects.marshal array.marshal; do
+for f in objects.marshal array.marshal regexps.marshal; do
   cp "$B/$f" "$FIX/ruby-marshal/$f"
 done

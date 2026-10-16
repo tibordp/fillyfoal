@@ -1539,6 +1539,7 @@ name `fillyfoal`), running `tests/data/ruby-marshal/make.rb`.
 | --- | --- | --- |
 | `ruby-marshal/objects.marshal` | Ruby 3.4.11 | a hash of nil/true/false, fixnums, bignums, floats (NaN, -Infinity), symbols and a symbol link, strings in UTF-8, US-ASCII, ISO-8859-1 and binary, arrays, an object link, hashes (one with a default), a struct, an object, `_dump` and `marshal_dump` objects, a regexp, a class, a module, a range and an extended String subclass; unchanged |
 | `ruby-marshal/array.marshal` | Ruby 3.4.11 | 600 `[i, "item i"]` pairs; unchanged |
+| `ruby-marshal/regexps.marshal` | Ruby 3.4.11 | `[/é/, /a/n, /x/imx]`: option bytes 0x10 (`FIXEDENCODING`), 0x20 (`NOENCODING`) and 7; unchanged |
 ## Partclone images (partclone)
 
 Reproduced byte-for-byte by `sh tests/data/partclone/make-external.sh`

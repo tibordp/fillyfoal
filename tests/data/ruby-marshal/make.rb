@@ -77,4 +77,6 @@ data = {
 File.binwrite(File.join(dir, 'objects.marshal'), Marshal.dump(data))
 # A long array: paging, and a top-level value that is not a hash.
 File.binwrite(File.join(dir, 'array.marshal'), Marshal.dump((1..600).map { |i| [i, "item #{i}"] }))
+# Regexp options: a fixed-encoding (UTF-8) one, a /n one and /imx.
+File.binwrite(File.join(dir, 'regexps.marshal'), Marshal.dump([/é/, /a/n, /x/imx]))
 puts RUBY_VERSION
