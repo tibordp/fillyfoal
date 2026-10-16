@@ -11,6 +11,13 @@
 #   zstd -19 out/17/dynamic.jsa -o jdk17-dynamic.jsa.raw.zst   (likewise 21, 25)
 #   zstd -19 out/21/dynamic-on-static.jsa -o jdk21-dynamic-on-static.jsa.raw.zst
 #   head -c 73728 out/21/static.jsa | zstd -19 -o jdk21-static-prefix.jsa.raw.zst   (likewise 17)
+# The JDK 8 and 11 archives (header layouts not decoded) are the JDKs' own
+# default archives, cut to 4 KiB:
+#   docker run --rm --hostname fillyfoal eclipse-temurin:8 \
+#     sh -c 'java -Xshare:dump >/dev/null; cat $JAVA_HOME/jre/lib/*/server/classes.jsa' > jdk8.jsa
+#   docker run --rm --hostname fillyfoal eclipse-temurin:11 \
+#     sh -c 'cat $JAVA_HOME/lib/server/classes.jsa' > jdk11.jsa
+#   head -c 4096 jdk8.jsa | zstd -19 -o jdk8-static-prefix.jsa.raw.zst   (likewise 11)
 set -e
 cd /work
 OUT=/work/out/${JDK:-21}; mkdir -p app $OUT

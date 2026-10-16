@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ jdk8-static-prefix.jsa — static CDS archive, version 2 (JDK 8)  [0x0+0x1000]
+  ▾ Header  [0x0+0xc]
+      _magic: static archive (0xf00baba2)  [0x0+0x4]
+      _crc: 0xaaa86c15  [0x4+0x4]
+      _version: 2  [0x8+0x4]
+    Header data
+      ! unsupported: the header layout of CDS archive version 2 is not known (versions 11, 18 and 19 are)

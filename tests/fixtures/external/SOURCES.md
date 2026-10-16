@@ -1797,6 +1797,8 @@ byte-reproducible (addresses and CRCs vary with the build); the archives hold on
 | `jvm-cds/jdk21-dynamic-on-static.jsa.raw.zst` | Temurin 21.0.12.1+1 | `-XX:SharedArchiveFile=static.jsa -XX:ArchiveClassesAtExit`: records the base archive's name; unchanged |
 | `jvm-cds/jdk21-static-prefix.jsa.raw.zst` | Temurin 21.0.12.1+1 | `-Xshare:dump` (9,109,504 bytes), cut to its first 73,728 bytes: the header, region table and the start of the `rw` region |
 | `jvm-cds/jdk17-static-prefix.jsa.raw.zst` | Temurin 17.0.20.1+1 | `-Xshare:dump` (6,488,064 bytes), cut to its first 73,728 bytes, as above |
+| `jvm-cds/jdk8-static-prefix.jsa.raw.zst` | Temurin 8u504 (OpenJDK 25.504-b01, linux-aarch64, `eclipse-temurin:8`) | `java -Xshare:dump`, the default archive `jre/lib/aarch64/server/classes.jsa` (20,279,296 bytes), cut to its first 4,096 bytes: version 2 header (commands in `tests/data/jvm-cds/make.sh`) |
+| `jvm-cds/jdk11-static-prefix.jsa.raw.zst` | Temurin 11.0.32.1+1 (linux-aarch64, `eclipse-temurin:11`) | the archive the JDK ships, `lib/server/classes.jsa` (11,882,496 bytes), cut to its first 4,096 bytes: version 5 header |
 
 ## Alpine APK v3 packages and index
 
