@@ -22,7 +22,7 @@ use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::{Check, EnumTable, Value, lookup};
 
 const BLOCK: u64 = 512;
 /// The header blocks before the first log block.
@@ -77,20 +77,12 @@ fn probe(h: &Head<'_>) -> bool {
 
 fn checksum_node(block: &[u8], span: Span) -> Node {
     let stored = u32_be(block, 508).unwrap_or(0);
-    let n = Node::new("Checksum")
-        .span(span.sub(508, 4))
-        .value(hex(stored, 32));
+    let n = Node::new("Checksum").span(span.sub(508, 4));
+    let check = Check::new("CRC-32C", stored);
     if block.iter().all(|&b| b == 0) {
-        return n.summary("empty block");
+        return n.checksum(check.skipped("empty block"));
     }
-    let crc = crc32c(block.get(..508).unwrap_or_default());
-    if crc == stored {
-        n.summary("CRC-32C, valid")
-    } else {
-        n.diag(Diagnostic::warning(format!(
-            "checksum mismatch (computed {crc:#010x})"
-        )))
-    }
+    n.checksum(check.verify(crc32c(block.get(..508).unwrap_or_default())))
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {

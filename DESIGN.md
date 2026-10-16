@@ -196,7 +196,11 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
   clock the file recorded it on (`Time { secs, nanos, zone, res }`: UTC, a
   recorded offset, or a local wall clock in an unknown zone, which nobody
   converts) and how precisely (a day, minute, second, or so many
-  fractional digits). `render::value`
+  fractional digits), and a stored check value its algorithm and verdict
+  (`Checksum(Box<Check { algo, stored, verdict }>)`: valid, a mismatch
+  with what the data gives, not checked, or skipped and why; digests in
+  full, never cut off like `Bytes`). A mismatch is also a diagnostic, so
+  it surfaces as a problem. `render::value`
   is the canonical text and never depends on the host (zone, locale); hosts
   may format the structured fields their own way. `Value` is
   `#[non_exhaustive]` and atoms are added over time, so every host keeps a

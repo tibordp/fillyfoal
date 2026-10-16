@@ -220,7 +220,7 @@ record! {
         next: u64 "Next section offset" .hex(),
         size: u64 "Section size",
         _padding: bytes[40] "Padding",
-        checksum: u32 "Adler-32" .hex(),
+        checksum: u32 "Adler-32" .checksum("Adler-32"),
     }
 }
 
@@ -427,7 +427,7 @@ async fn ewf_section(
             f.u32("Padding").emit()?;
             let base = f.u64("Table base offset").hex().emit()?;
             f.u32("Padding").emit()?;
-            f.u32("Adler-32").hex().emit()?;
+            f.u32("Adler-32").checksum("Adler-32").emit()?;
             let entries = data.sub_exact(24, u64::from(count).saturating_mul(4))?;
             let file = input.span;
             let ends = ChunkEnds {
@@ -444,13 +444,16 @@ async fn ewf_section(
         }
         "hash" => {
             let block = cx.block(data.sub(0, 16)).await?;
-            Fields::emitting(&cx, &block, LE).bytes("MD5", 16).emit()?;
+            Fields::emitting(&cx, &block, LE)
+                .bytes("MD5", 16)
+                .checksum("MD5")
+                .emit()?;
         }
         "digest" => {
             let block = cx.block(data.sub(0, 36)).await?;
             let mut f = Fields::emitting(&cx, &block, LE);
-            f.bytes("MD5", 16).emit()?;
-            f.bytes("SHA-1", 20).emit()?;
+            f.bytes("MD5", 16).checksum("MD5").emit()?;
+            f.bytes("SHA-1", 20).checksum("SHA-1").emit()?;
         }
         "sectors" => cx.emit(Node::new("Chunk data").span(data)),
         _ if !data.is_empty() => cx.emit(Node::new("Data").span(data)),
@@ -642,9 +645,9 @@ record! {
         size: u64 "Data size",
         descriptor_size: u32 "Descriptor size",
         padding: u32 "Padding size",
-        hash: bytes[16] "Data integrity hash (MD5)",
+        hash: bytes[16] "Data integrity hash (MD5)" .checksum("MD5"),
         _reserved: bytes[12] "Padding",
-        checksum: u32 "Adler-32" .hex(),
+        checksum: u32 "Adler-32" .checksum("Adler-32"),
     }
 }
 
@@ -881,7 +884,7 @@ async fn ewf2_section(
             f.u64("First chunk").emit()?;
             let count = f.u32("Number of entries").emit()?;
             f.u32("Unknown").emit()?;
-            f.u32("Adler-32").hex().emit()?;
+            f.u32("Adler-32").checksum("Adler-32").emit()?;
             f.bytes("Padding", 12).emit()?;
             let entries = data.sub_exact(32, u64::from(count).saturating_mul(16))?;
             cx.emit(
@@ -894,7 +897,7 @@ async fn ewf2_section(
             if !footer.is_empty() {
                 let block = cx.block(footer).await?;
                 let mut f = Fields::emitting(&cx, &block, LE);
-                f.u32("Entries Adler-32").hex().emit()?;
+                f.u32("Entries Adler-32").checksum("Adler-32").emit()?;
                 f.bytes("Padding", 12).emit()?;
             }
         }
@@ -903,7 +906,7 @@ async fn ewf2_section(
             let mut f = Fields::emitting(&cx, &block, LE);
             let count = f.u32("Number of entries").emit()?;
             f.bytes("Unknown", 12).emit()?;
-            f.u32("Adler-32").hex().emit()?;
+            f.u32("Adler-32").checksum("Adler-32").emit()?;
             f.bytes("Padding", 12).emit()?;
             let width = if kind == 5 { 16 } else { 32 };
             let entries = data.sub_exact(32, u64::from(count).saturating_mul(width))?;
@@ -918,9 +921,9 @@ async fn ewf2_section(
             let len: u64 = if kind == 8 { 16 } else { 20 };
             let block = cx.block(data.sub(0, len.saturating_add(4))).await?;
             let mut f = Fields::emitting(&cx, &block, LE);
-            f.bytes(if kind == 8 { "MD5" } else { "SHA-1" }, len)
-                .emit()?;
-            f.u32("Adler-32").hex().emit()?;
+            let algo = if kind == 8 { "MD5" } else { "SHA-1" };
+            f.bytes(algo, len).checksum(algo).emit()?;
+            f.u32("Adler-32").checksum("Adler-32").emit()?;
         }
         _ if !data.is_empty() => cx.emit(Node::new("Data").span(data)),
         _ => {}

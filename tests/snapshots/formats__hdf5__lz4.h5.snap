@@ -13,7 +13,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Superblock extension address: 0xffffffffffffffff — undefined  [0x14+0x8]
       End of file address: 0xba2  [0x1c+0x8]
       Root group object header address: 0x30  [0x24+0x8]
-      Checksum: 0xc534fe7d — lookup3, valid  [0x2c+0x4]
+      Checksum: 0xc534fe7d (lookup3, valid)  [0x2c+0x4]
   ▾ Root group: 0x30 — group, 2 members → 0x30+0x4
     ▾ Object header — version 2, 5 messages  [0x30+0x83]
         Signature: "OHDR"  [0x30+0x4]
@@ -57,7 +57,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Size: 46  [0x7e+0x2]
           Flags: 0x0 []  [0x80+0x1]
           Padding: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x81+0x2e]
-        Checksum: 0x9a9e6350 — lookup3, valid  [0xaf+0x4]
+        Checksum: 0x9a9e6350 (lookup3, valid)  [0xaf+0x4]
     ▾ text: 0xb3 — dataset, uint8 [1280], chunked 1280, LZ4  [0x53+0x13] → 0xb3+0x4
       ▾ Object header — version 2, 6 messages  [0xb3+0x10c]
           Signature: "OHDR"  [0xb3+0x4]
@@ -122,7 +122,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Size: 81  [0x167+0x2]
             Flags: 0x0 []  [0x169+0x1]
             Padding: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x16a+0x51]
-          Checksum: 0x9eee3f7e — lookup3, valid  [0x1bb+0x4]
+          Checksum: 0x9eee3f7e (lookup3, valid)  [0x1bb+0x4]
       ▾ Chunks — chunks of 1280 (1.2 KiB)
         ▾ Chunk [0]: 0x800 — 790 bytes, LZ4  [0x800+0x316]
           ▾ LZ4 stream — 790 bytes → 1.2 KiB  [0x800+0x316]
@@ -1475,7 +1475,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Size: 73  [0x27b+0x2]
             Flags: 0x0 []  [0x27d+0x1]
             Padding: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x27e+0x49]
-          Checksum: 0xa3a8d9cc — lookup3, valid  [0x2c7+0x4]
+          Checksum: 0xa3a8d9cc (lookup3, valid)  [0x2c7+0x4]
       ▾ Chunks — chunks of 96 (384 bytes)
         ▾ Chunk [0]: 0xb16 — 140 bytes, shuffle → LZ4  [0xb16+0x8c]
           ▾ LZ4 stream — 140 bytes → 384 bytes  [0xb16+0x8c]

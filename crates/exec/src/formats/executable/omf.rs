@@ -6,7 +6,7 @@
 use crate::bytes::u16_le;
 use crate::cx::Cx;
 use crate::dsl::Cursor;
-use crate::error::{Diagnostic, Result};
+use crate::error::Result;
 use crate::fields::Endian;
 use crate::formats::util::binutil::NodeExt;
 use crate::formats::util::fmt::{clip, plural};
@@ -283,7 +283,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .maybe_summary(describe(kind, &data))
             .lazy(record_fields, span);
         if stored != 0 && sum != 0 && kind != 0xf0 && kind != 0xf1 {
-            node = node.diag(Diagnostic::warning("checksum mismatch"));
+            // The byte that makes the record sum to zero.
+            let computed = stored.wrapping_sub(sum);
+            node = node.check_diag(&crate::value::Check::new("8-bit sum", stored).verify(computed));
         }
         if matches!(kind, 0x80 | 0x82) && walk.module.is_none() {
             walk.module = Some(describe(kind, &data));

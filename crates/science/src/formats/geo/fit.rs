@@ -22,7 +22,7 @@ use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::{Check, EnumTable, Value, lookup};
 
 const LE: Endian = Endian::Little;
 
@@ -342,18 +342,15 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let crc_span = file.sub(crc_at, 2);
     if crc_span.len == 2 {
         let stored = u16_le(&cx.read(crc_span).await?, 0).unwrap_or(0);
-        let mut node = leaf("CRC", crc_span, hex(stored, 16));
+        let mut check = Check::new("FIT CRC-16", stored);
         // Checking the CRC reads the whole file; only do it for small files.
         if crc_at <= 4 << 20 {
             let all = cx.read(file.sub(0, crc_at)).await?;
-            let computed = crc16(&all);
-            node = if computed == stored {
-                node.summary("valid")
-            } else {
-                node.diag(Diagnostic::warning(format!("computed CRC {computed:#06x}")))
-            };
+            check = check.verify(crc16(&all));
+        } else {
+            check = check.skipped("covers more than 4 MiB");
         }
-        cx.emit(node);
+        cx.emit(Node::new("CRC").span(crc_span).checksum(check));
         let rest = file.tail(crc_at.saturating_add(2));
         if rest.len >= 14 {
             cx.emit(embedded_as("Chained FIT file", input.nested(rest), &FIT));

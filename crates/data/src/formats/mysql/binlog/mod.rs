@@ -47,7 +47,7 @@ use crate::formats::util::val::{enumv, flagsv, hex, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag, lookup};
 
 use rows::{Column, TableMap, lenenc};
 
@@ -569,12 +569,10 @@ async fn walk(cx: &Cx, s: &Stream, start: u64, resumed: Option<Walk>, top: bool)
             {
                 summary.push_str(&format!(" (next position {log_pos})"));
             }
-            if s.fmt.checksum {
-                match check(cx, &event).await? {
-                    Some(true) => {}
-                    Some(false) => node = node.diag(Diagnostic::warning("CRC-32 mismatch")),
-                    None => {}
-                }
+            if s.fmt.checksum
+                && let Some(message) = check(cx, &event).await?.mismatch_text()
+            {
+                node = node.diag(Diagnostic::warning(message));
             }
         }
         if flags & 0x80 != 0 && lookup(EVENT_TYPES, ty.into()).is_none() {
@@ -620,12 +618,14 @@ fn table_id_of(post: &[u8], post_len: u64) -> u64 {
         .fold(0u64, |a, &x| a.wrapping_shl(8) | u64::from(x))
 }
 
-/// Checks an event's CRC-32 (`None`: too large to check). The format
+/// Checks an event's CRC-32 (skipped when too large). The format
 /// description's `BINLOG_IN_USE` flag is cleared first, as the server
 /// computed the CRC before setting it.
-async fn check(cx: &Cx, e: &Event) -> Result<Option<bool>> {
+async fn check(cx: &Cx, e: &Event) -> Result<Check> {
     if e.span.len > MAX_EVENT || e.span.len < 4 {
-        return Ok(None);
+        let at = e.span.sub(e.span.len.saturating_sub(4), 4);
+        let stored = u32_le(&cx.read(at).await?, 0).unwrap_or(0);
+        return Ok(Check::new("CRC-32", stored).skipped("event too large"));
     }
     let mut data = cx.read(e.span).await?;
     let n = data.len().saturating_sub(4);
@@ -636,7 +636,7 @@ async fn check(cx: &Cx, e: &Event) -> Result<Option<bool>> {
     {
         *f &= !1;
     }
-    Ok(Some(crc32_paced(cx, &data).await == stored))
+    Ok(Check::new("CRC-32", stored).verify(crc32_paced(cx, &data).await))
 }
 
 /// Reads an event's body (bounded).
@@ -996,15 +996,12 @@ async fn event(cx: Cx, e: Event) -> Result<()> {
     if e.crc_len() > 0 {
         let at = e.span.sub(e.span.len.saturating_sub(4), 4);
         let stored = u32_le(&cx.read(at).await?, 0).unwrap_or(0);
-        let node = Node::new("Checksum").span(at).value(hex(stored, 32));
+        let node = Node::new("Checksum").span(at);
         cx.emit(if !fmt.checksum {
-            node.summary("unused (checksums off)")
+            node.value(hex(stored, 32))
+                .summary("unused (checksums off)")
         } else {
-            match check(&cx, &e).await? {
-                Some(true) => node.summary("valid CRC-32"),
-                Some(false) => node.diag(Diagnostic::warning("CRC-32 mismatch")),
-                None => node.summary("not checked"),
-            }
+            node.checksum(check(&cx, &e).await?)
         });
     }
     Ok(())

@@ -15,7 +15,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Transform seed: 20 21 22 23 24 25 26 27 28 29 2a 2b 2c 2d 2e 2f …  | !"#$%&'()*+,-./|  [0x58+0x20]
     Key transform rounds: 100  [0x78+0x4]
   ▾ Payload — unlocked  [0x7c+0x450]
-      Decrypted — AES-256-CBC, 1098 bytes, contents hash verified  [#1:0x0+0x44a]
+      Decrypted — AES-256-CBC, 1098 bytes, contents hash valid  [#1:0x0+0x44a]
     ▾ Groups — 3
       ▾ General — level 0  [#1:0x0+0x66]
           Group ID: 1  [#1:0x0+0xa] → #1:0x6+0x4

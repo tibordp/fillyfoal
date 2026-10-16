@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ default.xbe — "Fillyfoal Test"  [0x0+0x1000]
   ▾ Image header  [0x0+0x130]
@@ -29,7 +29,7 @@ expression: "common::explore(&name, &data)"
         Section reference count: 0  [0x418+0x4]
         Head shared page reference count address: 0x0  [0x41c+0x4]
         Tail shared page reference count address: 0x0  [0x420+0x4]
-        SHA-1 digest: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x424+0x14]
+        SHA-1 digest: 0000000000000000000000000000000000000000 (SHA-1, not checked)  [0x424+0x14]
     ▾ .data — VA 0x12000+0x100  [0x438+0x38] → 0x900+0x100
         Flags: 0x1 [WRITABLE]  [0x438+0x4]
         Virtual address: 0x12000  [0x43c+0x4]
@@ -40,4 +40,4 @@ expression: "common::explore(&name, &data)"
         Section reference count: 0  [0x450+0x4]
         Head shared page reference count address: 0x0  [0x454+0x4]
         Tail shared page reference count address: 0x0  [0x458+0x4]
-        SHA-1 digest: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x45c+0x14]
+        SHA-1 digest: 0000000000000000000000000000000000000000 (SHA-1, not checked)  [0x45c+0x14]

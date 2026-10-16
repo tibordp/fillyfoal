@@ -32,6 +32,7 @@ use crate::node::{Count, Node};
 use crate::span::Span;
 
 use super::bson;
+use crate::value::Check;
 
 pub static FORMAT: Format = Format {
     name: "mongo-archive",
@@ -267,16 +268,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         };
         let span = file.sub(pos, block.end.saturating_sub(pos));
         let mut node = Node::new(block.namespace.clone()).span(span);
-        node = match (block.eof, block.check) {
-            (true, Some(true)) => node.summary(format!(
-                "end of namespace, CRC-64 {:#018x} (valid)",
-                block.crc
-            )),
-            (true, Some(false)) => node
-                .summary(format!("end of namespace, CRC-64 {:#018x}", block.crc))
-                .diag(Diagnostic::warning("CRC-64 mismatch")),
-            (true, None) => node.summary(format!("end of namespace, CRC-64 {:#018x}", block.crc)),
-            (false, _) => node.summary(plural(block.documents, "document")),
+        node = if block.eof {
+            // The CRC is a field of the terminator, not shown as a node.
+            let check = Check::new("CRC-64", block.crc);
+            let check = match block.check {
+                Some(ok) => check.verified(ok),
+                None => check,
+            };
+            node.summary(format!("end of namespace, {check}"))
+                .check_diag(&check)
+        } else {
+            node.summary(plural(block.documents, "document"))
         };
         if block.eof && block.documents > 0 {
             node = node.diag(Diagnostic::malformed(

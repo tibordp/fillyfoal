@@ -46,7 +46,7 @@ use crate::formats::util::fmt::grouped_count;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, Value, decode_flags, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, decode_flags, flag, lookup};
 
 const MAGIC: u32 = 120_897;
 /// The allocation unit assumed for address cookies.
@@ -196,16 +196,16 @@ pub async fn btree(cx: Cx, input: Input) -> Result<()> {
     let stored = u32_le(&desc, 8).unwrap_or(0);
     let major = u16_le(&desc, 4).unwrap_or(0);
     let minor = u16_le(&desc, 6).unwrap_or(0);
-    let mut sum = Node::new("Checksum")
-        .span(file.sub(8, 4))
-        .value(hex(stored.into(), 32));
-    if crc_with_zeroed(&cx, &desc, 8, desc.len()).await == stored {
-        sum = sum.summary("valid (CRC-32C)");
-    } else if crc_with_zeroed(&cx, &desc, 8, 512).await == stored {
-        sum = sum.summary("valid (CRC-32C over 512 bytes)");
+    let full = crc_with_zeroed(&cx, &desc, 8, desc.len()).await;
+    let check = Check::new("CRC-32C", stored);
+    let sum = Node::new("Checksum").span(file.sub(8, 4));
+    let sum = if full != stored && crc_with_zeroed(&cx, &desc, 8, 512).await == stored {
+        sum.checksum(check.verified(true))
+            .desc("CRC-32C of the first 512 bytes")
     } else {
-        sum = sum.diag(Diagnostic::warning("checksum mismatch"));
-    }
+        sum.checksum(check.verify(full))
+            .desc("CRC-32C of the block")
+    };
     let kids = vec![
         Node::new("Magic")
             .span(file.sub(0, 4))
@@ -383,18 +383,15 @@ async fn page(cx: Cx, (input, file, pos): PageState) -> Result<()> {
     } else {
         to_usize(COMPRESS_SKIP)
     };
-    let mut sum = Node::new("Checksum")
+    let computed = crc_with_zeroed(&cx, &block, 32, covered).await;
+    let sum = Node::new("Checksum")
         .span(span.sub(32, 4))
-        .value(hex(stored.into(), 32));
-    sum = if crc_with_zeroed(&cx, &block, 32, covered).await == stored {
-        sum.summary(if bflags & 1 != 0 {
-            "valid (CRC-32C of the block)"
+        .checksum(Check::new("CRC-32C", stored).verify(computed))
+        .desc(if bflags & 1 != 0 {
+            "CRC-32C of the block"
         } else {
-            "valid (CRC-32C of the first 64 bytes)"
-        })
-    } else {
-        sum.diag(Diagnostic::warning("checksum mismatch"))
-    };
+            "CRC-32C of the first 64 bytes"
+        });
     let bh = vec![
         Node::new("On-disk size")
             .span(span.sub(28, 4))

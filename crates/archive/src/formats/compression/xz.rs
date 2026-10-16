@@ -23,7 +23,7 @@ use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, Value};
+use crate::value::{Check, EnumTable, Value};
 
 const LE: Endian = Endian::Little;
 /// Streams in one file before giving up.
@@ -74,13 +74,13 @@ record! {
         magic: bytes[6] "Magic",
         reserved: u8 "Reserved flags",
         check: u8 "Check type" .enumeration(CHECK),
-        crc: u32 "CRC32" .hex() .desc("CRC32 of the stream flags"),
+        crc: u32 "CRC32" .checksum("CRC-32") .desc("CRC32 of the stream flags"),
     }
 }
 
 record! {
     pub struct StreamFooter {
-        crc: u32 "CRC32" .hex() .desc("CRC32 of the backward size and stream flags"),
+        crc: u32 "CRC32" .checksum("CRC-32") .desc("CRC32 of the backward size and stream flags"),
         backward: u32 "Backward size"
             .with(|&v, n| n.summary(format!("index is {} bytes", u64::from(v).saturating_add(1).saturating_mul(4)))),
         reserved: u8 "Reserved flags",
@@ -354,21 +354,13 @@ async fn stream_node(cx: Cx, (input, stream): (Input, Stream)) -> Result<()> {
 
 async fn stream_header_node(cx: &Cx, span: Span) -> Result<Node> {
     let data = cx.read_avail(span).await?;
-    let mut node = StreamHeader::node("Stream header", span, LE);
-    if let (Some(flags), Some(stored)) = (data.get(6..8), u32_le(&data, 8)) {
-        node = verify(node, crc32(flags), stored);
-    }
-    Ok(node)
-}
-
-fn verify(node: Node, computed: u32, stored: u32) -> Node {
-    if computed == stored {
-        node.summary("CRC valid")
-    } else {
-        node.diag(Diagnostic::warning(format!(
-            "CRC32 mismatch: computed {computed:#010x}"
-        )))
-    }
+    Ok(match (data.get(6..8), u32_le(&data, 8)) {
+        (Some(flags), Some(stored)) => {
+            let check = Check::new("CRC-32", stored).verify(crc32(flags));
+            StreamHeader::checked_node("Stream header", span, LE, check.at(8)).check_diag(&check)
+        }
+        _ => StreamHeader::node("Stream header", span, LE),
+    })
 }
 
 async fn emit_stream(cx: &Cx, input: Input, stream: &Stream) -> Result<()> {
@@ -393,11 +385,14 @@ async fn emit_stream(cx: &Cx, input: Input, stream: &Stream) -> Result<()> {
     );
     let footer_span = Span::new(span.source, stream.index.end(), 12);
     let footer = cx.read_avail(footer_span).await?;
-    let mut node = StreamFooter::node("Stream footer", footer_span, LE);
-    if let (Some(covered), Some(stored)) = (footer.get(4..10), u32_le(&footer, 0)) {
-        node = verify(node, crc32(covered), stored);
-    }
-    cx.emit(node);
+    cx.emit(match (footer.get(4..10), u32_le(&footer, 0)) {
+        (Some(covered), Some(stored)) => {
+            let check = Check::new("CRC-32", stored).verify(crc32(covered));
+            StreamFooter::checked_node("Stream footer", footer_span, LE, check.at(0))
+                .check_diag(&check)
+        }
+        _ => StreamFooter::node("Stream footer", footer_span, LE),
+    });
     Ok(())
 }
 
@@ -512,11 +507,16 @@ async fn block(cx: Cx, (_input, span, unpadded, check): (Input, Span, u64, u8)) 
     if check_len > 0 {
         let at = pad_at.saturating_add(pad);
         let bytes = cx.read_avail(span.sub(at, check_len)).await?;
+        // Checked against the decoded block by the decoder.
+        let stored = match check {
+            1 => Check::new("CRC-32", u32_le(&bytes, 0).unwrap_or(0)),
+            4 => Check::new("CRC-64/XZ", crate::bytes::u64_le(&bytes, 0).unwrap_or(0)),
+            _ => Check::new(check_name(check), bytes),
+        };
         cx.emit(
             Node::new("Check")
                 .span(span.sub(at, check_len))
-                .value(Value::Bytes(bytes))
-                .summary(check_name(check)),
+                .checksum(stored.on_decode()),
         );
     }
     Ok(())
@@ -603,11 +603,12 @@ async fn block_header(cx: Cx, span: Span) -> Result<()> {
         cx.emit(Node::new("Header padding").span(span.sub(pad, crc_at.saturating_sub(pad))));
     }
     let stored = u32_le(&data, to_usize(crc_at)).unwrap_or(0);
-    let node = Node::new("CRC32")
-        .span(span.sub(crc_at, 4))
-        .value(hex(stored, 64));
     let covered = data.get(..to_usize(crc_at)).unwrap_or_default();
-    cx.emit(verify(node, crc32(covered), stored));
+    cx.emit(
+        Node::new("CRC32")
+            .span(span.sub(crc_at, 4))
+            .checksum(Check::new("CRC-32", stored).verify(crc32(covered))),
+    );
     Ok(())
 }
 
@@ -646,11 +647,12 @@ async fn index(cx: Cx, span: Span) -> Result<()> {
         cx.emit(Node::new("Index padding").span(span.sub(pad, crc_at.saturating_sub(pad))));
     }
     let stored = u32_le(&data, to_usize(crc_at)).unwrap_or(0);
-    let node = Node::new("CRC32")
-        .span(span.sub(crc_at, 4))
-        .value(hex(stored, 64));
     let covered = data.get(..to_usize(crc_at)).unwrap_or_default();
     let computed = crate::formats::util::datakit::crc32_paced(&cx, covered).await;
-    cx.emit(verify(node, computed, stored));
+    cx.emit(
+        Node::new("CRC32")
+            .span(span.sub(crc_at, 4))
+            .checksum(Check::new("CRC-32", stored).verify(computed)),
+    );
     Ok(())
 }

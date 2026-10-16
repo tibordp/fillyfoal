@@ -11,14 +11,13 @@ use crate::fields::{Endian, parse};
 use crate::formats::audio::ape::trailing_tags;
 use crate::formats::util::datakit::crc32_paced;
 use crate::formats::util::fmt::plural;
-use crate::formats::util::sound::{channels, duration_of, leaf, table};
-use crate::formats::util::val::hex;
+use crate::formats::util::sound::{channels, duration_of, table};
 use crate::formats::util::vidutil::khz;
 use crate::formats::{Format, Input, Probe, audio::id3};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::EnumTable;
+use crate::value::{Check, EnumTable};
 
 const LE: Endian = Endian::Little;
 
@@ -41,7 +40,7 @@ record! {
         bits: u16 "Bits per sample",
         rate: u32 "Sample rate",
         samples: u32 "Samples" .desc("Per channel"),
-        crc: u32 "CRC" .hex() .desc("CRC-32 of the 18 bytes before it"),
+        crc: u32 "CRC" .checksum("CRC-32") .desc("CRC-32 of the 18 bytes before it"),
     }
 }
 
@@ -62,13 +61,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let hspan = file.sub(0, Header::SIZE);
     let h = parse(&cx, hspan, LE, &(), Header::layout).await?;
     let raw = cx.read(hspan).await?;
-    let mut node = Header::node("Header", hspan, LE);
-    node = if crc32(raw.get(..18).unwrap_or_default()) == h.crc {
-        node.summary("CRC valid")
-    } else {
-        node.diag(Diagnostic::warning("header CRC mismatch"))
-    };
-    cx.emit(node);
+    let check = Check::new("CRC-32", h.crc).verify(crc32(raw.get(..18).unwrap_or_default()));
+    cx.emit(Header::checked_node("Header", hspan, LE, check.at(18)).check_diag(&check));
     let layout = match h.channels {
         1 => "mono".to_owned(),
         2 => "stereo".to_owned(),
@@ -99,16 +93,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let crc_span = file.sub(seek.end().saturating_sub(file.offset), 4);
     let stored = cx.read_avail(crc_span).await?;
     let stored = u32_le(&stored, 0);
-    let mut crc_node = leaf("Seek table CRC", crc_span, hex(stored.unwrap_or(0), 32));
+    let mut check = Check::new("CRC-32", stored.unwrap_or(0));
     if seek.len <= MAX_CHECKED && stored.is_some() {
         let table = cx.read_avail(seek).await?;
-        crc_node = if Some(crc32_paced(&cx, &table).await) == stored {
-            crc_node.summary("valid")
-        } else {
-            crc_node.diag(Diagnostic::warning("seek table CRC mismatch"))
-        };
+        check = check.verify(crc32_paced(&cx, &table).await);
     }
-    cx.emit(crc_node);
+    cx.emit(Node::new("Seek table CRC").span(crc_span).checksum(check));
     let start = crc_span.end().saturating_sub(file.offset);
     let data = file.sub(start, end.saturating_sub(start));
     cx.emit(
@@ -187,17 +177,14 @@ async fn frame(cx: Cx, span: Span) -> Result<()> {
     );
     let crc_span = span.tail(body.len);
     let stored = u32_le(&cx.read_avail(crc_span).await?, 0);
-    let mut node = leaf("CRC", crc_span, hex(stored.unwrap_or(0), 32));
-    if body.len <= MAX_CHECKED && stored.is_some() {
+    let check = Check::new("CRC-32", stored.unwrap_or(0));
+    let node = Node::new("CRC").span(crc_span);
+    let node = if body.len <= MAX_CHECKED && stored.is_some() {
         let data = cx.read_avail(body).await?;
-        node = if Some(crc32_paced(&cx, &data).await) == stored {
-            node.summary("valid")
-        } else {
-            node.diag(Diagnostic::warning("frame CRC mismatch"))
-        };
+        node.checksum(check.verify(crc32_paced(&cx, &data).await))
     } else {
-        node = node.summary(format!("not checked ({} bytes)", body.len));
-    }
+        node.checksum(check.skipped(format!("covers {} bytes", body.len)))
+    };
     cx.emit(node);
     Ok(())
 }

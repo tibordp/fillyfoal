@@ -7,10 +7,10 @@ expression: "common::explore(&display_name(&path), &data)"
       Signature: 37 7a bc af 27 1c  |7z..'.|  [0x0+0x6]
       Major version: 0  [0x6+0x1]
       Minor version: 4  [0x7+0x1]
-      Start header CRC: 0xc063c678  [0x8+0x4]
+      Start header CRC: 0xc063c678 (CRC-32, valid)  [0x8+0x4]
       Next header offset: 0x975  [0xc+0x8]
       Next header size: 90 — 90 bytes  [0x14+0x8]
-      Next header CRC: 0x69042954  [0x1c+0x4]
+      Next header CRC: 0x69042954 (CRC-32, valid)  [0x1c+0x4]
   ▾ Files — 1 file  [0x995+0x5a]
     ▾ words.txt — 19.5 KiB  [0x20+0x975]
         Modification time: 2024-01-02 03:04:00 UTC
@@ -18,7 +18,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 20000 — 19.5 KiB
         Folder: 0
       ▾ Content — UTF-8 text, LF line endings, 270 lines  [0x20+0x975]
-          CRC32: 0xd2f85e64 — valid
+          CRC32: 0xd2f85e64 (CRC-32, valid)
           Encoding: "UTF-8"
           Line endings: "LF" — 269 LF, 0 CRLF, 0 CR
         ▾ Lines — 270 lines  [#1:0x0+0x4e20]

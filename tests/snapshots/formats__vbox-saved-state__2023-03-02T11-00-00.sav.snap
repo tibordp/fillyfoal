@@ -16,7 +16,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Number of units: 2  [0x30+0x4]
       Flags: 0x0  [0x34+0x4]
       Maximum decompressed record size: 4096  [0x38+0x4]
-      CRC-32: 0x0  [0x3c+0x4]
+      CRC-32: 0x0 (CRC-32, not checked)  [0x3c+0x4]
   ▾ SSM — version 1, instance 0  [0x40+0x2c]
       Magic: "\nUnit\n"  [0x40+0x8]
       Stream offset: 0x40  [0x48+0x8]

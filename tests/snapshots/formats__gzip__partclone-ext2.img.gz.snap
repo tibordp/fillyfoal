@@ -11,7 +11,7 @@ expression: "common::explore(&display_name(&path), &data)"
       XFL: best compression (0x2)  [0x8+0x1]
       OS: Unix (0x3)  [0x9+0x1]
   ▾ Trailer  [0x35b+0x8]
-      CRC32: 0x4dada2b7  [0x35b+0x4]
+      CRC32: 0x4dada2b7 (CRC-32, valid)  [0x35b+0x4]
       ISIZE: 30970  [0x35f+0x4]
   ▾ Content — Partclone image 0002 (partclone 0.3.36), EXTFS, 1 MiB volume, 1024 blocks of 1024 bytes, 30 in use  [0xa+0x359]
     ▾ Image head  [#1:0x0+0x24]
@@ -35,11 +35,11 @@ expression: "common::explore(&display_name(&path), &data)"
         Blocks per checksum: 16  [#1:0x64+0x4]
         Reseed checksum: true  [#1:0x68+0x1]
         Bitmap mode: BIT (0x1)  [#1:0x69+0x1]
-      Header checksum: 0xcecf4470  [#1:0x6a+0x4]
+      Header checksum: 0xcecf4470 (CRC-32 (not inverted), valid)  [#1:0x6a+0x4]
     ▾ Bitmap — 1024 blocks, a bit per block  [#1:0x6e+0x80]
         Blocks in use: 30
-        Computed checksum: 0xbc66015f  [#1:0xee+0x4]
-      Bitmap checksum: 0xbc66015f  [#1:0xee+0x4]
+        Bitmap checksum: 0xbc66015f (CRC-32 (not inverted), valid)  [#1:0xee+0x4]
+      Bitmap checksum: 0xbc66015f (CRC-32 (not inverted), skipped: checked when the bitmap is expanded)  [#1:0xee+0x4]
     ▾ Volume — ext2 filesystem "fillyfoal", 1 MiB, 1024-byte blocks, 16 inodes (3 free)
       ▾ Superblock  [#2:0x400+0x400]
           Inodes: 16  [#2:0x400+0x4]
@@ -1058,8 +1058,8 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Blocks — runs of blocks in use and free
         Blocks 0–15 — in use, 16 KiB  [#1:0xf2+0x4000] → #2:0x0+0x4000
       ▾ Check value: 0xd2c15c8c — after stored block 15  [#1:0x40f2+0x4]
-          Computed: 0xd2c15c8c
+          Checked: 0xd2c15c8c (CRC-32 (not inverted), valid)
         Blocks 16–29 — in use, 14 KiB  [#1:0x40f6+0x3800] → #2:0x4000+0x3800
       ▾ Check value: 0x1a9137cd — after stored block 29  [#1:0x78f6+0x4]
-          Computed: 0x1a9137cd
+          Checked: 0x1a9137cd (CRC-32 (not inverted), valid)
         Blocks 30–1023 — free, 994 KiB → #2:0x7800+0xf8800

@@ -22,7 +22,7 @@ use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{FlagTable, Guid, Value, flag};
+use crate::value::{Check, FlagTable, Guid, Value, flag};
 
 const LE: Endian = Endian::Little;
 const SIGNATURE: &[u8] = b"EFI PART";
@@ -61,7 +61,7 @@ record! {
         signature: ascii[8] "Signature",
         revision: u32 "Revision" .hex() .with(|&r, n| n.summary(format!("{}.{}", r >> 16, r & 0xffff))),
         header_size: u32 "Header size",
-        header_crc: u32 "Header CRC32" .hex(),
+        header_crc: u32 "Header CRC32" .checksum("CRC-32"),
         _reserved: u32 "Reserved",
         my_lba: u64 "This header's LBA",
         alternate_lba: u64 "Alternate header's LBA",
@@ -71,7 +71,7 @@ record! {
         entries_lba: u64 "Partition entries LBA",
         entries: u32 "Number of partition entries",
         entry_size: u32 "Size of a partition entry",
-        entries_crc: u32 "Partition entries CRC32" .hex(),
+        entries_crc: u32 "Partition entries CRC32" .checksum("CRC-32"),
     }
 }
 
@@ -103,7 +103,8 @@ struct Gpt {
 }
 
 /// A header sector: the header fields, then the reserved rest.
-fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+fn header_layout(f: &mut Fields<'_>, checks: &Checks) -> Result<()> {
+    f.verifying(checks.0.clone());
     let h = Header::read(f)?;
     let size = u64::from(h.header_size).max(Header::SIZE);
     if size > Header::SIZE {
@@ -119,43 +120,46 @@ fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
 
 /// Checks a header's CRC: computed over `header_size` bytes with the CRC
 /// field zeroed.
-async fn header_crc(cx: &Cx, span: Span, h: &Header) -> Result<Option<Diagnostic>> {
+async fn header_crc(cx: &Cx, span: Span, h: &Header) -> Result<Check> {
     let len = u64::from(h.header_size).clamp(92, 4096);
     let mut data = cx.read(span.sub(0, len)).await?;
     if let Some(field) = data.get_mut(16..20) {
         field.fill(0);
     }
-    let computed = crc32(&data);
-    Ok((computed != h.header_crc).then(|| {
-        Diagnostic::warning(format!(
-            "header CRC mismatch: computed {computed:#010x}, stored {:#010x}",
-            h.header_crc
-        ))
-        .at(span)
-    }))
+    Ok(Check::new("CRC-32", h.header_crc).verify(crc32(&data)))
 }
 
+/// What a header's fields are verified against: its own CRC and, when
+/// checked, its array's.
+fn header_checks(header: &Check, array: Option<&Check>) -> Checks {
+    let mut v = header.at(16);
+    if let Some(a) = array {
+        v.extend(a.at(88));
+    }
+    Checks(v)
+}
+
+/// A header's checks, by field position.
+#[derive(Clone, Debug, Default)]
+struct Checks(Vec<(u64, Check)>);
+
+/// A partition array as read (if small enough), a truncation, and its
+/// CRC checked against `crc` (when read whole).
+type Array = (Option<Vec<u8>>, Option<Diagnostic>, Option<Check>);
+
 /// Reads a partition array (if small enough) and checks its CRC.
-async fn read_array(
-    cx: &Cx,
-    array: Span,
-    crc: u32,
-) -> Result<(Option<Vec<u8>>, Option<Diagnostic>)> {
+async fn read_array(cx: &Cx, array: Span, crc: u32) -> Result<Array> {
     if array.len > MAX_ARRAY {
-        return Ok((None, None));
+        return Ok((None, None, None));
     }
     let data = cx.read_avail(array).await?;
     if to_u64(data.len()) < array.len {
         let d = Diagnostic::truncated(array, to_u64(data.len()));
-        return Ok((Some(data), Some(d)));
+        return Ok((Some(data), Some(d), None));
     }
     let computed = crate::formats::util::datakit::crc32_paced(cx, &data).await;
-    let problem = (computed != crc).then(|| {
-        Diagnostic::warning(format!(
-            "partition array CRC mismatch: computed {computed:#010x}, stored {crc:#010x}"
-        ))
-    });
-    Ok((Some(data), problem))
+    let check = Check::new("CRC-32", crc).verify(computed);
+    Ok((Some(data), None, Some(check)))
 }
 
 fn used_entries(data: &[u8], entry_size: u64) -> usize {
@@ -187,8 +191,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let header_sector = disk.sub(sector, sector);
     let header_span = disk.sub(sector, Header::SIZE);
     let header = parse(&cx, header_span, LE, &(), Header::layout).await?;
-    let mut header_node =
-        struct_node("GPT header", header_sector, LE, (), header_layout).summary(format!(
+    let header_check = header_crc(&cx, header_span, &header).await?;
+    let array = disk.sub(
+        header.entries_lba.saturating_mul(sector),
+        u64::from(header.entries).saturating_mul(header.entry_size.into()),
+    );
+    let read = if u64::from(header.entry_size) >= Entry::SIZE {
+        read_array(&cx, array, header.entries_crc).await?
+    } else {
+        (None, None, None)
+    };
+    let computed = header_checks(&header_check, read.2.as_ref());
+    let header_node = struct_node("GPT header", header_sector, LE, computed, header_layout)
+        .summary(format!(
             "revision {}.{}, {} at LBA {}, usable LBA {}–{}",
             header.revision >> 16,
             header.revision & 0xffff,
@@ -197,10 +212,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             header.first_usable,
             header.last_usable
         ));
-    if let Some(d) = header_crc(&cx, header_span, &header).await? {
-        header_node = header_node.diag(d);
-    }
-    cx.emit(header_node);
+    cx.emit(header_node.check_diag(&header_check));
 
     let entry_size = u64::from(header.entry_size);
     let entries = u64::from(header.entries);
@@ -210,10 +222,6 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .at(header_span),
         );
     }
-    let array = disk.sub(
-        header.entries_lba.saturating_mul(sector),
-        entries.saturating_mul(entry_size),
-    );
     let gpt = Gpt {
         input,
         sector,
@@ -222,11 +230,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         entry_size,
     };
 
-    let (data, problem) = read_array(&cx, array, header.entries_crc).await?;
+    let (data, problem, check) = read;
     let used = data.as_deref().map(|d| used_entries(d, entry_size));
     let mut list = Node::new("Partition entries").span(array);
     if let Some(d) = problem {
         list = list.diag(d);
+    }
+    if let Some(c) = &check {
+        list = list.check_diag(c);
     }
     cx.annotate(match used {
         Some(n) => format!(
@@ -272,12 +283,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         } else {
             match read_backup(&cx, &gpt, primary, data.as_deref(), alternate).await? {
                 Backup::Found(found) => {
-                    let mut node =
-                        struct_node("Backup GPT header", backup_sector, LE, (), header_layout)
-                            .summary(format!(
-                                "at LBA {alternate}, entries at LBA {}",
-                                found.entries_lba
-                            ));
+                    let mut node = struct_node(
+                        "Backup GPT header",
+                        backup_sector,
+                        LE,
+                        found.computed.clone(),
+                        header_layout,
+                    )
+                    .summary(format!(
+                        "at LBA {alternate}, entries at LBA {}",
+                        found.entries_lba
+                    ));
                     for d in found.problems {
                         node = node.diag(d);
                     }
@@ -326,6 +342,8 @@ struct Found {
     array: Node,
     array_span: Span,
     problems: Vec<Diagnostic>,
+    /// The header's fields' check values, verified.
+    computed: Checks,
 }
 
 enum Backup {
@@ -358,8 +376,9 @@ async fn read_backup(
         Err(e) => return Ok(Backup::Unreadable(e)),
     };
     let mut problems = Vec::new();
-    if let Some(d) = header_crc(cx, backup, &b).await? {
-        problems.push(d);
+    let hcheck = header_crc(cx, backup, &b).await?;
+    if let Some(message) = hcheck.mismatch_text() {
+        problems.push(Diagnostic::warning(message).at(backup));
     }
     if b.alternate_lba != primary.my_lba || b.disk_guid != primary.disk_guid {
         problems.push(Diagnostic::warning(
@@ -370,7 +389,7 @@ async fn read_backup(
         b.entries_lba.saturating_mul(sector),
         u64::from(b.entries).saturating_mul(b.entry_size.into()),
     );
-    let (bdata, bproblem) = read_array(cx, barray, b.entries_crc).await?;
+    let (bdata, bproblem, bcheck) = read_array(cx, barray, b.entries_crc).await?;
     let mut anode = Node::new("Backup partition entries").span(barray);
     anode = match (bdata.as_deref(), primary_data) {
         (Some(x), Some(y)) if x == y => anode.summary("identical to the primary array"),
@@ -379,6 +398,9 @@ async fn read_backup(
     };
     if let Some(d) = bproblem {
         anode = anode.diag(d);
+    }
+    if let Some(c) = &bcheck {
+        anode = anode.check_diag(c);
     }
     if bdata
         .as_deref()
@@ -400,13 +422,14 @@ async fn read_backup(
         array: anode,
         array_span: barray,
         problems,
+        computed: header_checks(&hcheck, bcheck.as_ref()),
     })))
 }
 
 /// The backup header, read on request (see [`far::deferred`]): its fields
 /// and its array, with what disagrees with the primary as diagnostics.
 async fn deferred_backup(cx: Cx, (gpt, primary, alternate): (Gpt, Primary, u64)) -> Result<()> {
-    let (data, _) = read_array(&cx, gpt.array, primary.entries_crc).await?;
+    let (data, _, _) = read_array(&cx, gpt.array, primary.entries_crc).await?;
     match read_backup(&cx, &gpt, primary, data.as_deref(), alternate).await? {
         Backup::Found(found) => {
             let sector = gpt
@@ -414,7 +437,7 @@ async fn deferred_backup(cx: Cx, (gpt, primary, alternate): (Gpt, Primary, u64))
                 .span
                 .sub(alternate.saturating_mul(gpt.sector), gpt.sector);
             let block = cx.block(sector).await?;
-            header_layout(&mut Fields::emitting(&cx, &block, LE), &())?;
+            header_layout(&mut Fields::emitting(&cx, &block, LE), &found.computed)?;
             cx.emit(found.array);
             for d in found.problems {
                 cx.diag(d);
@@ -589,7 +612,7 @@ async fn layout(
     if let Some(h) = backup_header {
         areas.push((lba(h), lba_end(h), "Backup GPT header".to_owned()));
     }
-    let (data, _) = read_array(&cx, gpt.array, 0).await?;
+    let (data, _, _) = read_array(&cx, gpt.array, 0).await?;
     if let Some(data) = data {
         for (i, e) in data.chunks(to_usize(gpt.entry_size)).enumerate() {
             if i.is_multiple_of(256) {

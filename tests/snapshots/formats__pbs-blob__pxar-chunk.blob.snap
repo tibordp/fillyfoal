@@ -4,7 +4,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ pxar-chunk.blob — Proxmox Backup data blob, zstd-compressed, 4.1 KiB  [0x0+0x1043]
     Magic: "zstd-compressed"  [0x0+0x8]
-    CRC32: 0x55950e54 — valid  [0x8+0x4]
+    CRC32: 0x55950e54 (CRC-32, valid)  [0x8+0x4]
   ▾ Data — Proxmox file archive (format version 1)  [0xc+0x1037]
     ▾ Root directory — directory drwxr-xr-x, 2 entries  [#1:0x0+0x245a]
       ▾ ENTRY — directory drwxr-xr-x, uid 0, gid 0  [#1:0x0+0x38]

@@ -3,14 +3,14 @@
 use crate::bytes::{u16_le, u32_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
-use crate::error::{Diagnostic, Result};
+use crate::error::Result;
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{crc32_update, size, text, unix_time, uuid_value};
 use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
-use crate::value::{FlagTable, flag};
+use crate::value::{Check, FlagTable, flag};
 
 const LE: Endian = Endian::Little;
 const SUPER: u64 = 1024;
@@ -44,7 +44,7 @@ record! {
         bytes: u16 "Superblock size",
         flags: u16 "Flags" .hex(),
         crc_seed: u32 "CRC seed" .hex(),
-        sum: u32 "Checksum" .hex(),
+        sum: u32 "Checksum" .checksum(NILFS_CRC),
         log_block_size: u32 "Block size (log2 - 10)",
         segments: u64 "Segments",
         dev_size: u64 "Device size" .with(|&v, n| n.summary(size(v))),
@@ -77,19 +77,26 @@ record! {
     }
 }
 
+/// The superblock's CRC-32, seeded from the superblock, no inversions.
+const NILFS_CRC: &str = "CRC-32 (seeded)";
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let vol = input.span;
     let span = vol.sub(SUPER, Superblock::SIZE);
     let sb = parse(&cx, span, LE, &(), Superblock::layout).await?;
-    let mut node = Superblock::node("Superblock", vol.sub(SUPER, sb.bytes.into()), LE);
     // CRC-32 (seeded) over the superblock with the checksum field zeroed.
     let mut raw = cx.read_avail(vol.sub(SUPER, sb.bytes.into())).await?;
     if let Some(f) = raw.get_mut(16..20) {
         f.fill(0);
     }
-    if crc32_update(sb.crc_seed, &raw) != sb.sum {
-        node = node.diag(Diagnostic::warning("superblock checksum mismatch"));
-    }
+    let check = Check::new(NILFS_CRC, sb.sum).verify(crc32_update(sb.crc_seed, &raw));
+    let node = Superblock::checked_node(
+        "Superblock",
+        vol.sub(SUPER, sb.bytes.into()),
+        LE,
+        check.at(16),
+    )
+    .check_diag(&check);
     cx.emit(node);
     let block = 1024u64.checked_shl(sb.log_block_size).unwrap_or(0);
     let label = crate::text::until_nul(&sb.volume_name);

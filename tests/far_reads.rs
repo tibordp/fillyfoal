@@ -238,7 +238,7 @@ fn a_damaged_backup_is_reported_when_read() {
         .map(|d| d.message.clone())
         .collect();
     assert!(
-        messages.iter().any(|m| m.contains("CRC mismatch")),
+        messages.iter().any(|m| m.contains("CRC-32 mismatch")),
         "{messages:?}"
     );
     assert!(

@@ -439,20 +439,11 @@ pub async fn checksum_node(cx: &Cx, data: &[u8], span: Span, at: usize) -> Optio
     let stored = crate::bytes::u32_le(data, at)?;
     let covered = data.get(..at)?;
     let computed = lookup3(cx, covered).await;
-    let node = Node::new("Checksum")
-        .span(span.sub(to_u64(at), 4))
-        .value(Value::UInt {
-            value: stored.into(),
-            bits: 32,
-            radix: Radix::Hex,
-        });
-    Some(if stored == computed {
-        node.summary("lookup3, valid")
-    } else {
-        node.diag(crate::error::Diagnostic::warning(format!(
-            "checksum mismatch: computed {computed:#010x}"
-        )))
-    })
+    Some(
+        Node::new("Checksum")
+            .span(span.sub(to_u64(at), 4))
+            .checksum(crate::value::Check::new("lookup3", stored).verify(computed)),
+    )
 }
 
 /// HDF5's Fletcher-32 (`H5_checksum_fletcher32`): 16-bit big-endian words,

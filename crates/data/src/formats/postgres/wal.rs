@@ -25,7 +25,7 @@ use crate::formats::util::val::{hex, uint};
 use crate::formats::{Format, Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag, lookup};
 
 pub static FORMAT: Format = Format {
     name: "pg-wal",
@@ -780,20 +780,13 @@ async fn record(cx: Cx, rs: RecState) -> Result<()> {
     );
     cx.emit(Node::new("Padding").span(at(18, 2)));
     let stored = u32_le(&b, 20).unwrap_or(0);
-    let mut crc = Node::new("CRC").span(at(20, 4)).value(hex(stored, 32));
+    let mut check = Check::new("CRC-32C", stored);
     if whole && to_u64(b.len()) == tot {
         let body = b.get(24..).unwrap_or_default();
         let head = b.get(..20).unwrap_or_default();
-        let computed = !crc32c_update(crc32c_update(u32::MAX, body), head);
-        crc = if computed == stored {
-            crc.summary("CRC-32C, valid")
-        } else {
-            crc.diag(Diagnostic::warning(format!(
-                "CRC mismatch (computed {computed:#010x})"
-            )))
-        };
+        check = check.verify(!crc32c_update(crc32c_update(u32::MAX, body), head));
     }
-    cx.emit(crc);
+    cx.emit(Node::new("CRC").span(at(20, 4)).checksum(check));
     let blocks = parse_blocks(&b, tot, seg.magic);
     if let Some(p) = &blocks.problem {
         cx.diag(Diagnostic::malformed(p.clone()));

@@ -33,6 +33,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, Prim, struct_node};
 use crate::node::Node;
 use crate::span::Span;
+use crate::value::Check;
 
 /// A fixed-size structure declared with [`record!`](crate::record).
 pub trait Record: Sized + Send + 'static {
@@ -47,6 +48,21 @@ pub trait Record: Sized + Send + 'static {
     /// A lazy node showing this record's fields at `span`.
     fn node(name: impl Into<Cow<'static, str>>, span: Span, endian: Endian) -> Node {
         struct_node(name, span, endian, (), Self::layout)
+    }
+
+    /// [`Record::node`] whose check-value fields (marked `.checksum(..)`)
+    /// show the dissector's checks of them: `checks` by field position,
+    /// relative to the record ([`Check::at`]).
+    fn checked_node(
+        name: impl Into<Cow<'static, str>>,
+        span: Span,
+        endian: Endian,
+        checks: Vec<(u64, Check)>,
+    ) -> Node {
+        struct_node(name, span, endian, checks, |f, checks| {
+            f.verifying(checks.clone());
+            Self::read(f)
+        })
     }
 }
 

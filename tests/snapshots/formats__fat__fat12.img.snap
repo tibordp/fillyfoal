@@ -246,7 +246,7 @@ expression: "common::explore(&display_name(&path), &data)"
             OS: unknown (0xff)  [#1:0x9+0x1]
           Original name: "notes.txt"  [#1:0xa+0xa]
         ▾ Trailer  [#1:0x739+0x8]
-            CRC32: 0x36f8c423  [#1:0x739+0x4]
+            CRC32: 0x36f8c423 (CRC-32, valid)  [#1:0x739+0x4]
             ISIZE: 1824  [#1:0x73d+0x4]
         ▾ Content — 0x720 bytes decompressed  [#1:0x14+0x72d]
             Data  [#2:0x0+0x720]

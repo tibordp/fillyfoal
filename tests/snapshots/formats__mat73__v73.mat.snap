@@ -19,8 +19,8 @@ expression: "common::explore(&display_name(&path), &data)"
       Superblock extension address: 0xffffffffffffffff — undefined  [0x214+0x8]
       End of file address: 0x12c  [0x21c+0x8]
       Root group object header address: 0x30  [0x224+0x8]
-      Checksum: 0x0  [0x22c+0x4]
-        ! warning: checksum mismatch: computed 0xf9664695
+      Checksum: 0x0 (lookup3, mismatch: computed 0xf9664695)  [0x22c+0x4]
+        ! warning: lookup3 mismatch: stored 0x0, computed 0xf9664695
   ▾ Root group: 0x30 — group, 2 members → 0x230+0x4
     ▾ Object header — version 2, 3 messages  [0x230+0x44]
         Signature: "OHDR"  [0x230+0x4]
@@ -60,8 +60,8 @@ expression: "common::explore(&display_name(&path), &data)"
           Dataspace  [0x270+0x0]
           Truncated  [0x270+0x0]
             ! truncated: needed 0x1 bytes at 0x270, only 0x0 available [0x270+0x1]
-        Checksum: 0x0  [0x270+0x4]
-          ! warning: checksum mismatch: computed 0x5f84319e
+        Checksum: 0x0 (lookup3, mismatch: computed 0x5f84319e)  [0x270+0x4]
+          ! warning: lookup3 mismatch: stored 0x0, computed 0x5f84319e
     ▾ x: 0xa0 — dataset, uint32 [4], contiguous  [0x23a+0x10] → 0x2a0+0x4
       ▾ Object header — version 2, 3 messages  [0x2a0+0x44]
           Signature: "OHDR"  [0x2a0+0x4]
@@ -94,8 +94,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Layout class: contiguous (0x1)  [0x2cf+0x1]
             Address: 0x104  [0x2d0+0x8]
             Size: 16  [0x2d8+0x8]
-          Checksum: 0x0  [0x2e0+0x4]
-            ! warning: checksum mismatch: computed 0x0e6c92bf
+          Checksum: 0x0 (lookup3, mismatch: computed 0xe6c92bf)  [0x2e0+0x4]
+            ! warning: lookup3 mismatch: stored 0x0, computed 0xe6c92bf
       ▾ Data — 4 elements, 16 bytes  [0x304+0x10]
           [0]: 10  [0x304+0x4]
           [1]: 20  [0x308+0x4]

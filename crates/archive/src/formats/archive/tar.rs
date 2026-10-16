@@ -20,7 +20,7 @@ use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::EnumTable;
+use crate::value::{Check, Digest, EnumTable, Radix};
 
 const BLOCK: u64 = 512;
 /// The largest metadata payload (long name, pax header) decoded in memory.
@@ -72,6 +72,35 @@ fn checksum_ok(block: &[u8]) -> bool {
     };
     let (unsigned, signed) = checksums(block);
     stored == unsigned || i64::try_from(stored).ok() == Some(signed)
+}
+
+/// The header checksum: the sum of the header's bytes, the checksum
+/// field counted as spaces (some old tars summed signed bytes).
+const TAR_SUM: &str = "byte sum";
+
+/// The header checksum's verdict.
+fn header_check(c: Check, block: &[u8]) -> Check {
+    if checksum_ok(block) {
+        c.verified(true)
+    } else {
+        c.verify(checksums(block).0)
+    }
+}
+
+/// The header checksum's diagnostic, if it does not match.
+fn checksum_diag(block: &[u8]) -> Option<Diagnostic> {
+    let stored = block.get(148..156).and_then(parse_tar_number);
+    let check = Check::new(
+        TAR_SUM,
+        Digest::Int {
+            value: stored.unwrap_or(0),
+            bits: 64,
+            radix: Radix::Oct,
+        },
+    );
+    header_check(check, block)
+        .mismatch_text()
+        .map(Diagnostic::warning)
 }
 
 fn checksums(block: &[u8]) -> (u64, i64) {
@@ -469,8 +498,8 @@ async fn member(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         };
         let mut header = struct_node(title, header_span, Endian::Little, (), header_layout)
             .summary(raw.flavor.name());
-        if !raw.checksum_ok {
-            header = header.diag(Diagnostic::warning("header checksum mismatch"));
+        if let Some(d) = checksum_diag(&block) {
+            header = header.diag(d);
         }
         cx.emit(header);
         let data = cur.span(raw.size);
@@ -667,19 +696,9 @@ fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
         })
         .emit()?;
     ascii_num(f, "Modification time", 12, 8, Num::Time).emit()?;
-    let (unsigned, _) = checksums(&block);
     ascii_num(f, "Checksum", 8, 8, Num::Oct)
-        .with(|&v, n| {
-            if checksum_ok(&block) {
-                n.summary("valid")
-            } else if v.is_some() {
-                n.diag(Diagnostic::warning(format!(
-                    "checksum mismatch: computed 0o{unsigned:o}"
-                )))
-            } else {
-                n
-            }
-        })
+        .checksum(TAR_SUM)
+        .with_check(|c| header_check(c, &block))
         .emit()?;
     f.u8("Type").enumeration(TYPEFLAG).emit()?;
     f.ascii("Link name", 100).emit()?;

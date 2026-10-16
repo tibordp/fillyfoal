@@ -11,7 +11,7 @@ use crate::formats::util::fmt;
 use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{FlagTable, Radix, Value, flag};
+use crate::value::{Check, FlagTable, Value, flag};
 
 use super::util::{File, FileRef, Rd, checksum_node, group, limit_enc_size, log2, uint, undefined};
 
@@ -697,20 +697,12 @@ async fn dblock_expand(
         }
         let stored = u32_le(&data, at).unwrap_or(0);
         let computed = super::util::lookup3(&cx, &copy).await;
-        let node = Node::new("Checksum")
-            .span(span.sub(to_u64(at), 4))
-            .value(Value::UInt {
-                value: stored.into(),
-                bits: 32,
-                radix: Radix::Hex,
-            });
-        cx.emit(if stored == computed {
-            node.summary("lookup3 over the block, valid")
-        } else {
-            node.diag(Diagnostic::warning(format!(
-                "checksum mismatch: computed {computed:#010x}"
-            )))
-        });
+        cx.emit(
+            Node::new("Checksum")
+                .span(span.sub(to_u64(at), 4))
+                .checksum(Check::new("lookup3", stored).verify(computed))
+                .desc("Jenkins lookup3 over the block"),
+        );
     }
     let body = span.tail(to_u64(hlen));
     cx.emit(Node::new("Objects").span(body).summary(format!(

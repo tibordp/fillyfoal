@@ -20,7 +20,7 @@ use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, Value};
+use crate::value::{Check, EnumTable, Value};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -592,12 +592,12 @@ const UIMAGE_COMP: EnumTable = &[
 record! {
     pub struct UImage {
         magic: u32 "Magic" .hex(),
-        header_crc: u32 "Header CRC" .hex(),
+        header_crc: u32 "Header CRC" .checksum("CRC-32"),
         time: u32 "Creation time" .timestamp(),
         size: u32 "Data size" .with(|&s, n| n.summary(human_size(s.into()))),
         load: u32 "Load address" .hex(),
         entry: u32 "Entry point" .hex(),
-        data_crc: u32 "Data CRC" .hex(),
+        data_crc: u32 "Data CRC" .checksum("CRC-32"),
         os: u8 "Operating system" .enumeration(UIMAGE_OS),
         arch: u8 "Architecture" .enumeration(UIMAGE_ARCH),
         kind: u8 "Image type" .enumeration(UIMAGE_TYPE),
@@ -614,28 +614,9 @@ pub async fn dissect_uimage(cx: Cx, input: Input) -> Result<()> {
     if let Some(field) = raw.get_mut(4..8) {
         field.fill(0);
     }
-    let mut header = UImage::node("Header", hspan, BE).summary(h.name.clone());
-    let computed = crc32(&raw);
-    header = if computed == h.header_crc {
-        header.summary(format!("{}, header CRC valid", h.name))
-    } else {
-        header.diag(Diagnostic::warning(format!(
-            "header CRC mismatch: computed {computed:#010x}"
-        )))
-    };
-    cx.emit(header);
+    let header_check = Check::new("CRC-32", h.header_crc).verify(crc32(&raw));
     let data = file.sub(UImage::SIZE, h.size.into());
-    let lookup = |t: EnumTable, v: u8| crate::value::lookup(t, v.into()).unwrap_or("unknown");
-    let mut node = if h.kind == 4 {
-        Node::new("Images").span(data).lazy(multi, (input, data))
-    } else {
-        embedded("Data", input.nested(data))
-    };
-    node = node.summary(format!(
-        "{}, {}",
-        lookup(UIMAGE_COMP, h.comp),
-        human_size(h.size.into())
-    ));
+    let mut data_check = Check::new("CRC-32", h.data_crc);
     if data.len <= cx.limits().max_read && data.len == u64::from(h.size) {
         // Checked a chunk per read, so each step stays bounded.
         const CHUNK: u64 = 1 << 20;
@@ -650,13 +631,27 @@ pub async fn dissect_uimage(cx: Cx, input: Input) -> Result<()> {
             .await;
             done = done.saturating_add(n);
         }
-        let computed = !crc;
-        if computed != h.data_crc {
-            node = node.diag(Diagnostic::warning(format!(
-                "data CRC mismatch: computed {computed:#010x}"
-            )));
-        }
+        data_check = data_check.verify(!crc);
     }
+    let mut checks = header_check.at(4);
+    checks.extend(data_check.at(24));
+    cx.emit(
+        UImage::checked_node("Header", hspan, BE, checks)
+            .summary(h.name.clone())
+            .check_diag(&header_check),
+    );
+    let lookup = |t: EnumTable, v: u8| crate::value::lookup(t, v.into()).unwrap_or("unknown");
+    let mut node = if h.kind == 4 {
+        Node::new("Images").span(data).lazy(multi, (input, data))
+    } else {
+        embedded("Data", input.nested(data))
+    };
+    node = node.summary(format!(
+        "{}, {}",
+        lookup(UIMAGE_COMP, h.comp),
+        human_size(h.size.into())
+    ));
+    node = node.check_diag(&data_check);
     cx.emit(crate::formats::util::arcutil::check_len(
         node,
         data,

@@ -1655,7 +1655,7 @@ fn validation_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u8("Platform").enumeration(PLATFORM).emit()?;
     f.u16("Reserved").emit()?;
     f.ascii("Id string", 24).emit()?;
-    f.u16("Checksum").hex().emit()?;
+    f.u16("Checksum").checksum("16-bit sum").emit()?;
     f.bytes("Key", 2).emit()?;
     Ok(())
 }

@@ -28,7 +28,7 @@ use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::{Check, EnumTable, Radix, Value, lookup};
 
 const LEVELDB_MAGIC: u64 = 0xdb47_7524_8b80_fb57;
 const ROCKSDB_MAGIC: u64 = 0x88e2_41b7_85f4_cff7;
@@ -90,6 +90,11 @@ const CHECKSUMS: EnumTable = &[
     (3, "xxHash64"),
     (4, "XXH3"),
 ];
+
+/// The name of the table's checksum type.
+fn checksum_name(flavor: Flavor) -> &'static str {
+    lookup(CHECKSUMS, flavor.checksum.into()).unwrap_or("unknown checksum")
+}
 
 fn varint(data: &[u8], at: usize) -> Option<(u64, usize)> {
     let (v, n) = crate::bytes::uleb128(data.get(at..)?)?;
@@ -308,17 +313,13 @@ async fn footer_fields(cx: Cx, (input, flavor): (Input, Flavor)) -> Result<()> {
             field.fill(0);
         }
         let offset = span.offset.saturating_sub(file.offset);
-        let mut node = Node::new("Footer checksum")
-            .span(span.sub(5, 4))
-            .value(uint(stored.into(), 32, Radix::Hex));
-        if let Some(sum) = checksum(&cx, flavor, &zeroed, None, offset).await
-            && sum != stored
-        {
-            node = node.diag(Diagnostic::warning(format!(
-                "footer checksum mismatch (computed {sum:#010x})"
-            )));
-        }
-        cx.emit(node);
+        let check = Check::new(checksum_name(flavor), stored)
+            .verify_opt(checksum(&cx, flavor, &zeroed, None, offset).await);
+        cx.emit(
+            Node::new("Footer checksum")
+                .span(span.sub(5, 4))
+                .checksum(check),
+        );
         cx.emit(
             Node::new("Base context checksum")
                 .span(span.sub(9, 4))
@@ -555,10 +556,10 @@ async fn read_block(
     let kind = trailer.first().copied().unwrap_or(0);
     let stored = u32_le(&trailer, 1).unwrap_or(0);
     let diag = match checksum(cx, flavor, &data, Some(kind), offset).await {
-        Some(sum) if sum != stored => Some(Diagnostic::warning(format!(
-            "block checksum mismatch ({})",
-            lookup(CHECKSUMS, flavor.checksum.into()).unwrap_or("unknown")
-        ))),
+        Some(sum) => Check::new(checksum_name(flavor), stored)
+            .verify(sum)
+            .mismatch_text()
+            .map(Diagnostic::warning),
         None if flavor.checksum > 4 => Some(Diagnostic::unsupported(format!(
             "checksum type {}",
             flavor.checksum

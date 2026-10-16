@@ -510,7 +510,8 @@ let key = match derive_key(b"") {
 ## 7. Values and presentation
 
 Prefer typed values over formatted strings: `Value::UInt` (with radix),
-`Int`, `Float`, `Enum`, `Flags`, `Timestamp`, `Text`, `Bytes`, `Guid`. Put
+`Int`, `Float`, `Enum`, `Flags`, `Timestamp`, `Text`, `Bytes`, `Guid`,
+`Checksum`. Put
 human interpretation in `summary` ("640×480, 24-bit") and meaning in
 `desc`. Which value to use:
 
@@ -551,6 +552,34 @@ human interpretation in `summary` ("640×480, 24-bit") and meaning in
     `node.not_set()` (no value, summary "not set"); `.filetime()` does it
     for 0. A raw number that is not a time (ticks of a clock that starts
     at boot, a duration) stays a number with a summary.
+- **Checksums** (CRCs, sums, digests, MACs, tags): a `Checksum(Check)`,
+  never a hex number with "valid" in its summary or a digest in `Bytes`
+  (which shows 16 bytes) or hex `Text`:
+  - *Algorithm:* its usual name ("CRC-32", "CRC-32C", "Adler-32",
+    "SHA-256", "HMAC-SHA-256"), with the variant when it matters
+    ("CRC-32 (not inverted)", "CRC-32C (low 16 bits)"), or the format's
+    own ("Internet checksum", "8-bit sum", "lookup3"). Keep a format's
+    algorithm in one `const`.
+  - *Verdict:* `Check::new(algo, stored)` is not checked;
+    `.verify(computed)` makes it valid or a mismatch (keep the computed
+    value: hosts show both); `.verified(ok)` when only a comparison is
+    known (sums that must come to zero, AEAD tags, frames found by their
+    CRC); `.skipped(reason)` when the dissector could but did not ("empty
+    block", "covers 40 MiB", "needs the key"); `.on_decode()` when the
+    decoder verifies it. A zero meaning "none" is
+    `.skipped("zero: none recorded")`.
+  - *Fields:* `.checksum(algo)` turns a number or byte field into an
+    unchecked check, `.verify(computed)` / `.with_check(f)` give it its
+    verdict, `.checksum_if(on, algo)` when a feature flag decides whether
+    the field is one. A record verified from outside its own bytes:
+    `Record::checked_node(name, span, endian, check.at(offset))`, or
+    `Fields::verifying` in a hand-written layout. A node:
+    `Node::checksum(check)` / `Node::with_check`.
+  - *Mismatches* are warnings in one wording (`CRC-32 mismatch: stored
+    X, computed Y`), added by `Node::checksum`; a parent that contains
+    the field (a header, a page) repeats it with `node.check_diag(&check)`
+    so it shows collapsed, and does not say "checksum valid" in its
+    summary unless the check is not shown as a field.
 
 Annotate the file node with `cx.annotate("PE32+ DLL, AMD64")`: that
 summary is the first thing the user sees on F3.

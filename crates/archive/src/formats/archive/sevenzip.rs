@@ -52,7 +52,7 @@ use crate::formats::{Codec, Format, Input, Probe, dissect_or_data, embedded};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, Value};
+use crate::value::{Check, EnumTable, Value};
 
 const LE: Endian = Endian::Little;
 const SIGNATURE_HEADER: u64 = 32;
@@ -137,10 +137,10 @@ record! {
         signature: bytes[6] "Signature",
         major: u8 "Major version",
         minor: u8 "Minor version",
-        start_crc: u32 "Start header CRC" .hex(),
+        start_crc: u32 "Start header CRC" .checksum("CRC-32"),
         next_offset: u64 "Next header offset" .hex() .desc("Relative to the end of this header"),
         next_size: u64 "Next header size" .with(|&s, n| n.summary(fmt::size(s))),
-        next_crc: u32 "Next header CRC" .hex(),
+        next_crc: u32 "Next header CRC" .checksum("CRC-32"),
     }
 }
 
@@ -1776,17 +1776,14 @@ async fn check_crc(cx: &Cx, span: Span, len: u64, crc: Option<u32>) -> Result<()
         return Ok(());
     }
     let (got, read) = super::rar::crc_of(cx, span).await?;
-    let node = Node::new("CRC32").value(hex(got, 64));
+    let check = Check::new("CRC-32", want);
+    let node = Node::new("CRC32");
     cx.emit(if read < len {
-        node.diag(Diagnostic::malformed(format!(
-            "decoded {read:#x} of {len:#x} bytes"
-        )))
-    } else if got != want {
-        node.diag(Diagnostic::warning(format!(
-            "CRC32 mismatch: stored {want:#010x}"
-        )))
+        let short = format!("decoded {read:#x} of {len:#x} bytes");
+        node.checksum(check.skipped(short.clone()))
+            .diag(Diagnostic::malformed(short))
     } else {
-        node.summary("valid")
+        node.checksum(check.verify(got))
     });
     Ok(())
 }
@@ -1799,20 +1796,31 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let sh_span = file.sub(0, SignatureHeader::SIZE);
     let sh = crate::fields::parse(&cx, sh_span, LE, &(), SignatureHeader::layout).await?;
     let raw = cx.read(sh_span).await?;
-    let mut sh_node = SignatureHeader::node("Signature header", sh_span, LE)
-        .summary(format!("version {}.{}", sh.major, sh.minor));
-    if let (Some(covered), Some(stored)) = (raw.get(12..32), u32_le(&raw, 8))
-        && crc32(covered) != stored
-    {
-        sh_node = sh_node.diag(Diagnostic::warning("start header CRC mismatch"));
-    }
-    cx.emit(sh_node);
-    cx.annotate("7-Zip archive");
-
+    let start_check = Check::new("CRC-32", sh.start_crc)
+        .verify_opt(raw.get(12..32).filter(|c| c.len() == 20).map(crc32));
     let next = file.sub(
         SIGNATURE_HEADER.saturating_add(sh.next_offset),
         sh.next_size,
     );
+    // The next header, when it is there to check (and parse, below).
+    let data = if next.len == sh.next_size && sh.next_size != 0 {
+        Some(cx.read(next).await?)
+    } else {
+        None
+    };
+    let next_check = match &data {
+        Some(d) => Check::new("CRC-32", sh.next_crc)
+            .verify(crate::formats::util::datakit::crc32_paced(&cx, d).await),
+        None => Check::new("CRC-32", sh.next_crc),
+    };
+    let mut checks = start_check.at(8);
+    checks.extend(next_check.at(28));
+    let sh_node = SignatureHeader::checked_node("Signature header", sh_span, LE, checks)
+        .summary(format!("version {}.{}", sh.major, sh.minor))
+        .check_diag(&start_check);
+    cx.emit(sh_node);
+    cx.annotate("7-Zip archive");
+
     if next.len < sh.next_size {
         cx.emit(Node::new("Packed data").span(file.tail(SIGNATURE_HEADER)));
         return Err(Diagnostic::truncated(
@@ -1824,11 +1832,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.annotate("7-Zip archive, empty");
         return Ok(());
     }
-    let data = cx.read(next).await?;
-    let mut next_node = Node::new("Next header").span(next);
-    if crate::formats::util::datakit::crc32_paced(&cx, &data).await != sh.next_crc {
-        next_node = next_node.diag(Diagnostic::warning("next header CRC mismatch"));
-    }
+    let data = data.unwrap_or_default();
+    let mut next_node = Node::new("Next header").span(next).check_diag(&next_check);
     let parsed = Parser {
         data: &data,
         at: 0,

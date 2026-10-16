@@ -396,4 +396,4 @@ expression: "common::explore(&display_name(&path), &data)"
       [0]: 0x9 — c707b5dfe777a0ecd0d148611fb1f7825fe115051334bbe120d8aa3203c92064  [0x800+0x4]
       [1]: 0x4 — 46ecdf188733a6c7117b586cf9b61d1ef7611e14c72a96ec6c044239100ded16  [0x804+0x4]
       [2]: 0x80000008 — 7cbdfa1c37ccb6d9afbe1afe4cc2d4aef1807bc44c452c59b79b2da14ca1777e, last parent  [0x808+0x4]
-    Checksum: "7a469b88b9a46b86d7b4435bc6bceaf9daf05be2c02200cdeda62a0e0dd13971" — valid SHA-256  [0x80c+0x20]
+    Checksum: 7a469b88b9a46b86d7b4435bc6bceaf9daf05be2c02200cdeda62a0e0dd13971 (SHA-256, valid)  [0x80c+0x20]

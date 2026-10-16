@@ -20,7 +20,7 @@ use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, lookup};
+use crate::value::{Check, EnumTable, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -854,7 +854,7 @@ record! {
         encoding: u8 "Encoding" .enumeration(MSEED_ENCODINGS),
         rate: f64 "Sample rate/period",
         samples: u32 "Number of samples",
-        crc: u32 "CRC-32C" .hex(),
+        crc: u32 "CRC-32C" .checksum("CRC-32C"),
         publication: u8 "Publication version",
         sid_length: u8 "Source identifier length",
         extra_length: u16 "Extra headers length",
@@ -1512,15 +1512,12 @@ async fn e57_pages(cx: Cx, (file, page): (Span, u64)) -> Result<()> {
         let (body, crc) = data.split_at(data.len().saturating_sub(4));
         let stored = u32_be(crc, 0).unwrap_or(0);
         let computed = crc32c(body);
-        let mut node = Node::new(format!("Page {i}"))
-            .span(span)
-            .value(crate::formats::util::lines::hex(stored.into(), 32));
-        if stored != computed {
-            node = node.diag(Diagnostic::warning(format!(
-                "CRC-32C mismatch (computed {computed:#010x})"
-            )));
-        }
-        cx.push(node).await;
+        cx.push(
+            Node::new(format!("Page {i}"))
+                .span(span)
+                .checksum(Check::new("CRC-32C", stored).verify(computed)),
+        )
+        .await;
     }
     Ok(())
 }

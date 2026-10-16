@@ -5,7 +5,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ▾ jdk21-static-prefix.jsa — static CDS archive, version 18 (JDK 21); OpenJDK 64-Bit Server VM (21.0.12.1+1-LTS) for linux-aarch64 JRE (21.0.12.1+1-LTS)  [0x0+0x12000]
   ▾ Generic header  [0x0+0x18]
       _magic: static archive (0xf00baba2)  [0x0+0x4]
-      _crc: 0x87580da8 — matches  [0x4+0x4]
+      _crc: 0x87580da8 (CRC-32, valid)  [0x4+0x4]
       _version: 18 — JDK 21  [0x8+0x4]
       _header_size: 784  [0xc+0x4]
       _base_archive_name_offset: 0x0  [0x10+0x4]

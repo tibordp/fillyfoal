@@ -427,4 +427,4 @@ expression: "common::explore(&display_name(&path), &data)"
         d1ddd7536bd1b6d4e5ebede12444664e8897b4ba: 01 d5 5b  |..[| — 3 bytes, 11 of 24 bits set  [0x76d+0x3]
         ead24e3e5087d2c77b49954126eaa032f42753de: 1d 87 7a  |..z| — 3 bytes, 13 of 24 bits set  [0x770+0x3]
         f304ea608d6584737d6adf8f5c2e4d3bb615956b: 1c d0 8d  |...| — 3 bytes, 10 of 24 bits set  [0x773+0x3]
-    Checksum: "184811a161aae622357f391391950307299f8cd5" — valid SHA-1  [0x776+0x14]
+    Checksum: 184811a161aae622357f391391950307299f8cd5 (SHA-1, valid)  [0x776+0x14]

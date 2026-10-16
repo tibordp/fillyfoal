@@ -5,7 +5,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ▾ manifest — Borg segment, 1 entry: 1 PUT, 0 DELETE, 0 COMMIT  [0x0+0x2e7]
     Magic: "BORG_SEG" — Borg segment  [0x0+0x8]
   ▾ PUT 0000000000000000… — manifest, 694 bytes, plaintext, lz4  [0x8+0x2df]
-      CRC32: 0xd6b05580 — valid  [0x8+0x4]
+      CRC32: 0xd6b05580 (CRC-32, valid)  [0x8+0x4]
       Size: 735  [0xc+0x4]
       Tag: PUT (0x0)  [0x10+0x1]
       Object ID: "0000000000000000000000000000000000000000000000000000000000000000" — manifest  [0x11+0x20]

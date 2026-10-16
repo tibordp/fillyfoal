@@ -13,7 +13,7 @@ use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, field, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, field, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -279,8 +279,8 @@ record! {
         destination: u8 "Destination" .enumeration(GB_DESTINATION),
         old_licensee: u8 "Old licensee code" .hex(),
         version: u8 "Mask ROM version",
-        header_checksum: u8 "Header checksum" .hex(),
-        global_checksum: u16 "Global checksum" .hex(),
+        header_checksum: u8 "Header checksum" .checksum("Game Boy header sum"),
+        global_checksum: u16 "Global checksum" .checksum("16-bit byte sum"),
     }
 }
 
@@ -289,17 +289,14 @@ async fn gameboy(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Interrupt vectors and RST").span(file.sub(0, 0x100)));
     let span = file.sub(0x100, GbHeader::SIZE);
     let h: GbHeader = read_record(&cx, span, BE).await?;
-    let mut node = GbHeader::node("Cartridge header", span, BE);
     let covered = cx.read(file.sub(0x134, 0x19)).await?;
     let computed = covered
         .iter()
         .fold(0u8, |x, &b| x.wrapping_sub(b).wrapping_sub(1));
-    if computed != h.header_checksum {
-        node = node.diag(Diagnostic::warning(format!(
-            "header checksum mismatch: computed {computed:#04x}"
-        )));
-    }
-    cx.emit(node);
+    let check = Check::new("Game Boy header sum", h.header_checksum).verify(computed);
+    cx.emit(
+        GbHeader::checked_node("Cartridge header", span, BE, check.at(0x4d)).check_diag(&check),
+    );
     cx.emit(Node::new("Program").span(file.tail(0x150)));
     let cart = lookup(GB_CART, h.cart.into()).unwrap_or("unknown cartridge");
     cx.annotate(format!("{:?}, {cart}", h.title.trim_end()));
@@ -330,7 +327,7 @@ record! {
         device: u8 "Device type",
         _reserved: bytes[7] "Reserved",
         version: u8 "Software version",
-        complement: u8 "Complement check" .hex(),
+        complement: u8 "Complement check" .checksum("GBA complement"),
         _reserved2: bytes[2] "Reserved",
     }
 }
@@ -344,13 +341,10 @@ async fn gba(cx: Cx, input: Input) -> Result<()> {
         .iter()
         .fold(0u8, |x, &b| x.wrapping_sub(b))
         .wrapping_sub(0x19);
-    let mut node = GbaHeader::node("Cartridge header", span, LE);
-    if computed != h.complement {
-        node = node.diag(Diagnostic::warning(format!(
-            "complement check mismatch: computed {computed:#04x}"
-        )));
-    }
-    cx.emit(node);
+    let check = Check::new("GBA complement", h.complement).verify(computed);
+    cx.emit(
+        GbaHeader::checked_node("Cartridge header", span, LE, check.at(0xbd)).check_diag(&check),
+    );
     cx.emit(Node::new("Program").span(file.tail(GbaHeader::SIZE)));
     cx.annotate(format!("{:?} ({}{})", h.title.trim_end(), h.code, h.maker));
     Ok(())
@@ -398,7 +392,7 @@ record! {
         port_normal: u32 "Port 0x40001A4 setting (normal)" .hex(),
         port_key1: u32 "Port 0x40001A4 setting (KEY1)" .hex(),
         banner_offset: u32 "Icon/title offset" .hex(),
-        secure_crc: u16 "Secure area CRC" .hex(),
+        secure_crc: u16 "Secure area CRC" .checksum("CRC-16/MODBUS"),
         secure_timeout: u16 "Secure transfer timeout",
         arm9_autoload: u32 "ARM9 autoload" .hex(),
         arm7_autoload: u32 "ARM7 autoload" .hex(),
@@ -416,20 +410,9 @@ async fn nds(cx: Cx, input: Input) -> Result<()> {
     let header = cx.read(file.sub(0, 0x160)).await?;
     let stored = u16_le(&header, 0x15e).unwrap_or(0);
     let computed = crc16(header.get(..0x15e).unwrap_or_default());
-    let mut crc = Node::new("Header CRC")
+    let crc = Node::new("Header CRC")
         .span(file.sub(0x15e, 2))
-        .value(Value::UInt {
-            value: stored.into(),
-            bits: 16,
-            radix: crate::value::Radix::Hex,
-        });
-    crc = if stored == computed {
-        crc.summary("valid")
-    } else {
-        crc.diag(Diagnostic::warning(format!(
-            "CRC mismatch: computed {computed:#06x}"
-        )))
-    };
+        .checksum(Check::new("CRC-16/MODBUS", stored).verify(computed));
     cx.emit(Node::new("Nintendo logo").span(file.sub(0xc0, 156)));
     cx.emit(crc);
     let region = |offset: u32, size: u32| file.sub(offset.into(), size.into());
@@ -889,7 +872,7 @@ record! {
         refs: u32 "Section reference count",
         head_ref: u32 "Head shared page reference count address" .hex(),
         tail_ref: u32 "Tail shared page reference count address" .hex(),
-        digest: bytes[20] "SHA-1 digest",
+        digest: bytes[20] "SHA-1 digest" .checksum("SHA-1"),
     }
 }
 
@@ -1202,9 +1185,9 @@ record! {
         hash: u32 "Seed check hash" .hex(),
         program_id: u64 "Program ID" .hex(),
         _reserved: bytes[16] "Reserved",
-        logo_hash: bytes[32] "Logo region hash",
+        logo_hash: bytes[32] "Logo region hash" .checksum("SHA-256"),
         product: ascii[16] "Product code",
-        exheader_hash: bytes[32] "Extended header hash",
+        exheader_hash: bytes[32] "Extended header hash" .checksum("SHA-256"),
         exheader_size: u32 "Extended header size" .hex(),
         _reserved2: u32 "Reserved",
         flags: bytes[8] "Flags",
@@ -1220,8 +1203,8 @@ record! {
         romfs_size: u32 "RomFS size (MU)",
         romfs_hash_size: u32 "RomFS hash region size (MU)",
         _reserved4: u32 "Reserved",
-        exefs_hash: bytes[32] "ExeFS superblock hash",
-        romfs_hash: bytes[32] "RomFS superblock hash",
+        exefs_hash: bytes[32] "ExeFS superblock hash" .checksum("SHA-256"),
+        romfs_hash: bytes[32] "RomFS superblock hash" .checksum("SHA-256"),
     }
 }
 

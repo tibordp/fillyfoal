@@ -22,11 +22,11 @@ use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{
     Bits, CRC16_MPEG, FrameSyntax, bits_node, duration, junk_node, leaf, resync, tail_node,
 };
-use crate::formats::util::val::{hex, text, uint};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, HEAD_LEN, Head, Input, Probe, audio::id3};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{Check, Digest, EnumTable, FlagTable, Radix, Value, flag, lookup};
 
 const BE: Endian = Endian::Big;
 
@@ -1146,23 +1146,20 @@ async fn expand_lame(cx: Cx, (span, frame): (Span, Span)) -> Result<()> {
         .with(|v, n| n.summary(human_size(v)))
         .emit()?;
     b.field("Music CRC", 16)
-        .hex()
         .desc("CRC-16 of the audio frames")
+        .with(|v, n| n.checksum(Check::new("CRC-16/ARC", u16::try_from(v).unwrap_or(0))))
         .emit()?;
     b.field("Tag CRC", 16)
-        .hex()
         .desc("CRC-16 of this frame up to this field")
         .with(|v, n| {
+            let check = Check::new("CRC-16/ARC", u16::try_from(v).unwrap_or(0));
+            // FFmpeg's encoder computes it over a different range.
             let matches = |c: Option<u16>| c.is_some_and(|c| u64::from(c) == v);
-            if matches(lame_crc) || matches(ffmpeg_crc) {
-                n.summary("valid")
-            } else if let Some(c) = lame_crc {
-                n.diag(Diagnostic::warning(format!(
-                    "CRC mismatch: computed {c:#06x}"
-                )))
+            n.checksum(if matches(ffmpeg_crc) && !matches(lame_crc) {
+                check.verified(true)
             } else {
-                n
-            }
+                check.verify_opt(lame_crc)
+            })
         })
         .emit()?;
     Ok(())
@@ -1611,19 +1608,21 @@ async fn frame(cx: Cx, (span, h, first): (Span, Header, bool)) -> Result<()> {
             .read_avail(span.sub(2, 4u64.saturating_add(protected.unwrap_or(0))))
             .await?;
         let stored = u16_be(&data, 2).unwrap_or(0);
-        let mut node = leaf("CRC", span.sub(4, 2), hex(stored, 16));
+        let mut node = Node::new("CRC")
+            .span(span.sub(4, 2))
+            .checksum(Check::new("CRC-16", stored));
         match protected {
             Some(n) if to_u64(data.len()) >= n.saturating_add(4) => {
                 let mut covered = data.get(..2).unwrap_or_default().to_vec();
                 covered.extend_from_slice(data.get(4..).unwrap_or_default());
                 let computed = CRC16_MPEG.checksum(&covered);
-                node = if computed == u64::from(stored) {
-                    node.summary("valid")
-                } else {
-                    node.diag(Diagnostic::warning(format!(
-                        "CRC mismatch: computed {computed:#06x}"
-                    )))
-                };
+                node = node.with_check(|c| {
+                    c.verify(Digest::Int {
+                        value: computed,
+                        bits: 16,
+                        radix: Radix::Hex,
+                    })
+                });
             }
             Some(_) => {}
             None => {

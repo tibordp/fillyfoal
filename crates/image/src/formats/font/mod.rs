@@ -27,7 +27,7 @@ use crate::formats::util::fmt::{clip, fourcc, plural};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::Value;
+use crate::value::{Check, Value};
 
 const BE: Endian = Endian::Big;
 const MAX_TABLES: u16 = 1024;
@@ -206,7 +206,10 @@ async fn directory(cx: Cx, dir: Span) -> Result<()> {
         let tag = fourcc(data.get(..4).unwrap_or_default());
         cx.push(struct_node(format!("'{tag}'"), span, BE, (), |f, _| {
             f.ascii("Tag", 4).emit()?;
-            f.u32("Checksum").hex().emit()?;
+            f.u32("Checksum")
+                .checksum(tables::SFNT_SUM)
+                .with_check(|c| c.skipped("checked under the table"))
+                .emit()?;
             f.u32("Offset").hex().emit()?;
             f.u32("Length").emit()?;
             Ok(())
@@ -226,14 +229,10 @@ async fn table(cx: Cx, entry: TableEntry) -> Result<()> {
     if padded <= cx.limits().max_read {
         let data = cx.read_avail(whole).await?;
         let computed = tables::table_checksum(&cx, &data, entry.tag == "head").await;
-        let node = Node::new("Checksum").value(crate::formats::util::val::hex(entry.checksum, 32));
-        cx.emit(if computed == entry.checksum {
-            node.summary("valid")
-        } else {
-            node.diag(Diagnostic::warning(format!(
-                "mismatch: computed {computed:#010x}"
-            )))
-        });
+        cx.emit(
+            Node::new("Checksum")
+                .checksum(Check::new(tables::SFNT_SUM, entry.checksum).verify(computed)),
+        );
     }
     tables::decode(&cx, entry.input, &entry.tag, entry.span, &entry.ctx).await
 }

@@ -1602,7 +1602,8 @@ fn yenc_decodes_real_encoder_output() {
         "{texts:?}"
     );
     assert!(
-        texts.iter().any(|t| t == "CRC-32: matches the trailer"),
+        // The trailer's CRC-32 is there, and no diagnostic says it is wrong.
+        texts.iter().any(|t| t == "CRC-32: "),
         "{texts:?}"
     );
     assert!(!texts.iter().any(|t| t.starts_with("diag")), "{texts:?}");
@@ -1623,10 +1624,7 @@ fn yenc_decodes_real_encoder_output() {
         "{texts:?}"
     );
     assert_eq!(
-        texts
-            .iter()
-            .filter(|t| *t == "CRC-32: matches the trailer")
-            .count(),
+        texts.iter().filter(|t| *t == "CRC-32: ").count(),
         4,
         "{texts:?}"
     );
@@ -1640,7 +1638,7 @@ fn yenc_decodes_real_encoder_output() {
     assert!(
         texts
             .iter()
-            .any(|t| t.starts_with("diag Malformed: CRC-32")),
+            .any(|t| t.starts_with("diag Warning: CRC-32 mismatch")),
         "{texts:?}"
     );
 }

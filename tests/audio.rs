@@ -66,9 +66,10 @@ fn tta_frame_crc_is_hashed_in_steps() {
     let yields = yields_expanding(&mut host, frame, 300);
     assert!(yields >= 3, "{yields} yields");
     let crc = host.child(frame, "CRC").expect("crc");
-    assert_eq!(
-        host.session.node(crc).unwrap().summary.as_deref(),
-        Some("valid")
+    let crc = host.session.node(crc).unwrap();
+    assert!(
+        matches!(&crc.value, Some(fillyfoal::Value::Checksum(c)) if c.is_valid()),
+        "{crc:?}"
     );
 }
 

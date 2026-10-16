@@ -1742,19 +1742,16 @@ async fn armor_block(
         } = crate::formats::text::decode::base64(line.get(1..).unwrap_or_default())
             && let [a, b, c] = sum.as_slice()
         {
-            let stored = u32::from_be_bytes([0, *a, *b, *c]);
-            node = node.value(Value::UInt {
-                value: stored.into(),
+            let int = |value: u32| crate::value::Digest::Int {
+                value: value.into(),
                 bits: 24,
                 radix: Radix::Hex,
-            });
+            };
+            let stored = u32::from_be_bytes([0, *a, *b, *c]);
             let data = crate::codec::read_all(&cx, decoded).await?;
             let computed = crate::formats::util::datakit::crc24_paced(&cx, &data).await;
-            if computed != stored {
-                node = node.diag(Diagnostic::warning(format!(
-                    "CRC-24 mismatch (computed {computed:#08x})"
-                )));
-            }
+            node = node
+                .checksum(crate::value::Check::new("CRC-24", int(stored)).verify(int(computed)));
         }
         cx.emit(node);
     }

@@ -160,7 +160,7 @@ fn kdb_decrypts_and_hashes_in_steps() {
     let yields = poll_stepped(&mut host, payload);
     assert!(yields >= 4, "{yields} yields");
     let rendered = host.render();
-    assert!(rendered.contains("contents hash verified"), "{rendered}");
+    assert!(rendered.contains("contents hash valid"), "{rendered}");
 }
 
 #[test]

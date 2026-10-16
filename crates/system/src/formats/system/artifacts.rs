@@ -12,7 +12,7 @@ use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Radix, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Radix, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -244,7 +244,7 @@ record! {
         signature: ascii[4] "Signature",
         length: u32 "Length",
         revision: u8 "Revision",
-        checksum: u8 "Checksum" .hex(),
+        checksum: u8 "Checksum" .checksum("8-bit sum"),
         oem: ascii[6] "OEM ID",
         oem_table: ascii[8] "OEM table ID",
         oem_revision: u32 "OEM revision" .hex(),
@@ -270,11 +270,10 @@ async fn acpi(cx: Cx, input: Input) -> Result<()> {
             sum = data.iter().fold(sum, |a, &b| a.wrapping_add(b));
             done = done.saturating_add(n);
         }
-        node = if sum == 0 {
-            node.summary("checksum valid")
-        } else {
-            node.diag(Diagnostic::warning("checksum does not sum to zero"))
-        };
+        // The checksum byte makes the whole table sum to zero.
+        let stored = h.checksum;
+        let check = Check::new("8-bit sum", stored).verify(stored.wrapping_sub(sum));
+        node = AcpiHeader::checked_node("Header", span, LE, check.at(9)).check_diag(&check);
     }
     cx.emit(node);
     let body = file.tail(AcpiHeader::SIZE);

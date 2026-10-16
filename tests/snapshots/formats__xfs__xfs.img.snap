@@ -54,7 +54,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Read-only compatible features: 0x1 [FINOBT]  [0xd4+0x4]
       Incompatible features: 0x1 [FTYPE]  [0xd8+0x4]
       Log incompatible features: 0x0 []  [0xdc+0x4]
-      CRC-32C: 0xa212ddb3 — valid  [0xe0+0x4]
+      CRC: 0xa212ddb3 (CRC-32C, valid)  [0xe0+0x4]
       Sparse inode chunk alignment (blocks): 0  [0xe4+0x4]
       Project quota inode: 0  [0xe8+0x8]
       Last write LSN: 0x0 — cycle 0, block 0  [0xf0+0x8]
@@ -64,7 +64,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ AG 0 — 16 KiB, from block 0  [0x0+0x4000]
         Superblock (primary) — shown at the top level  [0x0+0x200]
       ▾ AGF (free space) — 1 free blocks (4 KiB), longest free extent 1 block  [0x200+0x200]
-          ! warning: AGF CRC mismatch: stored 0x00000000, computed 0x5abfa5e0
+          ! warning: CRC-32C mismatch: stored 0x0, computed 0x5abfa5e0
           Magic: "XAGF"  [0x200+0x4]
           Version: 1  [0x204+0x4]
           AG number: 0  [0x208+0x4]
@@ -88,12 +88,12 @@ expression: "common::explore(&display_name(&path), &data)"
           Reference count B+tree levels: 0  [0x25c+0x4]
           Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x260+0x70]
           LSN: 0x0 — cycle 0, block 0  [0x2d0+0x8]
-          CRC-32C: 0x0  [0x2d8+0x4]
-            ! warning: mismatch: computed 0x5abfa5e0
+          CRC: 0x0 (CRC-32C, mismatch: computed 0x5abfa5e0)  [0x2d8+0x4]
+            ! warning: CRC-32C mismatch: stored 0x0, computed 0x5abfa5e0
           Padding: 0  [0x2dc+0x4]
           Unused — 288 bytes  [0x2e0+0x120]
       ▾ AGI (inodes) — 0 inodes, 0 free  [0x400+0x200]
-          ! warning: AGI CRC mismatch: stored 0x00000000, computed 0x03c5fa3d
+          ! warning: CRC-32C mismatch: stored 0x0, computed 0x3c5fa3d
           Magic: "XAGI"  [0x400+0x4]
           Version: 1  [0x404+0x4]
           AG number: 0  [0x408+0x4]
@@ -170,8 +170,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Bucket 62: 0 — AG inode 0  [0x520+0x4]
             Bucket 63: 0 — AG inode 0  [0x524+0x4]
           UUID: "00000000-0000-0000-0000-000000000000"  [0x528+0x10]
-          CRC-32C: 0x0  [0x538+0x4]
-            ! warning: mismatch: computed 0x03c5fa3d
+          CRC: 0x0 (CRC-32C, mismatch: computed 0x3c5fa3d)  [0x538+0x4]
+            ! warning: CRC-32C mismatch: stored 0x0, computed 0x3c5fa3d
           Padding: 0  [0x53c+0x4]
           LSN: 0x0 — cycle 0, block 0  [0x540+0x8]
           Free inode B+tree root: 0  [0x548+0x4]
@@ -185,8 +185,8 @@ expression: "common::explore(&display_name(&path), &data)"
           AG number: 0  [0x604+0x4]
           UUID: "00000000-0000-0000-0000-000000000000"  [0x608+0x10]
           LSN: 0x0 — cycle 0, block 0  [0x618+0x8]
-          CRC-32C: 0x0  [0x620+0x4]
-            ! warning: mismatch: computed 0x30fcedc0
+          CRC: 0x0 (CRC-32C, mismatch: computed 0x30fcedc0)  [0x620+0x4]
+            ! warning: CRC-32C mismatch: stored 0x0, computed 0x30fcedc0
           Unused slots — slots 0–118  [0x624+0x1dc]
         Unused — rest of the AG header block  [0x800+0x800]
       ▾ Free space B+tree (by block) — root at AG block 1, 1 level
@@ -200,8 +200,8 @@ expression: "common::explore(&display_name(&path), &data)"
             LSN: 0x0 — cycle 0, block 0  [0x1018+0x8]
             UUID: "00000000-0000-0000-0000-000000000000"  [0x1020+0x10]
             Owner (AG): 0  [0x1030+0x4]
-            CRC-32C: 0x0  [0x1034+0x4]
-              ! warning: mismatch: computed 0x98f94189
+            CRC: 0x0 (CRC-32C, mismatch: computed 0x98f94189)  [0x1034+0x4]
+              ! warning: CRC-32C mismatch: stored 0x0, computed 0x98f94189
           ! malformed: expected magic AB3B [0x1000+0x4]
       ▾ Free space B+tree (by size) — root at AG block 2, 1 level
         ▾ Header — level 0, 0 records  [0x2000+0x38]
@@ -214,8 +214,8 @@ expression: "common::explore(&display_name(&path), &data)"
             LSN: 0x0 — cycle 0, block 0  [0x2018+0x8]
             UUID: "00000000-0000-0000-0000-000000000000"  [0x2020+0x10]
             Owner (AG): 0  [0x2030+0x4]
-            CRC-32C: 0x0  [0x2034+0x4]
-              ! warning: mismatch: computed 0x98f94189
+            CRC: 0x0 (CRC-32C, mismatch: computed 0x98f94189)  [0x2034+0x4]
+              ! warning: CRC-32C mismatch: stored 0x0, computed 0x98f94189
           ! malformed: expected magic AB3C [0x2000+0x4]
       ▾ Inode B+tree — root at AG block 3, 1 level
         ▾ Header — level 0, 0 records  [0x3000+0x38]
@@ -228,8 +228,8 @@ expression: "common::explore(&display_name(&path), &data)"
             LSN: 0x0 — cycle 0, block 0  [0x3018+0x8]
             UUID: "00000000-0000-0000-0000-000000000000"  [0x3020+0x10]
             Owner (AG): 0  [0x3030+0x4]
-            CRC-32C: 0x0  [0x3034+0x4]
-              ! warning: mismatch: computed 0x98f94189
+            CRC: 0x0 (CRC-32C, mismatch: computed 0x98f94189)  [0x3034+0x4]
+              ! warning: CRC-32C mismatch: stored 0x0, computed 0x98f94189
           ! malformed: expected magic IAB3 [0x3000+0x4]
         Free inode B+tree — empty
     ▾ AG 1 — 16 KiB, from block 4  [0x4000+0x4000]
@@ -283,7 +283,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Features 2 (copy): 0x0 []  [0x40cc+0x4]
           Unused — 304 bytes  [0x40d0+0x130]
       ▾ AGF (free space) — 1 free blocks (4 KiB), longest free extent 1 block  [0x4200+0x200]
-          ! warning: AGF CRC mismatch: stored 0x00000000, computed 0x2c4bb351
+          ! warning: CRC-32C mismatch: stored 0x0, computed 0x2c4bb351
           Magic: "XAGF"  [0x4200+0x4]
           Version: 1  [0x4204+0x4]
           AG number: 1  [0x4208+0x4]
@@ -307,12 +307,12 @@ expression: "common::explore(&display_name(&path), &data)"
           Reference count B+tree levels: 0  [0x425c+0x4]
           Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x4260+0x70]
           LSN: 0x0 — cycle 0, block 0  [0x42d0+0x8]
-          CRC-32C: 0x0  [0x42d8+0x4]
-            ! warning: mismatch: computed 0x2c4bb351
+          CRC: 0x0 (CRC-32C, mismatch: computed 0x2c4bb351)  [0x42d8+0x4]
+            ! warning: CRC-32C mismatch: stored 0x0, computed 0x2c4bb351
           Padding: 0  [0x42dc+0x4]
           Unused — 288 bytes  [0x42e0+0x120]
       ▾ AGI (inodes) — 64 inodes, 61 free  [0x4400+0x200]
-          ! warning: AGI CRC mismatch: stored 0x00000000, computed 0x150ba9e6
+          ! warning: CRC-32C mismatch: stored 0x0, computed 0x150ba9e6
           Magic: "XAGI"  [0x4400+0x4]
           Version: 1  [0x4404+0x4]
           AG number: 1  [0x4408+0x4]
@@ -389,8 +389,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Bucket 62: 0 — AG inode 0  [0x4520+0x4]
             Bucket 63: 0 — AG inode 0  [0x4524+0x4]
           UUID: "00000000-0000-0000-0000-000000000000"  [0x4528+0x10]
-          CRC-32C: 0x0  [0x4538+0x4]
-            ! warning: mismatch: computed 0x150ba9e6
+          CRC: 0x0 (CRC-32C, mismatch: computed 0x150ba9e6)  [0x4538+0x4]
+            ! warning: CRC-32C mismatch: stored 0x0, computed 0x150ba9e6
           Padding: 0  [0x453c+0x4]
           LSN: 0x0 — cycle 0, block 0  [0x4540+0x8]
           Free inode B+tree root: 0  [0x4548+0x4]
@@ -404,8 +404,8 @@ expression: "common::explore(&display_name(&path), &data)"
           AG number: 0  [0x4604+0x4]
           UUID: "00000000-0000-0000-0000-000000000000"  [0x4608+0x10]
           LSN: 0x0 — cycle 0, block 0  [0x4618+0x8]
-          CRC-32C: 0x0  [0x4620+0x4]
-            ! warning: mismatch: computed 0x30fcedc0
+          CRC: 0x0 (CRC-32C, mismatch: computed 0x30fcedc0)  [0x4620+0x4]
+            ! warning: CRC-32C mismatch: stored 0x0, computed 0x30fcedc0
           Unused slots — slots 0–118  [0x4624+0x1dc]
         Unused — rest of the AG header block  [0x4800+0x800]
       ▾ Free space B+tree (by block) — root at AG block 1, 1 level
@@ -419,8 +419,8 @@ expression: "common::explore(&display_name(&path), &data)"
             LSN: 0x0 — cycle 0, block 0  [0x5018+0x8]
             UUID: "00000000-0000-0000-0000-000000000000"  [0x5020+0x10]
             Owner (AG): 0  [0x5030+0x4]
-            CRC-32C: 0x0  [0x5034+0x4]
-              ! warning: mismatch: computed 0x98f94189
+            CRC: 0x0 (CRC-32C, mismatch: computed 0x98f94189)  [0x5034+0x4]
+              ! warning: CRC-32C mismatch: stored 0x0, computed 0x98f94189
           ! malformed: expected magic AB3B [0x5000+0x4]
       ▾ Free space B+tree (by size) — root at AG block 2, 1 level
         ▾ Header — level 0, 0 records  [0x6000+0x38]
@@ -433,8 +433,8 @@ expression: "common::explore(&display_name(&path), &data)"
             LSN: 0x0 — cycle 0, block 0  [0x6018+0x8]
             UUID: "00000000-0000-0000-0000-000000000000"  [0x6020+0x10]
             Owner (AG): 0  [0x6030+0x4]
-            CRC-32C: 0x0  [0x6034+0x4]
-              ! warning: mismatch: computed 0x98f94189
+            CRC: 0x0 (CRC-32C, mismatch: computed 0x98f94189)  [0x6034+0x4]
+              ! warning: CRC-32C mismatch: stored 0x0, computed 0x98f94189
           ! malformed: expected magic AB3C [0x6000+0x4]
       ▾ Inode B+tree — root at AG block 3, 1 level
         ▾ Header — level 0, 0 records  [0x7000+0x38]
@@ -447,14 +447,14 @@ expression: "common::explore(&display_name(&path), &data)"
             LSN: 0x0 — cycle 0, block 0  [0x7018+0x8]
             UUID: "00000000-0000-0000-0000-000000000000"  [0x7020+0x10]
             Owner (AG): 0  [0x7030+0x4]
-            CRC-32C: 0x0  [0x7034+0x4]
-              ! warning: mismatch: computed 0x98f94189
+            CRC: 0x0 (CRC-32C, mismatch: computed 0x98f94189)  [0x7034+0x4]
+              ! warning: CRC-32C mismatch: stored 0x0, computed 0x98f94189
           ! malformed: expected magic IAB3 [0x7000+0x4]
         Free inode B+tree — empty
   ▾ Root directory — inode 32
     ▾ Inode — drwxr-xr-x, 22 bytes  [0x4000+0x200]
       ▾ Core — inode 32, version 3  [0x4000+0xb0]
-          ! warning: inode CRC mismatch: stored 0x00000000, computed 0xb4698560
+          ! warning: CRC-32C mismatch: stored 0x0, computed 0xb4698560
           Magic: "IN"  [0x4000+0x2]
           Mode: 0o40755 — drwxr-xr-x  [0x4002+0x2]
           Version: 3  [0x4004+0x1]
@@ -481,8 +481,8 @@ expression: "common::explore(&display_name(&path), &data)"
           Flags: 0x0 []  [0x405a+0x2]
           Generation: 0  [0x405c+0x4]
           Next unlinked inode: 4294967295 — none  [0x4060+0x4]
-          CRC-32C: 0x0  [0x4064+0x4]
-            ! warning: mismatch: computed 0xb4698560
+          CRC: 0x0 (CRC-32C, mismatch: computed 0xb4698560)  [0x4064+0x4]
+            ! warning: CRC-32C mismatch: stored 0x0, computed 0xb4698560
           Change count: 0  [0x4068+0x8]
           LSN: 0x0 — cycle 0, block 0  [0x4070+0x8]
           Flags 2: 0x0 []  [0x4078+0x8]

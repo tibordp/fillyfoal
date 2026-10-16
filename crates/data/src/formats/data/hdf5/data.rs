@@ -13,7 +13,7 @@ use crate::formats::util::fmt;
 use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{Radix, Value};
+use crate::value::{Check, Radix, Value};
 
 use super::btree::{EaIter, FaIter, V1Iter, V2Iter};
 use super::datatype::{self, Ty};
@@ -667,23 +667,20 @@ async fn chunk_expand(cx: Cx, (d, c): (Arc<Dset>, Chunk)) -> Result<()> {
         let stored = crate::bytes::u32_le(&raw, 0).unwrap_or(0);
         let mut node = Node::new("Fletcher-32 checksum")
             .span(sum)
-            .value(Value::UInt {
-                value: stored.into(),
-                bits: 32,
-                radix: Radix::Hex,
-            });
+            .checksum(Check::new("Fletcher-32", stored));
         if body.len <= MAX_CHUNK {
             let data = cx.read(body).await?;
             let computed = super::util::fletcher32(&cx, &data).await;
             let b = computed.to_le_bytes();
             let reversed = u32::from_le_bytes([b[1], b[0], b[3], b[2]]);
-            node = if stored == computed || stored == reversed {
-                node.summary("valid")
-            } else {
-                node.diag(Diagnostic::warning(format!(
-                    "checksum mismatch: computed {computed:#010x}"
-                )))
-            };
+            // Some writers store it with its 16-bit halves byte-swapped.
+            node = node.with_check(|c| {
+                if stored == reversed {
+                    c.verified(true)
+                } else {
+                    c.verify(computed)
+                }
+            });
         }
         cx.emit(node);
         span = body;

@@ -28,7 +28,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Version: FrozenIndex (0x9)  [0x4fd+0x4]
       Index offset: 0x39f  [0x501+0x8]
       Index size: 329  [0x509+0x8]
-      Index hash (SHA-1): 34 e2 5a 5f 8b b0 64 eb f0 2d 6d 51 de 1a e8 1a …  |4.Z_..d..-mQ....|  [0x511+0x14]
+      Index hash (SHA-1): 34e25a5f8bb064ebf02d6d51de1ae81a01b3f2cc (SHA-1, not checked)  [0x511+0x14]
       Frozen index: 0  [0x525+0x1]
       Compression method: "Gzip"  [0x526+0x20]
       Compression method: ""  [0x546+0x20]

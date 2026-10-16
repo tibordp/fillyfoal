@@ -93,12 +93,8 @@ fn superblock_layout(f: &mut Fields<'_>, computed: &Option<u32>) -> Result<()> {
     f.u32("Log head").emit()?;
     f.bytes("Padding", 160).emit()?;
     f.u32("Checksum")
-        .hex()
-        .with(|&v, n| match computed {
-            Some(c) if *c == v => n.summary("valid"),
-            Some(c) => n.diag(Diagnostic::warning(format!("mismatch: computed {c:#010x}"))),
-            None => n,
-        })
+        .checksum("CRC-32C")
+        .verify(*computed)
         .emit()?;
     let shown = u64::from(users).min(48);
     for _ in 0..shown {

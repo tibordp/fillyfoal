@@ -20,8 +20,8 @@ expression: "common::explore(&display_name(&path), &data)"
         Freelist page: 2  [0x30+0x8]
         High water mark: 4  [0x38+0x8]
         Transaction ID: 9  [0x40+0x8]
-        Checksum: 0x0  [0x48+0x8]
-          ! malformed: checksum mismatch (computed 0x2e75fcd1f9fef707) [0x48+0x8]
+        Checksum: 0x0 (FNV-1a 64, mismatch: computed 0x2e75fcd1f9fef707)  [0x48+0x8]
+          ! warning: FNV-1a 64 mismatch: stored 0x0, computed 0x2e75fcd1f9fef707
   ▾ Meta page 1 — txid 0, bad magic  [0x1000+0x1000]
     ▾ Page header  [0x1000+0x10]
         Page ID: 0  [0x1000+0x8]
@@ -49,6 +49,6 @@ expression: "common::explore(&display_name(&path), &data)"
           Freelist page: 2  [0x30+0x8]
           High water mark: 4  [0x38+0x8]
           Transaction ID: 9  [0x40+0x8]
-          Checksum: 0x0  [0x48+0x8]
-            ! malformed: checksum mismatch (computed 0x2e75fcd1f9fef707) [0x48+0x8]
+          Checksum: 0x0 (FNV-1a 64, mismatch: computed 0x2e75fcd1f9fef707)  [0x48+0x8]
+            ! warning: FNV-1a 64 mismatch: stored 0x0, computed 0x2e75fcd1f9fef707
       Page 1 — unused  [0x1000+0x1000]

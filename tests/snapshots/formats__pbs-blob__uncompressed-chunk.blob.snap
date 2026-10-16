@@ -4,7 +4,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ uncompressed-chunk.blob — Proxmox Backup data blob, uncompressed, 75 bytes  [0x0+0x57]
     Magic: "uncompressed"  [0x0+0x8]
-    CRC32: 0xac71285c — valid  [0x8+0x4]
+    CRC32: 0xac71285c (CRC-32, valid)  [0x8+0x4]
   ▾ Data — Proxmox Backup catalog, 1 archive  [0xc+0x4b]
       Magic: "catalog 1.0"  [0xc+0x8]
       Root table offset: 0x2f  [0x4f+0x8] → 0x3b+0x1

@@ -24,11 +24,11 @@ expression: "common::explore(&display_name(&path), &data)"
       Blocks per checksum: 2048  [0x64+0x4]
       Reseed checksum: true  [0x68+0x1]
       Bitmap mode: BIT (0x1)  [0x69+0x1]
-    Header checksum: 0x57a35b9f  [0x6a+0x4]
+    Header checksum: 0x57a35b9f (CRC-32 (not inverted), valid)  [0x6a+0x4]
   ▾ Bitmap — 8192 blocks, a bit per block  [0x6e+0x400]
       Blocks in use: 107
-      Computed checksum: 0xf81a9d72  [0x46e+0x4]
-    Bitmap checksum: 0xf81a9d72  [0x46e+0x4]
+      Bitmap checksum: 0xf81a9d72 (CRC-32 (not inverted), valid)  [0x46e+0x4]
+    Bitmap checksum: 0xf81a9d72 (CRC-32 (not inverted), skipped: checked when the bitmap is expanded)  [0x46e+0x4]
   ▾ Volume — FAT16 filesystem "FILLYFOAL", 4 MiB, 8095 clusters of 512 bytes
     ▾ Boot sector (BPB) — OEM "mkfs.fat"  [#1:0x0+0x200]
         Jump instruction: eb 3c 90  |.<.|  [#1:0x0+0x3]
@@ -216,5 +216,5 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Blocks — runs of blocks in use and free
       Blocks 0–106 — in use, 53.5 KiB  [0x472+0xd600] → #1:0x0+0xd600
     ▾ Check value: 0x2f0cf76a — after stored block 106  [0xda72+0x4]
-        Computed: 0x2f0cf76a
+        Checked: 0x2f0cf76a (CRC-32 (not inverted), valid)
       Blocks 107–8191 — free, 3.9 MiB → #1:0xd600+0x3f2a00

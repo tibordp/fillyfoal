@@ -5,7 +5,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ▾ jdk11-static-prefix.jsa — static CDS archive, version 5 (JDK 11); OpenJDK 64-Bit Server VM (11.0.32.1+1) for linux-aarch64 JRE (11.0.32.1+1)  [0x0+0x3000]
   ▾ Header  [0x0+0xc]
       _magic: static archive (0xf00baba2)  [0x0+0x4]
-      _crc: 0x55e88f41 — matches  [0x4+0x4]
+      _crc: 0x55e88f41 (CRC-32, valid)  [0x4+0x4]
       _version: 5 — JDK 11  [0x8+0x4]
   ▾ Regions — 8 regions  [0x10+0x1f8]
     ▾ mc — miscellaneous code (method trampolines), 8128 bytes at 0x1000  [0x10+0x38]
@@ -18,7 +18,7 @@ expression: "common::explore(&display_name(&path), &data)"
         _oopmap: 0xffff581b3af0  [0x38+0x8]
         _oopmap_size_in_bits: 281472159392336  [0x40+0x8]
     ▾ mc data — miscellaneous code (method trampolines), 8128 bytes  [0x1000+0x1fc0]
-        CRC-32: 0x408313db — matches the region's contents
+        CRC-32: 0x408313db (CRC-32, valid)
         Contents — 8128 bytes  [0x1000+0x1fc0]
     ▾ rw — read-write metadata, 3971752 bytes at 0x3000  [0x48+0x38]
         ! truncated: needed 0x3c9aa8 bytes at 0x3000, only 0x0 available [0x48+0x38]

@@ -24,7 +24,7 @@ use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{FlagTable, Radix, Value, flag, lookup};
+use crate::value::{Check, FlagTable, Radix, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const SUPER: u64 = 1024;
@@ -148,7 +148,7 @@ record! {
         stop_reason: bytes[32] "Stop reasons",
         errors: bytes[16] "Errors",
         _reserved: bytes[258] "Reserved",
-        crc: u32 "Checksum" .hex(),
+        crc: u32 "Checksum" .checksum(F2FS_CRC),
     }
 }
 
@@ -218,6 +218,10 @@ impl Fs {
         Ok(u32_le(&raw, 5).unwrap_or(0).into())
     }
 }
+
+/// What F2FS calls its CRC-32: the raw register, seeded, no final
+/// inversion.
+const F2FS_CRC: &str = "CRC-32 (F2FS)";
 
 /// F2FS's CRC-32: the raw register, seeded.
 fn f2fs_crc(seed: u32, parts: &[&[u8]]) -> u32 {
@@ -294,12 +298,8 @@ fn cp_layout(f: &mut Fields<'_>, computed: &Option<u32>) -> Result<()> {
 
 fn cp_checksum(f: &mut Fields<'_>, computed: &Option<u32>) -> Result<()> {
     f.u32("Checksum")
-        .hex()
-        .with(|&v, n| match computed {
-            Some(c) if *c == v => n.summary("valid"),
-            Some(c) => n.diag(Diagnostic::warning(format!("mismatch: computed {c:#010x}"))),
-            None => n,
-        })
+        .checksum(F2FS_CRC)
+        .verify(*computed)
         .emit()?;
     Ok(())
 }
@@ -348,28 +348,21 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     );
     for (i, at) in [SUPER, BLOCK.saturating_add(SUPER)].into_iter().enumerate() {
         let copy = vol.sub(at, Superblock::SIZE);
-        let mut node = Superblock::node(
-            if i == 0 {
-                "Superblock"
-            } else {
-                "Superblock (backup)"
-            },
-            copy,
-            LE,
-        );
+        let name = if i == 0 {
+            "Superblock"
+        } else {
+            "Superblock (backup)"
+        };
+        let mut node = Superblock::node(name, copy, LE);
         if sb.features & 0x800 != 0 {
             let csum_at = u64::from(sb.checksum_offset).min(3068);
             let raw = cx
                 .read_avail(vol.sub(at, csum_at.saturating_add(4)))
                 .await?;
             let computed = f2fs_crc(MAGIC, &[raw.get(..to_usize(csum_at)).unwrap_or_default()]);
-            node = if u32_le(&raw, to_usize(csum_at)) == Some(computed) {
-                node.summary("checksum valid")
-            } else {
-                node.diag(Diagnostic::warning(format!(
-                    "superblock checksum mismatch: computed {computed:#010x}"
-                )))
-            };
+            let stored = u32_le(&raw, to_usize(csum_at)).unwrap_or(0);
+            let check = Check::new(F2FS_CRC, stored).verify(computed);
+            node = Superblock::checked_node(name, copy, LE, check.at(csum_at)).check_diag(&check);
         }
         cx.emit(node);
         if i == 1 {
@@ -759,12 +752,8 @@ fn inode_layout(f: &mut Fields<'_>, ctx: &InodeCtx) -> Result<()> {
     }
     if ctx.extra >= 12 {
         f.u32("Inode checksum")
-            .hex()
-            .with(|&v, n| match ctx.csum {
-                Some(c) if c == v => n.summary("valid"),
-                Some(c) => n.diag(Diagnostic::warning(format!("mismatch: computed {c:#010x}"))),
-                None => n,
-            })
+            .checksum_if(ctx.csum.is_some(), F2FS_CRC)
+            .verify(ctx.csum)
             .emit()?;
     }
     if ctx.extra >= 24 {
@@ -885,9 +874,9 @@ fn inode_node(fs: &Fs, inode: &Inode, name: String) -> Node {
     )
     .summary(inode.summary());
     if let (Some(c), Some(stored)) = (inode.checksum(fs), u32_le(&inode.raw, 368))
-        && c != stored
+        && let Some(message) = Check::new(F2FS_CRC, stored).verify(c).mismatch_text()
     {
-        node = node.diag(Diagnostic::warning("inode checksum mismatch"));
+        node = node.diag(Diagnostic::warning(message));
     }
     node
 }

@@ -21,7 +21,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Line 2: "============="  [#1:0xf+0xd]
           Line 3: ""  [#1:0x1e+0x0]
           Line 4: "- café au lait"  [#1:0x20+0xf]
-      CRC-32: 0x9f6557ed — matches the trailer
+      CRC-32: 0x9f6557ed (CRC-32, valid)
     ▾ Trailer  [0x82+0x33]
         size: 49  [0x88+0x7]
         part: 1  [0x90+0x6]
@@ -44,7 +44,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Line 1: "- 2× croissants"  [#2:0x0+0x10]
           Line 2: ""  [#2:0x12+0x0]
           Line 3: "Last line without terminator"  [#2:0x14+0x1c]
-      CRC-32: 0xc2f074fb — matches the trailer
+      CRC-32: 0xc2f074fb (CRC-32, valid)
     ▾ Trailer  [0x139+0x33]
         size: 48  [0x13f+0x7]
         part: 2  [0x147+0x6]
@@ -62,4 +62,4 @@ expression: "common::explore(&display_name(&path), &data)"
           Line 5: "- 2× croissants"  [#3:0x31+0x10]
           Line 6: ""  [#3:0x43+0x0]
           Line 7: "Last line without terminator"  [#3:0x45+0x1c]
-      CRC-32: 0x5725f388 — matches the trailer
+      CRC-32: 0x5725f388 (CRC-32, valid)

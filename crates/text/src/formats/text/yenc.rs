@@ -439,17 +439,18 @@ async fn crc_node(cx: &Cx, span: Span, want: Option<u32>) -> Result<Node> {
         pos = pos.saturating_add(crate::bytes::to_u64(data.len()));
     }
     let got = !crc;
-    let node = Node::new("CRC-32").value(Value::UInt {
-        value: u64::from(got),
-        bits: 32,
-        radix: Radix::Hex,
-    });
+    let node = Node::new("CRC-32");
     Ok(match want {
-        Some(w) if w == got => node.summary("matches the trailer"),
-        Some(w) => node.diag(Diagnostic::malformed(format!(
-            "CRC-32 {got:08x}, {w:08x} expected"
-        ))),
-        None => node.summary("no CRC-32 in the trailer"),
+        Some(w) => node
+            .checksum(crate::value::Check::new("CRC-32", w).verify(got))
+            .desc("The trailer's CRC-32, checked against the decoded data"),
+        None => node
+            .value(Value::UInt {
+                value: u64::from(got),
+                bits: 32,
+                radix: Radix::Hex,
+            })
+            .summary("no CRC-32 in the trailer"),
     })
 }
 

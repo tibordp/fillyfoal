@@ -381,17 +381,9 @@ pub(super) async fn rich_header(cx: &Cx, file: Span, lfanew: u64) -> Result<Opti
     let computed = rich_checksum(&stub, start, &entries);
     let mut node = Node::new("Rich Header")
         .span(span)
-        .summary(format!(
-            "{} tools, key {key:#010x}{}",
-            entries.len(),
-            if computed == key { " (valid)" } else { "" }
-        ))
+        .summary(format!("{} tools, key {key:#010x}", entries.len()))
         .desc("Undocumented record of the Microsoft tools that built the image, XOR-masked with a checksum");
-    if computed != key {
-        node = node.diag(Diagnostic::warning(format!(
-            "checksum mismatch: computed {computed:#010x}"
-        )));
-    }
+    node = node.check_diag(&crate::value::Check::new(RICH_SUM, key).verify(computed));
     Ok(Some(Rich {
         node: node.lazy(
             rich_entries,
@@ -451,19 +443,12 @@ async fn rich_entries(cx: Cx, st: RichState) -> Result<()> {
             .span(st.span.sub(at, 4))
             .value(Value::Text("Rich".to_owned())),
     );
-    let mut key = Node::new("Key")
-        .span(st.span.sub(at.saturating_add(4), 4))
-        .value(hex(st.key))
-        .desc("Checksum of the DOS header, stub and entries; also the XOR mask");
-    key = if st.key == st.computed {
-        key.summary("valid")
-    } else {
-        key.diag(Diagnostic::warning(format!(
-            "checksum mismatch: computed {:#010x}",
-            st.computed
-        )))
-    };
-    cx.emit(key);
+    cx.emit(
+        Node::new("Key")
+            .span(st.span.sub(at.saturating_add(4), 4))
+            .checksum(crate::value::Check::new(RICH_SUM, st.key).verify(st.computed))
+            .desc("Checksum of the DOS header, stub and entries; also the XOR mask"),
+    );
     Ok(())
 }
 
@@ -513,7 +498,10 @@ fn mz_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
         .desc("Initial SS, relative to the load segment")
         .emit()?;
     f.u16("e_sp").hex().desc("Initial SP").emit()?;
-    f.u16("e_csum").hex().desc("Checksum (rarely set)").emit()?;
+    f.u16("e_csum")
+        .checksum("DOS header checksum")
+        .desc("Checksum (rarely set)")
+        .emit()?;
     f.u16("e_ip").hex().desc("Initial IP").emit()?;
     f.u16("e_cs")
         .hex()
@@ -1011,6 +999,10 @@ fn signed_digests(data: &[u8]) -> Option<Signed> {
 }
 
 /// The digest algorithms Authenticode signatures use.
+/// The Rich header's checksum (and XOR key): rotated sums of the DOS
+/// header, stub and entries.
+const RICH_SUM: &str = "Rich header checksum";
+
 enum Digest {
     Md5(crate::codec::crypto::Md5),
     Sha1(crate::codec::crypto::Sha1),
@@ -1020,6 +1012,16 @@ enum Digest {
 }
 
 impl Digest {
+    fn name(&self) -> &'static str {
+        match self {
+            Digest::Md5(_) => "MD5",
+            Digest::Sha1(_) => "SHA-1",
+            Digest::Sha256(_) => "SHA-256",
+            Digest::Sha384(_) => "SHA-384",
+            Digest::Sha512(_) => "SHA-512",
+        }
+    }
+
     fn new(oid: &str) -> Option<Self> {
         use crate::codec::crypto::Hash;
         Some(match oid {
@@ -1126,20 +1128,15 @@ async fn image_hash(cx: Cx, (pe, table, body): (Pe, Span, Span)) -> Result<()> {
     ];
     match Digest::new(&signed.algorithm) {
         Some(h) => {
+            let name = h.name();
             let computed = hash_ranges(&cx, h, file, &ranges).await?;
-            let mut node = Node::new("Computed digest")
-                .value(Value::Text(hex_string(&computed)))
-                .summary(if computed == signed.digest {
-                    "matches"
-                } else {
-                    "differs"
-                });
-            if computed != signed.digest {
-                node = node.diag(Diagnostic::malformed(
-                    "Authenticode digest mismatch: the image was changed after signing",
-                ));
+            let check = crate::value::Check::new(name, signed.digest.clone()).verify(computed);
+            let mut node = Node::new("Image digest")
+                .desc("The signed digest of the image (SpcIndirectDataContent), checked against the image without its checksum and certificate table");
+            if check.is_mismatch() {
+                node = node.summary("the image was changed after signing");
             }
-            cx.emit(node);
+            cx.emit(node.checksum(check));
         }
         None => cx.diag(Diagnostic::unsupported(format!(
             "digest algorithm {algorithm}"
@@ -1150,24 +1147,16 @@ async fn image_hash(cx: Cx, (pe, table, body): (Pe, Span, Span)) -> Result<()> {
         && let Some(mut h) = Digest::new(alg)
     {
         let content_span = body.sub(to_u64(signed.content.start), to_u64(content.len()));
+        let name = h.name();
         crate::formats::util::datakit::feed_paced(&cx, content, |piece| h.update(piece)).await;
         let computed = h.finish();
         {
-            let matches = &computed == expected;
-            let mut node = Node::new("Signer's messageDigest")
-                .span(content_span)
-                .value(Value::Text(hex_string(expected)))
-                .summary(if matches {
-                    "matches SpcIndirectDataContent"
-                } else {
-                    "differs from SpcIndirectDataContent"
-                });
-            if !matches {
-                node = node.diag(Diagnostic::malformed(
-                    "messageDigest does not match the signed content",
-                ));
-            }
-            cx.emit(node);
+            cx.emit(
+                Node::new("Signer's messageDigest")
+                    .span(content_span)
+                    .checksum(crate::value::Check::new(name, expected.clone()).verify(computed))
+                    .desc("Of SpcIndirectDataContent, the signed content"),
+            );
         }
     }
     Ok(())

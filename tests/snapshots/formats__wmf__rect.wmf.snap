@@ -12,7 +12,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Bottom: 100  [0xc+0x2]
       Units per inch: 1440  [0xe+0x2]
       Reserved: 0  [0x10+0x4]
-      Checksum: 0x52b1  [0x14+0x2]
+      Checksum: 0x52b1 (16-bit XOR, valid)  [0x14+0x2]
   ▾ Header — version 3.0, 58 bytes, 0 objects  [0x16+0x12]
       Type: memory (0x1)  [0x16+0x2]
       Header size (words): 9  [0x18+0x2]

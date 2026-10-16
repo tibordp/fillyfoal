@@ -32,6 +32,7 @@ pub fn value(v: &Value) -> String {
         Value::Text(s) => format!("{s:?}"),
         Value::Bytes(b) => bytes(b),
         Value::Guid(g) => g.to_string(),
+        Value::Checksum(c) => c.to_string(),
     }
 }
 
@@ -313,6 +314,46 @@ mod tests {
         assert_eq!(Time::offset(0, -330).iso8601(), "1969-12-31T18:30:00-05:30");
         assert_eq!(Time::local(0).minute().iso8601(), "1970-01-01T00:00");
         assert_eq!(Time::utc(0).day().iso8601(), "1970-01-01");
+    }
+
+    #[test]
+    fn checksums_say_their_algorithm_and_verdict() {
+        use crate::value::Check;
+        let v = |c: Check| value(&c.into());
+        assert_eq!(
+            v(Check::new("CRC-32", 0xae42_6082u32).verify(0xae42_6082u32)),
+            "0xae426082 (CRC-32, valid)"
+        );
+        let bad = Check::new("CRC-16", 0x1234u16).verify(0x0bu16);
+        assert_eq!(v(bad.clone()), "0x1234 (CRC-16, mismatch: computed 0xb)");
+        assert_eq!(
+            bad.mismatch_text().unwrap(),
+            "CRC-16 mismatch: stored 0x1234, computed 0xb"
+        );
+        // Digests print in full, however long.
+        let digest: Vec<u8> = (0..32).collect();
+        assert_eq!(
+            v(Check::new("SHA-256", digest.clone())),
+            format!(
+                "{} (SHA-256, not checked)",
+                digest
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+            )
+        );
+        assert_eq!(
+            v(Check::new("MD5", [0u8; 16]).skipped("encrypted")),
+            "00000000000000000000000000000000 (MD5, skipped: encrypted)"
+        );
+        // An integer and a byte string compare by their bytes.
+        assert!(
+            Check::new("CRC-32", 0x0102_0304u32)
+                .verify([1u8, 2, 3, 4])
+                .is_valid()
+        );
+        let node = crate::Node::new("CRC").checksum(bad);
+        assert_eq!(node.diagnostics.len(), 1);
     }
 
     #[test]

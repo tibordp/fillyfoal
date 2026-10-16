@@ -15,7 +15,7 @@ use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -104,7 +104,8 @@ async fn kickstart(cx: Cx, input: Input) -> Result<()> {
     let mut verdict = "";
     let mut node = Node::new("Checksum")
         .span(file.sub(foot, 4))
-        .value(hex(stored, 32));
+        .checksum(Check::new("Kickstart sum", stored))
+        .desc("Makes the sum of all longs, with end-around carry, 0xffffffff");
     if file.len <= cx.limits().max_read {
         let all = cx.read(file).await?;
         // Sum of all longs with end-around carry must be 0xFFFFFFFF.
@@ -114,13 +115,10 @@ async fn kickstart(cx: Cx, input: Input) -> Result<()> {
         });
         if sum == u32::MAX {
             verdict = ", checksum valid";
-            node = node.summary("valid");
         } else {
             verdict = ", checksum mismatch";
-            node = node.diag(Diagnostic::warning(format!(
-                "long sum is {sum:#010x}, expected 0xffffffff"
-            )));
         }
+        node = node.with_check(|c| c.verified(sum == u32::MAX));
     }
     cx.emit(node);
     cx.emit(
@@ -593,7 +591,7 @@ record! {
         entry: u16 "Entry address" .hex(),
         _unused: bytes[36] "Unused",
         file_len: bytes[3] "File length (24-bit)",
-        checksum: u16 "Checksum" .hex(),
+        checksum: u16 "Checksum" .checksum("16-bit byte sum"),
     }
 }
 
@@ -601,7 +599,14 @@ async fn amsdos(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let span = file.sub(0, AmsdosHeader::SIZE);
     let h: AmsdosHeader = read_record(&cx, span, LE).await?;
-    cx.emit(AmsdosHeader::node("AMSDOS header", file.sub(0, 128), LE).summary("checksum valid"));
+    // The probe only accepts a header whose checksum is right.
+    let check = Check::new("16-bit byte sum", h.checksum).verified(true);
+    cx.emit(AmsdosHeader::checked_node(
+        "AMSDOS header",
+        file.sub(0, 128),
+        LE,
+        check.at(67),
+    ));
     let len = u64::from(crate::bytes::u24_le(&h.file_len, 0).unwrap_or(0));
     let data = file.sub(128, len);
     let name = format!("{}.{}", clean(&h.name), clean(&h.ext));

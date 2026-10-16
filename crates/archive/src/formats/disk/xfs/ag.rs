@@ -333,7 +333,7 @@ pub(super) async fn group(cx: Cx, (fs, ag): (FsRef, u64)) -> Result<()> {
         let mut node = struct_node("Superblock (secondary)", sb_span, BE, computed, sb_layout);
         if raw.get(..4) != Some(b"XFSB".as_slice()) {
             node = node.diag(Diagnostic::malformed("bad superblock magic"));
-        } else if let Some(d) = v5.then(|| crc_diag(&raw, 224, "superblock")).flatten() {
+        } else if let Some(d) = v5.then(|| crc_diag(&raw, 224)).flatten() {
             node = node.diag(d);
         }
         cx.emit(node);
@@ -356,7 +356,7 @@ pub(super) async fn group(cx: Cx, (fs, ag): (FsRef, u64)) -> Result<()> {
     let mut node = struct_node("AGF (free space)", agf_span, BE, hctx, agf_layout);
     if raw.get(..4) != Some(b"XAGF".as_slice()) {
         node = node.diag(Diagnostic::malformed("bad AGF magic"));
-    } else if let Some(d) = v5.then(|| crc_diag(&raw, 216, "AGF")).flatten() {
+    } else if let Some(d) = v5.then(|| crc_diag(&raw, 216)).flatten() {
         node = node.diag(d);
     }
     if let Ok(a) = &agf {
@@ -382,7 +382,7 @@ pub(super) async fn group(cx: Cx, (fs, ag): (FsRef, u64)) -> Result<()> {
     let mut node = struct_node("AGI (inodes)", agi_span, BE, hctx, agi_layout);
     if raw.get(..4) != Some(b"XAGI".as_slice()) {
         node = node.diag(Diagnostic::malformed("bad AGI magic"));
-    } else if let Some(d) = v5.then(|| crc_diag(&raw, 312, "AGI")).flatten() {
+    } else if let Some(d) = v5.then(|| crc_diag(&raw, 312)).flatten() {
         node = node.diag(d);
     }
     if let Ok(a) = &agi {
@@ -419,7 +419,7 @@ pub(super) async fn group(cx: Cx, (fs, ag): (FsRef, u64)) -> Result<()> {
     ));
     if v5 && raw.get(..4) != Some(b"XAFL".as_slice()) {
         node = node.diag(Diagnostic::malformed("bad AGFL magic"));
-    } else if let Some(d) = v5.then(|| crc_diag(&raw, 32, "AGFL")).flatten() {
+    } else if let Some(d) = v5.then(|| crc_diag(&raw, 32)).flatten() {
         node = node.diag(d);
     }
     cx.emit(node);

@@ -26,8 +26,7 @@ use crate::formats::{Format, Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::text::hex_lower;
-use crate::value::{EnumTable, FlagTable, Value, decode_flags, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, decode_flags, flag, lookup};
 
 const LE: Endian = Endian::Little;
 /// Longest string we look for a terminator in.
@@ -401,27 +400,14 @@ fn header(f: &mut Fields<'_>, (file, checks): &(Span, Option<Checks>)) -> Result
         .with(|_, n| n.summary(if compact { "compact DEX" } else { "DEX" }))
         .emit()?;
     f.u32("checksum")
-        .hex()
+        .checksum("Adler-32")
+        .verify(checks.map(|c| c.adler))
         .desc("Adler-32 of everything after this field")
-        .with(|&v, n| match checks {
-            Some(c) if c.adler == v => n.summary("valid"),
-            Some(c) => n.diag(Diagnostic::warning(format!(
-                "checksum mismatch: computed {:#010x}",
-                c.adler
-            ))),
-            None => n,
-        })
         .emit()?;
     f.bytes("signature", 20)
+        .checksum("SHA-1")
+        .verify(checks.map(|c| c.sha1))
         .desc("SHA-1 of everything after this field")
-        .with(|v, n| match checks {
-            Some(c) if c.sha1.as_slice() == v.as_slice() => n.summary("valid"),
-            Some(c) => n.diag(Diagnostic::warning(format!(
-                "signature mismatch: computed {}",
-                hex_lower(&c.sha1)
-            ))),
-            None => n,
-        })
         .emit()?;
     f.u32("file_size")
         .hex()
@@ -522,12 +508,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
     let mut node = struct_node("Header", header_span, LE, (file, checks), header);
     if let Some(c) = checks {
-        if c.adler != stored {
-            node = node.diag(Diagnostic::warning("checksum mismatch"));
-        }
-        if head.get(12..32) != Some(c.sha1.as_slice()) {
-            node = node.diag(Diagnostic::warning("signature mismatch"));
-        }
+        node = node
+            .check_diag(&Check::new("Adler-32", stored).verify(c.adler))
+            .check_diag(
+                &Check::new("SHA-1", head.get(12..32).unwrap_or_default().to_vec()).verify(c.sha1),
+            );
     }
     cx.emit(node);
     let h = parse(&cx, header_span, LE, &(file, checks), header).await?;
@@ -2100,7 +2085,7 @@ record! {
         opt_offset: u32 "opt_offset" .hex(),
         opt_length: u32 "opt_length" .hex(),
         flags: u32 "flags" .hex(),
-        checksum: u32 "checksum" .hex() .desc("Adler-32 of the dependencies and optimized data"),
+        checksum: u32 "checksum" .checksum("Adler-32") .desc("Adler-32 of the dependencies and optimized data"),
     }
 }
 

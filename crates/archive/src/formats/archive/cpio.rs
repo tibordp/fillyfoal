@@ -17,6 +17,7 @@ use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
+use crate::value::{Check, Digest, Radix};
 
 pub static FORMAT: Format = Format {
     name: "cpio",
@@ -113,6 +114,9 @@ struct Header {
     check: u64,
 }
 
+/// The "070702" variant's checksum: the 32-bit sum of the data's bytes.
+const CPIO_SUM: &str = "32-bit byte sum";
+
 /// Decodes (and, when emitting, shows) a header of any variant.
 fn header_layout(f: &mut Fields<'_>, variant: &Variant) -> Result<Header> {
     let variant = *variant;
@@ -133,7 +137,15 @@ fn header_layout(f: &mut Fields<'_>, variant: &Variant) -> Result<Header> {
             hex("Special device major", Num::Dec).emit()?;
             hex("Special device minor", Num::Dec).emit()?;
             let namesize = hex("Name size", Num::Dec).emit()?.ok_or_else(missing)?;
-            let check = hex("Checksum", Num::Hex).emit()?.unwrap_or(0);
+            // Only the "070702" variant sums the data; it is checked with the
+            // content.
+            let field = hex("Checksum", Num::Hex);
+            let field = if variant == Variant::Crc {
+                field.checksum(CPIO_SUM)
+            } else {
+                field
+            };
+            let check = field.emit()?.unwrap_or(0);
             Ok(Header {
                 mode,
                 namesize,
@@ -354,11 +366,16 @@ async fn member(cx: Cx, (input, span, variant): (Input, Span, Variant)) -> Resul
                 let sum = bytes
                     .iter()
                     .fold(0u32, |a, &b| a.wrapping_add(u32::from(b)));
-                if u64::from(sum) != header.check {
-                    node = node.diag(Diagnostic::warning(format!(
-                        "checksum mismatch: computed {sum:#010x}"
-                    )));
-                }
+                let check = Check::new(
+                    CPIO_SUM,
+                    Digest::Int {
+                        value: header.check,
+                        bits: 32,
+                        radix: Radix::Hex,
+                    },
+                )
+                .verify(sum);
+                node = node.check_diag(&check);
             }
             cx.emit(check_len(node, data, header.filesize));
         }

@@ -37,7 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Updated: 2024-05-17 13:38:20 UTC  [0x10c0+0x8]
       Events: 17  [0x10c8+0x8]
       Resync offset: 18446744073709551615 — none: the array is in sync  [0x10d0+0x8]
-      Superblock checksum: 0x2498e70a  [0x10d8+0x4]
+      Superblock checksum: 0x2498e70a (md word sum, valid)  [0x10d8+0x4]
       Device role slots: 2  [0x10dc+0x4]
       Logical block size: 0  [0x10e0+0x4]
       Padding: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x10e4+0x1c]

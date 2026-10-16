@@ -5,7 +5,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ▾ pubkey.asc — OpenPGP public key, EdDSA (legacy), "Alice Example <alice@example.test>" (armored)  [0x0+0x28b]
   ▾ PGP PUBLIC KEY BLOCK  [0x0+0x28b]
       Comment: "fillyfoal fixture"  [0x25+0x1b]
-      Checksum: 0x2d1db4  [0x262+0x6]
+      Checksum: 0x2d1db4 (CRC-24, valid)  [0x262+0x6]
     ▾ Packets — 402 bytes  [#1:0x0+0x192]
       ▾ Public-Key Packet — v4 EdDSA (legacy), created 2026-01-01  [#1:0x0+0x35]
           Packet header: Public-Key (0x6) — new format, 51 body bytes  [#1:0x0+0x2]

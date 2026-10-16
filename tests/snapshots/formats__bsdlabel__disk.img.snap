@@ -28,7 +28,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Drive data: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x25c+0x14]
       Spare: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x270+0x14]
       Magic (copy): 0x82564557  [0x284+0x4]
-      Checksum: 0x414a  [0x288+0x2]
+      Checksum: 0x414a (16-bit XOR, valid)  [0x288+0x2]
       Partitions: 3  [0x28a+0x2]
       Boot area size: 8192  [0x28c+0x4]
       Superblock size: 8192  [0x290+0x4]

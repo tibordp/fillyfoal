@@ -57,4 +57,4 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ TREE (Cache tree) — 53 bytes  [0xe9+0x3d]
         (root): "877022b686e38c6af2ac73dda9d0f337f2c7d13d" — 3 entries, 1 subtrees  [0xf1+0x19]
         src: "ed52aa80094872d267141c56c2dabd6e0c32da47" — 1 entry, 0 subtrees  [0x10a+0x1c]
-    Checksum: "30e737563bbd6dd42f00d05174734b6542ade004" — valid SHA-1  [0x126+0x14]
+    Checksum: 30e737563bbd6dd42f00d05174734b6542ade004 (SHA-1, valid)  [0x126+0x14]

@@ -984,12 +984,19 @@ async fn macbinary(cx: Cx, input: Input) -> Result<()> {
         .enumeration(&[(129, "MacBinary II"), (130, "MacBinary III")])
         .emit()?;
     f.u8("Minimum version").emit()?;
-    let crc = f.u16("Header CRC").hex().emit()?;
     let computed = crc16_xmodem(head.data.get(..124).unwrap_or_default());
-    if version >= 129 && computed != crc {
-        cx.diag(Diagnostic::warning(format!(
-            "header CRC mismatch: computed {computed:#06x}"
-        )));
+    // MacBinary I has no header CRC.
+    let crc = f
+        .u16("Header CRC")
+        .checksum_if(version >= 129, "CRC-16/XMODEM")
+        .verify(Some(computed))
+        .emit()?;
+    if version >= 129
+        && let Some(m) = crate::value::Check::new("CRC-16/XMODEM", crc)
+            .verify(computed)
+            .mismatch_text()
+    {
+        cx.diag(Diagnostic::warning(m));
     }
     let mut at = 128u64.saturating_add(u64::from(secondary).next_multiple_of(128));
     if data_len > 0 {
@@ -1119,7 +1126,7 @@ async fn binhex(cx: Cx, input: Input) -> Result<()> {
     f.u16("Finder flags").flags(FINDER_FLAGS).emit()?;
     let data_len = u64::from(f.u32("Data fork length").emit()?);
     let rsrc_len = u64::from(f.u32("Resource fork length").emit()?);
-    let stored = f.u16("Header CRC").hex().emit()?;
+    let stored = f.u16("Header CRC").checksum("CRC-16/XMODEM").emit()?;
     let mut status = Vec::new();
     // The header CRC covers the header before it (nothing if truncated).
     let covered = hlen.saturating_sub(2);

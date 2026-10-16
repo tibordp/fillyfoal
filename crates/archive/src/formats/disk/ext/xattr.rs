@@ -256,12 +256,8 @@ fn block_layout(f: &mut Fields<'_>, ctx: &BlockCtx) -> Result<()> {
     f.u32("Blocks").emit()?;
     f.u32("Hash").hex().emit()?;
     f.u32("Checksum")
-        .hex()
-        .with(|&v, n| match ctx.computed {
-            Some(c) if c == v => n.summary("valid"),
-            Some(c) => n.diag(Diagnostic::warning(format!("mismatch: computed {c:#010x}"))),
-            None => n,
-        })
+        .checksum("CRC-32C")
+        .verify(ctx.computed)
         .emit()?;
     f.bytes("Reserved", 12).emit()?;
     area(f, 0, 32);

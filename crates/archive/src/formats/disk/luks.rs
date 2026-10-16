@@ -23,7 +23,7 @@ use crate::formats::{Format, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::EnumTable;
+use crate::value::{Check, EnumTable, Value};
 
 const BE: Endian = Endian::Big;
 const MAGIC: &[u8] = b"LUKS\xba\xbe";
@@ -55,7 +55,7 @@ record! {
         hash: ascii[32] "Hash specification",
         payload: u32 "Payload offset (sectors)" .with(|&v, n| n.summary(format!("at {:#x}", u64::from(v).saturating_mul(512)))),
         key_bytes: u32 "Master key length (bytes)" .with(|&v, n| n.summary(format!("{} bits", u64::from(v).saturating_mul(8)))),
-        digest: bytes[20] "Master key digest",
+        digest: bytes[20] "Master key digest" .checksum("PBKDF2 key digest"),
         salt: bytes[32] "Master key digest salt",
         iterations: u32 "Master key digest iterations",
         uuid: ascii[40] "UUID",
@@ -87,7 +87,7 @@ record! {
         subsystem: ascii[48] "Subsystem",
         offset: u64 "Header offset" .with(|&v, n| n.summary(format!("{v:#x} from the start of the device"))),
         _padding: bytes[184] "Padding",
-        checksum: bytes[64] "Checksum",
+        checksum: bytes[64] "Checksum" .with(|b, n| n.value(Value::Bytes(luks2_digest(&checksum_alg, b)))) .checksum(digest_name(&checksum_alg)),
         _padding2: bytes[3584] "Padding",
     }
 }
@@ -214,28 +214,44 @@ async fn key_slots(cx: Cx, (disk, span, key_bytes): (Span, Span, u32)) -> Result
 
 /// Verifies a LUKS2 header checksum: the hash of the binary header and the
 /// JSON area with the checksum field zeroed.
-async fn luks2_checksum(cx: &Cx, area: Span, alg: &str) -> Result<Option<Diagnostic>> {
+async fn luks2_checksum(cx: &Cx, area: Span, alg: &str) -> Result<Option<Check>> {
     if area.len > MAX_JSON {
         return Ok(None);
     }
     let mut data = cx.read_avail(area).await?;
-    let stored = data.get(448..512).unwrap_or_default().to_vec();
+    let stored = luks2_digest(alg, data.get(448..512).unwrap_or_default());
     if let Some(f) = data.get_mut(448..512) {
         f.fill(0);
     }
+    let check = Check::new(digest_name(alg), stored);
     let computed = match alg {
         "sha1" => digest_paced::<Sha1>(cx, &data).await,
         "sha256" => digest_paced::<Sha256>(cx, &data).await,
         "sha512" => digest_paced::<Sha512>(cx, &data).await,
-        other => {
-            return Ok(Some(Diagnostic::unsupported(format!(
-                "checksum algorithm {other:?} not verified"
-            ))));
-        }
+        _ => return Ok(Some(check)),
     };
-    let n = computed.len();
-    Ok((stored.get(..n) != Some(computed.as_slice()))
-        .then(|| Diagnostic::warning(format!("{alg} checksum mismatch")).at(area.sub(448, 64))))
+    Ok(Some(check.verify(computed)))
+}
+
+/// The usual name of a LUKS2 checksum algorithm.
+fn digest_name(alg: &str) -> String {
+    match alg {
+        "sha1" => "SHA-1".to_owned(),
+        "sha256" => "SHA-256".to_owned(),
+        "sha512" => "SHA-512".to_owned(),
+        other => other.to_owned(),
+    }
+}
+
+/// The digest in the 64-byte checksum field: as long as the algorithm's
+/// output, the rest zero padding.
+fn luks2_digest(alg: &str, field: &[u8]) -> Vec<u8> {
+    let len = match alg {
+        "sha1" => 20,
+        "sha256" => 32,
+        _ => 64,
+    };
+    field.get(..len).unwrap_or(field).to_vec()
 }
 
 /// A header copy: binary header and JSON area, checked.
@@ -258,13 +274,20 @@ async fn header_copy(
     }
     let h = parse(cx, span, BE, &(), Luks2::layout).await?;
     let hdr_size = h.header_size.clamp(4096, MAX_JSON);
-    let mut node = Luks2::node(name, span, BE).summary(format!(
+    let check = luks2_checksum(cx, disk.sub(at, hdr_size), &h.checksum_alg).await?;
+    let mut node = Luks2::checked_node(
+        name,
+        span,
+        BE,
+        check.as_ref().map(|c| c.at(448)).unwrap_or_default(),
+    )
+    .summary(format!(
         "sequence {}, {} with the JSON area",
         h.seqid,
         size(hdr_size)
     ));
-    if let Some(d) = luks2_checksum(cx, disk.sub(at, hdr_size), &h.checksum_alg).await? {
-        node = node.diag(d);
+    if let Some(c) = &check {
+        node = node.check_diag(c);
     }
     cx.emit(node);
     let json_area = disk.sub(at.saturating_add(4096), hdr_size.saturating_sub(4096));

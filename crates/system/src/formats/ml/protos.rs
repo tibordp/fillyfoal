@@ -16,7 +16,7 @@ use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value};
+use crate::value::{Check, EnumTable, Radix, Value};
 
 use crate::formats::util::wire::protobuf::{
     self as proto, Elem, Msg, Ty, f, fields_in, string_in, varint_in,
@@ -1164,22 +1164,17 @@ async fn tfrecord(cx: Cx, input: Input) -> Result<()> {
             ));
         }
         cur.skip(len);
-        let crc_at = cur.pos();
         let data_crc = cur.u32().await?;
         let mut node = Node::new(format!("Record {n}")).span(cur.since(start));
-        if head.get(..8).map(crate::codec::crc::crc32c_masked) != Some(len_crc) {
-            node = node.diag(
-                Diagnostic::malformed("length CRC mismatch")
-                    .at(file.sub(start.saturating_add(8), 4)),
-            );
+        if let Some(c) = head.get(..8).map(crate::codec::crc::crc32c_masked) {
+            node = node.check_diag(&Check::new("masked CRC-32C", len_crc).verify(c));
         }
         if len <= CRC_MAX {
             let data = cx.read(body).await?;
             let crc = crate::formats::util::datakit::crc32c_paced(&cx, &data).await;
-            if crate::codec::crc::mask_crc32c(crc) != data_crc {
-                node =
-                    node.diag(Diagnostic::malformed("data CRC mismatch").at(file.sub(crc_at, 4)));
-            }
+            node = node.check_diag(
+                &Check::new("masked CRC-32C", data_crc).verify(crate::codec::crc::mask_crc32c(crc)),
+            );
         }
         let first = cx.read_avail(body.sub(0, 1)).await?;
         let (schema, kind): (&'static Msg, &str) = if first.first() == Some(&0x09) {

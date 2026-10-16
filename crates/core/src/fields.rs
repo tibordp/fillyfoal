@@ -23,7 +23,7 @@ use crate::cx::{Block, Cx};
 use crate::error::{Diagnostic, Result};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Guid, Radix, Value, decode_flags, lookup};
+use crate::value::{Check, Digest, EnumTable, FlagTable, Guid, Radix, Value, decode_flags, lookup};
 
 pub use crate::bytes::Endian;
 
@@ -110,6 +110,9 @@ pub struct Fields<'a> {
     block: &'a Block,
     pos: u64,
     endian: Endian,
+    /// Checks the dissector made, by field position: [`Field::checksum`]
+    /// shows the field at that position as that check.
+    checks: Vec<(u64, Check)>,
 }
 
 impl<'a> Fields<'a> {
@@ -120,6 +123,7 @@ impl<'a> Fields<'a> {
             block,
             pos: 0,
             endian,
+            checks: Vec::new(),
         }
     }
 
@@ -130,7 +134,18 @@ impl<'a> Fields<'a> {
             block,
             pos: 0,
             endian,
+            checks: Vec::new(),
         }
+    }
+
+    /// Checks the dissector made of the check values at these positions
+    /// (relative to the block, [`Check::at`]): a field marked
+    /// [`checksum`](Field::checksum) there takes its check, verdict
+    /// included. This is how a [`record`](crate::record) whose check covers
+    /// more than its own bytes gets a verdict
+    /// ([`Record::checked_node`](crate::dsl::Record::checked_node)).
+    pub fn verifying(&mut self, checks: Vec<(u64, Check)>) {
+        self.checks = checks;
     }
 
     pub fn is_emitting(&self) -> bool {
@@ -191,11 +206,17 @@ impl<'a> Fields<'a> {
     }
 
     fn field<T>(&self, name: &'static str, span: Span, value: Result<T>) -> Field<'a, T> {
+        let at = span.offset.saturating_sub(self.block.span.offset);
         Field {
             cx: self.cx,
             node: Node::new(name).span(span),
             value,
             raw: None,
+            check: self
+                .checks
+                .iter()
+                .find(|(pos, _)| *pos == at)
+                .map(|(_, c)| c.clone()),
         }
     }
 
@@ -355,6 +376,9 @@ pub struct Field<'a, T> {
     node: Node,
     value: Result<T>,
     raw: Option<(u64, u8)>,
+    /// The dissector's check of this field, if it is a check value
+    /// ([`Fields::verifying`]).
+    check: Option<Check>,
 }
 
 impl<'a, T> Field<'a, T> {
@@ -388,6 +412,55 @@ impl<'a, T> Field<'a, T> {
         self
     }
 
+    /// The field (an unsigned number or bytes) is a check value of `algo`,
+    /// not yet verified (see [`Field::verify`]); or the check the cursor
+    /// was given for this position ([`Fields::verifying`]).
+    pub fn checksum(mut self, algo: impl Into<Cow<'static, str>>) -> Self {
+        if self.value.is_ok()
+            && let Some(check) = self.check.take()
+        {
+            let node = std::mem::replace(&mut self.node, Node::new(""));
+            self.node = node.checksum(check);
+            return self;
+        }
+        let stored = match self.node.value.take() {
+            // Shown in hex unless the format writes it otherwise (octal).
+            Some(Value::UInt { value, bits, radix }) => Some(Digest::Int {
+                value,
+                bits,
+                radix: if radix == Radix::Dec {
+                    Radix::Hex
+                } else {
+                    radix
+                },
+            }),
+            Some(Value::Bytes(b)) => Some(Digest::Bytes(b)),
+            other => {
+                self.node.value = other;
+                None
+            }
+        };
+        if let Some(stored) = stored {
+            self.node.value = Some(Check::new(algo, stored).into());
+        }
+        self
+    }
+
+    /// Verifies a [`checksum`](Field::checksum) field against what the data
+    /// gives; `None` leaves it not checked. A mismatch is also a diagnostic.
+    pub fn verify<D: Into<Digest>>(self, computed: Option<D>) -> Self {
+        self.with_check(|c| c.verify_opt(computed))
+    }
+
+    /// Updates a [`checksum`](Field::checksum) field's verdict (for checks
+    /// that need the stored value: masking, skipping), reporting a
+    /// mismatch as a diagnostic.
+    pub fn with_check(mut self, f: impl FnOnce(Check) -> Check) -> Self {
+        let node = std::mem::replace(&mut self.node, Node::new(""));
+        self.node = node.with_check(f);
+        self
+    }
+
     /// Attaches a diagnostic when `check` returns one for the value.
     pub fn check(mut self, check: impl FnOnce(&T) -> Option<Diagnostic>) -> Self {
         if let Ok(v) = &self.value
@@ -405,6 +478,7 @@ impl<'a, T> Field<'a, T> {
             node: self.node,
             value: self.value.map(f),
             raw: self.raw,
+            check: self.check,
         }
     }
 
@@ -423,6 +497,12 @@ impl<'a, T> Field<'a, T> {
 }
 
 impl<T: Prim> Field<'_, T> {
+    /// A [`checksum`](Field::checksum) of `algo` when the file uses one
+    /// here (`on`, e.g. a feature flag), otherwise a plain hex number.
+    pub fn checksum_if(self, on: bool, algo: impl Into<Cow<'static, str>>) -> Self {
+        if on { self.checksum(algo) } else { self.hex() }
+    }
+
     pub fn hex(mut self) -> Self {
         if let Some(Value::UInt { radix, .. }) = &mut self.node.value {
             *radix = Radix::Hex;

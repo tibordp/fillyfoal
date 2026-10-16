@@ -14,7 +14,7 @@ mod tree;
 
 use std::sync::Arc;
 
-use crate::bytes::{to_u64, u16_le, u64_le};
+use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::dsl::{Path, Record};
 use crate::error::{Diagnostic, Result};
@@ -25,7 +25,7 @@ use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, flag};
+use crate::value::{Check, EnumTable, FlagTable, flag};
 
 const LE: Endian = Endian::Little;
 const SUPER: u64 = 0x10000;
@@ -85,6 +85,24 @@ const SB_FLAGS: FlagTable = &[
     flag(0x40_0000_0000, "CHANGING_META_CSUM"),
 ];
 
+/// The checksum at the start of a superblock or tree node (`data`): of the
+/// rest of the block, by the filesystem's checksum type. Only CRC-32C is
+/// verified.
+pub(super) fn block_check(kind: u16, data: &[u8]) -> Check {
+    let stored = data.get(..32).unwrap_or_default();
+    let digest = |name: &'static str, len: usize| {
+        Check::new(name, stored.get(..len).unwrap_or(stored).to_vec())
+    };
+    match kind {
+        0 => Check::new("CRC-32C", u32_le(stored, 0).unwrap_or(0))
+            .verify_opt(data.get(32..).map(crc32c)),
+        1 => Check::new("xxHash64", u64_le(stored, 0).unwrap_or(0)),
+        2 => digest("SHA-256", 32),
+        3 => digest("BLAKE2b-256", 32),
+        _ => digest("unknown checksum type", 32),
+    }
+}
+
 const CSUM: EnumTable = &[
     (0, "CRC32C"),
     (1, "xxHash64"),
@@ -109,7 +127,7 @@ pub(super) const CHUNK_TYPE: FlagTable = &[
 record! {
     /// `struct btrfs_super_block`, up to the bootstrap chunk array.
     pub struct Superblock {
-        csum: bytes[32] "Checksum",
+        csum: bytes[32] "Checksum" .checksum("checksum"),
         fsid: bytes[16] "Filesystem UUID" .with(uuid_value),
         bytenr: u64 "This copy's offset" .hex(),
         flags: u64 "Flags" .hex() .flags(SB_FLAGS),
@@ -352,20 +370,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .span(vol.sub(0, SUPER))
             .summary("64 KiB before the superblock, left for boot loaders"),
     );
-    let mut node =
-        Superblock::node("Superblock", span, LE).summary(format!("generation {}", sb.generation));
-    if sb.csum_type == 0 {
-        let data = cx.read_avail(full).await?;
-        let computed = crc32c(data.get(32..).unwrap_or_default());
-        node = if sb.csum.get(..4) == Some(&computed.to_le_bytes()[..]) {
-            node.summary(format!("generation {}, checksum valid", sb.generation))
-        } else {
-            node.diag(Diagnostic::warning(format!(
-                "checksum mismatch: computed {computed:#010x}"
-            )))
-        };
-    }
-    cx.emit(node);
+    let check = block_check(sb.csum_type, &cx.read_avail(full).await?);
+    cx.emit(
+        Superblock::checked_node("Superblock", span, LE, check.at(0))
+            .summary(format!("generation {}", sb.generation))
+            .check_diag(&check),
+    );
     let label = crate::text::until_nul(&sb.label);
     cx.annotate(format!(
         "Btrfs filesystem{}, {} ({} used), {} device{}",

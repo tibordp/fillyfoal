@@ -298,7 +298,7 @@ fn layout(b: &mut Bits<'_>) -> Result<()> {
     b.field("LFE", 2).enumeration(LFE).emit()?;
     b.field("Predictor history", 1).flag().emit()?;
     if crc != 0 {
-        b.field("Header CRC", 16).hex().emit()?;
+        b.field("Header CRC", 16).checksum("CRC-16").emit()?;
     }
     b.field("Multirate interpolator", 1)
         .with(|v, n| {

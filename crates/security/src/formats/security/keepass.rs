@@ -41,7 +41,7 @@ use crate::record;
 use crate::secret::{MAX_ATTEMPTS, SecretRequest};
 use crate::span::{Origin, Span};
 use crate::text::{hex_lower, until_nul};
-use crate::value::{EnumTable, FlagTable, Radix, Value, decode_flags, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Radix, Value, decode_flags, flag, lookup};
 
 const LE: Endian = Endian::Little;
 
@@ -725,17 +725,20 @@ async fn kdbx(cx: Cx, input: Input) -> Result<()> {
     if major >= 4 {
         let stored = cx.read_avail(file.sub(h.end, 32)).await?;
         let header = cx.read(file.sub_exact(0, h.end)?).await?;
-        let mut node = Node::new("Header SHA-256").span(file.sub(h.end, 32));
-        node = if stored == sha256(&[&header]) {
-            node.summary("matches")
-        } else {
-            node.diag(Diagnostic::warning("header hash mismatch"))
-        };
-        cx.emit(node);
+        cx.emit(
+            Node::new("Header SHA-256")
+                .span(file.sub(h.end, 32))
+                .checksum(Check::new("SHA-256", stored).verify(sha256(&[&header]))),
+        );
+        let hmac = cx
+            .read_avail(file.sub(h.end.saturating_add(32), 32))
+            .await?;
         cx.emit(
             Node::new("Header HMAC-SHA-256")
                 .span(file.sub(h.end.saturating_add(32), 32))
-                .summary("checked with the key when unlocked"),
+                .checksum(
+                    Check::new("HMAC-SHA-256", hmac).skipped("checked with the key when unlocked"),
+                ),
         );
         h.payload = h.end.saturating_add(64);
     } else {
@@ -886,7 +889,7 @@ fn blocks_node(name: &'static str, blocks: Vec<BlockInfo>, bad: usize, what: &'s
         "{}{}",
         plural(blocks.len(), "block"),
         if bad == 0 {
-            format!(", {what} verified")
+            format!(", {what} valid")
         } else {
             format!(", {bad} bad")
         }
@@ -1934,7 +1937,7 @@ async fn kdb_payload(cx: Cx, (input, h): (Input, Arc<KdbHeader>)) -> Result<()> 
         }
     };
     cx.emit(Node::new("Decrypted").span(plain).summary(format!(
-        "{}, {} bytes, contents hash verified",
+        "{}, {} bytes, contents hash valid",
         cipher.name(),
         plain.len
     )));

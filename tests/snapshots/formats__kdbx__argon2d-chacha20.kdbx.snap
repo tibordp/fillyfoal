@@ -20,10 +20,10 @@ expression: "common::explore(&display_name(&path), &data)"
       S — Bytes, 32 bytes  [0xb7+0x2a]
       V: 0x13  [0xe1+0xe]
     End of header — 4 bytes  [0xf0+0x9] → 0xf5+0x4
-    Header SHA-256 — matches  [0xf9+0x20]
-    Header HMAC-SHA-256 — checked with the key when unlocked  [0x119+0x20]
+    Header SHA-256: 217ec860587a1369040b7963466c4b18751482a7a0e7411717c8adf4e4a5541c (SHA-256, valid)  [0xf9+0x20]
+    Header HMAC-SHA-256: 038611002f9ab35ae57d6306ed4d3ca02cbdbf0e2997b8716932a643d56390a8 (HMAC-SHA-256, skipped: checked with the key when unlocked)  [0x119+0x20]
   ▾ Payload — unlocked  [0x139+0x614]
-    ▾ HMAC block stream — 2 blocks, HMAC verified  [0x139+0x614]
+    ▾ HMAC block stream — 2 blocks, HMAC valid  [0x139+0x614]
         Block 0 — 1484 bytes  [0x139+0x5f0] → 0x15d+0x5cc
         Block 1 — end  [0x729+0x24] → 0x74d+0x0
       Decrypted — ChaCha20, 1484 bytes  [#2:0x0+0x5cc]

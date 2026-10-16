@@ -47,7 +47,7 @@ use crate::formats::{
 };
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Value};
+use crate::value::{Check, EnumTable, Value};
 
 pub static FORMAT: Format = Format {
     name: "borg-segment",
@@ -79,6 +79,28 @@ const KEY_TYPES: EnumTable = &[
     (0x06, "authenticated (BLAKE2b)"),
     (0x07, "authenticated (HMAC-SHA256)"),
 ];
+
+/// The MAC algorithm of a key type.
+fn mac_name(key_type: u8) -> &'static str {
+    match key_type {
+        0x04..=0x06 => "keyed BLAKE2b-256",
+        _ => "HMAC-SHA-256",
+    }
+}
+
+/// Why keyed IDs and MACs are not verified.
+const NEEDS_KEY: &str = "needs the repository's key";
+
+/// An object's ID: the plaintext chunk's SHA-256 (unencrypted), or its MAC
+/// under the repository's ID key. Not checked: the chunk would have to be
+/// decompressed, or the key is not in the segments.
+fn id_check(key_type: Option<u8>, id: Vec<u8>) -> Check {
+    match key_type {
+        Some(0x02) => Check::new("SHA-256", id),
+        Some(k) => Check::new(mac_name(k), id).skipped(NEEDS_KEY),
+        None => Check::new("chunk ID", id),
+    }
+}
 
 /// Whether objects of this key type are stored unencrypted.
 fn plaintext(key_type: u8) -> bool {
@@ -298,15 +320,11 @@ async fn entry(cx: Cx, (input, span, tag, crc, len): (Input, Span, u8, u32, u64)
         cx.checkpoint().await;
     }
     let computed = !computed;
-    let mut crc_node = Node::new("CRC32").span(span.sub(0, 4)).value(hex(crc, 32));
-    crc_node = if computed == crc {
-        crc_node.summary("valid")
-    } else {
-        crc_node.diag(Diagnostic::malformed(format!(
-            "CRC mismatch: computed {computed:#010x}"
-        )))
-    };
-    cx.emit(crc_node);
+    cx.emit(
+        Node::new("CRC32")
+            .span(span.sub(0, 4))
+            .checksum(Check::new("CRC-32", crc).verify(computed)),
+    );
     cx.emit(
         Node::new("Size")
             .span(span.sub(4, 4))
@@ -324,13 +342,20 @@ async fn entry(cx: Cx, (input, span, tag, crc, len): (Input, Span, u8, u32, u64)
     let id_span = span.sub(9, 32);
     let id = cx.read(id_span).await?;
     let manifest = id.iter().all(|&b| b == 0);
+    // The ID's algorithm follows the key type, the object's first byte.
+    let key_type = if tag == PUT {
+        cx.read(span.sub(KEYED_HEADER, 1)).await?.first().copied()
+    } else {
+        None
+    };
     let mut id_node = Node::new("Object ID")
         .span(id_span)
-        .value(text(hex_string(&id)))
         .desc("MAC (HMAC-SHA256 or BLAKE2b) of the plaintext chunk, keyed by the repository's ID key; SHA-256 when unencrypted");
-    if manifest {
-        id_node = id_node.summary("manifest");
-    }
+    id_node = if manifest {
+        id_node.value(text(hex_string(&id))).summary("manifest")
+    } else {
+        id_node.checksum(id_check(key_type, id))
+    };
     cx.emit(id_node);
     if tag == PUT {
         object(&cx, input, span.tail(KEYED_HEADER), manifest).await?;
@@ -364,9 +389,15 @@ async fn object(cx: &Cx, input: Input, data: Span, manifest: bool) -> Result<()>
             );
             return Ok(());
         }
-        cx.emit(Node::new("MAC").span(rest.sub(0, 32)).desc(
-            "HMAC-SHA256 or BLAKE2b of the nonce and ciphertext, keyed by the repository's MAC key",
-        ));
+        let mac = cx.read(rest.sub(0, 32)).await?;
+        cx.emit(
+            Node::new("MAC")
+                .span(rest.sub(0, 32))
+                .checksum(Check::new(mac_name(key_type), mac).skipped(NEEDS_KEY))
+                .desc(
+                    "HMAC-SHA256 or BLAKE2b of the nonce and ciphertext, keyed by the repository's MAC key",
+                ),
+        );
         let nonce = rest.sub(32, 8);
         let n = cx.read(nonce).await?;
         cx.emit(

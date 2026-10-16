@@ -231,25 +231,22 @@ async fn key_blob(cx: &Cx, input: &Input, span: Span, mut f: Fields<'_>, x509: b
         return Ok(());
     }
     let sha1 = sha1_paced(cx, body).await;
-    let mut node = Node::new("Checksum")
-        .span(span.sub(end, CHECKSUM))
-        .value(Value::Bytes(stored.to_vec()));
-    if stored == sha1 {
-        node = node.summary("SHA-1, valid");
-    } else if stored.get(..4) == Some(&[0, 0, 0, 0])
+    let node = Node::new("Checksum").span(span.sub(end, CHECKSUM));
+    let check = if stored != sha1.as_slice()
+        && stored.get(..4) == Some(&[0, 0, 0, 0])
         && stored.get(4..) == Some(digest_paced::<Md5>(cx, body).await.as_slice())
     {
-        // GnuPG before 2.1 wrote an MD5 here (and never checked it).
-        node = node.summary("MD5 (GnuPG before 2.1), valid");
+        // GnuPG before 2.1 wrote an MD5 here, after four zero bytes (and
+        // never checked it).
+        crate::value::Check::new(
+            "MD5 (GnuPG before 2.1)",
+            stored.get(4..).unwrap_or_default().to_vec(),
+        )
+        .verified(true)
     } else {
-        node = node
-            .summary("SHA-1, mismatch")
-            .diag(Diagnostic::malformed(format!(
-                "checksum mismatch: computed SHA-1 {}",
-                hex_upper(&sha1)
-            )));
-    }
-    cx.emit(node.desc("Hash of the blob before it"));
+        crate::value::Check::new("SHA-1", stored.to_vec()).verify(sha1)
+    };
+    cx.emit(node.checksum(check).desc("Hash of the blob before it"));
     Ok(())
 }
 

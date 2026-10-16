@@ -4,7 +4,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ luks2.img — LUKS2 encrypted volume "fixture", aes-xts-plain64, 1 keyslot, UUID 0f1e2d3c-4b5a-4968-8776-655443322110  [0x0+0x9200]
   ▾ Binary header — sequence 3, 16 KiB with the JSON area  [0x0+0x1000]
-      ! warning: sha256 checksum mismatch [0x1c0+0x40]
+      ! warning: SHA-256 mismatch: stored 0000000000000000000000000000000000000000000000000000000000000000, computed 132419fe23ae996dc30f2afc24bfb831e75a32a563e3780f0eb1ebc0f81e02cc
       Magic: 4c 55 4b 53 ba be  |LUKS..|  [0x0+0x6]
       Version: 2  [0x6+0x2]
       Header size (binary + JSON): 16384 — 16 KiB  [0x8+0x8]
@@ -16,7 +16,8 @@ expression: "common::explore(&display_name(&path), &data)"
       Subsystem: ""  [0xd0+0x30]
       Header offset: 0 — 0x0 from the start of the device  [0x100+0x8]
       Padding: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x108+0xb8]
-      Checksum: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x1c0+0x40]
+      Checksum: 0000000000000000000000000000000000000000000000000000000000000000 (SHA-256, mismatch: computed 132419fe23ae996dc30f2afc24bfb831e75a32a563e3780f0eb1ebc0f81e02cc)  [0x1c0+0x40]
+        ! warning: SHA-256 mismatch: stored 0000000000000000000000000000000000000000000000000000000000000000, computed 132419fe23ae996dc30f2afc24bfb831e75a32a563e3780f0eb1ebc0f81e02cc
       Padding: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x200+0xe00]
   ▾ JSON metadata — JSON object, 5 members  [0x1000+0x289]
     ▾ keyslots — object, 1 member  [0x100c+0x114]
@@ -64,7 +65,7 @@ expression: "common::explore(&display_name(&path), &data)"
         keyslots_size: "16744448"  [0x127d+0xa]
     JSON area padding — 11.4 KiB  [0x1289+0x2d77]
   ▾ Secondary binary header — sequence 3, 16 KiB with the JSON area  [0x4000+0x1000]
-      ! warning: sha256 checksum mismatch [0x41c0+0x40]
+      ! warning: SHA-256 mismatch: stored 0000000000000000000000000000000000000000000000000000000000000000, computed a22a674acb234955c89cccc9a864bd760b6b50c4a913e05dc3a9f67a210a80a9
       Magic: 53 4b 55 4c ba be  |SKUL..|  [0x4000+0x6]
       Version: 2  [0x4006+0x2]
       Header size (binary + JSON): 16384 — 16 KiB  [0x4008+0x8]
@@ -76,7 +77,8 @@ expression: "common::explore(&display_name(&path), &data)"
       Subsystem: ""  [0x40d0+0x30]
       Header offset: 16384 — 0x4000 from the start of the device  [0x4100+0x8]
       Padding: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x4108+0xb8]
-      Checksum: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x41c0+0x40]
+      Checksum: 0000000000000000000000000000000000000000000000000000000000000000 (SHA-256, mismatch: computed a22a674acb234955c89cccc9a864bd760b6b50c4a913e05dc3a9f67a210a80a9)  [0x41c0+0x40]
+        ! warning: SHA-256 mismatch: stored 0000000000000000000000000000000000000000000000000000000000000000, computed a22a674acb234955c89cccc9a864bd760b6b50c4a913e05dc3a9f67a210a80a9
       Padding: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x4200+0xe00]
   ▾ Secondary JSON metadata — JSON object, 5 members  [0x5000+0x289]
     ▾ keyslots — object, 1 member  [0x500c+0x114]

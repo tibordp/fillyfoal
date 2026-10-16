@@ -592,7 +592,7 @@ async fn lookup_table(
                 .value(uint(e.refs, 64)),
             Node::new("SHA-1")
                 .span(entry.sub(30, 20))
-                .value(Value::Bytes(e.hash.to_vec())),
+                .checksum(crate::value::Check::new("SHA-1", e.hash.to_vec())),
             content,
         ];
         let hex_hash: String = e.hash.iter().take(6).map(|b| format!("{b:02x}")).collect();
@@ -1093,7 +1093,9 @@ fn dentry_layout(f: &mut Fields<'_>, (): &()) -> Result<()> {
     f.u64("Creation time").filetime().emit()?;
     f.u64("Last access time").filetime().emit()?;
     f.u64("Last write time").filetime().emit()?;
-    f.bytes("SHA-1 of the unnamed stream", 20).emit()?;
+    f.bytes("SHA-1 of the unnamed stream", 20)
+        .checksum("SHA-1")
+        .emit()?;
     f.u32("Unknown").hex().emit()?;
     if attributes & 0x400 != 0 {
         f.u32("Reparse tag").hex().emit()?;
@@ -1119,7 +1121,7 @@ fn dentry_layout(f: &mut Fields<'_>, (): &()) -> Result<()> {
 fn stream_entry_layout(f: &mut Fields<'_>, (): &()) -> Result<()> {
     f.u64("Length").emit()?;
     f.u64("Reserved").emit()?;
-    f.bytes("SHA-1", 20).emit()?;
+    f.bytes("SHA-1", 20).checksum("SHA-1").emit()?;
     let n = f.u16("Name size").emit()?;
     if n > 0 {
         f.utf16("Name", u64::from(n / 2)).emit()?;

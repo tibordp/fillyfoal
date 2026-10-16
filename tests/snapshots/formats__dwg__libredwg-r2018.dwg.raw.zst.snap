@@ -41,7 +41,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Section map ID: 15  [#1:0x5c+0x4]
       Section page array size: 16  [#1:0x60+0x4]
       Gap array size: 0  [#1:0x64+0x4]
-      CRC-32: 0x1e3d208b  [#1:0x68+0x4]
+      CRC-32: 0x1e3d208b (CRC-32, not checked)  [#1:0x68+0x4]
     Encrypted header padding  [0xec+0x14]
   ▾ Section page map — page 16, 14 entries  [0x49d6e+0x14]
       Page type: section page map (0x41630e3b)  [0x49d6e+0x4]

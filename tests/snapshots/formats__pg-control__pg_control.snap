@@ -53,5 +53,5 @@ expression: "common::explore(&display_name(&path), &data)"
     float8 passed by value: true  [0xf8+0x1]
     Data checksum version: 1  [0xfc+0x4]
     Mock authentication nonce: 88 f3 42 8e ee 99 d2 f5 95 53 d2 5f b4 8a dd 6a …  |..B......S._...j|  [0x100+0x20]
-    CRC: 0x7591db60 — CRC-32C, valid  [0x120+0x4]
+    CRC: 0x7591db60 (CRC-32C, valid)  [0x120+0x4]
     Padding — zero to 8 KiB  [0x124+0x1edc]

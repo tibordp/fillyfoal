@@ -23,7 +23,7 @@ expression: "common::explore(&display_name(&path), &data)"
       GUID signature: ""  [0xa4+0x4]
       Last reorganized — not set  [0xa8+0x8]
       Reserved  [0xb0+0x14c]
-      Checksum: 0x3d657c85 — valid  [0x1fc+0x4]
+      Checksum: 0x3d657c85 (32-bit XOR, valid)  [0x1fc+0x4]
   ▾ Log entry 0 — sequence 7, 1 dirty pages, 4608 bytes  [0x200+0x1200]
     ▾ Header  [0x200+0x28]
         Signature: "HvLE"  [0x200+0x4]

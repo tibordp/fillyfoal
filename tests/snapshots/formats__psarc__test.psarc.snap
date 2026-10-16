@@ -14,7 +14,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Archive flags: 0x0  [0x1c+0x4]
   ▾ Table of contents — 1 entry  [0x20+0x1e]
     ▾ Entry 0 (manifest)  [0x20+0x1e]
-        Name digest (MD5): 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x20+0x10]
+        Name digest (MD5): 00000000000000000000000000000000 (MD5, not checked)  [0x20+0x10]
         First block: 0  [0x30+0x4]
         Uncompressed size: 0 — 0 bytes  [0x34+0x5]
         Offset: 0x0  [0x39+0x5]

@@ -22,7 +22,7 @@ use crate::formats::{Codec, Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 /// B-tree depth followed and volumes listed at most.
@@ -105,7 +105,7 @@ const INCOMPAT: FlagTable = &[
 record! {
     /// `nx_superblock_t` up to the volume list.
     pub struct ContainerSuperblock {
-        checksum: u64 "Checksum" .hex(),
+        checksum: u64 "Checksum" .checksum("Fletcher-64"),
         oid: u64 "Object id",
         xid: u64 "Transaction id",
         kind: u32 "Object type" .hex() .with(object_type),
@@ -177,7 +177,7 @@ fn ns_time(v: &u64, n: Node) -> Node {
 record! {
     /// `apfs_superblock_t` up to the volume name and role.
     pub struct VolumeSuperblock {
-        checksum: u64 "Checksum" .hex(),
+        checksum: u64 "Checksum" .checksum("Fletcher-64"),
         oid: u64 "Object id",
         xid: u64 "Transaction id",
         kind: u32 "Object type" .hex() .with(object_type),
@@ -235,14 +235,15 @@ impl Container {
     }
 
     /// Reads block `n` and checks its object checksum.
-    async fn object(&self, cx: &Cx, n: u64) -> Result<(Vec<u8>, bool)> {
+    async fn object(&self, cx: &Cx, n: u64) -> Result<(Vec<u8>, Check)> {
         let span = self
             .vol
             .sub_exact(n.saturating_mul(self.block), self.block)
             .map_err(|_| Diagnostic::malformed(format!("block {n} is outside the container")))?;
         let data = cx.read(span).await?;
-        let ok = u64_le(&data, 0) == Some(fletcher64(&data));
-        Ok((data, ok))
+        let check =
+            Check::new("Fletcher-64", u64_le(&data, 0).unwrap_or(0)).verify(fletcher64(&data));
+        Ok((data, check))
     }
 }
 
@@ -255,12 +256,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         return Err(Diagnostic::malformed(format!("block size {block}")).at(span));
     }
     let c = Arc::new(Container { input, vol, block });
-    let (_, ok) = c.object(&cx, 0).await?;
-    let mut node = ContainerSuperblock::node("Container superblock (block 0)", c.block_span(0), LE)
-        .summary(format!("transaction {}", sb0.xid));
-    if !ok {
-        node = node.diag(Diagnostic::warning("object checksum mismatch"));
-    }
+    let (_, check) = c.object(&cx, 0).await?;
+    let node = ContainerSuperblock::checked_node(
+        "Container superblock (block 0)",
+        c.block_span(0),
+        LE,
+        check.at(0),
+    )
+    .summary(format!("transaction {}", sb0.xid))
+    .check_diag(&check);
     cx.emit(node);
 
     // The newest valid superblock in the checkpoint descriptor area.
@@ -269,10 +273,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if sb0.desc_blocks & 0x8000_0000 == 0 {
         for i in 0..desc.1.min(65536) {
             let n = desc.0.saturating_add(i);
-            let Ok((data, ok)) = c.object(&cx, n).await else {
+            let Ok((data, check)) = c.object(&cx, n).await else {
                 break;
             };
-            if ok
+            if check.is_valid()
                 && u32_le(&data, 24).is_some_and(|t| t & 0xffff == 1)
                 && data.get(32..36) == Some(b"NXSB")
             {
@@ -398,7 +402,7 @@ async fn checkpoint_area(cx: Cx, (c, base, count): (Arc<Container>, u64, u64)) -
     for i in 0..count {
         cx.progress(i, count);
         let n = base.saturating_add(i);
-        let (data, ok) = c.object(&cx, n).await?;
+        let (data, check) = c.object(&cx, n).await?;
         let kind = u32_le(&data, 24).unwrap_or(0);
         let xid = u64_le(&data, 16).unwrap_or(0);
         let name = lookup(OBJECT_TYPES, (kind & 0xffff).into()).unwrap_or("unknown object");
@@ -412,8 +416,8 @@ async fn checkpoint_area(cx: Cx, (c, base, count): (Arc<Container>, u64, u64)) -
         } else {
             node.summary(name)
         };
-        if !ok && data.iter().any(|&b| b != 0) {
-            node = node.diag(Diagnostic::warning("object checksum mismatch"));
+        if data.iter().any(|&b| b != 0) {
+            node = node.check_diag(&check);
         }
         cx.push(node).await;
     }
@@ -421,8 +425,12 @@ async fn checkpoint_area(cx: Cx, (c, base, count): (Arc<Container>, u64, u64)) -
 }
 
 async fn superblock_node(cx: Cx, span: Span) -> Result<()> {
+    let data = cx.read(span).await?;
+    let check = Check::new("Fletcher-64", u64_le(&data, 0).unwrap_or(0)).verify(fletcher64(&data));
     let block = cx.block(span.sub(0, ContainerSuperblock::SIZE)).await?;
-    ContainerSuperblock::read(&mut crate::fields::Fields::emitting(&cx, &block, LE))?;
+    let mut f = crate::fields::Fields::emitting(&cx, &block, LE);
+    f.verifying(check.at(0));
+    ContainerSuperblock::read(&mut f)?;
     Ok(())
 }
 
@@ -523,9 +531,9 @@ async fn object_map(cx: Cx, (c, omap): (Arc<Container>, u64)) -> Result<()> {
 }
 
 async fn omap_node(cx: Cx, (c, n, depth): (Arc<Container>, u64, u32)) -> Result<()> {
-    let (node, ok) = c.object(&cx, n).await?;
-    if !ok {
-        cx.diag(Diagnostic::warning("object checksum mismatch"));
+    let (node, check) = c.object(&cx, n).await?;
+    if let Some(message) = check.mismatch_text() {
+        cx.diag(Diagnostic::warning(message));
     }
     let span = c.block_span(n);
     let level = u32::from(u16_le(&node, 34).unwrap_or(0));
@@ -570,7 +578,7 @@ async fn volume(cx: Cx, (c, paddr): (Arc<Container>, u64)) -> Result<()> {
         VolumeSuperblock::layout,
     )
     .await?;
-    let (_, ok) = c.object(&cx, paddr).await?;
+    let (_, check) = c.object(&cx, paddr).await?;
     cx.annotate(format!(
         "\"{}\" ({}), {}, {}",
         v.name,
@@ -578,10 +586,8 @@ async fn volume(cx: Cx, (c, paddr): (Arc<Container>, u64)) -> Result<()> {
         plural(v.files, "file"),
         plural(v.directories, "directory")
     ));
-    let mut node = VolumeSuperblock::node("Volume superblock", span, LE);
-    if !ok {
-        node = node.diag(Diagnostic::warning("object checksum mismatch"));
-    }
+    let mut node = VolumeSuperblock::checked_node("Volume superblock", span, LE, check.at(0))
+        .check_diag(&check);
     if v.magic != "APSB" {
         node = node.diag(Diagnostic::malformed("bad volume superblock magic"));
     }
@@ -656,9 +662,9 @@ async fn fs_node(cx: Cx, (fs, oid, depth): (Arc<FsTree>, u64, u32)) -> Result<()
         .ok_or_else(|| {
             Diagnostic::malformed(format!("object {oid} is not in the volume's object map"))
         })?;
-    let (node, ok) = c.object(&cx, paddr).await?;
-    if !ok {
-        cx.diag(Diagnostic::warning("object checksum mismatch"));
+    let (node, check) = c.object(&cx, paddr).await?;
+    if let Some(message) = check.mismatch_text() {
+        cx.diag(Diagnostic::warning(message));
     }
     let span = c.block_span(paddr);
     let level = u32::from(u16_le(&node, 34).unwrap_or(0));

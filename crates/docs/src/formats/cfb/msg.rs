@@ -360,7 +360,7 @@ fn rtf_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u32("compSize").desc("Bytes after this field").emit()?;
     f.u32("rawSize").emit()?;
     f.u32("compType").hex().enumeration(RTF_TYPES).emit()?;
-    f.u32("crc").hex().emit()?;
+    f.u32("crc").checksum("CRC-32").emit()?;
     Ok(())
 }
 

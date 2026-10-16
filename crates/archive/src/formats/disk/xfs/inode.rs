@@ -623,7 +623,7 @@ pub(super) async fn view(cx: Cx, (fs, ino): (FsRef, u64)) -> Result<()> {
     )
     .summary(format!("inode {ino}, version {}", di.version));
     if let Some(d) = (di.version >= 3)
-        .then(|| super::crc_diag(&di.raw, 100, "inode"))
+        .then(|| super::crc_diag(&di.raw, 100))
         .flatten()
     {
         core = core.diag(d);

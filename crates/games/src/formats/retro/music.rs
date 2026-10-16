@@ -339,7 +339,7 @@ record! {
         system: u8 "Platform" .enumeration(PSF_SYSTEMS),
         reserved: u32 "Reserved area size",
         program: u32 "Compressed program size",
-        crc: u32 "Program CRC-32" .hex(),
+        crc: u32 "Program CRC-32" .checksum("CRC-32"),
     }
 }
 

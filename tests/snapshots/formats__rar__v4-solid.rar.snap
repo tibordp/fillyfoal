@@ -6,7 +6,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Signature: "Rar!" — RAR 1.5–4.x  [0x0+0x7]
   ▾ Archive header  [0x7+0xd]
     ▾ Header  [0x7+0xd]
-        Header CRC: 0xd03b — valid  [0x7+0x2]
+        Header CRC: 0xd03b (CRC-32 (low 16 bits), valid)  [0x7+0x2]
         Header type: archive header (0x73)  [0x9+0x1]
         Flags: 0x8 [SOLID]  [0xa+0x2]
         Header size: 13  [0xc+0x2]
@@ -14,14 +14,14 @@ expression: "common::explore(&display_name(&path), &data)"
         Reserved 2: 0  [0x10+0x4]
   ▾ part0.txt — 2.0 KiB  [0x14+0x409]
     ▾ Header  [0x14+0x29]
-        Header CRC: 0xff0 — valid  [0x14+0x2]
+        Header CRC: 0xff0 (CRC-32 (low 16 bits), valid)  [0x14+0x2]
         Header type: file header (0x74)  [0x16+0x1]
         Flags: 0x8040 [DICT_256K | LONG_BLOCK]  [0x17+0x2]
         Header size: 41  [0x19+0x2]
         Packed size: 992 — 992 bytes  [0x1b+0x4]
         Unpacked size: 2000 — 2.0 KiB  [0x1f+0x4]
         Host OS: Unix (0x3)  [0x23+0x1]
-        File CRC: 0x26cc7fdb  [0x24+0x4]
+        File CRC: 0x26cc7fdb (CRC-32, skipped: checked when decoded)  [0x24+0x4]
         Modification time (DOS): 2025-03-11 09:33:02 (local time)  [0x28+0x4]
         Version needed: 29 — 2.9  [0x2c+0x1]
         Method: normal (0x33)  [0x2d+0x1]
@@ -29,7 +29,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Attributes: 0x81a4  [0x30+0x4]
         Name: "part0.txt"  [0x34+0x9]
     ▾ Content — UTF-8 text, LF line endings, 40 lines  [0x3d+0x3e0]
-        CRC32: 0x26cc7fdb — valid
+        CRC32: 0x26cc7fdb (CRC-32, valid)
         Encoding: "UTF-8"
         Line endings: "LF" — 39 LF, 0 CRLF, 0 CR
       ▾ Lines — 40 lines  [#1:0x0+0x7d0]
@@ -75,14 +75,14 @@ expression: "common::explore(&display_name(&path), &data)"
           Line 40: "been there of time you some wit"  [#1:0x7b1+0x1f]
   ▾ part1.txt — 1.5 KiB  [0x41d+0x26c]
     ▾ Header  [0x41d+0x29]
-        Header CRC: 0x87f8 — valid  [0x41d+0x2]
+        Header CRC: 0x87f8 (CRC-32 (low 16 bits), valid)  [0x41d+0x2]
         Header type: file header (0x74)  [0x41f+0x1]
         Flags: 0x8050 [SOLID | DICT_256K | LONG_BLOCK]  [0x420+0x2]
         Header size: 41  [0x422+0x2]
         Packed size: 579 — 579 bytes  [0x424+0x4]
         Unpacked size: 1500 — 1.5 KiB  [0x428+0x4]
         Host OS: Unix (0x3)  [0x42c+0x1]
-        File CRC: 0x281010bb  [0x42d+0x4]
+        File CRC: 0x281010bb (CRC-32, skipped: checked when decoded)  [0x42d+0x4]
         Modification time (DOS): 2025-03-11 09:33:02 (local time)  [0x431+0x4]
         Version needed: 29 — 2.9  [0x435+0x1]
         Method: normal (0x33)  [0x436+0x1]
@@ -91,7 +91,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Name: "part1.txt"  [0x43d+0x9]
     ▾ Content — UTF-8 text, LF line endings, 30 lines  [0x446+0x243]
         Solid run — file 2 of 4 files, at 0x7d0  [#3:0x0+0x1af4]
-        CRC32: 0x281010bb — valid
+        CRC32: 0x281010bb (CRC-32, valid)
         Encoding: "UTF-8"
         Line endings: "LF" — 29 LF, 0 CRLF, 0 CR
       ▾ Lines — 30 lines  [#3:0x7d0+0x5dc]
@@ -127,14 +127,14 @@ expression: "common::explore(&display_name(&path), &data)"
           Line 30: "she as are more would if as and"  [#3:0xd8d+0x1f]
   ▾ part2.txt — 2.4 KiB  [0x689+0x3cb]
     ▾ Header  [0x689+0x29]
-        Header CRC: 0xebf4 — valid  [0x689+0x2]
+        Header CRC: 0xebf4 (CRC-32 (low 16 bits), valid)  [0x689+0x2]
         Header type: file header (0x74)  [0x68b+0x1]
         Flags: 0x8050 [SOLID | DICT_256K | LONG_BLOCK]  [0x68c+0x2]
         Header size: 41  [0x68e+0x2]
         Packed size: 930 — 930 bytes  [0x690+0x4]
         Unpacked size: 2500 — 2.4 KiB  [0x694+0x4]
         Host OS: Unix (0x3)  [0x698+0x1]
-        File CRC: 0x36475e8b  [0x699+0x4]
+        File CRC: 0x36475e8b (CRC-32, skipped: checked when decoded)  [0x699+0x4]
         Modification time (DOS): 2025-03-11 09:33:02 (local time)  [0x69d+0x4]
         Version needed: 29 — 2.9  [0x6a1+0x1]
         Method: normal (0x33)  [0x6a2+0x1]
@@ -143,7 +143,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Name: "part2.txt"  [0x6a9+0x9]
     ▾ Content — UTF-8 text, LF line endings, 50 lines  [0x6b2+0x3a2]
         Solid run — file 3 of 4 files, at 0xdac  [#3:0x0+0x1af4]
-        CRC32: 0x36475e8b — valid
+        CRC32: 0x36475e8b (CRC-32, valid)
         Encoding: "UTF-8"
         Line endings: "LF" — 49 LF, 0 CRLF, 0 CR
       ▾ Lines — 50 lines  [#3:0xdac+0x9c4]
@@ -199,14 +199,14 @@ expression: "common::explore(&display_name(&path), &data)"
           Line 50: "new her of when an not them when some have"  [#3:0x1746+0x2a]
   ▾ part3.txt — 900 bytes  [0xa54+0x14c]
     ▾ Header  [0xa54+0x29]
-        Header CRC: 0x74e4 — valid  [0xa54+0x2]
+        Header CRC: 0x74e4 (CRC-32 (low 16 bits), valid)  [0xa54+0x2]
         Header type: file header (0x74)  [0xa56+0x1]
         Flags: 0x8050 [SOLID | DICT_256K | LONG_BLOCK]  [0xa57+0x2]
         Header size: 41  [0xa59+0x2]
         Packed size: 291 — 291 bytes  [0xa5b+0x4]
         Unpacked size: 900 — 900 bytes  [0xa5f+0x4]
         Host OS: Unix (0x3)  [0xa63+0x1]
-        File CRC: 0xe3f5a86b  [0xa64+0x4]
+        File CRC: 0xe3f5a86b (CRC-32, skipped: checked when decoded)  [0xa64+0x4]
         Modification time (DOS): 2025-03-11 09:33:02 (local time)  [0xa68+0x4]
         Version needed: 29 — 2.9  [0xa6c+0x1]
         Method: normal (0x33)  [0xa6d+0x1]
@@ -215,7 +215,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Name: "part3.txt"  [0xa74+0x9]
     ▾ Content — UTF-8 text, LF line endings, 18 lines  [0xa7d+0x123]
         Solid run — file 4 of 4 files, at 0x1770  [#3:0x0+0x1af4]
-        CRC32: 0xe3f5a86b — valid
+        CRC32: 0xe3f5a86b (CRC-32, valid)
         Encoding: "UTF-8"
         Line endings: "LF" — 17 LF, 0 CRLF, 0 CR
       ▾ Lines — 18 lines  [#3:0x1770+0x384]
@@ -239,7 +239,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Line 18: "and has more if these b"  [#3:0x1add+0x17]
   ▾ End of archive  [0xba0+0x7]
     ▾ Header  [0xba0+0x7]
-        Header CRC: 0x3dc4 — valid  [0xba0+0x2]
+        Header CRC: 0x3dc4 (CRC-32 (low 16 bits), valid)  [0xba0+0x2]
         Header type: end of archive (0x7b)  [0xba2+0x1]
         Flags: 0x4000  [0xba3+0x2]
         Header size: 7  [0xba5+0x2]

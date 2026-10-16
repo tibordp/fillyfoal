@@ -17,7 +17,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Author: "tasser"  [0x31+0x20]
       Video backend: "OGL"  [0x51+0x10]
       Audio emulator: "HLE"  [0x61+0x10]
-      Game MD5: 00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f  |................|  [0x71+0x10]
+      Game MD5: 000102030405060708090a0b0c0d0e0f (MD5, not checked)  [0x71+0x10]
       Recording start time: 2020-09-13 12:26:40 UTC  [0x81+0x8]
       Config saved: 1  [0x89+0x1]
       Idle skipping: 1  [0x8a+0x1]

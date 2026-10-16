@@ -38,10 +38,11 @@ fn authenticode_digest_is_recomputed() {
     let t = tree("pe/fixture_hello_x64_signed.exe");
     assert_has(
         &t,
-        "Computed digest: \"5E075BEF544C60D87F4EE42A850708C55D9F56865050FF2E71DE42C431102EC2\" — matches",
+        "Image digest: 5e075bef544c60d87f4ee42a850708c55d9f56865050ff2e71de42c431102ec2 (SHA-256, valid)",
     );
     assert_has(&t, "Signer's messageDigest");
-    assert_has(&t, "— matches SpcIndirectDataContent");
+    assert_has(&t, "Signer's messageDigest: ");
+    assert!(!t.contains("mismatch"), "{t}");
 }
 
 #[test]
@@ -50,8 +51,8 @@ fn authenticode_detects_a_changed_image() {
     // A byte of .text, covered by the signed digest.
     data[0x500] ^= 1;
     let t = common::explore_full_as(&name, &data, None);
-    assert_has(&t, "— differs");
-    assert_has(&t, "Authenticode digest mismatch");
+    assert_has(&t, "— the image was changed after signing");
+    assert_has(&t, "SHA-256 mismatch");
 }
 
 #[test]
@@ -162,7 +163,7 @@ fn inno_setup_layouts_from_6_3_to_7_1() {
         );
         assert_has(&t, "PrivilegesRequired: lowest (0x3)");
         assert_has(&t, "DestName: \"{app}\\\\readme.txt\"");
-        let checks = t.matches(&format!("{hash} check — valid")).count();
+        let checks = t.matches(&format!("({hash}, valid)")).count();
         assert!(checks >= 2, "{file}: {checks} {hash} checks\n{t}");
         for bad in [
             "CRC mismatch",

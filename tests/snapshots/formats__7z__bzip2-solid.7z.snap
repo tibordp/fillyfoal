@@ -7,10 +7,10 @@ expression: "common::explore(&display_name(&path), &data)"
       Signature: 37 7a bc af 27 1c  |7z..'.|  [0x0+0x6]
       Major version: 0  [0x6+0x1]
       Minor version: 4  [0x7+0x1]
-      Start header CRC: 0x7d5579c6  [0x8+0x4]
+      Start header CRC: 0x7d5579c6 (CRC-32, valid)  [0x8+0x4]
       Next header offset: 0x13d  [0xc+0x8]
       Next header size: 34 — 34 bytes  [0x14+0x8]
-      Next header CRC: 0x53476021  [0x1c+0x4]
+      Next header CRC: 0x53476021 (CRC-32, valid)  [0x1c+0x4]
   ▾ Encoded header — LZMA, 106 bytes → 146 bytes  [0xf3+0x6a]
     ▾ kEncodedHeader  [0x15d+0x22]
       ▾ kPackInfo — 1 packed stream, at 0xd3  [0x15e+0x7]
@@ -26,7 +26,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 530 — 530 bytes
         Folder: 0
       ▾ Content — UTF-8 text, LF line endings, 60 lines  [0x20+0xd3]
-          CRC32: 0x7bdf5fb7 — valid
+          CRC32: 0x7bdf5fb7 (CRC-32, valid)
           Encoding: "UTF-8"
           Line endings: "LF" — 60 LF, 0 CRLF, 0 CR
         ▾ Lines — 60 lines  [#2:0x0+0x212]
@@ -96,7 +96,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 530 — 530 bytes
         Folder: 0
       ▾ Content — UTF-8 text, LF line endings, 60 lines  [0x20+0xd3]
-          CRC32: 0x278fd362 — valid
+          CRC32: 0x278fd362 (CRC-32, valid)
           Encoding: "UTF-8"
           Line endings: "LF" — 60 LF, 0 CRLF, 0 CR
         ▾ Lines — 60 lines  [#2:0x212+0x212]
@@ -166,7 +166,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 24 — 24 bytes
         Folder: 0
       ▾ Content — UTF-8 text, LF line endings, 3 lines  [0x20+0xd3]
-          CRC32: 0x5f18fcb1 — valid
+          CRC32: 0x5f18fcb1 (CRC-32, valid)
           Encoding: "UTF-8"
           Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
         ▾ Lines — 3 lines  [#2:0x424+0x18]

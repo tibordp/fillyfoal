@@ -15,7 +15,7 @@ use crate::formats::{Format, Input, Probe, decodes_lazily, embedded, embedded_na
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Guid, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Guid, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 /// Files or sections listed per container before assuming corruption.
@@ -75,7 +75,7 @@ record! {
         signature: ascii[4] "Signature",
         attributes: u32 "Attributes" .hex() .flags(FV_ATTRIBUTES),
         header_length: u16 "Header length",
-        checksum: u16 "Checksum" .hex(),
+        checksum: u16 "Checksum" .checksum(UEFI_SUM),
         ext_header: u16 "Extended header offset" .hex(),
         _reserved: u8 "Reserved",
         revision: u8 "Revision",
@@ -112,8 +112,8 @@ record! {
     /// `EFI_FFS_FILE_HEADER`.
     pub struct FileHeader {
         name: guid "Name",
-        header_checksum: u8 "Header checksum" .hex(),
-        file_checksum: u8 "File checksum" .hex(),
+        header_checksum: u8 "Header checksum" .checksum("8-bit sum"),
+        file_checksum: u8 "File checksum" .checksum("8-bit sum"),
         kind: u8 "Type" .enumeration(FILE_TYPES),
         attributes: u8 "Attributes" .hex() .flags(FILE_ATTRIBUTES),
         size: bytes[3] "Size" .with(|b, n| n.summary(size(u24_le(b, 0).unwrap_or(0).into()))),
@@ -139,6 +139,9 @@ const SECTION_TYPES: EnumTable = &[
     (0x1c, "MM dependency"),
 ];
 
+/// The volume header checksum: its 16-bit words sum to zero.
+const UEFI_SUM: &str = "16-bit sum";
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let fv = input.span;
     let span = fv.sub(0, VolumeHeader::SIZE);
@@ -150,11 +153,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .0
         .iter()
         .fold(0u16, |s, w| s.wrapping_add(u16::from_le_bytes(*w)));
-    let mut node = VolumeHeader::node("Volume header", fv.sub(0, header_len), LE);
-    if sum != 0 {
-        node = node.diag(Diagnostic::warning("header checksum mismatch"));
-    }
-    cx.emit(node);
+    // The value that makes the sum zero.
+    let check = Check::new(UEFI_SUM, h.checksum).verify(h.checksum.wrapping_sub(sum));
+    cx.emit(
+        VolumeHeader::checked_node("Volume header", fv.sub(0, header_len), LE, check.at(50))
+            .check_diag(&check),
+    );
     let kind = fs_name(&h.file_system).unwrap_or("unknown file system");
     let volume = fv.sub(0, h.length);
     cx.annotate(format!(

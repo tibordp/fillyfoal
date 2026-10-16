@@ -277,4 +277,4 @@ expression: "common::explore(&display_name(&path), &data)"
     CRC-32 table  [0x4d0+0x28]
     Offset table  [0x4f8+0x28]
     Pack checksum: "62390b5b9f3716b90e4df221c13dbc0f5ab24f7c"  [0x520+0x14]
-    Index checksum: "8ada2f0f52e7ec8eddad945d04f171a903cc3a50" — valid SHA-1  [0x534+0x14]
+    Index checksum: 8ada2f0f52e7ec8eddad945d04f171a903cc3a50 (SHA-1, valid)  [0x534+0x14]

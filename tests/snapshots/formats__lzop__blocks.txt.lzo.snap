@@ -14,7 +14,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Modification time (high): 0  [0x1d+0x4]
     Name length: 10  [0x21+0x1]
     Original name: "blocks.txt"  [0x22+0xa]
-    Header checksum: 0x77fb084a — Adler-32  [0x2c+0x4]
+    Header checksum: 0x77fb084a (Adler-32, valid)  [0x2c+0x4]
     Block 1 — 37 bytes, 256 uncompressed  [0x30+0x35]
     Block 2 — 93 bytes, 256 uncompressed  [0x65+0x6d]
     Block 3 — 256 bytes, stored  [0xd2+0x10c]

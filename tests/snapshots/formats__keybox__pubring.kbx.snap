@@ -34,5 +34,5 @@ expression: "common::explore(&display_name(&path), &data)"
       All validity: 0x0  [0x3f+0x1]
       Reserved: 0  [0x40+0x2]
       Recheck after: 1970-01-01 00:00:00 UTC  [0x42+0x4]
-      Checksum: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................| — SHA-1, mismatch  [0x34+0x14]
-        ! malformed: checksum mismatch: computed SHA-1 825137CD1377740A37AD891610EEF22E574680C7
+      Checksum: 0000000000000000000000000000000000000000 (SHA-1, mismatch: computed 825137cd1377740a37ad891610eef22e574680c7)  [0x34+0x14]
+        ! warning: SHA-1 mismatch: stored 0000000000000000000000000000000000000000, computed 825137cd1377740a37ad891610eef22e574680c7

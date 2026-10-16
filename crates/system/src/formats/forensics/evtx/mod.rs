@@ -27,7 +27,7 @@ use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag, lookup};
 
 use binxml::{Facts, Parser, parse_record};
 
@@ -78,7 +78,7 @@ record! {
         chunks: u16 "Number of chunks",
         _unknown: bytes[76] "Reserved",
         flags: u32 "File flags" .flags(FILE_FLAGS),
-        checksum: u32 "Checksum" .hex() .desc("CRC-32 of the first 120 bytes"),
+        checksum: u32 "Checksum" .checksum("CRC-32") .desc("CRC-32 of the first 120 bytes"),
     }
 }
 
@@ -92,10 +92,10 @@ record! {
         header_size: u32 "Header size",
         last_offset: u32 "Last event record offset" .hex(),
         free_offset: u32 "Free space offset" .hex(),
-        records_crc: u32 "Event records checksum" .hex() .desc("CRC-32 of the records (0x200 up to the free space offset)"),
+        records_crc: u32 "Event records checksum" .checksum("CRC-32") .desc("CRC-32 of the records (0x200 up to the free space offset)"),
         _unknown: bytes[64] "Reserved",
         flags: u32 "Flags" .flags(CHUNK_FLAGS),
-        header_crc: u32 "Header checksum" .hex() .desc("CRC-32 of bytes 0–0x78 and 0x80–0x200"),
+        header_crc: u32 "Header checksum" .checksum("CRC-32") .desc("CRC-32 of bytes 0–0x78 and 0x80–0x200"),
     }
 }
 
@@ -112,22 +112,18 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let header_span = file.sub(0, FileHeader::SIZE);
     let header = parse(&cx, header_span, LE, &(), FileHeader::layout).await?;
-    let mut node = FileHeader::node("File header", header_span, LE);
     let bytes = cx.read(file.sub(0, 120)).await?;
-    let computed = crc32(&bytes);
-    node = if computed == header.checksum {
-        node.summary(format!(
-            "version {}.{}, {}, checksum valid",
-            header.major,
-            header.minor,
-            plural(header.chunks, "chunk")
-        ))
-    } else {
-        node.diag(Diagnostic::warning(format!(
-            "header checksum mismatch: computed {computed:#010x}"
-        )))
-    };
-    cx.emit(node);
+    let check = Check::new("CRC-32", header.checksum).verify(crc32(&bytes));
+    cx.emit(
+        FileHeader::checked_node("File header", header_span, LE, check.at(124))
+            .summary(format!(
+                "version {}.{}, {}",
+                header.major,
+                header.minor,
+                plural(header.chunks, "chunk")
+            ))
+            .check_diag(&check),
+    );
     let block = u64::from(header.block_size).clamp(FileHeader::SIZE, HEADER_BLOCK);
     if file.len > FileHeader::SIZE {
         cx.emit(
@@ -222,20 +218,29 @@ async fn chunk(cx: Cx, span: Span) -> Result<()> {
     let header_span = span.sub(0, ChunkHeader::SIZE);
     let header = parse(&cx, header_span, LE, &(), ChunkHeader::layout).await?;
     let data = chunk_data(&cx, span).await?;
-    let mut node = ChunkHeader::node("Chunk header", header_span, LE);
+    let mut header_check = Check::new("CRC-32", header.header_crc);
     if to_u64(data.len()) >= RECORDS_START {
         let mut covered = data.get(..120).unwrap_or_default().to_vec();
         covered.extend_from_slice(data.get(128..512).unwrap_or_default());
-        let computed = crc32(&covered);
-        node = if computed == header.header_crc {
-            node.summary("header checksum valid")
-        } else {
-            node.diag(Diagnostic::warning(format!(
-                "header checksum mismatch: computed {computed:#010x}"
-            )))
-        };
+        header_check = header_check.verify(crc32(&covered));
     }
-    cx.emit(node);
+    let end = u64::from(header.free_offset).clamp(RECORDS_START, CHUNK);
+    let records = span.sub(RECORDS_START, end.saturating_sub(RECORDS_START));
+    let body = data
+        .get(to_usize(RECORDS_START)..to_usize(end))
+        .unwrap_or_default();
+    let complete = to_u64(body.len()) >= records.len;
+    let mut records_check = Check::new("CRC-32", header.records_crc);
+    if complete {
+        records_check =
+            records_check.verify(crate::formats::util::datakit::crc32_paced(&cx, body).await);
+    }
+    let mut checks = records_check.at(52);
+    checks.extend(header_check.at(124));
+    cx.emit(
+        ChunkHeader::checked_node("Chunk header", header_span, LE, checks)
+            .check_diag(&header_check),
+    );
     cx.emit(
         Node::new("String table")
             .span(span.sub(STRING_TABLE, 64 * 4))
@@ -250,27 +255,15 @@ async fn chunk(cx: Cx, span: Span) -> Result<()> {
             .desc("Hash table of the template definitions stored in the chunk: 32 bucket heads, chained through each definition's next offset")
             .lazy(template_table, span),
     );
-    let end = u64::from(header.free_offset).clamp(RECORDS_START, CHUNK);
-    let records = span.sub(RECORDS_START, end.saturating_sub(RECORDS_START));
-    let body = data
-        .get(to_usize(RECORDS_START)..to_usize(end))
-        .unwrap_or_default();
-    let mut crc_node = Node::new("Event records checksum")
+    let crc_node = Node::new("Event records checksum")
         .span(records)
-        .value(hex(header.records_crc, 32));
-    crc_node = if to_u64(body.len()) < records.len {
-        crc_node.diag(Diagnostic::truncated(records, to_u64(body.len())))
+        .checksum(records_check)
+        .desc("The header's checksum of the records, checked against them");
+    cx.emit(if complete {
+        crc_node
     } else {
-        let computed = crate::formats::util::datakit::crc32_paced(&cx, body).await;
-        if computed == header.records_crc {
-            crc_node.summary("valid")
-        } else {
-            crc_node.diag(Diagnostic::warning(format!(
-                "mismatch: computed {computed:#010x}"
-            )))
-        }
-    };
-    cx.emit(crc_node);
+        crc_node.diag(Diagnostic::truncated(records, to_u64(body.len())))
+    });
 
     let mut parser = Parser::new(data.as_slice(), span);
     let mut pace = Pace::new(&cx, BINXML_STEPS_PER_UNIT);

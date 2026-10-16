@@ -381,7 +381,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Footer  [0xe3c+0x35]
       Checksum type: XXH3 (0x4)  [0xe3c+0x1]
       Extended magic: 3e 00 7a 00  |>.z.|  [0xe3d+0x4]
-      Footer checksum: 0xcd730f4f  [0xe41+0x4]
+      Footer checksum: 0xcd730f4f (XXH3, valid)  [0xe41+0x4]
       Base context checksum: 0x23738007  [0xe45+0x4]
       Meta-index size: 56  [0xe49+0x4]
       Padding  [0xe4d+0x18]

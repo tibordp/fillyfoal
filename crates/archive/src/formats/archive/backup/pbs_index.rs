@@ -26,13 +26,13 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::uuid_value;
-use crate::formats::util::fmt::{grouped_count, hex_lower, size};
+use crate::formats::util::fmt::{grouped_count, size};
 use crate::formats::util::val::hex;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::Value;
+use crate::value::{Check, Value};
 
 const LE: Endian = Endian::Little;
 
@@ -74,18 +74,13 @@ fn time_value(&v: &i64, node: Node) -> Node {
     node.value(Value::utc(v))
 }
 
-#[allow(clippy::ptr_arg)] // used as a `Field::with` decorator
-fn digest_value(b: &Vec<u8>, node: Node) -> Node {
-    node.value(Value::Text(hex_lower(b)))
-}
-
 record! {
     /// `DynamicIndexHeader`, without its reserved tail.
     pub struct DynamicHeader {
         _magic: bytes[8] "Magic",
         _uuid: bytes[16] "UUID" .with(uuid_value),
         _ctime: i64 "Creation time" .with(time_value),
-        csum: bytes[32] "Index checksum" .with(digest_value)
+        csum: bytes[32] "Index checksum" .checksum("SHA-256")
             .desc("SHA-256 of all the entries after the header"),
     }
 }
@@ -96,7 +91,7 @@ record! {
         _magic: bytes[8] "Magic",
         _uuid: bytes[16] "UUID" .with(uuid_value),
         _ctime: i64 "Creation time" .with(time_value),
-        csum: bytes[32] "Index checksum" .with(digest_value)
+        csum: bytes[32] "Index checksum" .checksum("SHA-256")
             .desc("SHA-256 of all the entries after the header"),
         image_size: u64 "Size" .with(|&v, n| n.summary(size(v))) .desc("Size of the image"),
         chunk_size: u64 "Chunk size" .with(|&v, n| n.summary(size(v))),
@@ -133,22 +128,19 @@ async fn csum_of(cx: &Cx, entries: Span) -> Result<Vec<u8>> {
     Ok(h.finish())
 }
 
-fn csum_node(span: Span, stored: &[u8], computed: &[u8]) -> Node {
-    let node = Node::new("Checksum")
-        .span(span)
-        .value(Value::Text(hex_lower(computed)))
-        .desc("SHA-256 of the entries, computed");
-    if stored == computed {
-        node.summary("valid")
+/// The index checksum (header offset 32), checked against the entries
+/// when they are small enough to hash right away.
+async fn index_check(cx: &Cx, index: &Index, stored: &[u8]) -> Result<Check> {
+    let check = Check::new("SHA-256", stored.to_vec());
+    Ok(if index.entries.len <= EAGER_CSUM {
+        check.verify(csum_of(cx, index.entries).await?)
     } else {
-        node.diag(Diagnostic::malformed(
-            "index checksum mismatch: the entries do not match the header",
-        ))
-    }
+        check.skipped("large: checked when the index checksum node is expanded")
+    })
 }
 
 /// Emits the header, the reserved area, the checksum and the chunk list.
-async fn common(cx: &Cx, file: Span, header: Node, csum: Vec<u8>, index: Index) -> Result<()> {
+async fn common(cx: &Cx, file: Span, header: Node, check: Check, index: Index) -> Result<()> {
     cx.emit(header);
     cx.emit(
         Node::new("Reserved")
@@ -159,15 +151,12 @@ async fn common(cx: &Cx, file: Span, header: Node, csum: Vec<u8>, index: Index) 
             .summary(size(HEADER.saturating_sub(index.fields_len()))),
     );
     let entries = index.entries;
-    if entries.len <= EAGER_CSUM {
-        let computed = csum_of(cx, entries).await?;
-        cx.emit(csum_node(entries, &csum, &computed));
-    } else {
+    if entries.len > EAGER_CSUM {
         cx.emit(
-            Node::new("Checksum")
+            Node::new("Index checksum")
                 .span(entries)
                 .desc("SHA-256 of the entries, computed when expanded")
-                .lazy(csum_expand, (entries, csum)),
+                .lazy(csum_expand, (entries, check.stored.to_bytes())),
         );
     }
     let mut chunks =
@@ -197,7 +186,12 @@ impl Index {
 
 async fn csum_expand(cx: Cx, (entries, stored): (Span, Vec<u8>)) -> Result<()> {
     let computed = csum_of(&cx, entries).await?;
-    cx.emit(csum_node(entries, &stored, &computed).renamed("Computed"));
+    cx.emit(
+        Node::new("Checked")
+            .span(entries)
+            .checksum(Check::new("SHA-256", stored).verify(computed))
+            .desc("The header's index checksum, checked against the entries"),
+    );
     Ok(())
 }
 
@@ -226,14 +220,9 @@ pub async fn dissect_dynamic(cx: Cx, input: Input) -> Result<()> {
         grouped_count(count, "chunk", "chunks"),
         total.map(|t| format!(", {}", size(t))).unwrap_or_default(),
     ));
-    common(
-        &cx,
-        file,
-        DynamicHeader::node("Header", span, LE),
-        h.csum,
-        index,
-    )
-    .await
+    let check = index_check(&cx, &index, &h.csum).await?;
+    let header = DynamicHeader::checked_node("Header", span, LE, check.at(32)).check_diag(&check);
+    common(&cx, file, header, check, index).await
 }
 
 pub async fn dissect_fixed(cx: Cx, input: Input) -> Result<()> {
@@ -242,7 +231,15 @@ pub async fn dissect_fixed(cx: Cx, input: Input) -> Result<()> {
     let h = parse(&cx, span, LE, &(), FixedHeader::layout).await?;
     let entries = file.tail(HEADER);
     let count = entries.len / 32;
-    let mut header = FixedHeader::node("Header", span, LE);
+    let index = Index {
+        entries,
+        entry: 32,
+        count,
+        image: h.image_size,
+        chunk_size: h.chunk_size,
+    };
+    let check = index_check(&cx, &index, &h.csum).await?;
+    let mut header = FixedHeader::checked_node("Header", span, LE, check.at(32)).check_diag(&check);
     let expected = h.image_size.div_ceil(h.chunk_size.max(1));
     if h.chunk_size == 0 {
         header = header.diag(Diagnostic::malformed("chunk size is zero"));
@@ -259,14 +256,7 @@ pub async fn dissect_fixed(cx: Cx, input: Input) -> Result<()> {
         grouped_count(count, "chunk", "chunks"),
         size(h.chunk_size),
     ));
-    let index = Index {
-        entries,
-        entry: 32,
-        count,
-        image: h.image_size,
-        chunk_size: h.chunk_size,
-    };
-    common(&cx, file, header, h.csum, index).await
+    common(&cx, file, header, check, index).await
 }
 
 /// The chunks, in order.
@@ -301,6 +291,12 @@ async fn list(cx: Cx, index: Index) -> Result<()> {
     Ok(())
 }
 
+/// A chunk's digest: the SHA-256 of a blob elsewhere in the datastore,
+/// so not checked here.
+fn chunk_digest(digest: &[u8]) -> Check {
+    Check::new("SHA-256", digest.to_vec())
+}
+
 fn digest_desc() -> &'static str {
     "SHA-256 of the chunk's content; its blob is .chunks/<first 4 hex digits>/<digest> in the datastore"
 }
@@ -309,7 +305,7 @@ fn dynamic_chunk(i: u64, span: Span, start: u64, end: u64, digest: &[u8]) -> Nod
     let len = end.saturating_sub(start);
     let mut node = Node::new(format!("Chunk {i}"))
         .span(span)
-        .value(Value::Text(hex_lower(digest)))
+        .checksum(chunk_digest(digest))
         .summary(format!("{} at {start:#x}", size(len)))
         .desc(digest_desc())
         .lazy(dynamic_fields, span);
@@ -335,7 +331,7 @@ async fn dynamic_fields(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Digest")
             .span(span.sub(8, 32))
-            .value(Value::Text(hex_lower(raw.get(8..).unwrap_or_default()))),
+            .checksum(chunk_digest(raw.get(8..).unwrap_or_default())),
     );
     Ok(())
 }
@@ -349,7 +345,7 @@ fn fixed_chunk(index: &Index, i: u64, span: Span, digest: &[u8]) -> Node {
     }
     let mut node = Node::new(format!("Chunk {i}"))
         .span(span)
-        .value(Value::Text(hex_lower(digest)))
+        .checksum(chunk_digest(digest))
         .summary(summary)
         .desc(digest_desc());
     if index.chunk_size > 0 && start >= index.image {

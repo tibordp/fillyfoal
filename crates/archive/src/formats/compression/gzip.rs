@@ -19,12 +19,12 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::fmt::size;
-use crate::formats::util::val::{hex, text, uint};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Codec, Format, Input, Probe, content_hinted};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag};
 
 const LE: Endian = Endian::Little;
 
@@ -80,7 +80,7 @@ record! {
 
 record! {
     pub struct Trailer {
-        crc: u32 "CRC32" .hex().desc("CRC-32 of the uncompressed data"),
+        crc: u32 "CRC32" .checksum("CRC-32").desc("CRC-32 of the uncompressed data"),
         size: u32 "ISIZE" .desc("Uncompressed size modulo 2^32"),
     }
 }
@@ -281,7 +281,7 @@ async fn header_nodes(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Option<String>> {
         cx.emit(
             Node::new("Header CRC16")
                 .span(cur.since(start))
-                .value(hex(crc, 16)),
+                .checksum(Check::new("CRC-32 (low 16 bits)", crc)),
         );
     }
     Ok(name)
@@ -439,16 +439,13 @@ async fn walk(cx: &Cx, file: Span, budget: u64, max_members: usize) -> Result<Op
 /// The trailer of `m` (`recorded` is its bytes at `span`), checked against
 /// what the member decoded to.
 fn checked_trailer(span: Span, m: &Member, recorded: &[u8]) -> Node {
-    let mut node = Trailer::node("Trailer", span, LE);
     if recorded.len() < 8 {
-        return node.diag(Diagnostic::truncated(span, to_u64(recorded.len())));
+        return Trailer::node("Trailer", span, LE)
+            .diag(Diagnostic::truncated(span, to_u64(recorded.len())));
     }
-    if u32_le(recorded, 0) != Some(m.crc) {
-        node = node.diag(Diagnostic::warning(format!(
-            "CRC-32 mismatch: the data decodes to {:#010x}",
-            m.crc
-        )));
-    } else if u32_le(recorded, 4) != Some(m.isize()) {
+    let check = Check::new("CRC-32", u32_le(recorded, 0).unwrap_or(0)).verify(m.crc);
+    let mut node = Trailer::checked_node("Trailer", span, LE, check.at(0)).check_diag(&check);
+    if !check.is_mismatch() && u32_le(recorded, 4) != Some(m.isize()) {
         node = node.diag(Diagnostic::warning(format!(
             "ISIZE mismatch: the data decodes to {} bytes",
             m.decoded

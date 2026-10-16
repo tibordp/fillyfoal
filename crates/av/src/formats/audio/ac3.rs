@@ -14,13 +14,12 @@ use crate::error::{Diagnostic, Result};
 use crate::formats::util::arcutil::human_size;
 use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{
-    Bits, CRC16_BUYPASS, FrameRef, FrameSyntax, bits_node, duration, frames_node, leaf,
+    Bits, CRC16_BUYPASS, FrameRef, FrameSyntax, bits_node, duration, frames_node,
 };
-use crate::formats::util::val::hex;
 use crate::formats::{Format, Head, Input, Probe, audio::id3};
 use crate::node::Node;
 use crate::span::{SourceId, Span};
-use crate::value::{EnumTable, FlagTable, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, flag, lookup};
 
 pub static FORMAT: Format = Format {
     name: "ac3",
@@ -315,9 +314,17 @@ fn program(b: &mut Bits<'_>, two: bool, eac3: bool) -> Result<u64> {
     Ok(if dialnorm == 0 { 31 } else { dialnorm })
 }
 
+/// AC-3's CRCs (CRC-16/BUYPASS, checked by the remainder they leave).
+const AC3_CRC: &str = "CRC-16/BUYPASS";
+
 fn ac3_bsi(b: &mut Bits<'_>) -> Result<Info> {
     b.field("CRC1", 16)
-        .hex()
+        .with(|v, n| {
+            n.checksum(
+                Check::new(AC3_CRC, u16::try_from(v).unwrap_or(0))
+                    .skipped("checked with CRC2, at the end of the frame"),
+            )
+        })
         .desc("Of the first 5/8 of the frame")
         .emit()?;
     let fscod = b
@@ -764,16 +771,14 @@ async fn frame(cx: Cx, f: FrameRef) -> Result<()> {
             .desc("Exponents, bit allocation and mantissas, then auxiliary data"),
     );
     let stored = crate::bytes::u16_be(&data, to_usize(crc_at)).unwrap_or(0);
-    let mut node = leaf(
-        if eac3 { "CRC" } else { "CRC2" },
-        f.span.sub(crc_at, 2),
-        hex(stored, 16),
-    )
-    .desc(if eac3 {
-        "Of the frame after the sync word"
-    } else {
-        "Of the last 3/8 of the frame"
-    });
+    let mut node = Node::new(if eac3 { "CRC" } else { "CRC2" })
+        .span(f.span.sub(crc_at, 2))
+        .checksum(Check::new(AC3_CRC, stored))
+        .desc(if eac3 {
+            "Of the frame after the sync word"
+        } else {
+            "Of the last 3/8 of the frame"
+        });
     if complete {
         let len = to_usize(f.span.len);
         // AC-3 checks the first 5/8 (CRC1) and the rest (CRC2); E-AC-3
@@ -785,27 +790,23 @@ async fn frame(cx: Cx, f: FrameRef) -> Result<()> {
         } else {
             vec![(2, five_eighths), (five_eighths, len)]
         };
-        let mut bad = Vec::new();
-        for (i, (from, to)) in ranges.into_iter().enumerate() {
-            let part = data.get(from..to).unwrap_or_default();
-            if CRC16_BUYPASS.checksum(part) != 0 {
-                bad.push(if eac3 {
-                    "CRC"
-                } else if i == 0 {
-                    "CRC1"
-                } else {
-                    "CRC2"
-                });
+        let ok: Vec<bool> = ranges
+            .into_iter()
+            .map(|(from, to)| CRC16_BUYPASS.checksum(data.get(from..to).unwrap_or_default()) == 0)
+            .collect();
+        // A correct CRC leaves no remainder: the verdict, not the value
+        // the data gives.
+        node = node.with_check(|c| c.verified(ok.last().copied().unwrap_or(true)));
+        if !eac3 {
+            // CRC1 is a field of the bit stream information; its verdict is
+            // shown here.
+            let crc1 = Check::new(AC3_CRC, crate::bytes::u16_be(&data, 2).unwrap_or(0))
+                .verified(ok.first().copied().unwrap_or(true));
+            node = node.summary(format!("CRC1 {}", crc1.verdict_text()));
+            if let Some(m) = crc1.mismatch_text() {
+                node = node.diag(Diagnostic::warning(format!("CRC1: {m}")));
             }
         }
-        node = if bad.is_empty() {
-            node.summary(if eac3 { "valid" } else { "valid (CRC1 too)" })
-        } else {
-            node.diag(Diagnostic::warning(format!(
-                "{} mismatch",
-                bad.join(" and ")
-            )))
-        };
     }
     cx.emit(node);
     Ok(())

@@ -147,7 +147,7 @@ fn block_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.bytes("Block magic", 6)
         .desc("0x314159265359 (BCD π)")
         .emit()?;
-    f.u32("Block CRC").hex().emit()?;
+    f.u32("Block CRC").checksum("CRC-32/BZIP2").emit()?;
     let rest = f.bytes("Randomised / original pointer", 4).get()?;
     let randomised = bits(&rest, 0, 1).unwrap_or(0);
     let orig = bits(&rest, 1, 24).unwrap_or(0);

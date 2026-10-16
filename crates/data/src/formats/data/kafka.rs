@@ -71,7 +71,7 @@ use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, Value, field, flag};
+use crate::value::{Check, EnumTable, FlagTable, Value, field, flag};
 
 const BE: Endian = Endian::Big;
 
@@ -544,21 +544,16 @@ async fn crc_node(cx: &Cx, at: Span, stored: u32, covered: Span, castagnoli: boo
         pos = pos.saturating_add(to_u64(piece.len()));
     }
     let computed = !reg;
-    let node = Node::new("CRC")
+    Ok(Node::new("CRC")
         .span(at)
-        .value(val::hex(stored, 32))
+        .checksum(
+            Check::new(if castagnoli { "CRC-32C" } else { "CRC-32" }, stored).verify(computed),
+        )
         .desc(if castagnoli {
             "CRC-32C from the attributes to the end of the batch"
         } else {
             "CRC-32 from the magic byte to the end of the message"
-        });
-    Ok(if computed == stored {
-        node.summary("valid")
-    } else {
-        node.diag(Diagnostic::warning(format!(
-            "CRC mismatch: computed {computed:#010x}"
-        )))
-    })
+        }))
 }
 
 // ---------------------------------------------------------------------------
@@ -767,7 +762,7 @@ record! {
         length: i32 "Batch length" .desc("Bytes after this field"),
         leader_epoch: i32 "Partition leader epoch",
         magic: u8 "Magic",
-        crc: u32 "CRC" .hex(),
+        crc: u32 "CRC" .checksum("CRC-32"),
         attributes: u16 "Attributes" .flags(BATCH_ATTRIBUTES),
         last_offset_delta: i32 "Last offset delta",
         base_timestamp: i64 "Base timestamp",

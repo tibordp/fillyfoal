@@ -14,7 +14,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Frame data bytes: 3820  [0x18+0x4]
       Frame data bytes (high): 0  [0x1c+0x4]
       Terminating data bytes: 0  [0x20+0x4]
-      MD5: b4 dd ba f7 05 d7 47 7e 56 a3 6d 34 54 b3 cf 7a  |......G~V.m4T..z|  [0x24+0x10]
+      MD5: b4ddbaf705d7477e56a36d3454b3cf7a (MD5, not checked)  [0x24+0x10]
   ▾ Header  [0x34+0x18]
       Compression level: extra high (0xfa0)  [0x34+0x2]
       Format flags: 0x0 []  [0x36+0x2]

@@ -30,7 +30,7 @@ use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value};
+use crate::value::{Check, EnumTable, Radix, Value};
 
 const BE: Endian = Endian::Big;
 /// WAL files up to this size are verified when they are expanded.
@@ -100,25 +100,21 @@ pub(super) fn wal_checksum(data: &[u8], big: bool, (mut s1, mut s2): (u32, u32))
     (s1, s2)
 }
 
+/// The WAL's checksum: two 32-bit halves of a cumulative Fletcher-like
+/// sum over the header and the frames.
+const WAL_SUM: &str = "WAL checksum";
+
 /// Checks a stored checksum pair against the computed one.
 fn checksum_fields(f: &mut Fields<'_>, expected: Option<(u32, u32)>) -> Result<()> {
-    let stored1 = f.u32("Checksum-1").hex().emit()?;
-    let stored2 = f
-        .u32("Checksum-2")
-        .hex()
+    f.u32("Checksum-1")
+        .checksum(WAL_SUM)
+        .verify(expected.map(|e| e.0))
+        .emit()?;
+    f.u32("Checksum-2")
+        .checksum(WAL_SUM)
+        .verify(expected.map(|e| e.1))
         .desc("With checksum-1: the cumulative checksum, continued from the previous frame (or the header)")
         .emit()?;
-    if let Some((e1, e2)) = expected {
-        let node = Node::new("Checksum check");
-        f.node(if (e1, e2) == (stored1, stored2) {
-            node.value(Value::Bool(true)).summary("matches")
-        } else {
-            node.value(Value::Bool(false))
-                .diag(Diagnostic::warning(format!(
-                    "computed {e1:#010x} {e2:#010x}"
-                )))
-        });
-    }
     Ok(())
 }
 
@@ -554,7 +550,7 @@ async fn wal_frames(cx: Cx, (wal, header_ok): (Wal, bool)) -> Result<()> {
                 }
             }
             (Status::Valid, Some(_)) => "uncommitted: no commit frame follows".to_owned(),
-            (Status::Valid, None) => "checksum ok".to_owned(),
+            (Status::Valid, None) => "checksum valid".to_owned(),
             (Status::Stale, _) => "stale: salts of an earlier generation of the log".to_owned(),
             (Status::Unwritten, _) => {
                 "salts and checksum not written yet (an open transaction)".to_owned()
@@ -924,16 +920,7 @@ async fn journal_record(cx: Cx, (db, span, page, computed): (DbRef, Span, u32, u
         .span(checksum)
         .desc("The segment's nonce plus every 200th byte of the page, counted from the end");
     if let Some(v) = u32_be(&data, 0) {
-        node = node.value(Value::UInt {
-            value: v.into(),
-            bits: 32,
-            radix: Radix::Hex,
-        });
-        node = if v == computed {
-            node.summary("matches")
-        } else {
-            node.diag(Diagnostic::warning(format!("computed {computed:#010x}")))
-        };
+        node = node.checksum(Check::new("SQLite journal sum", v).verify(computed));
     }
     cx.emit(node);
     Ok(())

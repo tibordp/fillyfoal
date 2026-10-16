@@ -3,7 +3,7 @@ source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ fillyfoal.evtx — Windows event log 3.2, 4 chunks, records 1–600 (600 events)  [0x0+0x111000]
-  ▾ File header — version 3.2, 4 chunks, checksum valid  [0x0+0x80]
+  ▾ File header — version 3.2, 4 chunks  [0x0+0x80]
       Signature: "ElfFile"  [0x0+0x8]
       First chunk number: 0  [0x8+0x8]
       Last chunk number: 3  [0x10+0x8]
@@ -15,10 +15,10 @@ expression: "common::explore(&display_name(&path), &data)"
       Number of chunks: 4  [0x2a+0x2]
       Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x2c+0x4c]
       File flags: 0x0 []  [0x78+0x4]
-      Checksum: 0x2a507a8e  [0x7c+0x4]
+      Checksum: 0x2a507a8e (CRC-32, valid)  [0x7c+0x4]
     Header block padding  [0x80+0xf80]
   ▾ Chunk 0 — records 1–181 (181 events)  [0x1000+0x10000]
-    ▾ Chunk header — header checksum valid  [0x1000+0x80]
+    ▾ Chunk header  [0x1000+0x80]
         Signature: "ElfChnk"  [0x1000+0x8]
         First event record number: 1  [0x1008+0x8]
         Last event record number: 181  [0x1010+0x8]
@@ -27,10 +27,10 @@ expression: "common::explore(&display_name(&path), &data)"
         Header size: 128  [0x1028+0x4]
         Last event record offset: 0xfd50  [0x102c+0x4]
         Free space offset: 0xfeb0  [0x1030+0x4]
-        Event records checksum: 0xc66397c  [0x1034+0x4]
+        Event records checksum: 0xc66397c (CRC-32, valid)  [0x1034+0x4]
         Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x1038+0x40]
         Flags: 0x1 [DIRTY]  [0x1078+0x4]
-        Header checksum: 0x64733c0f  [0x107c+0x4]
+        Header checksum: 0x64733c0f (CRC-32, valid)  [0x107c+0x4]
     ▾ String table: "22 of 64 buckets used"  [0x1080+0x100]
         Bucket 3: 0x620 — Channel  [0x108c+0x4] → 0x1620+0x18
         Bucket 4: 0x78f — EventData  [0x1090+0x4] → 0x178f+0x1c
@@ -58,7 +58,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Bucket 2: 0x768 — 0x4329d877 at 0x768 (120 bytes)  [0x1188+0x4] → 0x1768+0x90
         Bucket 12: 0x226 — 0xd8c96e0b at 0x226 (1183 bytes)  [0x11b0+0x4] → 0x1226+0x4b7
         Bucket 29: 0x8ae — 0x1038812c at 0x8ae (527 bytes)  [0x11f4+0x4] → 0x18ae+0x227
-      Event records checksum: 0xc66397c — valid  [0x1200+0xfcb0]
+      Event records checksum: 0xc66397c (CRC-32, valid)  [0x1200+0xfcb0]
     ▾ Record 1: 2026-10-09 23:05:53.4961839 UTC — Event 1000, Information, FillyfoalSource  [0x1200+0x688]
         Signature: 2a 2a 00 00  |**..|  [0x1200+0x4]
         Size: 1672  [0x1204+0x4]

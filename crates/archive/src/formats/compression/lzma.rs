@@ -137,7 +137,7 @@ record! {
 
 record! {
     pub struct LzipTrailer {
-        crc: u32 "CRC32" .hex() .desc("CRC32 of the uncompressed data"),
+        crc: u32 "CRC32" .checksum("CRC-32") .desc("CRC32 of the uncompressed data"),
         data_size: u64 "Data size" .with(|&s, n| n.summary(fmt::size(s))) .desc("Uncompressed size"),
         member_size: u64 "Member size" .with(|&s, n| n.summary(fmt::size(s))) .desc("Header, compressed data and trailer"),
     }

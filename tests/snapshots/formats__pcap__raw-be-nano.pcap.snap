@@ -25,7 +25,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Flags / fragment offset: 0x4000 [DF] — fragment offset 0  [0x2e+0x2]
         Time to live: 64  [0x30+0x1]
         Protocol: TCP (0x6)  [0x31+0x1]
-        Header checksum: 0x433a — correct  [0x32+0x2]
+        Header checksum: 0x433a (Internet checksum, valid)  [0x32+0x2]
         Source: "192.168.1.10"  [0x34+0x4]
         Destination: "93.184.216.34"  [0x38+0x4]
     ▾ TCP — 51000 → 80 (http) [SYN], seq 1000, ack 0, window 65535, 0 bytes  [0x3c+0x1c]
@@ -36,8 +36,8 @@ expression: "common::explore(&display_name(&path), &data)"
         Data offset: 7 — header 28 bytes  [0x48+0x1]
         Flags: 0x2 [SYN]  [0x48+0x2]
         Window: 65535  [0x4a+0x2]
-        Checksum: 0x0  [0x4c+0x2]
-          ! warning: incorrect, should be 0xc021
+        Checksum: 0x0 (Internet checksum, mismatch: computed 0xc021)  [0x4c+0x2]
+          ! warning: Internet checksum mismatch: stored 0x0, computed 0xc021
         Urgent pointer: 0  [0x4e+0x2]
       ▾ Options — MSS=1460, SACK_PERM  [0x50+0x8]
         ▾ Maximum segment size — MSS=1460  [0x50+0x4]
@@ -63,7 +63,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Flags / fragment offset: 0x4000 [DF] — fragment offset 0  [0x6e+0x2]
         Time to live: 64  [0x70+0x1]
         Protocol: TCP (0x6)  [0x71+0x1]
-        Header checksum: 0x4342 — correct  [0x72+0x2]
+        Header checksum: 0x4342 (Internet checksum, valid)  [0x72+0x2]
         Source: "93.184.216.34"  [0x74+0x4]
         Destination: "192.168.1.10"  [0x78+0x4]
     ▾ TCP — 80 (http) → 51000 [SYN, ACK], seq 5000, ack 1001, window 65535, 0 bytes  [0x7c+0x14]
@@ -74,8 +74,8 @@ expression: "common::explore(&display_name(&path), &data)"
         Data offset: 5 — header 20 bytes  [0x88+0x1]
         Flags: 0x12 [SYN | ACK]  [0x88+0x2]
         Window: 65535  [0x8a+0x2]
-        Checksum: 0x0  [0x8c+0x2]
-          ! warning: incorrect, should be 0xd94b
+        Checksum: 0x0 (Internet checksum, mismatch: computed 0xd94b)  [0x8c+0x2]
+          ! warning: Internet checksum mismatch: stored 0x0, computed 0xd94b
         Urgent pointer: 0  [0x8e+0x2]
   ▾ Packet 2 — +2.000000 s, 48 bytes of 81, 192.168.1.10 → 93.184.216.34, HTTP (continued)  [0x90+0x40]
       ! note: only 48 of 81 bytes were captured
@@ -93,7 +93,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Flags / fragment offset: 0x4000 [DF] — fragment offset 0  [0xa6+0x2]
         Time to live: 64  [0xa8+0x1]
         Protocol: TCP (0x6)  [0xa9+0x1]
-        Header checksum: 0x4319 — correct  [0xaa+0x2]
+        Header checksum: 0x4319 (Internet checksum, valid)  [0xaa+0x2]
         Source: "192.168.1.10"  [0xac+0x4]
         Destination: "93.184.216.34"  [0xb0+0x4]
     ▾ TCP — 51000 → 80 (http) [PSH, ACK], seq 1001, ack 5001, window 65535, 8 bytes  [0xb4+0x14]
@@ -104,8 +104,8 @@ expression: "common::explore(&display_name(&path), &data)"
         Data offset: 5 — header 20 bytes  [0xc0+0x1]
         Flags: 0x18 [PSH | ACK]  [0xc0+0x2]
         Window: 65535  [0xc2+0x2]
-        Checksum: 0x0  [0xc4+0x2]
-          ! warning: incorrect, should be 0xc662
+        Checksum: 0x0 (Internet checksum, mismatch: computed 0xc662)  [0xc4+0x2]
+          ! warning: Internet checksum mismatch: stored 0x0, computed 0xc662
         Urgent pointer: 0  [0xc6+0x2]
     ▾ HTTP  [0xc8+0x8]
         Start line (incomplete): "GET / HT"  [0xc8+0x8]

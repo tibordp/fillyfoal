@@ -1,17 +1,17 @@
 //! BSD disklabels (FreeBSD, NetBSD, OpenBSD): sector 1 of a disk or slice
 //! holds a label with up to 16 partitions (`a` to `p`).
 
-use crate::bytes::{to_u64, u32_le};
+use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
-use crate::error::{Diagnostic, Result};
+use crate::error::Result;
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{size, volume};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, lookup};
+use crate::value::{Check, EnumTable, lookup};
 
 const LE: Endian = Endian::Little;
 const MAGIC: u32 = 0x8256_4557;
@@ -114,7 +114,7 @@ record! {
         _drive_data: bytes[20] "Drive data",
         _spare: bytes[20] "Spare",
         magic2: u32 "Magic (copy)" .hex(),
-        checksum: u16 "Checksum" .hex(),
+        checksum: u16 "Checksum" .checksum(BSD_XOR),
         partitions: u16 "Partitions",
         boot_size: u32 "Boot area size",
         super_size: u32 "Superblock size",
@@ -131,6 +131,10 @@ record! {
         cpg: u16 "Cylinders per group",
     }
 }
+
+/// The disklabel checksum: the XOR of the label's and its partition
+/// table's 16-bit words is zero.
+const BSD_XOR: &str = "16-bit XOR";
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let disk = input.span;
@@ -150,11 +154,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .0
         .iter()
         .fold(0u16, |x, w| x ^ u16::from_le_bytes(*w));
-    let mut node = Label::node("Disklabel", span, LE);
-    if xor != 0 {
-        node = node.diag(Diagnostic::warning("disklabel checksum mismatch"));
-    }
-    cx.emit(node);
+    // The value that would make it zero.
+    let stored = u16_le(&raw, 136).unwrap_or(0);
+    let check = Check::new(BSD_XOR, stored).verify(xor ^ stored);
+    cx.emit(Label::checked_node("Disklabel", span, LE, check.at(136)).check_diag(&check));
     let entries: Vec<(u32, u32, u8)> = raw
         .get(crate::bytes::to_usize(Label::SIZE)..)
         .unwrap_or_default()

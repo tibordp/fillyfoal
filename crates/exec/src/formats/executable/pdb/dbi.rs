@@ -291,8 +291,8 @@ fn contribution(f: &mut Fields<'_>, size: &u32) -> Result<()> {
         .emit()?;
     f.u16("Module").emit()?;
     f.u16("Padding").emit()?;
-    f.u32("Data CRC").hex().emit()?;
-    f.u32("Relocation CRC").hex().emit()?;
+    f.u32("Data CRC").checksum("CRC-32").emit()?;
+    f.u32("Relocation CRC").checksum("CRC-32").emit()?;
     if *size >= 32 {
         f.u32("COFF section").emit()?;
     }

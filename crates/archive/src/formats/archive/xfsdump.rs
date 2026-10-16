@@ -54,7 +54,7 @@ use crate::formats::{Format, Input, Probe, dissect_or_data};
 use crate::node::Node;
 use crate::record;
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, Value, flag};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag};
 
 pub static FORMAT: Format = Format {
     name: "xfsdump",
@@ -155,7 +155,7 @@ record! {
     pub struct GlobalHeader {
         magic: ascii[8] "Magic",
         version: u32 "Version",
-        checksum: u32 "Checksum" .hex(),
+        checksum: u32 "Checksum" .checksum(XFSDUMP_SUM),
         time: u32 "Dump time" .timestamp(),
         _pad1: bytes[4] "Padding",
         host_id: u64 "Host id" .hex() .desc("From gethostid(3)"),
@@ -315,6 +315,15 @@ const FILEHDR_INTS: &[(usize, usize)] = &[
 const EXTENT_INTS: &[(usize, usize)] = &[(0, 8), (8, 8), (16, 4), (20, 4), (24, 4)];
 const DIRENT_INTS: &[(usize, usize)] = &[(0, 8), (8, 4), (12, 4), (16, 2)];
 const ATTR_INTS: &[(usize, usize)] = &[(0, 4), (4, 2), (6, 2), (8, 4), (12, 4)];
+
+/// xfsdump's header checksums: the header's 32-bit words sum to zero.
+const XFSDUMP_SUM: &str = "32-bit word sum";
+
+/// A header checksum, by whether the header's words sum to zero (the
+/// value they should have depends on the writer's byte order).
+fn sum_check(stored: u32, ok: bool) -> Check {
+    Check::new(XFSDUMP_SUM, stored).verified(ok)
+}
 
 /// Whether the words of `raw` sum to zero, as written (big-endian) or with
 /// the integer fields `ints` laid out little-endian (the usual writer).
@@ -702,11 +711,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         GlobalHeader::layout,
     )
     .await?;
-    let mut global = GlobalHeader::node("Global header", file.sub(0, GlobalHeader::SIZE), BE)
-        .summary(format!("version {}, {}", g.version, g.host));
-    if !checksum_ok(&page, &[]) {
-        global = global.diag(Diagnostic::warning("global header checksum mismatch"));
-    }
+    let check = sum_check(g.checksum, checksum_ok(&page, &[]));
+    let mut global = GlobalHeader::checked_node(
+        "Global header",
+        file.sub(0, GlobalHeader::SIZE),
+        BE,
+        check.at(12),
+    )
+    .summary(format!("version {}, {}", g.version, g.host))
+    .check_diag(&check);
     if !(1..=3).contains(&g.version) {
         global = global.diag(Diagnostic::unsupported(format!("version {}", g.version)));
     }
@@ -1300,13 +1313,11 @@ async fn file_header_fields(cx: Cx, span: Span) -> Result<()> {
             .span(span.sub(8, 4))
             .value(crate::formats::util::val::flagsv(flags, 32, FILE_FLAGS)),
     );
-    let mut ck = Node::new("Checksum")
-        .span(span.sub(12, 4))
-        .value(hex(be_u32(&raw, 12), 32));
-    if !checksum_ok(&raw, FILEHDR_INTS) {
-        ck = ck.diag(Diagnostic::warning("mismatch"));
-    }
-    cx.emit(ck);
+    cx.emit(
+        Node::new("Checksum")
+            .span(span.sub(12, 4))
+            .checksum(sum_check(be_u32(&raw, 12), checksum_ok(&raw, FILEHDR_INTS))),
+    );
     if flags & (FH_NULL | FH_END) != 0 && be_u64(&raw, 16) == 0 {
         return Ok(());
     }
@@ -1413,13 +1424,11 @@ async fn extent_fields(cx: Cx, span: Span) -> Result<()> {
             .span(span.sub(20, 4))
             .value(hex(be_u32(&raw, 20), 32)),
     );
-    let mut ck = Node::new("Checksum")
-        .span(span.sub(24, 4))
-        .value(hex(be_u32(&raw, 24), 32));
-    if !checksum_ok(&raw, EXTENT_INTS) {
-        ck = ck.diag(Diagnostic::warning("mismatch"));
-    }
-    cx.emit(ck);
+    cx.emit(
+        Node::new("Checksum")
+            .span(span.sub(24, 4))
+            .checksum(sum_check(be_u32(&raw, 24), checksum_ok(&raw, EXTENT_INTS))),
+    );
     Ok(())
 }
 
@@ -1435,13 +1444,15 @@ async fn dirent_fields(cx: Cx, (span, checked): (Span, bool)) -> Result<()> {
             .span(span.sub(8, 4))
             .value(hex(be_u32(&raw, 8), 32)),
     );
-    let mut ck = Node::new("Checksum")
-        .span(span.sub(12, 4))
-        .value(hex(be_u32(&raw, 12), 32));
-    if checked && !checksum_ok(raw.get(..24).unwrap_or_default(), DIRENT_INTS) {
-        ck = ck.diag(Diagnostic::warning("mismatch"));
-    }
-    cx.emit(ck);
+    let ck = Node::new("Checksum").span(span.sub(12, 4));
+    cx.emit(if checked {
+        ck.checksum(sum_check(
+            be_u32(&raw, 12),
+            checksum_ok(raw.get(..24).unwrap_or_default(), DIRENT_INTS),
+        ))
+    } else {
+        ck.value(hex(be_u32(&raw, 12), 32))
+    });
     cx.emit(
         Node::new("Record size")
             .span(span.sub(16, 2))
@@ -1483,13 +1494,11 @@ async fn attr_fields(cx: Cx, (span, value): (Span, Span)) -> Result<()> {
             .span(span.sub(8, 4))
             .value(uint(be_u32(&raw, 8), 32)),
     );
-    let mut ck = Node::new("Checksum")
-        .span(span.sub(12, 4))
-        .value(hex(be_u32(&raw, 12), 32));
-    if !checksum_ok(&raw, ATTR_INTS) {
-        ck = ck.diag(Diagnostic::warning("mismatch"));
-    }
-    cx.emit(ck);
+    cx.emit(
+        Node::new("Checksum")
+            .span(span.sub(12, 4))
+            .checksum(sum_check(be_u32(&raw, 12), checksum_ok(&raw, ATTR_INTS))),
+    );
     if be_u16(&raw, 6) & ATTR_NULL == 0 {
         let name_end = value.offset.saturating_sub(span.offset);
         let name = cx

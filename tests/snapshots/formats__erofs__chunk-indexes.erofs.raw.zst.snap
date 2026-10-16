@@ -6,7 +6,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Boot area — 1 KiB left for a boot loader; not used by EROFS  [0x0+0x400]
   ▾ Superblock — 36 inodes, 40 blocks of 4 KiB  [0x400+0x80]
       Magic: 0xe0f5e1e2  [0x400+0x4]
-      Checksum: 0xc1abfc16 — valid CRC-32C  [0x404+0x4]
+      Checksum: 0xc1abfc16 (CRC-32C, valid)  [0x404+0x4]
       Compatible features: 0x7 [SB_CHKSUM | MTIME | XATTR_FILTER]  [0x408+0x4]
       log2(block size): 12 — 4 KiB  [0x40c+0x1]
       Extension slots: 0 — superblock of 128 bytes  [0x40d+0x1]

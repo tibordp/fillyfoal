@@ -24,7 +24,7 @@ use crate::formats::util::val::{hex, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, field, flag};
+use crate::value::{Check, EnumTable, FlagTable, field, flag};
 
 const LE: Endian = Endian::Little;
 const FRAME_MAGIC: u32 = 0x184d_2204;
@@ -123,14 +123,8 @@ fn descriptor(f: &mut Fields<'_>, _: &()) -> Result<Descriptor> {
     let at = crate::bytes::to_usize(f.pos());
     let expected = covered.get(..at).map(|c| ((xxh32(c, 0) >> 8) & 0xff) as u8);
     f.u8("Header checksum")
-        .hex()
-        .with(|&hc, n| match expected {
-            Some(e) if e == hc => n.summary("valid"),
-            Some(e) => n.diag(Diagnostic::warning(format!(
-                "header checksum mismatch: computed {e:#04x}"
-            ))),
-            None => n,
-        })
+        .checksum("XXH32 (second byte)")
+        .verify(expected)
         .emit()?;
     Ok(d)
 }
@@ -400,10 +394,17 @@ async fn frame(cx: Cx, span: Span) -> Result<()> {
             let at = cur.pos();
             let c = cx.read_avail(span.sub(at, 4)).await?;
             cur.skip(4);
+            // XXH32 of the block's data as stored.
+            let computed = if data.len <= cx.limits().max_read {
+                let bytes = cx.read(data).await?;
+                (crate::bytes::to_u64(bytes.len()) == data.len).then(|| xxh32(&bytes, 0))
+            } else {
+                None
+            };
             children.push(
                 Node::new("Block checksum")
                     .span(span.sub(at, 4))
-                    .value(hex(u32_le(&c, 0).unwrap_or(0), 64)),
+                    .checksum(Check::new("XXH32", u32_le(&c, 0).unwrap_or(0)).verify_opt(computed)),
             );
         }
         let block_span = cur.since(start);
@@ -429,7 +430,7 @@ async fn frame(cx: Cx, span: Span) -> Result<()> {
         cx.emit(
             Node::new("Content checksum")
                 .span(span.sub(at, 4))
-                .value(hex(u32_le(&c, 0).unwrap_or(0), 64))
+                .checksum(Check::new("XXH32", u32_le(&c, 0).unwrap_or(0)))
                 .desc("XXH32 of the decompressed content"),
         );
     }
@@ -515,9 +516,8 @@ async fn snappy_chunk(cx: Cx, (span, kind): (Span, u8)) -> Result<()> {
         0x00 | 0x01 => {
             let crc = cx.read(body.sub(0, 4)).await?;
             let stored = u32_le(&crc, 0).unwrap_or(0);
-            let mut crc_node = Node::new("Masked CRC-32C")
-                .span(body.sub(0, 4))
-                .value(hex(stored, 64));
+            let check = Check::new("masked CRC-32C", stored);
+            let crc_node = Node::new("Masked CRC-32C").span(body.sub(0, 4));
             let data = body.tail(4);
             if kind == 0x01 {
                 if data.len <= cx.limits().max_read {
@@ -525,18 +525,17 @@ async fn snappy_chunk(cx: Cx, (span, kind): (Span, u8)) -> Result<()> {
                     let computed = crate::codec::crc::mask_crc32c(
                         crate::formats::util::datakit::crc32c_paced(&cx, &bytes).await,
                     );
-                    crc_node = if computed == stored {
-                        crc_node.summary("valid")
-                    } else {
-                        crc_node.diag(Diagnostic::warning(format!(
-                            "CRC mismatch: computed {computed:#010x}"
-                        )))
-                    };
+                    cx.emit(crc_node.checksum(check.verify(computed)));
+                } else {
+                    cx.emit(crc_node.checksum(check));
                 }
-                cx.emit(crc_node);
                 cx.emit(Node::new("Data").span(data));
             } else {
-                cx.emit(crc_node.desc("CRC of the uncompressed data"));
+                cx.emit(
+                    crc_node
+                        .checksum(check)
+                        .desc("CRC of the uncompressed data"),
+                );
                 let head = cx.read_avail(data.sub(0, 5)).await?;
                 if let Some((len, n)) = crate::bytes::uleb128(&head) {
                     cx.emit(

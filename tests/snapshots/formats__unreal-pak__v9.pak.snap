@@ -30,7 +30,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Version: FrozenIndex (0x9)  [0x3b3+0x4]
       Index offset: 0x259  [0x3b7+0x8]
       Index size: 325  [0x3bf+0x8]
-      Index hash (SHA-1): 1d 86 f3 55 98 22 cf 3e e5 85 36 e8 63 23 84 11 …  |...U.".>..6.c#..|  [0x3c7+0x14]
+      Index hash (SHA-1): 1d86f3559822cf3ee58536e863238411d3e2781c (SHA-1, not checked)  [0x3c7+0x14]
       Frozen index: 0  [0x3db+0x1]
       Compression method: "Zlib"  [0x3dc+0x20]
       Compression method: "Gzip"  [0x3fc+0x20]

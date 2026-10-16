@@ -19,7 +19,7 @@ use crate::formats::util::val::hex;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Value};
+use crate::value::{Check, EnumTable, Value};
 
 const LE: Endian = Endian::Little;
 const TAG: u32 = 0xfdc4_a7dc;
@@ -182,7 +182,7 @@ async fn directory_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let time = r.u16("Time", LE).ok_or_else(bad)?;
     r.with(|n| n.summary(crate::text::dos_datetime(date, time)));
     let crc = r.u16("File CRC-16", LE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(crc, 64)));
+    r.with(|n| n.checksum(Check::new("CRC-16/ARC", crc).on_decode()));
     let original = r.u32("Original size", LE).ok_or_else(bad)?;
     r.with(|n| n.summary(fmt::size(original.into())));
     let packed = r.u32("Compressed size", LE).ok_or_else(bad)?;
@@ -199,7 +199,8 @@ async fn directory_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     if kind == 2 {
         r.u16("Variable part length", LE).ok_or_else(bad)?;
         r.u8("Time zone").ok_or_else(bad)?;
-        r.u16("Entry CRC-16", LE).ok_or_else(bad)?;
+        let ecrc = r.u16("Entry CRC-16", LE).ok_or_else(bad)?;
+        r.with(|n| n.checksum(Check::new("CRC-16/ARC", ecrc)));
         let namlen = r.u8("Long name length").ok_or_else(bad)?;
         let dirlen = r.u8("Directory length").ok_or_else(bad)?;
         for (name, len) in [("Long name", namlen), ("Directory", dirlen)] {

@@ -7,7 +7,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Signature: "PACK"  [0x0+0x4]
       Version: 2  [0x4+0x4]
       Number of objects: 10  [0x8+0x4]
-    Pack checksum: "62390b5b9f3716b90e4df221c13dbc0f5ab24f7c" — valid SHA-1  [0x420+0x14]
+    Pack checksum: 62390b5b9f3716b90e4df221c13dbc0f5ab24f7c (SHA-1, valid)  [0x420+0x14]
   ▾ commit at 0xc — object 0, 186 → 272 bytes  [0xc+0xbc]
       Type and size: 0x90  [0xc+0x1]
       Type: commit (0x1)

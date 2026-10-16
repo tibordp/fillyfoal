@@ -368,7 +368,7 @@ async fn parse_layout(cx: &Cx, data: &[u8], oatdata_at: u64) -> Layout {
 fn header(f: &mut Fields<'_>, base: &u64) -> Result<()> {
     f.ascii("magic", 4).emit()?;
     let version: u32 = f.ascii("version", 4).emit()?.parse().unwrap_or(0);
-    f.u32("oat_checksum").hex().emit()?;
+    f.u32("oat_checksum").checksum("Adler-32").emit()?;
     let isa = f.u32("instruction_set").enumeration(ISA).emit()?;
     let features = f.u32("instruction_set_features_bitmap");
     if isa == 2 {
@@ -452,8 +452,10 @@ fn dex_file(f: &mut Fields<'_>, _: &()) -> Result<()> {
     let len = f.u32("dex_file_location_size").emit()?;
     f.ascii("dex_file_location", len.into()).emit()?;
     f.ascii("dex_file_magic", 8).emit()?;
-    f.u32("dex_file_location_checksum").hex().emit()?;
-    f.bytes("dex_file_sha1", 20).emit()?;
+    f.u32("dex_file_location_checksum")
+        .checksum("Adler-32")
+        .emit()?;
+    f.bytes("dex_file_sha1", 20).checksum("SHA-1").emit()?;
     f.u32("dex_file_offset")
         .hex()
         .desc("Offset of the DEX file in the VDEX")

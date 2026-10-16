@@ -147,7 +147,7 @@ expression: "common::explore(&display_name(&path), &data)"
             PCS illuminant Y: 1  [0x286+0x4]
             PCS illuminant Z: 0.8249053955078125  [0x28a+0x4]
             Profile creator: "lcms" — Little CMS  [0x28e+0x4]
-            Profile ID: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x292+0x10]
+            Profile ID: 00000000000000000000000000000000 (MD5, skipped: zero: none recorded)  [0x292+0x10]
             Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x2a2+0x1c]
         ▾ Tag table — 11 tags  [0x2be+0x88]
           ▾ Profile description: "sRGB built-in" — 'desc', type 'mluc', 54 bytes  [0x346+0x36]

@@ -12,61 +12,61 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Table directory — 11 tables  [0xc+0xb0]
     ▾ 'OS/2'  [0xc+0x10]
         Tag: "OS/2"  [0xc+0x4]
-        Checksum: 0x67066180  [0x10+0x4]
+        Checksum: 0x67066180 (sfnt word sum, skipped: checked under the table)  [0x10+0x4]
         Offset: 0xbc  [0x14+0x4]
         Length: 96  [0x18+0x4]
     ▾ 'cmap'  [0x1c+0x10]
         Tag: "cmap"  [0x1c+0x4]
-        Checksum: 0x1eeda0  [0x20+0x4]
+        Checksum: 0x1eeda0 (sfnt word sum, skipped: checked under the table)  [0x20+0x4]
         Offset: 0x11c  [0x24+0x4]
         Length: 100  [0x28+0x4]
     ▾ 'fvar'  [0x2c+0x10]
         Tag: "fvar"  [0x2c+0x4]
-        Checksum: 0xf9a5deff  [0x30+0x4]
+        Checksum: 0xf9a5deff (sfnt word sum, skipped: checked under the table)  [0x30+0x4]
         Offset: 0x180  [0x34+0x4]
         Length: 68  [0x38+0x4]
     ▾ 'glyf'  [0x3c+0x10]
         Tag: "glyf"  [0x3c+0x4]
-        Checksum: 0x3be03c0  [0x40+0x4]
+        Checksum: 0x3be03c0 (sfnt word sum, skipped: checked under the table)  [0x40+0x4]
         Offset: 0x1c4  [0x44+0x4]
         Length: 36  [0x48+0x4]
     ▾ 'head'  [0x4c+0x10]
         Tag: "head"  [0x4c+0x4]
-        Checksum: 0x2feeed21  [0x50+0x4]
+        Checksum: 0x2feeed21 (sfnt word sum, skipped: checked under the table)  [0x50+0x4]
         Offset: 0x1e8  [0x54+0x4]
         Length: 54  [0x58+0x4]
     ▾ 'hhea'  [0x5c+0x10]
         Tag: "hhea"  [0x5c+0x4]
-        Checksum: 0x5d40196  [0x60+0x4]
+        Checksum: 0x5d40196 (sfnt word sum, skipped: checked under the table)  [0x60+0x4]
         Offset: 0x220  [0x64+0x4]
         Length: 36  [0x68+0x4]
     ▾ 'hmtx'  [0x6c+0x10]
         Tag: "hmtx"  [0x6c+0x4]
-        Checksum: 0xbb80000  [0x70+0x4]
+        Checksum: 0xbb80000 (sfnt word sum, skipped: checked under the table)  [0x70+0x4]
         Offset: 0x244  [0x74+0x4]
         Length: 20  [0x78+0x4]
     ▾ 'loca'  [0x7c+0x10]
         Tag: "loca"  [0x7c+0x4]
-        Checksum: 0x240024  [0x80+0x4]
+        Checksum: 0x240024 (sfnt word sum, skipped: checked under the table)  [0x80+0x4]
         Offset: 0x258  [0x84+0x4]
         Length: 12  [0x88+0x4]
     ▾ 'maxp'  [0x8c+0x10]
         Tag: "maxp"  [0x8c+0x4]
-        Checksum: 0x47000a  [0x90+0x4]
+        Checksum: 0x47000a (sfnt word sum, skipped: checked under the table)  [0x90+0x4]
         Offset: 0x264  [0x94+0x4]
         Length: 32  [0x98+0x4]
     ▾ 'name'  [0x9c+0x10]
         Tag: "name"  [0x9c+0x4]
-        Checksum: 0x70702c35  [0xa0+0x4]
+        Checksum: 0x70702c35 (sfnt word sum, skipped: checked under the table)  [0xa0+0x4]
         Offset: 0x284  [0xa4+0x4]
         Length: 371  [0xa8+0x4]
     ▾ 'post'  [0xac+0x10]
         Tag: "post"  [0xac+0x4]
-        Checksum: 0xff9f0032  [0xb0+0x4]
+        Checksum: 0xff9f0032 (sfnt word sum, skipped: checked under the table)  [0xb0+0x4]
         Offset: 0x3f8  [0xb4+0x4]
         Length: 32  [0xb8+0x4]
   ▾ 'OS/2' — OS/2 and Windows metrics, 96 bytes, weight 400, vendor "FFOA"  [0xbc+0x60]
-      Checksum: 0x67066180 — valid
+      Checksum: 0x67066180 (sfnt word sum, valid)
       Version: 4  [0xbc+0x2]
       Average char width: 500  [0xbe+0x2]
       Weight class: Normal (0x190)  [0xc0+0x2]
@@ -105,7 +105,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Break char: 0x20  [0x118+0x2]
       Max context: 2  [0x11a+0x2]
   ▾ 'cmap' — Character to glyph mapping, 100 bytes, 3 subtables  [0x11c+0x64]
-      Checksum: 0x1eeda0 — valid
+      Checksum: 0x1eeda0 (sfnt word sum, valid)
     ▾ Header  [0x11c+0x4]
         Version: 0  [0x11c+0x2]
         Number of encoding records: 3  [0x11e+0x2]
@@ -141,7 +141,7 @@ expression: "common::explore(&display_name(&path), &data)"
           U+0041–U+0043 — → glyphs 1–3  [0x168+0xc]
           U+1F600–U+1F600 — → glyphs 4–4  [0x174+0xc]
   ▾ 'fvar' — Font variations, 68 bytes, 2 axes, 1 instance  [0x180+0x44]
-      Checksum: 0xf9a5deff — valid
+      Checksum: 0xf9a5deff (sfnt word sum, valid)
       Major version: 1  [0x180+0x2]
       Minor version: 0  [0x182+0x2]
       Axes array offset: 0x10  [0x184+0x2]
@@ -168,7 +168,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Instances — 1  [0x1b8+0xc]
         Instance 0 — name ID 258, coordinates (700, 100)  [0x1b8+0xc]
   ▾ 'glyf' — Glyph data, 36 bytes  [0x1c4+0x24]
-      Checksum: 0x3be03c0 — valid
+      Checksum: 0x3be03c0 (sfnt word sum, valid)
       Glyph 0 — empty  [0x1c4+0x0]
     ▾ Glyph 1 — 1 contour, (100, 0)–(500, 700)  [0x1c4+0x24]
         Number of contours: 1  [0x1c4+0x2]
@@ -187,7 +187,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Glyph 3 — empty  [0x1e8+0x0]
       Glyph 4 — empty  [0x1e8+0x0]
   ▾ 'head' — Font header, 54 bytes, 1000 units/em  [0x1e8+0x36]
-      Checksum: 0x2feeed21 — valid
+      Checksum: 0x2feeed21 (sfnt word sum, valid)
       Major version: 1  [0x1e8+0x2]
       Minor version: 0  [0x1ea+0x2]
       Font revision: 1.5  [0x1ec+0x4]
@@ -207,7 +207,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Index to location format: 0 — short offsets  [0x21a+0x2]
       Glyph data format: 0  [0x21c+0x2]
   ▾ 'hhea' — Horizontal header, 36 bytes, 5 h-metrics  [0x220+0x24]
-      Checksum: 0x5d40196 — valid
+      Checksum: 0x5d40196 (sfnt word sum, valid)
       Major version: 1  [0x220+0x2]
       Minor version: 0  [0x222+0x2]
       Ascender: 800  [0x224+0x2]
@@ -224,7 +224,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Metric data format: 0  [0x240+0x2]
       Number of h metrics: 5  [0x242+0x2]
   ▾ 'hmtx' — Horizontal metrics, 20 bytes  [0x244+0x14]
-      Checksum: 0xbb80000 — valid
+      Checksum: 0xbb80000 (sfnt word sum, valid)
     ▾ Long metrics — 5 × (advance width, left side bearing)  [0x244+0x14]
         Glyph 0 — advance 600, lsb 0  [0x244+0x4]
         Glyph 1 — advance 600, lsb 0  [0x248+0x4]
@@ -232,7 +232,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Glyph 3 — advance 600, lsb 0  [0x250+0x4]
         Glyph 4 — advance 600, lsb 0  [0x254+0x4]
   ▾ 'loca' — Index to location, 12 bytes  [0x258+0xc]
-      Checksum: 0x240024 — valid
+      Checksum: 0x240024 (sfnt word sum, valid)
       Glyph 0 — 0x0, empty  [0x258+0x2]
       Glyph 1 — 0x0, 36 bytes  [0x25a+0x2]
       Glyph 2 — 0x24, empty  [0x25c+0x2]
@@ -240,7 +240,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Glyph 4 — 0x24, empty  [0x260+0x2]
       End — 0x24, end  [0x262+0x2]
   ▾ 'maxp' — Maximum profile, 32 bytes, 5 glyphs  [0x264+0x20]
-      Checksum: 0x47000a — valid
+      Checksum: 0x47000a (sfnt word sum, valid)
       Version: 0x10000 — 1.0 (TrueType)  [0x264+0x4]
       Number of glyphs: 5  [0x268+0x2]
       Max points: 8  [0x26a+0x2]
@@ -257,7 +257,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Max component elements: 0  [0x280+0x2]
       Max component depth: 0  [0x282+0x2]
   ▾ 'name' — Naming table, 371 bytes, 9 records  [0x284+0x173]
-      Checksum: 0x70702c35 — valid
+      Checksum: 0x70702c35 (sfnt word sum, valid)
     ▾ Header  [0x284+0x6]
         Format: 0  [0x284+0x2]
         Count: 9  [0x286+0x2]
@@ -327,7 +327,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Length: 16  [0x2f2+0x2]
           String offset: 0xf1  [0x2f4+0x2]
   ▾ 'post' — PostScript, 32 bytes, version 3  [0x3f8+0x20]
-      Checksum: 0xff9f0032 — valid
+      Checksum: 0xff9f0032 (sfnt word sum, valid)
       Version: 0x30000 — 3  [0x3f8+0x4]
       Italic angle: 0  [0x3fc+0x4]
       Underline position: -100  [0x400+0x2]

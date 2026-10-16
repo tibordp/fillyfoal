@@ -32,7 +32,7 @@ use crate::formats::{Format, Head, Input, Probe, audio::flac, audio::vorbis};
 use crate::node::Node;
 use crate::record;
 use crate::span::{Origin, Span};
-use crate::value::{FlagTable, flag};
+use crate::value::{Check, FlagTable, flag};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -115,7 +115,7 @@ record! {
         granule: u64 "Granule position" .desc("Codec-defined position at the end of the last completed packet") .with(|&g, n| if g == u64::MAX { n.summary("-1: no packet ends on this page") } else { n }),
         serial: u32 "Stream serial number" .hex(),
         sequence: u32 "Page sequence number",
-        crc: u32 "CRC" .hex(),
+        crc: u32 "CRC" .checksum("CRC-32/Ogg"),
         segments: u8 "Segments",
     }
 }
@@ -864,21 +864,14 @@ async fn expand_page(cx: Cx, st: PageState) -> Result<()> {
     let file = st.input.span;
     let page = read_page(&cx, file, st.pos).await?;
     let header = page.span.sub(0, PageHeader::SIZE);
-    let mut node = PageHeader::node("Header", header, LE);
+    let mut check = Check::new("CRC-32/Ogg", page.header.crc);
     if page.span.len <= cx.limits().max_read {
         let bytes = cx.read_avail(page.span).await?;
         if to_u64(bytes.len()) == page.span.len {
-            let computed = crc32(&bytes);
-            node = if computed == page.header.crc {
-                node.summary("CRC valid")
-            } else {
-                node.diag(Diagnostic::warning(format!(
-                    "CRC mismatch: computed {computed:#010x}"
-                )))
-            };
+            check = check.verify(crc32(&bytes));
         }
     }
-    cx.emit(node);
+    cx.emit(PageHeader::checked_node("Header", header, LE, check.at(22)).check_diag(&check));
     cx.emit(
         Node::new("Segment table")
             .span(page.span.sub(PageHeader::SIZE, page.header.segments.into()))

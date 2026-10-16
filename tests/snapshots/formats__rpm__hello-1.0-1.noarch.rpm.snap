@@ -145,7 +145,7 @@ expression: "common::explore(&display_name(&path), &data)"
         XFL: best compression (0x2)  [0x275+0x1]
         OS: unknown (0xff)  [0x276+0x1]
     ▾ Trailer  [0x2e7+0x8]
-        CRC32: 0xf5eec738  [0x2e7+0x4]
+        CRC32: 0xf5eec738 (CRC-32, valid)  [0x2e7+0x4]
         ISIZE: 280  [0x2eb+0x4]
     ▾ Content — cpio archive (SVR4 newc), 1 entry, 15 bytes  [0x277+0x78]
       ▾ ./usr/share/doc/hello/README — 15 bytes  [#1:0x0+0x9c]

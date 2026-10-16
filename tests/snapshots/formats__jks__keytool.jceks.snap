@@ -163,4 +163,4 @@ expression: "common::explore(&display_name(&path), &data)"
                 r: 9d d0 a4 5d fa 3c f5 a0 3c 37 2f e2 ad 23 6c d9 …  |...].<..<7/..#l.| — INTEGER, 256-bit  [0x545+0x23]
                 s: da 1c 33 f8 f5 8b a4 c7 49 1b cc 59 34 e5 ce fb …  |..3.....I..Y4...| — INTEGER, 256-bit  [0x568+0x23]
   ▾ Digest: "8904427f2bea3ed44c855d67421f2ebb86ddc13a"  [0x58b+0x14]
-      Integrity check — verified with the store password  [0x58b+0x14]
+      Integrity check: 8904427f2bea3ed44c855d67421f2ebb86ddc13a (keyed SHA-1, valid) — with the store password  [0x58b+0x14]

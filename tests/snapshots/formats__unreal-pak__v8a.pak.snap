@@ -30,7 +30,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Version: FNameBasedCompressionMethod (0x8)  [0x41a+0x4]
       Index offset: 0x2c9  [0x41e+0x8]
       Index size: 316  [0x426+0x8]
-      Index hash (SHA-1): cb 67 fd cd a0 a5 82 52 05 5d 1d 45 3e d4 fc 37 …  |.g.....R.].E>..7|  [0x42e+0x14]
+      Index hash (SHA-1): cb67fdcda0a58252055d1d453ed4fc37bd9666ad (SHA-1, not checked)  [0x42e+0x14]
       Compression method: "Zlib"  [0x442+0x20]
       Compression method: "Gzip"  [0x462+0x20]
       Compression method: "LZ4"  [0x482+0x20]

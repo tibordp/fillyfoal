@@ -4,7 +4,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ index.json.blob — Proxmox Backup data blob, zstd-compressed, 413 bytes  [0x0+0x1a9]
     Magic: "zstd-compressed"  [0x0+0x8]
-    CRC32: 0x51059603 — valid  [0x8+0x4]
+    CRC32: 0x51059603 (CRC-32, valid)  [0x8+0x4]
   ▾ Data — JSON object, 6 members  [0xc+0x19d]
       backup-id: "plain"  [#1:0x11+0x7]
       backup-time: 1767323045  [#1:0x2b+0xa]

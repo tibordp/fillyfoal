@@ -41,7 +41,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Compression method: deflate (0x0)  [#3:0x1a+0x1]
             Filter method: adaptive (five filter types) (0x0)  [#3:0x1b+0x1]
             Interlace method: None (0x0)  [#3:0x1c+0x1]
-            CRC: 0x3a7e9b55 — valid  [#3:0x1d+0x4]
+            CRC: 0x3a7e9b55 (CRC-32, valid)  [#3:0x1d+0x4]
         ▾ Image data — 1 IDAT chunk, 10 bytes compressed → 2 bytes of scanlines  [#3:0x21+0x16]
           ▾ Compressed stream — zlib stream, 10 bytes  [#3:0x29+0xa]
               CMF: 0x78 — deflate, 32 KiB window  [#3:0x29+0x1]
@@ -52,11 +52,11 @@ expression: "common::explore(&display_name(&path), &data)"
               Length: 10  [#3:0x21+0x4]
               Type: "IDAT" — critical, public, unsafe to copy  [#3:0x25+0x4]
               Data  [#3:0x29+0xa]
-              CRC: 0x48afa471 — valid  [#3:0x33+0x4]
+              CRC: 0x48afa471 (CRC-32, valid)  [#3:0x33+0x4]
         ▾ IEND — end of image  [#3:0x37+0xc]
             Length: 0  [#3:0x37+0x4]
             Type: "IEND" — critical, public, unsafe to copy  [#3:0x3b+0x4]
-            CRC: 0xae426082 — valid  [#3:0x3f+0x4]
+            CRC: 0xae426082 (CRC-32, valid)  [#3:0x3f+0x4]
     ▾ hello.txt — 10 bytes  [0x419+0x12]
         Type: "file"
         Mode: "0644" — -rw-r--r--

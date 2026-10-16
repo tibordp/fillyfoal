@@ -363,7 +363,10 @@ fn header_layout(f: &mut Fields<'_>, file: &Span) -> Result<()> {
     f.u8("fNeedsGarbageCollect").emit()?;
     f.u8("fHasNoEmbeddedFileObjects").emit()?;
     f.guid("guidAncestor").emit()?;
-    f.u32("crcName").hex().desc("CRC of the file name").emit()?;
+    f.u32("crcName")
+        .checksum("CRC-32")
+        .desc("CRC of the file name")
+        .emit()?;
     fcr_field(f, "fcrHashedChunkList", 12, file)?;
     fcr_field(f, "fcrTransactionLog", 12, file)?;
     fcr_field(f, "fcrFileNodeListRoot", 12, file)?;
