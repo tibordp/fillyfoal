@@ -699,7 +699,7 @@ fn gr_probe(h: &Head<'_>) -> bool {
     xsize == pixels
         && (1..=3).contains(&kind)
         && csize >= ARC_HEADER
-        && body.saturating_add(csize) <= h.len
+        && h.within(body.saturating_add(csize))
 }
 
 fn dc_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
@@ -857,4 +857,31 @@ async fn arc_fields(cx: Cx, arc: Span) -> Result<()> {
     ));
     cx.emit(Node::new("Codes").span(arc.tail(ARC_HEADER)));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gr_probe_needs_a_known_length_or_the_head() {
+        // An 8x8 compressed device context whose 1000-byte block runs past
+        // the 61 bytes there are.
+        let mut data = vec![0u8; 16];
+        for v in [8u32, 8, 8, DCF_COMPRESSED] {
+            data.extend_from_slice(&v.to_le_bytes());
+        }
+        data.extend_from_slice(&1000u64.to_le_bytes());
+        data.extend_from_slice(&64u64.to_le_bytes());
+        data.extend_from_slice(&[2, 0, 0, 0, 0]);
+        let head = |len, len_known| Head {
+            data: &data,
+            tail: &data,
+            len,
+            len_known,
+        };
+        assert!(!gr_probe(&head(61, true)));
+        assert!(!gr_probe(&head(1 << 20, false)));
+        assert!(gr_probe(&head(1049, true)));
+    }
 }
