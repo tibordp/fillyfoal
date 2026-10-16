@@ -121,7 +121,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Stereo: false  [0x728+0x1]
         Frame count code: 0 — 1 frame  [0x728+0x1]
         Frames  [0x729+0x35]
-    ▾ Packet 7 — 35 bytes, hybrid FB 20 ms, mono, 1 frame, ends at 0:00.100  [0x75e+0x23]
+    ▾ Packet 7 — 35 bytes, hybrid FB 20 ms, mono, 1 frame, ends at 100 ms  [0x75e+0x23]
         Configuration: 15 — hybrid FB 20 ms  [0x75e+0x1]
         Stereo: false  [0x75e+0x1]
         Frame count code: 0 — 1 frame  [0x75e+0x1]

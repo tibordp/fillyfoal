@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ id3v2.mpc — Musepack SV8, 44100 Hz, 2 ch, 0:01  [0x0+0x1bf]
+▾ id3v2.mpc — Musepack SV8, 44100 Hz, 2 ch, 1 s  [0x0+0x1bf]
   ▾ ID3v2 tag — ID3v2.3, 2 frames, 245 bytes: fillyfoal – Tone  [0x0+0xf5]
     ▾ Header  [0x0+0xa]
         Identifier: "ID3"  [0x0+0x3]
@@ -24,7 +24,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Text: "fillyfoal"  [0x24+0x9]
       Padding — 200 bytes  [0x2d+0xc8]
     Magic  [0xf5+0x4]
-  ▾ Stream header — 44100 Hz, 2 ch, 0:01  [0xf9+0xe]
+  ▾ Stream header — 44100 Hz, 2 ch, 1 s  [0xf9+0xe]
       Key: "SH"  [0xf9+0x2]
       Size: 14  [0xfb+0x1]
       CRC: 0x12345678 (CRC-32, not checked)  [0xfc+0x4]

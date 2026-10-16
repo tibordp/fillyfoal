@@ -6,7 +6,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Signature: "NSVf"  [0x0+0x4]
     Header size: 40  [0x4+0x4]
     File size: 0  [0x8+0x4]
-    Length (ms): 1000  [0xc+0x4]
+    Length: 1 s  [0xc+0x4]
     Metadata length: 12  [0x10+0x4]
     TOC allocated: 0  [0x14+0x4]
     TOC entries: 0  [0x18+0x4]

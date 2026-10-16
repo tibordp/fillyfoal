@@ -47,7 +47,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Packet type: 0 — data  [0x248+0x1]
         Frame type: 0 — intra (keyframe)  [0x248+0x1]
         Frame data  [0x248+0x14]
-    ▾ Packet 4 — 10 bytes, inter frame, ends at 0:00.040  [0x25c+0xa]
+    ▾ Packet 4 — 10 bytes, inter frame, ends at 40 ms  [0x25c+0xa]
         Packet type: 0 — data  [0x25c+0x1]
         Frame type: 1 — inter  [0x25c+0x1]
         Frame data  [0x25c+0xa]

@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ 420p10-tff.y4m — YUV4MPEG2, 8×4, 4:2:0 10-bit, 29.97 fps, interlaced (top field first), PAR 10:11, 2 frames, 00:00:00.066  [0x0+0x108]
+▾ 420p10-tff.y4m — YUV4MPEG2, 8×4, 4:2:0 10-bit, 29.97 fps, interlaced (top field first), PAR 10:11, 2 frames, 66 ms  [0x0+0x108]
   ▾ Stream header  [0x0+0x3c]
       Signature: "YUV4MPEG2"  [0x0+0x9]
       Width: 8  [0xa+0x2]

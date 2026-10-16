@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ 420jpeg.y4m — YUV4MPEG2, 16×16, 4:2:0 8-bit, JPEG/MPEG-1 chroma siting, 5 fps, 1 frame, 00:00:00.200  [0x0+0x1bd]
+▾ 420jpeg.y4m — YUV4MPEG2, 16×16, 4:2:0 8-bit, JPEG/MPEG-1 chroma siting, 5 fps, 1 frame, 200 ms  [0x0+0x1bd]
   ▾ Stream header  [0x0+0x37]
       Signature: "YUV4MPEG2"  [0x0+0x9]
       Width: 16  [0xa+0x3]

@@ -80,7 +80,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Name length: 5  [0xa00e+0x2]
         Created: 2026-10-10 00:39:19 UTC  [0xa010+0x4]
         Created (ns): 690695000  [0xa014+0x4]
-        VM clock (ns): 0 — 0.000000000 s  [0xa018+0x8]
+        VM clock: 0 s  [0xa018+0x8]
         VM state size: 0 bytes  [0xa020+0x4]
         Extra data size: 24  [0xa024+0x4]
         VM state size (64-bit): 0 bytes  [0xa028+0x8]

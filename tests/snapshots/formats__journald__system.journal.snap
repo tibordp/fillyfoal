@@ -27,5 +27,5 @@ expression: "common::explore(&display_name(&path), &data)"
       Entry array offset: 0x0  [0xb0+0x8]
       Head entry realtime (µs): 1700000000000000  [0xb8+0x8]
       Tail entry realtime (µs): 1700003600000000  [0xc0+0x8]
-      Tail entry monotonic (µs): 0  [0xc8+0x8]
+      Tail entry monotonic: 0 s  [0xc8+0x8]
   ▾ Objects — 0 objects  [0x110+0x0]

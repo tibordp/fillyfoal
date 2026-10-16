@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ zero-padded.mp3 — MPEG-2.5 Layer III, 32 kbps, 11025 Hz, mono, 150 ms, Lavc62.28  [0x0+0x596]
+▾ zero-padded.mp3 — MPEG-2.5 Layer III, 32 kbps, 11025 Hz, mono, 150.022676 ms, Lavc62.28  [0x0+0x596]
     Junk — 700 bytes, before the first frame  [0x0+0x2bc]
   ▾ Info header — CBR, 5 frames, 730 bytes, Lavc62.28  [0x2c9+0xc3]
       ID: "Info" — constant (or average) bitrate  [0x2c9+0x4]

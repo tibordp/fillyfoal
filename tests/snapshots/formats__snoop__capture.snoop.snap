@@ -2,11 +2,11 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ capture.snoop — snoop v2, Ethernet; 1 packet, 60 bytes over 0.000000 s; Ethernet 1  [0x0+0x64]
+▾ capture.snoop — snoop v2, Ethernet; 1 packet, 60 bytes over 0 s; Ethernet 1  [0x0+0x64]
     Magic: "snoop"  [0x0+0x8]
     Version: 2  [0x8+0x4]
     Datalink type: Ethernet (0x4)  [0xc+0x4]
-  ▾ Packet 0 — +0.000000 s, 60 bytes, 00:00:00:00:00:00 → 00:00:00:00:00:00, IEEE 802.3, length 0  [0x10+0x54]
+  ▾ Packet 0 — +0 s, 60 bytes, 00:00:00:00:00:00 → 00:00:00:00:00:00, IEEE 802.3, length 0  [0x10+0x54]
     ▾ Record Header — 2023-11-14 22:13:20.000500 UTC  [0x10+0x18]
         Original length: 60  [0x10+0x4]
         Included length: 60  [0x14+0x4]

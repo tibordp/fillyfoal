@@ -53,7 +53,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Subframe type: 0x27 — LPC, order 8  [0xb6+0x1]
             Wasted bits flag: false  [0xb6+0x1]
           CRC-16: 0xc0f0 (CRC-16/BUYPASS, valid)  [0x1b8+0x2]
-    ▾ Packet 3 — 148 bytes, frame 1, 224 samples, mono, ends at 0:00.100  [0x1ba+0x94]
+    ▾ Packet 3 — 148 bytes, frame 1, 224 samples, mono, ends at 100 ms  [0x1ba+0x94]
       ▾ FLAC frame — frame 1, 224 samples, mono  [0x1ba+0x94]
         ▾ Header  [0x1ba+0x7]
             Sync code: 0x3ffe  [0x1ba+0x2]

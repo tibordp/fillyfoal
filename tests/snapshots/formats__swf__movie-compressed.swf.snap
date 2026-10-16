@@ -22,7 +22,7 @@ expression: "common::explore(&display_name(&path), &data)"
           XML: "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description rdf:about=\"\"><dc:title xmlns:dc=\"http://purl.org/dc/elements/1.1/\">fillyfoal</dc:title></rdf:Description></rdf:RDF>"  [#1:0x19+0xc6]
       ▾ ScriptLimits — 4 bytes  [#1:0xdf+0x6]
           Max recursion depth: 1000  [#1:0xe1+0x2]
-          Script timeout (s): 60  [#1:0xe3+0x2]
+          Script timeout: 0:01:00  [#1:0xe3+0x2]
       ▾ SetBackgroundColor — 3 bytes  [#1:0xe5+0x5]
           Background colour: "#336699"  [#1:0xe7+0x3]
       ▾ DefineBinaryData — 79 bytes  [#1:0xea+0x55]

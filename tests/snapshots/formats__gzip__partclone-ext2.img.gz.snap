@@ -62,7 +62,7 @@ expression: "common::explore(&display_name(&path), &data)"
           On errors: continue (0x1)  [#2:0x43c+0x2]
           Minor revision: 0  [#2:0x43e+0x2]
           Last checked: 2024-01-01 00:00:00 UTC  [#2:0x440+0x4]
-          Check interval (s): 0  [#2:0x444+0x4]
+          Check interval: 0 s  [#2:0x444+0x4]
           Creator OS: Linux (0x0)  [#2:0x448+0x4]
           Revision: 1  [#2:0x44c+0x4]
           Reserved blocks user: 0  [#2:0x450+0x2]

@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ apetag.mp3 — MPEG-2.5 Layer III, 32 kbps, 11025 Hz, mono, 150 ms, Lavc62.28 — Beep  [0x0+0x49a]
+▾ apetag.mp3 — MPEG-2.5 Layer III, 32 kbps, 11025 Hz, mono, 150.022676 ms, Lavc62.28 — Beep  [0x0+0x49a]
   ▾ ID3v2 tag — ID3v2.3, 3 frames, 84 bytes: Beep  [0x0+0x54]
     ▾ Header  [0x0+0xa]
         Identifier: "ID3"  [0x0+0x3]

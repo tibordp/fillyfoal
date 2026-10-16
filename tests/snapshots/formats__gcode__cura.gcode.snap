@@ -2,11 +2,11 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ cura.gcode — 3D printer G-code, Cura_SteamEngine 5.4.0, Creality Ender-3, 12m 34s, 0.412m  [0x0+0x680]
+▾ cura.gcode — 3D printer G-code, Cura_SteamEngine 5.4.0, Creality Ender-3, 0:12:34, 0.412m  [0x0+0x680]
     Slicer: "Cura_SteamEngine 5.4.0"  [0xad+0x26]
     Printer: "Creality Ender-3"  [0x9c+0x10]
     Flavor: "Marlin"  [0x8+0x6]
-    Estimated time: "754" — 12m 34s  [0x15+0x3]
+    Estimated time: "754" — 0:12:34  [0x15+0x3]
     Filament used: "0.412m"  [0x29+0x6]
     Layer height: "0.2"  [0x3f+0x3]
     Nozzle temperature: 200 — °C, first M104/M109  [0x1a9+0x9]

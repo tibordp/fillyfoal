@@ -202,7 +202,7 @@ expression: "common::explore(&display_name(&path), &data)"
         types_nr[2]: 6  [0x3d8+0x4]
   ▾ Records  [0x3dc+0x2418]
     ▾ [0] 11:26:22 R_STATS: 2026-10-16 11:26:22 UTC — 16 activities  [0x3dc+0x2418]
-        uptime_cs: 78915424 — 789154.24 s  [0x3dc+0x8]
+        uptime_cs: 9 days, 3:12:34.240  [0x3dc+0x8]
         ust_time: 2026-10-16 11:26:22 UTC  [0x3e4+0x8]
         extra_next: 0  [0x3ec+0x4]
         record_type: R_STATS (0x1)  [0x3f0+0x1]

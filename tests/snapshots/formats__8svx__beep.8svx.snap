@@ -1,8 +1,8 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ beep.8svx — 8SVX, 8363 Hz, 100 samples, 12 ms  [0x0+0xde]
+▾ beep.8svx — 8SVX, 8363 Hz, 100 samples, 11.957 ms  [0x0+0xde]
   ▾ Header  [0x0+0xc]
       Chunk ID: "FORM"  [0x0+0x4]
       Size: 214  [0x4+0x4]

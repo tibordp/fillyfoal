@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ junk-tags.mp3 — MPEG-2 Layer III, 32 kbps, 16000 Hz, mono, 341 ms — fillyfoal – Tone  [0x0+0x739]
+▾ junk-tags.mp3 — MPEG-2 Layer III, 32 kbps, 16000 Hz, mono, 341.25 ms — fillyfoal – Tone  [0x0+0x739]
   ▾ Frames — 1.3 KiB  [0x0+0x555]
     ▾ Frame 0 — MPEG-2 Layer III, 32 kbps, 16000 Hz, mono, 144 bytes  [0x0+0x90]
       ▾ Header  [0x0+0x4]

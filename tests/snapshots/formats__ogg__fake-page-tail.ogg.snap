@@ -41,7 +41,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Data — 434 bytes  [0xd82+0x1b2]
     ▾ Packet 4 — 369 bytes  [0xf34+0x171]
         Data — 369 bytes  [0xf34+0x171]
-    ▾ Packet 5 — 446 bytes, ends at 0:00.200  [0x10a5+0x1be]
+    ▾ Packet 5 — 446 bytes, ends at 200 ms  [0x10a5+0x1be]
         Data — 446 bytes  [0x10a5+0x1be]
   ▾ Pages — 1 stream, 4.6 KiB  [0x0+0x127e]
     ▾ Page 0 — serial 0x0, seq 0, granule 0, 1 packet, BOS (Vorbis)  [0x0+0x3a]

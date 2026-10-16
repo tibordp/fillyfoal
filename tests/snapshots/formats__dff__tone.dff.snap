@@ -1,8 +1,8 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tone.dff — DSDIFF, DSD, DSD64 (2.8224 MHz), 2 ch, 1 ms  [0x0+0x2de]
+▾ tone.dff — DSDIFF, DSD, DSD64 (2.8224 MHz), 2 ch, 725.624 µs  [0x0+0x2de]
   ▾ FRM8 DSD — 722 bytes  [0x0+0x2de]
       Chunk ID: "FRM8"  [0x0+0x4]
       Chunk size: 722  [0x4+0x8]

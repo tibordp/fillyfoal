@@ -1032,7 +1032,7 @@ expression: "common::explore(&display_name(&path), &data)"
         BasicPerfInfo.CommittedPages: 1347336  [0x14fc+0x8]
         BasicPerfInfo.CommitLimit: 4455124  [0x1504+0x8]
         BasicPerfInfo.PeakCommitment: 1350084  [0x150c+0x8]
-        PerfInfo.IdleProcessTime: 32480625000 — 3248.0625000 s  [0x1514+0x8]
+        PerfInfo.IdleProcessTime: 0:54:08.0625  [0x1514+0x8]
         PerfInfo.IoReadTransferCount: 7560196692  [0x151c+0x8]
         PerfInfo.IoWriteTransferCount: 1365522392  [0x1524+0x8]
         PerfInfo.IoOtherTransferCount: 66695334  [0x152c+0x8]

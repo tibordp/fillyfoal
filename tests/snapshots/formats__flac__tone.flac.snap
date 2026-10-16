@@ -15,7 +15,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Sample rate: 8000 — 8000 Hz  [0x12+0x3]
         Channels − 1: 0 — 1 ch  [0x14+0x1]
         Bits per sample − 1: 15 — 16-bit  [0x14+0x2]
-        Total samples: 2400 — 300 ms  [0x15+0x5]
+        Total samples: 300 ms (2400/8000 s)  [0x15+0x5]
         MD5 signature: 1fb5e5ff8ab65eb9db702816f1b28b44 (MD5, not checked)  [0x1a+0x10]
   ▾ PICTURE — Other, 8×8 PNG  [0x2a+0x8f]
       Header: PICTURE (0x6) — more blocks follow  [0x2a+0x1]
