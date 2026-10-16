@@ -158,6 +158,8 @@ struct Stream {
     names: BTreeMap<u32, String>,
     /// Whether sections end with footers (seen after the RAM setup).
     footers: bool,
+    /// The machine type, from the configuration.
+    machine: String,
     /// The RAM block of the last page record: a page record that
     /// continues it may start the next RAM part.
     block: String,
@@ -173,6 +175,7 @@ impl Stream {
             caps: Vec::new(),
             names: BTreeMap::new(),
             footers: true,
+            machine: String::new(),
             block: String::new(),
             sections: 0,
             ram_total: 0,
@@ -258,6 +261,15 @@ async fn walk(cx: Cx, w: Walk) -> Result<()> {
             header_layout,
         ));
         cur.seek(8);
+        let head = cx.read_avail(region.sub(4, 4)).await?;
+        if u32_be(&head, 0) == Some(2) {
+            // QEMU_VM_FILE_VERSION_COMPAT: records of ID string, instance,
+            // version and a 64-bit length, with no section types; QEMU
+            // stopped writing it in 0.13 and refuses to read it.
+            return Err(
+                Diagnostic::unsupported("version 2 (pre-0.13) stream layout").at(region.sub(8, 0)),
+            );
+        }
     }
     loop {
         if cur.at_end() {
@@ -300,6 +312,9 @@ async fn walk(cx: Cx, w: Walk) -> Result<()> {
     }
     if w.header {
         let mut label = String::from("QEMU migration stream");
+        if !st.machine.is_empty() {
+            label.push_str(&format!(", {}", clip(&st.machine, 40)));
+        }
         if st.ram_blocks > 0 {
             label.push_str(&format!(
                 ", {} RAM in {}",
@@ -445,6 +460,7 @@ async fn config_section(cx: &Cx, w: &Walk, cur: &mut Cursor<'_>, st: &mut Stream
         st.page = page;
     }
     st.caps = config.caps;
+    st.machine = config.machine.clone();
     cur.seek(start.saturating_add(len));
     let mut summary = config.machine.clone();
     if !st.caps.is_empty() {
@@ -1456,8 +1472,8 @@ fn run_node(sec: &Section, r: Run) -> Node {
             "{:#x}–{last:#x}, {} {} {} ({})",
             r.first,
             r.count,
-            if r.count == 1 { "page" } else { "pages" },
             r.kind.name(),
+            if r.count == 1 { "page" } else { "pages" },
             size(r.count.saturating_mul(page))
         ));
     if r.fills {

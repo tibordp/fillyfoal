@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ v2.vmstate  [0x0+0x26]
+  ▾ Header  [0x0+0x8]
+      Magic: "QEVM"  [0x0+0x4]
+      Version: 2  [0x4+0x4]
+    ! unsupported: version 2 (pre-0.13) stream layout [0x8+0x0]
