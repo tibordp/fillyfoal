@@ -13,12 +13,14 @@
 //! inflate without error up to the end of the head (at least 4 KiB of it),
 //! or end inside it with a matching Adler-32. Random and text data fail
 //! that within a few hundred bytes. Streams with a preset
-//! dictionary cannot be inflated without it and are left to the
-//! extensions.
+//! dictionary cannot be inflated without it: a second-phase probe takes
+//! them by their header and a `.zlib` or `.zz` name, and they are listed
+//! (header, dictionary id, data, trailer) without being decoded.
 //!
 //! Small files are decoded when the node is expanded, to find where the
-//! stream ends and check its Adler-32; the content of larger ones is
-//! decoded on demand, and their trailer checked when expanded.
+//! stream ends and check its Adler-32 (damage found then is reported on
+//! the compressed data); the content of larger ones is decoded on demand,
+//! and their trailer checked when expanded.
 
 use crate::codec::Adler32;
 use crate::codec::pipeline::{Status, Step};
@@ -38,6 +40,24 @@ pub static FORMAT: Format = Format {
     mime: "application/zlib",
     probe: Probe::Custom(probe),
     dissect: crate::expander!(dissect: Input),
+};
+
+/// Streams with a preset dictionary, which the first-phase probe cannot
+/// inflate: a header with the dictionary flag (checked as for any stream)
+/// and a `.zlib` or `.zz` name.
+pub static DICT_DEEP: crate::formats::DeepProbe = crate::formats::DeepProbe {
+    format: &FORMAT,
+    tail: false,
+    over: &[],
+    probe: |d| {
+        let (Some(&cmf), Some(&flg)) = (d.head.data.first(), d.head.data.get(1)) else {
+            return false;
+        };
+        flg & 0x20 != 0
+            && header_ok(cmf, flg, true)
+            && d.head.len >= 10
+            && (d.extension_is("zlib") || d.extension_is("zz"))
+    },
 };
 
 const LEVELS: EnumTable = &[(0, "fastest"), (1, "fast"), (2, "default"), (3, "maximum")];
@@ -209,15 +229,38 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .value(hex(id, 32))
                 .desc("Adler-32 of the preset dictionary"),
         );
-        cx.annotate(format!("zlib, preset dictionary {id:#010x}"));
-        return Err(
-            Diagnostic::unsupported("zlib stream with a preset dictionary").at(file.tail(6)),
+        cx.annotate(format!(
+            "zlib, {} window, preset dictionary {id:#010x}",
+            size(window)
+        ));
+        let data = file.sub(6, file.len.saturating_sub(10));
+        cx.emit(
+            Node::new("Compressed data")
+                .span(data)
+                .summary(size(data.len))
+                .diag(Diagnostic::unsupported(
+                    "decoding needs the preset dictionary, which is not in the file",
+                )),
         );
+        let trailer = file.tail(file.len.saturating_sub(4).max(6));
+        let recorded = cx.read_avail(trailer).await?;
+        let mut node = Node::new("Adler-32")
+            .span(trailer)
+            .desc("Of the decompressed data; not checked");
+        if let Some(v) = crate::bytes::u32_be(&recorded, 0) {
+            node = node.value(hex(v, 32));
+        }
+        cx.emit(node);
+        return Ok(());
     }
-    let walked = if file.len <= EAGER_LEN {
-        walk(&cx, file, EAGER_OUTPUT).await.ok().flatten()
+    // A small stream is decoded now; its damage is shown on the data.
+    let (walked, damage) = if file.len <= EAGER_LEN {
+        match walk(&cx, file, EAGER_OUTPUT).await {
+            Ok(w) => (w, None),
+            Err(e) => (None, Some(e)),
+        }
     } else {
-        None
+        (None, None)
     };
     let mut summary = format!(
         "zlib, {} window, {} level",
@@ -261,19 +304,21 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         None => {
             cx.emit(content("Decompressed", input, file, Codec::Zlib, None));
             let trailer = file.tail(file.len.saturating_sub(4));
-            cx.emit(
-                Node::new("Compressed data")
-                    .span(
-                        file.sub(
-                            data_at,
-                            trailer
-                                .offset
-                                .saturating_sub(file.offset)
-                                .saturating_sub(data_at),
-                        ),
-                    )
-                    .summary(size(file.len.saturating_sub(data_at).saturating_sub(4))),
-            );
+            let mut data = Node::new("Compressed data")
+                .span(
+                    file.sub(
+                        data_at,
+                        trailer
+                            .offset
+                            .saturating_sub(file.offset)
+                            .saturating_sub(data_at),
+                    ),
+                )
+                .summary(size(file.len.saturating_sub(data_at).saturating_sub(4)));
+            if let Some(e) = damage {
+                data = data.diag(e);
+            }
+            cx.emit(data);
             let recorded = cx.read_avail(trailer).await?;
             let mut node = Node::new("Adler-32")
                 .span(trailer)

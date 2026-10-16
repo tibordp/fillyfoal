@@ -54,7 +54,7 @@ use crate::formats::{Codec, Format, Input, Probe, dissect_or_data};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::EnumTable;
+use crate::value::{EnumTable, Value};
 
 pub static FORMAT: Format = Format {
     name: "partclone",
@@ -112,7 +112,7 @@ record! {
         checksum_mode: u16 "Checksum mode" .hex() .enumeration(CHECKSUM_MODES),
         checksum_size: u16 "Checksum size",
         blocks_per_checksum: u32 "Blocks per checksum",
-        reseed: u8 "Reseed checksum" .desc("Whether the CRC restarts after each check value"),
+        reseed: u8 "Reseed checksum" .with(|&v, n| n.value(Value::Bool(v != 0))) .desc("Whether the CRC restarts after each check value"),
         bitmap_mode: u8 "Bitmap mode" .enumeration(BITMAP_MODES),
     }
 }
@@ -202,12 +202,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(head_node);
     let fs_span = file.sub(HeadV2::SIZE, FsInfo::SIZE);
     let fs = parse(&cx, fs_span, endian, &(), FsInfo::layout).await?;
-    cx.emit(
+    cx.emit(fs_note(
         FsInfo::node("File system", fs_span, endian).summary(format!(
             "{}, {} blocks of {} bytes, {} in use",
             fs.fs, fs.blocks, fs.block_size, fs.used
         )),
-    );
+        fs.device_size,
+        fs.blocks,
+        fs.block_size,
+    ));
     let opt_at = HeadV2::SIZE.saturating_add(FsInfo::SIZE);
     let o = parse(
         &cx,
@@ -218,11 +221,24 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     )
     .await?;
     let opt_len = u64::from(o.feature_size);
+    let checks = match (o.checksum_mode, o.blocks_per_checksum) {
+        (0, _) => "no check values".to_string(),
+        (mode, every) => format!(
+            "{} every {}{}",
+            crate::formats::util::val::name_or(CHECKSUM_MODES, mode.into(), "checksum mode "),
+            plural(every, "block"),
+            if o.reseed != 0 { ", reseeded" } else { "" }
+        ),
+    };
     let mut opt_node = Options::node(
         "Options",
         file.sub(opt_at, opt_len.clamp(OPTIONS_SIZE, MAX_OPTIONS)),
         endian,
-    );
+    )
+    .summary(format!(
+        "{checks}, bitmap {}",
+        crate::formats::util::val::name_or(BITMAP_MODES, o.bitmap_mode.into(), "mode ")
+    ));
     if opt_len < OPTIONS_SIZE {
         opt_node = opt_node.diag(Diagnostic::malformed(format!(
             "options size {opt_len} (at least {OPTIONS_SIZE})"
@@ -324,16 +340,35 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     .await
 }
 
+/// A note on the file system node when the device is not what the
+/// blocks cover (the volume is the blocks; partclone.dd, or a file system
+/// smaller than its partition).
+fn fs_note(node: Node, device: u64, blocks: u64, block_size: u32) -> Node {
+    let covered = blocks.saturating_mul(block_size.into());
+    if device == covered {
+        return node;
+    }
+    node.diag(Diagnostic::note(format!(
+        "the device is {}; its {} blocks cover {}, the volume shown",
+        size(device),
+        blocks,
+        size(covered)
+    )))
+}
+
 async fn dissect_v1(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let span = file.sub(0, HeaderV1::SIZE);
     let h = parse(&cx, span, Endian::Little, &(), HeaderV1::layout).await?;
-    cx.emit(
+    cx.emit(fs_note(
         HeaderV1::node("Header", span, Endian::Little).summary(format!(
             "{}, {} blocks of {} bytes, {} in use",
             h.fs, h.blocks, h.block_size, h.used
         )),
-    );
+        h.device_size,
+        h.blocks,
+        h.block_size,
+    ));
     cx.annotate(format!(
         "Partclone image 0001, {}, {} volume, {} blocks of {} bytes, {} in use",
         h.fs,

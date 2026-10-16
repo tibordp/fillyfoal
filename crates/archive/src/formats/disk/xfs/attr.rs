@@ -42,7 +42,7 @@ fn attr_name(flags: u8, name: &[u8]) -> String {
 }
 
 /// A POSIX ACL as XFS stores it (`xfs_acl`), in `getfacl` short form.
-fn acl_text(value: &[u8]) -> Option<String> {
+pub(crate) fn acl_text(value: &[u8]) -> Option<String> {
     let count = to_usize(u32_be(value, 0)?.into());
     let entries = value.get(4..)?.as_chunks::<12>().0;
     if entries.len() < count {

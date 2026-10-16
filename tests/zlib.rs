@@ -145,3 +145,23 @@ fn small_streams_are_checked_at_once() {
     assert!(tree.contains("22 bytes uncompressed"), "{tree}");
     assert!(tree.contains("4 bytes after the stream"), "{tree}");
 }
+
+/// Damage found by the decode of a small stream at expansion is shown on
+/// the compressed data at once, not only once its content is expanded.
+#[test]
+fn small_streams_show_their_damage() {
+    // A stored block whose length check (NLEN) does not match.
+    let mut z = zlib_stored(b"hello zlib, hello zlib");
+    z[5] ^= 0xff;
+    let mut host = Host::open(
+        "bad.zz",
+        z,
+        Limits::default(),
+        fillyfoal::formats::by_name("zlib"),
+    );
+    let root = host.root;
+    expand(&mut host, root);
+    let data = host.child(root, "Compressed data").unwrap();
+    let node = host.session.node(data).unwrap();
+    assert!(!node.diagnostics.is_empty(), "{}", host.render());
+}

@@ -25,7 +25,10 @@
 //!
 //! The listing names directories and files by their paths, from the
 //! directory entries (read once and cached); a file's content is its data
-//! extents and holes as a piecewise source. Checksum mismatches are
+//! extents and holes as a piecewise source. A hard-linked inode is named
+//! by its first entry, its summary listing the others; device numbers are
+//! XFS's (major above 18 bits of minor); POSIX ACLs (`SGI_ACL_FILE`,
+//! `SGI_ACL_DEFAULT`) are shown as `getfacl` text. Checksum mismatches are
 //! warnings; directory entries are checked only when the dump attributes
 //! say they carry checksums, extents when their own flag does.
 //!
@@ -169,7 +172,7 @@ record! {
     pub struct DriveHeader {
         drive_count: u32 "Drives",
         drive_index: u32 "Drive index",
-        strategy: i32 "Drive strategy",
+        strategy: i32 "Drive strategy" .enumeration(DRIVE_STRATEGIES),
         _pad1: bytes[0x1f4] "Padding",
         _specific: bytes[0x200] "Strategy-specific",
     }
@@ -182,7 +185,7 @@ record! {
         prev_label: ascii[256] "Previous media label",
         _pad1: bytes[256] "Padding",
         media_id: bytes[16] "Media id" .with(uuid_value),
-        prev_media_id: bytes[16] "Previous media id" .with(uuid_value),
+        prev_media_id: bytes[16] "Previous media id" .with(uuid_or_none),
         _pad2: bytes[16] "Padding",
         media_index: u32 "Media index",
         media_file_index: u32 "Media file index",
@@ -217,11 +220,11 @@ record! {
         attrs: u32 "Dump attributes" .hex() .flags(DUMP_ATTRS),
         level: i32 "Dump level",
         _pad1: bytes[4] "Padding",
-        last_time: u32 "Base dump time" .timestamp(),
-        resume_time: u32 "Resumed dump time" .timestamp(),
+        last_time: u32 "Base dump time" .with(time_or_unset),
+        resume_time: u32 "Resumed dump time" .with(time_or_unset),
         root: u64 "Root inode",
-        last_id: bytes[16] "Base dump id" .with(uuid_value),
-        resume_id: bytes[16] "Resumed dump id" .with(uuid_value),
+        last_id: bytes[16] "Base dump id" .with(uuid_or_none),
+        resume_id: bytes[16] "Resumed dump id" .with(uuid_or_none),
         start_ino: u64 "Start point: inode",
         start_offset: i64 "Start point: offset",
         start_flags: i32 "Start point: flags" .hex(),
@@ -239,6 +242,38 @@ record! {
         data_size: u64 "Data size" .with(|&v, n| n.summary(size(v))),
         _pad2: bytes[0x18] "Padding",
     }
+}
+
+/// Drive strategies: 1 is what dumps to a file or a pipe write (checked
+/// on the fixtures); the others drive tapes (from memory: 0 SCSI tape, 2
+/// remote tape), whose records carry headers of their own.
+const DRIVE_STRATEGIES: EnumTable = &[(1, "simple (file or pipe)")];
+const DRIVE_SIMPLE: i32 = 1;
+
+/// A time field: 0 means none.
+fn time_or_unset(v: &u32, n: Node) -> Node {
+    if *v == 0 {
+        return n.summary("not set");
+    }
+    n.value(Value::Timestamp {
+        unix_seconds: i64::from(*v),
+    })
+}
+
+/// A UUID field: all zeros means none.
+fn uuid_or_none(b: &Vec<u8>, n: Node) -> Node {
+    let n = uuid_value(b, n);
+    if b.iter().all(|&x| x == 0) {
+        n.summary("none")
+    } else {
+        n
+    }
+}
+
+/// Major and minor numbers of a device as XFS stores it (14 bits of
+/// major above 18 of minor; checked on the fixtures' 1:3 and 7:0).
+fn dev_parts(rdev: u32) -> (u32, u32) {
+    (rdev >> 18, rdev & 0x3_ffff)
 }
 
 /// Offsets of the nested headers in the first page.
@@ -328,8 +363,8 @@ struct FileHdr {
     flags: u32,
     ino: u64,
     mode: u32,
+    rdev: u32,
     size: u64,
-    mtime: u32,
     checksum_ok: bool,
 }
 
@@ -348,8 +383,8 @@ async fn file_hdr(cx: &Cx, stream: Span, pos: u64) -> Result<FileHdr> {
         flags: be_u32(&raw, 8),
         ino: be_u64(&raw, 16),
         mode: be_u32(&raw, 24),
+        rdev: be_u32(&raw, 40),
         size: be_u64(&raw, 48),
-        mtime: be_u32(&raw, 64),
         checksum_ok: checksum_ok(&raw, FILEHDR_INTS),
     })
 }
@@ -556,17 +591,51 @@ struct State {
 /// The directory entries, read once: each inode's parent and name, and
 /// where the other inodes' records start.
 struct Names {
+    /// Each inode's first name: its directory and the name in it.
     parent: BTreeMap<u64, (u64, String)>,
+    /// The other names of hard-linked inodes.
+    links: BTreeMap<u64, Vec<(u64, String)>>,
     files_at: u64,
 }
+
+/// Other names shown on a hard-linked file's node at most.
+const MAX_LINKS_SHOWN: usize = 4;
 
 impl Names {
     fn path(&self, root: u64, ino: u64) -> String {
         if ino == root {
             return "/".into();
         }
-        let mut parts = Vec::new();
-        let mut at = ino;
+        match self.parent.get(&ino) {
+            Some((dir, name)) => self.join(root, *dir, name, ino),
+            None => format!("inode {ino}"),
+        }
+    }
+
+    /// The paths of a hard-linked inode's other names (a few, then a
+    /// count).
+    fn other_paths(&self, root: u64, ino: u64) -> Vec<String> {
+        let Some(links) = self.links.get(&ino) else {
+            return Vec::new();
+        };
+        let mut out: Vec<String> = links
+            .iter()
+            .take(MAX_LINKS_SHOWN)
+            .map(|(dir, name)| self.join(root, *dir, name, ino))
+            .collect();
+        if links.len() > MAX_LINKS_SHOWN {
+            out.push(format!(
+                "{} more",
+                links.len().saturating_sub(MAX_LINKS_SHOWN)
+            ));
+        }
+        out
+    }
+
+    /// The path of `name` in directory `dir`.
+    fn join(&self, root: u64, dir: u64, name: &str, ino: u64) -> String {
+        let mut parts = vec![name];
+        let mut at = dir;
         while at != root && parts.len() < MAX_DEPTH {
             let Some((parent, name)) = self.parent.get(&at) else {
                 return format!("inode {ino}");
@@ -585,6 +654,7 @@ async fn names(cx: &Cx, state: &State) -> Result<Arc<Names>> {
         return Ok(n);
     }
     let mut parent = BTreeMap::new();
+    let mut links: BTreeMap<u64, Vec<(u64, String)>> = BTreeMap::new();
     let mut pos = 0u64;
     while pos < state.stream.len {
         cx.progress_in(state.stream, pos);
@@ -594,8 +664,18 @@ async fn names(cx: &Cx, state: &State) -> Result<Arc<Names>> {
         match rec {
             Rec::Dir { hdr, entries, .. } => {
                 for e in entries {
-                    if e.name != "." && e.name != ".." {
-                        parent.insert(e.ino, (hdr.ino, e.name));
+                    if e.name == "." || e.name == ".." {
+                        continue;
+                    }
+                    // The first name names the inode; a hard link's
+                    // others are kept for its node's summary.
+                    match parent.entry(e.ino) {
+                        std::collections::btree_map::Entry::Vacant(v) => {
+                            v.insert((hdr.ino, e.name));
+                        }
+                        std::collections::btree_map::Entry::Occupied(_) => {
+                            links.entry(e.ino).or_default().push((hdr.ino, e.name));
+                        }
                     }
                 }
             }
@@ -606,6 +686,7 @@ async fn names(cx: &Cx, state: &State) -> Result<Arc<Names>> {
     }
     let n = Arc::new(Names {
         parent,
+        links,
         files_at: pos,
     });
     cx.cache(state.stream, KIND, n.clone());
@@ -632,11 +713,22 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         global = global.diag(Diagnostic::unsupported(format!("version {}", g.version)));
     }
     cx.emit(global);
-    cx.emit(DriveHeader::node(
-        "Drive header",
+    let d = parse(
+        &cx,
         file.sub(DRIVE_AT, DriveHeader::SIZE),
         BE,
-    ));
+        &(),
+        DriveHeader::layout,
+    )
+    .await?;
+    let mut drive = DriveHeader::node("Drive header", file.sub(DRIVE_AT, DriveHeader::SIZE), BE);
+    if d.strategy != DRIVE_SIMPLE {
+        drive = drive.diag(Diagnostic::unsupported(format!(
+            "drive strategy {}: a tape's records, with headers of their own, are not read",
+            d.strategy
+        )));
+    }
+    cx.emit(drive);
     let m = parse(
         &cx,
         file.sub(MEDIA_AT, MediaHeader::SIZE),
@@ -906,19 +998,32 @@ async fn files(cx: Cx, state: Arc<State>) -> Result<()> {
             0o140000 => "socket",
             _ => "inode",
         };
+        let what = match hdr.kind() {
+            0o020000 | 0o060000 => {
+                let (major, minor) = dev_parts(hdr.rdev);
+                format!("{major}:{minor}")
+            }
+            0o100000 | 0o120000 => size(hdr.size),
+            _ => String::new(),
+        };
+        let mut summary = kind.to_string();
+        for part in [
+            what,
+            unix_mode(hdr.mode.into()),
+            format!("inode {}", hdr.ino),
+        ] {
+            if !part.is_empty() {
+                summary.push_str(", ");
+                summary.push_str(&part);
+            }
+        }
+        let others = names.other_paths(state.root, hdr.ino);
+        if !others.is_empty() {
+            summary.push_str(&format!(", also {}", others.join(", ")));
+        }
         let mut node = Node::new(names.path(state.root, hdr.ino))
             .span(span)
-            .summary(format!(
-                "{kind}, inode {}, {}, {}",
-                hdr.ino,
-                unix_mode(hdr.mode.into()),
-                size(hdr.size)
-            ));
-        if hdr.mtime != 0 {
-            node = node.value(Value::Timestamp {
-                unix_seconds: hdr.mtime.into(),
-            });
-        }
+            .summary(summary);
         let groups = Arc::new(groups);
         node = record_diags(node, &state, &groups, attrs.as_ref());
         cx.mark(move || mark);
@@ -1019,36 +1124,70 @@ async fn record_children(
         }
     }
     if let Some(Rec::Attrs { hdr, attrs }) = &attrs {
+        let count = attrs.iter().filter(|a| a.flags & ATTR_NULL == 0).count();
+        let end = attrs.last().map_or(hdr.span.end(), |a| a.span.end());
         cx.push(
-            Node::new("Extended attributes header")
-                .span(hdr.span)
-                .lazy(file_header_fields, hdr.span),
+            Node::new("Extended attributes")
+                .span(Span::new(
+                    hdr.span.source,
+                    hdr.span.offset,
+                    end.saturating_sub(hdr.span.offset),
+                ))
+                .summary(if count == 0 {
+                    "none".to_string()
+                } else {
+                    plural(count, "attribute")
+                })
+                .lazy(attributes, (hdr.span, attrs.clone())),
         )
         .await;
-        for a in attrs {
-            let name = if a.flags & ATTR_NULL != 0 {
-                "End of attributes".to_string()
-            } else {
-                let ns = if a.flags & 1 != 0 {
-                    "trusted."
-                } else if a.flags & 8 != 0 {
-                    "security."
-                } else {
-                    "user."
-                };
-                format!("Attribute {ns}{}", a.name)
-            };
-            let mut node = Node::new(name)
-                .span(a.span)
-                .lazy(attr_fields, (a.span, a.value));
-            if a.flags & ATTR_NULL == 0 {
-                node = node.summary(size(a.value.len));
-            }
-            cx.push(node).await;
-        }
     }
     Ok(())
 }
+
+/// An inode's extended attributes record: its file header, the
+/// attributes (POSIX ACLs as `getfacl` text) and the null one ending them.
+async fn attributes(cx: Cx, (hdr, attrs): (Span, Vec<Attr>)) -> Result<()> {
+    cx.push(Node::new("Header").span(hdr).lazy(file_header_fields, hdr))
+        .await;
+    for a in attrs.iter() {
+        let name = if a.flags & ATTR_NULL != 0 {
+            "End of attributes".to_string()
+        } else {
+            let ns = if a.flags & 1 != 0 {
+                "trusted."
+            } else if a.flags & 8 != 0 {
+                "security."
+            } else {
+                "user."
+            };
+            format!("Attribute {ns}{}", a.name)
+        };
+        let mut node = Node::new(name)
+            .span(a.span)
+            .lazy(attr_fields, (a.span, a.value));
+        if a.flags & ATTR_NULL == 0 {
+            let acl = a.flags & 1 != 0
+                && (a.name == "SGI_ACL_FILE" || a.name == "SGI_ACL_DEFAULT")
+                && a.value.len <= MAX_ACL;
+            let text = if acl {
+                crate::formats::disk::xfs::acl_text(&cx.read(a.value).await?)
+            } else {
+                None
+            };
+            node = node.summary(match text {
+                Some(t) => format!("POSIX ACL: {t}"),
+                None => size(a.value.len),
+            });
+        }
+        cx.push(node).await;
+    }
+    Ok(())
+}
+
+/// ACL values larger than this are not decoded for the summary (XFS
+/// allows a few thousand entries of 12 bytes).
+const MAX_ACL: u64 = 1 << 16;
 
 async fn group_children(cx: Cx, (state, rec): (Arc<State>, Rec)) -> Result<()> {
     group_parts(&cx, &state, &rec).await
@@ -1196,9 +1335,17 @@ async fn file_header_fields(cx: Cx, span: Span) -> Result<()> {
         Node::new("Group id")
             .span(st.sub(20, 4))
             .value(uint(u32_at(36), 32)),
-        Node::new("Device")
-            .span(st.sub(24, 4))
-            .value(hex(u32_at(40), 32)),
+        {
+            let (major, minor) = dev_parts(u32_at(40));
+            let n = Node::new("Device")
+                .span(st.sub(24, 4))
+                .value(hex(u32_at(40), 32));
+            if u32_at(40) == 0 {
+                n
+            } else {
+                n.summary(format!("{major}:{minor}"))
+            }
+        },
         Node::new("Block size")
             .span(st.sub(28, 4))
             .value(uint(u32_at(44), 32)),

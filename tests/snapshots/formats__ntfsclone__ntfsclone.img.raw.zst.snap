@@ -3,7 +3,7 @@ source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ ntfsclone.img — ntfsclone image 10.1, 2 MiB volume, 4 KiB clusters, 258 in use  [0x0+0x10275f]
-  ▾ Header — version 10.1  [0x0+0x38]
+  ▾ Header — version 10.1, 512 clusters of 4 KiB, 258 in use  [0x0+0x38]
       Magic: 00 6e 74 66 73 63 6c 6f 6e 65 2d 69 6d 61 67 65  |.ntfsclone-image|  [0x0+0x10]
       Major version: 10  [0x10+0x1]
       Minor version: 1  [0x11+0x1]

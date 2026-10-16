@@ -27,6 +27,8 @@ mod dir;
 mod inode;
 mod log;
 
+pub(crate) use attr::acl_text;
+
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, u16_be, u32_be, u32_le};

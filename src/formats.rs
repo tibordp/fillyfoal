@@ -128,6 +128,8 @@ pub static DEEP: &[&DeepProbe] = &[
     &system::ostree::DELTA_DEEP,
     #[cfg(feature = "archive")]
     &archive::terraform::TFPLAN_DEEP,
+    #[cfg(feature = "archive")]
+    &compression::zlib::DICT_DEEP,
 ];
 
 /// Every format.

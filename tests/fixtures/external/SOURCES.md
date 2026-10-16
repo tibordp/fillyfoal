@@ -186,6 +186,7 @@ checks the decoded volume against.
 | --- | --- | --- |
 | `ntfsclone/ntfsclone.img.raw.zst` | ntfsclone 2022.10.3 | `ntfsclone --save-image -o ntfsclone.img vol.img` (image version 10.1), stored with `zstd -19` |
 | `gzip/ntfsclone.img.gz` | ntfsclone 2022.10.3, gzip 1.13 | `ntfsclone --save-image -o - vol.img \| gzip -9 -n`: the same image (identical bytes) written to standard output |
+| `ntfsclone/ntfs-far.img.raw.zst` | ntfsclone 2022.10.3 | `sh tests/data/ntfsclone/make-far.sh` (`inner-far.sh`, same container and packages): a 32 MiB volume (same `mkntfs` options, MFT mirror and log in the middle), a 12 MiB file of four bytes repeated and a 4.6 KiB text file copied in by `ntfscp` under `faketime`, `ntfsclone --save-image`; data megabytes apart with gaps between. Restored and compared as above; `tests/ntfsclone.rs` checks the decoded volume's CRC-32 and the far file's offset the script prints. Stored with `zstd -19` |
 
 ## Disk images (Linux tools)
 
@@ -1587,6 +1588,7 @@ FAT12 bitmap leaves out clusters in use, so its FAT12 images do not restore.)
 | `partclone/fat16-v1.img.raw.zst` | partclone 0.2.73 | `partclone.fat16 -c -s fat.img -o fat16-v1.img` (image format 0001), stored with `zstd -19` |
 | `gzip/partclone-ext2.img.gz` | partclone 0.3.36, gzip 1.13 | `partclone.extfs -c -k 16 -s ext.img -o - \| gzip -9 -n` |
 | `zstd/partclone-fat16.img.zst` | partclone 0.3.36, zstd 1.5.7 | `partclone.fat16 -c -s fat.img -o - \| zstd -19` |
+| `partclone/ext4-far.img.raw.zst` | partclone 0.3.36, e2fsprogs 1.47.2-3+b12 | `sh tests/data/partclone/make-far.sh` (`inner-far.sh`, Docker `debian:trixie-slim`): `partclone.extfs -c` of a 32 MiB ext4 (`mkfs.ext4 -b 1024 -N 64 -I 256 -O ^resize_inode`, fixed UUID and hash seed, filled with `-d` under `faketime`: a 12 MiB file of four bytes repeated, then a text file at block 12362), so the data runs past several 4 MiB resume points with free blocks after it. Restored with `partclone.restore` and compared; `tests/partclone.rs` checks the decoded volume's CRC-32 and a far read of the text file. Stored with `zstd -19` |
 
 ## FSArchiver archives (fsarchiver)
 
@@ -1615,13 +1617,14 @@ equal to the faked creation time.
 | `fsarchiver/split.fsa.raw.zst` | fsarchiver 0.8.8 | `sh tests/data/fsarchiver/make-more.sh` (privileged, `inner-more.sh`): `fsarchiver savedir -z 1 -s 1 split.fsa tree` under `faketime -f '2024-01-01 00:00:00'`, a 1.1 MB file (a 49,153-byte perl `srand(1)` run repeated, which LZO cannot shorten) whose blocks straddle the two 1 MiB volumes, and a 10-byte file: the first volume, stored with `zstd -19` |
 | `fsarchiver/split.f01.raw.zst` | fsarchiver 0.8.8 | the second, last volume of the same archive, stored with `zstd -19` |
 | `fsarchiver/two.fsa` | fsarchiver 0.8.8 | `make-more.sh` as above: `fsarchiver savefs -Z 3 two.fsa /dev/loopA /dev/loopB` of an empty 16 MiB ext4 (`mkfs.ext4 -b 4096 -I 256`) and an empty 8 MiB ext2 (`mkfs.ext2 -b 1024 -I 128`), e2fsprogs 1.47.2-3+b12, fixed UUIDs |
+| `fsarchiver/specials.fsa` | fsarchiver 0.8.8, e2fsprogs 1.47.2-3+b12, attr 2.5.2-3, acl 2.3.2-2+b1 | `sh tests/data/fsarchiver/make-specials.sh` (privileged, `inner-specials.sh`): `fsarchiver savefs -Z 3 specials.fsa /dev/loopN` of a 16 MiB ext4 (`mkfs.ext4 -b 1024 -N 64 -I 256`, fixed UUID) holding a file with two `user.` extended attributes (`setfattr`), one with a POSIX ACL (`setfacl -m u:1000:r,g:100:rw`), a hard link, a character device (1:3), a block device (7:0), a FIFO and a socket; under `faketime -f '2024-01-01 00:00:00'`. Not byte-for-byte reproducible (archive id, mount point name from the real clock) |
 
 ## zlib streams (zlib)
 
 Reproduced byte-for-byte by `sh tests/data/zlib/make-external.sh` (Docker
 `debian:trixie-slim`, host name `fillyfoal`, running
 `tests/data/zlib/inner.sh`): Python 3.13.5 with zlib 1.3.1, pigz 2.8. All
-four compress the same 2,460 bytes of neutral text (60 numbered lines).
+six compress the same 2,460 bytes of neutral text (60 numbered lines).
 
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
@@ -1629,6 +1632,8 @@ four compress the same 2,460 bytes of neutral text (60 numbered lines).
 | `zlib/python-level9.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compress(data, 9)` |
 | `zlib/python-stored.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compress(data, 0)` (stored blocks) |
 | `zlib/pigz.zz` | pigz 2.8 | `pigz -z -11 -c lines.txt` (zopfli) |
+| `zlib/python-wbits9.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compressobj(9, zlib.DEFLATED, 9)` (CINFO 1, a 512-byte window) |
+| `zlib/python-zdict.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compressobj(9, zlib.DEFLATED, 15, zdict=b"fillyfoal line of the zlib fixture\n")` (FDICT, dictionary id 0xedac0ce3) |
 
 ## xfsdump archives (xfsdump)
 
@@ -1650,6 +1655,8 @@ faked clock, finds every inode changed).
 | `xfsdump/level0.xfsdump.raw.zst` | xfsdump 3.2.0 | `faketime -f '2024-01-02 00:00:00' xfsdump -l 0 -L fillyfoal -M fillyfoal -f level0.xfsdump /mnt/fillyfoal`, stored with `zstd -19` |
 | `xfsdump/level1.xfsdump.raw.zst` | xfsdump 3.2.0 | `faketime -f '2024-01-04 00:00:00' xfsdump -l 1 -L fillyfoal-1 -M fillyfoal-1 -f level1.xfsdump /mnt/fillyfoal` after adding a file, stored with `zstd -19` |
 | `xfsdump/groups.xfsdump.raw.zst` | xfsdump 3.2.0 | `sh tests/data/xfsdump/make-groups.sh` (`inner-groups.sh`, same container and filesystem as above): a 16 MiB + 8 KiB file of four bytes repeated (written as two extent groups) and a small text file, `faketime -f '2024-01-02 00:00:00' xfsdump -l 0 -L fillyfoal -M fillyfoal -f groups.xfsdump /mnt/fillyfoal`, stored with `zstd -19` |
+| `xfsdump/specials.xfsdump.raw.zst` | xfsdump 3.2.0, acl 2.3.2-2+b1 | `sh tests/data/xfsdump/make-specials.sh` (`inner-specials.sh`, same container and filesystem as above): a file with a POSIX ACL (`setfacl -m u:1000:r,g:100:rw`, stored as `SGI_ACL_FILE`), one with a `trusted.` attribute, a hard link (two names in two directories), a character device (1:3), a block device (7:0), a FIFO and a socket, `faketime -f '2024-01-02 00:00:00' xfsdump -l 0 -L fillyfoal -M fillyfoal -f specials.xfsdump /mnt/fillyfoal`, stored with `zstd -19` |
+| `xfsdump/subtree.xfsdump.raw.zst` | xfsdump 3.2.0 | `make-specials.sh` as above: `xfsdump -l 0 -s sub -L fillyfoal-sub -M fillyfoal-sub -f subtree.xfsdump /mnt/fillyfoal` (the SUBTREE dump attribute), stored with `zstd -19` |
 ## Apache Kafka 3.9.1: log segments and indexes
 
 Written by a real broker: the `apache/kafka:3.9.1` image (KRaft, single

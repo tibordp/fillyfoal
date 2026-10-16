@@ -1,7 +1,8 @@
 #!/bin/sh
 # Rebuilds the zlib fixtures made by real encoders,
 # tests/fixtures/external/zlib/: Python's zlib.compress at levels 1, 9 and
-# 0 (stored blocks), and pigz -z -11, of the same 2.4 KB of neutral text.
+# 0 (stored blocks), with a 512-byte window and with a preset dictionary,
+# and pigz -z -11, of the same 2.4 KB of neutral text.
 #
 # Runs a plain Debian container, host name "fillyfoal", in a scratch
 # directory outside the home directory:

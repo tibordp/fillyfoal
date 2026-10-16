@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ python-zdict.zlib — zlib, 32 KiB window, preset dictionary 0xedac0ce3  [0x0+0x9e]
+  ▾ Header — DEFLATE, 32 KiB window, maximum level  [0x0+0x2]
+      CMF: 0x78  [0x0+0x1]
+      Method: 8 — DEFLATE  [0x0+0x1]
+      Window (CINFO): 7 — 32 KiB  [0x0+0x1]
+      FLG: 0xf9  [0x1+0x1]
+      Check (FCHECK): 25  [0x1+0x1]
+      Preset dictionary (FDICT): 1  [0x1+0x1]
+      Level (FLEVEL): maximum (0x3)  [0x1+0x1]
+    Dictionary id: 0xedac0ce3  [0x2+0x4]
+    Compressed data — 148 bytes  [0x6+0x94]
+      ! unsupported: decoding needs the preset dictionary, which is not in the file
+    Adler-32: 0x2535468a  [0x9a+0x4]
