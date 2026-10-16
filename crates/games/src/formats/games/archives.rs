@@ -233,7 +233,7 @@ fn be40(b: &[u8]) -> u64 {
 
 /// A TOC entry: MD5 of the name, first block, size and offset (40-bit).
 fn psarc_entry(f: &mut Fields<'_>, _: &()) -> Result<(u32, u64, u64)> {
-    f.bytes("Name digest (MD5)", 16).emit()?;
+    f.bytes("Name digest (MD5)", 16).checksum("MD5").emit()?;
     let block = f.u32("First block").emit()?;
     let size = f
         .bytes("Uncompressed size", 5)
@@ -523,7 +523,7 @@ fn upak_info(
     f.u32("Version").enumeration(UPAK_VERSIONS).emit()?;
     let index_offset = f.u64("Index offset").hex().emit()?;
     let index_size = f.u64("Index size").emit()?;
-    f.bytes("Index hash (SHA-1)", 20).emit()?;
+    f.bytes("Index hash (SHA-1)", 20).checksum("SHA-1").emit()?;
     let frozen = back == 205 && f.u8("Frozen index").emit()? != 0;
     let names = match back {
         172 => 4,

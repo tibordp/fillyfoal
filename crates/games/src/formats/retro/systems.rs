@@ -505,7 +505,7 @@ async fn stfs(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("License entries").span(file.sub(0x22c, 0x100)));
     let meta = cx.block(file.sub(0x32c, 0x79)).await?;
     let mut f = Fields::emitting(&cx, &meta, BE);
-    f.bytes("Header SHA-1", 20).emit()?;
+    f.bytes("Header SHA-1", 20).checksum("SHA-1").emit()?;
     f.u32("Header size").hex().emit()?;
     let content = f.u32("Content type").enumeration(STFS_CONTENT).emit()?;
     f.u32("Metadata version").emit()?;

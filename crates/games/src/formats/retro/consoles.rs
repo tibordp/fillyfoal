@@ -1185,9 +1185,9 @@ record! {
         hash: u32 "Seed check hash" .hex(),
         program_id: u64 "Program ID" .hex(),
         _reserved: bytes[16] "Reserved",
-        logo_hash: bytes[32] "Logo region hash",
+        logo_hash: bytes[32] "Logo region hash" .checksum("SHA-256"),
         product: ascii[16] "Product code",
-        exheader_hash: bytes[32] "Extended header hash",
+        exheader_hash: bytes[32] "Extended header hash" .checksum("SHA-256"),
         exheader_size: u32 "Extended header size" .hex(),
         _reserved2: u32 "Reserved",
         flags: bytes[8] "Flags",
@@ -1203,8 +1203,8 @@ record! {
         romfs_size: u32 "RomFS size (MU)",
         romfs_hash_size: u32 "RomFS hash region size (MU)",
         _reserved4: u32 "Reserved",
-        exefs_hash: bytes[32] "ExeFS superblock hash",
-        romfs_hash: bytes[32] "RomFS superblock hash",
+        exefs_hash: bytes[32] "ExeFS superblock hash" .checksum("SHA-256"),
+        romfs_hash: bytes[32] "RomFS superblock hash" .checksum("SHA-256"),
     }
 }
 

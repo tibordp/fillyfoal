@@ -752,7 +752,7 @@ fn storage_string(f: &mut Fields<'_>, name: &'static str) -> Result<String> {
 }
 
 fn md5(f: &mut Fields<'_>) -> Result<()> {
-    f.bytes("md5Hash", 16).emit()?;
+    f.bytes("md5Hash", 16).checksum("MD5").emit()?;
     Ok(())
 }
 

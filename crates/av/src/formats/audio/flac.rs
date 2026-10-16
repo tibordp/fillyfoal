@@ -157,6 +157,7 @@ pub fn streaminfo(b: &mut Bits<'_>) -> Result<StreamInfo> {
         })
         .emit()?;
     b.bytes("MD5 signature", 16)
+        .checksum("MD5")
         .desc("MD5 of the unencoded audio samples; all zeros if not computed")
         .emit()?;
     Ok(StreamInfo {

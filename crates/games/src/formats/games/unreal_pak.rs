@@ -100,7 +100,7 @@ fn pak_entry(f: &mut Fields<'_>, footer: &PakFooter) -> Result<PakEntry> {
     if footer.version == 1 {
         f.u64("Timestamp").get()?;
     }
-    f.bytes("SHA-1", 20).get()?;
+    f.bytes("SHA-1", 20).checksum("SHA-1").get()?;
     let mut e = PakEntry {
         size,
         method,
@@ -296,7 +296,7 @@ fn index_region(f: &mut Fields<'_>, name: &'static str, file: Span) -> Result<Op
     }
     let offset = f.u64("Offset").hex().emit()?;
     let size = f.u64("Size").emit()?;
-    f.bytes("SHA-1", 20).emit()?;
+    f.bytes("SHA-1", 20).checksum("SHA-1").emit()?;
     let span = file.sub(offset, size);
     f.node(Node::new(name).span(span).summary(fmt::size(size)));
     Ok(Some(span))

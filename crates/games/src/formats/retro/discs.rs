@@ -118,9 +118,9 @@ fn chd_header(f: &mut Fields<'_>, _: &()) -> Result<(ChdInfo, String)> {
             info.meta = f.u64("Metadata offset").hex().emit()?;
             info.hunk_bytes = f.u32("Hunk size").emit()?.into();
             info.unit_bytes = f.u32("Unit size").emit()?.into();
-            f.bytes("Raw SHA-1", 20).emit()?;
-            f.bytes("SHA-1", 20).emit()?;
-            f.bytes("Parent SHA-1", 20).emit()?;
+            f.bytes("Raw SHA-1", 20).checksum("SHA-1").emit()?;
+            f.bytes("SHA-1", 20).checksum("SHA-1").emit()?;
+            f.bytes("Parent SHA-1", 20).checksum("SHA-1").emit()?;
             info.hunks = info.logical.div_ceil(info.hunk_bytes.max(1));
         }
         3 | 4 => {
@@ -133,14 +133,14 @@ fn chd_header(f: &mut Fields<'_>, _: &()) -> Result<(ChdInfo, String)> {
             info.logical = f.u64("Logical size").emit()?;
             info.meta = f.u64("Metadata offset").hex().emit()?;
             if version == 3 {
-                f.bytes("MD5", 16).emit()?;
-                f.bytes("Parent MD5", 16).emit()?;
+                f.bytes("MD5", 16).checksum("MD5").emit()?;
+                f.bytes("Parent MD5", 16).checksum("MD5").emit()?;
             }
             info.hunk_bytes = f.u32("Hunk size").emit()?.into();
-            f.bytes("SHA-1", 20).emit()?;
-            f.bytes("Parent SHA-1", 20).emit()?;
+            f.bytes("SHA-1", 20).checksum("SHA-1").emit()?;
+            f.bytes("Parent SHA-1", 20).checksum("SHA-1").emit()?;
             if version == 4 {
-                f.bytes("Raw SHA-1", 20).emit()?;
+                f.bytes("Raw SHA-1", 20).checksum("SHA-1").emit()?;
             }
             info.map = header_len;
         }
@@ -155,8 +155,8 @@ fn chd_header(f: &mut Fields<'_>, _: &()) -> Result<(ChdInfo, String)> {
             f.u32("Cylinders").emit()?;
             f.u32("Heads").emit()?;
             f.u32("Sectors per track").emit()?;
-            f.bytes("MD5", 16).emit()?;
-            f.bytes("Parent MD5", 16).emit()?;
+            f.bytes("MD5", 16).checksum("MD5").emit()?;
+            f.bytes("Parent MD5", 16).checksum("MD5").emit()?;
             let sector = if version == 2 {
                 u64::from(f.u32("Sector size").emit()?)
             } else {
@@ -2198,10 +2198,10 @@ async fn wia(cx: Cx, input: Input) -> Result<()> {
         .with(|&v, n| n.summary(wia_version(v)))
         .emit()?;
     let h2_size = f.u32("Header 2 size").emit()?;
-    f.bytes("Header 2 SHA-1", 20).emit()?;
+    f.bytes("Header 2 SHA-1", 20).checksum("SHA-1").emit()?;
     let iso = f.u64("ISO size").emit()?;
     let wia_size = f.u64("File size").emit()?;
-    f.bytes("Header 1 SHA-1", 20).emit()?;
+    f.bytes("Header 1 SHA-1", 20).checksum("SHA-1").emit()?;
     let h2 = file.sub(0x48, h2_size.into());
     let raw = cx.read_avail(h2.sub(0, 16)).await?;
     let disc = u32_be(&raw, 0).unwrap_or(0);
@@ -2243,7 +2243,9 @@ async fn wia_header2(cx: Cx, (input, h2): (Input, Span)) -> Result<()> {
     f.u32("Partitions").emit()?;
     f.u32("Partition entry size").emit()?;
     f.u64("Partition entries offset").hex().emit()?;
-    f.bytes("Partition entries SHA-1", 20).emit()?;
+    f.bytes("Partition entries SHA-1", 20)
+        .checksum("SHA-1")
+        .emit()?;
     f.u32("Raw data entries").emit()?;
     f.u64("Raw data entries offset").hex().emit()?;
     f.u32("Raw data entries size").emit()?;

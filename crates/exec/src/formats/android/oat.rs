@@ -455,7 +455,7 @@ fn dex_file(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u32("dex_file_location_checksum")
         .checksum("Adler-32")
         .emit()?;
-    f.bytes("dex_file_sha1", 20).emit()?;
+    f.bytes("dex_file_sha1", 20).checksum("SHA-1").emit()?;
     f.u32("dex_file_offset")
         .hex()
         .desc("Offset of the DEX file in the VDEX")

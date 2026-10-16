@@ -643,7 +643,7 @@ async fn fcm(cx: Cx, input: Input) -> Result<()> {
     let data_len = f.u32("Controller data length").emit()?;
     let state = f.u32("Save state offset").hex().emit()?;
     let data = f.u32("Controller data offset").hex().emit()?;
-    f.bytes("ROM MD5", 16).emit()?;
+    f.bytes("ROM MD5", 16).checksum("MD5").emit()?;
     f.u32("Emulator version").emit()?;
     let (rom, rom_span) = cx.cstr(file.sub(0x34, 256)).await?;
     cx.emit(

@@ -298,7 +298,9 @@ pub struct BitField<'a> {
 impl BitField<'_> {
     /// The field is a check value of `algo`, not checked here.
     pub fn checksum(mut self, algo: &'static str) -> Self {
-        if let Ok(v) = self.value {
+        if let Some(Value::Bytes(b)) = &self.node.value {
+            self.node.value = Some(crate::value::Check::new(algo, b.clone()).into());
+        } else if let Ok(v) = self.value {
             self.node.value = Some(
                 crate::value::Check::new(
                     algo,
