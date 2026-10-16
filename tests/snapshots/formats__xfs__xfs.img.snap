@@ -456,7 +456,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ Core — inode 32, version 3  [0x4000+0xb0]
           ! warning: inode CRC mismatch: stored 0x00000000, computed 0xb4698560
           Magic: "IN"  [0x4000+0x2]
-          Mode: 0x41ed — drwxr-xr-x  [0x4002+0x2]
+          Mode: 0o40755 — drwxr-xr-x  [0x4002+0x2]
           Version: 3  [0x4004+0x1]
           Data fork format: local (inline) (0x1)  [0x4005+0x1]
           Metadata file type: 0  [0x4006+0x2]
