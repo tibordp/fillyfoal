@@ -58,7 +58,7 @@ use crate::formats::util::fmt::count;
 use crate::formats::util::val::{text, uint};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Time, Value, field, flag};
+use crate::value::{Check, EnumTable, FlagTable, Time, Value, field, flag};
 
 const LE: Endian = Endian::Little;
 /// Volume descriptors read per sequence (and sequence hops).
@@ -284,22 +284,35 @@ fn timestamp(b: &[u8]) -> Option<Time> {
     Some(t.micros(micros))
 }
 
+/// A descriptor tag's checksum: the sum of its other 15 bytes.
+const TAG_SUM: &str = "8-bit sum";
+/// The descriptor CRC (CRC-ITU-T, as XMODEM computes it).
+const TAG_CRC: &str = "CRC-16/XMODEM";
+
+fn tag_sum(head: &[u8]) -> u8 {
+    head.iter()
+        .take(16)
+        .enumerate()
+        .filter(|&(i, _)| i != 4)
+        .fold(0u8, |a, (_, &v)| a.wrapping_add(v))
+}
+
 /// Problems with a descriptor tag: checksum, CRC, recorded location.
 fn verify(b: &[u8], location: Option<u32>) -> Option<Diagnostic> {
     let head = b.get(..16)?;
-    let sum = head
-        .iter()
-        .enumerate()
-        .filter(|&(i, _)| i != 4)
-        .fold(0u8, |a, (_, &v)| a.wrapping_add(v));
-    if head.get(4) != Some(&sum) {
-        return Some(Diagnostic::warning("tag checksum mismatch"));
+    if let Some(message) = Check::new(TAG_SUM, *head.get(4)?)
+        .verify(tag_sum(head))
+        .mismatch_text()
+    {
+        return Some(Diagnostic::warning(message));
     }
     let crc_len = usize::from(u16_le(head, 10)?);
     if let Some(body) = b.get(16..16usize.saturating_add(crc_len))
-        && u16_le(head, 8) != Some(crc16_xmodem(body))
+        && let Some(message) = Check::new(TAG_CRC, u16_le(head, 8)?)
+            .verify(crc16_xmodem(body))
+            .mismatch_text()
     {
-        return Some(Diagnostic::warning("descriptor CRC mismatch"));
+        return Some(Diagnostic::warning(message));
     }
     let recorded = u32_le(head, 12)?;
     match location {
@@ -399,7 +412,14 @@ fn tag(f: &mut Fields<'_>) -> Result<u16> {
     let at = to_usize(f.pos());
     let id = u16_le(&f.block().data, at).unwrap_or(0);
     let span = f.peek_span(16);
-    let mut node = struct_node("Descriptor tag", span, LE, (), tag_layout);
+    // The descriptor CRC covers the bytes after the tag, when present.
+    let data = &f.block().data;
+    let crc = u16_le(data, at.saturating_add(10)).and_then(|len| {
+        let start = at.saturating_add(16);
+        data.get(start..start.saturating_add(usize::from(len)))
+            .map(crc16_xmodem)
+    });
+    let mut node = struct_node("Descriptor tag", span, LE, crc, tag_layout);
     if let Some(name) = crate::value::lookup(TAG_IDS, id.into()) {
         node = node.summary(name);
     }
@@ -408,25 +428,20 @@ fn tag(f: &mut Fields<'_>) -> Result<u16> {
     Ok(id)
 }
 
-fn tag_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
-    let head = f.block().data.clone();
+fn tag_layout(f: &mut Fields<'_>, crc: &Option<u16>) -> Result<()> {
+    let sum = tag_sum(&f.block().data);
     f.u16("Tag identifier").enumeration(TAG_IDS).emit()?;
     f.u16("Descriptor version").emit()?;
     f.u8("Tag checksum")
-        .hex()
-        .check(|&c| {
-            let sum = head
-                .iter()
-                .take(16)
-                .enumerate()
-                .filter(|&(i, _)| i != 4)
-                .fold(0u8, |a, (_, &v)| a.wrapping_add(v));
-            (sum != c).then(|| Diagnostic::warning(format!("computed {sum:#04x}")))
-        })
+        .checksum(TAG_SUM)
+        .verify(Some(sum))
         .emit()?;
     f.u8("Reserved").emit()?;
     f.u16("Tag serial number").emit()?;
-    f.u16("Descriptor CRC").hex().emit()?;
+    f.u16("Descriptor CRC")
+        .checksum(TAG_CRC)
+        .verify(*crc)
+        .emit()?;
     f.u16("Descriptor CRC length").emit()?;
     f.u32("Tag location")
         .desc("Block this descriptor was written to (partition-relative inside a partition)")

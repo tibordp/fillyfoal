@@ -208,12 +208,8 @@ fn tail_layout(f: &mut Fields<'_>, ctx: &TailCtx) -> Result<()> {
     f.u8("Name length (zero)").emit()?;
     f.u8("File type").hex().enumeration(FILE_TYPES).emit()?;
     f.u32("Checksum")
-        .hex()
-        .with(|&v, n| match ctx.computed {
-            Some(c) if c == v => n.summary("valid"),
-            Some(c) => n.diag(Diagnostic::warning(format!("mismatch: computed {c:#010x}"))),
-            None => n,
-        })
+        .checksum("CRC-32C")
+        .verify(ctx.computed)
         .emit()?;
     Ok(())
 }
@@ -353,12 +349,8 @@ struct DxTailCtx {
 fn dx_tail_layout(f: &mut Fields<'_>, ctx: &DxTailCtx) -> Result<()> {
     f.u32("Reserved").emit()?;
     f.u32("Checksum")
-        .hex()
-        .with(|&v, n| match ctx.computed {
-            Some(c) if c == v => n.summary("valid"),
-            Some(c) => n.diag(Diagnostic::warning(format!("mismatch: computed {c:#010x}"))),
-            None => n,
-        })
+        .checksum("CRC-32C")
+        .verify(ctx.computed)
         .emit()?;
     Ok(())
 }

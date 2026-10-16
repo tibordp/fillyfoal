@@ -17,7 +17,7 @@ use crate::formats::{Deep, DeepProbe, Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag};
 
 const LE: Endian = Endian::Little;
 const MAGIC: u32 = 0xa92b_4efc;
@@ -163,7 +163,7 @@ record! {
         working: u32 "Working disks",
         failed: u32 "Failed disks",
         spare: u32 "Spare disks",
-        checksum: u32 "Superblock checksum" .hex(),
+        checksum: u32 "Superblock checksum" .checksum(MD_SUM),
         events_lo: u32 "Events (low)",
         events_hi: u32 "Events (high)",
         cp_events_lo: u32 "Checkpoint events (low)",
@@ -243,7 +243,8 @@ fn disk090_summary(d: &[u8]) -> String {
 
 /// The whole 4 KiB 0.90 superblock: the constant and state words, the
 /// personality words, the used disk descriptors and this device's.
-fn sb090_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+fn sb090_layout(f: &mut Fields<'_>, check: &Check) -> Result<()> {
+    f.verifying(check.at(to_u64(CSUM090)));
     Superblock090::read(f)?;
     f.bytes("Reserved", 16 * 4).emit()?;
     State090::read(f)?;
@@ -281,15 +282,11 @@ async fn dissect_090(cx: &Cx, input: &Input, at: u64) -> Result<()> {
     let this = raw
         .get(to_usize(THIS_DISK090)..)
         .and_then(|d| u32_le(d, 12));
-    let mut node = struct_node("Superblock", sb_span, LE, (), sb090_layout)
-        .summary("version 0.90, in the last 64 KiB block");
-    let stored = u32_le(&raw, CSUM090);
-    if raw.len() == 4096 && stored != Some(md_checksum(&raw, CSUM090)) {
-        node = node.diag(Diagnostic::warning(format!(
-            "checksum mismatch: computed {:#010x}",
-            md_checksum(&raw, CSUM090)
-        )));
-    }
+    let computed = (raw.len() == 4096).then(|| md_checksum(&raw, CSUM090));
+    let check = Check::new(MD_SUM, u32_le(&raw, CSUM090).unwrap_or(0)).verify_opt(computed);
+    let node = struct_node("Superblock", sb_span, LE, check.clone(), sb090_layout)
+        .summary("version 0.90, in the last 64 KiB block")
+        .check_diag(&check);
     cx.emit(node);
     let level = crate::value::lookup(LEVELS, sb.level.into()).unwrap_or("unknown level");
     let data_span = dev.sub(0, u64::from(sb.size).saturating_mul(1024).min(at));
@@ -443,12 +440,15 @@ record! {
         utime: u64 "Updated" .with(|&v, n| n.value(Value::utc(i64::try_from(v & 0xff_ffff_ffff).unwrap_or(0)))),
         events: u64 "Events",
         resync_offset: u64 "Resync offset" .with(|&v, n| if v == u64::MAX { n.summary("none: the array is in sync") } else { n }),
-        checksum: u32 "Superblock checksum" .hex(),
+        checksum: u32 "Superblock checksum" .checksum(MD_SUM),
         max_dev: u32 "Device role slots",
         logical_block_size: u32 "Logical block size" .desc("The array's logical block size; recent kernels store it, older ones leave 0"),
         _pad3: bytes[28] "Padding",
     }
 }
+
+/// What md's superblock checksum is.
+const MD_SUM: &str = "md word sum";
 
 /// md's checksum: 32-bit sum of little-endian words (checksum field as 0),
 /// folded to 32 bits.
@@ -486,17 +486,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let roles = u64::from(sb.max_dev.min(MAX_DEVS));
     let full = dev.sub(at, Superblock::SIZE.saturating_add(roles.saturating_mul(2)));
     let data = cx.read_avail(full).await?;
-    let mut node = Superblock::node("Superblock", sb_span, LE).summary(match at {
-        0 => "version 1.1",
-        4096 => "version 1.2",
-        _ => "version 1.0, at the end of the device",
-    });
-    if md_checksum(&data, 216) != sb.checksum {
-        node = node.diag(Diagnostic::warning(format!(
-            "checksum mismatch: computed {:#010x}",
-            md_checksum(&data, 216)
-        )));
-    }
+    let check = Check::new(MD_SUM, sb.checksum).verify(md_checksum(&data, 216));
+    let node = Superblock::checked_node("Superblock", sb_span, LE, check.at(216))
+        .summary(match at {
+            0 => "version 1.1",
+            4096 => "version 1.2",
+            _ => "version 1.0, at the end of the device",
+        })
+        .check_diag(&check);
     cx.emit(node);
     let name = crate::text::until_nul(&sb.set_name);
     let level = crate::value::lookup(LEVELS, sb.level.into()).unwrap_or("unknown level");

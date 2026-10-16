@@ -16,7 +16,7 @@ use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value};
+use crate::value::{Check, EnumTable, Radix, Value};
 
 const LABEL: u64 = 256 * 1024;
 const NVLIST: u64 = 16 * 1024;
@@ -570,7 +570,8 @@ fn bp_layout(f: &mut Fields<'_>, &endian: &Endian) -> Result<()> {
                 .desc("<vdev:offset:allocated size>, in bytes")
         });
     }
-    f.u64("Properties")
+    let prop = f
+        .u64("Properties")
         .hex()
         .with(|&v, n| n.summary(props_summary(v)))
         .emit()?;
@@ -581,12 +582,14 @@ fn bp_layout(f: &mut Fields<'_>, &endian: &Endian) -> Result<()> {
     let span = f.peek_span(32);
     let mut words = Vec::new();
     for _ in 0..4 {
-        words.push(format!("{:016x}", f.u64("Checksum word").get()?));
+        words.extend(f.u64("Checksum word").get()?.to_be_bytes());
     }
+    // The block it covers is elsewhere on the pool: not checked here.
     f.node(
         Node::new("Checksum")
             .span(span)
-            .value(Value::Text(words.join(":"))),
+            .checksum(Check::new(name_of(CHECKSUM, bits(prop, 40, 8)), words))
+            .desc("Four 64-bit words, as zdb prints them run together"),
     );
     Ok(())
 }
@@ -625,7 +628,7 @@ const ECK_MAGIC: u64 = 0x0210_da7a_b10c_7a11;
 /// block's byte offset on the device, then zeros), each word the digest
 /// read big-endian and stored in the block's byte order. `None` when the
 /// block has no trailer.
-async fn label_checksum(cx: &Cx, data: &[u8], offset: u64) -> Option<bool> {
+async fn label_checksum(cx: &Cx, data: &[u8], offset: u64) -> Option<Check> {
     let tail = data.len().checked_sub(40)?;
     let le = if u64_le(data, tail) == Some(ECK_MAGIC) {
         true
@@ -644,29 +647,32 @@ async fn label_checksum(cx: &Cx, data: &[u8], offset: u64) -> Option<bool> {
     });
     let digest =
         crate::formats::util::datakit::digest_paced::<crate::codec::crypto::Sha256>(cx, &buf).await;
-    Some((0..4).all(|i: usize| {
-        let at = i.saturating_mul(8);
-        let want = digest
-            .get(at..at.saturating_add(8))
-            .and_then(|w| <[u8; 8]>::try_from(w).ok())
-            .map(u64::from_be_bytes);
-        let stored = tail.saturating_add(8).saturating_add(at);
-        let got = if le {
-            u64_le(data, stored)
+    // The stored words, each read in the block's byte order, as the
+    // digest's bytes.
+    let mut stored = Vec::with_capacity(32);
+    for i in 0..4usize {
+        let at = tail.saturating_add(8).saturating_add(i.saturating_mul(8));
+        let word = if le {
+            u64_le(data, at)
         } else {
-            u64_be(data, stored)
-        };
-        want.is_some() && want == got
-    }))
+            u64_be(data, at)
+        }?;
+        stored.extend(word.to_be_bytes());
+    }
+    Some(Check::new("SHA-256", stored).verify(digest))
 }
 
-/// Adds a label block's checksum status to its node's summary.
+/// Adds a label block's checksum verdict to its node's summary (the
+/// trailer holding it is not shown as a field), and a mismatch as a
+/// diagnostic.
 async fn checked(cx: &Cx, node: Node, data: &[u8], offset: u64, summary: String) -> Node {
     match label_checksum(cx, data, offset).await {
-        Some(true) => node.summary(format!("{summary}, checksum valid")),
-        Some(false) => node
-            .summary(format!("{summary}, checksum INVALID"))
-            .diag(Diagnostic::warning("label checksum (SHA-256) mismatch")),
+        Some(check) => match check.mismatch_text() {
+            None => node.summary(format!("{summary}, checksum {}", check.verdict_text())),
+            Some(message) => node
+                .summary(format!("{summary}, checksum mismatch"))
+                .diag(Diagnostic::warning(message)),
+        },
         None => node.summary(summary),
     }
 }

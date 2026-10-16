@@ -65,6 +65,9 @@ pub static FORMAT: Format = Format {
     dissect: crate::expander!(dissect: Input),
 };
 
+/// Partclone's checksums: the CRC-32 register, no final inversion.
+const PC_CRC: &str = "CRC-32 (not inverted)";
+
 const CHECKSUM_MODES: EnumTable = &[(0, "NONE"), (0x20, "CRC32"), (0xff, "CRC32_0001")];
 const BITMAP_MODES: EnumTable = &[(0, "NONE"), (1, "BIT"), (8, "BYTE")];
 /// The option fields this dissector knows (format 0002).
@@ -272,16 +275,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .get(..crate::bytes::to_usize(crc_at))
         .unwrap_or_default();
     let computed = crc32_update(0xffff_ffff, covered);
-    let mut crc_node = Node::new("Header checksum")
-        .span(crc_span)
-        .value(hex(stored, 32))
-        .desc("CRC-32 register (no final inversion) over the header before it");
-    if computed != stored {
-        crc_node = crc_node.diag(Diagnostic::warning(format!(
-            "header checksum {stored:#010x}, computed {computed:#010x}"
-        )));
-    }
-    cx.emit(crc_node);
+    cx.emit(
+        Node::new("Header checksum")
+            .span(crc_span)
+            .checksum(crate::value::Check::new(PC_CRC, stored).verify(computed))
+            .desc("CRC-32 register (no final inversion) over the header before it"),
+    );
     let header_len = crc_at.saturating_add(4);
 
     let map = match o.bitmap_mode {
@@ -478,7 +477,10 @@ async fn finish(
                 .span(after)
                 .desc("CRC-32 register (no final inversion) over the bitmap; checked when the bitmap is expanded");
             if let Some(v) = v {
-                node = node.value(hex(v, 32));
+                node = node.checksum(
+                    crate::value::Check::new(PC_CRC, v)
+                        .skipped("checked when the bitmap is expanded"),
+                );
             }
             cx.emit(node);
         }
@@ -608,17 +610,14 @@ async fn bitmap_node(cx: Cx, state: Arc<State>) -> Result<()> {
         let be = <[u8; 4]>::try_from(raw.as_slice())
             .map(u32::from_be_bytes)
             .unwrap_or(0);
-        let mut node = Node::new("Computed checksum")
-            .span(span)
-            .value(hex(loaded.crc, 32))
-            .desc("CRC-32 register over the bitmap");
-        if loaded.crc != le && loaded.crc != be {
-            node = node.diag(Diagnostic::warning(format!(
-                "bitmap checksum {le:#010x}, computed {:#010x}",
-                loaded.crc
-            )));
-        }
-        cx.emit(node);
+        // Written in either byte order.
+        let stored = if loaded.crc == be { be } else { le };
+        cx.emit(
+            Node::new("Bitmap checksum")
+                .span(span)
+                .checksum(crate::value::Check::new(PC_CRC, stored).verify(loaded.crc))
+                .desc("CRC-32 register over the bitmap"),
+        );
     }
     Ok(())
 }
@@ -812,17 +811,15 @@ async fn verify(cx: Cx, (state, stored, value): (Arc<State>, u64, u32)) -> Resul
             pos = pos.saturating_add(chunk);
         }
     }
-    let mut node = Node::new("Computed").value(hex(crc, 32)).desc(if reseed {
-        "CRC-32 register over the blocks since the previous check value"
-    } else {
-        "CRC-32 register over every block before it"
-    });
-    if crc != value {
-        node = node.diag(Diagnostic::warning(format!(
-            "check value {value:#010x}, computed {crc:#010x}"
-        )));
-    }
-    cx.emit(node);
+    cx.emit(
+        Node::new("Checked")
+            .checksum(crate::value::Check::new(PC_CRC, value).verify(crc))
+            .desc(if reseed {
+                "CRC-32 register over the blocks since the previous check value"
+            } else {
+                "CRC-32 register over every block before it"
+            }),
+    );
     Ok(())
 }
 

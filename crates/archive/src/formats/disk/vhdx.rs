@@ -24,7 +24,7 @@ use crate::formats::{Format, Input, Probe, dissect_or_data};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Guid, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Guid, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const KIB64: u64 = 64 * 1024;
@@ -46,7 +46,7 @@ pub static FORMAT: Format = Format {
 record! {
     pub struct Header {
         signature: ascii[4] "Signature",
-        checksum: u32 "Checksum (CRC-32C)" .hex(),
+        checksum: u32 "Checksum" .checksum("CRC-32C"),
         sequence: u64 "Sequence number",
         file_write: guid "File write GUID" .desc("Changes whenever the file is opened for writing"),
         data_write: guid "Data write GUID" .desc("Changes whenever the virtual disk's data is written"),
@@ -62,7 +62,7 @@ record! {
 record! {
     pub struct RegionTable {
         signature: ascii[4] "Signature",
-        checksum: u32 "Checksum (CRC-32C)" .hex(),
+        checksum: u32 "Checksum" .checksum("CRC-32C"),
         entries: u32 "Entry count",
         _reserved: u32 "Reserved",
     }
@@ -136,7 +136,7 @@ const FILE_PARAMS: FlagTable = &[flag(1, "LEAVE_BLOCKS_ALLOCATED"), flag(2, "HAS
 record! {
     pub struct LogEntryHeader {
         signature: ascii[4] "Signature",
-        checksum: u32 "Checksum (CRC-32C)" .hex(),
+        checksum: u32 "Checksum" .checksum("CRC-32C"),
         length: u32 "Entry length" .with(|&v, n| n.summary(size(v.into()))),
         tail: u32 "Tail" .hex() .desc("Offset in the log of the oldest entry still needed"),
         sequence: u64 "Sequence number",
@@ -160,15 +160,13 @@ const BAT_STATES: EnumTable = &[
 const BITMAP_STATES: EnumTable = &[(0, "not present"), (6, "present")];
 
 /// Checks the CRC-32C of a structure whose checksum is at offset 4.
-async fn verify(cx: &Cx, span: Span, stored: u32) -> Result<Option<Diagnostic>> {
+async fn verify(cx: &Cx, span: Span, stored: u32) -> Result<Check> {
     let mut data = cx.read_avail(span).await?;
     if let Some(f) = data.get_mut(4..8) {
         f.fill(0);
     }
     let computed = crc32c_paced(cx, &data).await;
-    Ok((computed != stored).then(|| {
-        Diagnostic::warning(format!("checksum mismatch: computed {computed:#010x}")).at(span)
-    }))
+    Ok(Check::new("CRC-32C", stored).verify(computed))
 }
 
 #[derive(Debug, Default)]
@@ -199,14 +197,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let name = format!("Header {}", i.saturating_add(1));
         match parse(&cx, span, LE, &(), Header::layout).await {
             Ok(h) if h.signature == "head" => {
-                let bad = verify(&cx, span, h.checksum).await?;
-                let mut node =
-                    Header::node(name, span, LE).summary(format!("sequence {}", h.sequence));
-                if let Some(d) = bad {
-                    node = node.diag(d);
-                } else if current
-                    .as_ref()
-                    .is_none_or(|(_, c)| h.sequence > c.sequence)
+                let check = verify(&cx, span, h.checksum).await?;
+                let node = Header::checked_node(name, span, LE, check.at(4))
+                    .summary(format!("sequence {}", h.sequence))
+                    .check_diag(&check);
+                if !check.is_mismatch()
+                    && current
+                        .as_ref()
+                        .is_none_or(|(_, c)| h.sequence > c.sequence)
                 {
                     current = Some((i, h));
                 }
@@ -257,9 +255,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 let mut node = Node::new(name)
                     .span(span)
                     .summary(plural(t.entries, "region"));
-                if let Some(d) = verify(&cx, span, t.checksum).await? {
-                    node = node.diag(d);
-                }
+                node = node.check_diag(&verify(&cx, span, t.checksum).await?);
                 let count = u64::from(t.entries).min(MAX_ENTRIES);
                 cx.emit(node.lazy(region_table, (span, count)));
                 if regions.is_empty() {
@@ -407,10 +403,13 @@ fn identifier_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
 }
 
 async fn region_table(cx: Cx, (span, count): (Span, u64)) -> Result<()> {
-    cx.emit(RegionTable::node(
+    let stored = u32_le(&cx.read(span.sub(4, 4)).await?, 0).unwrap_or(0);
+    let check = verify(&cx, span, stored).await?;
+    cx.emit(RegionTable::checked_node(
         "Header",
         span.sub(0, RegionTable::SIZE),
         LE,
+        check.at(4),
     ));
     for i in 0..count {
         let e = span.sub(16u64.saturating_add(i.saturating_mul(32)), 32);
@@ -637,10 +636,8 @@ async fn log_entries(cx: Cx, log: Span) -> Result<()> {
                 size(len)
             ))
             .lazy(log_entry, span);
-        if len <= cx.limits().max_read
-            && let Some(d) = verify(&cx, span, u32_le(&head, 4).unwrap_or(0)).await?
-        {
-            node = node.diag(d);
+        if len <= cx.limits().max_read {
+            node = node.check_diag(&verify(&cx, span, u32_le(&head, 4).unwrap_or(0)).await?);
         }
         cx.push(node).await;
         at = at.saturating_add(len);
@@ -658,10 +655,16 @@ async fn log_entry(cx: Cx, span: Span) -> Result<()> {
         LogEntryHeader::layout,
     )
     .await?;
-    cx.emit(LogEntryHeader::node(
+    let computed = if span.len <= cx.limits().max_read {
+        verify(&cx, span, h.checksum).await?.at(4)
+    } else {
+        Vec::new()
+    };
+    cx.emit(LogEntryHeader::checked_node(
         "Header",
         span.sub(0, LogEntryHeader::SIZE),
         LE,
+        computed,
     ));
     let count = u64::from(h.descriptors).min(span.len / 32);
     let descs = span.sub(LogEntryHeader::SIZE, count.saturating_mul(32));

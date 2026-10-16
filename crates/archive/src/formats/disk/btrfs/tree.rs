@@ -6,7 +6,7 @@ use crate::dsl::{Path, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::disk::{acl, name_field};
-use crate::formats::disk::{crc32c, size, unix_mode, uuid_value};
+use crate::formats::disk::{size, unix_mode, uuid_value};
 use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::record;
@@ -32,7 +32,7 @@ pub(super) const ROOT_ITEM: u8 = 132;
 record! {
     /// `struct btrfs_header`, at the start of every tree node.
     pub struct NodeHeader {
-        csum: bytes[32] "Checksum",
+        csum: bytes[32] "Checksum" .checksum("checksum"),
         fsid: bytes[16] "Filesystem UUID" .with(uuid_value),
         bytenr: u64 "Logical address" .hex(),
         flags: u64 "Flags" .hex() .flags(NODE_FLAGS),
@@ -579,17 +579,8 @@ async fn tree_node(cx: Cx, st: NodeState) -> Result<()> {
         .ok_or_else(|| Diagnostic::malformed("logical address not mapped"))?;
     let data = cx.read(span).await?;
     let header = span.sub(0, HEADER);
-    let mut hnode = NodeHeader::node("Header", header, LE);
-    if fs.csum_type == 0 {
-        let computed = crc32c(data.get(32..).unwrap_or_default());
-        hnode = if data.get(..4) == Some(&computed.to_le_bytes()[..]) {
-            hnode.summary("checksum valid")
-        } else {
-            hnode.diag(Diagnostic::warning(format!(
-                "checksum mismatch: computed {computed:#010x}"
-            )))
-        };
-    }
+    let check = super::block_check(fs.csum_type, &data);
+    let mut hnode = NodeHeader::checked_node("Header", header, LE, check.at(0)).check_diag(&check);
     if u64_le(&data, 0x30) != Some(st.logical) {
         hnode = hnode.diag(Diagnostic::malformed("node address does not match"));
     }

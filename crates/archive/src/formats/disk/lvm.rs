@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use crate::bytes::{to_u64, u64_le};
+use crate::bytes::{to_u64, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
@@ -19,7 +19,7 @@ use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::{Origin, Span};
-use crate::value::Value;
+use crate::value::{Check, Value};
 
 const LE: Endian = Endian::Little;
 const SECTOR: u64 = 512;
@@ -56,7 +56,7 @@ record! {
     pub struct Label {
         id: ascii[8] "Identifier",
         sector: u64 "Sector",
-        crc: u32 "CRC" .hex(),
+        crc: u32 "CRC" .checksum(LVM_CRC),
         offset: u32 "PV header offset",
         kind: ascii[8] "Type",
     }
@@ -78,7 +78,7 @@ record! {
 
 record! {
     pub struct MdaHeader {
-        checksum: u32 "Checksum" .hex(),
+        checksum: u32 "Checksum" .checksum(LVM_CRC),
         magic: bytes[16] "Magic",
         version: u32 "Version",
         start: u64 "Start" .hex(),
@@ -90,10 +90,13 @@ record! {
     pub struct RawLocation {
         offset: u64 "Offset" .hex(),
         len: u64 "Size",
-        checksum: u32 "Checksum" .hex(),
+        checksum: u32 "Checksum" .checksum(LVM_CRC),
         flags: u32 "Flags" .hex(),
     }
 }
+
+/// LVM's CRC: CRC-32 polynomial, initial value 0xf597a6cf, no inversion.
+const LVM_CRC: &str = "CRC-32 (LVM)";
 
 /// LVM's CRC: CRC-32 polynomial, initial value 0xf597a6cf, no inversion.
 fn lvm_crc(data: &[u8]) -> u32 {
@@ -132,15 +135,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let label_at = sector.saturating_mul(SECTOR);
     let label_span = pv.sub(label_at, Label::SIZE);
     let label = parse(&cx, label_span, LE, &(), Label::layout).await?;
-    let mut label_node = Label::node("Label", label_span, LE);
     let sector_bytes = head
         .get(crate::bytes::to_usize(label_at)..)
         .and_then(|s| s.get(20..512))
         .unwrap_or_default();
-    if lvm_crc(sector_bytes) != label.crc {
-        label_node = label_node.diag(Diagnostic::warning("label CRC mismatch"));
-    }
-    cx.emit(label_node);
+    let check = Check::new(LVM_CRC, label.crc).verify(lvm_crc(sector_bytes));
+    cx.emit(Label::checked_node("Label", label_span, LE, check.at(16)).check_diag(&check));
 
     let header_at = label_at.saturating_add(label.offset.into());
     let header_span = pv.sub(header_at, PvHeader::SIZE);
@@ -348,13 +348,32 @@ fn metadata_text(
 }
 
 async fn metadata_area(cx: Cx, (area, text): (Span, Span)) -> Result<()> {
-    cx.emit(MdaHeader::node("Header", area.sub(0, MdaHeader::SIZE), LE));
-    cx.emit(RawLocation::node(
+    // The header's CRC covers the rest of its 512 bytes; the location's,
+    // the metadata text.
+    let header = cx.read_avail(area.sub(0, MDA_HEADER)).await?;
+    let header_crc =
+        (to_u64(header.len()) == MDA_HEADER).then(|| lvm_crc(header.get(4..).unwrap_or_default()));
+    let header_check = Check::new(LVM_CRC, u32_le(&header, 0).unwrap_or(0)).verify_opt(header_crc);
+    cx.emit(MdaHeader::checked_node(
+        "Header",
+        area.sub(0, MdaHeader::SIZE),
+        LE,
+        header_check.at(0),
+    ));
+    let data = cx.read_avail(text).await?;
+    // Only text read whole (not cut at the size limit) can be checked.
+    let loc = cx
+        .read_avail(area.sub(MdaHeader::SIZE, RawLocation::SIZE))
+        .await?;
+    let text_crc = (to_u64(data.len()) == text.len && u64_le(&loc, 8) == Some(text.len))
+        .then(|| lvm_crc(&data));
+    let text_check = Check::new(LVM_CRC, u32_le(&loc, 16).unwrap_or(0)).verify_opt(text_crc);
+    cx.emit(RawLocation::checked_node(
         "Raw location",
         area.sub(MdaHeader::SIZE, RawLocation::SIZE),
         LE,
+        text_check.at(16),
     ));
-    let data = cx.read_avail(text).await?;
     let content = crate::text::until_nul(&data);
     cx.emit(
         Node::new("Metadata text")

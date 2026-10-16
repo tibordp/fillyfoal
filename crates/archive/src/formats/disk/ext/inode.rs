@@ -13,7 +13,7 @@ use crate::formats::disk::{PieceList, content_node, fragments_node, size, unix_m
 use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{FlagTable, Value, flag};
+use crate::value::{Check, FlagTable, Value, flag};
 
 use super::{Fs, FsRef, LE, ahead, csum32, uint};
 
@@ -155,9 +155,15 @@ impl Inode {
     /// A diagnostic if the inode checksum does not match.
     pub(super) fn checksum_diag(&self, fs: &Fs) -> Option<Diagnostic> {
         let (c, has_hi) = self.checksum(fs)?;
-        let want = if has_hi { c } else { c & 0xffff };
-        (self.stored_checksum(has_hi) != want)
-            .then(|| Diagnostic::warning(format!("inode checksum mismatch: computed {want:#x}")))
+        let (want, algo) = if has_hi {
+            (c, "CRC-32C")
+        } else {
+            (c & 0xffff, super::CRC32C_LOW)
+        };
+        Check::new(algo, self.stored_checksum(has_hi))
+            .verify(want)
+            .mismatch_text()
+            .map(Diagnostic::warning)
     }
 
     pub(super) fn summary(&self) -> String {
@@ -558,12 +564,8 @@ fn extent_node_layout(f: &mut Fields<'_>, ctx: &ExtCtx) -> Result<()> {
                 )
             });
             f.u32("Checksum")
-                .hex()
-                .with(|&v, n| match computed {
-                    Some(c) if c == v => n.summary("valid"),
-                    Some(c) => n.diag(Diagnostic::warning(format!("mismatch: computed {c:#010x}"))),
-                    None => n,
-                })
+                .checksum("CRC-32C")
+                .verify(computed)
                 .emit()?;
         }
     }
@@ -628,15 +630,8 @@ fn inode_layout(f: &mut Fields<'_>, ctx: &InodeCtx) -> Result<()> {
     f.u16("Group (high)").emit()?;
     let csum = ctx.csum;
     f.u16("Checksum (low)")
-        .hex()
-        .with(|&v, n| match csum {
-            Some((c, false)) if u32::from(v) == c & 0xffff => n.summary("valid"),
-            Some((c, false)) => n.diag(Diagnostic::warning(format!(
-                "mismatch: computed {:#06x}",
-                c & 0xffff
-            ))),
-            _ => n,
-        })
+        .checksum_if(csum.is_some(), super::CRC32C_LOW)
+        .verify(csum.map(|(c, _)| u16::try_from(c & 0xffff).unwrap_or(0)))
         .emit()?;
     f.u16("Reserved").emit()?;
     if f.remaining() == 0 {
@@ -649,15 +644,11 @@ fn inode_layout(f: &mut Fields<'_>, ctx: &InodeCtx) -> Result<()> {
     let extra_end = 128u64.saturating_add(extra.into()).min(f.block().span.len);
     let fits = |f: &Fields<'_>, n: u64| f.pos().saturating_add(n) <= extra_end;
     if fits(f, 2) {
-        let lo = u32::from(u16_le(&f.block().data, 0x7c).unwrap_or(0));
         f.u16("Checksum (high)")
-            .hex()
-            .with(|&v, n| match csum {
-                Some((c, true)) if u32::from(v) << 16 | lo == c => n.summary("valid"),
-                Some((c, true)) => {
-                    n.diag(Diagnostic::warning(format!("mismatch: computed {c:#010x}")))
-                }
-                _ => n,
+            .checksum_if(csum.is_some(), super::CRC32C_HIGH)
+            .verify(match csum {
+                Some((c, true)) => Some(u16::try_from(c >> 16).unwrap_or(0)),
+                _ => None,
             })
             .emit()?;
     }

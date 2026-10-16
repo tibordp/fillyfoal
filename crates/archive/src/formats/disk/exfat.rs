@@ -24,7 +24,7 @@ use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{FlagTable, Time, Value, flag};
+use crate::value::{Check, FlagTable, Time, Value, flag};
 
 const LE: Endian = Endian::Little;
 const ENTRY: u64 = 32;
@@ -76,7 +76,7 @@ record! {
     pub struct FileEntry {
         kind: u8 "Entry type" .hex(),
         secondary: u8 "Secondary entries",
-        checksum: u16 "Set checksum" .hex(),
+        checksum: u16 "Set checksum" .checksum(EXFAT_SUM),
         attributes: u16 "Attributes" .hex() .flags(FILE_ATTRIBUTES),
         _reserved: u16 "Reserved",
         created: u32 "Created" .with(dos_stamp),
@@ -246,6 +246,10 @@ impl Volume {
     }
 }
 
+/// exFAT's checksums (boot region, entry sets, up-case table): each byte
+/// added to the sum rotated right by one.
+const EXFAT_SUM: &str = "exFAT rotating sum";
+
 /// The boot region checksum over sectors 0-10 (skipping the volatile
 /// VolumeFlags and PercentInUse fields).
 fn boot_checksum(data: &[u8]) -> u32 {
@@ -277,17 +281,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let cluster = sector << bs.cluster_shift;
     let region = vol.sub(0, sector.saturating_mul(12));
     let data = cx.read_avail(region).await?;
-    let mut boot = BootSector::node("Boot sector", vol.sub(0, sector), LE);
+    let boot = BootSector::node("Boot sector", vol.sub(0, sector), LE);
     let computed = boot_checksum(
         data.get(..crate::bytes::to_usize(sector.saturating_mul(11)))
             .unwrap_or_default(),
     );
     let stored = u32_le(&data, crate::bytes::to_usize(sector.saturating_mul(11)));
-    if stored.is_some_and(|s| s != computed) {
-        boot = boot.diag(Diagnostic::warning(format!(
-            "boot region checksum mismatch: computed {computed:#010x}"
-        )));
-    }
     cx.emit(boot);
     boot_tail(&cx, vol, &data, sector);
     cx.emit(
@@ -312,11 +311,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Boot checksum sector")
             .span(vol.sub(sector.saturating_mul(11), sector))
-            .value(Value::UInt {
-                value: stored.unwrap_or(0).into(),
-                bits: 32,
-                radix: crate::value::Radix::Hex,
-            }),
+            .checksum(
+                Check::new(EXFAT_SUM, stored.unwrap_or(0))
+                    .verify_opt(stored.is_some().then_some(computed)),
+            )
+            .desc("The checksum of sectors 0-10, repeated to fill the sector"),
     );
     cx.emit(
         Node::new("Backup boot region")
@@ -705,14 +704,15 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
                     let sum = raw
                         .iter()
                         .fold(0u32, |s, &b| s.rotate_right(1).wrapping_add(b.into()));
-                    let stored = u32_le(&e, 4).unwrap_or(0);
-                    tnode = if sum == stored {
-                        tnode.summary(format!("{}, checksum valid", size(table.len)))
-                    } else {
-                        tnode.diag(Diagnostic::warning(format!(
-                            "up-case table checksum mismatch: computed {sum:#010x}"
-                        )))
-                    };
+                    // The checksum is a field of the directory entry above.
+                    let check = Check::new(EXFAT_SUM, u32_le(&e, 4).unwrap_or(0)).verify(sum);
+                    tnode = tnode
+                        .summary(format!(
+                            "{}, checksum {}",
+                            size(table.len),
+                            check.verdict_text()
+                        ))
+                        .check_diag(&check);
                 } else {
                     let raw = cx.read_avail(table.sub(0, 1 << 20)).await?;
                     let used: u32 = raw.iter().map(|b| b.count_ones()).sum();
@@ -776,7 +776,8 @@ struct FileSet {
     modified_10ms: u8,
     modified_utc: u8,
     stream: Option<[u8; 32]>,
-    checksum_ok: bool,
+    /// The set checksum, over all of its entries.
+    checksum: Check,
 }
 
 async fn file_set(cx: &Cx, it: &mut Entries, first: [u8; 32], span: Span) -> Result<FileSet> {
@@ -790,7 +791,7 @@ async fn file_set(cx: &Cx, it: &mut Entries, first: [u8; 32], span: Span) -> Res
         modified_10ms: first[21],
         modified_utc: first[23],
         stream: None,
-        checksum_ok: true,
+        checksum: Check::new(EXFAT_SUM, u16_le(&first, 2).unwrap_or(0)),
     };
     let mut checksum = 0u16;
     for (i, &b) in first.iter().enumerate() {
@@ -823,7 +824,7 @@ async fn file_set(cx: &Cx, it: &mut Entries, first: [u8; 32], span: Span) -> Res
     let name_len = set.stream.map_or(0, |s| usize::from(s[3]));
     units.truncate(name_len);
     set.name = String::from_utf16_lossy(&units);
-    set.checksum_ok = u16_le(&first, 2) == Some(checksum);
+    set.checksum = set.checksum.clone().verify(checksum);
     if let (Some(a), Some(b)) = (set.entries.first(), set.entries.last())
         && a.source == b.source
         && b.end() > a.offset
@@ -853,9 +854,7 @@ fn file_node(fs: &Vol, ancestors: &Arc<Vec<u32>>, set: FileSet) -> Node {
         set.name.clone()
     })
     .span(set.span);
-    if !set.checksum_ok {
-        node = node.diag(Diagnostic::warning("entry set checksum mismatch"));
-    }
+    node = node.check_diag(&set.checksum);
     if set.stream.is_none() {
         return node.diag(Diagnostic::malformed(
             "file entry without a stream extension",
@@ -900,10 +899,29 @@ fn entry_set_node(set: &FileSet) -> Node {
 }
 
 async fn entry_set(cx: Cx, entries: Arc<Vec<Span>>) -> Result<()> {
+    // The set checksum: every byte of the set but the checksum field.
+    let mut sum = 0u16;
+    let mut stored = 0u16;
+    for (k, span) in entries.iter().enumerate() {
+        let raw = cx.read(*span).await?;
+        if k == 0 {
+            stored = u16_le(&raw, 2).unwrap_or(0);
+        }
+        for (i, &b) in raw.iter().enumerate() {
+            if k > 0 || (i != 2 && i != 3) {
+                sum = sum.rotate_right(1).wrapping_add(b.into());
+            }
+        }
+    }
     for span in entries.iter() {
         let raw = cx.read(span.sub(0, 1)).await?;
         let node = match raw.first() {
-            Some(0x85) => FileEntry::node("File", *span, LE),
+            Some(0x85) => FileEntry::checked_node(
+                "File",
+                *span,
+                LE,
+                Check::new(EXFAT_SUM, stored).verify(sum).at(2),
+            ),
             Some(0xc0) => StreamEntry::node("Stream extension", *span, LE),
             Some(0xc1) => NameEntry::node("File name", *span, LE),
             _ => Node::new("Entry").span(*span),

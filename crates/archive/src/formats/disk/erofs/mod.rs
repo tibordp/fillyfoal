@@ -30,7 +30,7 @@ use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Radix, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Radix, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const SUPER: u64 = 1024;
@@ -126,14 +126,9 @@ struct Sb {
 fn sb_layout(f: &mut Fields<'_>, computed: &Option<u32>) -> Result<Sb> {
     f.u32("Magic").hex().emit()?;
     f.u32("Checksum")
-        .hex()
-        .with(|&v, n| match computed {
-            Some(c) if *c == v => n.summary("valid CRC-32C"),
-            Some(c) => n.diag(Diagnostic::warning(format!(
-                "mismatch: computed {c:#010x}"
-            ))),
-            None => n.summary("not used"),
-        })
+        .checksum_if(computed.is_some(), "CRC-32C")
+        .verify(*computed)
+        .with(|_, n| if computed.is_none() { n.summary("not used") } else { n })
         .desc("CRC-32C (no final inversion) of the superblock's block from offset 1024, with this field zeroed")
         .emit()?;
     let compat = f.u32("Compatible features").hex().flags(COMPAT).emit()?;
@@ -375,10 +370,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         plural(sb.blocks, "block"),
         size(blk)
     ));
-    if let Some(c) = computed
-        && u32_le(&head, 4) != Some(c)
-    {
-        node = node.diag(Diagnostic::warning("superblock checksum mismatch"));
+    if let Some(c) = computed {
+        node = node.check_diag(&Check::new("CRC-32C", u32_le(&head, 4).unwrap_or(0)).verify(c));
     }
     cx.emit(node);
     let label = crate::text::until_nul(&sb.name);

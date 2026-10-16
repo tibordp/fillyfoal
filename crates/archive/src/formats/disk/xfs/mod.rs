@@ -41,7 +41,7 @@ use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{FlagTable, Radix, Value, field, flag};
+use crate::value::{Check, FlagTable, field, flag};
 
 const BE: Endian = Endian::Big;
 /// "No inode" in superblock and directory fields.
@@ -192,32 +192,19 @@ fn crc(data: &[u8], at: usize) -> Option<u32> {
 }
 
 /// A diagnostic for a CRC mismatch at `at`, if any.
-fn crc_diag(data: &[u8], at: usize, what: &str) -> Option<Diagnostic> {
-    match (crc(data, at), u32_le(data, at)) {
-        (Some(c), Some(s)) if c != s => Some(Diagnostic::warning(format!(
-            "{what} CRC mismatch: stored {s:#010x}, computed {c:#010x}"
-        ))),
-        _ => None,
-    }
+fn crc_diag(data: &[u8], at: usize) -> Option<Diagnostic> {
+    Check::new("CRC-32C", u32_le(data, at)?)
+        .verify(crc(data, at)?)
+        .mismatch_text()
+        .map(Diagnostic::warning)
 }
 
 /// A little-endian CRC-32C field read by a big-endian cursor, checked
 /// against `computed`.
 fn crc_field(f: &mut Fields<'_>, computed: Option<u32>) -> Result<u32> {
-    f.u32("CRC-32C")
+    f.u32("CRC")
         .map(u32::swap_bytes)
-        .with(|&v, n| {
-            let n = n.value(Value::UInt {
-                value: v.into(),
-                bits: 32,
-                radix: Radix::Hex,
-            });
-            match computed {
-                Some(c) if c == v => n.summary("valid"),
-                Some(c) => n.diag(Diagnostic::warning(format!("mismatch: computed {c:#010x}"))),
-                None => n,
-            }
-        })
+        .with(|&v, n| n.checksum(Check::new("CRC-32C", v).verify_opt(computed)))
         .emit()
 }
 
@@ -532,7 +519,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         sb.ifree,
         size(sb.fdblocks.saturating_mul(block))
     ));
-    if let Some(d) = v5.then(|| crc_diag(&raw, 224, "superblock")).flatten() {
+    if let Some(d) = v5.then(|| crc_diag(&raw, 224)).flatten() {
         node = node.diag(d);
     }
     cx.emit(node);

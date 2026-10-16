@@ -24,7 +24,7 @@ use crate::formats::{Format, Head, Input, Probe, dissect_or_data, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{Check, EnumTable, FlagTable, Value, flag, lookup};
 
 const BE: Endian = Endian::Big;
 const COOKIE: &[u8] = b"conectix";
@@ -124,7 +124,7 @@ record! {
         heads: u8 "Heads",
         sectors: u8 "Sectors per track" .with(|&s, n| n.summary(format!("CHS capacity {}", size(u64::from(cylinders).saturating_mul(heads.into()).saturating_mul(s.into()).saturating_mul(SECTOR))))),
         disk_type: u32 "Disk type" .enumeration(DISK_TYPES),
-        checksum: u32 "Checksum" .hex(),
+        checksum: u32 "Checksum" .checksum(VHD_SUM),
         unique_id: bytes[16] "Unique id" .with(uuid_value),
         saved_state: u8 "Saved state" .with(|&v, n| n.summary(if v == 0 { "no" } else { "yes: the VM was saved with this disk" })),
         _reserved: bytes[427] "Reserved",
@@ -140,7 +140,7 @@ record! {
         version: u32 "Header version" .hex() .with(creator_version),
         max_entries: u32 "BAT entries",
         block_size: u32 "Block size" .with(|&v, n| n.summary(size(v.into()))),
-        checksum: u32 "Checksum" .hex(),
+        checksum: u32 "Checksum" .checksum(VHD_SUM),
         parent_id: bytes[16] "Parent unique id" .with(uuid_value),
         parent_time: u32 "Parent modified" .with(vhd_time),
         _reserved: u32 "Reserved",
@@ -160,6 +160,9 @@ record! {
 }
 
 /// One's complement of the byte sum, skipping the checksum field.
+/// What VHD's checksum is.
+const VHD_SUM: &str = "ones' complement byte sum";
+
 fn checksum(data: &[u8], field: usize) -> u32 {
     let sum = data
         .iter()
@@ -224,7 +227,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let footer_span = file.sub(primary, SECTOR);
     let footer = parse(&cx, footer_span, BE, &(), Footer::layout).await?;
     let raw = cx.read_avail(footer_span).await?;
-    let mut node = Footer::node(
+    let check = Check::new(VHD_SUM, footer.checksum).verify(checksum(&raw, 64));
+    let mut node = Footer::checked_node(
         if footer_at.is_some() {
             "Footer"
         } else {
@@ -232,18 +236,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         },
         footer_span,
         BE,
+        check.at(64),
     )
     .summary(format!(
         "{} disk, {}",
         lookup(DISK_TYPES, footer.disk_type.into()).unwrap_or("unknown"),
         size(footer.current_size)
     ));
-    if checksum(&raw, 64) != footer.checksum {
-        node = node.diag(Diagnostic::warning(format!(
-            "footer checksum mismatch: computed {:#010x}",
-            checksum(&raw, 64)
-        )));
-    }
+    node = node.check_diag(&check);
     if footer_at.is_none() {
         node = node.diag(Diagnostic::warning(
             "no footer at the end; using the copy at the start",
@@ -278,7 +278,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let footer_copy = file.sub(0, SECTOR);
     if footer_at.is_some() {
         let copy = cx.read_avail(footer_copy).await?;
-        let mut cnode = Footer::node("Footer copy", footer_copy, BE);
+        let mut cnode = Footer::checked_node(
+            "Footer copy",
+            footer_copy,
+            BE,
+            Check::new(VHD_SUM, u32_be(&copy, 64).unwrap_or(0))
+                .verify(checksum(&copy, 64))
+                .at(64),
+        );
         if copy != raw {
             cnode = cnode.diag(Diagnostic::warning("differs from the footer at the end"));
         }
@@ -328,18 +335,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             String::new()
         }
     ));
-    let mut hnode =
-        struct_node("Dynamic header", header_span, BE, (), header_layout).summary(format!(
-            "{} BAT entries, {}",
-            header.max_entries,
-            plural(size(header.block_size.into()), "block")
-        ));
-    if checksum(&raw, 36) != header.checksum {
-        hnode = hnode.diag(Diagnostic::warning(format!(
-            "dynamic header checksum mismatch: computed {:#010x}",
-            checksum(&raw, 36)
-        )));
-    }
+    let hcheck = Check::new(VHD_SUM, header.checksum).verify(checksum(&raw, 36));
+    let mut hnode = struct_node(
+        "Dynamic header",
+        header_span,
+        BE,
+        hcheck.clone(),
+        header_layout,
+    )
+    .summary(format!(
+        "{} BAT entries, {}",
+        header.max_entries,
+        plural(size(header.block_size.into()), "block")
+    ));
+    hnode = hnode.check_diag(&hcheck);
     cx.emit(hnode);
     let block = u64::from(header.block_size);
     // Bitmaps are scanned bit by bit: blocks are at most 256 MiB.
@@ -412,7 +421,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+fn header_layout(f: &mut Fields<'_>, check: &Check) -> Result<()> {
+    f.verifying(check.at(36));
     DynamicHeader::read(f)?;
     for i in 0..8u64 {
         let span = f.peek_span(24);

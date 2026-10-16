@@ -28,7 +28,7 @@ use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, flag};
+use crate::value::{Check, EnumTable, FlagTable, flag};
 
 const LE: Endian = Endian::Little;
 const SUPER: u64 = 1024;
@@ -261,7 +261,7 @@ record! {
         encoding_flags: u16 "Encoding flags" .hex(),
         orphan_file_inum: u32 "Orphan file inode",
         _reserved: bytes[376] "Reserved",
-        checksum: u32 "Checksum" .hex() .desc("CRC-32C (no final inversion) of the superblock up to this field (METADATA_CSUM)"),
+        checksum: u32 "Checksum" .checksum_if(ro_compat & 0x400 != 0, "CRC-32C") .desc("CRC-32C (no final inversion) of the superblock up to this field (METADATA_CSUM)"),
     }
 }
 
@@ -302,12 +302,11 @@ struct GdCtx {
     wide: bool,
     /// (computed checksum, block bitmap checksum, inode bitmap checksum)
     csum: Option<u16>,
+    /// The descriptor checksum is the low half of a CRC-32C (METADATA_CSUM),
+    /// not a CRC-16 (GDT_CSUM).
+    metadata_csum: bool,
     block_bitmap_csum: Option<u32>,
     inode_bitmap_csum: Option<u32>,
-}
-
-fn csum_summary(ok: bool) -> &'static str {
-    if ok { "valid" } else { "mismatch" }
 }
 
 fn gd_layout(f: &mut Fields<'_>, ctx: &GdCtx) -> Result<()> {
@@ -317,30 +316,35 @@ fn gd_layout(f: &mut Fields<'_>, ctx: &GdCtx) -> Result<()> {
     f.u16("Free blocks").emit()?;
     f.u16("Free inodes").emit()?;
     f.u16("Directories").emit()?;
-    f.u16("Flags").hex().flags(BG_FLAGS).emit()?;
+    let flags = f.u16("Flags").hex().flags(BG_FLAGS).emit()?;
     f.u32("Snapshot exclusion bitmap").emit()?;
+    // An uninitialized bitmap (INODE_UNINIT, BLOCK_UNINIT) has no checksum.
+    let half = |c: Check, computed: Option<u32>, uninit: u16, shift: u32| {
+        if flags & uninit != 0 {
+            c.skipped("bitmap not initialized")
+        } else {
+            c.verify_opt(computed.map(|v| u16::try_from((v >> shift) & 0xffff).unwrap_or(0)))
+        }
+    };
     f.u16("Block bitmap checksum (low)")
-        .hex()
-        .with(|&v, n| match ctx.block_bitmap_csum {
-            Some(c) if !ctx.wide => n.summary(csum_summary(u32::from(v) == c & 0xffff)),
-            _ => n,
-        })
+        .checksum_if(ctx.metadata_csum, CRC32C_LOW)
+        .with_check(|c| half(c, ctx.block_bitmap_csum, 2, 0))
         .emit()?;
     f.u16("Inode bitmap checksum (low)")
-        .hex()
-        .with(|&v, n| match ctx.inode_bitmap_csum {
-            Some(c) if !ctx.wide => n.summary(csum_summary(u32::from(v) == c & 0xffff)),
-            _ => n,
-        })
+        .checksum_if(ctx.metadata_csum, CRC32C_LOW)
+        .with_check(|c| half(c, ctx.inode_bitmap_csum, 1, 0))
         .emit()?;
     f.u16("Unused inodes").emit()?;
     f.u16("Checksum")
-        .hex()
-        .with(|&v, n| match ctx.csum {
-            Some(c) if c == v => n.summary("valid"),
-            Some(c) => n.diag(Diagnostic::warning(format!("mismatch: computed {c:#06x}"))),
-            None => n,
-        })
+        .checksum_if(
+            ctx.csum.is_some(),
+            if ctx.metadata_csum {
+                CRC32C_LOW
+            } else {
+                "CRC-16"
+            },
+        )
+        .verify(ctx.csum)
         .emit()?;
     if ctx.wide {
         f.u32("Block bitmap (high)").emit()?;
@@ -351,8 +355,14 @@ fn gd_layout(f: &mut Fields<'_>, ctx: &GdCtx) -> Result<()> {
         f.u16("Directories (high)").emit()?;
         f.u16("Unused inodes (high)").emit()?;
         f.u32("Snapshot exclusion bitmap (high)").emit()?;
-        f.u16("Block bitmap checksum (high)").hex().emit()?;
-        f.u16("Inode bitmap checksum (high)").hex().emit()?;
+        f.u16("Block bitmap checksum (high)")
+            .checksum_if(ctx.metadata_csum, CRC32C_HIGH)
+            .with_check(|c| half(c, ctx.block_bitmap_csum, 2, 16))
+            .emit()?;
+        f.u16("Inode bitmap checksum (high)")
+            .checksum_if(ctx.metadata_csum, CRC32C_HIGH)
+            .with_check(|c| half(c, ctx.inode_bitmap_csum, 1, 16))
+            .emit()?;
         f.u32("Reserved").emit()?;
     }
     let rest = f.remaining();
@@ -519,6 +529,18 @@ impl Fs {
     }
 }
 
+/// A 16-bit checksum field holding the low half of a CRC-32C.
+pub(super) const CRC32C_LOW: &str = "CRC-32C (low 16 bits)";
+/// The other half, where the format keeps it.
+pub(super) const CRC32C_HIGH: &str = "CRC-32C (high 16 bits)";
+
+/// A superblock's own checksum (METADATA_CSUM): CRC-32C of what precedes
+/// it.
+fn sb_check(raw: &[u8]) -> Check {
+    let computed = crc32c_update(!0, raw.get(..1020).unwrap_or_default());
+    Check::new("CRC-32C", u32_le(raw, 1020).unwrap_or(0)).verify(computed)
+}
+
 /// A CRC-32C over several parts, starting from `seed` (no inversions, as
 /// ext4's `ext4_chksum`).
 fn csum32(seed: u32, parts: &[&[u8]]) -> u32 {
@@ -554,14 +576,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let raw = cx.read_avail(span).await?;
     let mut node = Superblock::node("Superblock", span, LE);
     if sb.ro_compat & 0x400 != 0 {
-        let computed = crc32c_update(!0, raw.get(..1020).unwrap_or_default());
-        node = if u32_le(&raw, 1020) == Some(computed) {
-            node.summary("checksum valid")
-        } else {
-            node.diag(Diagnostic::warning(format!(
-                "superblock checksum mismatch: computed {computed:#010x}"
-            )))
-        };
+        let check = sb_check(&raw);
+        node = Superblock::checked_node("Superblock", span, LE, check.at(1020)).check_diag(&check);
     }
     cx.emit(node);
     let block = 1024u64
@@ -767,6 +783,7 @@ async fn group_descriptors(cx: Cx, fs: FsRef) -> Result<()> {
             GdCtx {
                 wide: fs.wide && fs.desc_size >= 64,
                 csum: computed,
+                metadata_csum: fs.csum.is_some(),
                 block_bitmap_csum: None,
                 inode_bitmap_csum: None,
             },
@@ -779,10 +796,16 @@ async fn group_descriptors(cx: Cx, fs: FsRef) -> Result<()> {
             d.free_blocks,
             d.free_inodes
         ));
-        if let Some(c) = computed
-            && u16_le(&raw, 0x1e) != Some(c)
-        {
-            node = node.diag(Diagnostic::warning("group descriptor checksum mismatch"));
+        if let Some(c) = computed {
+            let algo = if fs.csum.is_some() {
+                CRC32C_LOW
+            } else {
+                "CRC-16"
+            };
+            let check = Check::new(algo, u16_le(&raw, 0x1e).unwrap_or(0)).verify(c);
+            if let Some(message) = check.mismatch_text() {
+                node = node.diag(Diagnostic::warning(message));
+            }
         }
         cx.push(node).await;
     }
@@ -836,10 +859,17 @@ async fn group(cx: Cx, (fs, g): (FsRef, u64)) -> Result<()> {
                     .summary("shown at the top level"),
             );
         } else {
-            cx.emit(Superblock::node(
+            let span = fs.vol.sub(first.saturating_mul(fs.block), 1024);
+            let checks = if fs.csum.is_some() {
+                sb_check(&cx.read_avail(span).await?).at(1020)
+            } else {
+                Vec::new()
+            };
+            cx.emit(Superblock::checked_node(
                 "Superblock (backup)",
-                fs.vol.sub(first.saturating_mul(fs.block), 1024),
+                span,
                 LE,
+                checks,
             ));
         }
     }
@@ -923,6 +953,7 @@ async fn group(cx: Cx, (fs, g): (FsRef, u64)) -> Result<()> {
         GdCtx {
             wide,
             csum: gd_checksum(&fs, g, &raw),
+            metadata_csum: fs.csum.is_some(),
             block_bitmap_csum: bb_csum,
             inode_bitmap_csum: ib_csum,
         },
@@ -939,9 +970,15 @@ async fn group(cx: Cx, (fs, g): (FsRef, u64)) -> Result<()> {
     };
     let check = |computed: Option<u32>, lo: usize, hi: usize| -> Option<Diagnostic> {
         let c = computed?;
-        let c = if wide { c } else { c & 0xffff };
-        (stored(lo, hi) != c)
-            .then(|| Diagnostic::warning(format!("bitmap checksum mismatch: computed {c:#x}")))
+        let (c, algo) = if wide {
+            (c, "CRC-32C")
+        } else {
+            (c & 0xffff, CRC32C_LOW)
+        };
+        Check::new(algo, stored(lo, hi))
+            .verify(c)
+            .mismatch_text()
+            .map(Diagnostic::warning)
     };
     let block_uninit = gd.flags & 2 != 0;
     let mut bnode = Node::new("Block bitmap")
