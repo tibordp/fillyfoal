@@ -7,9 +7,7 @@ use crate::bytes::{to_u64, to_usize, u16_be, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
-use crate::formats::util::vidutil::{
-    Entry, enumerated, fourcc, num, read_small, table, text, uuid,
-};
+use crate::formats::util::vidutil::{Entry, enumerated, fourcc, num, read_small, table, uuid};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -1178,7 +1176,7 @@ fn group_entry(f: &mut Fields<'_>, &(kind, lead): &([u8; 4], usize)) -> Result<(
             let kid = f.bytes("KID", 16);
             let span = kid.span();
             let kid = kid.get()?;
-            f.node(text("KID", span, uuid(&kid)));
+            f.node(Node::new("KID").span(span).value(Value::uuid(&kid)));
             if protected == 1 && iv == 0 {
                 let n = f.u8("Constant IV size").emit()?;
                 f.bytes("Constant IV", n.into()).emit()?;

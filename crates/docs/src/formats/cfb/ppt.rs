@@ -492,7 +492,9 @@ pub async fn atom_fields(
                 "accent and followed hyperlink",
             ] {
                 f.u32(name)
-                    .with(|&v, n| n.summary(officeart::color(v & 0x00ff_ffff)))
+                    .with(|&v, n| {
+                        n.value(crate::value::Value::color(crate::value::Color::colorref(v)))
+                    })
                     .emit()?;
             }
         }

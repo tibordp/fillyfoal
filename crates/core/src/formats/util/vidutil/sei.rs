@@ -417,8 +417,11 @@ pub fn nits(v: f64) -> String {
 fn user_data_unregistered(w: &mut Walker, size: u64) -> Option<Option<String>> {
     let start = w.pos();
     let uuid = w.read_bytes(16)?;
-    let text = super::uuid(&uuid);
-    w.text("uuid_iso_iec_11578", start, text);
+    w.value(
+        "uuid_iso_iec_11578",
+        start,
+        crate::value::Value::uuid(&uuid),
+    );
     let n = usize::try_from(size).ok()?.checked_sub(16)?;
     let start = w.pos();
     let data = w.read_bytes(n)?;

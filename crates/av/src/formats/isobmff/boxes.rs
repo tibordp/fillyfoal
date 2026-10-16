@@ -5,7 +5,7 @@ use crate::bytes::{u16_be, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Fields, struct_node};
-use crate::formats::util::vidutil::{fixed8, fixed16, fourcc, num, sfixed16, text, uuid};
+use crate::formats::util::vidutil::{fixed8, fixed16, fourcc, num, sfixed16, uuid};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag};
@@ -1018,13 +1018,11 @@ fn tkhd(f: &mut Fields<'_>, movie_timescale: u32) -> Result<()> {
         .get()?
         .iter()
         .fold(0u64, |acc, &b| (acc << 8) | u64::from(b));
-    let (set, unknown) = crate::value::decode_flags(TKHD_FLAGS, raw);
-    f.node(Node::new("Flags").span(span).value(Value::Flags {
-        raw,
-        bits: 24,
-        set,
-        unknown,
-    }));
+    f.node(
+        Node::new("Flags")
+            .span(span)
+            .value(Value::flags(raw, 24, TKHD_FLAGS)),
+    );
     f.uword("Creation time", wide).mac_time().emit()?;
     f.uword("Modification time", wide).mac_time().emit()?;
     f.u32("Track ID").emit()?;
@@ -1143,13 +1141,11 @@ fn tfhd(f: &mut Fields<'_>, file: Span) -> Result<()> {
         .get()?
         .iter()
         .fold(0u64, |acc, &b| (acc << 8) | u64::from(b));
-    let (set, unknown) = crate::value::decode_flags(TFHD_FLAGS, flags);
-    f.node(Node::new("Flags").span(span).value(Value::Flags {
-        raw: flags,
-        bits: 24,
-        set,
-        unknown,
-    }));
+    f.node(
+        Node::new("Flags")
+            .span(span)
+            .value(Value::flags(flags, 24, TFHD_FLAGS)),
+    );
     f.u32("Track ID").emit()?;
     if flags & 0x1 != 0 {
         f.u64("Base data offset")
@@ -1215,7 +1211,7 @@ fn pssh(f: &mut Fields<'_>) -> Result<()> {
     let id = f.bytes("System ID", 16);
     let at = id.span();
     let id = id.get()?;
-    let mut node = text("System ID", at, uuid(&id));
+    let mut node = Node::new("System ID").span(at).value(Value::uuid(&id));
     if let Some(name) = drm_system(&id) {
         node = node.summary(name);
     }
@@ -1229,7 +1225,7 @@ fn pssh(f: &mut Fields<'_>) -> Result<()> {
             let kid = f.bytes("KID", 16);
             let span = kid.span();
             let kid = kid.get()?;
-            f.node(text("KID", span, uuid(&kid)));
+            f.node(Node::new("KID").span(span).value(Value::uuid(&kid)));
         }
     }
     let size = f.u32("Data size").emit()?;
@@ -1267,7 +1263,7 @@ fn tenc(f: &mut Fields<'_>) -> Result<()> {
     let kid = f.bytes("Default KID", 16);
     let span = kid.span();
     let kid = kid.get()?;
-    f.node(text("Default KID", span, uuid(&kid)));
+    f.node(Node::new("Default KID").span(span).value(Value::uuid(&kid)));
     if protected == 1 && iv == 0 {
         let n = f.u8("Constant IV size").emit()?;
         f.bytes("Constant IV", n.into()).emit()?;

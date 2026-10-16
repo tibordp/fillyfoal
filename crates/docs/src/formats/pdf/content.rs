@@ -229,7 +229,12 @@ pub async fn operators(cx: &Cx, span: Span, syntax: Syntax) -> Result<()> {
         }
         let mut node =
             Node::new(op.clone()).span(span.sub(to_u64(from), to_u64(end.saturating_sub(from))));
-        if !text.is_empty() {
+        if let Some(c) = (syntax == Syntax::Content && extra == 0)
+            .then(|| device_color(&op, &operands))
+            .flatten()
+        {
+            node = node.value(Value::color(c));
+        } else if !text.is_empty() {
             node = node.value(Value::Text(text));
         }
         if let Some(d) = describe(&op, syntax) {
@@ -242,6 +247,23 @@ pub async fn operators(cx: &Cx, span: Span, syntax: Syntax) -> Result<()> {
         extra = 0;
     }
     Ok(())
+}
+
+/// The colour a device colour operator sets (`g`/`G` gray, `rg`/`RG`
+/// RGB, `k`/`K` CMYK), from its numeric operands.
+fn device_color(op: &str, operands: &[String]) -> Option<crate::value::Color> {
+    use crate::value::{Color, ColorDepth, ColorSpace};
+    let n: Vec<f64> = operands
+        .iter()
+        .map(|o| o.parse::<f64>().ok().filter(|v| v.is_finite()))
+        .collect::<Option<_>>()?;
+    let depth = ColorDepth::Float(64);
+    Some(match (op, n.as_slice()) {
+        ("g" | "G", &[v]) => Color::gray_float(64, v).space(ColorSpace::Device),
+        ("rg" | "RG", &[r, g, b]) => Color::rgb_float(64, r, g, b).space(ColorSpace::Device),
+        ("k" | "K", &[c, m, y, k]) => Color::cmyk(depth, c, m, y, k),
+        _ => return None,
+    })
 }
 
 fn short(item: &syntax::Item) -> String {

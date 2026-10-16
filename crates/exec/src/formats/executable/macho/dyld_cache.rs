@@ -144,7 +144,7 @@ fn header(f: &mut Fields<'_>, limit: &u64) -> Result<()> {
             }
             Kind::Uuid => {
                 f.bytes(name, 16)
-                    .with(|v, n| n.summary(uuid(v).to_uppercase()))
+                    .with(|v, n| n.value(crate::value::Value::uuid(v)))
                     .emit()?;
             }
             Kind::Platform => {

@@ -531,7 +531,9 @@ async fn expand_box(cx: Cx, st: BoxState) -> Result<()> {
     }
     if let Some(u) = h.uuid {
         let at = f.peek_span(16);
-        let mut node = text("User type", at, crate::formats::util::vidutil::uuid(&u));
+        let mut node = Node::new("User type")
+            .span(at)
+            .value(crate::value::Value::uuid(&u));
         if let Some(name) = canon::uuid_name(&u) {
             node = node.summary(name);
         }
@@ -702,16 +704,10 @@ pub fn full_box_flags(f: &mut Fields<'_>, table: crate::value::FlagTable) -> Res
     let span = field.span();
     let raw = field.get()?;
     let flags = raw.iter().fold(0u32, |acc, &b| (acc << 8) | u32::from(b));
-    let (set, unknown) = crate::value::decode_flags(table, flags.into());
     f.node(
         Node::new("Flags")
             .span(span)
-            .value(crate::value::Value::Flags {
-                raw: flags.into(),
-                bits: 24,
-                set,
-                unknown,
-            }),
+            .value(crate::value::Value::flags(flags.into(), 24, table)),
     );
     Ok((version, flags))
 }

@@ -130,14 +130,14 @@ async fn palette_entries(cx: Cx, (span, order): (Span, ColorOrder)) -> Result<()
         let entry = span.sub(index.saturating_mul(size), size);
         let bytes = cx.read(entry).await?;
         let (r, g, b, a) = order.rgb(&bytes);
-        let summary = match a {
-            Some(a) => format!("#{r:02x}{g:02x}{b:02x}{a:02x}"),
-            None => format!("#{r:02x}{g:02x}{b:02x}"),
+        let color = match a {
+            Some(a) => crate::value::Color::rgba8(r, g, b, a),
+            None => crate::value::Color::rgb8(r, g, b),
         };
         cx.push(
             Node::new(format!("[{index}]"))
                 .span(entry)
-                .value(Value::Text(summary)),
+                .value(Value::color(color)),
         )
         .await;
     }

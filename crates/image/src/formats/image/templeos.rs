@@ -748,16 +748,16 @@ async fn palette_entries(cx: Cx, span: Span) -> Result<()> {
     let data = cx.read(span).await?;
     cx.set_count(Count::Exact(16));
     for (i, e) in data.as_chunks::<8>().0.iter().enumerate() {
-        let c = |at: usize| e.get(at.saturating_add(1)).copied().unwrap_or(0);
+        let c = |at: usize| u64::from(crate::bytes::u16_le(e, at).unwrap_or(0));
         let name = COLORS.get(i).map_or("?", |&(_, n)| n);
         cx.push(
             Node::new(format!("[{i}] {name}"))
                 .span(span.sub(to_u64(i).saturating_mul(8), 8))
-                .value(Value::Text(format!(
-                    "#{:02x}{:02x}{:02x}",
+                .value(Value::color(crate::value::Color::rgb_bits(
+                    16,
                     c(4),
                     c(2),
-                    c(0)
+                    c(0),
                 ))),
         )
         .await;

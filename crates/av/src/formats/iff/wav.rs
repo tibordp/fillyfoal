@@ -335,8 +335,8 @@ pub fn peek_format(d: &[u8]) -> Option<WaveFormat> {
 /// The KSDATAFORMAT_SUBTYPE GUIDs are `XXXXXXXX-0000-0010-8000-00aa00389b71`
 /// with a format tag in the first field.
 fn subformat_tag(g: &Guid) -> Option<u16> {
-    (g.data2 == 0 && g.data3 == 0x10 && g.data4 == [0x80, 0, 0, 0xaa, 0, 0x38, 0x9b, 0x71])
-        .then(|| u16::try_from(g.data1).ok())
+    (g.data2() == 0 && g.data3() == 0x10 && g.data4() == [0x80, 0, 0, 0xaa, 0, 0x38, 0x9b, 0x71])
+        .then(|| u16::try_from(g.data1()).ok())
         .flatten()
 }
 
@@ -344,15 +344,15 @@ fn subformat_tag(g: &Guid) -> Option<u16> {
 fn subformat_special(g: &Guid) -> Option<&'static str> {
     const AMBISONIC: [u8; 8] = [0x86, 0x44, 0xc8, 0xc1, 0xca, 0, 0, 0];
     const IEC61937: [u8; 8] = [0x80, 0, 0, 0xaa, 0, 0x38, 0x9b, 0x71];
-    if g.data2 == 0x0721 && g.data3 == 0x11d3 && g.data4 == AMBISONIC {
-        return match g.data1 {
+    if g.data2() == 0x0721 && g.data3() == 0x11d3 && g.data4() == AMBISONIC {
+        return match g.data1() {
             1 => Some("Ambisonic B-format PCM"),
             3 => Some("Ambisonic B-format float"),
             _ => None,
         };
     }
-    if g.data2 == 0x0cea && g.data3 == 0x0010 && g.data4 == IEC61937 {
-        return match g.data1 {
+    if g.data2() == 0x0cea && g.data3() == 0x0010 && g.data4() == IEC61937 {
+        return match g.data1() {
             0x0a => Some("IEC 61937 Dolby Digital Plus"),
             0x0b => Some("IEC 61937 DTS-HD"),
             0x0c => Some("IEC 61937 Dolby MLP"),

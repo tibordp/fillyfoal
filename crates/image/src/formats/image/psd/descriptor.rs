@@ -157,7 +157,9 @@ enum Kind {
 enum Val {
     Leaf(Value, Option<String>),
     Note(String),
-    Nested(Kind, String),
+    /// A container: its kind, summary, and the colour it is when it is a
+    /// colour descriptor.
+    Nested(Kind, String, Option<Value>),
 }
 
 const TYPE_NAMES: &[(&[u8; 4], &str)] = &[
@@ -278,12 +280,19 @@ fn open(r: &mut Rd<'_>, t: &[u8; 4], depth: u32) -> Option<(Open, Val)> {
         b"Objc" | b"GlbO" => {
             let inner = depth.saturating_add(1);
             let (class, n) = descriptor_head(r, inner)?;
-            (
-                Kind::Descriptor,
-                n,
-                inner,
-                format!("{class}, {n_item}", n_item = plural(n, "item")),
-            )
+            let color = color_of(&class, n, &Rd::at(r.data, r.pos, r.endian)).map(Value::color);
+            return Some((
+                Open {
+                    kind: Kind::Descriptor,
+                    left: n,
+                    depth: inner,
+                },
+                Val::Nested(
+                    Kind::Descriptor,
+                    format!("{class}, {n_item}", n_item = plural(n, "item")),
+                    color,
+                ),
+            ));
         }
         b"VlLs" => {
             let n = r.u32()?;
@@ -295,7 +304,65 @@ fn open(r: &mut Rd<'_>, t: &[u8; 4], depth: u32) -> Option<(Open, Val)> {
         }
         _ => return None,
     };
-    Some((Open { kind, left, depth }, Val::Nested(kind, summary)))
+    Some((Open { kind, left, depth }, Val::Nested(kind, summary, None)))
+}
+
+/// The colour a colour descriptor (`RGBC`, `CMYC`, `LbCl`, `HSBC`,
+/// `Grsc`) holds, from its `n` items at `r`: Photoshop's doubles, RGB in
+/// 0..255, CMYK, saturation, brightness and gray in percent (gray as ink),
+/// hue in degrees, Lab in its own units.
+fn color_of(class: &str, n: u32, r: &Rd<'_>) -> Option<crate::value::Color> {
+    use crate::value::{Color, ColorDepth, ColorSpace};
+    if !matches!(class, "RGBC" | "CMYC" | "LbCl" | "HSBC" | "Grsc") || n > 8 {
+        return None;
+    }
+    let mut r = Rd::at(r.data, r.pos, r.endian);
+    let mut items: Vec<(String, f64)> = Vec::new();
+    for _ in 0..n {
+        let k = key(&mut r)?;
+        let v = match &r.fourcc()? {
+            b"doub" => r.f64()?,
+            b"UntF" => {
+                r.fourcc()?;
+                r.f64()?
+            }
+            b"long" => f64::from(r.i32()?),
+            _ => return None,
+        };
+        items.push((k, v));
+    }
+    let get = |k: &str| items.iter().find(|(n, _)| n == k).map(|(_, v)| *v);
+    let depth = ColorDepth::Float(64);
+    Some(match class {
+        "RGBC" => {
+            let (r, g, b) = (get("Rd")?, get("Grn")?, get("Bl")?);
+            // Whole numbers 0..255 (what Photoshop writes) are 8-bit RGB.
+            let byte = |v: f64| {
+                (v == v.round() && (0.0..=255.0).contains(&v))
+                    .then(|| u8::try_from(v as i64).ok())
+                    .flatten()
+            };
+            match (byte(r), byte(g), byte(b)) {
+                (Some(r), Some(g), Some(b)) => Color::rgb8(r, g, b),
+                _ => Color::rgb_float(64, r / 255.0, g / 255.0, b / 255.0),
+            }
+        }
+        "CMYC" => Color::cmyk(
+            depth,
+            get("Cyn")? / 100.0,
+            get("Mgnt")? / 100.0,
+            get("Ylw")? / 100.0,
+            get("Blck")? / 100.0,
+        ),
+        "LbCl" => Color::lab(depth, get("Lmnc")?, get("A")?, get("B")?),
+        "HSBC" => Color::hsb(
+            depth,
+            get("H")? / 360.0,
+            get("Strt")? / 100.0,
+            get("Brgh")? / 100.0,
+        ),
+        _ => Color::gray_float(64, 1.0 - get("Gry")? / 100.0).space(ColorSpace::Device),
+    })
 }
 
 fn is_container(t: &[u8; 4]) -> bool {
@@ -442,9 +509,14 @@ fn item_node(
         Some(Val::Leaf(v, None)) => node.value(v).summary(ty),
         Some(Val::Leaf(v, Some(s))) => node.value(v).summary(format!("{ty}, {s}")),
         Some(Val::Note(s)) => node.summary(format!("{ty}, {s}")),
-        Some(Val::Nested(kind, s)) => node
-            .summary(format!("{ty}: {s}"))
-            .lazy(items, (inner, kind, depth.saturating_add(1))),
+        Some(Val::Nested(kind, s, color)) => {
+            let node = match color {
+                Some(c) => node.value(c),
+                None => node,
+            };
+            node.summary(format!("{ty}: {s}"))
+                .lazy(items, (inner, kind, depth.saturating_add(1)))
+        }
     }
 }
 

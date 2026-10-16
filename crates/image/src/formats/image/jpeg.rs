@@ -1702,6 +1702,23 @@ fn id_node(name: &'static str, payload: Span, head: &[u8], len: u64) -> Node {
         .value(text(id_text(head, len)))
 }
 
+/// The four-character code of an ISO-registered UUID.
+fn iso_code(b: &[u8]) -> Option<String> {
+    let cc = b.get(..4)?;
+    (b.get(4..16) == Some(ISO_UUID_SUFFIX.as_slice())
+        && cc.iter().all(|c| c.is_ascii_graphic() || *c == b' '))
+    .then(|| format!("'{}'", String::from_utf8_lossy(cc)))
+}
+
+/// A UUID as a value, named by its code when ISO-registered.
+fn uuid_node(b: &[u8], n: Node) -> Node {
+    let n = n.value(Value::uuid(b));
+    match iso_code(b) {
+        Some(cc) => n.summary(cc),
+        None => n,
+    }
+}
+
 /// A UUID: its four-character code for ISO-registered ones, else 8-4-4-4-12.
 fn uuid_text(b: &[u8]) -> String {
     if b.get(4..16) == Some(ISO_UUID_SUFFIX.as_slice())
@@ -2873,7 +2890,7 @@ fn jumbf_description(f: &mut Fields<'_>, header: &u64) -> Result<()> {
         f.u64("Extended length").emit()?;
     }
     f.bytes("Content type", 16)
-        .with(|u, n| n.summary(uuid_text(u)))
+        .with(|u, n| uuid_node(u, n))
         .emit()?;
     let toggles = f.u8("Toggles").flags(JUMD_TOGGLES).emit()?;
     if toggles & 2 != 0 {
@@ -2896,11 +2913,7 @@ fn jumbf_description(f: &mut Fields<'_>, header: &u64) -> Result<()> {
 
 async fn uuid_box(cx: Cx, (input, body): (Input, Span)) -> Result<()> {
     let uuid = cx.read_avail(body.sub(0, 16)).await?;
-    cx.emit(
-        Node::new("UUID")
-            .span(body.sub(0, 16))
-            .value(text(uuid_text(&uuid))),
-    );
+    cx.emit(uuid_node(&uuid, Node::new("UUID").span(body.sub(0, 16))));
     if body.len > 16 {
         cx.emit(embedded("Data", input.nested(body.tail(16))));
     }

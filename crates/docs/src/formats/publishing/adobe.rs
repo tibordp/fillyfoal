@@ -16,7 +16,7 @@ use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Value};
+use crate::value::{Color, ColorDepth, EnumTable, Value};
 
 use crate::formats::image::psd::descriptor::{
     MAX_READ, Rd, descriptor, descriptor_items, key, pattern_node, patterns, skip_value, ustr,
@@ -730,30 +730,22 @@ async fn acb_colours(cx: Cx, (region, count, space): (Span, u16, u16)) -> Result
         let name = ustr(&mut cur).await?;
         let code = cur.bytes(6).await?;
         let c = cur.bytes(comps).await?;
-        let value = match (space, c.as_slice()) {
-            (0, [r, g, b]) => format!("#{r:02x}{g:02x}{b:02x}"),
-            (2, [c0, m, y, k]) => {
-                // Stored inverted: 0 is full ink.
-                let pct = |v: &u8| {
-                    (255u32.saturating_sub(u32::from(*v)))
-                        .saturating_mul(100)
-                        .checked_div(255)
-                        .unwrap_or(0)
-                };
-                format!("C{} M{} Y{} K{}", pct(c0), pct(m), pct(y), pct(k))
+        let depth = ColorDepth::Bits(8);
+        let color = match (space, c.as_slice()) {
+            (0, &[r, g, b]) => Some(Color::rgb8(r, g, b)),
+            // Stored inverted: 0 is full ink.
+            (2, &[c0, m, y, k]) => {
+                let ink = |v: u8| f64::from(255u8.saturating_sub(v)) / 255.0;
+                Some(Color::cmyk(depth, ink(c0), ink(m), ink(y), ink(k)))
             }
-            (7, [l, a, b]) => {
-                let l = u32::from(*l)
-                    .saturating_mul(100)
-                    .checked_div(255)
-                    .unwrap_or(0);
-                format!(
-                    "L{l} a{} b{}",
-                    i16::from(*a).saturating_sub(128),
-                    i16::from(*b).saturating_sub(128)
-                )
-            }
-            _ => format!("{c:02x?}"),
+            // L 0..255 for 0..100; a and b offset by 128.
+            (7, &[l, a, b]) => Some(Color::lab(
+                depth,
+                f64::from(l) * 100.0 / 255.0,
+                f64::from(a) - 128.0,
+                f64::from(b) - 128.0,
+            )),
+            _ => None,
         };
         let code = String::from_utf8_lossy(&code).trim().to_owned();
         let name = localized(&name);
@@ -762,12 +754,18 @@ async fn acb_colours(cx: Cx, (region, count, space): (Span, u16, u16)) -> Result
             (true, false) => code.clone(),
             (true, true) => "(unnamed)".to_owned(),
         };
-        cx.push(
-            Node::new(label)
-                .span(cur.since(start))
-                .value(text(value))
-                .summary(code),
-        )
+        let node = Node::new(label).span(cur.since(start));
+        let node = match color {
+            // A spot colour, by its name in the book.
+            Some(c) if !name.is_empty() => node.value(Value::color(c.named(name.to_owned()))),
+            Some(c) => node.value(Value::color(c)),
+            None => node.value(Value::Bytes(c)),
+        };
+        cx.push(if code.is_empty() {
+            node
+        } else {
+            node.summary(code)
+        })
         .await;
     }
     Ok(())
@@ -850,7 +848,9 @@ async fn act_colours(cx: Cx, table: Span) -> Result<()> {
         cx.push(
             Node::new(format!("[{i}]"))
                 .span(table.sub(to_u64(i).saturating_mul(3), 3))
-                .value(text(format!("#{r:02x}{g:02x}{b:02x}"))),
+                .value(crate::value::Value::color(crate::value::Color::rgb8(
+                    r, g, b,
+                ))),
         )
         .await;
     }

@@ -18,7 +18,7 @@ use crate::formats::util::binutil::{Tree, get};
 use crate::formats::util::val::{enumv, hex, uint};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{Check, Digest, EnumTable, FlagTable, Value, decode_flags};
+use crate::value::{Addr, Check, Digest, EnumTable, FlagTable, Value};
 
 /// Bytes of a packet decoded on expansion; the rest is shown as data.
 pub const MAX_DECODE: u64 = 0x1_0000;
@@ -370,24 +370,45 @@ impl<'a> Dec<'a> {
         self.add(p, name, off, len, |n| n.value(Value::Text(s())))
     }
 
+    /// An address field of `len` bytes, `addr` read from them.
+    pub fn addr(
+        &mut self,
+        p: Ix,
+        name: impl Into<Cow<'static, str>>,
+        off: usize,
+        len: usize,
+        addr: impl FnOnce(&[u8]) -> Option<Addr>,
+    ) -> Option<Addr> {
+        match self.bytes(off, len).and_then(addr) {
+            Some(a) => {
+                self.add(p, name, off, len, |n| n.value(Value::Addr(a)));
+                Some(a)
+            }
+            None => {
+                self.truncated(p, name, off, len);
+                None
+            }
+        }
+    }
+
     /// An IPv4 address field.
     pub fn ip4(&mut self, p: Ix, name: &'static str, off: usize) -> Option<[u8; 4]> {
         let a: Option<[u8; 4]> = self.bytes(off, 4).and_then(|b| b.try_into().ok());
-        self.text(p, name, off, 4, || a.map(|a| ipv4(&a)).unwrap_or_default());
+        self.addr(p, name, off, 4, Addr::v4_at);
         a
     }
 
     /// An IPv6 address field.
     pub fn ip6(&mut self, p: Ix, name: &'static str, off: usize) -> Option<[u8; 16]> {
         let a: Option<[u8; 16]> = self.bytes(off, 16).and_then(|b| b.try_into().ok());
-        self.text(p, name, off, 16, || a.map(|a| ipv6(&a)).unwrap_or_default());
+        self.addr(p, name, off, 16, Addr::v6_at);
         a
     }
 
     /// A MAC address field.
     pub fn mac(&mut self, p: Ix, name: &'static str, off: usize) -> Option<[u8; 6]> {
         let a: Option<[u8; 6]> = self.bytes(off, 6).and_then(|b| b.try_into().ok());
-        self.text(p, name, off, 6, || a.map(|a| mac(&a)).unwrap_or_default());
+        self.addr(p, name, off, 6, Addr::mac_at);
         a
     }
 
@@ -444,13 +465,7 @@ fn bits(size: usize) -> u8 {
 }
 
 pub fn flags(v: u64, bits: u8, table: FlagTable) -> Value {
-    let (set, unknown) = decode_flags(table, v);
-    Value::Flags {
-        raw: v,
-        bits,
-        set,
-        unknown,
-    }
+    Value::flags(v, bits, table)
 }
 
 /// The Internet checksum (RFC 1071) over `parts`, each summed as if
@@ -472,59 +487,22 @@ pub fn inet_sum(parts: &[&[u8]]) -> u16 {
     !u16::try_from(sum).unwrap_or(0)
 }
 
+/// A MAC (or, from 8 bytes, EUI-64) address as text: `00:1b:63:84:45:e6`.
 pub fn mac(b: &[u8]) -> String {
-    b.iter()
-        .map(|x| format!("{x:02x}"))
-        .collect::<Vec<_>>()
-        .join(":")
+    match b.len() {
+        6 => Addr::mac_at(b).map(|a| a.to_string()),
+        8 => Addr::eui64_at(b).map(|a| a.to_string()),
+        _ => None,
+    }
+    .unwrap_or_else(|| crate::text::hex_lower(b))
 }
 
+/// An IPv4 address as text: `192.0.2.1`.
 pub fn ipv4(b: &[u8]) -> String {
-    b.iter().map(u8::to_string).collect::<Vec<_>>().join(".")
+    Addr::v4_at(b).map_or_else(|| crate::text::hex_lower(b), |a| a.to_string())
 }
 
+/// An IPv6 address as text, RFC 5952: `2001:db8::1`, `::ffff:192.0.2.1`.
 pub fn ipv6(b: &[u8]) -> String {
-    let groups: Vec<u16> = b
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|&p| u16::from_be_bytes(p))
-        .collect();
-    // An IPv4-mapped address.
-    if groups.len() == 8
-        && groups.get(..5).is_some_and(|g| g.iter().all(|&x| x == 0))
-        && groups.get(5) == Some(&0xffff)
-    {
-        return format!("::ffff:{}", ipv4(b.get(12..16).unwrap_or_default()));
-    }
-    // Compress the longest run of zero groups.
-    let (mut best, mut best_len, mut run, mut run_len) = (0usize, 0usize, 0usize, 0usize);
-    for (i, &g) in groups.iter().enumerate() {
-        if g == 0 {
-            if run_len == 0 {
-                run = i;
-            }
-            run_len = run_len.saturating_add(1);
-            if run_len > best_len {
-                best = run;
-                best_len = run_len;
-            }
-        } else {
-            run_len = 0;
-        }
-    }
-    let hexes = |gs: &[u16]| {
-        gs.iter()
-            .map(|g| format!("{g:x}"))
-            .collect::<Vec<_>>()
-            .join(":")
-    };
-    if best_len < 2 {
-        return hexes(&groups);
-    }
-    let head = groups.get(..best).unwrap_or_default();
-    let tail = groups
-        .get(best.saturating_add(best_len)..)
-        .unwrap_or_default();
-    format!("{}::{}", hexes(head), hexes(tail))
+    Addr::v6_at(b).map_or_else(|| crate::text::hex_lower(b), |a| a.to_string())
 }

@@ -493,8 +493,12 @@ async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input, cs: Encoding) -> Re
             cx.push(
                 Node::new(format!("Color {colors}"))
                     .span(lex.span(&t))
-                    .value(Value::Text(format!("#{r:02x}{g:02x}{b:02x}")))
-                    .summary(format!("rgb({r}, {g}, {b})")),
+                    .value(Value::color(crate::value::Color::rgb_bits(
+                        8,
+                        u64::try_from(r).unwrap_or(0),
+                        u64::try_from(g).unwrap_or(0),
+                        u64::try_from(b).unwrap_or(0),
+                    ))),
             )
             .await;
             color = (None, None, None);

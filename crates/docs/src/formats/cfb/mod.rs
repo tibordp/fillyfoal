@@ -882,7 +882,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 path: Arc::new(vec![0]),
             },
         );
-    if root.clsid.data1 != 0 || root.clsid.data4 != [0; 8] {
+    if root.clsid.data1() != 0 || root.clsid.data4() != [0; 8] {
         root_node = root_node.value(Value::Guid(root.clsid));
     }
     cx.emit(root_node);

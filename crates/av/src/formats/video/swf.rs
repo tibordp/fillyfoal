@@ -333,11 +333,9 @@ async fn tag(cx: Cx, (input, body, code, depth): (Input, Span, u16, u32)) -> Res
     match code {
         9 => {
             f.bytes("Background colour", 3)
-                .with(|b, n| {
-                    n.value(Value::Text(format!(
-                        "#{}",
-                        crate::formats::util::datakit::hex_string(b)
-                    )))
+                .with(|b, n| match b.as_slice() {
+                    &[r, g, b] => n.value(Value::color(crate::value::Color::rgb8(r, g, b))),
+                    _ => n,
                 })
                 .emit()?;
         }

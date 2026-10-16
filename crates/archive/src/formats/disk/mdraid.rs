@@ -12,7 +12,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::disk::{size, text, uuid};
+use crate::formats::disk::{size, text};
 use crate::formats::{Deep, DeepProbe, Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
@@ -346,7 +346,7 @@ const FEATURES: FlagTable = &[
 
 #[allow(clippy::ptr_arg)] // a `Field::with` decorator
 fn uuid_node(b: &Vec<u8>, n: Node) -> Node {
-    n.value(Value::Text(uuid(b)))
+    n.value(Value::uuid(b))
 }
 
 /// Decorator for a count of 512-byte sectors.

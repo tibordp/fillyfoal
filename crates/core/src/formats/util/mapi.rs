@@ -6,7 +6,7 @@
 
 use crate::bytes::{to_usize, u16_le, u32_le, u64_le};
 use crate::formats::util::datakit::{enumv, hex, uint};
-use crate::value::{EnumTable, FlagTable, Guid, Value, decode_flags, flag, lookup};
+use crate::value::{EnumTable, FlagTable, Guid, Value, flag, lookup};
 
 /// Tagged property names ([MS-OXPROPS]), without the `PidTag` prefix.
 pub const NAMES: EnumTable = &[
@@ -300,12 +300,12 @@ const PROPERTY_SETS: &[(&str, &str)] = &[
 
 /// A GUID stored in its on-disk (little-endian) layout at `at`.
 pub fn guid(data: &[u8], at: usize) -> Option<Guid> {
-    Some(Guid {
-        data1: u32_le(data, at)?,
-        data2: u16_le(data, at.checked_add(4)?)?,
-        data3: u16_le(data, at.checked_add(6)?)?,
-        data4: crate::bytes::array(data, at.checked_add(8)?)?,
-    })
+    Some(Guid::new(
+        u32_le(data, at)?,
+        u16_le(data, at.checked_add(4)?)?,
+        u16_le(data, at.checked_add(6)?)?,
+        crate::bytes::array(data, at.checked_add(8)?)?,
+    ))
 }
 
 /// The name of a well-known property set, or the GUID itself.
@@ -382,15 +382,7 @@ pub fn fixed_scalar(id: u16, ty: u16, raw: &[u8]) -> (Option<Value>, Option<Stri
             0x3705 => enumv(low, 32, ATTACH_METHOD),
             0x0ffe => enumv(low, 32, OBJECT_TYPE),
             0x5909 => enumv(low, 32, EDITOR_FORMAT),
-            0x0e07 => {
-                let (set, unknown) = decode_flags(MESSAGE_FLAGS, low);
-                Value::Flags {
-                    raw: low,
-                    bits: 32,
-                    set,
-                    unknown,
-                }
-            }
+            0x0e07 => Value::flags(low, 32, MESSAGE_FLAGS),
             0x3fde | 0x3ffd | 0x3fd9 => {
                 return (Some(uint(low, 32)), Some("code page".to_owned()));
             }

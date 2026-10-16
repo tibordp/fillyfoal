@@ -10,7 +10,7 @@ use crate::dsl::{Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::fmt::size;
-use crate::formats::util::val::{hex, text, uint};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
@@ -345,15 +345,21 @@ const ST_RESOLUTIONS: EnumTable = &[
     (2, "high (640×400, mono)"),
 ];
 
-/// An ST palette entry (0x0RGB, 3 or 4 bits per channel) as `#rrggbb`.
-fn st_colour(v: u16) -> String {
+/// An ST palette entry (0x0RGB, 3 or 4 bits per channel).
+fn st_colour(v: u16) -> crate::value::Color {
     // STE puts the low bit of each channel in bit 3.
     let ch = |n: u16| {
         let n = n & 0xf;
         let v = (n & 7) << 1 | n >> 3;
-        v.saturating_mul(17)
+        u8::try_from(v.saturating_mul(17)).unwrap_or(u8::MAX)
     };
-    format!("#{:02x}{:02x}{:02x}", ch(v >> 8), ch(v >> 4), ch(v))
+    let mut c = crate::value::Color::rgb8(ch(v >> 8), ch(v >> 4), ch(v));
+    c.depth = crate::value::ColorDepth::Packed {
+        raw: v.into(),
+        bits: 16,
+        layout: "Atari ST",
+    };
+    c
 }
 
 async fn st_palette(cx: Cx, span: Span) -> Result<()> {
@@ -363,8 +369,7 @@ async fn st_palette(cx: Cx, span: Span) -> Result<()> {
         cx.emit(
             Node::new(format!("Colour {i}"))
                 .span(span.sub(to_u64(i).saturating_mul(2), 2))
-                .value(hex(v, 16))
-                .summary(st_colour(v)),
+                .value(crate::value::Value::color(st_colour(v))),
         );
     }
     Ok(())

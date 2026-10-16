@@ -291,7 +291,7 @@ fn scalar_node(node: Node, scalar: Scalar<'_>, t: Type) -> Node {
         Scalar::Bool(b) => node.value(Value::Bool(b)).summary(t.name()),
         Scalar::Int(v, bits) => node.value(Value::Int { value: v, bits }).summary(t.name()),
         Scalar::Double(x) => node.value(Value::f64(x)).summary(t.name()),
-        Scalar::Uuid(b) => node.value(Value::Text(uuid(b))).summary(t.name()),
+        Scalar::Uuid(b) => node.value(Value::uuid(b)).summary(t.name()),
         Scalar::Bytes([]) => node.summary("binary, empty"),
         Scalar::Bytes(b) if printable(b, false) => {
             let node = node.value(Value::Text(short_text(b, TEXT_MAX)));

@@ -924,18 +924,6 @@ fn decode_header(
     Some((h, r.pos(), at))
 }
 
-fn guid_text(b: &[u8; 16]) -> String {
-    let d1 = u32_le(b, 0).unwrap_or(0);
-    let d2 = u16_le(b, 4).unwrap_or(0);
-    let d3 = u16_le(b, 6).unwrap_or(0);
-    let rest: Vec<String> = b.iter().skip(8).map(|x| format!("{x:02x}")).collect();
-    format!(
-        "{d1:08x}-{d2:04x}-{d3:04x}-{}-{}",
-        rest.get(..2).unwrap_or_default().concat(),
-        rest.get(2..).unwrap_or_default().concat()
-    )
-}
-
 /// One event's header values as a node's children.
 fn header_value(h: &Header, name: &str) -> Value {
     let uint = |value: u64, bits: u8| Value::UInt {
@@ -951,8 +939,8 @@ fn header_value(h: &Header, name: &str) -> Value {
         "Thread" => uint(h.thread, 64),
         "StackId" => uint(h.stack.into(), 32),
         "TimeStamp" | "TimeStamp (delta)" => uint(h.ts, 64),
-        "ActivityId" => Value::Text(guid_text(&h.activity)),
-        "RelatedActivityId" => Value::Text(guid_text(&h.related)),
+        "ActivityId" => Value::guid(&h.activity),
+        "RelatedActivityId" => Value::guid(&h.related),
         "LabelListId" => uint(h.label.into(), 32),
         "PayloadSize" => uint(h.size.into(), 32),
         _ => Value::Text(String::new()),
@@ -1784,7 +1772,7 @@ fn parse_meta_v6(row: &[u8], items: &mut Vec<Item>) -> Option<(u32, Meta)> {
             7 => {
                 let mut g = [0u8; 16];
                 g.copy_from_slice(o.bytes(16)?);
-                ("ProviderGuid".to_owned(), text(guid_text(&g)))
+                ("ProviderGuid".to_owned(), Value::guid(&g))
             }
             8 => {
                 m.level = o.u8()?.into();
@@ -2256,7 +2244,7 @@ fn decode_payload(bytes: &[u8], fields: &[FieldDesc], ver: Ver) -> Vec<Item> {
             17 => r.bytes(16).map(|b| {
                 let mut g = [0u8; 16];
                 g.copy_from_slice(b);
-                text(guid_text(&g))
+                Value::guid(&g)
             }),
             18 => utf16z_at(&mut r).map(|s| text(s.chars().take(TEXT_MAX).collect())),
             20 if ver == Ver::V6 => r.uleb().map(|v| Value::Int {
@@ -2571,7 +2559,7 @@ async fn label_lists_v6(cx: Cx, body: Span) -> Result<()> {
                             "RelatedActivityId"
                         }
                         .to_owned(),
-                        ok.map(|()| text(guid_text(&g))),
+                        ok.map(|()| Value::guid(&g)),
                     )
                 }
                 3 => (

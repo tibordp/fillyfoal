@@ -543,6 +543,9 @@ async fn tags(cx: Cx, (file, count): (Span, u32)) -> Result<()> {
     let n = count.min(MAX_TAGS);
     let table = file.sub_exact(HEADER.saturating_add(4), u64::from(n).saturating_mul(12))?;
     cx.set_count(Count::Exact(n.into()));
+    // The profile connection space, which colorant and named-colour PCS
+    // values are in.
+    let pcs = u32_be(&cx.read(file.sub(20, 4)).await?, 0).unwrap_or(0);
     for i in 0..u64::from(n) {
         let span = table.sub(i.saturating_mul(12), 12);
         let entry = cx.read(span).await?;
@@ -560,7 +563,7 @@ async fn tags(cx: Cx, (file, count): (Span, u32)) -> Result<()> {
                 "'{code}', type '{kind}', {}",
                 human_size(size.into())
             ))
-            .lazy(tag_data, data);
+            .lazy(tag_data, (data, pcs));
         if let Some(short) = short_value(&head) {
             node = node.value(Value::Text(short));
         }
@@ -673,7 +676,53 @@ fn ufixed(f: &mut Fields<'_>, name: &'static str) -> Result<()> {
     Ok(())
 }
 
-async fn tag_data(cx: Cx, span: Span) -> Result<()> {
+/// A 16-bit PCS value as a colour, when the PCS is CIELAB (ICC v4
+/// encoding: L 0..65535 for 0..100, a and b 0..65535 for -128..127).
+fn pcs_color(pcs: u32, [l, a, b]: [u16; 3]) -> Option<crate::value::Color> {
+    (u64::from(pcs) == sig(b"Lab ")).then(|| {
+        crate::value::Color::lab(
+            crate::value::ColorDepth::Bits(16),
+            f64::from(l) * 100.0 / 65535.0,
+            f64::from(a) / 257.0 - 128.0,
+            f64::from(b) / 257.0 - 128.0,
+        )
+    })
+}
+
+/// Three 16-bit PCS values: one colour node when the PCS is CIELAB, else
+/// the numbers.
+fn pcs_fields(f: &mut Fields<'_>, pcs: u32, name: Option<String>) -> Result<()> {
+    let at = f.peek_span(6);
+    let mut v = [0u16; 3];
+    for slot in &mut v {
+        *slot = f.u16("PCS").get()?;
+    }
+    match pcs_color(pcs, v) {
+        Some(c) => {
+            let c = match name {
+                Some(n) => c.named(n),
+                None => c,
+            };
+            f.node(Node::new("PCS value").span(at).value(Value::color(c)));
+        }
+        None => {
+            for (i, x) in v.iter().enumerate() {
+                f.node(
+                    Node::new(format!("PCS {}", i.saturating_add(1)))
+                        .span(at.sub(crate::bytes::to_u64(i).saturating_mul(2), 2))
+                        .value(Value::UInt {
+                            value: (*x).into(),
+                            bits: 16,
+                            radix: crate::value::Radix::Dec,
+                        }),
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn tag_data(cx: Cx, (span, pcs): (Span, u32)) -> Result<()> {
     let block = cx.block(span.sub(0, 0x10000)).await?;
     let mut f = Fields::emitting(&cx, &block, BE);
     let kind = f
@@ -955,16 +1004,15 @@ async fn tag_data(cx: Cx, span: Span) -> Result<()> {
             f.node(
                 Node::new("Colours")
                     .span(f.peek_span(len))
-                    .summary(format!("{count} named colours")),
+                    .summary(format!("{count} named colours"))
+                    .lazy(named_colours, (f.peek_span(len), pcs, coords)),
             );
         }
         b"clrt" => {
             let count = f.u32("Colorants").emit()?;
             for _ in 0..count.min(64) {
-                f.ascii("Name", 32).emit()?;
-                f.u16("PCS 1").emit()?;
-                f.u16("PCS 2").emit()?;
-                f.u16("PCS 3").emit()?;
+                let name = f.ascii("Name", 32).emit()?;
+                pcs_fields(&mut f, pcs, Some(name))?;
             }
         }
         b"clro" => {
@@ -992,4 +1040,27 @@ fn curve_gamma(points: &[u8], n: u32) -> Option<f64> {
     )?) / 65535.0;
     let x = f64::from(i) / f64::from(n.checked_sub(1)?);
     (x > 0.0 && x < 1.0 && y > 0.0 && y < 1.0).then(|| y.ln() / x.ln())
+}
+
+/// The entries of a `ncl2` tag: a root name, the PCS value and the device
+/// coordinates of each named colour.
+async fn named_colours(cx: Cx, (span, pcs, coords): (Span, u32, u32)) -> Result<()> {
+    let each = 38u64.saturating_add(u64::from(coords).saturating_mul(2));
+    let count = span.len.checked_div(each).unwrap_or(0);
+    cx.set_count(Count::Exact(count));
+    for i in 0..count {
+        let entry = span.sub(i.saturating_mul(each), each);
+        let data = cx.read(entry).await?;
+        let name = crate::text::until_nul(data.get(..32).unwrap_or_default());
+        let w = |k: usize| {
+            crate::bytes::u16_be(&data, 32usize.saturating_add(k.saturating_mul(2))).unwrap_or(0)
+        };
+        let node = Node::new(name.clone()).span(entry);
+        cx.push(match pcs_color(pcs, [w(0), w(1), w(2)]) {
+            Some(c) => node.value(Value::color(c.named(name))),
+            None => node.summary(format!("PCS {} {} {}", w(0), w(1), w(2))),
+        })
+        .await;
+    }
+    Ok(())
 }

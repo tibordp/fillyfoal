@@ -69,10 +69,10 @@ impl Context {
 
 /// The Windows Installer CLSIDs of the root storage.
 pub fn installer_kind(clsid: &Guid) -> Option<&'static str> {
-    if clsid.data2 != 0 || clsid.data3 != 0 || clsid.data4 != [0xc0, 0, 0, 0, 0, 0, 0, 0x46] {
+    if clsid.data2() != 0 || clsid.data3() != 0 || clsid.data4() != [0xc0, 0, 0, 0, 0, 0, 0, 0x46] {
         return None;
     }
-    match clsid.data1 {
+    match clsid.data1() {
         0x000c_1084 => Some("Windows Installer package"),
         0x000c_1086 => Some("Windows Installer patch"),
         0x000c_1082 => Some("Windows Installer transform"),
@@ -87,7 +87,7 @@ pub async fn application(
     root: &DirEntry,
 ) -> (Option<String>, Context) {
     if let Some(kind) = installer_kind(&root.clsid) {
-        let context = if root.clsid.data1 == 0x000c_1082 {
+        let context = if root.clsid.data1() == 0x000c_1082 {
             Context::MsiTransform
         } else {
             Context::Msi
@@ -116,10 +116,10 @@ pub async fn application(
     let (kind, context) = if has("WordDocument") {
         // Word 6.0/95 files carry their own class, CLSID_WordDocument6;
         // Word 97 and later use {00020906-...}.
-        let word6 = root.clsid.data1 == 0x0002_0900
-            && root.clsid.data2 == 0
-            && root.clsid.data3 == 0
-            && root.clsid.data4 == [0xc0, 0, 0, 0, 0, 0, 0, 0x46];
+        let word6 = root.clsid.data1() == 0x0002_0900
+            && root.clsid.data2() == 0
+            && root.clsid.data3() == 0
+            && root.clsid.data4() == [0xc0, 0, 0, 0, 0, 0, 0, 0x46];
         if word6 {
             ("Word 6.0/95 document", Context::Plain)
         } else {
@@ -141,10 +141,10 @@ pub async fn application(
         ("SolidWorks document", Context::Plain)
     } else if has_ci("RSeStorage") && has_ci("RSeDb") {
         // The class of part documents (libmagic's ole2compounddocs).
-        let part = root.clsid.data1 == 0x4d29_b490
-            && root.clsid.data2 == 0x49b2
-            && root.clsid.data3 == 0x11d0
-            && root.clsid.data4 == [0x93, 0xc3, 0x7e, 0x07, 0x06, 0, 0, 0];
+        let part = root.clsid.data1() == 0x4d29_b490
+            && root.clsid.data2() == 0x49b2
+            && root.clsid.data3() == 0x11d0
+            && root.clsid.data4() == [0x93, 0xc3, 0x7e, 0x07, 0x06, 0, 0, 0];
         if part {
             ("Inventor part", Context::Plain)
         } else {

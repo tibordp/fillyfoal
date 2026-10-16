@@ -1781,13 +1781,7 @@ fn render(b: &mut Body<'_>, frame: &Frame, id: &str) -> Result<()> {
 }
 
 fn flags_value(raw: u64, bits: u8, table: FlagTable) -> Value {
-    let (set, unknown) = crate::value::decode_flags(table, raw);
-    Value::Flags {
-        raw,
-        bits,
-        set,
-        unknown,
-    }
+    Value::flags(raw, bits, table)
 }
 
 /// PRIV payloads whose owners say what they are.
@@ -1807,12 +1801,12 @@ fn private(b: &mut Body<'_>, input: Input, owner: &str) {
             leaf(
                 "GUID",
                 span,
-                Value::Guid(crate::value::Guid {
-                    data1: crate::bytes::u32_le(&data, 0).unwrap_or(0),
-                    data2: crate::bytes::u16_le(&data, 4).unwrap_or(0),
-                    data3: crate::bytes::u16_le(&data, 6).unwrap_or(0),
-                    data4: d4,
-                }),
+                Value::Guid(crate::value::Guid::new(
+                    crate::bytes::u32_le(&data, 0).unwrap_or(0),
+                    crate::bytes::u16_le(&data, 4).unwrap_or(0),
+                    crate::bytes::u16_le(&data, 6).unwrap_or(0),
+                    d4,
+                )),
             )
         }
         _ if owner.starts_with("WM/") && data.len().is_multiple_of(2) => {

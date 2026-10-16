@@ -14,7 +14,7 @@ use crate::fields::Endian;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::{Color, ColorDepth, ColorSpace, EnumTable, Value, lookup};
 
 const BE: Endian = Endian::Big;
 
@@ -85,13 +85,16 @@ async fn ase(cx: Cx, input: Input) -> Result<()> {
             let name = crate::text::utf16z(name_bytes, BE).0;
             if kind == 0x0001 {
                 colors = colors.saturating_add(1);
-                let model = String::from_utf8_lossy(
-                    data.get(2usize.saturating_add(units.saturating_mul(2))..)
-                        .and_then(|r| r.get(..4))
-                        .unwrap_or_default(),
-                )
-                .into_owned();
-                node = node.summary(format!("{name} ({})", model.trim()));
+                let rest = data
+                    .get(2usize.saturating_add(units.saturating_mul(2))..)
+                    .unwrap_or_default();
+                let model = String::from_utf8_lossy(rest.get(..4).unwrap_or_default()).into_owned();
+                node = match ase_color(rest) {
+                    Some((c, kind)) => node
+                        .value(Value::color(c.named(name.clone())))
+                        .summary(kind),
+                    None => node.summary(format!("{name} ({})", model.trim())),
+                };
             } else {
                 node = node.summary(name);
             }
@@ -100,6 +103,54 @@ async fn ase(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(format!("{colors} colours"));
     Ok(())
+}
+
+/// An ASE colour entry after its name: the model, f32 components and the
+/// colour type (global, spot, normal).
+fn ase_color(b: &[u8]) -> Option<(Color, &'static str)> {
+    let f = |i: usize| -> Option<f64> {
+        let at = 4usize.checked_add(i.checked_mul(4)?)?;
+        Some(f64::from(f32::from_bits(crate::bytes::u32_be(b, at)?)))
+    };
+    let depth = ColorDepth::Float(32);
+    let (c, n): (Color, usize) = match b.get(..4)? {
+        b"RGB " => (Color::rgb_float(32, f(0)?, f(1)?, f(2)?), 3),
+        b"CMYK" => (Color::cmyk(depth, f(0)?, f(1)?, f(2)?, f(3)?), 4),
+        // L as a fraction; a and b in their own units.
+        b"LAB " => (Color::lab(depth, f(0)? * 100.0, f(1)?, f(2)?), 3),
+        b"Gray" => (Color::gray_float(32, f(0)?).space(ColorSpace::Device), 1),
+        _ => return None,
+    };
+    let kind = match crate::bytes::u16_be(b, 4usize.saturating_add(n.saturating_mul(4))) {
+        Some(0) => "global",
+        Some(1) => "spot",
+        Some(2) => "normal",
+        _ => "",
+    };
+    Some((c, kind))
+}
+
+/// An ACO colour: the colour space, then four 16-bit words.
+fn aco_color(space: u16, w: [u16; 4]) -> Option<Color> {
+    let [a, b, c, d] = w;
+    let u = |v: u16| f64::from(v) / 65535.0;
+    let depth = ColorDepth::Bits(16);
+    Some(match space {
+        0 => Color::rgb_bits(16, a.into(), b.into(), c.into()),
+        1 => Color::hsb(depth, u(a), u(b), u(c)),
+        // Stored inverted: 0 is full ink.
+        2 => Color::cmyk(depth, 1.0 - u(a), 1.0 - u(b), 1.0 - u(c), 1.0 - u(d)),
+        // L 0..10000; a and b signed, in hundredths.
+        7 => Color::lab(
+            depth,
+            f64::from(a) / 100.0,
+            f64::from(b.cast_signed()) / 100.0,
+            f64::from(c.cast_signed()) / 100.0,
+        ),
+        // 0..10000.
+        8 => Color::gray_float(64, f64::from(a.min(10000)) / 10000.0).space(ColorSpace::Device),
+        _ => return None,
+    })
 }
 
 fn aco_probe(h: &Head<'_>) -> bool {
@@ -139,13 +190,13 @@ async fn aco(cx: Cx, input: Input) -> Result<()> {
         let a = cur.u16().await?;
         let b = cur.u16().await?;
         let c = cur.u16().await?;
-        let _d = cur.u16().await?;
+        let d = cur.u16().await?;
         let space_name = lookup(ACO_SPACES, space.into()).unwrap_or("unknown");
-        cx.push(
-            Node::new(format!("Colour {i}"))
-                .span(cur.since(start))
-                .summary(format!("{space_name} {} {} {}", a >> 8, b >> 8, c >> 8)),
-        )
+        let node = Node::new(format!("Colour {i}")).span(cur.since(start));
+        cx.push(match aco_color(space, [a, b, c, d]) {
+            Some(color) => node.value(Value::color(color)).summary(space_name),
+            None => node.summary(format!("{space_name} {a:#x} {b:#x} {c:#x} {d:#x}")),
+        })
         .await;
     }
     cx.annotate(format!("{count} colours"));
