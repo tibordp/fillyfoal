@@ -640,14 +640,14 @@ fn acct_plausible(r: &[u8]) -> bool {
 }
 
 fn acct_probe(h: &Head<'_>) -> bool {
-    h.len >= ACCT_RECORD
-        && h.len.is_multiple_of(ACCT_RECORD)
-        && h.data
-            .as_chunks::<64>()
-            .0
-            .iter()
-            .take(16)
-            .all(|r| acct_plausible(r))
+    // At least one whole record, and every record seen (up to 16) plausible:
+    // with no record in view there is no evidence (a file shorter than one
+    // record whose length is only bounded must not pass vacuously).
+    let records = h.data.as_chunks::<64>().0;
+    h.within(ACCT_RECORD)
+        && !records.is_empty()
+        && (!h.len_known || h.len.is_multiple_of(ACCT_RECORD))
+        && records.iter().take(16).all(|r| acct_plausible(r))
 }
 
 declare_format!(pub ACCT = "linux-acct", "Linux process accounting (acct v3)", ["pacct", "acct"], "application/x-acct",

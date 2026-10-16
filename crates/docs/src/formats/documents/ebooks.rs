@@ -53,10 +53,14 @@ fn palmdoc_probe(h: &Head<'_>) -> bool {
 fn pdb_probe(h: &Head<'_>) -> bool {
     let d = h.data;
     let records = u16_be(d, 76).unwrap_or(0);
+    // The name is NUL-terminated within its 32 bytes (at most 31
+    // characters): text, which has no NUL, never passes, even when the
+    // length is unknown and the offsets below can't rule it out.
     let name_ok = d.get(..32).is_some_and(|n| {
-        n.iter()
-            .take_while(|&&b| b != 0)
-            .all(|&b| (0x20..0x7f).contains(&b))
+        n.contains(&0)
+            && n.iter()
+                .take_while(|&&b| b != 0)
+                .all(|&b| (0x20..0x7f).contains(&b))
             && n.first().is_some_and(|&b| b != 0)
     });
     let type_ok = d
@@ -67,7 +71,7 @@ fn pdb_probe(h: &Head<'_>) -> bool {
         && type_ok
         && records > 0
         && u64::from(first) >= 78u64.saturating_add(u64::from(records).saturating_mul(8))
-        && u64::from(first) < h.len
+        && h.within(u64::from(first).saturating_add(1))
         && (palm_kind(h).is_some()
             || h.data
                 .get(60..64)

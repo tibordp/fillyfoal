@@ -379,6 +379,68 @@ fn sized_streams_of_streaming_formats_list_at_once() {
     );
 }
 
+/// Text in a stream whose size nothing records is identified as text and
+/// shown without decoding to the end. (Palm databases' probe once took
+/// words at its type/creator offsets for a database when the length was
+/// unknown, which needed the whole stream decoded first.)
+#[test]
+fn unsized_text_streams_without_decoding_to_the_end() {
+    let words = [
+        "alpha", "beta", "gamma", "delta", "epsilon", "sector", "inode",
+    ];
+    // A first line of letters: the type/creator, record count and first
+    // record offset a Palm header would have there are all plausible.
+    let mut text = "a".repeat(120);
+    text.push('\n');
+    let mut seed = 7u32;
+    while text.len() < 4 << 20 {
+        for _ in 0..8 {
+            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            text.push_str(words[(seed >> 16) as usize % words.len()]);
+            text.push(' ');
+        }
+        text.push('\n');
+    }
+    let file = zstd_unsized(text.as_bytes());
+    let mut host = Host::named("big.txt.zst", file.clone(), Limits::default());
+    host.session.expand(host.root, 1);
+    let root = host.root;
+    while host.child(root, "Decompressed").is_none() {
+        match host.session.poll_node(root, 10_000) {
+            Progress::NeedBytes(r) => supply(&mut host, r),
+            Progress::Idle => break,
+            _ => {}
+        }
+    }
+    let content = host.child(root, "Decompressed").unwrap();
+    host.bytes_supplied = 0;
+    host.session.expand(content, 10);
+    loop {
+        match host.session.poll_node(content, 10_000) {
+            Progress::NeedBytes(r) => {
+                host.bytes_supplied += r.iter().map(|r| r.len).sum::<u64>();
+                supply(&mut host, r);
+            }
+            Progress::Idle => break,
+            _ => {}
+        }
+    }
+    let summary = host
+        .session
+        .node(content)
+        .unwrap()
+        .summary
+        .clone()
+        .unwrap_or_default();
+    assert!(summary.contains("text"), "{summary}\n{}", host.render());
+    assert!(
+        host.bytes_supplied < file.len() as u64 / 3,
+        "read {} of {} bytes",
+        host.bytes_supplied,
+        file.len()
+    );
+}
+
 /// A large compressed stream whose decoded size nothing records is decoded
 /// on demand: its first member is listed after reading a small part of the
 /// file (not after decoding all of it), with a provisional length that

@@ -74,6 +74,17 @@ pub struct Head<'a> {
 }
 
 impl Head<'_> {
+    /// Whether the first `end` bytes can all be in the input: against its
+    /// length when that is known, else only within what the probe sees (an
+    /// upper bound proves nothing, so a size that "fits" it is no evidence).
+    pub fn within(&self, end: u64) -> bool {
+        if self.len_known {
+            end <= self.len
+        } else {
+            end <= crate::bytes::to_u64(self.data.len())
+        }
+    }
+
     /// Whether `magic` occurs at `offset`.
     pub fn at(&self, offset: usize, magic: &[u8]) -> bool {
         offset

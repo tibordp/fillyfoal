@@ -56,7 +56,13 @@ fn probe_lzma(h: &Head<'_>) -> bool {
     // liblzma rejects lc + lp > 4, so real streams stay within it.
     let lclp_ok = (props % 9).saturating_add((props / 9) % 5) <= 4;
     // LZMA rarely compresses better than about 7000:1.
-    let ratio_ok = size == u64::MAX || size <= h.len.saturating_mul(1 << 14);
+    // (Against what is in view when the length is only an upper bound.)
+    let seen = if h.len_known {
+        h.len
+    } else {
+        crate::bytes::to_u64(h.data.len())
+    };
+    let ratio_ok = size == u64::MAX || size <= seen.saturating_mul(1 << 14);
     props < 225
         && lclp_ok
         && ratio_ok

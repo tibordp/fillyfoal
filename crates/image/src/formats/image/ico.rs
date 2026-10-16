@@ -65,7 +65,7 @@ fn probe(h: &Head<'_>, kind: u16) -> bool {
         && fields_ok
         && size > 0
         && u64::from(offset) >= directory_end
-        && u64::from(offset).saturating_add(size.into()) <= h.len
+        && h.within(u64::from(offset).saturating_add(size.into()))
 }
 
 const TYPES: EnumTable = &[(1, "Icon"), (2, "Cursor")];

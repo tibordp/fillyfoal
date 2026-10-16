@@ -567,7 +567,7 @@ fn atari_xex_probe(h: &Head<'_>) -> bool {
     h.at(0, b"\xff\xff")
         && start <= end
         && end != 0xffff
-        && u64::from(end.saturating_sub(start)).saturating_add(7) <= h.len
+        && h.within(u64::from(end.saturating_sub(start)).saturating_add(7))
 }
 
 declare_format!(pub ATARI_XEX = "atari-xex", "Atari 8-bit executable (XEX)", ["xex", "com", "exe", "obx"],

@@ -60,7 +60,7 @@ fn abr_probe(h: &Head<'_>) -> bool {
             u16_be(h.data, 2).is_some_and(|n| n > 0 && n < 1000)
                 && matches!(u16_be(h.data, 4), Some(1 | 2))
                 && u32_be(h.data, 6)
-                    .is_some_and(|s| s >= 14 && u64::from(s).saturating_add(10) <= h.len)
+                    .is_some_and(|s| s >= 14 && h.within(u64::from(s).saturating_add(10)))
         }
         _ => false,
     }
