@@ -1034,6 +1034,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "archive")]
     &archive::fsarchiver::FORMAT,
     #[cfg(feature = "archive")]
+    &archive::xfsdump::FORMAT,
+    #[cfg(feature = "archive")]
     &disk::templeos_iso::FORMAT,
     #[cfg(feature = "archive")]
     &disk::iso9660::FORMAT,

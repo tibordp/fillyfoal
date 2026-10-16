@@ -1447,3 +1447,23 @@ four compress the same 2,460 bytes of neutral text (60 numbered lines).
 | `zlib/python-level9.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compress(data, 9)` |
 | `zlib/python-stored.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compress(data, 0)` (stored blocks) |
 | `zlib/pigz.zz` | pigz 2.8 | `pigz -z -11 -c lines.txt` (zopfli) |
+
+## xfsdump archives (xfsdump)
+
+Made by `sh tests/data/xfsdump/make-external.sh`: a privileged Docker
+`debian:trixie-slim` container (host name `fillyfoal`; a loop device and a
+mount in the Docker VM's kernel) running `tests/data/xfsdump/inner.sh`:
+xfsprogs 6.13.0-2+deb13u1, xfsdump 3.2.0-2, attr 2.5.2-3, faketime
+0.9.10. A 300 MiB XFS filesystem (`mkfs.xfs -L fillyfoal`, fixed UUID)
+mounted at `/mnt/fillyfoal` holds a text file with a `user.comment`
+attribute, a subdirectory with a text file, a symbolic link, an empty file
+and a sparse file (4 KiB, a 1 MiB hole, 4 KiB); the host id comes from a
+fixed `/etc/hostid`. Not reproducible byte for byte: the dump session and
+media ids are random, and inode generations and change times come from the
+kernel (the change times are the real time, so the level 1 dump, under a
+faked clock, finds every inode changed).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `xfsdump/level0.xfsdump.raw.zst` | xfsdump 3.2.0 | `faketime -f '2024-01-02 00:00:00' xfsdump -l 0 -L fillyfoal -M fillyfoal -f level0.xfsdump /mnt/fillyfoal`, stored with `zstd -19` |
+| `xfsdump/level1.xfsdump.raw.zst` | xfsdump 3.2.0 | `faketime -f '2024-01-04 00:00:00' xfsdump -l 1 -L fillyfoal-1 -M fillyfoal-1 -f level1.xfsdump /mnt/fillyfoal` after adding a file, stored with `zstd -19` |

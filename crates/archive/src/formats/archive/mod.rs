@@ -1,6 +1,6 @@
 //! Archives and packages: ZIP and the formats built on it, tar, cpio, `ar`,
 //! RAR, 7z, Cabinet, WIM, xar, RPM, StuffIt, LHA, ARJ, ACE and ZOO;
-//! FSArchiver archives (`fsarchiver`);
+//! FSArchiver archives (`fsarchiver`) and xfsdump dumps (`xfsdump`);
 //! AppleSingle/AppleDouble, Chrome extensions (`crx`), WARC web archives,
 //! application packages (`packaging`: AppImage, Solaris datastreams, Haiku
 //! packages, Electron ASAR), Windows installers (`installer`: NSIS, Inno
@@ -29,5 +29,6 @@ pub mod tar;
 pub mod warc;
 pub mod wim;
 pub mod xar;
+pub mod xfsdump;
 pub mod zip;
 pub mod zoo;
