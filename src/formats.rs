@@ -857,6 +857,12 @@ pub static FORMATS: &[&Format] = &[
     &data::arrow::FORMAT,
     #[cfg(feature = "data")]
     &data::arrow::STREAM,
+    #[cfg(feature = "data")]
+    &data::kafka::LOG,
+    #[cfg(feature = "data")]
+    &data::kafka::INDEX,
+    #[cfg(feature = "data")]
+    &data::kafka::TIMEINDEX,
     // Schemaless wire encodings: by extension or "inspect as" only.
     #[cfg(feature = "data")]
     &data::wire::protobuf::FORMAT,

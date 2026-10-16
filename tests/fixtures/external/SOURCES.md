@@ -1360,3 +1360,33 @@ the same way locally (`TEMPLEOS_Z_DIRS`).
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
 | `templeos-iso/templeos-redseaiso.iso.gz` | TempleOS V5.03 (the distribution ISO above, booted as a live CD in QEMU 10.0.13 `qemu-system-x86_64 -accel tcg`, Debian 13 aarch64, in Docker, `-rtc base=2026-01-01T00:00:00`) | `tests/data/redsea/qemu_redseaiso.py` (its docstring has the `docker run` line) types, over QMP, `DirMk`/`Copy` of `/Demo/DateTime.HC.Z` and `/Doc/FileLowLevel.DD.Z` from the CD into `B:/Src` on the RAM drive, then `RedSeaISO("B:/Out","B:/Src");`, saves the guest's memory and carves `B:/Out.ISO.C` (contiguous) out of the RAM drive. Not reproducible byte for byte (the volume's `unique_id` mixes in the TSC, and creation times vary by seconds; two runs differed in 20 bytes). Apart from the slack after each file's last block (TempleOS writes from an uninitialised buffer, so it holds stale heap bytes), it is byte for byte what `tests/data/redsea/make_image.py` builds for the same tree, times and ID. Stored with `gzip -9 -n`. Public domain (TempleOS) |
+
+## Apache Kafka 3.9.1: log segments and indexes
+
+Written by a real broker: the `apache/kafka:3.9.1` image (KRaft, single
+node, `--hostname fillyfoal`), driven by `tests/data/kafka-log/make_kafka.sh`
+(its comment has the `docker run` line). One topic per codec, each with a
+4-record batch (keys, headers, a null key, a JSON value) from
+`kafka-console-producer.sh --compression-codec <codec>` and a 2-record one;
+`txn` is from `kafka-producer-perf-test.sh` with a transactional id (three
+records, then the COMMIT control batch). `index.interval.bytes=1`; the
+segments were copied after a clean `kafka-server-stop.sh`, so the indexes
+are trimmed. Checked against `kafka-dump-log.sh --deep-iteration` (offsets,
+timestamps, keys, values, headers, CRCs, index entries). Timestamps are the
+Docker VM's clock at the time; not reproducible byte for byte. The legacy
+file is the client library's encoder, not a broker's (Kafka 3.x no longer
+writes magic 0/1).
+
+| Fixture | Producer | Evidence |
+| --- | --- | --- |
+| `kafka-log/none.log` | Kafka 3.9.1 broker | `make_kafka.sh`, segment `00000000000000000000.log` of `demo-none-0` (uncompressed) |
+| `kafka-log/gzip.log` | Kafka 3.9.1 broker | the same for `demo-gzip-0` |
+| `kafka-log/snappy.log` | Kafka 3.9.1 broker | the same for `demo-snappy-0` (snappy-java framing) |
+| `kafka-log/lz4.log` | Kafka 3.9.1 broker | the same for `demo-lz4-0` |
+| `kafka-log/zstd.log` | Kafka 3.9.1 broker | the same for `demo-zstd-0` |
+| `kafka-log/txn.log` | Kafka 3.9.1 broker | the same for `demo-txn-0`: a transactional batch, then the COMMIT control batch |
+| `kafka-index/zstd.index` | Kafka 3.9.1 broker | `make_kafka.sh`, the offset index of `demo-zstd-0` (one entry) |
+| `kafka-index/txn.index` | Kafka 3.9.1 broker | the offset index of `demo-txn-0` (one entry) |
+| `kafka-timeindex/zstd.timeindex` | Kafka 3.9.1 broker | `make_kafka.sh`, the time index of `demo-zstd-0` (one entry) |
+| `kafka-timeindex/txn.timeindex` | Kafka 3.9.1 broker | the time index of `demo-txn-0` (one entry) |
+| `kafka-log/legacy.log` | kafka-python 3.0.11 `LegacyRecordBatchBuilder` | `uv run --with kafka-python==3.0.11 python -I tests/data/kafka-log/make_legacy.py <dir>`: v0 and v1 message sets and a gzip-compressed v1 wrapper, concatenated; the gzip header's mtime varies |

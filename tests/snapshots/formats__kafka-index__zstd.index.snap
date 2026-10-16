@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ zstd.index — Kafka offset index, 1 entry  [0x0+0x8]
+  ▾ Entry 0 — relative offset 5 at byte 260  [0x0+0x8]
+      Relative offset: 5  [0x0+0x4]
+      Position: 260  [0x4+0x4]
