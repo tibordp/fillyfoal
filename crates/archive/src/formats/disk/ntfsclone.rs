@@ -147,8 +147,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
     let header_span = file.sub(0, p.start.min(fields.saturating_add(MAX_PADDING)));
     let version = format!("{}.{}", h.major, h.minor);
-    let mut header = struct_node("Header", header_span, LE, (), header_layout)
-        .summary(format!("version {version}"));
+    let mut header = struct_node("Header", header_span, LE, (), header_layout).summary(format!(
+        "version {version}, {} clusters of {}, {} in use",
+        h.clusters,
+        size(h.cluster_size.into()),
+        h.in_use
+    ));
     if h.major < SAFE_MAJOR {
         header = header.diag(Diagnostic::note(
             "an image older than version 10.0, in the byte order of the machine that wrote it; read as little-endian",

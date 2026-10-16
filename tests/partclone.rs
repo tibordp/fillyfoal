@@ -134,13 +134,11 @@ fn far_reads_start_from_the_bitmap() {
     let mut host = Host::named("big.img", big_image(), Limits::default());
     open(&mut host, &["Volume"]);
     let vol = volume_span(&mut host, BIG * BS as u64);
-    let before = host.session.work_done();
     let (bytes, steps) = read_in_steps(&mut host, vol.sub((BIG - 1) * BS as u64, 16), 500);
     assert_eq!(&bytes[..12], b"block 262143");
-    let work = host.session.work_done() - before;
-    // A 4 MiB spacing: about a thousand units, against a quarter million
-    // to walk the whole volume.
-    assert!(work < 5_000, "{work} units");
+    // A 4 MiB spacing: about a thousand units, a few steps of 500, against
+    // a quarter million to walk the whole volume. (Read steps are not
+    // counted in `work_done`, which totals expansions.)
     assert!(steps < 20, "{steps} steps");
     let (bytes, _) = read_in_steps(&mut host, vol.sub(0, 7), 500);
     assert_eq!(bytes, b"block 0");
@@ -360,4 +358,23 @@ fn damage_is_reported() {
     );
     let (bytes, _) = read_in_steps(&mut host, vol.sub(2 * BS as u64, 7), 1000);
     assert_eq!(bytes, b"block 2");
+}
+
+/// A device larger than its blocks cover (a file system smaller than its
+/// partition) is pointed out on the file system node.
+#[test]
+fn device_larger_than_the_blocks() {
+    let mut img = image(8, &[0], 8, |b| format!("block {b}").into_bytes());
+    img[0x34..0x3c].copy_from_slice(&(16 * BS as u64).to_le_bytes());
+    // The header checksum covers it.
+    let crc = fillyfoal::codec::crc::crc32_update(0xffff_ffff, &img[..106]);
+    img[106..110].copy_from_slice(&crc.to_le_bytes());
+    let mut host = Host::named("dev.img", img, Limits::default());
+    let root = host.root;
+    expand(&mut host, root);
+    let tree = host.render();
+    assert!(
+        tree.contains("note: the device is 64 KiB; its 8 blocks cover 32 KiB, the volume shown"),
+        "{tree}"
+    );
 }
