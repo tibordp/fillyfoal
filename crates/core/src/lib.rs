@@ -41,4 +41,4 @@ pub use session::{
     NodeId, Progress, ReadPosition, ReadProgress, Session, Wait,
 };
 pub use span::{Origin, SourceId, Span};
-pub use value::{Guid, Radix, Res, Time, Value, Zone};
+pub use value::{Check, Digest, Guid, Radix, Res, Time, Value, Verdict, Zone};

@@ -64,6 +64,11 @@ pub enum Value {
     Text(String),
     Bytes(Vec<u8>),
     Guid(Guid),
+    /// A stored check value (CRC, checksum, digest, MAC) with its algorithm
+    /// and whether it was verified. Construct with [`Check::new`] and put it
+    /// on a node with [`Node::checksum`](crate::Node::checksum), which also
+    /// reports a mismatch as a diagnostic.
+    Checksum(Box<Check>),
 }
 
 impl Value {
@@ -392,6 +397,226 @@ impl fmt::Display for Time {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.write_clock(f, ' ', false)?;
         self.write_zone(f)
+    }
+}
+
+/// A check value as stored: a small integer (CRCs, sums: shown `0x…` like
+/// any hex number) or a byte string (digests, MACs: shown in full, as
+/// lowercase hex in stored order).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Digest {
+    Int { value: u64, bits: u8 },
+    Bytes(Vec<u8>),
+}
+
+impl Digest {
+    /// The digest's bytes, an integer big-endian at its width.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            Digest::Int { value, bits } => {
+                let len = usize::from(bits.div_ceil(8)).clamp(1, 8);
+                value
+                    .to_be_bytes()
+                    .get(8usize.saturating_sub(len)..)
+                    .unwrap_or_default()
+                    .to_vec()
+            }
+            Digest::Bytes(b) => b.clone(),
+        }
+    }
+
+    /// The same check value, however each side is held.
+    fn same(&self, other: &Digest) -> bool {
+        match (self, other) {
+            (Digest::Int { value: a, .. }, Digest::Int { value: b, .. }) => a == b,
+            (Digest::Bytes(a), Digest::Bytes(b)) => a == b,
+            _ => self.to_bytes() == other.to_bytes(),
+        }
+    }
+}
+
+impl fmt::Display for Digest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Digest::Int { value, .. } => write!(f, "{value:#x}"),
+            Digest::Bytes(b) => b.iter().try_for_each(|byte| write!(f, "{byte:02x}")),
+        }
+    }
+}
+
+macro_rules! digest_from_int {
+    ($($t:ty),*) => {$(
+        impl From<$t> for Digest {
+            fn from(value: $t) -> Digest {
+                Digest::Int { value: u64::from(value), bits: <$t>::BITS as u8 }
+            }
+        }
+    )*};
+}
+digest_from_int!(u8, u16, u32, u64);
+
+impl From<Vec<u8>> for Digest {
+    fn from(b: Vec<u8>) -> Digest {
+        Digest::Bytes(b)
+    }
+}
+
+impl From<&[u8]> for Digest {
+    fn from(b: &[u8]) -> Digest {
+        Digest::Bytes(b.to_vec())
+    }
+}
+
+impl From<&Vec<u8>> for Digest {
+    fn from(b: &Vec<u8>) -> Digest {
+        Digest::Bytes(b.clone())
+    }
+}
+
+impl<const N: usize> From<[u8; N]> for Digest {
+    fn from(b: [u8; N]) -> Digest {
+        Digest::Bytes(b.to_vec())
+    }
+}
+
+impl<const N: usize> From<&[u8; N]> for Digest {
+    fn from(b: &[u8; N]) -> Digest {
+        Digest::Bytes(b.to_vec())
+    }
+}
+
+/// What became of a stored check value.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Verdict {
+    /// Recomputed, and it equals the stored value.
+    Valid,
+    /// Recomputed, and it differs; `computed` is what the data gives, when
+    /// the dissector has it.
+    Mismatch { computed: Option<Digest> },
+    /// Not verified: the dissector doesn't compute this check.
+    NotChecked,
+    /// Not verified here, for the reason given ("encrypted", "over the read
+    /// limit", "checked by the decoder"...).
+    Skipped(Cow<'static, str>),
+}
+
+/// A stored check value: the algorithm, the value and the verdict. Text:
+/// `0xae426082 (CRC-32, valid)`, `0x1234 (CRC-16, mismatch: computed
+/// 0x89ab)`, a digest in full (`d225e5…8f2a (SHA-256, not checked)`),
+/// `… (MD5, skipped: encrypted)`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Check {
+    /// The algorithm's usual name: "CRC-32", "CRC-32C", "Adler-32",
+    /// "Fletcher-32", "SHA-256", "HMAC-SHA-256", or the format's own
+    /// ("TCP checksum", "lookup3", "8-bit sum").
+    pub algo: Cow<'static, str>,
+    pub stored: Digest,
+    pub verdict: Verdict,
+}
+
+impl Check {
+    /// A stored check value, not (yet) verified.
+    pub fn new(algo: impl Into<Cow<'static, str>>, stored: impl Into<Digest>) -> Check {
+        Check {
+            algo: algo.into(),
+            stored: stored.into(),
+            verdict: Verdict::NotChecked,
+        }
+    }
+
+    /// Verified against `computed`: valid when it equals the stored value.
+    pub fn verify(mut self, computed: impl Into<Digest>) -> Check {
+        let computed = computed.into();
+        self.verdict = if self.stored.same(&computed) {
+            Verdict::Valid
+        } else {
+            Verdict::Mismatch {
+                computed: Some(computed),
+            }
+        };
+        self
+    }
+
+    /// [`Check::verify`] when the dissector could compute the value;
+    /// unchanged (not checked) for `None`.
+    pub fn verify_opt<D: Into<Digest>>(self, computed: Option<D>) -> Check {
+        match computed {
+            Some(c) => self.verify(c),
+            None => self,
+        }
+    }
+
+    /// Verified, by a comparison made elsewhere: valid or a mismatch whose
+    /// computed value isn't at hand.
+    pub fn verified(mut self, ok: bool) -> Check {
+        self.verdict = if ok {
+            Verdict::Valid
+        } else {
+            Verdict::Mismatch { computed: None }
+        };
+        self
+    }
+
+    /// Not verified, for `reason`.
+    pub fn skipped(mut self, reason: impl Into<Cow<'static, str>>) -> Check {
+        self.verdict = Verdict::Skipped(reason.into());
+        self
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.verdict == Verdict::Valid
+    }
+
+    pub fn is_mismatch(&self) -> bool {
+        matches!(self.verdict, Verdict::Mismatch { .. })
+    }
+
+    /// The verdict alone: `valid`, `mismatch: computed 0x89ab`, `not
+    /// checked`, `skipped: encrypted`.
+    pub fn verdict_text(&self) -> String {
+        match &self.verdict {
+            Verdict::Valid => "valid".to_owned(),
+            Verdict::Mismatch {
+                computed: Some(c), ..
+            } => format!("mismatch: computed {c}"),
+            Verdict::Mismatch { computed: None } => "mismatch".to_owned(),
+            Verdict::NotChecked => "not checked".to_owned(),
+            Verdict::Skipped(reason) => format!("skipped: {reason}"),
+        }
+    }
+
+    /// The diagnostic message for a mismatch: `CRC-32 mismatch: stored
+    /// 0x1234, computed 0x89ab`.
+    pub fn mismatch_text(&self) -> Option<String> {
+        match &self.verdict {
+            Verdict::Mismatch { computed: Some(c) } => Some(format!(
+                "{} mismatch: stored {}, computed {c}",
+                self.algo, self.stored
+            )),
+            Verdict::Mismatch { computed: None } => {
+                Some(format!("{} mismatch: stored {}", self.algo, self.stored))
+            }
+            _ => None,
+        }
+    }
+}
+
+impl From<Check> for Value {
+    fn from(c: Check) -> Value {
+        Value::Checksum(Box::new(c))
+    }
+}
+
+impl fmt::Display for Check {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} ({}, {})",
+            self.stored,
+            self.algo,
+            self.verdict_text()
+        )
     }
 }
 

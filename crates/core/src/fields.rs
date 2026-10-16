@@ -23,7 +23,7 @@ use crate::cx::{Block, Cx};
 use crate::error::{Diagnostic, Result};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Guid, Radix, Value, decode_flags, lookup};
+use crate::value::{Check, Digest, EnumTable, FlagTable, Guid, Radix, Value, decode_flags, lookup};
 
 pub use crate::bytes::Endian;
 
@@ -384,6 +384,42 @@ impl<'a, T> Field<'a, T> {
     pub fn with(mut self, f: impl FnOnce(&T, Node) -> Node) -> Self {
         if let Ok(v) = &self.value {
             self.node = f(v, self.node);
+        }
+        self
+    }
+
+    /// The field (an unsigned number or bytes) is a check value of `algo`,
+    /// not yet verified: see [`Field::verify`].
+    pub fn checksum(mut self, algo: impl Into<Cow<'static, str>>) -> Self {
+        let stored = match self.node.value.take() {
+            Some(Value::UInt { value, bits, .. }) => Some(Digest::Int { value, bits }),
+            Some(Value::Bytes(b)) => Some(Digest::Bytes(b)),
+            other => {
+                self.node.value = other;
+                None
+            }
+        };
+        if let Some(stored) = stored {
+            self.node.value = Some(Check::new(algo, stored).into());
+        }
+        self
+    }
+
+    /// Verifies a [`checksum`](Field::checksum) field against what the data
+    /// gives; `None` leaves it not checked. A mismatch is also a diagnostic.
+    pub fn verify<D: Into<Digest>>(self, computed: Option<D>) -> Self {
+        self.with_check(|c| c.verify_opt(computed))
+    }
+
+    /// Updates a [`checksum`](Field::checksum) field's verdict (for checks
+    /// that need the stored value: masking, skipping), reporting a
+    /// mismatch as a diagnostic.
+    pub fn with_check(mut self, f: impl FnOnce(Check) -> Check) -> Self {
+        if let Some(Value::Checksum(_)) = &self.node.value
+            && let Some(Value::Checksum(c)) = self.node.value.take()
+        {
+            let node = std::mem::replace(&mut self.node, Node::new(""));
+            self.node = node.checksum(f(*c));
         }
         self
     }
