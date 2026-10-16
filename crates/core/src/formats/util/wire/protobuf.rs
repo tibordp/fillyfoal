@@ -18,7 +18,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::{EnumTable, FlagTable, Radix, Value, decode_flags, lookup};
 
 /// Nested messages deeper than this are not expanded.
 const MAX_DEPTH: u32 = 48;
@@ -36,6 +36,10 @@ pub enum Ty {
     SInt,
     Bool,
     Enum(EnumTable),
+    /// An unsigned varint shown in hexadecimal (addresses, masks).
+    Hex,
+    /// An unsigned varint holding flags.
+    Flags(FlagTable),
     Str,
     Bytes,
     Float,
@@ -372,6 +376,20 @@ fn varint_value(ty: Option<Ty>, v: u64) -> Value {
             bits: 32,
             name: lookup(table, v),
         },
+        Some(Ty::Hex) => Value::UInt {
+            value: v,
+            bits: 64,
+            radix: Radix::Hex,
+        },
+        Some(Ty::Flags(table)) => {
+            let (set, unknown) = decode_flags(table, v);
+            Value::Flags {
+                raw: v,
+                bits: 32,
+                set,
+                unknown,
+            }
+        }
         _ => signed(v),
     }
 }

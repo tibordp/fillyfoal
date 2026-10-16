@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ timens-0.img — CRIU TIMENS image (time namespace)  [0x0+0x24]
+    Image class: IMG_COMMON (0x54564319)  [0x0+0x4]
+    Image type: TIMENS (0x43114433) — time namespace  [0x4+0x4]
+  ▾ timens_entry [0] — 24 bytes  [0x8+0x1c]
+      Size: 24  [0x8+0x4]
+    ▾ timens_entry  [0xc+0x18]
+      ▾ monotonic — timespec, 10 bytes  [0xc+0xc]
+          tv_sec: 766271  [0xe+0x4]
+          tv_nsec: 495351573  [0x12+0x6]
+      ▾ boottime — timespec, 10 bytes  [0x18+0xc]
+          tv_sec: 766271  [0x1a+0x4]
+          tv_nsec: 495351615  [0x1e+0x6]

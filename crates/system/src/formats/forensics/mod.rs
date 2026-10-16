@@ -4,11 +4,14 @@
 //! macOS/iOS/Linux/Android
 //! (`unix`, bookmarks, `.DS_Store`), browsers, logs, user-profile text
 //! artifacts (`userdata`) and evidence containers and memory captures
-//! (`evidence`, Expert Witness images in `ewf`, AFF4 in `aff4`).
+//! (`evidence`, Expert Witness images in `ewf`, AFF4 in `aff4`), and saved
+//! virtual machine and process state (`qemu`: QEMU migration streams and
+//! libvirt save images; `criu`: CRIU checkpoint images).
 
 pub mod aff4;
 pub mod bookmark;
 pub mod browser;
+pub mod criu;
 pub mod dsstore;
 pub mod etl;
 pub mod evidence;
@@ -19,6 +22,7 @@ pub mod lnk;
 pub mod logs;
 pub mod minidump;
 pub mod prefetch;
+pub mod qemu;
 pub mod recyclebin;
 pub mod regf;
 pub mod registry_pol;
