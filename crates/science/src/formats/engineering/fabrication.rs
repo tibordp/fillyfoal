@@ -50,12 +50,12 @@ use crate::formats::text::decode::{Decoded, base64, derive};
 use crate::formats::text::probe;
 use crate::formats::text::scan::{LINE_CAP, Lines};
 use crate::formats::text::text_node;
-use crate::formats::util::datakit::{hex, text};
+use crate::formats::util::datakit::text;
 use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe, content, dissect_or_data};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, Value};
+use crate::value::{Check, EnumTable, Value};
 
 // ---------------------------------------------------------------------------
 // G-code lines
@@ -1681,17 +1681,13 @@ async fn block(cx: Cx, (input, pos, checksummed): (Input, u64, bool)) -> Result<
         let mut node = Node::new("Checksum").span(cs);
         match u32_le(&stored, 0) {
             Some(v) => {
-                node = node.value(hex(v, 32));
                 let computed = crate::formats::util::datakit::crc32_paced(&cx, &covered).await;
-                node = if to_u64(covered.len()) < b.span.len.saturating_sub(4) {
-                    node.summary("CRC-32 (block truncated)")
-                } else if computed == v {
-                    node.summary("CRC-32, valid")
+                let check = Check::new("CRC-32", v);
+                node = node.checksum(if to_u64(covered.len()) < b.span.len.saturating_sub(4) {
+                    check.skipped("block truncated")
                 } else {
-                    node.diag(Diagnostic::warning(format!(
-                        "CRC-32 mismatch: computed {computed:#010x}"
-                    )))
-                };
+                    check.verify(computed)
+                });
             }
             None => node = node.diag(Diagnostic::truncated(cs, to_u64(stored.len()))),
         }

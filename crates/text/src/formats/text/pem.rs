@@ -307,23 +307,19 @@ async fn expand(cx: Cx, b: Block) -> Result<()> {
         let stored = stored
             .iter()
             .fold(0u32, |acc, &x| (acc << 8) | u32::from(x));
-        let mut node = Node::new("Checksum").span(text.span()).value(Value::UInt {
-            value: stored.into(),
+        let int = |value: u32| crate::value::Digest::Int {
+            value: value.into(),
             bits: 24,
             radix: Radix::Hex,
-        });
+        };
+        let mut check = crate::value::Check::new("CRC-24", int(stored));
         if decoded.len <= cx.limits().max_read {
             let bytes = cx.read(decoded).await?;
-            let computed = crate::formats::util::datakit::crc24_paced(&cx, &bytes).await;
-            node = if computed == stored {
-                node.summary("CRC-24, valid")
-            } else {
-                node.diag(Diagnostic::warning(format!(
-                    "CRC-24 mismatch: computed {computed:#08x}"
-                )))
-            };
+            check = check.verify(int(
+                crate::formats::util::datakit::crc24_paced(&cx, &bytes).await
+            ));
         }
-        cx.emit(node);
+        cx.emit(Node::new("Checksum").span(text.span()).checksum(check));
     }
     // A missing END line is flagged on the block's node.
     if let Some(l) = end_line {

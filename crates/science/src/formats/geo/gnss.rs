@@ -20,7 +20,7 @@ use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::{Check, EnumTable, lookup};
 
 const LE: Endian = Endian::Little;
 
@@ -276,7 +276,12 @@ async fn ubx_packet(cx: Cx, (span, id): (Span, u16)) -> Result<()> {
         _ => cx.emit(Node::new("Payload").span(payload)),
     }
     let ck = span.sub(len.saturating_add(6), 2);
-    cx.emit(leaf("Checksum", ck, Value::Bytes(cx.read(ck).await?)).summary("valid"));
+    // Frames are found by a checksum that matches.
+    cx.emit(
+        Node::new("Checksum")
+            .span(ck)
+            .checksum(Check::new("Fletcher-8", cx.read(ck).await?).verified(true)),
+    );
     Ok(())
 }
 
@@ -509,18 +514,19 @@ async fn rtcm_frame(cx: Cx, span: Span) -> Result<()> {
         }
         cx.emit(Node::new("Payload").span(pspan));
     }
+    // Frames are found by a CRC that matches.
+    let crc = frame
+        .get(to_usize(len.saturating_add(3))..)
+        .unwrap_or_default();
+    let crc = crate::value::Digest::Int {
+        value: crate::formats::util::datakit::be_uint(crc),
+        bits: 24,
+        radix: crate::value::Radix::Hex,
+    };
     cx.emit(
-        leaf(
-            "CRC-24Q",
-            span.sub(len.saturating_add(3), 3),
-            Value::Bytes(
-                frame
-                    .get(to_usize(len.saturating_add(3))..)
-                    .unwrap_or_default()
-                    .to_vec(),
-            ),
-        )
-        .summary("valid"),
+        Node::new("CRC-24Q")
+            .span(span.sub(len.saturating_add(3), 3))
+            .checksum(Check::new("CRC-24Q", crc).verified(true)),
     );
     Ok(())
 }
@@ -644,13 +650,15 @@ record! {
 
 async fn sbf_block(cx: Cx, (span, number): (Span, u16)) -> Result<()> {
     cx.emit(leaf("Sync", span.sub(0, 2), text("$@")));
+    // Blocks are found by a CRC that matches.
     cx.emit(
-        leaf(
-            "CRC",
-            span.sub(2, 2),
-            hex(u16_le(&cx.read(span.sub(2, 2)).await?, 0).unwrap_or(0), 16),
-        )
-        .summary("valid"),
+        Node::new("CRC").span(span.sub(2, 2)).checksum(
+            Check::new(
+                "CRC-16/XMODEM",
+                u16_le(&cx.read(span.sub(2, 2)).await?, 0).unwrap_or(0),
+            )
+            .verified(true),
+        ),
     );
     cx.emit(leaf(
         "Block number",
