@@ -83,7 +83,7 @@ expression: "common::explore(&display_name(&path), &data)"
           FirstIndex: 1  [0x127+0x4]
           Count: 1  [0x12b+0x4]
       ▾ Label list 1 — 2 labels  [0x12f+0x1d]
-          ActivityId: "03020100-0504-0706-0809-0a0b0c0d0e0f"  [0x12f+0x11]
+          ActivityId: {03020100-0504-0706-0809-0a0b0c0d0e0f}  [0x12f+0x11]
           request: "42"  [0x140+0xc]
   ▾ EventBlock — 90 bytes, 100 ns–300 ns, compressed headers  [0x14c+0x5e]
     ▾ Block header  [0x14c+0x4]

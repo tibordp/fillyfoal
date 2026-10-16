@@ -5,7 +5,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ▾ disk.img.fidx — Proxmox Backup fixed index, 9 MiB, 3 chunks of 4 MiB  [0x0+0x1060]
   ▾ Header  [0x0+0x50]
       Magic: 2f 7f 41 ed 91 fd 0f cd  |/.A.....|  [0x0+0x8]
-      UUID: "121dbeb1-4eb7-4744-b12b-3c55d7d066d7"  [0x8+0x10]
+      UUID: 121dbeb1-4eb7-4744-b12b-3c55d7d066d7  [0x8+0x10]
       Creation time: 2026-10-16 11:10:05 UTC  [0x18+0x8]
       Index checksum: 1e4c7ffafa920eed37a358f027fe059b0fe886698c9a0dde383010bca0d05117 (SHA-256, valid)  [0x20+0x20]
       Size: 9437184 bytes (9 MiB)  [0x40+0x8]

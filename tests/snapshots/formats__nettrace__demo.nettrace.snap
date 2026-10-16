@@ -495,7 +495,7 @@ expression: "common::explore(&display_name(&path), &data)"
             StartupFlags: 8388611  [0x8e1+0x4]
             StartupMode: 0  [0x8e5+0x1]
             CommandLine: ""  [0x8e6+0x2]
-            ComObjectGuid: "00000000-0000-0000-0000-000000000000"  [0x8e8+0x10]
+            ComObjectGuid: {00000000-0000-0000-0000-000000000000}  [0x8e8+0x10]
             RuntimeDllPath: "/usr/share/dotnet/shared/Microsoft.NETCore.App/8.0.31/libcoreclr.so"  [0x8f8+0x88]
       ▾ Microsoft-Windows-DotNETRuntime/GCCreateSegment — 520.462 µs, thread 96, stack 1; Address=281196676251688 Size=33554392 Type=3 ClrInstanceID=0  [0x980+0x1c]
         ▾ Header — thread 96, sequence 2  [0x980+0x6]

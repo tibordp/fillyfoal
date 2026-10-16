@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ colormap-ext.tga — 4×2, 8-bit, Color-mapped  [0x0+0x248]
   ▾ Header  [0x0+0x12]
@@ -18,10 +18,10 @@ expression: "common::explore(&name, &data)"
       Image descriptor: 0x20 [TOP_LEFT] — 0 alpha bits  [0x11+0x1]
     Image ID: "fillyfoal"  [0x12+0x9]
   ▾ Color map — 4 colors  [0x1b+0xc]
-      [0]: "#000000"  [0x1b+0x3]
-      [1]: "#0000ff"  [0x1e+0x3]
-      [2]: "#00ff00"  [0x21+0x3]
-      [3]: "#ff0000"  [0x24+0x3]
+      [0]: #000000  [0x1b+0x3]
+      [1]: #0000ff  [0x1e+0x3]
+      [2]: #00ff00  [0x21+0x3]
+      [3]: #ff0000  [0x24+0x3]
     Image data — 2 rows  [0x27+0x8]
   ▾ Extension area  [0x33+0x1ef]
       Extension size: 495  [0x33+0x2]

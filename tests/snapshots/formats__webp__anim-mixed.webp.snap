@@ -17,7 +17,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ ANIM — background #ffffffff, plays 3 times  [0x1e+0xe]
       Chunk ID: "ANIM"  [0x1e+0x4]
       Chunk size: 6  [0x22+0x4]
-      Background color: ff ff ff ff  |....| — #ffffffff  [0x26+0x4]
+      Background color: #ffffffff  [0x26+0x4]
       Loop count: 3  [0x2a+0x2]
   ▾ ANMF — 16×16 at (0, 0), 120 ms, no blending  [0x2c+0x6e]
       Chunk ID: "ANMF"  [0x2c+0x4]

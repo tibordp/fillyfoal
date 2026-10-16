@@ -7,7 +7,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Packet 0 — seq 0, 233 bytes of event records  [0x0+0x125]
       ▾ Packet Header  [0x0+0x24]
           magic: 0xc1fc1fc1  [0x0+0x4]
-          uuid: "273f4c9b-47bb-4f43-bd77-9228cecd1290"  [0x4+0x10]
+          uuid: 273f4c9b-47bb-4f43-bd77-9228cecd1290  [0x4+0x10]
           stream_id: 0  [0x14+0x8]
           stream_instance_id: 0  [0x1c+0x8]
       ▾ Packet Context  [0x24+0x18]

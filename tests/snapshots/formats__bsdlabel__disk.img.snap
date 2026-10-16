@@ -56,7 +56,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Version: 1  [0x5400+0x4]
           Last page: 1  [0x5404+0x4]
           Bad pages: 0  [0x5408+0x4]
-          UUID: "8a7b6c5d-4e3f-4a2b-9c1d-0e1f2a3b4c5d"  [0x540c+0x10]
+          UUID: 8a7b6c5d-4e3f-4a2b-9c1d-0e1f2a3b4c5d  [0x540c+0x10]
           Label: "bsdswap"  [0x541c+0x10]
         Signature: "SWAPSPACE2"  [0x5ff6+0xa]
         Swap pages — 4 KiB  [0x6000+0x1000]

@@ -416,8 +416,8 @@ expression: "common::explore(&display_name(&path), &data)"
                 biClrUsed: 2  [0x33c4+0x4]
                 biClrImportant: 0  [0x33c8+0x4]
             ▾ Palette — 2 colors  [0x33cc+0x8]
-                [0]: "#000000"  [0x33cc+0x4]
-                [1]: "#ffffff"  [0x33d0+0x4]
+                [0]: #000000  [0x33cc+0x4]
+                [1]: #ffffff  [0x33d0+0x4]
               Pixel array — 16 rows of 4 bytes, bottom-up  [0x33d4+0x40]
               AND mask — 1-bit transparency mask  [0x3414+0x40]
     ▾ RT_BITMAP — 1 resource  [0x1620+0x8] → 0x16b0+0x10
@@ -961,8 +961,8 @@ expression: "common::explore(&display_name(&path), &data)"
                     biClrUsed: 2  [#2:0x36+0x4]
                     biClrImportant: 0  [#2:0x3a+0x4]
                 ▾ Palette — 2 colors  [#2:0x3e+0x8]
-                    [0]: "#000000"  [#2:0x3e+0x4]
-                    [1]: "#ffffff"  [#2:0x42+0x4]
+                    [0]: #000000  [#2:0x3e+0x4]
+                    [1]: #ffffff  [#2:0x42+0x4]
                   Pixel array — 16 rows of 4 bytes, bottom-up  [#2:0x46+0x40]
                   AND mask — 1-bit transparency mask  [#2:0x86+0x40]
     ▾ RT_GROUP_ICON — 1 resource  [0x1668+0x8] → 0x17a0+0x10

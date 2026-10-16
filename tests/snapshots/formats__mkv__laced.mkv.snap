@@ -38,7 +38,7 @@ expression: "common::explore(&display_name(&path), &data)"
         TimestampScale: 1000000 — 1 ms per tick  [0xb8+0x7]
         Duration: 400 ms  [0xbf+0x7]
         DateUTC: 2026-09-29 03:34:38 UTC  [0xc6+0xb]
-        SegmentUUID: 00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f  |................| — 00010203-0405-0607-0809-0a0b0c0d0e0f  [0xd1+0x13]
+        SegmentUUID: 00010203-0405-0607-0809-0a0b0c0d0e0f  [0xd1+0x13]
         Title: "Lacing test"  [0xe4+0xe]
         MuxingApp: "laced.py"  [0xf2+0xb]
         WritingApp: "laced.py"  [0xfd+0xb]

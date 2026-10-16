@@ -1462,7 +1462,7 @@ fn bare_photoshop_colour_tables_open_by_hand() {
         tree.contains("Photoshop colour table, 256 colours"),
         "{tree}"
     );
-    assert!(tree.contains("[255]: \"#ffffff\""), "{tree}");
+    assert!(tree.contains("[255]: #ffffff"), "{tree}");
     assert!(!tree.contains("! "), "{tree}");
 }
 

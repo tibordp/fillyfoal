@@ -31,7 +31,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Profile flags: 0x0 []  [0x52+0x4]
           Device manufacturer: "none"  [0x56+0x4]
           Device model: 0x0  [0x5a+0x4]
-          Device attributes: 0x0 []  [0x5e+0x8]
+          Device attributes: 0x0 [REFLECTIVE | GLOSSY | POSITIVE | COLOUR]  [0x5e+0x8]
           Rendering intent: Perceptual (0x0)  [0x66+0x4]
           PCS illuminant X: 0.964202880859375  [0x6a+0x4]
           PCS illuminant Y: 1  [0x6e+0x4]

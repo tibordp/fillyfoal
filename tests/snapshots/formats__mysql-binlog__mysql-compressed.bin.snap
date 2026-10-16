@@ -81,7 +81,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Next position: 0x115  [0xd3+0x4]
         Flags: 0x0 []  [0xd7+0x2]
       Flags: 0x0  [0xd9+0x1]
-      Server UUID: "895b7fe9-c8fe-11f1-8d38-560f3213783c"  [0xda+0x10]
+      Server UUID: 895b7fe9-c8fe-11f1-8d38-560f3213783c  [0xda+0x10]
       GNO: 15  [0xea+0x8]
       Logical clock type: 2  [0xf2+0x1]
       Last committed: 0  [0xf3+0x8]

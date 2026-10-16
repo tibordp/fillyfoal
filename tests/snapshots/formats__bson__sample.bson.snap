@@ -32,7 +32,7 @@ expression: "common::explore(&display_name(&path), &data)"
           [2] — null  [0x13f+0x3]
       empty — document, 5 bytes  [0x144+0xc]
     blob: 00 01 02 62 69 6e 61 72 79  |...binary| — binary (generic), 9 bytes  [0x151+0x14]
-    uuid: {12345678-9abc-4def-8123-456789abcdef} — binary (UUID)  [0x165+0x1b]
+    uuid: 12345678-9abc-4def-8123-456789abcdef — binary (UUID)  [0x165+0x1b]
     legacy uuid: "123456789abc4def8123456789abcdef" — binary (old UUID)  [0x180+0x22]
     md5: "d41d8cd98f00b204e9800998ecf8427e" — binary (MD5)  [0x1a2+0x1a]
     old binary: 61 62 63  |abc| — binary (old binary), 3 bytes  [0x1bc+0x18]

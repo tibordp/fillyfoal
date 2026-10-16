@@ -41,7 +41,7 @@ expression: "common::explore(&display_name(&path), &data)"
               ▾ Lines — 1 line  [#3:0x0+0x1b]
                   Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
             ▾ Operators
-                rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
+                rg: device-rgb(0 0 1) — set non-stroking RGB  [#3:0x0+0x8]
                 re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
                 f — fill  [#3:0x19+0x1]
         /Count: 1  [#2:0x54+0x8]
@@ -66,7 +66,7 @@ expression: "common::explore(&display_name(&path), &data)"
           ▾ Lines — 1 line  [#3:0x0+0x1b]
               Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
         ▾ Operators
-            rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
+            rg: device-rgb(0 0 1) — set non-stroking RGB  [#3:0x0+0x8]
             re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
             f — fill  [#3:0x19+0x1]
   ▾ Objects — 8 entries
@@ -127,7 +127,7 @@ expression: "common::explore(&display_name(&path), &data)"
             ▾ Lines — 1 line  [#3:0x0+0x1b]
                 Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
           ▾ Operators
-              rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
+              rg: device-rgb(0 0 1) — set non-stroking RGB  [#3:0x0+0x8]
               re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
               f — fill  [#3:0x19+0x1]
             End keywords: "endstream endobj"  [0x16b+0x12]
