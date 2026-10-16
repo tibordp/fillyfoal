@@ -83,8 +83,7 @@ exploration pays for additional work only as needed.
     MeatPack (Prusa binary G-code), DjVu BZZ, the DWG R2004+ LZ77 variant,
     SPSS bytecode and SAS7BDAT RLE/RDC row compression, Cap'n Proto packing,
     the ntfsclone image command stream, Partclone block areas, the
-    PDF/PostScript filters and
-    predictors, TempleOS `.Z` LZW (TOSZ as oracle);
+    PDF/PostScript filters and predictors, TempleOS `.Z` LZW (TOSZ as oracle);
   - ciphers and KDFs that unlock content: ZipCrypto, AES (CBC, CTR, GCM), RC4,
     ChaCha20/Poly1305, Twofish, Type 1 eexec, MPQ; Argon2, BLAKE2b, bcrypt_pbkdf,
     7-Zip's SHA-256 key derivation.

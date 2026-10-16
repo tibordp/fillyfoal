@@ -1,5 +1,6 @@
 //! Archives and packages: ZIP and the formats built on it, tar, cpio, `ar`,
 //! RAR, 7z, Cabinet, WIM, xar, RPM, StuffIt, LHA, ARJ, ACE and ZOO;
+//! FSArchiver archives (`fsarchiver`);
 //! AppleSingle/AppleDouble, Chrome extensions (`crx`), WARC web archives,
 //! application packages (`packaging`: AppImage, Solaris datastreams, Haiku
 //! packages, Electron ASAR), Windows installers (`installer`: NSIS, Inno
@@ -14,6 +15,7 @@ pub mod arj;
 pub mod cab;
 pub mod cpio;
 pub mod crx;
+pub mod fsarchiver;
 pub mod installer;
 pub mod legacy;
 pub mod lha;

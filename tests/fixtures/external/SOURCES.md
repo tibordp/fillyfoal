@@ -1408,3 +1408,28 @@ FAT12 bitmap leaves out clusters in use, so its FAT12 images do not restore.)
 | `partclone/fat16-v1.img.raw.zst` | partclone 0.2.73 | `partclone.fat16 -c -s fat.img -o fat16-v1.img` (image format 0001), stored with `zstd -19` |
 | `gzip/partclone-ext2.img.gz` | partclone 0.3.36, gzip 1.13 | `partclone.extfs -c -k 16 -s ext.img -o - \| gzip -9 -n` |
 | `zstd/partclone-fat16.img.zst` | partclone 0.3.36, zstd 1.5.7 | `partclone.fat16 -c -s fat.img -o - \| zstd -19` |
+
+## FSArchiver archives (fsarchiver)
+
+Made by `sh tests/data/fsarchiver/make-external.sh` (Docker
+`debian:trixie-slim`, host name `fillyfoal`): fsarchiver 0.8.8-1,
+faketime 0.9.10, e2fsprogs 1.47.2-3+b12. `inner.sh` archives one neutral
+tree (a 29-byte and a 4.7 KB text file packed into a shared block, a
+320 000-byte file of zeros in blocks of its own, a symbolic link, a
+subdirectory) with `fsarchiver savedir` under `faketime -f '2024-01-01
+00:00:00'`; `inner-savefs.sh` (a privileged container: a loop device, and
+the mount fsarchiver makes) saves a 4 MiB ext2 filesystem made by
+`mkfs.ext2 -d`. Not byte-for-byte reproducible: some access times are
+those fsarchiver's own reads leave (the real time); the archive id came out
+equal to the faked creation time.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `fsarchiver/zstd.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -Z 3 zstd.fsa tree` |
+| `fsarchiver/lz4.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -z 0 lz4.fsa tree` |
+| `fsarchiver/lzo.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -z 1 lzo.fsa tree` |
+| `fsarchiver/gzip.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -z 3 gzip.fsa tree` (zlib streams) |
+| `fsarchiver/bzip2.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -z 5 bzip2.fsa tree` |
+| `fsarchiver/xz.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -z 7 xz.fsa tree` (xz streams) |
+| `fsarchiver/blowfish.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -Z 3 -c fillyfoal blowfish.fsa tree` (Blowfish) |
+| `fsarchiver/savefs-ext2.fsa` | fsarchiver 0.8.8 | `fsarchiver savefs -Z 3 savefs-ext2.fsa /dev/loopN` of a 4 MiB ext2 filesystem |
