@@ -1400,7 +1400,15 @@ tables only; CRIU paths are the container's (`/usr/bin/sleep`, libc,
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
 | `qemu-vmstate/microvm.vmstate.raw.zst` | QEMU 10.0.13 | `sh tests/data/qemu-vmstate/make-external.sh` (`inner.sh microvm 2`): `qemu-system-x86_64 -nodefaults -machine microvm -accel tcg -m 2`, QMP `stop` then `migrate "exec:cat > ..."`; stored with `zstd -19` |
+| `qemu-vmstate/q35-virtio.vmstate.raw.zst` | QEMU 10.0.13 | same script (`inner-ext.sh`): `-machine q35 -m 16` with `virtio-net-pci` (user networking, `romfile=`, MAC 52:54:00:00:00:01) and `virtio-blk-pci` on a `null-co://` drive; stored with `zstd -19` |
+| `qemu-vmstate/virt-aarch64.vmstate.raw.zst` | QEMU 10.0.13 | same script: `qemu-system-aarch64 -machine virt -cpu max -m 8`; stored with `zstd -19` |
+| `qemu-vmstate/microvm-nofooter.vmstate.raw.zst` | QEMU 10.0.13 | same script: `-machine microvm -m 2 -global migration.send-section-footer=off`; stored with `zstd -19` |
+| `qemu-vmstate/microvm-postcopy.vmstate.raw.zst` | QEMU 10.0.13 | same script (`inner-postcopy.sh`): running `microvm`, `postcopy-ram` capability, `max-bandwidth` 8192 and `downtime-limit` 1, `migrate "tcp:127.0.0.1:4444"` to `socat -u TCP-LISTEN:4444 OPEN:<file>`, then `migrate-start-postcopy`; QEMU killed once the stream (ending with `QEMU_VM_EOF`) was written; stored with `zstd -19` |
+| `qemu-vmstate/sparc64-sun4u.vmstate.raw.zst` | QEMU 10.0.13 | same script (`inner-ext.sh`): `qemu-system-sparc64 -machine sun4u -m 16` (8 KiB target pages); stored with `zstd -19` |
 | `libvirt-save/fillyfoal-xz.sav` | libvirt 11.3.0, QEMU 10.0.13, xz | `sh tests/data/libvirt-save/make-external.sh`: privileged container running `libvirtd` (`save_image_format = "xz"`, no cgroups), `virsh create` of a diskless 4 MiB `pc` domain named `fillyfoal`, then `virsh save`; unchanged |
+| `libvirt-save/fillyfoal-zstd.sav` | libvirt 11.3.0, QEMU 10.0.13, zstd | same script, `save_image_format = "zstd"`; unchanged |
+| `libvirt-save/fillyfoal-raw.sav.raw.zst` | libvirt 11.3.0, QEMU 10.0.13 | same script, `save_image_format = "raw"` (the default: the migration stream uncompressed); stored with `zstd -19` |
+| `libvirt-save/fillyfoal-sparse.sav.raw.zst` | libvirt 11.3.0, QEMU 10.0.13 | same script, `save_image_format = "sparse"` (a `mapped-ram` migration stream: RAM pages at fixed, 1 MiB-aligned file offsets); stored with `zstd -19` |
 | `criu-image/inventory.img` | CRIU 4.1.1 | `sh tests/data/criu-image/make-external.sh`: privileged container, `criu dump -t <pid> --shell-job` of `sleep 1000` (PID 7) started with an empty environment; unchanged |
 | `criu-image/pstree.img` | CRIU 4.1.1 | same dump; unchanged |
 | `criu-image/core-7.img` | CRIU 4.1.1 | same dump; unchanged |
@@ -1416,6 +1424,17 @@ tables only; CRIU paths are the container's (`/usr/bin/sleep`, libc,
 | `criu-image/stopped-core-7.img` | CRIU 4.1.1 | `sh tests/data/criu-image/make-task-states.sh` (`inner-task-states.sh`): `criu dump --shell-job` of a `sleep 1000` stopped with `kill -STOP` (PID 7, `task_state` 3); `core-7.img` renamed |
 | `criu-image/zombie-core-20.img` | CRIU 4.1.1 | same script, second dump: `sh -c 'sleep 0 & exec sleep 1000'`, whose child is a zombie (PID 20, `task_state` 2); `core-20.img` renamed |
 | `criu-image/zombie-pstree.img` | CRIU 4.1.1 | same dump as `zombie-core-20.img`; `pstree.img` renamed |
+| `criu-image/raw-pipes-data.img` | CRIU 4.2.1 (Debian sid) | `sh tests/data/criu-image/make-raw.sh` (`Dockerfile`, `inner-raw.sh`): `criu dump --shell-job --tcp-established --network-lock skip` of a Python process (in its own IPC namespace) holding a pipe with 25 unread bytes, a Unix datagram socket pair with a message queued each way, a loopback TCP connection with unread data both ways, a System V message queue (two messages) and semaphore set (3, one set to 7), an epoll instance on the pipe, an inotify watch on a tmpfs directory, a pseudo-terminal pair, an `flock`ed file (`--file-locks`), and a deleted open file; `pipes-data.img` renamed |
+| `criu-image/raw-sk-queues.img` | CRIU 4.2.1 | same dump; `sk-queues.img` renamed |
+| `criu-image/raw-tcp-stream-client.img` | CRIU 4.2.1 | same dump; the client socket's `tcp-stream-<inode>.img` renamed |
+| `criu-image/raw-tcp-stream-server.img` | CRIU 4.2.1 | same dump; the accepted socket's `tcp-stream-<inode>.img` renamed |
+| `criu-image/raw-ipcns-msg.img` | CRIU 4.2.1 | same dump; `ipcns-msg-<id>.img` renamed |
+| `criu-image/raw-ipcns-sem.img` | CRIU 4.2.1 | same dump; `ipcns-sem-<id>.img` renamed |
+| `criu-image/raw-ghost-file.img` | CRIU 4.2.1 | same dump; `ghost-file-1.img` renamed (whole-file data, no chunks) |
+| `criu-image/raw-files.img` | CRIU 4.2.1 | same dump; `files.img` renamed (the pipe, socket, epoll, inotify, terminal and ghost file entries) |
+| `criu-image/raw-filelocks.img` | CRIU 4.2.1 | same dump; `filelocks.img` renamed |
+| `criu-image/raw-tty-info.img` | CRIU 4.2.1 | same dump; `tty-info.img` renamed |
+| `criu-image/raw-inventory.img` | CRIU 4.2.1 | same dump; `inventory.img` renamed |
 ## BorgBackup 1.2.4: repository segments
 
 Segment files (`<repo>/data/0/<n>`) copied unchanged out of repositories

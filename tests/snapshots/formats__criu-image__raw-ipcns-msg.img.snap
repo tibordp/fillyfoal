@@ -1,0 +1,37 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ raw-ipcns-msg.img — CRIU IPCNS_MSG image (System V message queues)  [0x0+0x64]
+    Image class: IMG_COMMON (0x54564319)  [0x0+0x4]
+    Image type: IPCNS_MSG (0x55453737) — System V message queues  [0x4+0x4]
+  ▾ ipc_msg_entry [0] — qnum=2  [0x8+0x5c]
+      Size: 24  [0x8+0x4]
+    ▾ desc — key=0x1234 · id=0  [0xc+0x12]
+        key: 0x1234  [0xe+0x3]
+        uid: 0  [0x11+0x2]
+        gid: 0  [0x13+0x2]
+        cuid: 0  [0x15+0x2]
+        cgid: 0  [0x17+0x2]
+        mode: 0x180  [0x19+0x3]
+        id: 0  [0x1c+0x2]
+      qbytes: 16384  [0x1e+0x4]
+      qnum: 2  [0x22+0x2]
+    ▾ message [0] — mtype 1, 13 bytes: “first message”  [0x24+0x18]
+        Size: 4  [0x24+0x4]
+        mtype: 1  [0x28+0x2]
+        msize: 13  [0x2a+0x2]
+      ▾ Text — UTF-8 text, 1 line  [0x2c+0xd]
+          Encoding: "UTF-8"
+          Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0x2c+0xd]
+            Line 1: "first message"  [0x2c+0xd]
+    ▾ message [1] — mtype 2, 27 bytes: “second, longer message text”  [0x3c+0x28]
+        Size: 4  [0x3c+0x4]
+        mtype: 2  [0x40+0x2]
+        msize: 27  [0x42+0x2]
+      ▾ Text — UTF-8 text, 1 line  [0x44+0x1b]
+          Encoding: "UTF-8"
+          Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0x44+0x1b]
+            Line 1: "second, longer message text"  [0x44+0x1b]

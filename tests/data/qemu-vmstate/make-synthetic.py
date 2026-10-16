@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Writes tests/fixtures/synthetic/qemu-vmstate/features.vmstate: a QEMU
-migration stream exercising what the real fixtures do not (hand-made from
-the layout QEMU 10.0 writes, not by QEMU):
+"""Writes tests/fixtures/synthetic/qemu-vmstate/features.vmstate (and
+v2.vmstate, see the end): a QEMU migration stream exercising what the real
+fixtures do not (hand-made from the layout QEMU 10.0 writes, not by QEMU):
 
 - configuration subsections: target page bits (1 KiB pages), capabilities,
   UUID;
@@ -156,3 +156,13 @@ os.makedirs(os.path.dirname(dst), exist_ok=True)
 with open(dst, "wb") as f:
     f.write(out)
 print(dst, len(out))
+
+# v2.vmstate: the pre-0.13 layout (QEMU_VM_FILE_VERSION_COMPAT), which has
+# no section types: records of ID string, instance, version and a 64-bit
+# length. Shown as unsupported after its header.
+v2 = b"QEVM" + be32(2)
+v2 += bytes([5]) + b"timer" + be32(0) + be32(2) + be64(8) + be64(0x1234)
+dst = os.path.join(here, "..", "..", "fixtures", "synthetic", "qemu-vmstate", "v2.vmstate")
+with open(dst, "wb") as f:
+    f.write(v2)
+print(dst, len(v2))

@@ -32,8 +32,16 @@
 //! Layout from QEMU's `docs/devel/migration/` and the stream as written by
 //! QEMU 10.0 (`migration/savevm.c`, `migration/ram.c`, GPL-2.0-or-later,
 //! read for the facts); checked against streams QEMU wrote (external
-//! fixtures). Not handled: `mapped-ram` streams (fixed page offsets) and
-//! RDMA hooks (unsupported diagnostics); with both `postcopy-ram` and
+//! fixtures: x86 microvm and q35, aarch64 virt, SPARC64 sun4u, footer-less
+//! and postcopy). The target page size is in the configuration only for
+//! targets whose page size varies (Arm); otherwise it is taken from the VM
+//! description when that is cheap to read, or from the machine type for
+//! the 8 KiB targets (SPARC64, Alpha), else assumed to be 4 KiB. In a
+//! `mapped-ram` stream (libvirt's "sparse" saves) each RAM block's header
+//! is followed by a header giving the file offsets of its page bitmap and
+//! pages, and the stream resumes after the pages; the blocks are shown
+//! with their bitmap and pages. Not handled: RDMA hooks (unsupported
+//! diagnostic); with both `postcopy-ram` and
 //! `x-ignore-shared`, a RAM block's optional page size is guessed.
 //!
 //! libvirt save images (`virsh save`, `managedsave`): a 92-byte header
@@ -150,6 +158,11 @@ struct Stream {
     names: BTreeMap<u32, String>,
     /// Whether sections end with footers (seen after the RAM setup).
     footers: bool,
+    /// The machine type, from the configuration.
+    machine: String,
+    /// The RAM block of the last page record: a page record that
+    /// continues it may start the next RAM part.
+    block: String,
     sections: u64,
     ram_total: u64,
     ram_blocks: u64,
@@ -162,6 +175,8 @@ impl Stream {
             caps: Vec::new(),
             names: BTreeMap::new(),
             footers: true,
+            machine: String::new(),
+            block: String::new(),
             sections: 0,
             ram_total: 0,
             ram_blocks: 0,
@@ -177,6 +192,7 @@ impl Stream {
             page: self.page,
             postcopy: self.cap("postcopy-ram"),
             ignore_shared: self.cap("x-ignore-shared"),
+            mapped: self.cap("mapped-ram"),
         }
     }
 }
@@ -190,6 +206,9 @@ struct Walk {
     region: Span,
     header: bool,
     depth: u32,
+    /// For a packaged stream: what the outer stream had set up (page
+    /// size, capabilities, footers, the last RAM block).
+    outer: Option<Arc<Stream>>,
 }
 
 async fn qemu(cx: Cx, input: Input) -> Result<()> {
@@ -202,6 +221,7 @@ async fn qemu(cx: Cx, input: Input) -> Result<()> {
             region: span,
             header: true,
             depth: 0,
+            outer: None,
         },
     )
     .await
@@ -219,7 +239,16 @@ fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
 async fn walk(cx: Cx, w: Walk) -> Result<()> {
     let region = w.region;
     let mut cur = Cursor::new(&cx, region, BE);
-    let mut st = Stream::new();
+    let mut st = match &w.outer {
+        Some(outer) => Stream {
+            page: outer.page,
+            caps: outer.caps.clone(),
+            footers: outer.footers,
+            block: outer.block.clone(),
+            ..Stream::new()
+        },
+        None => Stream::new(),
+    };
     if let Some((pos, saved)) = cx.resume::<(u64, Stream)>() {
         cur.seek(pos);
         st = saved;
@@ -232,9 +261,23 @@ async fn walk(cx: Cx, w: Walk) -> Result<()> {
             header_layout,
         ));
         cur.seek(8);
+        let head = cx.read_avail(region.sub(4, 4)).await?;
+        if u32_be(&head, 0) == Some(2) {
+            // QEMU_VM_FILE_VERSION_COMPAT: records of ID string, instance,
+            // version and a 64-bit length, with no section types; QEMU
+            // stopped writing it in 0.13 and refuses to read it.
+            return Err(
+                Diagnostic::unsupported("version 2 (pre-0.13) stream layout").at(region.sub(8, 0)),
+            );
+        }
     }
     loop {
         if cur.at_end() {
+            if !w.header {
+                // A packaged stream ends with its package (after
+                // MIG_CMD_POSTCOPY_RUN), not with QEMU_VM_EOF.
+                break;
+            }
             cx.diag(
                 Diagnostic::new(DiagKind::Truncated, "the stream ends before QEMU_VM_EOF")
                     .at(region.sub(cur.pos(), 0)),
@@ -246,10 +289,10 @@ async fn walk(cx: Cx, w: Walk) -> Result<()> {
         cx.progress_in(region, region.offset.saturating_add(start));
         let ty = cur.u8().await?;
         let step = match ty {
-            T_CONFIG => config_section(&cx, &mut cur, &mut st).await,
+            T_CONFIG => config_section(&cx, &w, &mut cur, &mut st).await,
             T_START | T_FULL => start_section(&cx, &w, &mut cur, &mut st, ty).await,
             T_PART | T_END => part_section(&cx, &w, &mut cur, &mut st, ty).await,
-            T_COMMAND => command(&w, &mut cur).await,
+            T_COMMAND => command(&w, &mut cur, &st).await,
             T_EOF => {
                 eof(&cx, &w, &mut cur).await?;
                 break;
@@ -269,6 +312,9 @@ async fn walk(cx: Cx, w: Walk) -> Result<()> {
     }
     if w.header {
         let mut label = String::from("QEMU migration stream");
+        if !st.machine.is_empty() {
+            label.push_str(&format!(", {}", clip(&st.machine, 40)));
+        }
         if st.ram_blocks > 0 {
             label.push_str(&format!(
                 ", {} RAM in {}",
@@ -374,7 +420,29 @@ fn config_subsection(f: &mut Fields<'_>, _: &()) -> Result<(String, ConfigSub)> 
 /// field (the configuration, the RAM block list).
 const SETUP_MAX: u64 = 256 * 1024;
 
-async fn config_section(cx: &Cx, cur: &mut Cursor<'_>, st: &mut Stream) -> Result<Node> {
+/// Machine types of targets whose pages are fixed at 8 KiB
+/// (`TARGET_PAGE_BITS` 13: SPARC64 and Alpha).
+const PAGES_8K: &[&str] = &["sun4u", "sun4v", "niagara", "clipper"];
+
+/// The page size of a stream with no `target-page-bits` subsection, which
+/// QEMU sends only for targets whose page size varies (Arm): from the VM
+/// description when reading it is cheap (it is at the end of the stream),
+/// else from the machine type for the 8 KiB targets, else unknown (4 KiB:
+/// x86 and most others).
+async fn fixed_page(cx: &Cx, w: &Walk, machine: &str) -> Result<Option<u64>> {
+    if cx.read_is_cheap(w.stream.tail(w.stream.len.saturating_sub(1)))
+        && let Some(page) = vmdesc(cx, w.stream)
+            .await?
+            .and_then(|d| d.page_size)
+            .filter(|p| p.is_power_of_two() && (512..=1 << 20).contains(p))
+    {
+        return Ok(Some(page));
+    }
+    let base = machine.split('-').next().unwrap_or_default();
+    Ok(PAGES_8K.contains(&base).then_some(8192))
+}
+
+async fn config_section(cx: &Cx, w: &Walk, cur: &mut Cursor<'_>, st: &mut Stream) -> Result<Node> {
     let start = cur.pos().saturating_sub(1);
     let region = cur.region();
     let span = region.sub(start, SETUP_MAX);
@@ -388,14 +456,11 @@ async fn config_section(cx: &Cx, cur: &mut Cursor<'_>, st: &mut Stream) -> Resul
     cx.charge(len / 64).await;
     if let Some(bits) = config.page_bits {
         st.page = 1u64.checked_shl(bits).unwrap_or(4096);
+    } else if let Some(page) = fixed_page(cx, w, &config.machine).await? {
+        st.page = page;
     }
     st.caps = config.caps;
-    if st.cap("mapped-ram") {
-        cx.diag(
-            Diagnostic::unsupported("mapped-ram streams (pages at fixed file offsets)")
-                .at(region.sub(start, len)),
-        );
-    }
+    st.machine = config.machine.clone();
     cur.seek(start.saturating_add(len));
     let mut summary = config.machine.clone();
     if !st.caps.is_empty() {
@@ -428,6 +493,8 @@ struct Section {
     ram: RamCtx,
     /// Page counts, for a RAM part's pages node.
     counts: Counts,
+    /// The RAM block of the page record before the section.
+    block: String,
 }
 
 impl Section {
@@ -481,6 +548,7 @@ async fn start_section(
         footer: false,
         ram: st.ram_ctx(),
         counts: Counts::default(),
+        block: st.block.clone(),
     };
     let kind = if ty == T_START { "start" } else { "full" };
     let mut summary = format!("{kind}, instance {instance}, version {version}");
@@ -542,10 +610,11 @@ async fn part_section(
         footer: false,
         ram: st.ram_ctx(),
         counts: Counts::default(),
+        block: st.block.clone(),
     };
     let kind = if ty == T_PART { "part" } else { "end" };
     let summary = if idstr == "ram" {
-        let counts = ram_count(cx, cur, &sec.ram).await?;
+        let counts = ram_count(cx, cur, &sec.ram, &mut st.block).await?;
         sec.payload_end = cur.pos();
         sec.counts = counts.clone();
         format!("{kind}: {}", counts.describe())
@@ -678,7 +747,7 @@ fn follows_section(buf: &[u8], q: usize, at_end: bool, names: &BTreeMap<u32, Str
     }
 }
 
-async fn command(w: &Walk, cur: &mut Cursor<'_>) -> Result<Node> {
+async fn command(w: &Walk, cur: &mut Cursor<'_>, st: &Stream) -> Result<Node> {
     let start = cur.pos().saturating_sub(1);
     let cmd = cur.u16().await?;
     let len = cur.u16().await?;
@@ -704,6 +773,7 @@ async fn command(w: &Walk, cur: &mut Cursor<'_>) -> Result<Node> {
             region: inner,
             header: false,
             depth: w.depth.saturating_add(1),
+            outer: Some(Arc::new(st.clone())),
         };
         if sub.depth > 4 {
             node = node.diag(Diagnostic::limit("packaged streams nested too deeply").at(inner));
@@ -808,7 +878,13 @@ async fn expand_section(cx: Cx, sec: Section) -> Result<()> {
         section_header_layout,
     ));
     let payload = sec.span(sec.payload, sec.payload_end);
-    if sec.idstr == "ram" && sec.ty == T_START {
+    if sec.idstr == "ram" && sec.ty == T_START && sec.ram.mapped {
+        cx.emit(
+            Node::new("RAM blocks")
+                .span(payload)
+                .lazy(mapped_blocks, sec.clone()),
+        );
+    } else if sec.idstr == "ram" && sec.ty == T_START {
         cx.emit(struct_node(
             "RAM blocks",
             payload,
@@ -853,6 +929,8 @@ struct RamCtx {
     page: u64,
     postcopy: bool,
     ignore_shared: bool,
+    /// `mapped-ram`: each block's pages at a fixed place in the file.
+    mapped: bool,
 }
 
 struct RamSetup {
@@ -947,6 +1025,9 @@ fn ram_block(f: &mut Fields<'_>, ctx: &RamCtx) -> Result<(String, u64)> {
 }
 
 async fn ram_setup(cx: &Cx, cur: &mut Cursor<'_>, ctx: &RamCtx) -> Result<RamSetup> {
+    if ctx.mapped {
+        return mapped_walk(cx, cur, ctx, false).await;
+    }
     let at = cur.pos();
     let span = cur.region().sub(at, SETUP_MAX);
     let block = Block {
@@ -958,6 +1039,177 @@ async fn ram_setup(cx: &Cx, cur: &mut Cursor<'_>, ctx: &RamCtx) -> Result<RamSet
     cx.charge(f.pos() / 64).await;
     cur.seek(at.saturating_add(f.pos()));
     Ok(setup)
+}
+
+// --- mapped-ram ---------------------------------------------------------------
+
+/// The `MappedRamHeader` after each block of a `mapped-ram` RAM setup
+/// (QEMU `migration/ram.c`, `docs/devel/migration/mapped-ram.rst`): its
+/// version, the target page size, and where in the file the block's page
+/// bitmap and pages are. The stream goes on after the block's pages, at
+/// the pages' offset plus the block's used length.
+fn mapped_header(f: &mut Fields<'_>, _: &()) -> Result<(u64, u64, u64)> {
+    f.u32("Version").emit()?;
+    let page = f.u64("Page size").emit()?;
+    let bitmap = f.u64("Bitmap offset").hex().emit()?;
+    let pages = f.u64("Pages offset").hex().emit()?;
+    Ok((page, bitmap, pages))
+}
+
+const MAPPED_HEADER: u64 = 28;
+
+/// Walks a `mapped-ram` RAM setup, whose blocks are spread over the file,
+/// leaving the cursor after its end flags; with `emit`, pushes a node per
+/// field and block. The headers give file offsets: the first header's
+/// bitmap offset, which is where that header ends, places the stream in
+/// its file.
+async fn mapped_walk(cx: &Cx, cur: &mut Cursor<'_>, ctx: &RamCtx, emit: bool) -> Result<RamSetup> {
+    let region = cur.region();
+    let mask = ctx.page.saturating_sub(1);
+    let at = cur.pos();
+    let first = cur.u64().await?;
+    if first & mask != F_MEM_SIZE {
+        return Err(Diagnostic::malformed(format!(
+            "RAM setup does not start with MEM_SIZE (flags {:#x})",
+            first & mask
+        ))
+        .at(region.sub(at, 8)));
+    }
+    let total = first & !mask;
+    if emit {
+        cx.push(
+            Node::new("Total RAM")
+                .span(region.sub(at, 8))
+                .value(Value::UInt {
+                    value: total,
+                    bits: 64,
+                    radix: Radix::Hex,
+                })
+                .summary(size(total)),
+        )
+        .await;
+    }
+    let mut seen = 0u64;
+    let mut blocks = 0usize;
+    // File offset minus region offset, from the first header.
+    let mut base: Option<u64> = None;
+    while seen < total {
+        let start = cur.pos();
+        let n = cur.u8().await?;
+        let name = crate::text::latin1(&cur.bytes(n.into()).await?);
+        let used = cur.u64().await?;
+        if ctx.ignore_shared {
+            cur.skip(8);
+        }
+        let hstart = cur.pos();
+        let hspan = region.sub_exact(hstart, MAPPED_HEADER)?;
+        let block = Block {
+            span: hspan,
+            data: cx.read(hspan).await?,
+        };
+        let (_, bitmap, pages) = mapped_header(&mut Fields::new(&block, BE), &())?;
+        let hend = hstart.saturating_add(MAPPED_HEADER);
+        let delta = *base.get_or_insert(bitmap.saturating_sub(hend));
+        let rel = |off: u64| {
+            off.checked_sub(delta)
+                .filter(|&r| r >= hend)
+                .ok_or_else(|| {
+                    Diagnostic::malformed(format!("mapped-ram offset {off:#x} before its header"))
+                        .at(hspan)
+                })
+        };
+        let (bitmap, pages) = (rel(bitmap)?, rel(pages)?);
+        let npages = used.checked_div(ctx.page).unwrap_or(0);
+        let bitmap_len = npages.div_ceil(64).saturating_mul(8);
+        let end = pages.saturating_add(used);
+        if end > region.len {
+            return Err(Diagnostic::truncated(
+                Span::new(region.source, region.offset.saturating_add(pages), used),
+                region.len.saturating_sub(pages),
+            ));
+        }
+        if emit {
+            let state = (
+                region.sub(start, hstart.saturating_sub(start)),
+                hspan,
+                region.sub(bitmap, bitmap_len),
+                region.sub(pages, used),
+                ctx.clone(),
+            );
+            cx.push(
+                Node::new(name)
+                    .span(region.sub(start, end.saturating_sub(start)))
+                    .summary(size(used))
+                    .lazy(mapped_block, state),
+            )
+            .await;
+        }
+        cur.seek(end);
+        seen = seen.saturating_add(used);
+        blocks = blocks.saturating_add(1);
+        if used == 0 && blocks > 4096 {
+            return Err(Diagnostic::limit("too many empty RAM blocks").at(region.sub(start, 0)));
+        }
+    }
+    loop {
+        let at = cur.pos();
+        let v = cur.u64().await?;
+        if emit {
+            cx.push(
+                Node::new("Flags")
+                    .span(region.sub(at, 8))
+                    .value(Value::UInt {
+                        value: v,
+                        bits: 64,
+                        radix: Radix::Hex,
+                    }),
+            )
+            .await;
+        }
+        if v & mask == F_EOS {
+            break;
+        }
+        if v & mask != F_FLUSH {
+            return Err(Diagnostic::malformed(format!(
+                "unexpected flags {:#x} after the RAM block list",
+                v & mask
+            ))
+            .at(region.sub(at, 8)));
+        }
+    }
+    Ok(RamSetup { total, blocks })
+}
+
+/// The blocks of a `mapped-ram` RAM setup.
+async fn mapped_blocks(cx: Cx, sec: Section) -> Result<()> {
+    let mut cur = Cursor::new(&cx, sec.walk.region, BE);
+    cur.seek(sec.payload);
+    mapped_walk(&cx, &mut cur, &sec.ram, true).await?;
+    Ok(())
+}
+
+/// One block of a `mapped-ram` RAM setup: its ID and length, its header,
+/// its page bitmap and its pages (the block's memory; pages never written
+/// read as zeros).
+async fn mapped_block(
+    cx: Cx,
+    (fields, header, bitmap, pages, ctx): (Span, Span, Span, Span, RamCtx),
+) -> Result<()> {
+    cx.emit(struct_node("Block", fields, BE, ctx, ram_block));
+    cx.emit(struct_node(
+        "Mapped-ram header",
+        header,
+        BE,
+        (),
+        mapped_header,
+    ));
+    cx.emit(
+        Node::new("Page bitmap")
+            .span(bitmap)
+            .summary(format!("{}, a bit per page", plural(bitmap.len, "byte"))),
+    );
+    cx.emit(Node::new("Pages").span(pages).summary(size(pages.len)));
+    Ok(())
 }
 
 /// Page counts of a RAM part, by kind.
@@ -1083,17 +1335,21 @@ async fn ram_record(cur: &mut Cursor<'_>, ctx: &RamCtx, block: &mut String) -> R
 }
 
 /// Counts a RAM part's pages, leaving the cursor after its end flags.
-async fn ram_count(cx: &Cx, cur: &mut Cursor<'_>, ctx: &RamCtx) -> Result<Counts> {
+async fn ram_count(
+    cx: &Cx,
+    cur: &mut Cursor<'_>,
+    ctx: &RamCtx,
+    block: &mut String,
+) -> Result<Counts> {
     let region = cur.region();
     let mut counts = Counts::default();
-    let mut block = String::new();
     let mut n = 0u32;
     loop {
         n = n.wrapping_add(1);
         if n.is_multiple_of(4096) {
             cx.progress_in(region, region.offset.saturating_add(cur.pos()));
         }
-        match ram_record(cur, ctx, &mut block).await? {
+        match ram_record(cur, ctx, block).await? {
             Rec::Eos => break,
             Rec::Flush => {}
             Rec::Page { kind, .. } => {
@@ -1127,7 +1383,7 @@ async fn page_runs(cx: Cx, sec: Section) -> Result<()> {
     let mut cur = Cursor::new(&cx, region, BE);
     let (pos, mut block) = cx
         .resume::<(u64, String)>()
-        .unwrap_or((sec.payload, String::new()));
+        .unwrap_or_else(|| (sec.payload, sec.block.clone()));
     cur.seek(pos);
     let page = sec.ram.page;
     let mut run: Option<Run> = None;
@@ -1216,8 +1472,8 @@ fn run_node(sec: &Section, r: Run) -> Node {
             "{:#x}–{last:#x}, {} {} {} ({})",
             r.first,
             r.count,
-            if r.count == 1 { "page" } else { "pages" },
             r.kind.name(),
+            if r.count == 1 { "page" } else { "pages" },
             size(r.count.saturating_mul(page))
         ));
     if r.fills {
@@ -1307,6 +1563,8 @@ struct Dev {
 #[derive(Debug)]
 struct VmDesc {
     devices: Vec<Dev>,
+    /// The target page size (`page_size`).
+    page_size: Option<u64>,
 }
 
 impl VmDesc {
@@ -1403,7 +1661,11 @@ fn build_vmdesc(j: &Json, nodes: &mut u64) -> Option<VmDesc> {
             total,
         });
     }
-    Some(VmDesc { devices: out })
+    let page_size = j.get("page_size").and_then(Json::as_u64);
+    Some(VmDesc {
+        devices: out,
+        page_size,
+    })
 }
 
 fn build_struct(j: &Json, nodes: &mut u64, depth: u32) -> SDesc {
@@ -1752,15 +2014,28 @@ async fn libvirt(cx: Cx, input: Input) -> Result<()> {
         input.nested(xml),
         &crate::formats::text::xml::FORMAT,
     ));
+    let mut used = xml.len;
     if cookie > 0 {
         let c = u64::from(cookie);
         let rest = raw.get(crate::bytes::to_usize(c)..).unwrap_or_default();
         let len = rest.iter().position(|&b| b == 0).unwrap_or(rest.len());
+        let cookie = data.sub(c, to_u64(len));
+        used = used.max(c.saturating_add(cookie.len));
         cx.emit(embedded_as(
             "Migration cookie",
-            input.nested(data.sub(c, to_u64(len))),
+            input.nested(cookie),
             &crate::formats::text::xml::FORMAT,
         ));
+    }
+    // The rest of the data: the XML's terminating NUL and the zeros libvirt
+    // reserves for the XML to grow (64 KiB in the fixtures).
+    let padding = data.tail(used);
+    if padding.len > 0 {
+        cx.emit(
+            Node::new("Padding")
+                .span(padding)
+                .summary(plural(padding.len, "byte")),
+        );
     }
     if data.len < u64::from(data_len) {
         cx.diag(Diagnostic::truncated(
@@ -1772,7 +2047,8 @@ async fn libvirt(cx: Cx, input: Input) -> Result<()> {
     let stream = file.tail(LIBVIRT_HEADER.saturating_add(data_len.into()));
     let fmt = crate::formats::util::val::name_or(SAVE_FORMATS, format.into(), "format");
     let codec = match format {
-        0 => Some(Codec::Stored),
+        // sparse: an uncompressed `mapped-ram` stream (pages at fixed offsets).
+        0 | 6 => Some(Codec::Stored),
         1 => Some(Codec::Gzip),
         2 => Some(Codec::Bzip2),
         3 => Some(Codec::Xz),

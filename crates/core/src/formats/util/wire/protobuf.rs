@@ -19,6 +19,7 @@ use crate::fields::Endian;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Radix, Value, decode_flags, lookup};
+use std::borrow::Cow;
 
 /// Nested messages deeper than this are not expanded.
 const MAX_DEPTH: u32 = 48;
@@ -42,6 +43,10 @@ pub enum Ty {
     Hex,
     /// An unsigned varint holding flags.
     Flags(FlagTable),
+    /// An unsigned varint some of whose values have names (sentinels such
+    /// as `RLIM_INFINITY` or `SIG_DFL`); other values are shown in the
+    /// radix.
+    Named(EnumTable, Radix),
     Str,
     Bytes,
     Float,
@@ -64,10 +69,95 @@ pub struct F {
     pub num: u64,
     pub name: &'static str,
     pub ty: Ty,
+    /// How the elements of a repeated field are labelled.
+    pub index: Index,
 }
 
 pub const fn f(num: u64, name: &'static str, ty: Ty) -> F {
-    F { num, name, ty }
+    F {
+        num,
+        name,
+        ty,
+        index: Index::None,
+    }
+}
+
+impl F {
+    /// The field, with its repeated elements labelled by `index`.
+    pub const fn indexed(self, index: Index) -> F {
+        F { index, ..self }
+    }
+}
+
+/// How the elements of a repeated field are labelled where their position
+/// means something (resource limits by `RLIMIT_*` number, registers by
+/// number, key/value pairs).
+#[derive(Clone, Copy)]
+pub enum Index {
+    /// By the field's name.
+    None,
+    /// By a label computed from the element's position (from 0).
+    Label(fn(u64) -> Cow<'static, str>),
+    /// Key/value pairs of scalars (an ELF auxiliary vector): even elements
+    /// are keys, labelled `key` and named by `keys`; odd ones are values,
+    /// labelled by their key's name and shown in decimal for the keys in
+    /// `decimal`, in hexadecimal otherwise.
+    Pairs {
+        key: &'static str,
+        keys: EnumTable,
+        decimal: &'static [u64],
+    },
+}
+
+/// The label and value of the element at position `i` of a repeated
+/// field (`key`: the element before it, for [`Index::Pairs`]).
+fn element(spec: &F, i: u64, key: u64, value: Value) -> (Cow<'static, str>, Value) {
+    match spec.index {
+        Index::None => (spec.name.into(), value),
+        Index::Label(label) => (label(i), value),
+        Index::Pairs {
+            key: key_label,
+            keys,
+            decimal,
+        } => {
+            let Some(raw) = scalar(&value) else {
+                return (spec.name.into(), value);
+            };
+            if i.is_multiple_of(2) {
+                let named = Value::Enum {
+                    raw,
+                    bits: 64,
+                    name: lookup(keys, raw),
+                };
+                return (key_label.into(), named);
+            }
+            let label: Cow<'static, str> = match lookup(keys, key) {
+                Some(name) => name.into(),
+                None => format!("{}[{i}]", spec.name).into(),
+            };
+            let radix = if decimal.contains(&key) {
+                Radix::Dec
+            } else {
+                Radix::Hex
+            };
+            let value = Value::UInt {
+                value: raw,
+                bits: 64,
+                radix,
+            };
+            (label, value)
+        }
+    }
+}
+
+/// The raw bits of a varint's value.
+fn scalar(value: &Value) -> Option<u64> {
+    match *value {
+        Value::UInt { value, .. } => Some(value),
+        Value::Int { value, .. } => Some(u64::from_ne_bytes(value.to_ne_bytes())),
+        Value::Enum { raw, .. } => Some(raw),
+        _ => None,
+    }
 }
 
 /// A message schema.
@@ -392,6 +482,18 @@ fn varint_value(ty: Option<Ty>, v: u64) -> Value {
                 unknown,
             }
         }
+        Some(Ty::Named(table, radix)) => match lookup(table, v) {
+            Some(name) => Value::Enum {
+                raw: v,
+                bits: 64,
+                name: Some(name),
+            },
+            None => Value::UInt {
+                value: v,
+                bits: 64,
+                radix,
+            },
+        },
         Some(Ty::UInt) => uint(v),
         _ => signed(v),
     }
@@ -443,7 +545,7 @@ pub fn title_of(data: &[u8], msg: &'static Msg) -> Option<String> {
         let Some(spec) = msg.fields.iter().find(|f| f.num == num) else {
             continue;
         };
-        if let Ty::Int | Ty::UInt | Ty::SInt = spec.ty {
+        if let Ty::Int | Ty::UInt | Ty::SInt | Ty::Named(_, Radix::Dec) = spec.ty {
             if let Some(v) = varint_in(data, num) {
                 parts.push((show(&varint_value(Some(spec.ty), v)), Some(spec.name)));
             }
@@ -451,6 +553,10 @@ pub fn title_of(data: &[u8], msg: &'static Msg) -> Option<String> {
         }
         let part = match spec.ty {
             Ty::Hex => varint_in(data, num).map(|v| format!("{}={v:#x}", spec.name)),
+            Ty::Named(table, _) => varint_in(data, num).map(|v| match lookup(table, v) {
+                Some(name) => name.to_owned(),
+                None => format!("{}={v:#x}", spec.name),
+            }),
             Ty::Bool => varint_in(data, num)
                 .filter(|&v| v != 0)
                 .map(|_| spec.name.to_owned()),
@@ -505,17 +611,40 @@ pub async fn message(cx: Cx, (span, msg, depth): State) -> Result<()> {
         return Err(Diagnostic::limit("messages nested too deeply").at(span));
     }
     let mut cur = Cursor::new(&cx, span, Endian::Little);
+    // Fields labelled by position: number, elements seen, last value.
+    let mut seen: Vec<(u64, u64, u64)> = Vec::new();
     while !cur.at_end() {
         let start = cur.pos();
         let (num, payload) = read_field(&mut cur).await?;
         let spec = msg.fields.iter().find(|f| f.num == num);
-        let label: std::borrow::Cow<'static, str> = match spec {
+        let mut label: Cow<'static, str> = match spec {
             Some(f) => f.name.into(),
             None => format!("field {num}").into(),
         };
         let ty = spec.map(|f| f.ty);
+        // The element's position and the one before it, if it counts.
+        // (A packed run labels its elements itself.)
+        let packed_run = matches!((ty, payload), (Some(Ty::Packed(_)), Payload::Len(_)));
+        let indexed = spec.filter(|f| !matches!(f.index, Index::None) && !packed_run);
+        let raw = match payload {
+            Payload::Varint(v) | Payload::I64(v) => v,
+            Payload::I32(v) => v.into(),
+            _ => 0,
+        };
+        let at = indexed.map(|f| (f, position(&mut seen, num, raw)));
+        if let Some((f, (i, _))) = at
+            && !matches!(payload, Payload::Varint(_))
+        {
+            label = element(f, i, 0, uint(raw)).0;
+        }
         let node = match payload {
-            Payload::Varint(v) => Node::new(label).value(varint_value(ty, v)),
+            Payload::Varint(v) => match at {
+                Some((f, (i, key))) => {
+                    let (label, value) = element(f, i, key, varint_value(ty, v));
+                    Node::new(label).value(value)
+                }
+                None => Node::new(label).value(varint_value(ty, v)),
+            },
             Payload::I64(v) => match ty {
                 Some(Ty::Double | Ty::Packed(Elem::Double)) => {
                     Node::new(label).value(Value::Float(f64::from_bits(v)))
@@ -536,7 +665,7 @@ pub async fn message(cx: Cx, (span, msg, depth): State) -> Result<()> {
                     radix: Radix::Hex,
                 }),
             },
-            Payload::Len(body) => delimited(&cx, label, body, ty, depth).await?,
+            Payload::Len(body) => delimited(&cx, label, body, spec, depth).await?,
             Payload::StartGroup | Payload::EndGroup => return Err(groups(&cur)),
         };
         cx.push(node.span(cur.since(start))).await;
@@ -544,13 +673,31 @@ pub async fn message(cx: Cx, (span, msg, depth): State) -> Result<()> {
     Ok(())
 }
 
+/// The position of the next element of field `num` and the value of the
+/// one before it, recording `raw` as the last value.
+fn position(seen: &mut Vec<(u64, u64, u64)>, num: u64, raw: u64) -> (u64, u64) {
+    match seen.iter_mut().find(|e| e.0 == num) {
+        Some(e) => {
+            let at = (e.1, e.2);
+            e.1 = e.1.saturating_add(1);
+            e.2 = raw;
+            at
+        }
+        None => {
+            seen.push((num, 1, raw));
+            (0, 0)
+        }
+    }
+}
+
 async fn delimited(
     cx: &Cx,
     label: std::borrow::Cow<'static, str>,
     body: Span,
-    ty: Option<Ty>,
+    spec: Option<&'static F>,
     depth: u32,
 ) -> Result<Node> {
+    let ty = spec.map(|f| f.ty);
     let child = depth.saturating_add(1);
     Ok(match ty {
         Some(Ty::Str) => {
@@ -574,7 +721,7 @@ async fn delimited(
         }
         Some(Ty::Packed(elem)) => Node::new(label)
             .summary(packed_summary(cx, body, elem).await?)
-            .lazy(packed, (body, elem)),
+            .lazy(packed, (body, elem, spec)),
         Some(Ty::Bytes) => Node::new(label).summary(format!("{} bytes", body.len)),
         _ => {
             // Unknown: text, a nested message, or opaque bytes.
@@ -625,6 +772,9 @@ fn show(v: &Value) -> String {
         Value::UInt { value, .. } => value.to_string(),
         Value::Int { value, .. } => value.to_string(),
         Value::Float(x) => format!("{x}"),
+        Value::Enum {
+            name: Some(name), ..
+        } => (*name).to_owned(),
         _ => String::new(),
     }
 }
@@ -642,13 +792,20 @@ async fn packed_summary(cx: &Cx, body: Span, elem: Elem) -> Result<String> {
 }
 
 /// Expands a packed field into its elements (the first 4096).
-async fn packed(cx: Cx, (body, elem): (Span, Elem)) -> Result<()> {
+async fn packed(cx: Cx, (body, elem, spec): (Span, Elem, Option<&'static F>)) -> Result<()> {
     let data = cx.read(body.sub(0, 64 * 1024)).await?;
     let values = elem_values(&data, elem);
     let total = values.len();
+    let mut key = 0u64;
     for (i, (value, at, n)) in values.into_iter().take(4096).enumerate() {
+        let raw = scalar(&value).unwrap_or(0);
+        let (label, value) = match spec.filter(|f| !matches!(f.index, Index::None)) {
+            Some(f) => element(f, to_u64(i), key, value),
+            None => (format!("[{i}]").into(), value),
+        };
+        key = raw;
         cx.push(
-            Node::new(format!("[{i}]"))
+            Node::new(label)
                 .span(body.sub(to_u64(at), to_u64(n)))
                 .value(value),
         )
