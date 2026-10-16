@@ -38,6 +38,24 @@ pub fn int(value: impl Into<i64>, bits: u8) -> Value {
     }
 }
 
+/// An MS-DOS date and time: a local time, or (when the date is not a
+/// calendar date) the fields as stored, as text.
+pub fn dos(date: u16, time: u16) -> Value {
+    crate::value::Time::dos(date, time).map_or_else(
+        || Value::Text(crate::text::dos_datetime(date, time)),
+        Value::Timestamp,
+    )
+}
+
+/// [`dos`] of a date and time packed as `date << 16 | time` (FAT, ARJ,
+/// ACE, LHA, RAR 2).
+pub fn dos_stamp(stamp: u32) -> Value {
+    dos(
+        u16::try_from(stamp >> 16).unwrap_or(0),
+        u16::try_from(stamp & 0xffff).unwrap_or(0),
+    )
+}
+
 /// A text value.
 pub fn text(s: impl Into<String>) -> Value {
     Value::Text(s.into())

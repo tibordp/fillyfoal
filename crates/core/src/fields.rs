@@ -462,10 +462,16 @@ impl<T: Prim> Field<'_, T> {
         self
     }
 
-    /// Windows FILETIME (100 ns ticks since 1601).
+    /// Windows FILETIME (100 ns ticks since 1601, UTC), to the tick; 0 is
+    /// "not set" (no value).
     pub fn filetime(mut self) -> Self {
-        if let Some((raw, _)) = self.raw {
-            self.node.value = Some(Value::utc(crate::text::filetime_to_unix(raw)));
+        match self.raw {
+            Some((0, _)) => {
+                self.node.value = None;
+                self.node.summary = Some("not set".into());
+            }
+            Some((raw, _)) => self.node.value = Some(Value::filetime(raw)),
+            None => {}
         }
         self
     }
@@ -479,9 +485,38 @@ impl<T: Prim> Field<'_, T> {
     }
 
     /// Seconds since the Unix epoch.
-    pub fn timestamp(mut self) -> Self {
-        if let Some((raw, _)) = self.raw {
-            self.node.value = Some(Value::utc(i64::try_from(raw).unwrap_or(i64::MAX)));
+    pub fn timestamp(self) -> Self {
+        self.unix_scaled(1)
+    }
+
+    /// Milliseconds since the Unix epoch, UTC.
+    pub fn unix_millis(self) -> Self {
+        self.unix_scaled(1000)
+    }
+
+    /// Microseconds since the Unix epoch, UTC.
+    pub fn unix_micros(self) -> Self {
+        self.unix_scaled(1_000_000)
+    }
+
+    /// Nanoseconds since the Unix epoch, UTC.
+    pub fn unix_nanos(self) -> Self {
+        self.unix_scaled(1_000_000_000)
+    }
+
+    /// A count of `1/per_sec` seconds since the Unix epoch (signed fields
+    /// may be before 1970), shown to that unit.
+    pub fn unix_scaled(mut self, per_sec: u32) -> Self {
+        let count = match &self.node.value {
+            Some(Value::Int { value, .. }) => Some(*value),
+            _ => self
+                .raw
+                .map(|(raw, _)| i64::try_from(raw).unwrap_or(i64::MAX)),
+        };
+        if let Some(count) = count {
+            self.node.value = Some(Value::Timestamp(crate::value::Time::unix_scaled(
+                count, per_sec,
+            )));
         }
         self
     }

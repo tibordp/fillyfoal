@@ -95,6 +95,11 @@ impl Value {
         Value::Timestamp(Time::utc(secs))
     }
 
+    /// A Windows FILETIME (100 ns ticks since 1601, UTC), to the tick.
+    pub fn filetime(ticks: u64) -> Value {
+        Value::Timestamp(Time::filetime(ticks))
+    }
+
     /// An enum value with a computed name (one no static table holds).
     pub fn named(raw: u64, bits: u8, name: impl Into<Cow<'static, str>>) -> Value {
         Value::Enum {
@@ -131,7 +136,8 @@ pub enum Res {
     Second,
     /// Fractions of a second, shown with this many digits (1 to 9: 3 for
     /// milliseconds, 6 for microseconds, 7 for FILETIME ticks, 9 for
-    /// nanoseconds).
+    /// nanoseconds). The text leaves out a fraction that is zero
+    /// (`03:04:05 UTC`, not `03:04:05.0000000 UTC`); ISO 8601 text keeps it.
     Sub(u8),
 }
 
@@ -303,6 +309,79 @@ impl Time {
     }
 }
 
+impl Time {
+    /// The recorded wall clock, `sep` between date and time:
+    /// `2026-10-09 23:05:53.4961830`, or the date alone for [`Res::Day`].
+    fn write_clock(&self, f: &mut impl fmt::Write, sep: char, zero_frac: bool) -> fmt::Result {
+        let wall = self.wall_secs();
+        let (year, month, day) = crate::formats::util::civil::civil(wall.div_euclid(86_400));
+        write!(f, "{year:04}-{month:02}-{day:02}")?;
+        let rem = wall.rem_euclid(86_400);
+        let (h, m, s) = (rem / 3600, rem % 3600 / 60, rem % 60);
+        match self.res {
+            Res::Day => Ok(()),
+            Res::Minute => write!(f, "{sep}{h:02}:{m:02}"),
+            Res::Second => write!(f, "{sep}{h:02}:{m:02}:{s:02}"),
+            Res::Sub(_) if self.nanos == 0 && !zero_frac => {
+                write!(f, "{sep}{h:02}:{m:02}:{s:02}")
+            }
+            Res::Sub(digits) => {
+                let digits = u32::from(digits.clamp(1, 9));
+                let scale = 10u32.checked_pow(9u32.saturating_sub(digits)).unwrap_or(1);
+                let shown = self.nanos.min(999_999_999).checked_div(scale).unwrap_or(0);
+                let width = usize::try_from(digits).unwrap_or(9);
+                write!(f, "{sep}{h:02}:{m:02}:{s:02}.{shown:0width$}")
+            }
+        }
+    }
+
+    /// `+01:00` for an offset in minutes east of UTC.
+    fn write_offset(f: &mut impl fmt::Write, minutes: i16) -> fmt::Result {
+        let sign = if minutes < 0 { '-' } else { '+' };
+        let a = minutes.unsigned_abs();
+        write!(f, "{sign}{:02}:{:02}", a / 60, a % 60)
+    }
+
+    /// The text form ([`Display`](fmt::Display)) with the fraction even
+    /// when it is zero, for listings whose times should line up.
+    pub fn text_full(&self) -> String {
+        let mut out = String::new();
+        let _ = self.write_clock(&mut out, ' ', true);
+        let _ = self.write_zone(&mut out);
+        out
+    }
+
+    fn write_zone(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        if self.res == Res::Day {
+            return Ok(());
+        }
+        match self.zone {
+            Zone::Utc => f.write_str(" UTC"),
+            Zone::Offset(minutes) => {
+                f.write_str(" UTC")?;
+                Time::write_offset(f, minutes)
+            }
+            Zone::Local => f.write_str(" (local time)"),
+        }
+    }
+
+    /// ISO 8601 / RFC 3339 text of the recorded clock:
+    /// `2026-10-09T23:05:53.4961830Z`, `2026-10-07T21:44:26+01:00`, a local
+    /// time with no designator, the date alone for [`Res::Day`].
+    pub fn iso8601(&self) -> String {
+        let mut out = String::new();
+        let _ = self.write_clock(&mut out, 'T', true);
+        if self.res != Res::Day {
+            let _ = match self.zone {
+                Zone::Utc => fmt::Write::write_str(&mut out, "Z"),
+                Zone::Offset(minutes) => Time::write_offset(&mut out, minutes),
+                Zone::Local => Ok(()),
+            };
+        }
+        out
+    }
+}
+
 impl From<Time> for Value {
     fn from(t: Time) -> Value {
         Value::Timestamp(t)
@@ -311,32 +390,8 @@ impl From<Time> for Value {
 
 impl fmt::Display for Time {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let wall = self.wall_secs();
-        let (year, month, day) = crate::formats::util::civil::civil(wall.div_euclid(86_400));
-        write!(f, "{year:04}-{month:02}-{day:02}")?;
-        let rem = wall.rem_euclid(86_400);
-        let (h, m, s) = (rem / 3600, rem % 3600 / 60, rem % 60);
-        match self.res {
-            Res::Day => return Ok(()),
-            Res::Minute => write!(f, " {h:02}:{m:02}")?,
-            Res::Second => write!(f, " {h:02}:{m:02}:{s:02}")?,
-            Res::Sub(digits) => {
-                let digits = u32::from(digits.clamp(1, 9));
-                let scale = 10u32.checked_pow(9u32.saturating_sub(digits)).unwrap_or(1);
-                let shown = self.nanos.min(999_999_999).checked_div(scale).unwrap_or(0);
-                let width = usize::try_from(digits).unwrap_or(9);
-                write!(f, " {h:02}:{m:02}:{s:02}.{shown:0width$}")?;
-            }
-        }
-        match self.zone {
-            Zone::Utc => f.write_str(" UTC"),
-            Zone::Offset(minutes) => {
-                let sign = if minutes < 0 { '-' } else { '+' };
-                let a = minutes.unsigned_abs();
-                write!(f, " UTC{sign}{:02}:{:02}", a / 60, a % 60)
-            }
-            Zone::Local => f.write_str(" (local time)"),
-        }
+        self.write_clock(f, ' ', false)?;
+        self.write_zone(f)
     }
 }
 

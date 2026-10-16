@@ -208,6 +208,7 @@ fn to_half(x: f64) -> f64 {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::formats::util::floats::f16;
@@ -268,6 +269,16 @@ mod tests {
             "2026-10-16 02:56:21.148 UTC"
         );
         assert_eq!(t(Time::unix_millis(-1)), "1969-12-31 23:59:59.999 UTC");
+        // A zero fraction is left out of the text, not out of the value.
+        assert_eq!(t(Time::unix_millis(1000)), "1970-01-01 00:00:01 UTC");
+        assert_eq!(
+            Time::unix_millis(1000).iso8601(),
+            "1970-01-01T00:00:01.000Z"
+        );
+        assert_eq!(
+            Time::unix_millis(1000).text_full(),
+            "1970-01-01 00:00:01.000 UTC"
+        );
         assert_eq!(
             t(Time::unix_micros(1_000_001)),
             "1970-01-01 00:00:01.000001 UTC"
@@ -295,6 +306,13 @@ mod tests {
         );
         assert_eq!(t(Time::dos_date(date).unwrap()), "2024-01-01");
         assert_eq!(Time::dos_date(0), None);
+        assert_eq!(
+            Time::filetime(133_485_408_001_234_567).iso8601(),
+            "2024-01-01T00:00:00.1234567Z"
+        );
+        assert_eq!(Time::offset(0, -330).iso8601(), "1969-12-31T18:30:00-05:30");
+        assert_eq!(Time::local(0).minute().iso8601(), "1970-01-01T00:00");
+        assert_eq!(Time::utc(0).day().iso8601(), "1970-01-01");
     }
 
     #[test]
