@@ -67,8 +67,22 @@ export type ValueData = {
     bits: number;
   };
   time: {
-    /// Seconds since the Unix epoch, UTC.
+    /// Seconds since 1970-01-01 00:00:00: the UTC instant for "utc" and
+    /// "offset", the wall clock read as if UTC for "local".
     secs: string;
+    /// Nanoseconds past `secs` (0 unless `res` is "sub").
+    nanos: number;
+    /// "offset": the file recorded its wall clock `offset` minutes east of
+    /// UTC. "local": a wall clock in an unrecorded zone; never convert it.
+    /// "other": a zone this frontend predates (use `text`).
+    zone: "utc" | "offset" | "local" | "other";
+    /// Minutes east of UTC, for "offset".
+    offset: number | null;
+    /// How precisely the file records it ("sub": fractional seconds).
+    res: "day" | "minute" | "second" | "sub" | "other";
+    /// For "sub": the fractional digits the format records (3 for
+    /// milliseconds, 7 for FILETIME ticks, 9 for nanoseconds).
+    digits: number | null;
   };
   text: {
     /// The text unescaped (`FieldValue.text` is escaped for display).
