@@ -84,6 +84,29 @@ impl Node {
         self
     }
 
+    /// Reports `check` as a warning if it is a mismatch, on a node that
+    /// contains the check value rather than being it (a header whose
+    /// checksum field is among its children), so the problem shows while
+    /// the node is collapsed.
+    pub fn check_diag(mut self, check: &Check) -> Self {
+        if let Some(message) = check.mismatch_text() {
+            self.diagnostics.push(Diagnostic::warning(message));
+        }
+        self
+    }
+
+    /// Gives the node's check value ([`Node::checksum`]) its verdict, `f`
+    /// of the unchecked one; a node without one is left as it is.
+    pub fn with_check(mut self, f: impl FnOnce(Check) -> Check) -> Self {
+        match self.value.take() {
+            Some(Value::Checksum(c)) => self.checksum(f(*c)),
+            other => {
+                self.value = other;
+                self
+            }
+        }
+    }
+
     pub fn summary(mut self, summary: impl Into<String>) -> Self {
         self.summary = Some(summary.into());
         self

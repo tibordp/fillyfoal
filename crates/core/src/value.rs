@@ -572,6 +572,23 @@ impl Check {
         matches!(self.verdict, Verdict::Mismatch { .. })
     }
 
+    /// What the data gives, when it was verified (the stored value when
+    /// valid).
+    pub fn computed(&self) -> Option<&Digest> {
+        match &self.verdict {
+            Verdict::Valid => Some(&self.stored),
+            Verdict::Mismatch { computed } => computed.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// This check as the one of the field at position `at`, for
+    /// [`Record::checked_node`](crate::dsl::Record::checked_node) and
+    /// [`Fields::verifying`](crate::Fields::verifying).
+    pub fn at(&self, at: u64) -> Vec<(u64, Check)> {
+        vec![(at, self.clone())]
+    }
+
     /// The verdict alone: `valid`, `mismatch: computed 0x89ab`, `not
     /// checked`, `skipped: encrypted`.
     pub fn verdict_text(&self) -> String {
