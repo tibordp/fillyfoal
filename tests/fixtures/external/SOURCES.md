@@ -1836,6 +1836,7 @@ Each was checked against `apk adbdump --format yaml` of the same file.
 | `alpine-apk-v3/hello-deflate9.apk` | apk-tools 3.0.7 | `apk mkpkg --compression deflate:9`: `ADBc` with algorithm and level; unchanged |
 | `alpine-apk-v3/hello-signed.apk` | apk-tools 3.0.7 | `apk mkpkg --compression none --sign-key` with a throwaway RSA key: a SIG block (v0, SHA-512); unchanged |
 | `alpine-apk-v3/index.adb` | apk-tools 3.0.7 | `apk mkndx -d "fillyfoal demo"` over `hello.apk`: `indx` schema, `ADBd`-compressed; unchanged |
+| `alpine-apk-v3/deps.apk` | apk-tools 3.0.6 (`alpine:latest`, Alpine 3.23.4, x86_64) | `tests/data/alpine-apk-v3/make_deps.sh`: `apk mkpkg --compression none` with dependencies `busybox>=1.36 musl=1.2.5-r0 zlib<2 fillyfoal~1.0 !fillyfoal-old so:libc.musl-x86_64.so.1` (`apk adbdump` lists them back in that notation); unchanged |
 
 ## .NET EventPipe trace
 

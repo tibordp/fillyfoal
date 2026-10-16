@@ -82,6 +82,8 @@ const COMPRESSION: EnumTable = &[(0, "none"), (1, "deflate"), (2, "zstd")];
 
 const HASH_ALG: EnumTable = &[
     (0, "none"),
+    // apk-tools has since dropped it (`APK_DIGEST_MD5`, "support removed").
+    (1, "MD5"),
     (2, "SHA-1"),
     (3, "SHA-256"),
     (4, "SHA-512"),
@@ -589,8 +591,15 @@ fn block_header(f: &mut Fields<'_>, ext: &bool) -> Result<()> {
         .hex()
         .with(|&v, n| {
             let ty = v >> 30;
+            let low = v & 0x3fff_ffff;
+            if ty == 3 {
+                // Extended: the low bits are the real type; the size
+                // follows as a u64.
+                let name = crate::value::lookup(BLOCK_TYPE, low.into()).unwrap_or("?");
+                return n.summary(format!("extended {name}"));
+            }
             let name = crate::value::lookup(BLOCK_TYPE, ty.into()).unwrap_or("?");
-            n.summary(format!("{name}, {} bytes", v & 0x3fff_ffff))
+            n.summary(format!("{name}, {low} bytes"))
         })
         .desc("Top 2 bits: block type; low 30 bits: size including this tag")
         .emit()?;
@@ -741,6 +750,36 @@ async fn object_summary(cx: &Cx, adb: Span, v: u32, o: &'static Obj) -> Result<S
             parts.push(t);
         }
     }
+    if std::ptr::eq(o, &DEPENDENCY) && !parts.is_empty() {
+        // `busybox>=1.36`, as apk writes a dependency: the match flags as
+        // an operator between name and version, `!` for a conflict.
+        let flags = match slot(cx, adb, v, 3).await? {
+            Some(m) => integer(cx, adb, m).await?.unwrap_or(0),
+            None => 0,
+        };
+        let name = parts.first().cloned().unwrap_or_default();
+        let conflict = if flags & 16 != 0 { "!" } else { "" };
+        return Ok(match parts.get(1) {
+            Some(version) => {
+                // No match with a version is EQUAL (apk writes `musl=1.2.5`
+                // without one).
+                let op = match flags & 15 {
+                    0 | 1 => "=",
+                    2 => "<",
+                    3 => "<=",
+                    4 => ">",
+                    5 => ">=",
+                    8 | 9 => "~",
+                    _ => " ",
+                };
+                format!("{conflict}{name}{op}{version}")
+            }
+            None => format!("{conflict}{name}"),
+        });
+    }
+    if std::ptr::eq(o, &DIR) && parts.is_empty() {
+        return Ok("directory /".to_owned());
+    }
     Ok(if parts.is_empty() {
         o.name.to_owned()
     } else {
@@ -822,11 +861,13 @@ async fn scalar(
             unix_seconds: i64::try_from(n).unwrap_or(i64::MAX),
         }),
         Ty::Oct => node.value(Value::Text(format!("0{n:o}"))),
-        Ty::Size => node.value(Value::UInt {
-            value: n,
-            bits: 64,
-            radix: Radix::Dec,
-        }),
+        Ty::Size => node
+            .value(Value::UInt {
+                value: n,
+                bits: 64,
+                radix: Radix::Dec,
+            })
+            .summary(crate::formats::util::fmt::size(n)),
         Ty::Match => node.value(crate::formats::util::val::flagsv(n, 32, DEP_MATCH)),
         _ => node.value(Value::UInt {
             value: n,
