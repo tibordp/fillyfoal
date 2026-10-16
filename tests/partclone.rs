@@ -344,8 +344,13 @@ fn damage_is_reported() {
         expand(&mut host, c);
     }
     let tree = host.render();
-    assert_eq!(tree.matches("warning: check value").count(), 1, "{tree}");
-    assert!(tree.contains("Computed"), "{tree}");
+    assert_eq!(
+        tree.matches("warning: CRC-32 (not inverted) mismatch")
+            .count(),
+        1,
+        "{tree}"
+    );
+    assert!(tree.contains("Checked"), "{tree}");
 
     let mut img = image(8, &used, 2, label);
     img.truncate(img.len() - BS);

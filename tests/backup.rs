@@ -215,7 +215,10 @@ fn pbs_large_blob_crc_is_lazy() {
     let crc = host.child(root, "CRC32").unwrap();
     expand(&mut host, crc);
     let tree = host.render();
-    assert!(tree.contains("Computed: 0x8d89877e — valid"), "{tree}");
+    assert!(
+        tree.contains("Checked: 0x8d89877e (CRC-32, valid)"),
+        "{tree}"
+    );
     let crc_work = host.session.work_done() - opened;
     assert!(crc_work > 500, "the CRC took {crc_work} units");
 }
@@ -246,7 +249,7 @@ fn pbs_index_large_is_bounded() {
     assert!(page < 1_000, "a page of the list took {page} units");
     let shown = host.session.children(list).unwrap().ids.len();
     assert!((100..=512).contains(&shown), "{shown} children");
-    let csum = host.child(host.root, "Checksum").unwrap();
+    let csum = host.child(host.root, "Index checksum").unwrap();
     expand(&mut host, csum);
-    assert!(host.render().contains("index checksum mismatch"));
+    assert!(host.render().contains("SHA-256 mismatch"));
 }

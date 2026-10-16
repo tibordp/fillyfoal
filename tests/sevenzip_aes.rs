@@ -42,13 +42,24 @@ fn messages(host: &Host) -> Vec<String> {
         .collect()
 }
 
+/// Content CRC32 nodes whose check is valid.
+fn valid_crcs(render: &str) -> usize {
+    render
+        .lines()
+        .filter(|l| l.trim_start().starts_with("CRC32: ") && l.contains("(CRC-32, valid)"))
+        .count()
+}
+
 #[test]
 fn one_prompt_serves_the_header_and_the_data() {
     let host = explored("aes-header-lzma2.7z", &["fillyfoal"], Limits::default());
     assert_eq!(attempts(&host), [0]);
     let render = host.render();
     assert!(render.contains("The quick brown fox"), "{render}");
-    assert!(render.contains("CRC32: 0xfecb6a91 — valid"), "{render}");
+    assert!(
+        render.contains("CRC32: 0xfecb6a91 (CRC-32, valid)"),
+        "{render}"
+    );
     assert!(messages(&host).is_empty(), "{:?}", messages(&host));
 }
 
@@ -62,7 +73,7 @@ fn a_wrong_password_is_asked_again() {
         let host = explored(name, &["wrong", "fillyfoal"], Limits::default());
         assert_eq!(attempts(&host), [0, 1], "{name}");
         assert!(messages(&host).is_empty(), "{name}: {:?}", messages(&host));
-        assert!(host.render().contains("— valid"), "{name}");
+        assert!(valid_crcs(&host.render()) > 0, "{name}");
     }
 }
 
@@ -107,7 +118,7 @@ fn a_wrong_password_for_stored_folders_is_asked_again() {
         let render = host.render();
         assert!(render.contains("sierra echo romeo oscar bravo"), "{name}");
         // Each file's content checks out.
-        assert_eq!(render.matches("— valid").count(), valid, "{name}: {render}");
+        assert_eq!(valid_crcs(&render), valid, "{name}: {render}");
         assert!(!render.contains("mismatch"), "{name}: {render}");
     }
 }
@@ -136,7 +147,10 @@ fn a_stored_folder_is_checked_on_its_padding() {
     assert_eq!(attempts(&host), [0, 1]);
     let crc = host.child(node, "CRC32").unwrap();
     let crc = host.session.node(crc).unwrap();
-    assert_eq!(crc.summary.as_deref(), Some("valid"), "{crc:?}");
+    assert!(
+        matches!(&crc.value, Some(fillyfoal::Value::Checksum(c)) if c.is_valid()),
+        "{crc:?}"
+    );
 }
 
 #[test]
@@ -147,7 +161,7 @@ fn a_stored_folder_shows_no_garbage_without_the_password() {
         assert_eq!(attempts(&host), [0], "{name}");
         let render = host.render();
         assert!(!render.contains("sierra"), "{name}: {render}");
-        assert!(!render.contains("— valid"), "{name}: {render}");
+        assert_eq!(valid_crcs(&render), 0, "{name}: {render}");
         assert!(!render.contains("mismatch"), "{name}: {render}");
         assert!(
             messages(&host)
@@ -160,7 +174,7 @@ fn a_stored_folder_shows_no_garbage_without_the_password() {
         let host = explored(name, &["wrong"], Limits::default());
         assert_eq!(attempts(&host), [0, 1], "{name}");
         let render = host.render();
-        assert!(!render.contains("— valid"), "{name}: {render}");
+        assert_eq!(valid_crcs(&render), 0, "{name}: {render}");
         assert!(!render.contains("mismatch"), "{name}: {render}");
         assert!(
             messages(&host)
@@ -325,7 +339,7 @@ fn a_stored_folder_is_checked_on_another_folder() {
     );
     assert!(render.contains("\"small\""), "{render}");
     // Only small.txt has a CRC left.
-    assert_eq!(render.matches("— valid").count(), 1, "{render}");
+    assert_eq!(valid_crcs(&render), 1, "{render}");
     // Wrong only: neither file is shown.
     let mut host = Host::named("x.7z", without_the_first_crc(), Limits::default());
     host.passwords = vec!["wrong".into()];
@@ -350,5 +364,8 @@ fn bcj2_streams_are_decrypted() {
     assert_eq!(attempts(&host), [0, 1]);
     assert!(messages(&host).is_empty(), "{:?}", messages(&host));
     let render = host.render();
-    assert!(render.contains("CRC32: 0x308f5345 — valid"), "{render}");
+    assert!(
+        render.contains("CRC32: 0x308f5345 (CRC-32, valid)"),
+        "{render}"
+    );
 }
