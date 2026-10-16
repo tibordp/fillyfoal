@@ -5,7 +5,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ▾ sample.xmp — XMP metadata, 4 properties: "Fixture brochure", 2026-10-06T10:00:00+02:00, Adobe InDesign 19.0 (Macintosh)  [0x0+0x28e]
   ▾ XMP Basic (xmp) — 2 properties
       xmp:CreatorTool: "Adobe InDesign 19.0 (Macintosh)"  [0x139+0x42]
-      xmp:CreateDate: "2026-10-06T10:00:00+02:00"  [0x17f+0x3a]
+      xmp:CreateDate: 2026-10-06 10:00:00 UTC+02:00  [0x17f+0x3a]
   ▾ Dublin Core (dc) — 2 properties
       dc:format: "application/x-indesign"  [0x1bd+0x2d]
     ▾ dc:title: "Fixture brochure" — 1 language alternative  [0x1ee+0x5e]

@@ -21,7 +21,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Flags: 0x0 []  [0x90+0x4]
       TmId: {00000000-0000-0000-0000-000000000000}  [0x94+0x10]
       GUID signature: ""  [0xa4+0x4]
-      Last reorganized: 1601-01-01 00:00:00 UTC  [0xa8+0x8]
+      Last reorganized — not set  [0xa8+0x8]
       Reserved  [0xb0+0x14c]
       Checksum: 0x3d657c8c — valid  [0x1fc+0x4]
       Reserved  [0x200+0xdc8]

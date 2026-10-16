@@ -52,7 +52,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Dump level: 1  [0xf48+0x4]
       Padding: 00 00 00 00  |....|  [0xf4c+0x4]
       Base dump time: 2024-01-02 00:00:00 UTC  [0xf50+0x4]
-      Resumed dump time: 0 — not set  [0xf54+0x4]
+      Resumed dump time — not set  [0xf54+0x4]
       Root inode: 128  [0xf58+0x8]
       Base dump id: "922d4123-f132-47c9-8376-7d1d7923bd26"  [0xf60+0x10]
       Resumed dump id: "00000000-0000-0000-0000-000000000000" — none  [0xf70+0x10]

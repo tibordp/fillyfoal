@@ -13,7 +13,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Next header CRC: 0xd9a3a1fd  [0x1c+0x4]
   ▾ Files — 1 file  [0x423+0x6a]
     ▾ code-arm64.bin — 2.7 KiB  [0x20+0x403]
-        Modification time: 2026-10-06 12:28:45 UTC
+        Modification time: 2026-10-06 12:28:45.5511871 UTC
         Attributes: 0x81a48020 — -rw-r--r--
         Size: 2800 — 2.7 KiB
         Folder: 0

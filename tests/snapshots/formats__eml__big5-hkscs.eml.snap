@@ -10,7 +10,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Subject: "香港字𠄌測試"  [0x63+0x29]
       From: "fillyfoal <fillyfoal@example.com>"  [0x8d+0x27]
       To: "fillyfoal <fillyfoal@example.com>"  [0xb5+0x25]
-      Date: 2026-10-12 02:00:00 UTC — Mon, 12 Oct 2026 10:00:00 +0800  [0xdb+0x25]
+      Date: 2026-10-12 10:00:00 UTC+08:00 — Mon, 12 Oct 2026 10:00:00 +0800  [0xdb+0x25]
       Message-ID: "<big5-hkscs@example>"  [0x101+0x20]
   ▾ Body — UTF-8 text, LF line endings, 2 lines  [0x123+0x52]
       Encoding: "UTF-8"

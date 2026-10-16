@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ Notes.job — Scheduled task: C:\WINDOWS\system32\notepad.exe C:\boot.ini — SCHED_S_TASK_READY, last run 2008-03-07 09:30:05  [0x0+0x13e]
+▾ Notes.job — Scheduled task: C:\WINDOWS\system32\notepad.exe C:\boot.ini — SCHED_S_TASK_READY, last run 2008-03-07 09:30:05 (local time)  [0x0+0x13e]
   ▾ Fixed-length section  [0x0+0x44]
       Product version: 0x501  [0x0+0x2]
       File version: 1  [0x2+0x2]
@@ -18,7 +18,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Exit code: 0x0  [0x28+0x4]
       Status: SCHED_S_TASK_READY (0x41300)  [0x2c+0x4]
       Flags: 0x0 []  [0x30+0x4]
-      Last run time: "2008-03-07 09:30:05"  [0x34+0x10]
+      Last run time: 2008-03-07 09:30:05 (local time)  [0x34+0x10]
     Running instance count: 0  [0x44+0x2]
     Application name: "C:\\WINDOWS\\system32\\notepad.exe"  [0x46+0x42]
     Parameters: "C:\\boot.ini"  [0x88+0x1a]

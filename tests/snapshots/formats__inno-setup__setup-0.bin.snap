@@ -215,7 +215,7 @@ expression: "common::explore(&display_name(&path), &data)"
         OriginalSize: 65 — 65 bytes  [#4:0x14+0x8]
         ChunkCompressedSize: 97  [#4:0x1c+0x8]
         SHA-1: 3e 79 65 94 e9 ca 2c c7 c8 f5 c9 67 e3 07 2c 04 …  |>ye...,....g..,.|  [#4:0x24+0x14]
-        TimeStamp: 2023-11-19 21:06:18 UTC  [#4:0x38+0x8]
+        TimeStamp: 2023-11-19 21:06:18.1908320 UTC  [#4:0x38+0x8]
         FileVersion: "1.0.0.0"  [#4:0x40+0x8]
         Flags: 0x86 [VersionInfoNotValid | TimeStampInUTC | ChunkCompressed]  [#4:0x48+0x2]
     ▾ Location 1 — 102 bytes, chunk at 0x0  [#4:0x4a+0x4a]
@@ -225,7 +225,7 @@ expression: "common::explore(&display_name(&path), &data)"
         OriginalSize: 102 — 102 bytes  [#4:0x5e+0x8]
         ChunkCompressedSize: 97  [#4:0x66+0x8]
         SHA-1: 4b 5c 88 05 c2 29 f4 d8 7a 27 a9 39 e2 73 7d e3 …  |K\...)..z'.9.s}.|  [#4:0x6e+0x14]
-        TimeStamp: 2023-11-19 21:06:18 UTC  [#4:0x82+0x8]
+        TimeStamp: 2023-11-19 21:06:18.1908320 UTC  [#4:0x82+0x8]
         FileVersion: "1.0.0.0"  [#4:0x8a+0x8]
         Flags: 0x86 [VersionInfoNotValid | TimeStampInUTC | ChunkCompressed]  [#4:0x92+0x2]
     ▾ Location 2 — 69 bytes, chunk at 0x65  [#4:0x94+0x4a]
@@ -235,7 +235,7 @@ expression: "common::explore(&display_name(&path), &data)"
         OriginalSize: 69 — 69 bytes  [#4:0xa8+0x8]
         ChunkCompressedSize: 76  [#4:0xb0+0x8]
         SHA-1: e2 1f c1 8d 17 63 20 6b e6 31 42 81 d7 50 d6 84 …  |.....c k.1B..P..|  [#4:0xb8+0x14]
-        TimeStamp: 2023-11-19 21:06:18 UTC  [#4:0xcc+0x8]
+        TimeStamp: 2023-11-19 21:06:18.1908320 UTC  [#4:0xcc+0x8]
         FileVersion: "1.0.0.0"  [#4:0xd4+0x8]
         Flags: 0x86 [VersionInfoNotValid | TimeStampInUTC | ChunkCompressed]  [#4:0xdc+0x2]
   ▾ Files — 3 files
@@ -248,7 +248,7 @@ expression: "common::explore(&display_name(&path), &data)"
         OriginalSize: 65 — 65 bytes  [#4:0x14+0x8]
         ChunkCompressedSize: 97  [#4:0x1c+0x8]
         SHA-1: 3e 79 65 94 e9 ca 2c c7 c8 f5 c9 67 e3 07 2c 04 …  |>ye...,....g..,.|  [#4:0x24+0x14]
-        TimeStamp: 2023-11-19 21:06:18 UTC  [#4:0x38+0x8]
+        TimeStamp: 2023-11-19 21:06:18.1908320 UTC  [#4:0x38+0x8]
         FileVersion: "1.0.0.0"  [#4:0x40+0x8]
         Flags: 0x86 [VersionInfoNotValid | TimeStampInUTC | ChunkCompressed]  [#4:0x48+0x2]
         Content — file data not available (setup-0 only)
@@ -261,7 +261,7 @@ expression: "common::explore(&display_name(&path), &data)"
         OriginalSize: 102 — 102 bytes  [#4:0x5e+0x8]
         ChunkCompressedSize: 97  [#4:0x66+0x8]
         SHA-1: 4b 5c 88 05 c2 29 f4 d8 7a 27 a9 39 e2 73 7d e3 …  |K\...)..z'.9.s}.|  [#4:0x6e+0x14]
-        TimeStamp: 2023-11-19 21:06:18 UTC  [#4:0x82+0x8]
+        TimeStamp: 2023-11-19 21:06:18.1908320 UTC  [#4:0x82+0x8]
         FileVersion: "1.0.0.0"  [#4:0x8a+0x8]
         Flags: 0x86 [VersionInfoNotValid | TimeStampInUTC | ChunkCompressed]  [#4:0x92+0x2]
         Content — file data not available (setup-0 only)
@@ -274,7 +274,7 @@ expression: "common::explore(&display_name(&path), &data)"
         OriginalSize: 69 — 69 bytes  [#4:0xa8+0x8]
         ChunkCompressedSize: 76  [#4:0xb0+0x8]
         SHA-1: e2 1f c1 8d 17 63 20 6b e6 31 42 81 d7 50 d6 84 …  |.....c k.1B..P..|  [#4:0xb8+0x14]
-        TimeStamp: 2023-11-19 21:06:18 UTC  [#4:0xcc+0x8]
+        TimeStamp: 2023-11-19 21:06:18.1908320 UTC  [#4:0xcc+0x8]
         FileVersion: "1.0.0.0"  [#4:0xd4+0x8]
         Flags: 0x86 [VersionInfoNotValid | TimeStampInUTC | ChunkCompressed]  [#4:0xdc+0x2]
         Content — file data not available (setup-0 only)

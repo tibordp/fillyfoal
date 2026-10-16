@@ -11,7 +11,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Chunk size: 112169  [0x8+0x8]
         Constant pool offset: 0x1b5ca  [0x10+0x8] → 0x1b5ca+0x0
         Metadata offset: 0x281d  [0x18+0x8] → 0x281d+0x0
-        Start time: 2026-10-12 03:53:47 UTC — 2026-10-12 03:53:47.100003587 UTC  [0x20+0x8]
+        Start time: 2026-10-12 03:53:47.100003587 UTC  [0x20+0x8]
         Duration: 23018758 — 23.019 ms  [0x28+0x8]
         Start ticks: 318445662  [0x30+0x8]
         Ticks per second: 1000000000  [0x38+0x8]
@@ -1302,7 +1302,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ jdk.ThreadStart — 2026-10-12 03:53:47.122035046 UTC, thread: JFR Shutdown Hook, parentThread: DestroyJavaVM  [0x2166+0xb]
         Size: 11  [0x2166+0x1]
         Type: 8 — jdk.ThreadStart  [0x2167+0x1]
-        startTime: 2026-10-12 03:53:47 UTC — 2026-10-12 03:53:47.122035046 UTC  [0x2168+0x5]
+        startTime: 2026-10-12 03:53:47.122035046 UTC — 2026-10-12 03:53:47.122035046 UTC  [0x2168+0x5]
       ▾ eventThread: 29 — Thread JFR Shutdown Hook  [0x216d+0x1] → 0x223b+0x2a
           osName: "JFR Shutdown Hook"  [0x223b+0x13]
           osThreadId: 91  [0x224e+0x1]

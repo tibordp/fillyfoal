@@ -25,7 +25,7 @@ expression: "common::explore(&display_name(&path), &data)"
       pi: 3.14159  [0x161+0x8]
       neg: -inf  [0x170+0x4]
       when: 1979-05-27 07:32:00 UTC  [0x17c+0x14]
-      local: "1979-05-27" — local date/time  [0x199+0xa]
+      local: 1979-05-27  [0x199+0xa]
       desc: "Multi-line\n\"quoted\" text"  [0x1ab+0x1f]
       raw: "no \\escapes"  [0x1d1+0x12]
     ▾ nested — array, 3 elements  [0x1ed+0x18]

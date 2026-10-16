@@ -3,12 +3,12 @@ source: tests/formats.rs
 expression: "common::explore(&name, &data)"
 ---
 ▾ inbox.mbox — Mailbox (mbox), 2 messages  [0x0+0x11a]
-  ▾ Message 1: 2026-10-05 10:00:00 UTC — First — from ana@example.com  [0x0+0xb6]
+  ▾ Message 1: 2026-10-05 10:00:00 UTC+00:00 — First — from ana@example.com  [0x0+0xb6]
     ▾ Headers — 4 fields  [0x2e+0x5f]
         From: "ana@example.com"  [0x2e+0x15]
         To: "bob@example.org"  [0x44+0x13]
         Subject: "First"  [0x58+0xe]
-        Date: 2026-10-05 10:00:00 UTC — Mon, 5 Oct 2026 10:00:00 +0000  [0x67+0x24]
+        Date: 2026-10-05 10:00:00 UTC+00:00 — Mon, 5 Oct 2026 10:00:00 +0000  [0x67+0x24]
     ▾ Body — UTF-8 text, LF line endings, 3 lines  [0x8d+0x29]
         Encoding: "UTF-8"
         Line endings: "LF" — 3 LF, 0 CRLF, 0 CR

@@ -73,7 +73,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Exception record — code 0x0  [0xf00+0x98]
     Dump type: kernel (summary) (0x2)  [0xf98+0x4]
     Required dump space: 0  [0xfa0+0x8]
-    System time: 1601-01-01 00:00:00 UTC  [0xfa8+0x8]
+    System time — not set  [0xfa8+0x8]
     Comment: ""  [0xfb0+0x80]
     System up time: 0 — 0:00:00.000  [0x1030+0x8]
     Minidump fields: 0x0  [0x1038+0x4]

@@ -230,7 +230,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ ý\readme.txt — 65 bytes  [0x1c5+0x41]
         Entry: 1 → #1:0x9f8+0x1c
         Overwrite: on (0x0)
-        Modification time: 2023-11-19 21:06:18 UTC
+        Modification time: 2023-11-19 21:06:18.1908320 UTC
         Data block offset: 0x0 → 0x1c1+0x4
       ▾ Content — UTF-8 text, CRLF line endings, 3 lines  [0x1c5+0x41]
           Encoding: "UTF-8"
@@ -242,7 +242,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ ý\logo.png — 69 bytes  [0x20a+0x45]
         Entry: 2 → #1:0xa14+0x1c
         Overwrite: on (0x0)
-        Modification time: 2023-11-19 21:06:18 UTC
+        Modification time: 2023-11-19 21:06:18.1908320 UTC
         Data block offset: 0x45 → 0x206+0x4
       ▾ Content — 1×1, 8-bit RGB  [0x20a+0x45]
           Signature  [0x20a+0x8]
@@ -275,7 +275,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ ý\docs\manual.txt — 61 bytes compressed  [0x253+0x3d]
         Entry: 4 → #1:0xa4c+0x1c
         Overwrite: try (0x2)
-        Modification time: 2023-11-19 21:06:18 UTC
+        Modification time: 2023-11-19 21:06:18.1908320 UTC
         Data block offset: 0x8e → 0x24f+0x4
       ▾ Content — UTF-8 text, CRLF line endings, 3 lines  [0x253+0x3d]
           Encoding: "UTF-8"

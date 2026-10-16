@@ -92,10 +92,10 @@ expression: "common::explore(&display_name(&path), &data)"
               Attributes: 0x20 [ARCHIVE]  [0x862b+0x1]
               Case flags (NT): 0x0 []  [0x862c+0x1]
               Creation time, 10 ms units: 100  [0x862d+0x1]
-              Created: 2024-05-17 13:37:42 UTC  [0x862e+0x4]
-              Accessed: 2024-05-17 00:00:00 UTC  [0x8632+0x2]
+              Created: 2024-05-17 13:37:42 (local time)  [0x862e+0x4]
+              Accessed: 2024-05-17  [0x8632+0x2]
               First cluster (high word): 0  [0x8634+0x2]
-              Modified: 2024-05-17 13:37:42 UTC  [0x8636+0x4]
+              Modified: 2024-05-17 13:37:42 (local time)  [0x8636+0x4]
               First cluster (low word): 2  [0x863a+0x2]
               File size: 14 — 14 bytes  [0x863c+0x4]
           ▾ Clusters — contiguous, 14 bytes

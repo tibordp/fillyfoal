@@ -13,7 +13,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Next header CRC: 0x666be92b  [0x1c+0x4]
   ▾ Files — 1 file  [0xb4+0x5a]
     ▾ ramp.pcm — 3.9 KiB  [0x20+0x94]
-        Modification time: 2026-10-06 12:28:45 UTC
+        Modification time: 2026-10-06 12:28:45.5516270 UTC
         Attributes: 0x81a48020 — -rw-r--r--
         Size: 4000 — 3.9 KiB
         Folder: 0

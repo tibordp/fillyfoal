@@ -21,7 +21,7 @@ expression: "common::explore(&display_name(&path), &data)"
           kCRC — 1 CRC  [0x177+0x6]
   ▾ Files — 3 files  [#1:0x0+0x92]
     ▾ a.txt — 530 bytes  [0x20+0xd3]
-        Modification time: 2026-10-06 12:28:45 UTC
+        Modification time: 2026-10-06 12:28:45.5517145 UTC
         Attributes: 0x81a48020 — -rw-r--r--
         Size: 530 — 530 bytes
         Folder: 0
@@ -91,7 +91,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Line 59: "alpha 58"  [#2:0x200+0x8]
             Line 60: "alpha 59"  [#2:0x209+0x8]
     ▾ b.txt — 530 bytes  [0x20+0xd3]
-        Modification time: 2026-10-06 12:28:45 UTC
+        Modification time: 2026-10-06 12:28:45.5517922 UTC
         Attributes: 0x81a48020 — -rw-r--r--
         Size: 530 — 530 bytes
         Folder: 0
@@ -161,7 +161,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Line 59: "bravo 58"  [#2:0x412+0x8]
             Line 60: "bravo 59"  [#2:0x41b+0x8]
     ▾ c.txt — 24 bytes  [0x20+0xd3]
-        Modification time: 2026-10-06 12:28:45 UTC
+        Modification time: 2026-10-06 12:28:45.5518477 UTC
         Attributes: 0x81a48020 — -rw-r--r--
         Size: 24 — 24 bytes
         Folder: 0

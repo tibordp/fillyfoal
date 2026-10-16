@@ -93,7 +93,7 @@ expression: "common::explore(&display_name(&path), &data)"
           [1]: "ceramic"  [0x7d0+0xf]
         stock: 7  [0x7e0+0xb]
         sold: 123456789012  [0x7eb+0xe]
-        added: 2026-01-02 03:04:05 UTC — UTC datetime, 2026-01-02 03:04:05.678 UTC  [0x7f9+0xf]
+        added: 2026-01-02 03:04:05.678 UTC — UTC datetime  [0x7f9+0xf]
         active: true  [0x808+0x9]
         note — null  [0x811+0x6]
       ▾ dims — document, 23 bytes  [0x817+0x1d]
