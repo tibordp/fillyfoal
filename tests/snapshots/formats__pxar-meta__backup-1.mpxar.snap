@@ -7,7 +7,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Type: FORMAT_VERSION (0x730f6c75df16a40d)  [0x0+0x8]
       Size: 24  [0x8+0x8]
       Version: 2  [0x10+0x8]
-  ▾ Root directory — directory drwxr-xr-x  [0x18+0x37a8]
+  ▾ Root directory — directory drwxr-xr-x, 102 entries  [0x18+0x37a8]
     ▾ ENTRY — directory drwxr-xr-x, uid 0, gid 0  [0x18+0x38]
         Type: ENTRY (0xd5956474e588acef)  [0x18+0x8]
         Size: 56  [0x20+0x8]
@@ -139,10 +139,12 @@ expression: "common::explore(&display_name(&path), &data)"
           Modification time: 2026-01-02 03:04:05 UTC  [0x90+0x8]
           Nanoseconds: 0  [0x98+0x4]
           Padding: 0  [0x9c+0x4]
-      ▾ FCAPS — 20 bytes  [0xa0+0x24]
+      ▾ FCAPS — cap_net_raw+ep  [0xa0+0x24]
           Type: FCAPS (0x2da9dd9db5f7fb67)  [0xa0+0x8]
           Size: 36  [0xa8+0x8]
-          Capabilities — 20 bytes  [0xb0+0x14]
+          Revision: 0x2000001 — version 2, effective  [0xb0+0x4]
+          Permitted: 0x2000 [cap_net_raw]  [0xb4+0x4]
+          Inheritable: 0x0 []  [0xb8+0x4]
       ▾ PAYLOAD_REF — offset 0x10, 25 bytes  [0xc4+0x20]
           Type: PAYLOAD_REF (0x419d3d6bc4ba977e)  [0xc4+0x8]
           Size: 32  [0xcc+0x8]
@@ -1293,7 +1295,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ f197.bin — file -rw-r--r--, 97.7 KiB in the payload archive  [0x2bb5+0x71]  (+19 nodes elided)
     ▾ f198.bin — file -rw-r--r--, 97.7 KiB in the payload archive  [0x2c26+0x71]  (+19 nodes elided)
     ▾ f199.bin — file -rw-r--r--, 97.7 KiB in the payload archive  [0x2c97+0x71]  (+19 nodes elided)
-    ▾ sub/ — directory drwxr-xr-x  [0x2d08+0x100]  (+38 nodes, 1 diagnostic elided)
+    ▾ sub/ — directory drwxr-xr-x, 1 entry  [0x2d08+0x100]  (+38 nodes, 1 diagnostic elided)
   ▾ Items  [0x0+0x37c0]
     ▾ FORMAT_VERSION — version 2  [0x0+0x18]
         Type: FORMAT_VERSION (0x730f6c75df16a40d)  [0x0+0x8]
@@ -1323,10 +1325,12 @@ expression: "common::explore(&display_name(&path), &data)"
         Modification time: 2026-01-02 03:04:05 UTC  [0x90+0x8]
         Nanoseconds: 0  [0x98+0x4]
         Padding: 0  [0x9c+0x4]
-    ▾ FCAPS — 20 bytes  [0xa0+0x24]
+    ▾ FCAPS — cap_net_raw+ep  [0xa0+0x24]
         Type: FCAPS (0x2da9dd9db5f7fb67)  [0xa0+0x8]
         Size: 36  [0xa8+0x8]
-        Capabilities — 20 bytes  [0xb0+0x14]
+        Revision: 0x2000001 — version 2, effective  [0xb0+0x4]
+        Permitted: 0x2000 [cap_net_raw]  [0xb4+0x4]
+        Inheritable: 0x0 []  [0xb8+0x4]
     ▾ PAYLOAD_REF — offset 0x10, 25 bytes  [0xc4+0x20]
         Type: PAYLOAD_REF (0x419d3d6bc4ba977e)  [0xc4+0x8]
         Size: 32  [0xcc+0x8]
@@ -2780,16 +2784,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Type: FILENAME (0x16701121063917b3)  [0x2270+0x8]
         Size: 25  [0x2278+0x8]
         Name: "f176.bin"  [0x2280+0x9]
-    ▾ ENTRY — file -rw-r--r--, uid 0, gid 0  [0x2289+0x38]
-        Type: ENTRY (0xd5956474e588acef)  [0x2289+0x8]
-        Size: 56  [0x2291+0x8]
-        Mode: 33188 — 0o100644 -rw-r--r--  [0x2299+0x8]
-        Flags: 0x80000 [NOCOW]  [0x22a1+0x8]
-        UID: 0  [0x22a9+0x4]
-        GID: 0  [0x22ad+0x4]
-        Modification time: 2026-01-02 03:04:05 UTC  [0x22b1+0x8]
-        Nanoseconds: 0  [0x22b9+0x4]
-        Padding: 0  [0x22bd+0x4]
+    ▾ ENTRY — file -rw-r--r--, uid 0, gid 0  [0x2289+0x38]  (+9 nodes elided)
     ▾ PAYLOAD_REF — offset 0x73fc79, 97.7 KiB  [0x22c1+0x20]  (+4 nodes elided)
     ▾ FILENAME — f177.bin  [0x22e1+0x19]  (+3 nodes elided)
     ▾ ENTRY — file -rw-r--r--, uid 0, gid 0  [0x22fa+0x38]  (+9 nodes elided)

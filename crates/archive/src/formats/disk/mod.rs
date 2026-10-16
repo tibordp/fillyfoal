@@ -306,11 +306,17 @@ async fn list_fragments(cx: Cx, pieces: Arc<Vec<Span>>) -> Result<()> {
     cx.set_count(Count::Exact(crate::bytes::to_u64(pieces.len())));
     let mut logical = 0u64;
     for (i, piece) in pieces.iter().enumerate() {
-        cx.push(
-            Node::new(format!("Fragment {i}"))
-                .span(*piece)
-                .summary(format!("file offset {logical:#x}, {}", size(piece.len))),
-        )
+        let node = Node::new(format!("Fragment {i}"));
+        // A hole has no bytes in any source: no span, just its size.
+        cx.push(if piece.source == SourceId::ZEROS {
+            node.summary(format!(
+                "file offset {logical:#x}, {}, a hole (zeros)",
+                size(piece.len)
+            ))
+        } else {
+            node.span(*piece)
+                .summary(format!("file offset {logical:#x}, {}", size(piece.len)))
+        })
         .await;
         logical = logical.saturating_add(piece.len);
     }

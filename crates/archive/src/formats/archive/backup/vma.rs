@@ -191,6 +191,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         };
         cx.emit(node);
     }
+    cx.emit(
+        Node::new("Config table")
+            .span(file.sub(2044, 2048))
+            .summary(plural(configs, "config file"))
+            .desc("Blob buffer offsets of each config file's name (256 slots), then of its data"),
+    );
 
     let mut devices = Vec::new();
     for id in 1..256u64 {
@@ -227,8 +233,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         );
     }
     cx.emit(
+        Node::new("Device table")
+            .span(file.sub(4096, 256 * 32))
+            .summary(plural(devices.len(), "device"))
+            .desc("256 slots of 32 bytes (slot 0 unused): name offset in the blob buffer, size"),
+    );
+    let data = file.tail(header_size);
+    cx.emit(
         Node::new("Extents")
-            .span(file.tail(header_size))
+            .span(data)
+            .summary(size(data.len))
             .lazy(extents, archive.clone()),
     );
     cx.annotate(format!(

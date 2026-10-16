@@ -14,11 +14,21 @@
 //! length to exactly the end of the file rules out almost all other
 //! binary data. Anything else (arrays, sequences of values, large files)
 //! is reached through the extension ("inspect as").
+//!
+//! BorgBackup's metadata (the manifest, archive and item records) is
+//! MessagePack written by Borg 1.x with `use_bin_type=False`, so binary
+//! values (chunk and archive IDs, HMACs, salts, xattr values) are raw
+//! strings. Borg's segment dissector hands it over as `borg-msgpack`, which
+//! shows strings that are not UTF-8 as hex (no warning: that is what they
+//! are), names (`path`, `source`, `user`, `group`, ...) as text however
+//! they are encoded, and the integer `atime`, `ctime`, `mtime` and
+//! `birthtime` as nanoseconds since 1970.
 
 use crate::cx::Cx;
 use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::datakit::{ByteReader, be_uint, hex};
+use crate::formats::util::fmt::{grouped_count, hex_lower};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -34,6 +44,32 @@ pub static FORMAT: Format = Format {
     probe: Probe::Custom(probe),
     dissect: crate::expander!(dissect: Input),
 };
+
+/// BorgBackup metadata: see the module documentation.
+pub static BORG: Format = Format {
+    name: "borg-msgpack",
+    title: "BorgBackup metadata (MessagePack)",
+    extensions: &[],
+    mime: "application/vnd.msgpack",
+    probe: Probe::Never,
+    dissect: crate::expander!(dissect_borg: Input),
+};
+
+/// How values are presented: as plain MessagePack, or as Borg writes them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Flavor {
+    Plain,
+    Borg,
+}
+
+/// Borg's integer timestamps (nanoseconds since 1970), by key.
+const BORG_TIMES: &[&str] = &["atime", "ctime", "mtime", "birthtime"];
+/// Borg's names: text, but not necessarily UTF-8 (`surrogateescape`).
+const BORG_NAMES: &[&str] = &[
+    "path", "source", "user", "group", "name", "hostname", "username", "comment",
+];
+/// Binary strings up to this long are shown whole, as hex text.
+const BORG_HEX: u64 = 64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind {
@@ -278,6 +314,14 @@ fn describe(h: &Item) -> String {
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
+    dissect_flavor(cx, input, Flavor::Plain).await
+}
+
+pub async fn dissect_borg(cx: Cx, input: Input) -> Result<()> {
+    dissect_flavor(cx, input, Flavor::Borg).await
+}
+
+async fn dissect_flavor(cx: Cx, input: Input, flavor: Flavor) -> Result<()> {
     let mut r = ByteReader::new(&cx, input.span);
     let first = head(&mut r, 0).await?;
     // One container filling the file: show its members at the top.
@@ -285,7 +329,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         && end_of(&mut r, 0).await.ok() == Some(input.span.len)
     {
         cx.annotate(format!("MessagePack {}", describe(&first)));
-        return members(cx, (input.span, 0, Path::new())).await;
+        return members(cx, (input.span, 0, Path::new(), flavor)).await;
     }
     cx.annotate(format!("MessagePack, first value: {}", describe(&first)));
     let (mut pos, mut index) = cx.resume::<(u64, u64)>().unwrap_or((0, 0));
@@ -304,7 +348,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 break;
             }
         };
-        let node = item_node(&mut r, pos, end, format!("[{index}]"), &Path::new()).await?;
+        let node = item_node(
+            &mut r,
+            (pos, end),
+            format!("[{index}]"),
+            &Path::new(),
+            (flavor, None),
+        )
+        .await?;
         cx.progress(end, input.span.len);
         cx.push(node).await;
         pos = end;
@@ -333,18 +384,58 @@ fn timestamp(data: &[u8]) -> Option<(i64, u32)> {
     }
 }
 
-/// A node for the value at `start..end`.
+/// A Borg integer timestamp (nanoseconds since 1970).
+fn borg_time(node: Node, ns: i64) -> Node {
+    node.value(Value::Timestamp {
+        unix_seconds: ns.div_euclid(1_000_000_000),
+    })
+    .summary(format!("{ns} ns"))
+}
+
+/// A Borg raw string: text if it is UTF-8 (or a name), else hex.
+fn borg_string(node: Node, data: Vec<u8>, total: u64, key: Option<&str>) -> Node {
+    let cut = crate::formats::util::datakit::len64(data.len()) < total;
+    let utf8 = match std::str::from_utf8(&data) {
+        Ok(_) => true,
+        Err(e) => cut && e.error_len().is_none(),
+    };
+    if utf8 {
+        return vt::text(node, &data, total);
+    }
+    if key.is_some_and(|k| BORG_NAMES.contains(&k)) {
+        return node
+            .value(Value::Text(String::from_utf8_lossy(&data).into_owned()))
+            .summary("not UTF-8");
+    }
+    borg_binary(node, data, total)
+}
+
+/// Borg binary data: whole as hex text when short (IDs, keys), else the
+/// usual binary leaf.
+fn borg_binary(node: Node, data: Vec<u8>, total: u64) -> Node {
+    if total <= BORG_HEX {
+        node.value(Value::Text(hex_lower(&data)))
+            .summary(format!("binary, {}", grouped_count(total, "byte", "bytes")))
+    } else {
+        vt::bytes(node, "binary", data, total)
+    }
+}
+
+/// A node for the value at `start..end`; `key` is its map key, if any.
 async fn item_node(
     r: &mut ByteReader<'_>,
-    start: u64,
-    end: u64,
+    (start, end): (u64, u64),
     name: String,
     path: &Path,
+    (flavor, key): (Flavor, Option<&str>),
 ) -> Result<Node> {
+    let borg = flavor == Flavor::Borg;
+    let time = borg && key.is_some_and(|k| BORG_TIMES.contains(&k));
     let h = head(r, start).await?;
     let node = Node::new(name).span(r.span(start, end.saturating_sub(start)));
     let body = start.saturating_add(h.head);
     Ok(match h.kind {
+        Kind::UInt if time => borg_time(node, i64::try_from(h.arg).unwrap_or(i64::MAX)),
         Kind::UInt => node.value(vt::uint(h.arg, h.bits.max(8))),
         Kind::NegFix => node.value(vt::int(i64::from(i8::from_le_bytes([h.arg as u8])), 8)),
         Kind::Int => {
@@ -352,7 +443,11 @@ async fn item_node(
             let v = (h.arg.checked_shl(shift).unwrap_or(0) as i64)
                 .checked_shr(shift)
                 .unwrap_or(0);
-            node.value(vt::int(v, h.bits))
+            if time {
+                borg_time(node, v)
+            } else {
+                node.value(vt::int(v, h.bits))
+            }
         }
         Kind::Nil => node.summary("nil"),
         Kind::Bool(b) => node.value(Value::Bool(b)),
@@ -360,9 +455,17 @@ async fn item_node(
             u32::try_from(h.arg).unwrap_or(0),
         )))),
         Kind::Float64 => node.value(Value::Float(f64::from_bits(h.arg))),
+        Kind::Str if borg => {
+            let data = r.bytes(body, h.arg.min(vt::MAX_TEXT)).await?;
+            borg_string(node, data, h.arg, key)
+        }
         Kind::Str => {
             let data = r.bytes(body, h.arg.min(vt::MAX_TEXT)).await?;
             vt::text(node, &data, h.arg)
+        }
+        Kind::Bin if borg => {
+            let data = r.bytes(body, h.arg.min(vt::MAX_BYTES)).await?;
+            borg_binary(node, data, h.arg)
         }
         Kind::Bin => {
             let data = r.bytes(body, h.arg.min(vt::MAX_BYTES)).await?;
@@ -397,8 +500,8 @@ async fn item_node(
             } else {
                 match vt::enter(path, start) {
                     Ok(p) => node.lazy(
-                        crate::expander!(self::members: (Span, u64, Path)),
-                        (r.region(), start, p),
+                        crate::expander!(self::members: (Span, u64, Path, Flavor)),
+                        (r.region(), start, p, flavor),
                     ),
                     Err(d) => node.diag(d),
                 }
@@ -431,7 +534,7 @@ async fn key_name(r: &mut ByteReader<'_>, at: u64, index: u64) -> Result<String>
     })
 }
 
-async fn members(cx: Cx, (region, start, path): (Span, u64, Path)) -> Result<()> {
+async fn members(cx: Cx, (region, start, path, flavor): (Span, u64, Path, Flavor)) -> Result<()> {
     let mut r = ByteReader::new(&cx, region);
     let h = head(&mut r, start).await?;
     cx.set_count(Count::Exact(h.arg));
@@ -447,14 +550,28 @@ async fn members(cx: Cx, (region, start, path): (Span, u64, Path)) -> Result<()>
             let value_end = end_of(&mut r, key_end).await?;
             let name = key_name(&mut r, pos, index).await?;
             // The member spans its key and its value.
-            let node = item_node(&mut r, key_end, value_end, name, &path)
-                .await?
-                .span(r.span(pos, value_end.saturating_sub(pos)));
+            let key = name.clone();
+            let node = item_node(
+                &mut r,
+                (key_end, value_end),
+                name,
+                &path,
+                (flavor, Some(&key)),
+            )
+            .await?
+            .span(r.span(pos, value_end.saturating_sub(pos)));
             pos = value_end;
             node
         } else {
             let end = end_of(&mut r, pos).await?;
-            let node = item_node(&mut r, pos, end, format!("[{index}]"), &path).await?;
+            let node = item_node(
+                &mut r,
+                (pos, end),
+                format!("[{index}]"),
+                &path,
+                (flavor, None),
+            )
+            .await?;
             pos = end;
             node
         };

@@ -1200,7 +1200,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Project ID: 0  [0x10e9c+0x4]
           Unused — 96 bytes  [0x10ea0+0x60]
       ▾ Blocks — contiguous, 64.3 MiB
-          Fragment 0 — file offset 0x0, 64.3 MiB  [#4294967295:0x0+0x4043000]
+          Fragment 0 — file offset 0x0, 64.3 MiB, a hole (zeros)
       ▾ Content — 64.3 MiB  [#2:0x0+0x4043000]
           Data  [#2:0x0+0x4043000]
     ▾ Orphan file — -rw-------, 32 KiB
