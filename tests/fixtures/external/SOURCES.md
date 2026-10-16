@@ -1682,3 +1682,91 @@ Docker VM's clock; not reproducible byte for byte. Checked against
 | `nfdump/v1-lzo.nfcapd` | nfdump 1.6.22 | `nfdump -r v1.nfcapd -z -w v1-lzo.nfcapd` |
 | `nfdump/v1-bz2.nfcapd` | nfdump 1.6.22 | the same with `-j` |
 | `nfdump/v1-lz4.nfcapd` | nfdump 1.6.22 | the same with `-y` |
+## BPF Type Format: clang BPF objects
+
+Built by `tests/data/btf/make.sh` from `tests/data/btf/kinds.c` (a small BPF
+program whose types use every BTF kind) with Debian clang 19.1.7 and
+llvm-objcopy 19 in Docker `debian:trixie`; checked against
+`bpftool btf dump file ... format raw` (bpftool 7.5.0). Reproduced byte for byte.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `btf/kinds-bpfel.btf` | clang 19.1.7 `-g -O2 -target bpfel` | the object's `.BTF` section, `llvm-objcopy --dump-section .BTF=...`; unchanged |
+| `btf/kinds-bpfeb.btf` | clang 19.1.7 `-g -O2 -target bpfeb` | the same for the big-endian target; unchanged |
+| `elf/bpf-btf.o` | clang 19.1.7 `-g -O2 -target bpfel -ffile-prefix-map=/src=.` | the little-endian object itself (`.BTF`, `.BTF.ext`, DWARF); unchanged |
+
+## trace-cmd: ftrace recordings on the Docker VM's kernel
+
+Recorded by `tests/data/tracecmd-dat/make.sh` (which runs `inside.sh`) with
+trace-cmd 3.3.1 (Debian trixie `trace-cmd 3.3.1-1+b1`, libtracecmd with zstd
+1.5.7) in a privileged container on the Docker Desktop VM's kernel (Linux
+7.0.14, aarch64, 18 CPUs), host name `fillyfoal`. Events are filtered to the
+traced task (`comm == "ffls"`: `ls /` run as `/tmp/a/ffls` then
+`/tmp/b/ffls`): `sched_process_exec`, `sched_process_exit`,
+`raw_syscalls:sys_enter`, `sys_exit`. For privacy `/proc/kallsyms` was
+bind-mounted over with six kernel text symbols and tracefs's
+`saved_cmdlines` with the traced task's own line (its PID there is the
+container's, not the kernel's, so trace-cmd shows the events' comm as
+`<...>`). Not reproducible byte for byte (timestamps, PIDs, trace ID, ASLR
+addresses in the syscall arguments). Checked against `trace-cmd report -t`
+and `trace-cmd dump --all`. The `UNAME` option names the VM kernel's release
+(`7.0.14-orbstack-...`).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `tracecmd-dat/v6.dat` | `trace-cmd record --file-version 6` | 319 events on CPUs 12 and 13; uncompressed; unchanged |
+| `tracecmd-dat/v7-zstd.dat` | `trace-cmd record --file-version 7 --compression zstd` | the same command recorded again: sections, zstd-compressed metadata and chunked CPU data (CPUs 6 and 13); unchanged |
+
+## sysstat: sadc activity files
+
+Written by `tests/data/sysstat-sa/make.sh` with sysstat 12.7.5 (Debian
+trixie `sysstat 12.7.5-2+b2`, `/usr/libexec/sysstat/sadc`) in a
+`debian:trixie` container on the Docker VM (Linux 7.0.14 aarch64, 18 CPUs),
+host name `fillyfoal`, `TZ=UTC`. The statistics are the VM's (CPU, memory,
+paging, the VM's block devices by number, the container's `lo` and `eth0`
+counters); no addresses, no process names. The file header names the VM
+kernel's release (`7.0.14-orbstack-...`). Not reproducible byte for byte
+(times and counters). Checked against `sadf -H` and `sar -f` (CPU, memory,
+disks, interfaces, restart and comment records).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `sysstat-sa/sa-all.sa` | `sadc -S ALL 1 2`, `sadc -C "fillyfoal test comment"`, `sadc -S ALL` (restart mark), `sadc -S ALL 1 1`, all appending to one file | 30 activities; statistics, comment and restart records; unchanged |
+| `sysstat-sa/sa-default.sa` | `sadc 1 3` | the default activities, three samples; unchanged |
+
+## atop: a raw log
+
+Written by `tests/data/atop-raw/make.sh` (which runs `inside.sh`) with atop
+2.11.1 (Debian trixie `atop 2.11.1-3`) in a `debian:trixie` container on the
+Docker VM (Linux 7.0.14 aarch64, 18 CPUs), host name `fillyfoal`, `TZ=UTC`:
+`atop -w atop_20261016 1 2` with only the script's shell (`bash
+/work/inside.sh`), a `sleep 30` and atop itself running. The system
+statistics are the VM's (CPU, memory, its block devices `vda` to `vdc`,
+the container's `eth0`); the header names the VM kernel's release and
+build (`7.0.14-orbstack-...`). The uncompressed `struct sstat` also holds
+stale buffer bytes (file names from `/proc` and the container's cgroup
+directory). Not reproducible byte for byte. Checked against
+`atop -r ... -P PRG,PRC` and by inflating every stream.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `atop-raw/atop_20261016` | `atop -w ... 1 2` | two samples (the first since boot), three tasks, cgroup v2 statistics; written as `atop.raw` and renamed after atop's daily log names; otherwise unchanged |
+
+## Common Trace Format: LTTng-UST and babeltrace2
+
+Written by `tests/data/ctf-packet/make.sh` (which runs `inside.sh`) in a
+`debian:trixie` container, host name `fillyfoal`, `TZ=UTC`: an LTTng-UST
+2.13.9 / lttng-tools 2.13.15 user-space session (`hello.c`: 150
+`lttng_ust_tracef` messages, contexts `vpid` and `procname`, per-UID
+buffers, two 4 KiB sub-buffers), and babeltrace2 2.1.1 converting
+`dmesg.txt` (five neutral lines) with `src.text.dmesg` to `sink.ctf.fs`
+with `ctf-version` 1 and 2. Not reproducible byte for byte (UUIDs, times,
+PIDs). Checked by reading the traces back with `babeltrace2`.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `ctf-packet/lttng-ust-stream` | LTTng-UST 2.13.9 | the per-CPU stream file (`ust/uid/0/64-bit/ch_N`) holding the events: three 4 KiB packets; unchanged |
+| `ctf-metadata/lttng-ust-metadata` | LTTng-UST 2.13.9 | the trace's packetized metadata: one packet of TSDL; unchanged |
+| `ctf-packet/babeltrace-ctf18-stream` | babeltrace2 2.1.1 `sink.ctf.fs`, `ctf-version="1"` | the data stream (one packet); unchanged |
+| `ctf-metadata/babeltrace-ctf18-metadata` | as above | the TSDL metadata file; unchanged |
+| `ctf-metadata/babeltrace-ctf2-metadata` | babeltrace2 2.1.1 `sink.ctf.fs`, `ctf-version="2"` | the CTF 2 JSON text sequence metadata; unchanged |

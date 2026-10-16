@@ -5,12 +5,16 @@
 //! gettext catalogs (`mo`), Apple BOM stores, Windows compatibility
 //! databases (`shim_sdb`), .NET resources and BinaryFormatter streams
 //! (`dotnet`), developer artifacts (`devtools`, Delphi form
-//! streams in `delphi`), Git storage (commit-graphs in `commit_graph`), OSTree objects and flatpak bundles
-//! (`ostree`) and Outlook PST/OST mail stores (`pst`).
+//! streams in `delphi`), Git storage (commit-graphs in `commit_graph`),
+//! OSTree objects and flatpak bundles (`ostree`), Outlook PST/OST mail
+//! stores (`pst`) and Linux tracing and monitoring data (`tracecmd`,
+//! `sysstat`, `atop`, Common Trace Format in `ctf`).
 
 pub mod artifacts;
+pub mod atop;
 pub mod bom;
 pub mod commit_graph;
+pub mod ctf;
 pub mod delphi;
 pub mod devices;
 pub mod devtools;
@@ -25,4 +29,6 @@ pub mod ota;
 pub mod platform;
 pub mod pst;
 pub mod shim_sdb;
+pub mod sysstat;
 pub mod terminfo;
+pub mod tracecmd;

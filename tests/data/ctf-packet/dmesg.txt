@@ -1,0 +1,5 @@
+[    0.000000] Booting fillyfoal test kernel
+[    0.000120] Memory: 1024K available
+[    0.104200] clocksource: test: mask 0xffffffff
+[    1.250000] fillyfoal: hello from the CTF fixture
+[    2.500001] fillyfoal: second message

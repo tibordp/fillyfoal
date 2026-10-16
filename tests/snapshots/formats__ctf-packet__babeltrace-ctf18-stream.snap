@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ babeltrace-ctf18-stream — CTF data stream, little-endian, trace 273f4c9b-47bb-4f43-bd77-9228cecd1290, layout of babeltrace2 sink.ctf.fs  [0x0+0x125]
+  ▾ Packets — packet header and context as written by babeltrace2 sink.ctf.fs  [0x0+0x125]
+    ▾ Packet 0 — seq 0, 233 bytes of event records  [0x0+0x125]
+      ▾ Packet Header  [0x0+0x24]
+          magic: 0xc1fc1fc1  [0x0+0x4]
+          uuid: "273f4c9b-47bb-4f43-bd77-9228cecd1290"  [0x4+0x10]
+          stream_id: 0  [0x14+0x8]
+          stream_instance_id: 0  [0x1c+0x8]
+      ▾ Packet Context  [0x24+0x18]
+          packet_size: 2344 — bits, 293 bytes  [0x24+0x8]
+          content_size: 2344 — bits, 293 bytes  [0x2c+0x8]
+          packet_seq_num: 0  [0x34+0x8]
+        Event Records — 233 bytes  [0x3c+0xe9]

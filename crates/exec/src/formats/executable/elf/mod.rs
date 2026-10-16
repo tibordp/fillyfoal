@@ -25,7 +25,7 @@ use crate::formats::executable::dwarf::Sec;
 use crate::formats::util::binutil::{RangeIndex, data_node, get_at, perms};
 use crate::formats::util::fmt::plural;
 use crate::formats::util::val::{name_or, text};
-use crate::formats::{Codec, Format, Head, Input, Probe, content, embedded};
+use crate::formats::{Codec, Format, Head, Input, Probe, content, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::Span;
 
@@ -1112,6 +1112,11 @@ async fn section_contents(cx: &Cx, elf: &Elf, section: &Section) -> Result<Optio
                 lazy("Debug Alt Link").lazy(symbols::debuglink, (elf.class, data))
             }
             ".nv_fatbin" | "__nv_relfatbin" => embedded("Fat Binary", elf.input.nested(data)),
+            ".BTF" => embedded_as(
+                "BPF Type Format",
+                elf.input.nested(data),
+                &crate::formats::executable::btf::FORMAT,
+            ),
             ".eh_frame" => lazy("Call Frame Information").lazy(eh_frame, (elf.clone(), index)),
             ".eh_frame_hdr" => lazy("Frame Index").lazy(eh_frame_hdr, (elf.clone(), index)),
             ".debug_frame" => {
