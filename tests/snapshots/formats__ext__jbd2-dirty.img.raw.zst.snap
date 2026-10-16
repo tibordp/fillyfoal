@@ -1201,8 +1201,8 @@ expression: "common::explore(&display_name(&path), &data)"
           Unused — 96 bytes  [0x10ea0+0x60]
       ▾ Blocks — contiguous, 64.3 MiB
           Fragment 0 — file offset 0x0, 64.3 MiB  [#4294967295:0x0+0x4043000]
-      ▾ Content — 64.3 MiB  [#4294967295:0x0+0x4043000]
-          Data  [#4294967295:0x0+0x4043000]
+      ▾ Content — 64.3 MiB  [#2:0x0+0x4043000]
+          Data  [#2:0x0+0x4043000]
     ▾ Orphan file — -rw-------, 32 KiB
       ▾ Inode 12 — -rw-------, 32 KiB  [0x11300+0x100]
           Mode: 0x8180 — -rw-------  [0x11300+0x2]

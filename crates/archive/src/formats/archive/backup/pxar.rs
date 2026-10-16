@@ -26,10 +26,18 @@
 //! contents in the `.ppxar`: the metadata archive has a `PAYLOAD_REF`
 //! (offset of the payload's `PAYLOAD` header in the payload archive, and its
 //! size) where a plain archive has the `PAYLOAD`. The payload archive is a
-//! start marker, the `PAYLOAD` items (possibly with unreferenced padding
-//! between them, from reused chunks) and a tail marker; its payloads are
+//! start marker, the `PAYLOAD` items and a tail marker; its payloads are
 //! listed and dissected, but which file each belongs to is only in the
-//! metadata archive (a separate file).
+//! metadata archive (a separate file). An incremental backup
+//! (`--change-detection-mode=metadata`) copies whole chunks of the previous
+//! payload archive, cut at item boundaries, so its payload archive can hold
+//! the previous one's start and tail markers and payloads no file refers
+//! to; the walk goes on past a tail marker that items follow. In a split
+//! archive a goodbye item's size is not its entry's size (it can count the
+//! file's payload, or not, for a reused one), so every entry is taken to
+//! run to the next one, as in a plain archive, where the two agree. Checked
+//! against two backups written by proxmox-backup-client 3.4.9 to a Proxmox
+//! Backup Server.
 //!
 //! The item types and structures are from the `pxar` crate's
 //! `format/mod.rs` and `format/acl.rs` and the entry flags from Proxmox
@@ -357,8 +365,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if next == PRELUDE {
             let span = file.sub(pos, next_len);
             cx.emit(
-                embedded("Prelude", input.nested(span.tail(16)))
-                    .summary(size(span.len.saturating_sub(16))),
+                item_node(&cx, input, PRELUDE, span)
+                    .await?
+                    .renamed("Prelude"),
             );
             pos = pos.saturating_add(next_len);
         }
@@ -405,16 +414,11 @@ async fn entry_expand(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let end = start.saturating_add(span.len);
     let e = parse_entry(&cx, file, start, end).await?;
     for &(kind, item) in &e.items {
-        if kind == PAYLOAD {
-            let content = item.tail(16);
-            let name = e.name.as_deref().map_or_else(
-                || "Content".to_owned(),
-                |n| String::from_utf8_lossy(n).into_owned(),
-            );
-            cx.emit(embedded(name, input.nested(content)).summary(size(content.len)));
-        } else {
-            cx.emit(item_node(&cx, input, kind, item).await?);
+        let mut node = item_node(&cx, input, kind, item).await?;
+        if let (PAYLOAD, Some(name)) = (kind, &e.name) {
+            node = node.lazy(payload_expand, (input, item, Some(name.clone())));
         }
+        cx.emit(node);
     }
     let Some(body) = e.body else {
         return Ok(());
@@ -441,7 +445,8 @@ async fn entry_expand(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     );
     cx.set_count(Count::AtLeast(to_u64(gb.order.len())));
     for (i, &idx) in gb.order.iter().enumerate() {
-        let Some(&(_, offset, len)) = gb.items.get(idx) else {
+        let (Some(&(_, offset, len)), Some(&child_end)) = (gb.items.get(idx), gb.ends.get(idx))
+        else {
             continue;
         };
         let child = gb.start.saturating_sub(offset);
@@ -449,22 +454,31 @@ async fn entry_expand(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             cx.push(Node::new(format!("Entry {i}"))).await;
             continue;
         }
-        let cspan = file.sub(child, len);
-        if child < body || child.saturating_add(len) > gb.start {
+        // An entry runs to the next one (or to the goodbye table): in a
+        // split archive the goodbye item's size is no bound, as it counts
+        // a file's payload, which is in the payload archive.
+        let cspan = file.sub(child, child_end.saturating_sub(child));
+        if child < body || child >= child_end {
             cx.push(
                 Node::new(format!("Entry {i}"))
                     .span(cspan)
                     .diag(Diagnostic::malformed(
-                        "goodbye item points outside the directory",
+                        "goodbye item points outside the directory, or at another entry",
                     )),
             )
             .await;
             continue;
         }
-        let node = match parse_entry(&cx, file, child, child.saturating_add(len)).await {
+        let mut node = match parse_entry(&cx, file, child, child_end).await {
             Ok(ce) => entry_node(input, cspan, &ce, false),
             Err(err) => Node::new(format!("Entry {i}")).span(cspan).diag(err),
         };
+        if !gb.split && len != cspan.len {
+            node = node.diag(Diagnostic::warning(format!(
+                "the goodbye table gives the entry {len} bytes, it has {}",
+                cspan.len
+            )));
+        }
         cx.push(node).await;
     }
     Ok(())
@@ -478,6 +492,13 @@ struct Goodbye {
     items: Vec<(u64, u64, u64)>,
     /// Indices into `items` in file order of the entries.
     order: Vec<usize>,
+    /// For each item, where its entry ends: at the next entry in file
+    /// order, or at the table.
+    ends: Vec<u64>,
+    /// A split archive (format version 2), whose goodbye sizes count each
+    /// file's payload in the payload archive (or, for a file whose payload
+    /// an incremental backup reused, not), so they bound nothing.
+    split: bool,
 }
 
 /// Reads the goodbye table at the end of the directory `[dir, end)`.
@@ -493,6 +514,8 @@ async fn goodbye(
     if let Some(found) = cx.cached::<Goodbye>(anchor, "pxar-goodbye") {
         return Ok(found);
     }
+    let first = cx.read(file.sub(0, 16)).await?;
+    let split = header_at(&first, 0).is_some_and(|(kind, _)| kind == FORMAT_VERSION);
     let tail_span = file.sub(end.saturating_sub(24), 24);
     let tail = cx.read(tail_span).await?;
     let (Some(hash), Some(back), Some(len)) =
@@ -535,10 +558,21 @@ async fn goodbye(
     order.sort_by_key(|&i| std::cmp::Reverse(items.get(i).map_or(0, |it| it.1)));
     // The sort above: charged per item and comparison round.
     cx.charge(to_u64(items.len()).saturating_mul(4)).await;
+    let mut ends = vec![start; items.len()];
+    for pair in order.windows(2) {
+        if let &[a, b] = pair {
+            let next = items.get(b).map_or(start, |it| start.saturating_sub(it.1));
+            if let Some(end) = ends.get_mut(a) {
+                *end = next;
+            }
+        }
+    }
     let gb = Arc::new(Goodbye {
         start,
         items,
         order,
+        ends,
+        split,
     });
     cx.cache(anchor, "pxar-goodbye", gb.clone());
     Ok(gb)
@@ -547,6 +581,12 @@ async fn goodbye(
 async fn goodbye_expand(cx: Cx, (input, gb): (Input, Arc<Goodbye>)) -> Result<()> {
     let file = input.span;
     cx.emit(Node::new("Header").span(file.sub(gb.start, 16)));
+    if gb.split {
+        cx.diag(Diagnostic::note(
+            "in a split archive the sizes are not the entries' sizes: they may count a file's \
+             payload, which is in the payload archive",
+        ));
+    }
     cx.set_count(Count::Exact(to_u64(gb.items.len()).saturating_add(2)));
     for (i, &(hash, back, len)) in gb.items.iter().enumerate() {
         let span = file.sub(
@@ -556,10 +596,11 @@ async fn goodbye_expand(cx: Cx, (input, gb): (Input, Arc<Goodbye>)) -> Result<()
             24,
         );
         let target = gb.start.saturating_sub(back);
+        let target_end = gb.ends.get(i).copied().unwrap_or(gb.start);
         let mut node = Node::new(format!("Item {i}"))
             .span(span)
             .value(hex(hash, 64))
-            .target(file.sub(target, len));
+            .target(file.sub(target, target_end.saturating_sub(target)));
         if !cx.skipping() {
             // The name hashed is the target's FILENAME.
             let b = cx.read(file.sub(target, 16 + 256)).await?;
@@ -571,9 +612,8 @@ async fn goodbye_expand(cx: Cx, (input, gb): (Input, Arc<Goodbye>)) -> Result<()
                     );
                     let ok = siphash24(HASH_KEY.0, HASH_KEY.1, &name) == hash;
                     node = node.summary(format!(
-                        "{}, offset back {back}, {}",
+                        "{}, offset back {back}, size {len}",
                         String::from_utf8_lossy(&name),
-                        size(len)
                     ));
                     if !ok {
                         node = node.diag(Diagnostic::malformed(
@@ -608,9 +648,10 @@ async fn goodbye_expand(cx: Cx, (input, gb): (Input, Arc<Goodbye>)) -> Result<()
 /// the items the file's own children.
 async fn items(cx: Cx, (input, top): (Input, bool)) -> Result<()> {
     let file = input.span;
-    let (mut pos, mut index, mut payloads) = cx.resume::<(u64, u64, u64)>().unwrap_or((0, 0, 0));
+    let (mut pos, mut index, mut payloads, mut reused_markers) =
+        cx.resume::<(u64, u64, u64, u64)>().unwrap_or((0, 0, 0, 0));
     while pos < file.len {
-        let at = (pos, index, payloads);
+        let at = (pos, index, payloads, reused_markers);
         cx.mark(move || at);
         cx.progress_in(file, pos);
         let (kind, len) = match read_header(&cx, file, pos, file.len).await {
@@ -634,26 +675,60 @@ async fn items(cx: Cx, (input, top): (Input, bool)) -> Result<()> {
         } else {
             item_node(&cx, input, kind, span).await?
         };
+        let next = pos.saturating_add(len);
+        // An incremental backup reuses whole chunks of the previous payload
+        // archive, its start and tail markers included: a marker with items
+        // after it (or a start marker after the first item) came with one.
+        let reused = top
+            && match kind {
+                PAYLOAD_START => pos > 0,
+                PAYLOAD_TAIL => next < file.len && items_follow(&cx, file, next).await,
+                _ => false,
+            };
         if kind == PAYLOAD {
             // PAYLOAD_REFs name payloads by this offset.
             node = node.renamed(format!("PAYLOAD at {pos:#x}"));
+        } else if reused {
+            reused_markers = reused_markers.saturating_add(1);
+            node = node
+                .renamed(format!("{} (from a reused chunk)", item_name(kind)))
+                .desc("Copied with a chunk of an earlier backup's payload archive");
         }
         cx.push(node).await;
-        pos = pos.saturating_add(len);
+        pos = next;
         index = index.saturating_add(1);
-        if top && kind == PAYLOAD_TAIL && pos < file.len {
+        if top && kind == PAYLOAD_TAIL && !reused && pos < file.len {
             cx.push(Node::new("Data after the tail marker").span(file.tail(pos)))
                 .await;
             break;
         }
     }
     if top {
-        cx.annotate(format!(
+        let mut note = format!(
             "Proxmox file archive payloads (split archive), {}",
             plural(payloads, "payload")
-        ));
+        );
+        if reused_markers > 0 {
+            note.push_str(", with chunks reused from an earlier backup");
+        }
+        cx.annotate(note);
+        if reused_markers > 0 {
+            cx.diag(Diagnostic::note(
+                "chunks reused from an earlier backup can hold payloads no file in this \
+                 backup refers to; the metadata archive (.mpxar) says which are referenced",
+            ));
+        }
     }
     Ok(())
+}
+
+/// Whether an item the payload archive can hold (a payload or a marker)
+/// starts at `pos`.
+async fn items_follow(cx: &Cx, file: Span, pos: u64) -> bool {
+    matches!(
+        read_header(cx, file, pos, file.len).await,
+        Ok((PAYLOAD | PAYLOAD_START | PAYLOAD_TAIL, _))
+    )
 }
 
 fn perms(v: u64) -> String {
@@ -712,13 +787,13 @@ async fn item_node(cx: &Cx, input: Input, kind: u64, span: Span) -> Result<Node>
         .span(span)
         .summary(item_summary(kind, span.len, &peek));
     Ok(match kind {
-        PAYLOAD | PRELUDE => embedded(item_name(kind), input.nested(span.tail(16)))
-            .summary(size(span.len.saturating_sub(16))),
+        PAYLOAD | PRELUDE => node.lazy(payload_expand, (input, span, None)),
         _ => node.lazy(item_expand, (input, kind, span)),
     })
 }
 
-async fn item_expand(cx: Cx, (_input, kind, span): (Input, u64, Span)) -> Result<()> {
+/// The item header's fields.
+fn emit_header(cx: &Cx, kind: u64, span: Span) {
     cx.emit(
         Node::new("Type")
             .span(span.sub(0, 8))
@@ -730,6 +805,25 @@ async fn item_expand(cx: Cx, (_input, kind, span): (Input, u64, Span)) -> Result
             .value(uint(span.len, 64))
             .desc("Size of the item, header included"),
     );
+}
+
+/// A `PAYLOAD` or `PRELUDE` item: its header and its content, named after
+/// the file it belongs to when that is known.
+async fn payload_expand(cx: Cx, (input, span, name): (Input, Span, Option<Vec<u8>>)) -> Result<()> {
+    let b = cx.read(span.sub(0, 8)).await?;
+    let kind = u64_le(&b, 0).unwrap_or(PAYLOAD);
+    emit_header(&cx, kind, span);
+    let content = span.tail(16);
+    let name = name.map_or_else(
+        || "Content".to_owned(),
+        |n| String::from_utf8_lossy(&n).into_owned(),
+    );
+    cx.emit(embedded(name, input.nested(content)).summary(size(content.len)));
+    Ok(())
+}
+
+async fn item_expand(cx: Cx, (_input, kind, span): (Input, u64, Span)) -> Result<()> {
+    emit_header(&cx, kind, span);
     let body = span.tail(16);
     match kind {
         ENTRY => {

@@ -1,8 +1,10 @@
 #!/bin/sh
-# Rebuilds tests/fixtures/external/proxmox-vma/vm.vma with `vma create`
+# Rebuilds tests/fixtures/external/proxmox-vma/{vm,config}.vma with `vma create`
 # from pve-qemu-kvm 9.2.0-8 (Proxmox's bookworm repository): a VM config
 # and two raw disks, a 4 MiB FAT12 volume with one text file and a 1 MiB
-# disk that is zero but for one sector. Build the image first (see
+# disk that is zero but for one sector (vm.vma); a vzdump-style config
+# with a snapshot section, a firewall config and an all-zero 1 MiB disk
+# (config.vma). Build the image first (see
 # tests/data/proxmox/Dockerfile), then:
 #
 #   sh tests/data/proxmox-vma/make-external.sh [scratch dir]
@@ -18,3 +20,4 @@ docker run --rm --platform linux/amd64 --hostname fillyfoal -v "$work:/out" -v "
   fillyfoal-proxmox:bookworm bash /data/inner.sh
 mkdir -p "$repo/tests/fixtures/external/proxmox-vma"
 cp "$work/vm.vma" "$repo/tests/fixtures/external/proxmox-vma/vm.vma"
+cp "$work/config.vma" "$repo/tests/fixtures/external/proxmox-vma/config.vma"

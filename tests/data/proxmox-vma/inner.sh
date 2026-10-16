@@ -24,6 +24,21 @@ CONF
 rm -f /out/vm.vma
 vma create /out/vm.vma -c qemu-server.conf -d format=raw:drive-scsi0=disk.raw -d format=raw:drive-scsi1=small.raw 2>&1 | { grep -v progress || true; }
 vma verify /out/vm.vma -v 2>&1 | { grep -v progress || true; }
+# config.vma: the configuration as vzdump writes it (a %-encoded
+# description, a #qmdump#map line) plus a snapshot section (vzdump drops
+# those, other writers may not), a firewall configuration, and a 1 MiB
+# disk of zeros (every cluster an all-zero block info, no data).
+truncate -s 1M zero.raw
+printf '%s\n' '#Web server%3A neutral test VM' '#second description line' \
+  'boot: order=scsi0' 'cores: 1' 'memory: 512' 'name: fillyfoal' 'parent: s1' \
+  'scsi0: local-lvm:vm-100-disk-0,size=1M' '#qmdump#map:scsi0:drive-scsi0:local-lvm:raw:' \
+  '' '[s1]' 'boot: order=scsi0' 'cores: 1' 'memory: 256' 'name: fillyfoal' \
+  'scsi0: local-lvm:vm-100-disk-0,size=1M' 'snaptime: 1767323045' > qemu-server.conf
+printf '%s\n' '[OPTIONS]' 'enable: 1' '' '[RULES]' 'IN ACCEPT -p tcp -dport 22' \
+  'IN SSH(ACCEPT) -i net0' > qemu-server.fw
+rm -f /out/config.vma
+vma create /out/config.vma -c qemu-server.conf -c qemu-server.fw -d format=raw:drive-scsi0=zero.raw 2>&1 | { grep -v progress || true; }
+vma verify /out/config.vma -v 2>&1 | { grep -v progress || true; }
 # For checking the dissector's reassembly (not fixtures).
 cp disk.raw small.raw /out/
 dpkg-query -W pve-qemu-kvm

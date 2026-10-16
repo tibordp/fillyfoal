@@ -1042,8 +1042,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Reserved: 0  [#1:0x237e+0x2]
         ▾ Blocks — contiguous, 64.3 MiB
             Fragment 0 — file offset 0x0, 64.3 MiB  [#4294967295:0x0+0x4043000]
-        ▾ Content — 64.3 MiB  [#4294967295:0x0+0x4043000]
-            Data  [#4294967295:0x0+0x4043000]
+        ▾ Content — 64.3 MiB  [#2:0x0+0x4043000]
+            Data  [#2:0x0+0x4043000]
   ▾ Blocks — runs of blocks in use and free
       Blocks 0–7 — in use, 8 KiB  [0xf2+0x2000] → #1:0x0+0x2000
     ▾ Check value: 0xdfb2f11d — after stored block 7  [0x20f2+0x4]

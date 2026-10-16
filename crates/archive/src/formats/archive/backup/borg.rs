@@ -195,8 +195,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let at = (pos, index, counts);
         cx.mark(move || at);
         cx.progress_in(file, pos);
+        // The entry header, the key type and the compressor header (for
+        // `obfuscate`, the wrapped compressor's ID, 7 bytes on).
         let head = cx
-            .read(file.sub(pos, KEYED_HEADER.saturating_add(8)))
+            .read(file.sub(pos, KEYED_HEADER.saturating_add(16)))
             .await?;
         let (Some(crc), Some(len), Some(&tag)) = (u32_le(&head, 0), u32_le(&head, 4), head.get(8))
         else {
@@ -260,7 +262,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if short {
             node = node.diag(Diagnostic::truncated(file.sub(pos, len), span.len));
         }
-        cx.push(node.lazy(entry, (input, span, tag, crc))).await;
+        cx.push(node.lazy(entry, (input, span, tag, crc, len)))
+            .await;
         if short {
             break;
         }
@@ -276,7 +279,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn entry(cx: Cx, (input, span, tag, crc): (Input, Span, u8, u32)) -> Result<()> {
+async fn entry(cx: Cx, (input, span, tag, crc, len): (Input, Span, u8, u32, u64)) -> Result<()> {
     // The CRC covers the size, the tag, the ID and the data.
     let body = span.tail(4);
     let mut computed = u32::MAX;
@@ -303,7 +306,7 @@ async fn entry(cx: Cx, (input, span, tag, crc): (Input, Span, u8, u32)) -> Resul
     cx.emit(
         Node::new("Size")
             .span(span.sub(4, 4))
-            .value(uint(span.len, 32))
+            .value(uint(len, 32))
             .desc("Size of the whole entry, header included"),
     );
     cx.emit(

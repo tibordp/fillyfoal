@@ -1448,12 +1448,16 @@ neutral files owned by root.
 | `pxar-meta/split.mpxar` | `pxar create --payload-output` | the same tree as a split archive (format version 2): metadata. Unchanged |
 | `pxar-payload/split.ppxar` | `pxar create --payload-output` | the payloads of the same split archive. Unchanged |
 | `proxmox-vma/vm.vma` | `vma create` | `tests/data/proxmox-vma/make-external.sh`: a VM config and two raw disks (a 4 MiB FAT12 volume with one file; 1 MiB, zero but for one sector), two extents. Reassembled byte for byte against the source disks (`tests/backup.rs` checks their content). UUID and time vary per run. Unchanged |
+| `proxmox-vma/config.vma` | `vma create` | the same script: a `qemu-server.conf` as vzdump writes it (%-encoded description lines, a `#qmdump#map` line) with a `[s1]` snapshot section, a `qemu-server.fw` (options and rules), and a 1 MiB all-zero disk (every cluster an all-zero block info). UUID and time vary per run. Unchanged |
 | `pbs-blob/index.json.blob` | Proxmox Backup Server via `proxmox-backup-client backup` | `tests/data/pbs-blob/make-external.sh` runs a throwaway server in the container and backs up a directory and a 4 KiB random image: the snapshot manifest (zstd-compressed). Unchanged |
 | `pbs-blob/pxar-chunk.blob` | the same | the chunk holding the whole `files.pxar` (zstd-compressed) |
 | `pbs-blob/compressed-chunk.blob` | the same | the smallest zstd-compressed chunk |
 | `pbs-blob/uncompressed-chunk.blob` | the same | the smallest uncompressed chunk (a catalog) |
 | `pbs-blob/encrypted-chunk.blob` | the same, `--keyfile` (a fresh key, `--kdf none`) | the smallest encrypted, uncompressed chunk |
 | `pbs-blob/encrypted-compressed-chunk.blob` | the same, `--keyfile` | the smallest encrypted, compressed chunk |
+| `pxar-meta/backup-1.mpxar` | Proxmox Backup Server via `proxmox-backup-client backup x.pxar:… --change-detection-mode=metadata` | `tests/data/pxar/make-split.sh` (runs `split-inner.sh` with a throwaway server): a directory of 100 files of 100 KB, a text file in a subdirectory and a file with `setcap cap_net_raw+ep`; the metadata stream of the first backup, the decoded chunks of `x.mpxar.didx` concatenated. Not reproducible byte for byte. Unchanged |
+| `pxar-meta/backup-2.mpxar` | the same | the second backup of the same directory, one file changed and one added: metadata stream |
+| `pxar-payload/backup-2.ppxar.raw.zst` | the same | the second backup's payload stream (11 MB, stored with `zstd -19 --long=27`): reuses chunks of the first, the first's start and tail markers included |
 ## Git commit-graph files
 
 Reproduced byte for byte by `sh tests/data/git-commit-graph/make.sh`

@@ -1027,5 +1027,5 @@ expression: "common::explore(&display_name(&path), &data)"
             Unused — 96 bytes  [0x226a0+0x60]
         ▾ Blocks — contiguous, 4.0 GiB
             Fragment 0 — file offset 0x0, 4.0 GiB  [#4294967295:0x0+0x10040c000]
-        ▾ Content — 4.0 GiB  [#4294967295:0x0+0x10040c000]
-            Data  [#4294967295:0x0+0x10040c000]
+        ▾ Content — 4.0 GiB  [#1:0x0+0x10040c000]
+            Data  [#1:0x0+0x10040c000]
