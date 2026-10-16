@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ hkey-paths.txt — UTF-8 text, LF line endings, 3 lines  [0x0+0x78]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
+  ▾ Lines — 3 lines  [0x0+0x78]
+      Line 1: "HKEY_LOCAL_MACHINE\\SOFTWARE\\Fillyfoal\\Settings"  [0x0+0x2e]
+      Line 2: "HKEY_CURRENT_USER\\Software\\Fillyfoal\\Recent"  [0x2f+0x2b]
+      Line 3: "HKEY_CLASSES_ROOT\\.fillyfoal"  [0x5b+0x1c]

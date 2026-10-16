@@ -8,6 +8,7 @@
 //! its fragments ([`Cx::add_pieces`]) otherwise.
 //!
 //! Also here: Apple disk images (`dmg`), ntfsclone images (`ntfsclone`),
+//! Partclone images (`partclone`),
 //! ISO 9660 and SquashFS/CramFS, and TempleOS's RedSea (`redsea`) and its
 //! ISOs (`templeos_iso`).
 
@@ -38,6 +39,7 @@ pub mod nilfs;
 pub mod ntfs;
 pub mod ntfsclone;
 pub mod parallels;
+pub mod partclone;
 pub mod ptypes;
 pub mod qcow;
 pub mod redsea;

@@ -1537,3 +1537,89 @@ name `fillyfoal`), running `tests/data/ruby-marshal/make.rb`.
 | --- | --- | --- |
 | `ruby-marshal/objects.marshal` | Ruby 3.4.11 | a hash of nil/true/false, fixnums, bignums, floats (NaN, -Infinity), symbols and a symbol link, strings in UTF-8, US-ASCII, ISO-8859-1 and binary, arrays, an object link, hashes (one with a default), a struct, an object, `_dump` and `marshal_dump` objects, a regexp, a class, a module, a range and an extended String subclass; unchanged |
 | `ruby-marshal/array.marshal` | Ruby 3.4.11 | 600 `[i, "item i"]` pairs; unchanged |
+## Partclone images (partclone)
+
+Reproduced byte-for-byte by `sh tests/data/partclone/make-external.sh`
+(host name `fillyfoal`). Format 0002 images come from Docker
+`debian:trixie-slim` running `tests/data/partclone/inner.sh`: partclone
+0.3.36+repack-1, dosfstools 4.2-1.2, mtools 4.0.48-1, e2fsprogs
+1.47.2-3+b12, faketime 0.9.10, gzip 1.13, zstd 1.5.7. The format 0001 image
+comes from Docker `debian/eol:jessie` running `inner-v1.sh`: partclone
+0.2.73-2+b1, dosfstools 3.0.27-1, mtools 4.0.18-2. The volumes are a 4 MiB
+FAT16 (`mkfs.fat -F 16 -s 1 -n FILLYFOAL -i 12345678`) and a 1 MiB ext2
+(`mkfs.ext2 -b 1024 -N 16 -I 128 -L fillyfoal`, fixed UUID and hash seed,
+filled with `-d`), each holding two neutral text files
+(`tests/data/partclone/files.sh`), made under `faketime -f '2024-01-01
+00:00:00'`. `inner.sh` restores every format 0002 image with
+`partclone.restore` and checks the result equals the volume byte for byte;
+`tests/partclone.rs` checks the decoded volumes against the lengths and
+CRC-32s the scripts print. (FAT16 rather than FAT12: partclone 0.3.36's
+FAT12 bitmap leaves out clusters in use, so its FAT12 images do not restore.)
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `partclone/fat16.img.raw.zst` | partclone 0.3.36 | `partclone.fat16 -c -s fat.img -o fat16.img` (CRC32, reseeded, one check value per 2048 blocks), stored with `zstd -19` |
+| `partclone/ext2-k8-noreseed.img.raw.zst` | partclone 0.3.36 | `partclone.extfs -c -k 8 -K -s ext.img -o ...` (a check value every 8 blocks, not reseeded), stored with `zstd -19` |
+| `partclone/ext2-nocrc.img.raw.zst` | partclone 0.3.36 | `partclone.extfs -c -a 0 -s ext.img -o ...` (no check values), stored with `zstd -19` |
+| `partclone/fat16-v1.img.raw.zst` | partclone 0.2.73 | `partclone.fat16 -c -s fat.img -o fat16-v1.img` (image format 0001), stored with `zstd -19` |
+| `gzip/partclone-ext2.img.gz` | partclone 0.3.36, gzip 1.13 | `partclone.extfs -c -k 16 -s ext.img -o - \| gzip -9 -n` |
+| `zstd/partclone-fat16.img.zst` | partclone 0.3.36, zstd 1.5.7 | `partclone.fat16 -c -s fat.img -o - \| zstd -19` |
+
+## FSArchiver archives (fsarchiver)
+
+Made by `sh tests/data/fsarchiver/make-external.sh` (Docker
+`debian:trixie-slim`, host name `fillyfoal`): fsarchiver 0.8.8-1,
+faketime 0.9.10, e2fsprogs 1.47.2-3+b12. `inner.sh` archives one neutral
+tree (a 29-byte and a 4.7 KB text file packed into a shared block, a
+320 000-byte file of zeros in blocks of its own, a symbolic link, a
+subdirectory) with `fsarchiver savedir` under `faketime -f '2024-01-01
+00:00:00'`; `inner-savefs.sh` (a privileged container: a loop device, and
+the mount fsarchiver makes) saves a 4 MiB ext2 filesystem made by
+`mkfs.ext2 -d`. Not byte-for-byte reproducible: some access times are
+those fsarchiver's own reads leave (the real time); the archive id came out
+equal to the faked creation time.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `fsarchiver/zstd.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -Z 3 zstd.fsa tree` |
+| `fsarchiver/lz4.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -z 0 lz4.fsa tree` |
+| `fsarchiver/lzo.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -z 1 lzo.fsa tree` |
+| `fsarchiver/gzip.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -z 3 gzip.fsa tree` (zlib streams) |
+| `fsarchiver/bzip2.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -z 5 bzip2.fsa tree` |
+| `fsarchiver/xz.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -z 7 xz.fsa tree` (xz streams) |
+| `fsarchiver/blowfish.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -Z 3 -c fillyfoal blowfish.fsa tree` (Blowfish) |
+| `fsarchiver/savefs-ext2.fsa` | fsarchiver 0.8.8 | `fsarchiver savefs -Z 3 savefs-ext2.fsa /dev/loopN` of a 4 MiB ext2 filesystem |
+
+## zlib streams (zlib)
+
+Reproduced byte-for-byte by `sh tests/data/zlib/make-external.sh` (Docker
+`debian:trixie-slim`, host name `fillyfoal`, running
+`tests/data/zlib/inner.sh`): Python 3.13.5 with zlib 1.3.1, pigz 2.8. All
+four compress the same 2,460 bytes of neutral text (60 numbered lines).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `zlib/python-level1.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compress(data, 1)` |
+| `zlib/python-level9.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compress(data, 9)` |
+| `zlib/python-stored.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compress(data, 0)` (stored blocks) |
+| `zlib/pigz.zz` | pigz 2.8 | `pigz -z -11 -c lines.txt` (zopfli) |
+
+## xfsdump archives (xfsdump)
+
+Made by `sh tests/data/xfsdump/make-external.sh`: a privileged Docker
+`debian:trixie-slim` container (host name `fillyfoal`; a loop device and a
+mount in the Docker VM's kernel) running `tests/data/xfsdump/inner.sh`:
+xfsprogs 6.13.0-2+deb13u1, xfsdump 3.2.0-2, attr 2.5.2-3, faketime
+0.9.10. A 300 MiB XFS filesystem (`mkfs.xfs -L fillyfoal`, fixed UUID)
+mounted at `/mnt/fillyfoal` holds a text file with a `user.comment`
+attribute, a subdirectory with a text file, a symbolic link, an empty file
+and a sparse file (4 KiB, a 1 MiB hole, 4 KiB); the host id comes from a
+fixed `/etc/hostid`. Not reproducible byte for byte: the dump session and
+media ids are random, and inode generations and change times come from the
+kernel (the change times are the real time, so the level 1 dump, under a
+faked clock, finds every inode changed).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `xfsdump/level0.xfsdump.raw.zst` | xfsdump 3.2.0 | `faketime -f '2024-01-02 00:00:00' xfsdump -l 0 -L fillyfoal -M fillyfoal -f level0.xfsdump /mnt/fillyfoal`, stored with `zstd -19` |
+| `xfsdump/level1.xfsdump.raw.zst` | xfsdump 3.2.0 | `faketime -f '2024-01-04 00:00:00' xfsdump -l 1 -L fillyfoal-1 -M fillyfoal-1 -f level1.xfsdump /mnt/fillyfoal` after adding a file, stored with `zstd -19` |

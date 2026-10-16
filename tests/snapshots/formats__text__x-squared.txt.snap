@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ x-squared.txt — UTF-8 text, LF line endings, 2 lines  [0x0+0x42]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 2 LF, 0 CRLF, 0 CR
+  ▾ Lines — 2 lines  [0x0+0x42]
+      Line 1: "x^2 + y^2 = r^2 describes a circle of radius r."  [0x0+0x2f]
+      Line 2: "x^3 grows faster."  [0x30+0x11]
