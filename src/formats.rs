@@ -3433,6 +3433,10 @@ pub static FORMATS: &[&Format] = &[
     // complete stream (a trial decode, so after everything with magic).
     #[cfg(feature = "archive")]
     &compression::brotli::FORMAT,
+    // zlib's two-byte header is too weak alone: a trial inflate of the
+    // head (see the module), so after everything with magic.
+    #[cfg(feature = "archive")]
+    &compression::zlib::FORMAT,
     // Magic-less binary value encodings: only whole small files that parse
     // exactly to their end as one record (see each module).
     #[cfg(feature = "data")]

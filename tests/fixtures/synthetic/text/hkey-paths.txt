@@ -1,0 +1,3 @@
+HKEY_LOCAL_MACHINE\SOFTWARE\Fillyfoal\Settings
+HKEY_CURRENT_USER\Software\Fillyfoal\Recent
+HKEY_CLASSES_ROOT\.fillyfoal

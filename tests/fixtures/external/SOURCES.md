@@ -1433,3 +1433,17 @@ equal to the faked creation time.
 | `fsarchiver/xz.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -z 7 xz.fsa tree` (xz streams) |
 | `fsarchiver/blowfish.fsa` | fsarchiver 0.8.8 | `fsarchiver savedir -Z 3 -c fillyfoal blowfish.fsa tree` (Blowfish) |
 | `fsarchiver/savefs-ext2.fsa` | fsarchiver 0.8.8 | `fsarchiver savefs -Z 3 savefs-ext2.fsa /dev/loopN` of a 4 MiB ext2 filesystem |
+
+## zlib streams (zlib)
+
+Reproduced byte-for-byte by `sh tests/data/zlib/make-external.sh` (Docker
+`debian:trixie-slim`, host name `fillyfoal`, running
+`tests/data/zlib/inner.sh`): Python 3.13.5 with zlib 1.3.1, pigz 2.8. All
+four compress the same 2,460 bytes of neutral text (60 numbered lines).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `zlib/python-level1.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compress(data, 1)` |
+| `zlib/python-level9.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compress(data, 9)` |
+| `zlib/python-stored.zlib` | Python 3.13.5 `zlib` (zlib 1.3.1) | `zlib.compress(data, 0)` (stored blocks) |
+| `zlib/pigz.zz` | pigz 2.8 | `pigz -z -11 -c lines.txt` (zopfli) |
