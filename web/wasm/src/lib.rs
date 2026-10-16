@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use fillyfoal::{
     ByteRequest, ChildState, Count, DiagKind, Diagnostic, Digest, Limits, NodeId, Progress, Radix,
-    ReadProgress, Res, Secret, SecretRequest, Session, SourceId, Span, Value, Verdict, Wait, Zone,
+    ReadProgress, Res, Secret, SizeUnit, SecretRequest, Session, SourceId, Span, Value, Verdict, Wait, Zone,
     formats,
 };
 use serde::{Deserialize, Serialize};
@@ -702,6 +702,8 @@ enum ValueKind {
     Bytes,
     Guid,
     Checksum,
+    Size,
+    Duration,
     /// A value this build doesn't structure: `text` only, `data` is null.
     Other,
 }
@@ -809,6 +811,26 @@ enum WireData {
         computed: Option<String>,
         /// For "skipped": why.
         reason: Option<String>,
+    },
+    Size {
+        /// The stored count: bytes, or blocks of `block` bytes.
+        n: String,
+        /// "bytes", "blocks", or "other" for a unit this build predates.
+        unit: &'static str,
+        /// For "blocks": bytes per block; otherwise null.
+        block: Option<u32>,
+        /// The size in bytes (null if it overflows 64 bits).
+        bytes: Option<String>,
+        /// The width the file stores `n` in.
+        bits: u8,
+    },
+    Duration {
+        /// The stored count of ticks (negative for a span backwards).
+        ticks: String,
+        /// Ticks per second: 1, 1000, 1000000000, 90000, a sample rate...
+        per_sec: String,
+        /// `ticks / per_sec`, rounded to a double (`text` is exact).
+        seconds: f64,
     },
 }
 
@@ -1005,6 +1027,35 @@ impl From<&Value> for WireValue {
                     },
                 )
             }
+            Value::Size { n, unit, bits } => {
+                let (unit_name, block) = match unit {
+                    SizeUnit::Bytes => ("bytes", None),
+                    SizeUnit::Blocks(b) => ("blocks", Some(*b)),
+                    _ => ("other", None),
+                };
+                (
+                    K::Size,
+                    fillyfoal::render::value(value),
+                    Some(format!("{n:#x}")),
+                    WireData::Size {
+                        n: n.to_string(),
+                        unit: unit_name,
+                        block,
+                        bytes: value.size_bytes().map(|b| b.to_string()),
+                        bits: *bits,
+                    },
+                )
+            }
+            Value::Duration { ticks, per_sec } => (
+                K::Duration,
+                fillyfoal::render::value(value),
+                Some(ticks.to_string()),
+                WireData::Duration {
+                    ticks: ticks.to_string(),
+                    per_sec: per_sec.to_string(),
+                    seconds: *ticks as f64 / (*per_sec).max(1) as f64,
+                },
+            ),
             // An atom newer than this match: its text, unstructured.
             _ => {
                 return WireValue {
@@ -1146,6 +1197,14 @@ mod tests {
                     .into()
             ),
             r#"{"kind":"checksum","text":"0x12 (CRC-16, mismatch: computed 0x89ab)","raw":null,"data":{"algo":"CRC-16","stored":"0012","bits":16,"radix":"hex","verdict":"mismatch","computed":"89ab","reason":null}}"#
+        );
+        assert_eq!(
+            wire(Value::blocks(8, 512).bits(32)),
+            r#"{"kind":"size","text":"8 × 512 bytes (4 KiB)","raw":"0x8","data":{"n":"8","unit":"blocks","block":512,"bytes":"4096","bits":32}}"#
+        );
+        assert_eq!(
+            wire(Value::duration(133_200, 90_000)),
+            r#"{"kind":"duration","text":"1.48 s (133200/90000 s)","raw":"133200","data":{"ticks":"133200","per_sec":"90000","seconds":1.48}}"#
         );
         let bytes = Value::Bytes((0..20).collect());
         assert!(wire(bytes).ends_with(

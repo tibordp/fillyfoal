@@ -118,6 +118,27 @@ export type ValueData = {
     /// For "skipped": why it wasn't verified.
     reason: string | null;
   };
+  size: {
+    /// The stored count (decimal): bytes, or blocks of `block` bytes.
+    n: string;
+    /// "other": a unit this frontend predates (use `text`).
+    unit: "bytes" | "blocks" | "other";
+    /// For "blocks": bytes per block.
+    block: number | null;
+    /// The size in bytes (decimal); null if it overflows 64 bits.
+    bytes: string | null;
+    /// The width the file stores `n` in.
+    bits: number;
+  };
+  duration: {
+    /// The stored count of ticks (decimal, negative for a span backwards).
+    ticks: string;
+    /// Ticks per second (decimal): 1, 1000, 1000000000, 90000, a sample
+    /// rate... `text` is exact; `seconds` is rounded.
+    per_sec: string;
+    /// `ticks / per_sec` as a double.
+    seconds: number;
+  };
 };
 
 /// A value this build doesn't structure: only `text` is meaningful.
