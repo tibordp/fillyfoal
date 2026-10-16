@@ -1138,7 +1138,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ .rel.debug_addr — REL, ---, 0x70 bytes  [0x1fa8+0x40]  (+32 nodes elided)
     ▾ .BTF — PROGBITS, ---, 0x6d4 bytes  [0x1fe8+0x40]  (+472 nodes elided)
     ▾ .rel.BTF — REL, ---, 0x40 bytes  [0x2028+0x40]  (+23 nodes elided)
-    ▾ .BTF.ext — PROGBITS, ---, 0xe8 bytes  [0x2068+0x40]  (+11 nodes elided)
+    ▾ .BTF.ext — PROGBITS, ---, 0xe8 bytes  [0x2068+0x40]  (+81 nodes elided)
     ▾ .rel.BTF.ext — REL, ---, 0xb0 bytes  [0x20a8+0x40]  (+44 nodes elided)
     ▾ .debug_frame — PROGBITS, ---, 0x40 bytes  [0x20e8+0x40]  (+33 nodes elided)
     ▾ .rel.debug_frame — REL, ---, 0x40 bytes  [0x2128+0x40]  (+23 nodes elided)

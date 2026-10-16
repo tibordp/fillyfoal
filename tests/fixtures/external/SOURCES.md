@@ -1889,3 +1889,67 @@ the CPU the events land on). Checked by reading both traces back with
 | --- | --- | --- |
 | `ctf-packet/lttng-ust-32bit-stream` | LTTng-UST 2.13.9 (armhf) | the per-CPU stream file (`ust/uid/0/32-bit/ch_16`) holding the events: two 4 KiB packets, 32-bit `events_discarded`; unchanged |
 | `ctf-packet/babeltrace-clocked-stream` | babeltrace2 2.1.1 `sink.ctf.fs` | the converted stream file of the same CPU: two packets with timestamps, discarded count, sequence number and `cpu_id` in the context; unchanged |
+
+## BTF: CO-RE relocations and a distilled base
+
+`elf/bpf-core.o` is built by `tests/data/btf/core.sh` from
+`tests/data/btf/core.c` (a small BPF program whose field, type and enum
+accesses carry CO-RE relocations) with Debian clang 19.1.7 (`-g -O2 -target
+bpfel -ffile-prefix-map=/src=.`) in Docker `debian:trixie`, host name
+`fillyfoal`. Its `.BTF.ext` holds function and line information and six
+CO-RE relocations. Checked against `llvm-objdump -S` on a copy stripped of
+its DWARF (which prints the source lines from `.BTF.ext`), the source's
+accesses and `bpftool btf dump` (bpftool 7.5.0). Reproduced byte for byte.
+
+`elf/btf-distilled-module.o` is built by `tests/data/btf/distilled.sh` in
+Docker `debian:trixie` (host name `fillyfoal`) from the split fixture's
+`base.c` and `module.c` (ours, no kernel data) with gcc 14.2.0 and pahole
+1.30: `pahole -J --btf_base=base.btf --btf_features=distilled_base` adds the
+module's split `.BTF` and its distilled `.BTF.base` (6 types), as kernel
+module builds do since Linux 6.12; the DWARF is then stripped. Checked with
+`bpftool btf dump file module.o format raw` (bpftool 7.5.0, libbpf 1.5, which
+reads `.BTF.base`): IDs 7 to 24 follow the base's 6, and the names and
+references agree with the dissector's. Reproduced byte for byte.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `elf/bpf-core.o` | clang 19.1.7 `-g -O2 -target bpfel` | the object, with `.BTF`, `.BTF.ext` and DWARF; unchanged |
+| `elf/btf-distilled-module.o` | gcc 14.2.0, pahole 1.30 `-J --btf_features=distilled_base`, `objcopy --strip-debug` | the module object with `.BTF` and `.BTF.base`; unchanged |
+
+## trace-cmd: a version 6 file with an instance
+
+`tracecmd-dat/v6-instance.dat` is recorded by `tests/data/tracecmd-dat/make.sh`
+(`inside.sh`) like the other trace-cmd fixtures (trace-cmd 3.3.1, privileged
+`debian:trixie` container on the Docker VM's kernel, Linux 7.0.14 aarch64,
+18 CPUs, host name `fillyfoal`, the same kallsyms and saved_cmdlines
+replacements and `comm == "ffls"` filters): `trace-cmd record --file-version
+6 -e sched:sched_process_exec ... -B ffinst -e sched:sched_process_exit ...`,
+so the top buffer holds the two exec events and the instance "ffinst" the
+exit event, each on its own flyrecord located (for the instance) by a
+`BUFFER` option. Not reproducible byte for byte (times, PIDs). Checked
+against `trace-cmd report -t` and `trace-cmd dump --all`.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `tracecmd-dat/v6-instance.dat` | `trace-cmd record --file-version 6 ... -B ffinst ...` | 3 events, CPU 2 of each buffer; unchanged |
+
+## sysstat: interrupts
+
+`sysstat-sa/sa-irq.sa` is written by the second run of
+`tests/data/sysstat-sa/make.sh` (sysstat 12.7.5, `debian:trixie`, host name
+`fillyfoal`, `TZ=UTC`), `sadc -S INT 1 1` in a privileged container (a plain
+one masks `/proc/interrupts`, and A_IRQ is then empty). It holds sadc's
+default activities and A_IRQ: 19 rows (all CPUs, then CPU 0 to 17) of 28
+interrupts, named only in the first row by the VM's generic IRQ names
+(`sum`, numbers, `IPI0` to `IPI7`). Not reproducible byte for byte. Checked
+against `sar -I ALL` on a two-sample run of the same command.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `sysstat-sa/sa-irq.sa` | `sadc -S INT 1 1` (privileged) | one sample; unchanged |
+
+## nfdump: a block the header does not count
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `nfdump/uncounted.nfcapd` | nfpcapd 1.7.5 | `nfdump/plain.nfcapd` with the header's block count (`NumBlocks`, offset 36) set from 1 to 0, as in a file whose writer stopped before updating it; `nfdump -r` then prints no flows and `nfdump -v` reports the block as extra data after the counted ones |

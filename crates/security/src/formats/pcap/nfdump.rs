@@ -806,16 +806,35 @@ async fn payload(cx: &Cx, file: File, body: Span, flags: u16) -> Result<Span> {
 async fn blocks(cx: Cx, (file, region, count): (File, Span, u32)) -> Result<()> {
     let e = file.endian;
     let (mut pos, mut index) = cx.resume::<(u64, u32)>().unwrap_or((0, 0));
-    while index < count && pos < region.len {
+    while pos < region.len && index < MAX_BLOCKS {
+        // Past the blocks the header counts (a file whose writer stopped
+        // before updating the count): further blocks are shown while they
+        // look like blocks, though nfdump reads only the counted ones.
+        let uncounted = index >= count;
         let at = (pos, index);
         cx.mark(move || at);
         let head = cx.read_avail(region.sub(pos, BLOCK_HEADER)).await?;
-        let (Some(n), Some(size), Some(kind), Some(flags)) = (
+        let fields = (
             get::<u32>(&head, 0, e),
             get::<u32>(&head, 4, e),
             get::<u16>(&head, 8, e),
             get::<u16>(&head, 10, e),
-        ) else {
+        );
+        if uncounted {
+            let plausible = match fields {
+                (Some(n), Some(size), Some(kind), Some(_)) => {
+                    n > 0
+                        && (1..=4).contains(&kind)
+                        && BLOCK_HEADER.saturating_add(size.into())
+                            <= region.len.saturating_sub(pos)
+                }
+                _ => false,
+            };
+            if !plausible {
+                break;
+            }
+        }
+        let (Some(n), Some(size), Some(kind), Some(flags)) = fields else {
             cx.push(
                 Node::new("Trailing data")
                     .span(region.tail(pos))
@@ -848,6 +867,12 @@ async fn blocks(cx: Cx, (file, region, count): (File, Span, u32)) -> Result<()> 
         if !(1..=4).contains(&kind) {
             node = node.diag(Diagnostic::warning(format!("unknown block type {kind}")));
         }
+        if uncounted {
+            node = node.diag(Diagnostic::warning(format!(
+                "not counted in the header, which counts {}: nfdump does not read it",
+                plural(count, "block")
+            )));
+        }
         if span.len < total {
             node = node.diag(Diagnostic::truncated(
                 Span::new(span.source, span.offset, total),
@@ -859,7 +884,7 @@ async fn blocks(cx: Cx, (file, region, count): (File, Span, u32)) -> Result<()> 
         pos = pos.saturating_add(total);
         index = index.saturating_add(1);
     }
-    if index == count && pos < region.len {
+    if pos < region.len {
         cx.push(
             Node::new("Trailing data")
                 .span(region.tail(pos))

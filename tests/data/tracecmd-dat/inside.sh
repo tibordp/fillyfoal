@@ -1,7 +1,9 @@
 #!/bin/bash
 # Runs inside a privileged Debian trixie container (see make.sh) and records
-# two trace-cmd files in /out: v6.dat (uncompressed) and v7-zstd.dat
-# (sections, zstd-compressed metadata and CPU data).
+# three trace-cmd files in /out: v6.dat (uncompressed), v7-zstd.dat
+# (sections, zstd-compressed metadata and CPU data) and v6-instance.dat
+# (version 6 with a second ftrace instance, "ffinst", made by -B: the exec
+# event in the top buffer, the exit event in the instance's).
 #
 # Privacy: the Docker VM's kernel is shared by every container on it, so
 #  - /proc/kallsyms is replaced by a few kernel text symbols (the real table
@@ -35,7 +37,7 @@ EOF
 chmod +x /tmp/a/ffls
 
 cd /out
-rm -f v6.dat v7-zstd.dat
+rm -f v6.dat v7-zstd.dat v6-instance.dat
 f='comm == "ffls"'
 events=()
 for e in sched:sched_process_exec sched:sched_process_exit raw_syscalls:sys_enter raw_syscalls:sys_exit; do
@@ -43,5 +45,7 @@ for e in sched:sched_process_exec sched:sched_process_exit raw_syscalls:sys_ente
 done
 trace-cmd record -q -o v6.dat --file-version 6 "${events[@]}" /tmp/a/ffls > /dev/null
 trace-cmd record -q -o v7-zstd.dat --file-version 7 --compression zstd "${events[@]}" /tmp/a/ffls > /dev/null
+trace-cmd record -q -o v6-instance.dat --file-version 6 -e sched:sched_process_exec -f "$f" \
+    -B ffinst -e sched:sched_process_exit -f "$f" /tmp/a/ffls > /dev/null
 umount /sys/kernel/tracing/saved_cmdlines /proc/kallsyms
 dpkg-query -W trace-cmd

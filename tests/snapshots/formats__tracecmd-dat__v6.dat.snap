@@ -925,4 +925,5 @@ expression: "common::explore(&display_name(&path), &data)"
     CPUs: 18  [0x4ac7+0x4]
   ▾ Options  [0x4acb+0xb33]  (+23 nodes elided)
   ▾ Flyrecord — 18 CPUs  [0x55fe+0x12a]  (+37 nodes elided)
+    Trace Clock: "[local]" — local  [0x5728+0xf]
   ▾ CPU 12 — 4 pages  [0x6000+0x4000]  (+2887 nodes elided)
