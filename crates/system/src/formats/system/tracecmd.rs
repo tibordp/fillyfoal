@@ -143,6 +143,8 @@ struct Meta {
     header: Option<Span>,
     ftrace: Option<Span>,
     events: Option<Span>,
+    /// The saved command lines, with their 8-byte size.
+    cmdlines: Option<Span>,
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
@@ -304,6 +306,9 @@ async fn v6(cx: &Cx, mut trace: Trace, start: u64) -> Result<()> {
         };
         let span = file.sub(at, width.saturating_add(n));
         cur.skip(n);
+        if width == 8 {
+            trace.meta.cmdlines = Some(span);
+        }
         if span.len < width.saturating_add(n) {
             cx.emit(
                 Node::new(name)
@@ -743,9 +748,11 @@ struct EventFormat {
     fields: Vec<FieldDef>,
 }
 
-/// Event formats by ID.
+/// Event formats by ID, and task names by PID.
 struct EventMap {
     by_id: std::collections::BTreeMap<u32, Arc<EventFormat>>,
+    /// From the saved command lines (`<pid> <comm>` per line).
+    comms: std::collections::BTreeMap<u32, String>,
 }
 
 async fn event_map(cx: &Cx, trace: &Trace) -> Arc<EventMap> {
@@ -801,7 +808,21 @@ async fn event_map(cx: &Cx, trace: &Trace) -> Arc<EventMap> {
             }
         }
     }
-    let map = Arc::new(EventMap { by_id });
+    let mut comms = std::collections::BTreeMap::new();
+    if let Some(span) = trace.meta.cmdlines {
+        let body = span.tail(8);
+        if let Ok(b) = cx.read(body.sub(0, MAX_TEXT)).await {
+            cx.charge(to_u64(b.len()) / 256).await;
+            for line in String::from_utf8_lossy(&b).lines() {
+                if let Some((pid, comm)) = line.split_once(' ')
+                    && let Ok(pid) = pid.trim().parse::<u32>()
+                {
+                    comms.insert(pid, comm.to_string());
+                }
+            }
+        }
+    }
+    let map = Arc::new(EventMap { by_id, comms });
     cx.cache(key, "tracecmd-events", map.clone());
     map
 }
@@ -889,6 +910,7 @@ async fn v7(cx: &Cx, mut trace: Trace, start: u64) -> Result<()> {
             SEC_HEADER_INFO => trace.meta.header = Some(contents),
             SEC_FTRACE => trace.meta.ftrace = Some(contents),
             SEC_EVENTS => trace.meta.events = Some(contents),
+            SEC_CMDLINES => trace.meta.cmdlines = Some(contents),
             _ => {}
         }
         sections.push(Section {
@@ -1352,7 +1374,10 @@ async fn page_events(cx: Cx, (trace, page, data_off): (Trace, Span, u64)) -> Res
                 };
                 let summary = match &fmt {
                     Some(f) => {
-                        let mut s = timestamp(ts);
+                        let mut s = match task(f, &events, bytes, e) {
+                            Some(t) => format!("{t} {}", timestamp(ts)),
+                            None => timestamp(ts),
+                        };
                         let preview = field_preview(f, bytes, e);
                         if !preview.is_empty() {
                             s.push_str(": ");
@@ -1376,6 +1401,23 @@ async fn page_events(cx: Cx, (trace, page, data_off): (Trace, Span, u64)) -> Res
         pos = pos.saturating_add(total);
     }
     Ok(())
+}
+
+/// The task an event was recorded in, as trace-cmd shows it: `comm-pid`
+/// (`<idle>-0`, `<...>-pid` when the command line was not saved).
+fn task(f: &EventFormat, events: &EventMap, bytes: &[u8], e: Endian) -> Option<String> {
+    let fd = f.fields.iter().find(|fd| fd.name == "common_pid")?;
+    let pid = match field_value(fd, bytes, e) {
+        Value::Int { value, .. } => u32::try_from(value).ok()?,
+        Value::UInt { value, .. } => u32::try_from(value).ok()?,
+        _ => return None,
+    };
+    let comm = match events.comms.get(&pid) {
+        Some(c) => c.as_str(),
+        None if pid == 0 => "<idle>",
+        None => "<...>",
+    };
+    Some(format!("{comm}-{pid}"))
 }
 
 /// The first few non-common fields, `name=value`.
@@ -1546,5 +1588,32 @@ mod tests {
         assert_eq!(f[1].name, "filename");
         assert_eq!(f[2].name, "comm");
         assert_eq!(f[2].size, 16);
+    }
+
+    /// Events name their task the way `trace-cmd report` does.
+    #[test]
+    fn events_name_their_task() {
+        let fmt = EventFormat {
+            system: "raw_syscalls".to_string(),
+            name: "sys_enter".to_string(),
+            fields: parse_fields(
+                "\tfield:unsigned short common_type;\toffset:0;\tsize:2;\tsigned:0;\n\
+                 \tfield:int common_pid;\toffset:4;\tsize:4;\tsigned:1;\n",
+            ),
+        };
+        let mut comms = std::collections::BTreeMap::new();
+        comms.insert(118, "ffls".to_string());
+        let map = EventMap {
+            by_id: std::collections::BTreeMap::new(),
+            comms,
+        };
+        let event = |pid: u32| {
+            let mut b = vec![24, 0, 0, 0];
+            b.extend_from_slice(&pid.to_le_bytes());
+            task(&fmt, &map, &b, Endian::Little)
+        };
+        assert_eq!(event(118).as_deref(), Some("ffls-118"));
+        assert_eq!(event(0).as_deref(), Some("<idle>-0"));
+        assert_eq!(event(7).as_deref(), Some("<...>-7"));
     }
 }

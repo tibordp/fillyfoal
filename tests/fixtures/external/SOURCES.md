@@ -1837,3 +1837,38 @@ byte-reproducible (timestamps, MVIDs).
 | `msbuild-binlog/tiny.binlog.gz` | MSBuild 17.11.48 | `dotnet msbuild tiny.proj -bl:tiny.binlog` of an SDK-less project (targets, a property, items, a warning; the project import archive embeds the project file). The file unchanged, renamed so the harness dissects the gzip-compressed record stream inside it |
 | `msbuild-binlog/build-noimports.binlog.gz` | MSBuild 17.11.48 | `dotnet build "-bl:build-noimports.binlog;ProjectImports=None"` of a console app (restore, evaluation, about 7,000 records of 20 kinds). Unchanged, renamed as above |
 | `gzip/tiny.binlog` | MSBuild 17.11.48 | the same file as `msbuild-binlog/tiny.binlog.gz`, under its own name: as a host sees it (gzip, then the record stream) |
+
+## BPF Type Format: split BTF from pahole
+
+Built by `tests/data/btf/split.sh` in Docker `debian:trixie` (host name
+`fillyfoal`) with gcc 14.2.0 (`-g -O2 -ffile-prefix-map=/src=. -fno-ident`)
+and pahole 1.30: `base.c`'s BTF (`pahole --btf_encode_detached`) stands in
+for vmlinux, and `module.c`'s is encoded split against it (`pahole
+--btf_base=base.btf --btf_encode_detached`), the way kernel module BTF is.
+No kernel data: both sources are ours (a `struct device`/`list_head` base,
+a `struct widget` module). Checked with `bpftool -B base.btf btf dump file
+module.btf format raw` (bpftool 7.5.0): IDs 14 to 27 continue the base's 13,
+and the names and references agree with the dissector's.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `btf/split-module.btf` | pahole 1.30 `--btf_base=base.btf --btf_encode_detached` | the module's raw split BTF; unchanged |
+| `elf/btf-split-module.o` | gcc 14.2.0, binutils `objcopy --strip-debug --add-section .BTF=module.btf` | `module.o` with its DWARF stripped and the split BTF added as `.BTF`, as in a `.ko`; unchanged |
+
+## Common Trace Format: a 32-bit LTTng-UST tracer and babeltrace2 with a clock
+
+Written by `tests/data/ctf-packet/make-32bit.sh` (which runs
+`inside-32bit.sh`) in a `debian:trixie` container for `linux/arm/v7` (under
+emulation), host name `fillyfoal`, `TZ=UTC`: LTTng-UST 2.13.9 / lttng-tools
+2.13.15 tracing `hello.c` (150 `lttng_ust_tracef` messages, no extra
+contexts, per-UID buffers, two 4 KiB sub-buffers), then babeltrace2 2.1.1
+converting that trace with `sink.ctf.fs` (CTF 2 metadata, clock and LTTng's
+`cpu_id` kept). Only stream files are kept (the metadata records the
+emulated kernel's release). Not reproducible byte for byte (UUIDs, times,
+the CPU the events land on). Checked by reading both traces back with
+`babeltrace2`.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `ctf-packet/lttng-ust-32bit-stream` | LTTng-UST 2.13.9 (armhf) | the per-CPU stream file (`ust/uid/0/32-bit/ch_16`) holding the events: two 4 KiB packets, 32-bit `events_discarded`; unchanged |
+| `ctf-packet/babeltrace-clocked-stream` | babeltrace2 2.1.1 `sink.ctf.fs` | the converted stream file of the same CPU: two packets with timestamps, discarded count, sequence number and `cpu_id` in the context; unchanged |

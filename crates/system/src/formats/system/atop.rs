@@ -437,9 +437,11 @@ async fn system_stats(cx: Cx, (_input, log, span): (Input, Log, Span)) -> Result
     f.u64("cpu.devint").desc("Device interrupts").emit()?;
     f.u64("cpu.csw").desc("Context switches").emit()?;
     f.u64("cpu.nprocs").desc("Processes started").emit()?;
-    f.f32("cpu.lavg1").emit()?;
-    f.f32("cpu.lavg5").emit()?;
-    f.f32("cpu.lavg15").emit()?;
+    for name in ["cpu.lavg1", "cpu.lavg5", "cpu.lavg15"] {
+        f.f32(name)
+            .with(|&v, node| node.value(Value::Float(shortest(v))))
+            .emit()?;
+    }
     f.skip(4 + 32);
     f.int::<i32>("cpu.all.cpunr").emit()?;
     f.skip(4);
@@ -582,4 +584,10 @@ async fn cgroup_pids(cx: Cx, (log, span, n): (Log, Span, u64)) -> Result<()> {
             .await;
     }
     Ok(())
+}
+
+/// An `f32` as the `f64` of its shortest decimal form (`0.33`, not the
+/// `0.33000001311302185` widening gives).
+fn shortest(v: f32) -> f64 {
+    v.to_string().parse().unwrap_or(f64::from(v))
 }
