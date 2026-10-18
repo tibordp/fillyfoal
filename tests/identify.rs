@@ -1,0 +1,71 @@
+//! `formats::Identify`: sans-IO identification with a text answer.
+
+#![allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
+
+use fillyfoal::formats::{ByteRange, Identification, Identified, Identify};
+
+/// Identifies `data` under `name`, returning the answer and every range
+/// asked for.
+fn run(data: &[u8], name: &str) -> (Identification, Vec<ByteRange>) {
+    let mut id = Identify::new(data.len() as u64, Some(name));
+    let mut asked = Vec::new();
+    loop {
+        match id.poll() {
+            Identified::NeedBytes(ranges) => {
+                for r in ranges {
+                    asked.push(r);
+                    let from = (r.offset as usize).min(data.len());
+                    let to = (from + r.len as usize).min(data.len());
+                    id.provide(r.offset, &data[from..to]);
+                }
+            }
+            Identified::Done(found) => return (found, asked),
+        }
+    }
+}
+
+#[test]
+fn text_is_reported_whatever_the_format() {
+    let (json, _) = run(br#"{"name": "fillyfoal", "formats": 1640}"#, "a.json");
+    assert_eq!(json.format.map(|f| f.name), Some("json"));
+    assert!(json.text);
+
+    let (plain, _) = run(b"just some words\nand another line\n", "notes.txt");
+    assert_eq!(plain.format.map(|f| f.name), Some("text"));
+    assert!(plain.text);
+
+    let png = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/external/png/gray-alpha16.png"
+    ))
+    .unwrap();
+    let (image, _) = run(&png, "picture.png");
+    assert_eq!(image.format.map(|f| f.name), Some("png"));
+    assert!(!image.text);
+
+    // Text in a file named like an image is still text.
+    let (fake, _) = run(b"hello\n", "fake.png");
+    assert!(fake.text);
+}
+
+#[test]
+fn only_the_head_and_tail_are_read_for_a_large_file() {
+    let mut data = vec![b'a'; 4 << 20];
+    data.push(b'\n');
+    let (found, asked) = run(&data, "big.txt");
+    assert!(found.text);
+    let total: u64 = asked.iter().map(|r| r.len).sum();
+    assert!(total < 256 * 1024, "read {total} bytes: {asked:?}");
+}
+
+#[test]
+fn empty_input_needs_no_bytes() {
+    let (found, asked) = run(b"", "empty");
+    assert!(asked.is_empty());
+    assert!(found.format.is_none());
+    assert!(!found.text);
+}

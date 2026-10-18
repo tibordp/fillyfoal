@@ -445,6 +445,21 @@ fn fixtures_are_identified_correctly() {
         let deep_tail = &data[data.len().saturating_sub(DEEP_TAIL_LEN as usize)..];
         let name = display_name(&path);
         let found = identify_all(&probe, deep_tail, Some(&name)).map(|f| f.name);
+        // The sans-IO identifier (what sessions run, and hosts may run on
+        // their own) gives the same answer, reading only what it asks for.
+        let mut id = fillyfoal::formats::Identify::new(data.len() as u64, Some(&name));
+        let polled = loop {
+            match id.poll() {
+                fillyfoal::formats::Identified::NeedBytes(ranges) => {
+                    for r in ranges {
+                        let from = (r.offset as usize).min(data.len());
+                        let to = (from + r.len as usize).min(data.len());
+                        id.provide(r.offset, &data[from..to]);
+                    }
+                }
+                fillyfoal::formats::Identified::Done(found) => break found.format.map(|f| f.name),
+            }
+        };
         let wanted = match chosen_format(&path) {
             Some(_) => None,
             None => Some(expected.as_str()),
@@ -452,6 +467,12 @@ fn fixtures_are_identified_correctly() {
         if found != wanted {
             wrong.push(format!(
                 "{}: expected {expected}, got {found:?}",
+                snapshot_name(&path)
+            ));
+        }
+        if polled != found {
+            wrong.push(format!(
+                "{}: Identify gave {polled:?}, identify_all {found:?}",
                 snapshot_name(&path)
             ));
         }

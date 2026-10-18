@@ -139,6 +139,91 @@ pub static REGISTRY: Registry = Registry {
     deep: DEEP,
 };
 
+/// Identifies a file the way a session's tree would (both phases, the
+/// deep tail only when a candidate wants it, the name as a tie-breaker),
+/// without a session: poll, supply the byte ranges asked for, repeat.
+///
+/// ```no_run
+/// # fn read(_: u64, _: u64) -> std::io::Result<Vec<u8>> { Ok(Vec::new()) }
+/// # fn main() -> std::io::Result<()> {
+/// use fillyfoal::formats::{Identified, Identify};
+/// let mut id = Identify::new(4096, Some("notes.md"));
+/// let found = loop {
+///     match id.poll() {
+///         Identified::NeedBytes(ranges) => {
+///             for r in ranges {
+///                 id.provide(r.offset, &read(r.offset, r.len)?);
+///             }
+///         }
+///         Identified::Done(found) => break found,
+///     }
+/// };
+/// let _ = (found.format, found.text);
+/// # Ok(()) }
+/// ```
+pub struct Identify(fillyfoal_core::formats::Identify);
+
+/// What [`Identify`] found.
+#[derive(Clone, Copy, Debug)]
+pub struct Identification {
+    /// The format, or `None` if nothing matched.
+    pub format: Option<&'static Format>,
+    /// Whether the content is text (decodable, few control characters),
+    /// whatever more specific format it may also be: true for JSON, CSV,
+    /// SVG, Markdown and source code, false for a PNG. The plain-text
+    /// probe's own test. Always false in a build without `text`.
+    pub text: bool,
+}
+
+/// What [`Identify::poll`] needs next.
+#[derive(Clone, Debug)]
+pub enum Identified {
+    /// Supply these ranges with [`Identify::provide`], then poll again.
+    NeedBytes(Vec<ByteRange>),
+    Done(Identification),
+}
+
+impl Identify {
+    /// A file of `len` bytes, opened under `name` (its file name, or an
+    /// archive member's path), if it has one.
+    pub fn new(len: u64, name: Option<&str>) -> Identify {
+        Identify(fillyfoal_core::formats::Identify::new(&REGISTRY, len, name))
+    }
+
+    /// Supplies bytes asked for by [`poll`](Identify::poll) (fewer at the
+    /// end of the file are fine).
+    pub fn provide(&mut self, offset: u64, data: &[u8]) {
+        self.0.provide(offset, data);
+    }
+
+    /// The next step: byte ranges to supply, or the answer.
+    pub fn poll(&mut self) -> Identified {
+        match self.0.poll() {
+            fillyfoal_core::formats::Identified::NeedBytes(ranges) => Identified::NeedBytes(ranges),
+            fillyfoal_core::formats::Identified::Done(format) => Identified::Done(Identification {
+                format,
+                text: self.text(),
+            }),
+        }
+    }
+
+    #[cfg(feature = "text")]
+    fn text(&self) -> bool {
+        let data = self.0.head().unwrap_or_default();
+        text::plain::is_text(&Head {
+            data,
+            tail: &[],
+            len: self.0.len(),
+            len_known: true,
+        })
+    }
+
+    #[cfg(not(feature = "text"))]
+    fn text(&self) -> bool {
+        false
+    }
+}
+
 /// The catalog of every format.
 pub struct All;
 

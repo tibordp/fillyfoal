@@ -40,6 +40,14 @@ pub static SCRIPT: Format = Format {
 /// Anything that looks like text. A few bytes are too little evidence (a
 /// truncated binary header is often printable), unless they end a line.
 fn probe_text(h: &Head<'_>) -> bool {
+    is_text(h)
+}
+
+/// Whether content is text (decodable in some encoding, with few control
+/// characters), whatever more specific format it may also be: true for
+/// JSON, CSV, SVG, source code, false for images. The plain-text probe's
+/// own test, so the two never disagree.
+pub fn is_text(h: &Head<'_>) -> bool {
     let tiny = h.len < 4 && !h.data.ends_with(b"\n");
     !tiny && encoding::classify(h.data).is_some()
 }

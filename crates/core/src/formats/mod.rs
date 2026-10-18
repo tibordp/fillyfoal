@@ -20,6 +20,9 @@ use crate::span::Span;
 // -- shared helpers --
 pub mod util;
 
+mod identify;
+pub use identify::{ByteRange, Identified, Identify};
+
 /// How many leading bytes probes see. Large enough for magic numbers deep in
 /// a file, such as ISO 9660's volume descriptor at 0x8001 and the btrfs and
 /// UFS2 superblocks at 64 KiB.
@@ -373,21 +376,6 @@ pub async fn head(cx: &Cx, span: Span) -> Result<(Vec<u8>, Vec<u8>)> {
     Ok((data, tail))
 }
 
-/// Reads what second-phase probes asking for it see: the last
-/// [`DEEP_TAIL_LEN`] bytes of `span` (`head` if it already holds all of
-/// them), or nothing where reading the tail would decode a whole stream
-/// (as for [`Head::tail`]).
-async fn deep_tail(cx: &Cx, span: Span, head: &[u8]) -> Result<Vec<u8>> {
-    if span.len <= crate::bytes::to_u64(head.len()) {
-        return Ok(head.to_vec());
-    }
-    if !cx.tail_is_cheap(span.source) || !cx.len_known(span.source) {
-        return Ok(Vec::new());
-    }
-    let n = DEEP_TAIL_LEN.min(cx.limits().max_read);
-    cx.read_avail(span.tail(span.len.saturating_sub(n))).await
-}
-
 /// Settles the format of `input`: `given` if the caller knows it, else by
 /// identification. A format the host forced on the node (see
 /// [`crate::Session::reinterpret`]) overrides both, but only at the node's
@@ -410,37 +398,32 @@ async fn settle(
     let (format, empty) = match given {
         Some(format) => (Some(format), false),
         None => {
-            let (data, tail) = head(cx, input.span).await?;
-            let probe = Head {
-                data: &data,
-                tail: &tail,
-                len: input.span.len,
-                len_known: cx.len_known(input.span.source),
+            // The name speaks for the node only at its own detection step;
+            // content nested inside it has none.
+            let name = claim.is_some().then(|| cx.node_name());
+            let span = input.span;
+            let mut id = Identify::new(cx.registry(), span.len, name.as_deref())
+                .max_read(cx.limits().max_read);
+            if !cx.len_known(span.source) {
+                id = id.len_unknown();
+            }
+            if !cx.tail_is_cheap(span.source) {
+                id = id.without_tails();
+            }
+            let format = loop {
+                match id.poll() {
+                    Identified::NeedBytes(ranges) => {
+                        for r in ranges {
+                            let data = cx.read_avail(span.sub(r.offset, r.len)).await?;
+                            id.provide(r.offset, &data);
+                        }
+                    }
+                    Identified::Done(format) => break format,
+                }
             };
-            let registry = cx.registry();
-            let (first, units) = registry.identify_costed(&probe);
             // Probes run synchronously over the head; charge them.
-            cx.charge(units).await;
-            let mut candidates = registry.deep_candidates(first).peekable();
-            let format = if candidates.peek().is_none() {
-                first
-            } else {
-                let deep_tail = if candidates.any(|d| d.tail) {
-                    deep_tail(cx, input.span, &data).await?
-                } else {
-                    Vec::new()
-                };
-                // The name speaks for the node only at its own detection
-                // step; content nested inside it has none.
-                let name = claim.is_some().then(|| cx.node_name());
-                registry.identify_deep(&Deep {
-                    head: &probe,
-                    tail: &deep_tail,
-                    name: name.as_deref(),
-                    first,
-                })
-            };
-            (format, data.is_empty())
+            cx.charge(id.units()).await;
+            (format, id.is_empty())
         }
     };
     if claim.is_some() {
