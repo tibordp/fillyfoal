@@ -95,3 +95,37 @@ fn names_break_ties_for_short_text() {
         Some("markdown")
     );
 }
+
+#[test]
+fn ranges_may_be_supplied_in_any_order() {
+    // Large, binary and unrecognised: the first phase finds nothing, so
+    // the second phase runs and wants the deep tail too.
+    let data: Vec<u8> = (0..300_000u32)
+        .map(|i| (i.wrapping_mul(2_654_435_761) >> 24) as u8)
+        .collect();
+    let name = "blob.bin";
+    let (in_order, asked) = run(&data, name);
+    assert!(asked.len() >= 3, "{asked:?}");
+
+    let mut id = Identify::new(data.len() as u64, Some(name));
+    let reversed = loop {
+        match id.poll() {
+            Identified::NeedBytes(ranges) => {
+                // Bytes nobody asked for are ignored...
+                id.provide(12_345, b"junk");
+                // ...and the ranges asked for may come in any order.
+                for r in ranges.into_iter().rev() {
+                    let from = r.offset as usize;
+                    let to = (from + r.len as usize).min(data.len());
+                    id.provide(r.offset, &data[from..to]);
+                }
+            }
+            Identified::Done(found) => break found,
+        }
+    };
+    assert_eq!(
+        reversed.format.map(|f| f.name),
+        in_order.format.map(|f| f.name)
+    );
+    assert_eq!(reversed.text, in_order.text);
+}

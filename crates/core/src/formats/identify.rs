@@ -39,6 +39,14 @@ pub enum Identified {
     Done(Option<&'static Format>),
 }
 
+/// Which buffer a requested range fills.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Part {
+    Head,
+    Tail,
+    DeepTail,
+}
+
 /// Identifies one input (see the module docs).
 pub struct Identify {
     registry: &'static Registry,
@@ -50,6 +58,10 @@ pub struct Identify {
     head: Option<Vec<u8>>,
     tail: Option<Vec<u8>>,
     deep_tail: Option<Vec<u8>>,
+    /// The ranges the last poll asked for and not yet supplied, with the
+    /// buffer each fills: `provide` matches on them, so ranges may be
+    /// supplied in any order.
+    pending: Vec<(Part, ByteRange)>,
     /// The first phase's answer, once it has run.
     first: Option<Option<&'static Format>>,
     units: u64,
@@ -70,6 +82,7 @@ impl Identify {
             head: None,
             tail: None,
             deep_tail: None,
+            pending: Vec::new(),
             first: None,
             units: 0,
             result: None,
@@ -142,15 +155,27 @@ impl Identify {
         self.tail.is_some() || !(self.len > HEAD_LEN && self.tails())
     }
 
-    /// Supplies bytes asked for by [`poll`](Identify::poll).
+    /// Supplies the bytes of a range [`poll`](Identify::poll) asked for,
+    /// by its offset (fewer at the end of the input are fine). Ranges may
+    /// be supplied in any order; bytes nobody asked for are ignored.
     pub fn provide(&mut self, offset: u64, data: &[u8]) {
-        if self.head.is_none() && offset == 0 {
-            self.head = Some(data.to_vec());
-        } else if self.first.is_none() && self.tail.is_none() {
-            self.tail = Some(data.to_vec());
-        } else if self.first.is_some() && self.deep_tail.is_none() {
-            self.deep_tail = Some(data.to_vec());
-        }
+        let Some(at) = self.pending.iter().position(|(_, r)| r.offset == offset) else {
+            return;
+        };
+        let (part, _) = self.pending.remove(at);
+        let slot = match part {
+            Part::Head => &mut self.head,
+            Part::Tail => &mut self.tail,
+            Part::DeepTail => &mut self.deep_tail,
+        };
+        *slot = Some(data.to_vec());
+    }
+
+    /// Asks for `need` (and remembers what each range is for).
+    fn ask(&mut self, need: Vec<(Part, ByteRange)>) -> Identified {
+        let ranges = need.iter().map(|&(_, r)| r).collect();
+        self.pending = need;
+        Identified::NeedBytes(ranges)
     }
 
     /// The next step: bytes to supply, or the answer.
@@ -164,14 +189,14 @@ impl Identify {
                 if self.len_known && self.len == 0 {
                     self.head = Some(Vec::new());
                 } else {
-                    need.push(self.head_range());
+                    need.push((Part::Head, self.head_range()));
                 }
             }
             if !self.tail_ready() {
-                need.push(self.end_range(TAIL_LEN));
+                need.push((Part::Tail, self.end_range(TAIL_LEN)));
             }
             if !need.is_empty() {
-                return Identified::NeedBytes(need);
+                return self.ask(need);
             }
             self.first_phase();
         }
@@ -180,7 +205,8 @@ impl Identify {
             if self.len_known && self.len <= head_len {
                 self.deep_tail = self.head.clone();
             } else if self.tails() {
-                return Identified::NeedBytes(vec![self.end_range(DEEP_TAIL_LEN)]);
+                let range = self.end_range(DEEP_TAIL_LEN);
+                return self.ask(vec![(Part::DeepTail, range)]);
             } else {
                 self.deep_tail = Some(Vec::new());
             }
