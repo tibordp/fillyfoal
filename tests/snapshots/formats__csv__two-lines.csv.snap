@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ two-lines.csv — CSV, 2 columns (name, age), ~1 record  [0x0+0xf]
+    Delimiter: "comma"
+  ▾ Header — name, age  [0x0+0x8]
+      Column 1: "name"  [0x0+0x4]
+      Column 2: "age"  [0x5+0x3]
+  ▾ Record 1 — bob,3  [0x9+0x5]
+      name: "bob"  [0x9+0x3]
+      age: 3  [0xd+0x1]

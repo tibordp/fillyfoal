@@ -69,3 +69,29 @@ fn empty_input_needs_no_bytes() {
     assert!(found.format.is_none());
     assert!(!found.text);
 }
+
+#[test]
+fn names_break_ties_for_short_text() {
+    let name_of = |data: &[u8], name: &str| run(data, name).0.format.map(|f| f.name);
+    // Too short to tell from the content alone...
+    let md = b"Notes\n\nSome text, nothing more.\n";
+    assert_eq!(name_of(md, "notes.txt"), Some("text"));
+    // ...but a Markdown name settles it: any text is valid Markdown.
+    assert_eq!(name_of(md, "notes.md"), Some("markdown"));
+    // A two-line table with the right name is a table.
+    assert_eq!(name_of(b"name,age\nbob,3\n", "people.csv"), Some("csv"));
+    assert_eq!(name_of(b"name\tage\nbob\t3\n", "people.tsv"), Some("tsv"));
+    // Prose named .csv stays text: the records don't agree.
+    assert_eq!(
+        name_of(
+            b"Hello, world.\nThis is just prose, really, with commas.\n",
+            "prose.csv"
+        ),
+        Some("text")
+    );
+    // The name never claims binary content.
+    assert_ne!(
+        name_of(&[0u8, 159, 146, 150, 1, 2, 3], "x.md"),
+        Some("markdown")
+    );
+}

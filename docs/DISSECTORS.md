@@ -95,7 +95,12 @@ deep tail by absolute offset. `Deep::name` is the node's name (the file
 name the host opened it under, an archive member's path) at the node's
 own detection step only; names lie, so use it as a tie-breaker for a
 signature too weak to stand alone (`Deep::extension_is`), never instead
-of one, and never in `over` probes. `fixtures_are_identified_correctly`
+of one, and never in `over` probes, with one exception: a name may
+override the generic `text` fallback (`over: &["text"]`), which is no
+positive identification, when the format has its own reason to accept
+short text. Markdown accepts any text (any text is valid Markdown);
+CSV/TSV need every sampled record to have the same field count
+(`markdown::NAMED`, `csv::CSV_DEEP`, `csv::TSV_DEEP`). `fixtures_are_identified_correctly`
 runs both phases with each fixture's name.
 
 A probe cannot always tell; when the dissector finds out later that the

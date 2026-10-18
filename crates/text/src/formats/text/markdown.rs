@@ -5,7 +5,7 @@
 
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::formats::{Format, Head, Input, Probe, embedded_as};
+use crate::formats::{DeepProbe, Format, Head, Input, Probe, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
 
@@ -21,6 +21,16 @@ pub static FORMAT: Format = Format {
     mime: "text/markdown",
     probe: Probe::Custom(probe_markdown),
     dissect: crate::expander!(dissect: Input),
+};
+
+/// A file named `.md` (or another Markdown extension) that the first phase
+/// took for plain text, because a short document has too few Markdown
+/// constructs to tell: any text is valid Markdown, so the name settles it.
+pub static NAMED: DeepProbe = DeepProbe {
+    format: &FORMAT,
+    tail: false,
+    over: &["text"],
+    probe: |d| FORMAT.extensions.iter().any(|e| d.extension_is(e)) && probe::is_text(d.head),
 };
 
 /// The level of an ATX heading line (`## Title`).

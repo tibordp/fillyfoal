@@ -130,6 +130,12 @@ pub static DEEP: &[&DeepProbe] = &[
     &archive::terraform::TFPLAN_DEEP,
     #[cfg(feature = "archive")]
     &compression::zlib::DICT_DEEP,
+    #[cfg(feature = "text")]
+    &text::markdown::NAMED,
+    #[cfg(feature = "text")]
+    &text::csv::CSV_DEEP,
+    #[cfg(feature = "text")]
+    &text::csv::TSV_DEEP,
 ];
 
 /// Every format.

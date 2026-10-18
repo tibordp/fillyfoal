@@ -9,7 +9,7 @@ use std::sync::Arc;
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::{Format, Head, Input, Probe};
+use crate::formats::{Deep, DeepProbe, Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::Value;
@@ -36,6 +36,36 @@ pub static TSV: Format = Format {
     probe: Probe::Custom(|h| sniff_head(h, b"\t").is_some()),
     dissect: crate::expander!(dissect_tsv: Input),
 };
+
+/// A file named `.csv` (or `.psv`, `.ssv`) that the first phase took for
+/// plain text, because a table of two or three lines is too little
+/// evidence on its own: the name breaks the tie if every sampled record
+/// has the same number of fields (at least two). Prose stays text.
+pub static CSV_DEEP: DeepProbe = DeepProbe {
+    format: &CSV,
+    tail: false,
+    over: &["text"],
+    probe: |d| named_table(d, &["csv", "psv", "ssv"], b",;|"),
+};
+
+/// [`CSV_DEEP`] for `.tsv` / `.tab`.
+pub static TSV_DEEP: DeepProbe = DeepProbe {
+    format: &TSV,
+    tail: false,
+    over: &["text"],
+    probe: |d| named_table(d, &["tsv", "tab"], b"\t"),
+};
+
+fn named_table(d: &Deep<'_>, extensions: &[&str], candidates: &[u8]) -> bool {
+    if !extensions.iter().any(|e| d.extension_is(e)) || !probe::is_text(d.head) {
+        return false;
+    }
+    let head = probe::head(d.head);
+    candidates.iter().any(|&delim| {
+        let counts = sample_records(&head, delim, 50);
+        counts.len() >= 2 && counts.iter().all(|&c| c >= 2 && Some(&c) == counts.first())
+    })
+}
 
 /// Splits `data` into records (quote-aware); the last one may be partial.
 fn sample_records(data: &[u8], delim: u8, max: usize) -> Vec<usize> {
