@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ hello.b64 — one line, 13 bytes decoded  [0x0+0x15]
+  ▾ Decoded — UTF-8 text, LF line endings, 1 line  [0x0+0x15]
+      Encoding: "UTF-8"
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [#1:0x0+0xd]
+        Line 1: "hello, world"  [#1:0x0+0xc]

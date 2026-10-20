@@ -30,6 +30,7 @@ pub mod piece;
 pub mod probe;
 pub mod scan;
 
+pub mod base64;
 pub mod bibtex;
 pub mod checksums;
 pub mod csv;

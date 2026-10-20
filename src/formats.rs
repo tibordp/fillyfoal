@@ -3423,6 +3423,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "text")]
     &text::uuencode::FORMAT,
     #[cfg(feature = "text")]
+    &text::base64::FORMAT,
+    #[cfg(feature = "text")]
     &text::po::FORMAT,
     #[cfg(feature = "text")]
     &text::bibtex::FORMAT,
