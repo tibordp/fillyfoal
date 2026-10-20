@@ -16,8 +16,21 @@ expression: "common::explore(&display_name(&path), &data)"
         Height − 1: 15 — 16 px  [0x16+0x3]
         Alpha is used: true  [0x18+0x1]
         Version: 0  [0x18+0x1]
-    ▾ Image stream — transforms, color cache, then entropy-coded pixels  [0x19+0x25]
-        Transform present: true  [0x19+0x1]
-        Transform type: predictor (0x0) — transform 1  [0x19+0x1]
-        Block size bits: 7 — 512×512 blocks  [0x19+0x1]
-        Transform data — an entropy-coded sub-image of per-block parameters follows; the rest of the stream is entropy-coded
+    ▾ Image stream — 2 transforms, 1 prefix code group, 8 literal pixels, 5 backward references covering 248 pixels  [0x19+0x25]
+      ▾ Predictor transform — 512×512 blocks, a 1×1 image of prediction modes  [0x19+0x6]
+          Mode 12: clamp(L + T − TL) — 1 block
+        ▾ Sub-image
+            Color cache — none  [0x19+0x1]
+          ▾ Prefix codes — 1 group  [0x19+0x6]
+              Group 0 — symbols coded: green 1, red 1, blue 1, alpha 1, distance 1  [0x19+0x6]
+            Pixels — 1 literal pixel  [0x1e+0x1]
+      ▾ Color transform — 512×512 blocks, a 1×1 image of green-to-red, green-to-blue and red-to-blue multipliers  [0x1e+0x5]
+        ▾ Sub-image
+            Color cache — none  [0x1e+0x1]
+          ▾ Prefix codes — 1 group  [0x1f+0x4]
+              Group 0 — symbols coded: green 1, red 1, blue 1, alpha 1, distance 1  [0x1f+0x4]
+            Pixels — 1 literal pixel  [0x22+0x1]
+        Color cache — none  [0x22+0x1]
+      ▾ Prefix codes — 1 group  [0x22+0x14]
+          Group 0 — symbols coded: green 4, red 2, blue 2, alpha 3, distance 2  [0x22+0x14]
+        Pixels — 8 literal pixels, 5 backward references covering 248 pixels  [0x35+0x9]

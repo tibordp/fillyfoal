@@ -12,6 +12,8 @@ pub mod aiff;
 pub mod amiga;
 pub mod avi;
 pub mod misc;
+pub mod vp8;
+pub mod vp8l;
 pub mod wav;
 pub mod webp;
 

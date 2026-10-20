@@ -2,14 +2,20 @@
 //! `ALPH`, `ANIM`, `ANMF` (whose data holds further chunks), `ICCP` and
 //! `EXIF` (dissected as embedded content).
 //!
-//! The VP8 frame header and the VP8L header are decoded bit by bit, and the
-//! VP8L stream (also the payload of lossless `ALPH`) up to the first
-//! entropy-coded part: its transforms, color cache and prefix-code grouping.
+//! Lossy images: the VP8 frame tag and key frame header are read bit by
+//! bit, the frame header in the boolean-entropy-coded first partition is
+//! decoded (see [`super::vp8`]), and the token partitions are split by
+//! their sizes. Lossless images, and lossless `ALPH` data: the VP8L
+//! header, then the image stream decoded (see [`super::vp8l`]):
+//! transforms, color table, prefix codes and how the pixels are coded.
+
+use std::sync::Arc;
 
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::iff::{Chunk, Ctx, FourCc, scan, walk};
+use crate::formats::util::arcutil::push_nodes;
 use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{Bits, bits_node, parse_bits, u24};
 use crate::formats::{embedded, embedded_as};
@@ -46,12 +52,6 @@ const VP8_VERSION: EnumTable = &[
     (1, "bilinear reconstruction, simple loop filter"),
     (2, "bilinear reconstruction, no loop filter"),
     (3, "full-pixel reconstruction, no loop filter"),
-];
-const TRANSFORMS: EnumTable = &[
-    (0, "predictor"),
-    (1, "cross-color"),
-    (2, "subtract green"),
-    (3, "color indexing"),
 ];
 
 /// Above this many frames the file summary does not total frame durations.
@@ -174,96 +174,6 @@ fn vp8l(b: &mut Bits<'_>) -> Result<Size> {
         height: height.saturating_add(1),
         alpha,
     })
-}
-
-/// The fields of a VP8L image stream that come before its first
-/// entropy-coded part: the transforms (each at most once; predictor,
-/// cross-color and color-indexing transforms are followed by an
-/// entropy-coded sub-image, where this stops), the color cache and whether
-/// meta prefix codes are used.
-fn image_stream(b: &mut Bits<'_>) -> Result<()> {
-    for index in 0..4u32 {
-        let present = b
-            .field("Transform present", 1)
-            .flag()
-            .desc("1: a transform follows; 0: the transforms end")
-            .emit()?;
-        if present == 0 {
-            break;
-        }
-        let kind = b
-            .field("Transform type", 2)
-            .enumeration(TRANSFORMS)
-            .with(|_, n| n.summary(format!("transform {}", index.saturating_add(1))))
-            .emit()?;
-        match kind {
-            0 | 1 => {
-                b.field("Block size bits", 3)
-                    .with(|v, n| {
-                        let size = 1u64
-                            .checked_shl(u32::try_from(v).unwrap_or(0).saturating_add(2))
-                            .unwrap_or(0);
-                        n.summary(format!("{size}×{size} blocks"))
-                    })
-                    .desc("log2(block size) − 2")
-                    .emit()?;
-                b.node(Node::new("Transform data").summary(
-                    "an entropy-coded sub-image of per-block parameters follows; the rest of the stream is entropy-coded",
-                ));
-                return Ok(());
-            }
-            3 => {
-                b.field("Color table size − 1", 8)
-                    .with(|v, n| {
-                        let colors = v.saturating_add(1);
-                        let bits = match colors {
-                            0..=2 => "8 pixels per byte",
-                            3..=4 => "4 pixels per byte",
-                            5..=16 => "2 pixels per byte",
-                            _ => "1 pixel per byte",
-                        };
-                        n.summary(format!("{colors} colors, {bits}"))
-                    })
-                    .emit()?;
-                b.node(Node::new("Transform data").summary(
-                    "the entropy-coded color table follows; the rest of the stream is entropy-coded",
-                ));
-                return Ok(());
-            }
-            _ => {}
-        }
-    }
-    let cache = b
-        .field("Color cache", 1)
-        .flag()
-        .desc("Whether recently used colors are coded by a cache index")
-        .emit()?;
-    if cache != 0 {
-        b.field("Color cache bits", 4)
-            .with(|v, n| {
-                let size = 1u64.checked_shl(u32::try_from(v).unwrap_or(0)).unwrap_or(0);
-                n.summary(plural(size, "entry"))
-            })
-            .emit()?;
-    }
-    let meta = b
-        .field("Meta prefix codes", 1)
-        .flag()
-        .desc("Whether different image regions use different prefix-code groups")
-        .emit()?;
-    if meta != 0 {
-        b.field("Prefix bits", 3)
-            .with(|v, n| {
-                let size = 1u64
-                    .checked_shl(u32::try_from(v).unwrap_or(0).saturating_add(2))
-                    .unwrap_or(0);
-                n.summary(format!("{size}×{size} blocks"))
-            })
-            .desc("log2(block size) − 2 of the entropy image")
-            .emit()?;
-    }
-    b.node(Node::new("Prefix codes").summary("entropy-coded data follows"));
-    Ok(())
 }
 
 /// The one-byte `ALPH` header (most significant bits first).
@@ -446,6 +356,102 @@ fn bgra(b: &[u8]) -> crate::value::Color {
     crate::value::Color::rgba8(at(2), at(1), at(0), at(3))
 }
 
+/// The header bytes of the first partition read at most: the frame header
+/// with every coefficient probability updated fits.
+const MAX_FRAME_HEADER: u64 = 4096;
+
+/// The first partition: the key frame header (decoded), then the
+/// per-macroblock modes. Returns the number of token partitions.
+async fn first_partition(cx: &Cx, partition: Span, first: u64) -> Result<u32> {
+    let head = cx
+        .read_avail(partition.sub(0, MAX_FRAME_HEADER.min(partition.len)))
+        .await?;
+    let header = super::vp8::frame_header(&head);
+    let mut node = Node::new("First partition")
+        .span(partition)
+        .summary(header.summary.clone());
+    if partition.len < first {
+        node = node.diag(Diagnostic::truncated(
+            Span::new(partition.source, partition.offset, first),
+            partition.len,
+        ));
+    }
+    let at = crate::bytes::to_u64(header.consumed).min(partition.len);
+    let mut frame = Node::new("Frame header")
+        .span(partition.sub(0, at))
+        .summary(header.summary)
+        .desc("Boolean-entropy-coded; its end is approximate, as the decoder reads ahead");
+    if header.overran {
+        frame = frame.diag(Diagnostic::malformed(
+            "the first partition ends inside the frame header",
+        ));
+    }
+    let kids = vec![
+        frame.lazy(push_nodes, Arc::new(header.nodes)),
+        Node::new("Macroblock headers")
+            .span(partition.tail(at))
+            .summary("segment, skip flag and prediction modes of each macroblock (boolean-entropy-coded)"),
+    ];
+    cx.emit(node.lazy(push_nodes, Arc::new(kids)));
+    Ok(header.partitions)
+}
+
+/// The token partitions: with more than one, a 3-byte size for each but
+/// the last, then the partitions back to back.
+async fn token_partitions(cx: &Cx, region: Span, count: u32) -> Result<()> {
+    let what = "DCT coefficients (boolean-entropy-coded)";
+    if count <= 1 {
+        cx.emit(Node::new("Token partitions").span(region).summary(what));
+        return Ok(());
+    }
+    let n = u64::from(count);
+    let table_len = n.saturating_sub(1).saturating_mul(3);
+    let table = cx.read_avail(region.sub(0, table_len)).await?;
+    let mut kids = vec![Node::new("Partition sizes").span(region.sub(0, table_len))];
+    let mut at = table_len;
+    for i in 0..n {
+        let len = if i.saturating_add(1) == n {
+            region.len.saturating_sub(at)
+        } else {
+            let k = crate::bytes::to_usize(i.saturating_mul(3));
+            crate::bytes::u24_le(&table, k).map_or(0, u64::from)
+        };
+        let span = region.sub(at, len);
+        let mut node = Node::new(format!("Partition {}", i.saturating_add(1)))
+            .span(span)
+            .summary(crate::formats::util::fmt::size(len));
+        if span.len < len {
+            node = node.diag(Diagnostic::malformed("partition runs past the chunk"));
+        }
+        kids.push(node);
+        at = at.saturating_add(len);
+    }
+    cx.emit(
+        Node::new("Token partitions")
+            .span(region)
+            .summary(format!("{count} partitions, {what}"))
+            .lazy(push_nodes, Arc::new(kids)),
+    );
+    Ok(())
+}
+
+/// A VP8L image stream of `w` × `h` pixels, decoded on expansion.
+fn lossless_node(name: &'static str, span: Span, w: u64, h: u64) -> Node {
+    let alpha = name.starts_with("Alpha");
+    Node::new(name)
+        .span(span)
+        .lazy(expand_lossless, (span, w, h, alpha))
+}
+
+async fn expand_lossless(cx: Cx, (span, w, h, alpha): (Span, u64, u64, bool)) -> Result<()> {
+    let decoded = super::vp8l::image_stream(&cx, span, w, h, alpha).await?;
+    cx.annotate(decoded.summary);
+    for node in decoded.nodes {
+        cx.emit(node);
+    }
+    Ok(())
+}
+
 pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
     let data = chunk.data;
     let input = chunk.input();
@@ -461,21 +467,8 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
             let block = cx.read_avail(data.sub(0, 3)).await?;
             let first = crate::bytes::u24_le(&block, 0).map_or(0, |tag| u64::from(tag >> 5));
             let partition = data.sub(10, first);
-            let mut node = Node::new("First partition")
-                .span(partition)
-                .summary("modes and probabilities (boolean-entropy-coded)");
-            if partition.len < first {
-                node = node.diag(Diagnostic::truncated(
-                    Span::new(partition.source, partition.offset, first),
-                    partition.len,
-                ));
-            }
-            cx.emit(node);
-            cx.emit(
-                Node::new("Token partitions")
-                    .span(data.tail(10u64.saturating_add(first)))
-                    .summary("DCT coefficients (boolean-entropy-coded)"),
-            );
+            let partitions = first_partition(cx, partition, first).await?;
+            token_partitions(cx, data.tail(10u64.saturating_add(first)), partitions).await?;
         }
         b"VP8L" => {
             cx.emit(bits_node(
@@ -484,10 +477,13 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
                 |b| vp8l(b).map(|_| ()),
                 true,
             ));
-            cx.emit(
-                bits_node("Image stream", data.tail(5), image_stream, true)
-                    .summary("transforms, color cache, then entropy-coded pixels"),
-            );
+            let size = parse_bits(cx, data.sub(0, 5), vp8l, true).await?;
+            cx.emit(lossless_node(
+                "Image stream",
+                data.tail(5),
+                size.width,
+                size.height,
+            ));
         }
         b"VP8X" => {
             let block = cx.block(data.sub(0, 10)).await?;
@@ -498,10 +494,26 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
             let head = cx.read_avail(data.sub(0, 1)).await?;
             let body = data.tail(1);
             if head.first().is_some_and(|v| v & 3 == 1) {
-                cx.emit(
-                    bits_node("Alpha bitstream", body, image_stream, true)
-                        .summary("VP8L image stream without header"),
-                );
+                // The dimensions are the image's: the VP8 chunk that
+                // follows says.
+                let next = data.end().saturating_add(data.len & 1);
+                let vp8 = cx.read_avail(Span::new(data.source, next, 18)).await?;
+                let dim = |at| crate::bytes::u16_le(&vp8, at).map(|v| u64::from(v & 0x3fff));
+                match (vp8.get(..4), dim(14), dim(16)) {
+                    (Some(b"VP8 "), Some(w), Some(h)) => {
+                        cx.emit(lossless_node("Alpha bitstream", body, w, h));
+                    }
+                    _ => {
+                        cx.emit(
+                            Node::new("Alpha bitstream")
+                                .span(body)
+                                .summary("VP8L image stream without header")
+                                .diag(Diagnostic::malformed(
+                                    "no VP8 chunk follows to give the size",
+                                )),
+                        );
+                    }
+                }
             } else {
                 cx.emit(
                     Node::new("Alpha bitstream")

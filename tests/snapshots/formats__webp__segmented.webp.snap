@@ -1,0 +1,58 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ segmented.webp — WebP lossy, 64×48  [0x0+0x110]
+  ▾ Header  [0x0+0xc]
+      Chunk ID: "RIFF"  [0x0+0x4]
+      Size: 264  [0x4+0x4]
+      Form type: "WEBP"  [0x8+0x4]
+  ▾ VP8 — 64×48  [0xc+0x104]
+      Chunk ID: "VP8 "  [0xc+0x4]
+      Chunk size: 252  [0x10+0x4]
+    ▾ Frame header  [0x14+0xa]
+        Frame type: 0 — key frame  [0x14+0x1]
+        Version: bicubic reconstruction, normal loop filter (0x0)  [0x14+0x1]
+        Show frame: true  [0x14+0x1]
+        First partition size: 55 bytes  [0x14+0x3]
+        Start code: 0x2a019d — 9d 01 2a  [0x17+0x3]
+        Width: 64  [0x1a+0x2]
+        Horizontal scale: none (0x0)  [0x1b+0x1]
+        Height: 48  [0x1c+0x2]
+        Vertical scale: none (0x0)  [0x1d+0x1]
+    ▾ First partition — quantizer 51, normal loop filter 51, 1 token partition, segmented  [0x1e+0x37]
+      ▾ Frame header — quantizer 51, normal loop filter 51, 1 token partition, segmented  [0x1e+0x1b]
+          Color space: YUV (ITU-R BT.601) (0x0)
+          Clamping: required (0x0)
+        ▾ Segmentation: true
+            Update segment map: true
+            Update segment data: true
+            Segment values: absolute values (0x1)
+            Quantizer, segment 0: 51
+            Quantizer, segment 1: 43
+            Quantizer, segment 2: 31
+            Quantizer, segment 3: 15
+            Loop filter level, segment 0: 10
+            Loop filter level, segment 1: 51
+            Loop filter level, segment 2: 3
+            Loop filter level, segment 3 — not updated
+            Segment tree probability 0: 85
+            Segment tree probability 1: 128
+            Segment tree probability 2: 128
+          Filter type: normal (0x0)
+          Loop filter level: 51
+          Sharpness: 3
+          Loop filter adjustments: false
+          Token partitions: 1
+        ▾ Quantizer indices — base 51 of 127
+            Y AC: 51
+            Y DC delta — not updated
+            Y2 DC delta — not updated
+            Y2 AC delta — not updated
+            UV DC delta: -3
+            UV AC delta: 5
+          Refresh entropy probabilities: false
+          Coefficient probability updates: 6 — of 1056
+          Skip empty macroblocks: false
+        Macroblock headers — segment, skip flag and prediction modes of each macroblock (boolean-entropy-coded)  [0x39+0x1c]
+      Token partitions — DCT coefficients (boolean-entropy-coded)  [0x55+0xbb]

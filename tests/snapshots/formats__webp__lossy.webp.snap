@@ -20,5 +20,25 @@ expression: "common::explore(&display_name(&path), &data)"
         Horizontal scale: none (0x0)  [0x1b+0x1]
         Height: 16  [0x1c+0x2]
         Vertical scale: none (0x0)  [0x1d+0x1]
-      First partition — modes and probabilities (boolean-entropy-coded)  [0x1e+0x22]
+    ▾ First partition — quantizer 38, normal loop filter 11, 1 token partition  [0x1e+0x22]
+      ▾ Frame header — quantizer 38, normal loop filter 11, 1 token partition  [0x1e+0x19]
+          Color space: YUV (ITU-R BT.601) (0x0)
+          Clamping: required (0x0)
+          Segmentation: false
+          Filter type: normal (0x0)
+          Loop filter level: 11
+          Sharpness: 0
+          Loop filter adjustments: false
+          Token partitions: 1
+        ▾ Quantizer indices — base 38 of 127
+            Y AC: 38
+            Y DC delta — not updated
+            Y2 DC delta — not updated
+            Y2 AC delta — not updated
+            UV DC delta: -2
+            UV AC delta: 6
+          Refresh entropy probabilities: false
+          Coefficient probability updates: 10 — of 1056
+          Skip empty macroblocks: false
+        Macroblock headers — segment, skip flag and prediction modes of each macroblock (boolean-entropy-coded)  [0x37+0x9]
       Token partitions — DCT coefficients (boolean-entropy-coded)  [0x40+0xb0]

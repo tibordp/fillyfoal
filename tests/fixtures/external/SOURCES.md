@@ -738,6 +738,7 @@ and reproduce every file byte for byte.
 | `webp/lossy-alpha-raw.webp` | libwebp cwebp 1.6.0 | reproduced byte-for-byte: `cwebp -quiet -q 60 -alpha_method 0 rgba.png` (uncompressed ALPH) |
 | `webp/lossy-alpha-meta.webp` | libwebp cwebp 1.6.0 | `cwebp -quiet -q 50 -alpha_filter best -metadata icc,exif,xmp rgba-meta.png`; the input's LittleCMS sRGB profile carries its creation time, so only that profile's date differs on a re-run |
 | `webp/anim-mixed.webp` | libwebp img2webp 1.6.0 | reproduced byte-for-byte: `img2webp -loop 3 -d 120 -lossless frame0.png -lossy -q 40 -d 80 frame1.png -lossless -d 200 frame2.png` |
+| `webp/segmented.webp` | libwebp cwebp 1.6.0 | reproduced byte-for-byte: `cwebp -quiet -q 60 -segments 4 -sns 80 -f 40 -sharpness 3` of the PPM `tests/data/webp/make_segmented.py` writes (segmentation with absolute per-segment quantizers and filter levels) |
 | `png/palette-metadata.png` | Pillow 12.3.0 (zlib-ng 2.19, LittleCMS) | `tests/data/png/make_external.py`; reproduced byte-for-byte except the embedded LittleCMS sRGB profile's creation time (in the zlib-compressed iCCP) |
 | `png/interlaced-sbit.png` | pypng 0.20220715.0 | reproduced byte-for-byte by `tests/data/png/make_external.py` (Adam7, sBIT, gAMA, bKGD, tRNS, pHYs, the zlib stream split over two IDAT chunks) |
 | `png/gray-alpha16.png` | pypng 0.20220715.0 | reproduced byte-for-byte by `tests/data/png/make_external.py` |

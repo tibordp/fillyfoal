@@ -145,11 +145,21 @@ expression: "common::explore(&display_name(&path), &data)"
         Preprocessing: none (0x0)  [0x27a+0x1]
         Filtering method: vertical (0x2)  [0x27a+0x1]
         Compression method: lossless (VP8L) (0x1)  [0x27a+0x1]
-    ▾ Alpha bitstream — VP8L image stream without header  [0x27b+0x1a]
-        Transform present: true  [0x27b+0x1]
-        Transform type: color indexing (0x3) — transform 1  [0x27b+0x1]
-        Color table size − 1: 3 — 4 colors, 4 pixels per byte  [0x27b+0x2]
-        Transform data — the entropy-coded color table follows; the rest of the stream is entropy-coded
+    ▾ Alpha bitstream — 1 transform, 1 prefix code group, 8 literal pixels, 1 backward reference covering 56 pixels  [0x27b+0x1a]
+      ▾ Color indexing transform — 4 alpha levels, 4 pixels per byte  [0x27b+0xc]
+          Level 0: 0
+          Level 1: 1
+          Level 2: 255
+          Level 3: 16
+        ▾ Sub-image
+            Color cache — none  [0x27c+0x1]
+          ▾ Prefix codes — 1 group  [0x27c+0xa]
+              Group 0 — symbols coded: green 4, red 1, blue 1, alpha 1, distance 1  [0x27c+0xa]
+            Pixels — 4 literal pixels  [0x285+0x2]
+        Color cache — none  [0x286+0x1]
+      ▾ Prefix codes — 1 group  [0x287+0xc]
+          Group 0 — symbols coded: green 5, red 1, blue 1, alpha 1, distance 1  [0x287+0xc]
+        Pixels — 8 literal pixels, 1 backward reference covering 56 pixels  [0x292+0x3]
       Pad byte  [0x295+0x1]
   ▾ VP8 — 16×16  [0x296+0x48]
       Chunk ID: "VP8 "  [0x296+0x4]
@@ -164,7 +174,27 @@ expression: "common::explore(&display_name(&path), &data)"
         Horizontal scale: none (0x0)  [0x2a5+0x1]
         Height: 16  [0x2a6+0x2]
         Vertical scale: none (0x0)  [0x2a7+0x1]
-      First partition — modes and probabilities (boolean-entropy-coded)  [0x2a8+0x11]
+    ▾ First partition — quantizer 38, normal loop filter 11, 1 token partition  [0x2a8+0x11]
+      ▾ Frame header — quantizer 38, normal loop filter 11, 1 token partition  [0x2a8+0x9]
+          Color space: YUV (ITU-R BT.601) (0x0)
+          Clamping: required (0x0)
+          Segmentation: false
+          Filter type: normal (0x0)
+          Loop filter level: 11
+          Sharpness: 0
+          Loop filter adjustments: false
+          Token partitions: 1
+        ▾ Quantizer indices — base 38 of 127
+            Y AC: 38
+            Y DC delta — not updated
+            Y2 DC delta — not updated
+            Y2 AC delta — not updated
+            UV DC delta: -2
+            UV AC delta: 6
+          Refresh entropy probabilities: false
+          Coefficient probability updates: 2 — of 1056
+          Skip empty macroblocks: false
+        Macroblock headers — segment, skip flag and prediction modes of each macroblock (boolean-entropy-coded)  [0x2b1+0x8]
       Token partitions — DCT coefficients (boolean-entropy-coded)  [0x2b9+0x25]
   ▾ EXIF — Exif, fillyfoal cwebp test  [0x2de+0x44]
       Chunk ID: "EXIF"  [0x2de+0x4]

@@ -37,11 +37,11 @@ expression: "common::explore(&display_name(&path), &data)"
           Height − 1: 15 — 16 px  [0x4e+0x3]
           Alpha is used: false  [0x50+0x1]
           Version: 0  [0x50+0x1]
-      ▾ Image stream — transforms, color cache, then entropy-coded pixels  [0x51+0x58]
-          Transform present: false  [0x51+0x1]
-          Color cache: false  [0x51+0x1]
-          Meta prefix codes: false  [0x51+0x1]
-          Prefix codes — entropy-coded data follows
+      ▾ Image stream — no transforms, 1 prefix code group, 48 literal pixels, 10 backward references covering 208 pixels  [0x51+0x58]
+          Color cache — none  [0x51+0x1]
+        ▾ Prefix codes — 1 group  [0x51+0x2a]
+            Group 0 — symbols coded: green 19, red 8, blue 6, alpha 1, distance 2  [0x51+0x2a]
+          Pixels — 48 literal pixels, 10 backward references covering 208 pixels  [0x7b+0x2e]
         Pad byte  [0xa9+0x1]
   ▾ ANMF — 16×3 at (0, 12), 100 ms  [0xaa+0x76]
       Chunk ID: "ANMF"  [0xaa+0x4]
@@ -61,11 +61,33 @@ expression: "common::explore(&display_name(&path), &data)"
           Height − 1: 2 — 3 px  [0xcc+0x3]
           Alpha is used: false  [0xce+0x1]
           Version: 0  [0xce+0x1]
-      ▾ Image stream — transforms, color cache, then entropy-coded pixels  [0xcf+0x50]
-          Transform present: true  [0xcf+0x1]
-          Transform type: color indexing (0x3) — transform 1  [0xcf+0x1]
-          Color table size − 1: 15 — 16 colors, 2 pixels per byte  [0xcf+0x2]
-          Transform data — the entropy-coded color table follows; the rest of the stream is entropy-coded
+      ▾ Image stream — 1 transform, 1 prefix code group, 8 literal pixels, 1 backward reference covering 16 pixels  [0xcf+0x50]
+        ▾ Color indexing transform — 16 colors, 2 pixels per byte  [0xcf+0x39]
+            Color 0: #ff000aff
+            Color 1: #00fff5ff
+            Color 2: #1500ffff
+            Color 3: #2aff00ff
+            Color 4: #eaff00ff
+            Color 5: #d500ffff
+            Color 6: #8aff00ff
+            Color 7: #7500ffff
+            Color 8: #ff00caff
+            Color 9: #00ff95ff
+            Color 10: #ff006aff
+            Color 11: #00ff35ff
+            Color 12: #ffb500ff
+            Color 13: #00aaffff
+            Color 14: #ff5500ff
+            Color 15: #004affff
+          ▾ Sub-image
+              Color cache — none  [0xd0+0x1]
+            ▾ Prefix codes — 1 group  [0xd0+0x27]
+                Group 0 — symbols coded: green 6, red 7, blue 7, alpha 2, distance 1  [0xd0+0x27]
+              Pixels — 16 literal pixels  [0xf6+0x12]
+          Color cache — none  [0x108+0x1]
+        ▾ Prefix codes — 1 group  [0x108+0x13]
+            Group 0 — symbols coded: green 9, red 1, blue 1, alpha 1, distance 1  [0x108+0x13]
+          Pixels — 8 literal pixels, 1 backward reference covering 16 pixels  [0x11a+0x5]
         Pad byte  [0x11f+0x1]
   ▾ ANMF — 16×3 at (0, 12), 100 ms  [0x120+0x76]
       Chunk ID: "ANMF"  [0x120+0x4]
@@ -89,5 +111,25 @@ expression: "common::explore(&display_name(&path), &data)"
           Horizontal scale: none (0x0)  [0x147+0x1]
           Height: 3  [0x148+0x2]
           Vertical scale: none (0x0)  [0x149+0x1]
-        First partition — modes and probabilities (boolean-entropy-coded)  [0x14a+0x1c]
+      ▾ First partition — quantizer 26, no loop filter, 1 token partition  [0x14a+0x1c]
+        ▾ Frame header — quantizer 26, no loop filter, 1 token partition  [0x14a+0x17]
+            Color space: YUV (ITU-R BT.601) (0x0)
+            Clamping: required (0x0)
+            Segmentation: false
+            Filter type: normal (0x0)
+            Loop filter level: 0 — no loop filter
+            Sharpness: 0
+            Loop filter adjustments: false
+            Token partitions: 1
+          ▾ Quantizer indices — base 26 of 127
+              Y AC: 26
+              Y DC delta — not updated
+              Y2 DC delta — not updated
+              Y2 AC delta — not updated
+              UV DC delta: -2
+              UV AC delta: 6
+            Refresh entropy probabilities: false
+            Coefficient probability updates: 9 — of 1056
+            Skip empty macroblocks: false
+          Macroblock headers — segment, skip flag and prediction modes of each macroblock (boolean-entropy-coded)  [0x161+0x5]
         Token partitions — DCT coefficients (boolean-entropy-coded)  [0x166+0x30]

@@ -371,6 +371,52 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
+## VP8 and VP8L tables — RFC 6386 and RFC 9649
+
+`COEFF_UPDATE_PROBS` in `crates/av/src/formats/iff/vp8.rs` is the table
+`coeff_update_probs` of RFC 6386 (section 13.4), extracted from the RFC's
+text; the RFC's reference decoder source, which holds the same table, is
+under this license (RFC 6386, section 20.26):
+
+```text
+Copyright (c) 2010, 2011, Google Inc.  All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+  * Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+
+  * Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in
+    the documentation and/or other materials provided with the
+    distribution.
+
+  * Neither the name of Google nor the names of its contributors may
+    be used to endorse or promote products derived from this software
+    without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
+WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+```
+
+`DISTANCE_MAP` and `CODE_LENGTH_ORDER` in
+`crates/av/src/formats/iff/vp8l.rs` are from RFC 9649 (sections 3.6.2.2.1
+and 3.7.2.1.2), Copyright (c) 2024 IETF Trust and the persons identified as
+the document authors, Code Components under the Revised BSD License of the
+IETF Trust's Legal Provisions (<https://trustee.ietf.org/license-info>).
+
 ## Guitar Pro field names — PyGuitarPro
 
 Flag and enumeration labels in `crates/av/src/formats/audio/guitar_pro/` follow

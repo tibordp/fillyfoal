@@ -37,11 +37,24 @@ expression: "common::explore(&display_name(&path), &data)"
           Height − 1: 15 — 16 px  [0x4e+0x3]
           Alpha is used: true  [0x50+0x1]
           Version: 0  [0x50+0x1]
-      ▾ Image stream — transforms, color cache, then entropy-coded pixels  [0x51+0x49]
-          Transform present: true  [0x51+0x1]
-          Transform type: predictor (0x0) — transform 1  [0x51+0x1]
-          Block size bits: 7 — 512×512 blocks  [0x51+0x1]
-          Transform data — an entropy-coded sub-image of per-block parameters follows; the rest of the stream is entropy-coded
+      ▾ Image stream — 2 transforms, 1 prefix code group, 29 literal pixels, 8 backward references covering 227 pixels  [0x51+0x49]
+        ▾ Predictor transform — 512×512 blocks, a 1×1 image of prediction modes  [0x51+0x6]
+            Mode 12: clamp(L + T − TL) — 1 block
+          ▾ Sub-image
+              Color cache — none  [0x51+0x1]
+            ▾ Prefix codes — 1 group  [0x51+0x6]
+                Group 0 — symbols coded: green 1, red 1, blue 1, alpha 1, distance 1  [0x51+0x6]
+              Pixels — 1 literal pixel  [0x56+0x1]
+        ▾ Color transform — 512×512 blocks, a 1×1 image of green-to-red, green-to-blue and red-to-blue multipliers  [0x56+0x5]
+          ▾ Sub-image
+              Color cache — none  [0x56+0x1]
+            ▾ Prefix codes — 1 group  [0x57+0x4]
+                Group 0 — symbols coded: green 1, red 1, blue 1, alpha 1, distance 1  [0x57+0x4]
+              Pixels — 1 literal pixel  [0x5a+0x1]
+          Color cache — none  [0x5a+0x1]
+        ▾ Prefix codes — 1 group  [0x5a+0x26]
+            Group 0 — symbols coded: green 7, red 4, blue 1, alpha 3, distance 6  [0x5a+0x26]
+          Pixels — 29 literal pixels, 8 backward references covering 227 pixels  [0x7f+0x1b]
   ▾ ANMF — 16×16 at (0, 0), 80 ms, no blending  [0x9a+0xa6]
       Chunk ID: "ANMF"  [0x9a+0x4]
       Chunk size: 158  [0x9e+0x4]
@@ -59,11 +72,19 @@ expression: "common::explore(&display_name(&path), &data)"
           Preprocessing: none (0x0)  [0xba+0x1]
           Filtering method: none (0x0)  [0xba+0x1]
           Compression method: lossless (VP8L) (0x1)  [0xba+0x1]
-      ▾ Alpha bitstream — VP8L image stream without header  [0xbb+0x18]
-          Transform present: true  [0xbb+0x1]
-          Transform type: color indexing (0x3) — transform 1  [0xbb+0x1]
-          Color table size − 1: 1 — 2 colors, 8 pixels per byte  [0xbb+0x2]
-          Transform data — the entropy-coded color table follows; the rest of the stream is entropy-coded
+      ▾ Alpha bitstream — 1 transform, 1 prefix code group, 6 literal pixels, 1 backward reference covering 26 pixels  [0xbb+0x18]
+        ▾ Color indexing transform — 2 alpha levels, 8 pixels per byte  [0xbb+0x6]
+            Level 0: 0
+            Level 1: 255
+          ▾ Sub-image
+              Color cache — none  [0xbc+0x1]
+            ▾ Prefix codes — 1 group  [0xbc+0x4]
+                Group 0 — symbols coded: green 2, red 1, blue 1, alpha 1, distance 1  [0xbc+0x4]
+              Pixels — 2 literal pixels  [0xc0+0x1]
+          Color cache — none  [0xc0+0x1]
+        ▾ Prefix codes — 1 group  [0xc0+0x10]
+            Group 0 — symbols coded: green 6, red 1, blue 1, alpha 1, distance 1  [0xc0+0x10]
+          Pixels — 6 literal pixels, 1 backward reference covering 26 pixels  [0xcf+0x4]
         Pad byte  [0xd3+0x1]
     ▾ VP8 — 16×16  [0xd4+0x6c]
         Chunk ID: "VP8 "  [0xd4+0x4]
@@ -78,7 +99,27 @@ expression: "common::explore(&display_name(&path), &data)"
           Horizontal scale: none (0x0)  [0xe3+0x1]
           Height: 16  [0xe4+0x2]
           Vertical scale: none (0x0)  [0xe5+0x1]
-        First partition — modes and probabilities (boolean-entropy-coded)  [0xe6+0x14]
+      ▾ First partition — quantizer 45, normal loop filter 14, 1 token partition  [0xe6+0x14]
+        ▾ Frame header — quantizer 45, normal loop filter 14, 1 token partition  [0xe6+0xb]
+            Color space: YUV (ITU-R BT.601) (0x0)
+            Clamping: required (0x0)
+            Segmentation: false
+            Filter type: normal (0x0)
+            Loop filter level: 14
+            Sharpness: 0
+            Loop filter adjustments: false
+            Token partitions: 1
+          ▾ Quantizer indices — base 45 of 127
+              Y AC: 45
+              Y DC delta — not updated
+              Y2 DC delta — not updated
+              Y2 AC delta — not updated
+              UV DC delta: -2
+              UV AC delta: 6
+            Refresh entropy probabilities: false
+            Coefficient probability updates: 3 — of 1056
+            Skip empty macroblocks: false
+          Macroblock headers — segment, skip flag and prediction modes of each macroblock (boolean-entropy-coded)  [0xf1+0x9]
         Token partitions — DCT coefficients (boolean-entropy-coded)  [0xfa+0x46]
   ▾ ANMF — 16×16 at (0, 0), 200 ms, no blending  [0x140+0x6c]
       Chunk ID: "ANMF"  [0x140+0x4]
@@ -98,9 +139,22 @@ expression: "common::explore(&display_name(&path), &data)"
           Height − 1: 15 — 16 px  [0x162+0x3]
           Alpha is used: true  [0x164+0x1]
           Version: 0  [0x164+0x1]
-      ▾ Image stream — transforms, color cache, then entropy-coded pixels  [0x165+0x46]
-          Transform present: true  [0x165+0x1]
-          Transform type: predictor (0x0) — transform 1  [0x165+0x1]
-          Block size bits: 7 — 512×512 blocks  [0x165+0x1]
-          Transform data — an entropy-coded sub-image of per-block parameters follows; the rest of the stream is entropy-coded
+      ▾ Image stream — 2 transforms, 1 prefix code group, 26 literal pixels, 8 backward references covering 230 pixels  [0x165+0x46]
+        ▾ Predictor transform — 512×512 blocks, a 1×1 image of prediction modes  [0x165+0x6]
+            Mode 12: clamp(L + T − TL) — 1 block
+          ▾ Sub-image
+              Color cache — none  [0x165+0x1]
+            ▾ Prefix codes — 1 group  [0x165+0x6]
+                Group 0 — symbols coded: green 1, red 1, blue 1, alpha 1, distance 1  [0x165+0x6]
+              Pixels — 1 literal pixel  [0x16a+0x1]
+        ▾ Color transform — 512×512 blocks, a 1×1 image of green-to-red, green-to-blue and red-to-blue multipliers  [0x16a+0x5]
+          ▾ Sub-image
+              Color cache — none  [0x16a+0x1]
+            ▾ Prefix codes — 1 group  [0x16b+0x4]
+                Group 0 — symbols coded: green 1, red 1, blue 1, alpha 1, distance 1  [0x16b+0x4]
+              Pixels — 1 literal pixel  [0x16e+0x1]
+          Color cache — none  [0x16e+0x1]
+        ▾ Prefix codes — 1 group  [0x16e+0x23]
+            Group 0 — symbols coded: green 7, red 5, blue 2, alpha 3, distance 2  [0x16e+0x23]
+          Pixels — 26 literal pixels, 8 backward references covering 230 pixels  [0x190+0x1b]
         Pad byte  [0x1ab+0x1]
