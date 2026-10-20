@@ -54,6 +54,7 @@ pub mod wim;
 pub mod xpress;
 pub mod xz;
 pub mod yaz0;
+pub mod zfs;
 pub mod zstd;
 
 use std::sync::Arc;
@@ -172,6 +173,8 @@ pub enum Codec {
     /// Exactly one Zstandard frame (after any skippable frames); what
     /// follows it is left unconsumed.
     ZstdFrame,
+    /// One zstd frame without its magic number, as ZFS stores blocks.
+    ZstdMagicless,
     /// One raw LZO1X stream (with its end marker).
     Lzo1x,
     /// The lzop (`.lzo`) container.
@@ -181,6 +184,10 @@ pub enum Codec {
     BtrfsLzo,
     /// Raw LZF (liblzf).
     Lzf,
+    /// ZFS's LZJB, stopping after this many bytes (see [`zfs::Lzjb`]).
+    Lzjb(u64),
+    /// ZFS's zero-length encoding, stopping after this many bytes.
+    Zle(u64),
     /// LZF in the `lzf` tool's `ZV` blocks.
     LzfFramed,
     /// Compressed RTF (`LZFu`/`MELA`, [MS-OXRTFCP]), header included.
@@ -422,6 +429,7 @@ impl Codec {
             Codec::NsisBzip2 => "nsis-bzip2",
             Codec::Zstd => "zstd",
             Codec::ZstdFrame => "zstd-frame",
+            Codec::ZstdMagicless => "zstd-magicless",
             Codec::ZstdDict(_) => "zstd-dict",
             Codec::PalmDoc(_) => "palmdoc",
             Codec::BtrfsLzo => "btrfs-lzo",
@@ -437,6 +445,8 @@ impl Codec {
             Codec::Bzz => "bzz",
             Codec::Lzop => "lzop",
             Codec::Lzf => "lzf",
+            Codec::Lzjb(_) => "lzjb",
+            Codec::Zle(_) => "zle",
             Codec::LzfFramed => "lzf-framed",
             Codec::Lzfu => "lzfu",
             Codec::Adc => "adc",
@@ -525,6 +535,7 @@ impl Codec {
             Codec::NsisBzip2 => "nsis-bzip2 (lazy)",
             Codec::Zstd => "zstd (lazy)",
             Codec::ZstdFrame => "zstd-frame (lazy)",
+            Codec::ZstdMagicless => "zstd-magicless (lazy)",
             Codec::ZstdDict(_) => "zstd-dict (lazy)",
             Codec::PalmDoc(_) => "palmdoc (lazy)",
             Codec::BtrfsLzo => "btrfs-lzo (lazy)",
@@ -540,6 +551,8 @@ impl Codec {
             Codec::Bzz => "bzz (lazy)",
             Codec::Lzop => "lzop (lazy)",
             Codec::Lzf => "lzf (lazy)",
+            Codec::Lzjb(_) => "lzjb (lazy)",
+            Codec::Zle(_) => "zle (lazy)",
             Codec::LzfFramed => "lzf-framed (lazy)",
             Codec::Lzfu => "lzfu (lazy)",
             Codec::Adc => "adc (lazy)",
@@ -627,6 +640,7 @@ impl Codec {
             | Codec::Xz
             | Codec::Zstd
             | Codec::ZstdFrame
+            | Codec::ZstdMagicless
             | Codec::ZstdDict(_)
             | Codec::PalmDoc(_)
             | Codec::BtrfsLzo
@@ -641,6 +655,8 @@ impl Codec {
             | Codec::Bzz
             | Codec::Lzop
             | Codec::Lzf
+            | Codec::Lzjb(_)
+            | Codec::Zle(_)
             | Codec::LzfFramed
             | Codec::Lzfu
             | Codec::Adc
@@ -735,7 +751,7 @@ impl Codec {
             // LZMA's longest match (273 bytes) costs a handful of bits.
             Codec::Xz | Codec::LzmaAlone | Codec::Lzma2 { .. } | Codec::LzmaRaw { .. } => 7_000,
             // RLE blocks can encode 128 KiB in four bytes.
-            Codec::Zstd | Codec::ZstdFrame | Codec::ZstdDict(_) => 32_768,
+            Codec::Zstd | Codec::ZstdFrame | Codec::ZstdMagicless | Codec::ZstdDict(_) => 32_768,
             Codec::UnixCompress => 8_000,
             // A 12-bit code stands for up to 4096 bytes.
             Codec::TempleOsZ => 2_800,
@@ -757,6 +773,10 @@ impl Codec {
             Codec::Lzo1x | Codec::Lzop | Codec::BtrfsLzo => 512,
             // At most 264 bytes per 3-byte back reference.
             Codec::Lzf | Codec::LzfFramed => 128,
+            // At most 66 bytes per 2-byte match.
+            Codec::Lzjb(_) => 33,
+            // A length byte stands for up to 192 zeros.
+            Codec::Zle(_) => 192,
             // At most 17 bytes per 2-byte reference (plus control bits).
             Codec::Lzfu => 16,
             // At most 67 bytes per 3-byte match.
@@ -864,6 +884,8 @@ impl Codec {
             Codec::Bzz => Box::new(Streaming(bzz::Bzz::default())),
             Codec::Lzop => Box::new(Streaming(lzo::Lzop::default())),
             Codec::Lzf => Box::new(Streaming(legacy::Lzf::default())),
+            Codec::Lzjb(len) => Box::new(Streaming(zfs::Lzjb::new(*len))),
+            Codec::Zle(len) => Box::new(Streaming(zfs::Zle::new(*len))),
             Codec::LzfFramed => Box::new(Streaming(legacy::LzfFramed::default())),
             Codec::Lzfu => Box::new(Streaming(lzfu::Lzfu::default())),
             Codec::Adc => Box::new(Streaming(legacy::Adc::default())),
@@ -879,6 +901,7 @@ impl Codec {
             Codec::Ppmd8 { size } => Box::new(ppmd8::Ppmd8::new(*size)),
             Codec::Zstd => Box::new(Streaming(zstd::Zstd::new())),
             Codec::ZstdFrame => Box::new(Streaming(zstd::Zstd::single_frame())),
+            Codec::ZstdMagicless => Box::new(Streaming(zstd::Zstd::magicless())),
             Codec::ZstdDict(d) => Box::new(Streaming(zstd::Zstd::with_dictionary(d.clone()))),
             Codec::PalmDoc(book) => Box::new(Streaming(palmdoc::Records::new(book.clone()))),
             Codec::BtrfsLzo => Box::new(Streaming(lzo::BtrfsLzo::default())),

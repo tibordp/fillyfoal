@@ -1126,6 +1126,9 @@ pub struct Zstd {
     frames: u32,
     frame: Option<Frame>,
     single: bool,
+    /// The frame has no magic number (ZFS's zstd blocks): exactly one
+    /// frame, its header first.
+    magicless: bool,
     done: bool,
     dict: Option<Dict>,
 }
@@ -1138,6 +1141,7 @@ impl Zstd {
             frames: 0,
             frame: None,
             single: false,
+            magicless: false,
             done: false,
             dict: None,
         }
@@ -1160,9 +1164,26 @@ impl Zstd {
         }
     }
 
+    /// One frame written without its magic number (as ZFS stores zstd
+    /// blocks); whatever follows it is left unconsumed.
+    pub fn magicless() -> Self {
+        Zstd {
+            single: true,
+            magicless: true,
+            ..Zstd::new()
+        }
+    }
+
     /// Starts a frame (or skips a skippable one) at `self.pos`.
     fn start_frame(&mut self, input: &[u8], eof: bool, out: &[u8]) -> Result<()> {
         let pos = self.pos;
+        if self.magicless {
+            if self.frames > 0 {
+                self.done = true;
+                return Ok(());
+            }
+            return self.frame_header(input, pos, out);
+        }
         let Some(magic) = input.get(pos..pos.saturating_add(4)).map(le) else {
             if !eof {
                 return Err(short("frame magic"));
@@ -1202,7 +1223,11 @@ impl Zstd {
             self.done = true;
             return Ok(());
         }
-        let mut at = pos.saturating_add(4);
+        self.frame_header(input, pos.saturating_add(4), out)
+    }
+
+    /// Starts the frame whose header is at `at` (after its magic, if any).
+    fn frame_header(&mut self, input: &[u8], mut at: usize, out: &[u8]) -> Result<()> {
         let fhd = *input.get(at).ok_or_else(|| short("frame header"))?;
         at = at.saturating_add(1);
         let single = fhd & 0x20 != 0;

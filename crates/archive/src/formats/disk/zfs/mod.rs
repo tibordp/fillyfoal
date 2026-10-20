@@ -4,6 +4,13 @@
 //! Each label is 256 KiB: 16 KiB of padding and boot header, 112 KiB of
 //! nvlist, 128 KiB of uberblocks. Labels 0 and 1 are at the start of the
 //! device, 2 and 3 at its end.
+//!
+//! The newest uberblock's root block pointer leads to the pool's meta
+//! object set, and from there to its datasets: file systems (directories
+//! and files), volumes and snapshots (see [`fs`], read through [`dmu`]).
+
+mod dmu;
+mod fs;
 
 use std::sync::Arc;
 
@@ -247,12 +254,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             _ => None,
         })
         .unwrap_or("unknown state");
-    let (vdev, ashift) = match list.get("vdev_tree") {
+    let (vdev, ashift, top) = match list.get("vdev_tree") {
         Some(Nv::List(v)) => (
             v.text("type").unwrap_or_default(),
             v.text("ashift").and_then(|a| a.parse().ok()),
+            v.text("id").and_then(|a| a.parse().ok()),
         ),
-        _ => (String::new(), None),
+        _ => (String::new(), None, None),
     };
     cx.annotate(format!(
         "ZFS pool \"{name}\" ({state}), {vdev} vdev, pool version {}, txg {}",
@@ -272,6 +280,24 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .span(ring)
             .lazy(uberblocks, (ring, slot, UBERBLOCKS)),
     );
+    let datasets = Node::new("Datasets");
+    cx.emit(match newest(&cx, ring, slot).await? {
+        _ if vdev.starts_with("raidz") || vdev.starts_with("draid") => datasets.summary(format!(
+            "not readable from one {vdev} member: its blocks are spread over all of them"
+        )),
+        None => datasets.diag(Diagnostic::malformed("no valid uberblock")),
+        Some((txg, bp)) => datasets.summary(format!("as of txg {txg}")).lazy(
+            fs::datasets,
+            (
+                Arc::new(dmu::Pool {
+                    input,
+                    top: top.unwrap_or(0),
+                }),
+                bp,
+                name.clone(),
+            ),
+        ),
+    });
     // Labels 2 and 3 end the device, rounded down to whole labels
     // (`vdev_label_offset`).
     let size = dev.len & !(LABEL - 1);
@@ -675,6 +701,29 @@ async fn checked(cx: &Cx, node: Node, data: &[u8], offset: u64, summary: String)
         },
         None => node.summary(summary),
     }
+}
+
+/// The newest uberblock in a ring: its txg and root block pointer.
+async fn newest(cx: &Cx, ring: Span, slot: u64) -> Result<Option<(u64, dmu::Bp)>> {
+    let slot = slot.max(1024);
+    let mut best: Option<(u64, dmu::Bp)> = None;
+    for i in 0..ring.len.checked_div(slot).unwrap_or(0) {
+        let span = ring.sub(i.saturating_mul(slot), 40 + BP_SIZE);
+        let raw = cx.read_avail(span).await?;
+        let le = match (u64_le(&raw, 0), u64_be(&raw, 0)) {
+            (Some(UB_MAGIC), _) => true,
+            (_, Some(UB_MAGIC)) => false,
+            _ => continue,
+        };
+        let txg = dmu::word(&raw, 16, le).unwrap_or(0);
+        if best.as_ref().is_some_and(|(t, _)| *t >= txg) {
+            continue;
+        }
+        if let Some(bp) = dmu::Bp::parse(&raw, 40, le, span.sub(40, BP_SIZE)) {
+            best = Some((txg, bp));
+        }
+    }
+    Ok(best)
 }
 
 /// An uberblock ring; `base` is its offset on the device.
