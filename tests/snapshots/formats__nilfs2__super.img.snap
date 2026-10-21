@@ -41,4 +41,8 @@ expression: "common::explore(&display_name(&path), &data)"
       UUID: 34343434-0000-4000-8000-000000000004  [0x498+0x10]
       Volume name: "nilfsvol"  [0x4a8+0x50]
     Latest partial segment — block 2  [0x2000+0x1000]
+  ▾ Root directory — checkpoint 3
+      ! malformed: no segment summary at the last partial segment
+  ▾ Checkpoints — 3 checkpoints
+      ! malformed: no segment summary at the last partial segment
     Secondary superblock  [0x3000+0x400]

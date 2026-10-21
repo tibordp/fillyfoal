@@ -1,4 +1,8 @@
-//! NILFS2 (log-structured file system) superblock.
+//! NILFS2 (log-structured file system): the superblock, and the file tree
+//! of the latest checkpoint and of every other checkpoint and snapshot
+//! (see [`tree`]).
+
+mod tree;
 
 use crate::bytes::{u16_le, u32_le};
 use crate::cx::Cx;
@@ -117,6 +121,25 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Node::new("Latest partial segment")
             .span(last)
             .summary(format!("block {}", sb.last_pseg)),
+    );
+    let geometry = tree::Geometry {
+        input,
+        block,
+        inode_size: sb.inode_size.into(),
+        dat_entry: sb.dat_entry_size.into(),
+        cp_entry: sb.checkpoint_size.into(),
+        last_pseg: sb.last_pseg,
+        last_cno: sb.last_cno,
+    };
+    cx.emit(
+        Node::new("Root directory")
+            .summary(format!("checkpoint {}", sb.last_cno))
+            .lazy(tree::latest, geometry),
+    );
+    cx.emit(
+        Node::new("Checkpoints")
+            .summary(plural(sb.last_cno, "checkpoint"))
+            .lazy(tree::checkpoints, geometry),
     );
     // The secondary superblock sits 4 KiB from the end, 4 KiB aligned.
     let second = (vol.len / 4096).saturating_sub(1).saturating_mul(4096);

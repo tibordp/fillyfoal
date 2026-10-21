@@ -15,6 +15,10 @@
 //! and one allocation group page (IAG) per 4096 inodes, each locating up to
 //! 128 extents of 32 inodes. The inline log (`jfs_logmgr.h`) is a
 //! superblock followed by log pages.
+//!
+//! The fileset's directory tree is under "Root directory" (see [`tree`]).
+
+mod tree;
 
 use crate::bytes::{u16_le, u32_le, u64_le};
 use crate::cx::Cx;
@@ -189,6 +193,7 @@ const FILESET_INODES: EnumTable = &[
 struct Agg {
     vol: Span,
     block: u64,
+    input: Input,
 }
 
 impl Agg {
@@ -1135,7 +1140,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let span = vol.sub(SUPER, Superblock::SIZE);
     let sb = parse(&cx, span, LE, &(), Superblock::layout).await?;
     let block = u64::from(sb.block_size).max(512);
-    let agg = Agg { vol, block };
+    let agg = Agg { vol, block, input };
     cx.emit(
         Node::new("Reserved")
             .span(vol.sub(0, SUPER))
@@ -1241,6 +1246,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     fileset: true,
                 },
             ));
+            cx.emit(
+                Node::new("Root directory")
+                    .lazy(tree::root_directory, tree::Fileset { agg, imap: file }),
+            );
         }
     }
     let (log_len, log_addr) = pxd(&sb.log_pxd);

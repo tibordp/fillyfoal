@@ -41,4 +41,9 @@ expression: "common::explore(&display_name(&path), &data)"
       UUID: d0a1581d-243f-4fd6-94a1-a2e7b56c1fbf  [0x498+0x10]
       Volume name: "fillyfoal"  [0x4a8+0x50]
     Latest partial segment — block 4  [0x1000+0x400]
+  ▾ Root directory — checkpoint 1
+      Inode 2 — drwxr-xr-x, 1 KiB, modified 2026-10-12 01:16:16 UTC  [0x2100+0x80]
+  ▾ Checkpoints — 1 checkpoint
+    ▾ Checkpoint 1 — checkpoint, created 2026-10-12 01:16:16 UTC, 1 inode  [0x28c0+0xc0]
+        Inode 2 — drwxr-xr-x, 1 KiB, modified 2026-10-12 01:16:16 UTC  [0x2100+0x80]
     Secondary superblock  [0x7ff000+0x118]
