@@ -15,11 +15,12 @@ use crate::dsl::{Cursor, Path};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::text::scan::{Lines, Scanner};
-use crate::formats::util::fmt::plural;
+use crate::formats::util::fmt::{self, plural};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Value, lookup};
+use mavlink_tlog::{CrcPolicy, FrameError, FrameRef, message_info};
 
 const LE: Endian = Endian::Little;
 
@@ -548,30 +549,35 @@ fn tlog_probe(h: &Head<'_>) -> bool {
 declare_format!(pub TLOG = "mavlink-tlog", "MAVLink telemetry log", ["tlog"], "application/x-mavlink-tlog",
     Probe::Custom(tlog_probe), tlog);
 
-const MAVLINK_MESSAGES: EnumTable = &[
-    (0, "HEARTBEAT"),
-    (1, "SYS_STATUS"),
-    (2, "SYSTEM_TIME"),
-    (22, "PARAM_VALUE"),
-    (24, "GPS_RAW_INT"),
-    (27, "RAW_IMU"),
-    (29, "SCALED_PRESSURE"),
-    (30, "ATTITUDE"),
-    (33, "GLOBAL_POSITION_INT"),
-    (35, "RC_CHANNELS_RAW"),
-    (36, "SERVO_OUTPUT_RAW"),
-    (42, "MISSION_CURRENT"),
-    (62, "NAV_CONTROLLER_OUTPUT"),
-    (65, "RC_CHANNELS"),
-    (74, "VFR_HUD"),
-    (76, "COMMAND_LONG"),
-    (77, "COMMAND_ACK"),
-    (111, "TIMESYNC"),
-    (147, "BATTERY_STATUS"),
-    (241, "VIBRATION"),
-    (242, "HOME_POSITION"),
-    (253, "STATUSTEXT"),
-];
+/// Longest tlog record: timestamp plus a signed MAVLink 2 frame.
+const TLOG_RECORD_MAX: usize = 288;
+
+/// Offset of the first record at or after `from` whose timestamp is
+/// plausible and whose frame checksum verifies against a known message.
+fn tlog_resync(data: &[u8], from: usize) -> Option<usize> {
+    (from..data.len()).find(|&i| {
+        plausible_time(data, i)
+            && data
+                .get(i.saturating_add(8)..)
+                .is_some_and(|d| FrameRef::parse(d, CrcPolicy::Strict).is_ok())
+    })
+}
+
+/// Bytes from `pos` up to the next valid record (or the end of the file).
+async fn tlog_damage(cx: &Cx, file: Span, pos: u64) -> Result<u64> {
+    let mut start = pos.saturating_add(1);
+    while start < file.len {
+        let w = cx.read(file.sub(start, 64 << 10)).await?;
+        if let Some(i) = tlog_resync(&w, 0) {
+            return Ok(start.saturating_add(to_u64(i)).saturating_sub(pos));
+        }
+        if start.saturating_add(to_u64(w.len())) >= file.len {
+            break;
+        }
+        start = start.saturating_add(to_u64(w.len().saturating_sub(TLOG_RECORD_MAX)).max(1));
+    }
+    Ok(file.len.saturating_sub(pos))
+}
 
 async fn tlog(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -579,10 +585,21 @@ async fn tlog(cx: Cx, input: Input) -> Result<()> {
     let mut n = 0u64;
     while pos.saturating_add(10) <= file.len {
         cx.progress_in(file, file.offset.saturating_add(pos));
-        let h = cx.read(file.sub(pos, 20)).await?;
-        let Some(len) = mavlink_at(&h, 8) else {
-            return Err(Diagnostic::malformed("expected a MAVLink packet")
-                .at(file.sub(pos.saturating_add(8), 1)));
+        let h = cx.read(file.sub(pos, to_u64(TLOG_RECORD_MAX))).await?;
+        let len = match FrameRef::parse(h.get(8..).unwrap_or_default(), CrcPolicy::Lenient) {
+            Ok(frame) => frame.len(),
+            Err(FrameError::Incomplete { need }) => need,
+            Err(e) => {
+                let skip = tlog_damage(&cx, file, pos).await?;
+                cx.push(
+                    Node::new("Damaged data")
+                        .span(file.sub(pos, skip))
+                        .summary(format!("{e}, {} skipped", fmt::size(skip))),
+                )
+                .await;
+                pos = pos.saturating_add(skip);
+                continue;
+            }
         };
         let total = to_u64(len).saturating_add(8);
         let span = file.sub(pos, total);
@@ -610,8 +627,7 @@ async fn tlog(cx: Cx, input: Input) -> Result<()> {
                 u32::from(h.get(13).copied().unwrap_or(0)),
             )
         };
-        let name = lookup(MAVLINK_MESSAGES, id.into())
-            .map_or_else(|| format!("Message {id}"), str::to_owned);
+        let name = message_info(id).map_or_else(|| format!("Message {id}"), |m| m.name.to_owned());
         let secs = i64::try_from(stamp / 1_000_000).unwrap_or(0);
         let summary = format!(
             "{}, system {sys}/{comp}, v{}",
@@ -697,7 +713,7 @@ async fn mavlink_packet(cx: Cx, (span, v2, id): (Span, bool, u32)) -> Result<()>
         Value::Enum {
             raw: id.into(),
             bits: 24,
-            name: lookup(MAVLINK_MESSAGES, id.into()).map(Into::into),
+            name: message_info(id).map(|m| m.name.into()),
         },
     ));
     let pstart = 8u64.saturating_add(header);
@@ -1371,4 +1387,38 @@ async fn blackbox_log(cx: Cx, span: Span) -> Result<()> {
     )
     .await;
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod tests {
+    use super::tlog_resync;
+    use mavlink_tlog::{CrcPolicy, FrameRef, Header, Version, encode};
+
+    fn record(t: u64, id: u32) -> Vec<u8> {
+        let mut out = t.to_be_bytes().to_vec();
+        let mut frame = [0u8; 280];
+        let header = Header {
+            seq: 0,
+            sys_id: 1,
+            comp_id: 1,
+            msg_id: id,
+        };
+        let n = encode(Version::V2, header, &[7; 9], None, &mut frame).unwrap();
+        out.extend_from_slice(&frame[..n]);
+        out
+    }
+
+    #[test]
+    fn damaged_record_is_skipped_to_the_next_good_one() {
+        let t = 1_700_000_000_000_000;
+        let mut bad = record(t, 0);
+        let last = bad.len() - 3;
+        bad[last] ^= 0xff; // payload byte: header length still looks right
+        let good = record(t + 1, 30);
+        let mut log = bad.clone();
+        log.extend_from_slice(&good);
+        assert!(FrameRef::parse(&log[8..], CrcPolicy::Lenient).is_err());
+        assert_eq!(tlog_resync(&log, 1), Some(bad.len()));
+    }
 }
