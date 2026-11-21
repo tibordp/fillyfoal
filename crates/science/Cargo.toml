@@ -12,6 +12,7 @@ fillyfoal-core.workspace = true
 fillyfoal-archive.workspace = true
 fillyfoal-image.workspace = true
 fillyfoal-text.workspace = true
+mavlink-tlog = { version = "0.1.3", default-features = false }
 
 [lints]
 workspace = true
